@@ -143,12 +143,18 @@ properties (temperature, atmosphere, water presence).
 | Polar ice    | High latitude, temperature below freezing            | Bright, low roughness, wind-scour patterning      |
 | Sand sea     | Thin+ atmosphere, low slope, warm                    | Dune-scale noise, wind-aligned                    |
 | Salt flat    | Thin+ atmosphere, low altitude, evaporite conditions | Bright, cracked, very low slope                   |
+| Seabed       | Under a sea the ground temperature admits            | Silt, seen through a sheet that refracts it       |
+| Riverbed     | The floored channel of a valley, with liquid to run  | The liquid painted on its bed                     |
+| Biosphere    | Liquid water, air, a temperate band; thins at height | The body's own pigment as a deposit, no geometry  |
 | Tundra ⬜    | Atmosphere, cold, water                              | First biome with flora                            |
 | Temperate ⬜ | Atmosphere, moderate, water                          | Post-MVP                                          |
 
 Eight biomes, six of them airless or near-airless, is the right MVP set: it
 covers the great majority of landable real bodies, and it avoids the flora
-problem entirely until after launch.
+problem entirely until after launch. The three rows between them are what
+[ADR-0026](../adr/0026-the-liquid.md) added without geometry — a seabed, a
+riverbed and a pigment are colors the cover carries, and a temperate world
+reads as one from orbit before a single plant is modeled.
 
 **Materials are the art budget.** Each biome needs a PBR material set —
 albedo, roughness, normal, and a detail layer — and those are the few dozen
@@ -159,7 +165,7 @@ parameterized palette: a reflectance ratio, a roughness, a grain and a bump per
 deposit, expressed against the body's own published colour so that Mars stays
 ochre and Callisto stays grey while both get the same internal contrast. The
 lookup is split by who can answer — latitude, altitude and slope per pixel from
-the mesh, and a four-byte _cover_ per vertex for what only the generator knows:
+the mesh, and an eight-byte _cover_ per vertex for what only the generator knows:
 where the flood basalt is, where a young crater has thrown fresh material, which
 way the crust's composition varies, where the volatiles have condensed. A body
 with a published map wears it, and the invented channels switch off, because the

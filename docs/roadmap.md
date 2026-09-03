@@ -84,7 +84,7 @@ change** — they are generators plus representations.
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                                                                                                                               |
 | Moons of real planets    | 🟡     | Sol's 62 are `observed` and measured; every exoplanet's moon is a projection, and `PackedPlanet` still has no moon list to change that                                                                                          |
 | Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel                                                                                                                |
-| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; craters, plates, volcanism and ice from a per-body grammar, shaded from a palette derived from the same facts; no authored material sets and no albedo bake for a generated body's sphere    |
+| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; craters, plates, volcanism and ice from a per-body grammar, shaded from a palette derived from the same facts; no authored material sets, and the baked sphere carries no relief             |
 | Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems                                                                                                                    |
 | Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; procedural giants get a 1-in-6 chance                                                                      |
 | Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
@@ -109,19 +109,21 @@ yet.
 ## Terrain
 
 The most visible shallowness, and the milestone in progress —
-[The terrain plan](../design/plans/terrain.md) sequences it.
+[The terrain plan](../design/plans/terrain.md) sequences it, and
+[the erosion plan](../design/plans/erosion.md) is the phase after the liquid.
 
 ```mermaid
 flowchart TB
-    NOW["<b>today</b><br/>a geology with a face,<br/>meter-scale ground,<br/>rocks lying on it, and<br/>heightfields from the GPU"]
+    NOW["<b>today</b><br/>a geology with a face,<br/>a sea over its seabed,<br/>valleys and a coast, and<br/>a sphere that wears its ground"]
     F["<b>the mesh off the main thread</b><br/>normals and the LOD morph<br/>where the heightfield already is"]
-    D["<b>the albedo bake</b><br/>a generated body's sphere<br/>shows its own maria"]
+    E["<b>erosion</b><br/>a drainage graph per body,<br/>rivers that run downhill,<br/>lakes at their spill"]
 
     NOW -->|"the build is the<br/>queue now"| F
-    NOW --> D
+    NOW -->|"the valleys do not<br/>know which way is down"| E
 
     style NOW fill:#334155,stroke:#1e293b,color:#fff
     style F fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style E fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
 Phase 1 landed 27 Aug 2026: per-patch level selection, whole-disk coverage,
@@ -142,8 +144,7 @@ is 848 px/rad against the guess's 935, and the telephoto end of the
 field-of-view slider saturates the patch cap on most of a descent's steps.
 
 Phase 3 landed 29 Aug 2026: the ground has a material.
-[ADR-0020](adr/0020-the-face.md) is the decision record. Four bytes a vertex
-carry what a shader cannot derive — impact-fresh material, flood basalt, where
+[ADR-0020](adr/0020-the-face.md) is the decision record. The cover — four bytes then, eight since the liquid — carries what a shader cannot derive — impact-fresh material, flood basalt, where
 the crust sits on the body's compositional ramp, condensed volatiles — and the
 three a shader _can_ are read per pixel from the mesh it is standing on.
 Deposits are layered rather than splatted, in the order they are laid down, and
@@ -174,19 +175,31 @@ along their margins; Venus the same size as Earth and a stagnant lid, because it
 has no ocean; Enceladus with four parallel fractures. `maxElevation` is a
 strength limit rather than a dial, and terrain moved to algorithm version 2.
 
-| Gap                                         | Consequence today                                                                                                                                         | Seam                                                                                                                                                              |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A generated body's sphere is a flat tint    | Its ground has maria, rays and caps below the eight-pixel gate and none of them above it — the far half of a descent is the only half that does not agree | A per-face albedo cube baked in workers, sampled by direction, read by `render/planet.ts` as well as by the terrain                                               |
-| Deposits are chosen from the mesh           | Two patches at different levels report different slopes for the same ground, so a weight read off the normal steps by ~4% at a level boundary             | More channels on the cover, so the deposits read the canonical field instead of the LOD                                                                           |
-| No authored material sets                   | Detail is gradient noise, which has no period to break and no projection to choose — so hex-tiling and triplanar answer questions nothing is asking       | The detail field in `render/terrain.ts`; both techniques come back with the textures that need them                                                               |
-| The selection is not frustum-culled         | A whole disk is generated, of which the renderer draws about a third                                                                                      | The streamer has the camera; a generous cone would keep a turn from bursting                                                                                      |
-| Vertex attributes are float32               | 237 KB a patch — 203 KB of float32 geometry and 34 KB of cover — so a whole-disk selection is 113–255 MB at the flight lens                               | Int8 normals and Int16 morph deltas are worth about half                                                                                                          |
-| A rock reads the field, not the mesh        | Its foot is 3–9 cm off the triangle under it in the mean and up to 0.70 m at the worst cell on the coarsest body; `MESH_SEAT` buries it 12 cm             | More channels on the cover, which is the same change the deposits want                                                                                            |
-| Scatter has no collision                    | A rock is presentational; the contact test does not know it exists                                                                                        | [On foot](design/onfoot.md), where the canonical floor drops as well                                                                                              |
-| The canonical crater ladder stops at eleven | A body whose largest basin is 2,170 km has craters down to 2.1 km and then nothing until the presentational tail starts at 8 m                            | `MAX_CRATER_LEVELS`; fourteen moves the detail floor 0–2 levels at 13% a patch, and it is terrain algorithm v3                                                    |
-| The mesh is built on the main thread        | 0.25 ms a patch, eight a frame — the queue, now that the heightfield is 10 ms for sixteen                                                                 | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
-| Patch generation is over its budget         | 21.6 to 49.8 ms per bordered 65×65 patch across the zoo, against a documented ≤ 8 ms — and a landing now wants 700 to 1,077 of them                       | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
-| A coarse patch costs more than a fine one   | Consecutive samples of a coarse patch land in different noise lattice cells                                                                               | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
+The liquid landed 2 Sep 2026: a sea read against its ground's temperature —
+water, hydrocarbon or magma — valleys cut into the landform and a coast
+remapped round the datum, the heightfield as the seabed with the sea a sheet
+over it, color families for rock, ice, haze and pigment, every detail octave
+a fetch of one baked noise texture, four named surface levers, and the sphere
+of a generated body wearing six faces of its own ground.
+[ADR-0026](adr/0026-the-liquid.md) is the decision record. Terrain moved to
+algorithm version 3, and the frame at a retina size over the shore went from
+9.5 to 16.3 fps. What it did not do is make a river run downhill: the valleys
+are the zero-level strip of a noise, and
+[the erosion plan](../design/plans/erosion.md) is the answer.
+
+| Gap                                         | Consequence today                                                                                                                                             | Seam                                                                                                                                                              |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A generated body's sphere has no relief     | Its sphere wears the ground's reflectance and sea mask and shades as a smooth ball above the eight-pixel gate — the maria are there and the mountains are not | A normal bake at the same six faces, the heightfield's gradient in the sphere's east–north frame                                                                  |
+| Deposits are chosen from the mesh           | Two patches at different levels report different slopes for the same ground, so a weight read off the normal steps by ~4% at a level boundary                 | More channels on the cover, so the deposits read the canonical field instead of the LOD                                                                           |
+| No authored material sets                   | Detail is gradient noise, which has no period to break and no projection to choose — so hex-tiling and triplanar answer questions nothing is asking           | The detail field in `render/terrain.ts`; both techniques come back with the textures that need them                                                               |
+| The selection is not frustum-culled         | A whole disk is generated, of which the renderer draws about a third                                                                                          | The streamer has the camera; a generous cone would keep a turn from bursting                                                                                      |
+| Vertex attributes are float32               | 270 KB a patch — 203 KB of float32 geometry and 68 KB of cover — so a whole-disk selection is 129–291 MB at the flight lens                                   | Int8 normals and Int16 morph deltas are worth about half                                                                                                          |
+| A rock reads the field, not the mesh        | Its foot is 3–9 cm off the triangle under it in the mean and up to 0.70 m at the worst cell on the coarsest body; `MESH_SEAT` buries it 12 cm                 | More channels on the cover, which is the same change the deposits want                                                                                            |
+| Scatter has no collision                    | A rock is presentational; the contact test does not know it exists                                                                                            | [On foot](design/onfoot.md), where the canonical floor drops as well                                                                                              |
+| The canonical crater ladder stops at eleven | A body whose largest basin is 2,170 km has craters down to 2.1 km and then nothing until the presentational tail starts at 8 m                                | `MAX_CRATER_LEVELS`; fourteen moves the detail floor 0–2 levels at 13% a patch, and it is terrain algorithm v4                                                    |
+| The mesh is built on the main thread        | 0.25 ms a patch, eight a frame — the queue, now that the heightfield is 10 ms for sixteen                                                                     | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
+| Patch generation is over its budget         | 21.6 to 49.8 ms per bordered 65×65 patch across the zoo, against a documented ≤ 8 ms — and a landing now wants 700 to 1,077 of them                           | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
+| A coarse patch costs more than a fine one   | Consecutive samples of a coarse patch land in different noise lattice cells                                                                                   | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
 
 ---
 

@@ -3,6 +3,7 @@ import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import {
   type Body,
   type BodyFixedDirection,
+  COVER_CHANNELS,
   packCover,
   type RegionAddress,
   drawnElevation,
@@ -57,7 +58,7 @@ export interface ScatterBatch {
   readonly count: number
   /** Column-major 4×4 per instance, in the field's anchor-relative axes. */
   readonly matrices: Float32Array
-  /** Four bytes of surface cover per instance. See `cover.ts`. */
+  /** `COVER_CHANNELS` bytes of surface cover per instance. See `cover.ts`. */
   readonly cover: Uint8Array
 }
 
@@ -406,7 +407,7 @@ export class ScatterField {
       variant,
       count,
       matrices: new Float32Array(count * 16),
-      cover: new Uint8Array(count * 4),
+      cover: new Uint8Array(count * COVER_CHANNELS),
     }))
     const cursors = new Array<number>(ROCK_VARIANTS).fill(0)
     for (const entry of drawn) {
@@ -415,7 +416,7 @@ export class ScatterField {
       const at = cursors[variant] as number
       cursors[variant] = at + 1
       writeInstance(batch.matrices, at * 16, entry.rock, entry.local)
-      writeCover(batch.cover, at * 4, entry.rock)
+      writeCover(batch.cover, at * COVER_CHANNELS, entry.rock)
     }
     return batches.filter((batch) => batch.count > 0)
   }
@@ -529,7 +530,7 @@ function writeInstance(
  *
  * A rock is drawn by the *same material* as the ground it lies on — same
  * palette, same photometry, same aerial veil, same published map where there is
- * one — so what it needs is the four bytes that material reads, and a block from
+ * one — so what it needs is the cover record that material reads, and a block from
  * a fresh crater says so by being `bright`. `tone` is signed, so a basalt block
  * on a highland plain lands in `dark` instead.
  */
@@ -548,6 +549,11 @@ function writeCover(out: Uint8Array, at: number, rock: ScatterRock): void {
       // the material's own slope term already takes frost off anything steep,
       // and a rock is steep everywhere.
       ice: 0,
+      // Nor running over it, nor growing on it: a block is bare by the same
+      // slope argument, and `scatter.ts` skips a riverbed the way it skips
+      // the sea, so no rock stands in a painted channel wearing this.
+      wet: 0,
+      biota: 0,
     },
     out,
     at,

@@ -21,10 +21,13 @@ import {
   type WorldSnapshot,
 } from '@inertialref/simulation'
 import {
+  type Body,
   type CatalogStar,
   cellKey,
   cellOf,
   type EntityId,
+  findBody,
+  parseAddress,
   type StarCatalog,
   type SystemId,
 } from '@inertialref/universe'
@@ -89,6 +92,11 @@ import {
   type OrbitScope,
   type PresentationStack,
 } from './presentation.ts'
+import {
+  cellPixelsFor,
+  DEFAULT_SURFACE_QUALITY,
+  type SurfaceQuality,
+} from '../render/quality.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
 import type { TerrainReport } from '@inertialref/devtools'
 
@@ -307,6 +315,15 @@ export class GameEngine implements PresentationHost {
    * would be lost with it.
    */
   lensFlare = true
+
+  /**
+   * What the surface may be turned down to, written by the shell from the
+   * persisted preference exactly as `lensFlare` is, and reachable from a
+   * driving script as `engine.surfaceQuality = {...}`. The streamer reads
+   * the refinement threshold off it every step; the scene components read
+   * the rest every frame and write uniforms only when a value moved.
+   */
+  surfaceQuality: SurfaceQuality = DEFAULT_SURFACE_QUALITY
 
   /**
    * The player's own lens — what the flight camera is looking through.
@@ -810,6 +827,25 @@ export class GameEngine implements PresentationHost {
     return this.#terrain.state()
   }
 
+  /** Where a heightfield request goes this frame — the streamer's answer. */
+  heightfieldSource(): HeightfieldSource | null {
+    return this.#terrain.heightfields()
+  }
+
+  /**
+   * The body at an address, out of the loaded world, or null.
+   *
+   * For a reader holding a `RenderBody` — the scene's description, which
+   * carries the address and the appearance and not the surface — that needs
+   * the body itself: the orbital bake wants `surface`, and the scene is
+   * right not to carry a surface grammar per drawn body per frame.
+   */
+  bodyFor(address: string): Body | null {
+    const parsed = parseAddress(address)
+    if (parsed.kind !== 'body') return null
+    return findBody(this.world.loadSystem(parsed.system), parsed.body) ?? null
+  }
+
   /**
    * What the streamer holds this frame, as data the harness can return.
    *
@@ -1173,6 +1209,7 @@ export class GameEngine implements PresentationHost {
     // and the *pair* rather than its halves — a lens measured over a viewport
     // it never landed on is a selection nobody can reproduce.
     this.#terrain.lensView = view
+    this.#terrain.cellPixels = cellPixelsFor(this.surfaceQuality.terrain)
     this.#terrain.update(
       this.world,
       shot.renderTime,

@@ -83,7 +83,7 @@ export const WINGS = [
     id: 'concepts',
     label: 'Concepts',
     blurb:
-      'The ten mechanisms that carry the architecture, and the twenty-four decisions underneath them.',
+      'The ten mechanisms that carry the architecture, and the twenty-six decisions underneath them.',
     framing: { address: 's:SOL/b:5', phase: -122, tilt: -26, fill: 1.5 },
     groups: [
       {
@@ -133,6 +133,7 @@ export const WINGS = [
           ['docs/adr/0023-the-gpu-producer.md', 'The GPU Producer'],
           ['docs/adr/0024-the-type-system.md', 'The Type System'],
           ['docs/adr/0025-the-rails.md', 'The Rails'],
+          ['docs/adr/0026-the-liquid.md', 'The Liquid'],
         ],
       },
     ],

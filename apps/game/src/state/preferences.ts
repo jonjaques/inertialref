@@ -39,6 +39,11 @@ import {
   OUTPUT_PREFERENCES,
 } from '../render/output.ts'
 import { type TimingLevel, TIMING_LEVELS } from '../engine/browserTiming.ts'
+import {
+  DEFAULT_SURFACE_QUALITY,
+  isSurfaceQuality,
+  type SurfaceQuality,
+} from '../render/quality.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
 import type { LabelDensity } from '../planetarium/layers.ts'
 
@@ -238,6 +243,22 @@ export const RENDER_LENS_FLARE = define({
   what: 'lens flare and diffraction spikes',
   initial: true,
   accept: isBoolean,
+})
+
+/**
+ * The surface's levers, as one record.
+ *
+ * One preference rather than four because they are read together, by the
+ * frame loop, as one object handed to the engine — and because a partial
+ * record is the failure mode a per-field guard cannot see: a stored `ground`
+ * with no `sea` beside it is a setting that half applies.
+ */
+export const RENDER_SURFACE = define<SurfaceQuality>({
+  key: 'render.surface',
+  group: 'display',
+  what: 'terrain refinement, ground detail, the sea and the rocks',
+  initial: DEFAULT_SURFACE_QUALITY,
+  accept: isSurfaceQuality,
 })
 
 /* ------------------------------------------------------------------------ */
@@ -482,6 +503,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_HDR,
   RENDER_AA,
   RENDER_LENS_FLARE,
+  RENDER_SURFACE,
   CAMERA_LENS,
   CONTROLS_KEYMAP,
   PLANETARIUM_LABELS,

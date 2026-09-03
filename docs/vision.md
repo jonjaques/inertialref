@@ -68,7 +68,7 @@ the browser (`await ir.selfTest()`):
 | 7   | Preserve precision near the surface                            | 1 inch resolved to 9.4 µm, 8.18 kpc out          |
 | 8   | Render meter-scale objects near the player                     | 1 m survives float32 at 8.18 kpc                 |
 | 9   | Rebase render origins without moving entities                  | 500 rebases, 2,560 km, zero drift                |
-| 10  | Run a meaningful procedural task in a worker                   | 4,761 elevations + 16,900 cover bytes, identical |
+| 10  | Run a meaningful procedural task in a worker                   | 4,761 elevations + 33,800 cover bytes, identical |
 | 11  | Serialize and restore world/player state                       | 998 bytes → identical state hash                 |
 | 12  | Run the simulation independently of frame rate                 | same hash at 60 Hz, 144 Hz and 100× warp         |
 

@@ -29,6 +29,7 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
+  DEFAULT_CELL_PIXELS,
   DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
@@ -43,6 +44,7 @@ import {
   selectTerrain,
   type TerrainEye,
   type TerrainPalette,
+  seaSheetDatum,
   terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
@@ -662,14 +664,27 @@ export class TerrainStreamer {
    * including the ones before a drawing buffer has been reported.
    */
   lensView: LensView | null = null
+  /**
+   * How many display pixels a cell may cover before refining — the
+   * surface-quality lever, written by the engine beside `lensView`. It is
+   * folded into the selection's `optics` scalar, because the predicate reads
+   * the two as one quotient and the memo compares that quotient.
+   */
+  cellPixels: number = DEFAULT_CELL_PIXELS
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
     this.#poolSource = pool === null ? null : poolHeightfieldSource(pool)
   }
 
-  /** Where the next heightfield request goes, or nowhere. */
-  #heightfields(): HeightfieldSource | null {
+  /**
+   * Where the next heightfield request goes, or nowhere.
+   *
+   * Public because the orbital bake asks the same source for the same tiles
+   * a patch is made of, and a second producer of "which source" would
+   * disagree with this one the frame the GPU one stood down.
+   */
+  heightfields(): HeightfieldSource | null {
     const source = this.source
     if (source !== null && source.available) return source
     return this.#poolSource
@@ -742,7 +757,7 @@ export class TerrainStreamer {
       // What the *next* request would go to, which is the only honest answer
       // once a producer has stopped: the fields already held came from
       // wherever they came from.
-      producer: this.#heightfields()?.kind ?? 'none',
+      producer: this.heightfields()?.kind ?? 'none',
       scatter: this.#scatter.summary(),
     }
   }
@@ -901,7 +916,7 @@ export class TerrainStreamer {
       this.#forget()
       return
     }
-    const options = { maxLevel, lens, viewport }
+    const options = { maxLevel, lens, viewport, cellPixels: this.cellPixels }
 
     /*
      * Reuse the held selection while nothing it is a function of has moved.
@@ -916,7 +931,7 @@ export class TerrainStreamer {
      * address is a different `Body`), and the cache epoch recorded at walk
      * time.
      */
-    const optics = pixelsPerRadian(lens, viewport)
+    const optics = pixelsPerRadian(lens, viewport) / this.cellPixels
     const held = this.#selection
     if (
       held !== null &&
@@ -1048,8 +1063,9 @@ export class TerrainStreamer {
       readonly maxLevel: number
       readonly lens: LensView['lens']
       readonly viewport: LensView['viewport']
+      readonly cellPixels: number
     },
-    /** `pixelsPerRadian(lens, viewport)`, computed by the caller. */
+    /** `pixelsPerRadian(lens, viewport) / cellPixels`, computed by the caller. */
     optics: number,
   ): void {
     // What to draw: refine only into ground already in the cache, so a patch
@@ -1383,6 +1399,9 @@ export class TerrainStreamer {
           elevations: field.elevations,
           cover: field.cover,
           bodyRadius: body.radius,
+          // The sheet's datum, where one is drawn at all — the same answer
+          // the palette gives the material, from the same function.
+          seaLevel: seaSheetDatum(body),
         }),
       )
       built += 1
@@ -1398,7 +1417,7 @@ export class TerrainStreamer {
    * dissolve exactly that grouping, so this only filters and takes.
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
-    const source = this.#heightfields()
+    const source = this.heightfields()
     if (source === null) return
     /*
      * The budget before the filter, and the early exit is the point.
@@ -1451,6 +1470,8 @@ export class TerrainStreamer {
         region,
         resolution: HEIGHTFIELD_RESOLUTION,
         border: HEIGHTFIELD_BORDER,
+        // The seabed only where `buildPatch` is handed a sheet to lay over it.
+        seabed: seaSheetDatum(body) !== null,
       })
       this.#inFlight.set(key, handle)
       void handle.result

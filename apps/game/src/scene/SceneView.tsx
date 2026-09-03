@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createTerrainMaterial } from '../render/terrain.ts'
+import { createWaterMaterial } from '../render/water.ts'
 import { Bodies } from './Bodies.tsx'
 import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
@@ -12,6 +13,7 @@ import { SunFlare } from './SunFlare.tsx'
 import { ScatterRocks } from './ScatterRocks.tsx'
 import { TerrainPatches } from './TerrainPatches.tsx'
 import { WarpFx } from './WarpFx.tsx'
+import { WaterPatches } from './WaterPatches.tsx'
 
 /*
  * The React Three Fiber layer.
@@ -58,6 +60,9 @@ export function SceneView({ engine }: { engine: GameEngine }) {
    * second program from the same material. `ScatterRocks` warms it.
    */
   const terrain = useMemo(() => createTerrainMaterial(), [])
+  // The sea's, likewise one for the session; `WaterPatches` is its only
+  // writer and its only reader.
+  const water = useMemo(() => createWaterMaterial(), [])
   return (
     <>
       {/* Space is genuinely high-contrast, but a debug build that renders its
@@ -73,8 +78,9 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <EngineTick engine={engine} />
       <CameraRig engine={engine} />
       <Starfield engine={engine} />
-      <Bodies engine={engine} />
+      <Bodies engine={engine} terrain={terrain} />
       <TerrainPatches engine={engine} terrain={terrain} />
+      <WaterPatches engine={engine} water={water} />
       <ScatterRocks engine={engine} terrain={terrain} />
       <OrbitTraces engine={engine} />
       <SunFlare engine={engine} />

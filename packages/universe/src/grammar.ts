@@ -221,8 +221,98 @@ export interface SurfaceGrammar {
   /** Great-circle troughs. 0..1. */
   readonly stripes: number
 
+  /**
+   * What stands as a liquid on this ground, if anything does. See `liquidKind`.
+   *
+   * On the grammar rather than derived at every reader because three of them
+   * disagree about what the answer is for: the sea's colour, whether the band
+   * stack carves valleys, and whether anything photosynthesises. Null on a
+   * body whose ground is too hot or too cold for any of the three.
+   */
+  readonly liquidKind: LiquidKind | null
+  /**
+   * How much running liquid works the surface, 0..1.
+   *
+   * Zero without air — a liquid at the surface of an airless body boils or
+   * freezes on the spot, whatever the temperature says — and zero outside the
+   * windows in `liquidWindow`. Magma does not count: a lava sea stands and a
+   * lava channel is a volcanic feature, not a drainage one.
+   */
+  readonly liquid: number
+  /** How deeply that liquid carves valleys into the landform, 0..1. */
+  readonly drainage: number
+  /**
+   * Whether anything grows here, 0..1.
+   *
+   * Water, air, and a temperature a liquid-water chemistry survives — which is
+   * a narrower window than `liquidWindow`'s water band, because a sea at 380 K
+   * is a sea and not a place with a biosphere on it. The design bible's flora
+   * biomes are post-MVP ([content § biomes](../../../docs/design/content.md));
+   * this is the pigment they will stand in, written into the cover so that a
+   * temperate world reads as one from orbit rather than as a wet desert.
+   */
+  readonly biota: number
+
   readonly bands: BandAmplitudes
 }
+
+/**
+ * The three liquids a surface can hold, by the temperature the ground is at.
+ *
+ * Water between the freezing point and a boiling point under a few bars;
+ * hydrocarbons — methane and ethane, which is what Titan's lakes are — around a
+ * hundred kelvin; and molten rock above the basalt solidus. The windows are
+ * disjoint, so a body holds at most one, and the gaps between them are worlds
+ * with no standing liquid at all: Venus at 739 K has an ocean's worth of water
+ * in its past and none on its ground.
+ */
+export type LiquidKind = 'water' | 'hydrocarbon' | 'magma'
+
+/**
+ * How stable a running liquid is at a ground temperature, 0..1, over the two
+ * windows that flow: water and hydrocarbons. Magma is `magmaWindow`.
+ *
+ * The edges are ramps rather than steps, because the temperature is one
+ * number for a whole body and a body at 245 K has liquid water at its equator
+ * and ice at its poles.
+ */
+export function liquidWindow(groundTemperature: Kelvin): number {
+  const water =
+    smoothstep(238, 262, groundTemperature) *
+    (1 - smoothstep(368, 395, groundTemperature))
+  const hydrocarbon =
+    smoothstep(64, 82, groundTemperature) *
+    (1 - smoothstep(118, 136, groundTemperature))
+  return Math.max(water, hydrocarbon)
+}
+
+/** How molten the ground is, 0..1: the basalt solidus, ramped. */
+export const magmaWindow = (groundTemperature: Kelvin): number =>
+  smoothstep(1_250, 1_420, groundTemperature)
+
+/** The liquid a ground temperature admits, or null between the windows. */
+export function liquidKind(groundTemperature: Kelvin): LiquidKind | null {
+  if (magmaWindow(groundTemperature) > 0.5) return 'magma'
+  if (liquidWindow(groundTemperature) <= 0.5) return null
+  return groundTemperature < 180 ? 'hydrocarbon' : 'water'
+}
+
+/**
+ * The window a biosphere needs, in kelvin: liquid water, and not much hotter
+ * than the warmest sea anything on Earth has grown in. Exported because the
+ * cover's TSL port reads the same four edges.
+ */
+export const BIOTA_WINDOW = {
+  coldOff: 248,
+  coldOn: 268,
+  hotOn: 318,
+  hotOff: 345,
+} as const
+
+/** How far inside `BIOTA_WINDOW` a ground temperature sits, 0..1. */
+export const biotaWindow = (groundTemperature: Kelvin): number =>
+  smoothstep(BIOTA_WINDOW.coldOff, BIOTA_WINDOW.coldOn, groundTemperature) *
+  (1 - smoothstep(BIOTA_WINDOW.hotOn, BIOTA_WINDOW.hotOff, groundTemperature))
 
 /** Surface gravity from mass and radius, m/s². */
 export const surfaceGravity = (mass: Kilograms, radius: Meters): number =>
@@ -391,6 +481,7 @@ export function surfaceGrammar(
    * Venus at 1, which is roughly the order their craters survive in.
    */
   const air = clamp01(Math.log10(1 + airMass) / 6)
+  const groundTemperature = surfaceTemperature(temperature, airMass)
   /*
    * `young` saturates at three times the threshold that separates a dead icy
    * moon from a live one, which is where Europa sits. Below it, Ganymede and
@@ -458,6 +549,29 @@ export function surfaceGrammar(
       ? 'measured'
       : reliefLimitSource(density, gravity, meanRadius)
 
+  /*
+   * Liquid needs a surface to stand on and air over it, whatever the
+   * temperature says: a giant has no ground for a sea to lie on, and at the
+   * pressure of a vacuum water sublimes or boils on the spot — a tenth of a
+   * bar is about where a puddle survives long enough to run downhill. Magma
+   * is the exception to the air, because a lava sea makes its own. The window
+   * itself is `liquidWindow`, and `hasOcean` widens it because a sea is the
+   * one fact about the liquid the generator has actually committed to —
+   * unless that sea is magma, which stands and does not drain: a lava world
+   * that drew a sea is not a river world, whatever the draw says.
+   */
+  const airborne = smoothstep(0.12, 0.35, air)
+  const liquid =
+    limit > 0
+      ? airborne *
+        Math.max(
+          liquidWindow(groundTemperature),
+          facts.hasOcean && magmaWindow(groundTemperature) <= 0 ? 0.5 : 0,
+        )
+      : 0
+  const admitted = liquidKind(groundTemperature)
+  const kind =
+    limit <= 0 || (admitted !== 'magma' && airborne <= 0) ? null : admitted
   const complexDiameter = mix(29_000, 3_500, icy) / Math.max(gravity, 1e-4)
   /*
    * Crater retention: air erases and a working surface resurfaces.
@@ -501,7 +615,7 @@ export function surfaceGrammar(
     density,
     meanRadius,
     temperature,
-    groundTemperature: surfaceTemperature(temperature, airMass),
+    groundTemperature,
     airMass,
     tidalProxy,
     reliefLimit: limit,
@@ -570,6 +684,25 @@ export function surfaceGrammar(
     chaos: icy * smoothstep(0.45, 0.85, young),
     sulci: icy * (smoothstep(0.12, 0.45, young) - smoothstep(0.6, 0.95, young)),
     stripes: young * young * icy,
+    liquidKind: kind,
+    liquid,
+    /*
+     * A thicker atmosphere carries more of the liquid around and drops more
+     * of it on the high ground, which is where a valley starts. Half strength
+     * is the floor rather than zero because `liquid` already carries the air
+     * gate: a world that has running liquid at all has valleys.
+     */
+    drainage: liquid * (0.5 + 0.5 * smoothstep(0.3, 0.8, air)),
+    /*
+     * A sea is not a condition — life on a world with rivers and lakes is
+     * still life — but it is most of one: an ocean is where the volatile
+     * inventory lives, and a world without one has its water tied up in ice
+     * or in the ground.
+     */
+    biota:
+      biotaWindow(groundTemperature) *
+      smoothstep(0.25, 0.5, air) *
+      (facts.hasOcean ? 1 : 0.35),
     bands,
   }
 }

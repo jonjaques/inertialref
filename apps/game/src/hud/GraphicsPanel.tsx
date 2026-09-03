@@ -1,8 +1,14 @@
-import { Sparkles } from 'lucide-react'
+import { Mountain, Sparkles } from 'lucide-react'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
+import {
+  GROUND_DETAILS,
+  SEA_DETAILS,
+  TERRAIN_DETAILS,
+} from '../render/quality.ts'
 import type { GraphicsState, HudRenderState } from './controls.ts'
 import { OptionGroup } from './OptionGroup.tsx'
 import { Section } from './Section.tsx'
+import { SurfaceRow } from './SurfaceRow.tsx'
 import { SwitchRow } from './SwitchRow.tsx'
 
 /*
@@ -69,6 +75,50 @@ export function GraphicsPanel({
             onChange={graphics.onAa}
           />
         </div>
+      </Section>
+
+      {/*
+       * The surface's levers. Each is one measured cost with a name on it
+       * rather than a rung of a quality ladder — `render/quality.ts` says what
+       * each step spends — and none rebuilds anything: the frame loop reads the
+       * record and the materials compare before they write.
+       */}
+      <Section id="graphics.surface" title="Surface">
+        <SurfaceRow
+          label="Terrain"
+          detail="how many pixels a ground cell may cover before it is refined"
+          value={graphics.surface.terrain}
+          values={TERRAIN_DETAILS}
+          onChange={(terrain) =>
+            graphics.onSurface({ ...graphics.surface, terrain })
+          }
+        />
+        <SurfaceRow
+          label="Ground detail"
+          detail="the per-pixel octaves under a mesh cell; lean keeps the coarse one"
+          value={graphics.surface.ground}
+          values={GROUND_DETAILS}
+          onChange={(ground) =>
+            graphics.onSurface({ ...graphics.surface, ground })
+          }
+        />
+        <SurfaceRow
+          label="Sea"
+          detail="full refracts the seabed; plain reflects the sky; flat has no waves"
+          value={graphics.surface.sea}
+          values={SEA_DETAILS}
+          onChange={(sea) => graphics.onSurface({ ...graphics.surface, sea })}
+        />
+        <SwitchRow
+          bordered
+          icon={Mountain}
+          label="Rocks"
+          detail="the instanced scatter on the ground"
+          on={graphics.surface.rocks}
+          onChange={(rocks) =>
+            graphics.onSurface({ ...graphics.surface, rocks })
+          }
+        />
       </Section>
 
       <Section

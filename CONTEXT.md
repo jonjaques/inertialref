@@ -6579,6 +6579,108 @@ status sample — which built two whole world snapshots a sample to inspect one
 entity, and now builds none — the 1 Hz travel survey, and the frame's own
 snapshot.
 
+## The liquid arrives, and the noise is baked (2 Sep 2026)
+
+The rest of [the terrain plan](design/plans/terrain.md), taken as far as a
+generated world can go before the sphere behind it learns what it looks like.
+[ADR-0026](docs/adr/0026-the-liquid.md) is the record; what is worth
+remembering from doing it:
+
+- **A sea was drawn wherever the generator drew one, and thirty of the
+  fifty-four within twenty light years were on ground between 400 and
+  1,200 K.** Fourteen remain. `makeSurface` still takes the draw and now reads it against the
+  ground temperature through `liquidKind`; `SYSTEM_ALGORITHM` stays where it
+  is because the `rng.bool` is still taken. Proxima Centauri II — the plate
+  world every tectonic test named — sits at 491 K, lost its sea, and with the
+  ocean lost the lithospheric weakening that gave it twenty plates. The test
+  now finds the most-plated solid body in the fixture; the claim did not
+  move, the example did.
+- **Valleys are the zero-level strip of a warped noise, and it reads as
+  drainage from every height the mesh reaches.** The strip where a noise
+  crosses zero branches and never ends in a plain, and `drainageCarve`
+  shallows it toward the datum so a valley meets the sea at sea level. From
+  30 km the rivers run to the coast and pool in crater bowls below the datum;
+  what they do not do is join, because nothing here knows which way is
+  downhill. The drainage graph stays deferred, and the plan says so.
+- **The shore needed the seabed.** Painting the sea on ground clamped to the
+  datum was the seabed's shape in blue, and from two meters it was a slope,
+  not a shore. The heightfield is `drawnGroundElevation` now — no clamp —
+  and `buildPatch` emits a datum sheet for any patch the sea reaches, with
+  the depth per vertex and a morph target for both. `drawnElevation` keeps
+  the clamp for the stance and the floor search, and `universe.test.ts` holds
+  the mesh to the unclamped canonical field under the sea.
+- **The sea refracts the frame behind it, and the harness cannot draw that.**
+  `viewportSharedTexture` copies the framebuffer once a frame by ending the
+  render pass and beginning it again, and the harness has no swap chain to
+  copy — `compile` hit the canvas stub, `draw` into a target hit
+  `RenderPassEncoder was already ended`. The frame read is a build option;
+  `materials.gpu.test.ts` compiles the sheet without it.
+- **The aerial veil's `1/μ` is an orbital formula.** From a standing camera
+  it put the ground forty meters away, seen at five degrees, behind eleven
+  atmospheres, and the sea at a two-meter stance was white. The view leg is
+  now the lesser of `1/μ` and the distance over Earth's 8.5 km scale height;
+  above the eight-pixel gate the distance is hundreds of scale heights and
+  the orbital term wins, so the seam with the disk is untouched.
+- **The frame at a retina size was per-pixel noise.** Measured at 1920×1200
+  over a device pixel ratio of 2, two meters over the sea with 1,227 patches
+  at level 17, by switching the terms off through `engine.surfaceQuality`:
+  9.5 fps before the phase; 12.2 with each octave inside a branch on its own
+  fade — a noise multiplied by a zero fade was a noise evaluated — of which
+  the ground's octaves were 25 ms of the 82 ms frame, the sea's waves and
+  refraction 15, the rocks 12 and the patches past `balanced` 18; 19.4 with
+  every octave a fetch of one baked 128³ single-channel texture; 11.9 once
+  the texture carried its gradient in four channels; and **16.3 with five
+  fetches a pixel rather than ten** — a four-channel texel fetch costs about
+  four times a one-channel one at the texture unit, and shrinking the texture
+  to 96³ or 64³ moved the figure by a frame. With every octave off the two
+  surfaces cost 18.0, which is the deposit stack, the veil, the sky shell and
+  MSAA at nine million pixels; the instrument for that is a timestamp query
+  per pass. At two kilometers 17.9 → 15.3, at thirty 23.9. Run-to-run
+  variance is about two frames a second, and a figure taken beside the GPU
+  test suite is a figure about the suite.
+- **A trilinear fetch differenced in screen space shows its texel grid.** The
+  first baked sea had a moiré in it: the normal was `dFdx` of a piecewise-
+  linear function, constant across each texel. The texture carries the
+  lattice's analytic gradient in its other three lanes now, and a shading
+  normal is the fetch's `yzw` projected onto the tangent plane — the ground's
+  bump left Mikkelsen's screen-space construction with it, which also ends
+  the per-triangle stepping that construction had at distance. The gradient
+  costs three fetches' worth of bandwidth, paid for by dropping the octaves
+  nobody could see: the macro band's third, the micro's second, the grain's
+  third at nine centimeters.
+- **A hue drawn uniformly makes every world the same unlikely pastel.**
+  `appearance.ts` draws from families — the iron oxides, the basalts, the
+  feldspars, olivine, sulfur, the tholins, five ices — weighted by ground
+  temperature, seven haze compositions gated by it, six pigments, and a
+  liquid's color, absorption and glow, all off a fork of the surface seed so
+  the body's other draws stay put.
+- **An opaque node material writes an alpha of one whatever its opacity
+  node says, and a cube camera inside a shell sees the winding backwards.**
+  The orbital bake found both. The first bake carried its sea mask in the
+  alpha lane and every face read 1.0 — a sphere that was all sea, glinting
+  everywhere — so the mask is a second pass into a second target. And the
+  first bake of all was black: the camera at the body's center looks at the
+  ground from inside, where its counter-clockwise-from-outside winding is
+  clockwise and the single-sided material culls it all. The bake's index is
+  the patch's turned over, which keeps the pipeline the boot warmed. Checked
+  by reading a face back through `window.orbitalBaker`, and by plates either
+  side of the relief gate showing the same lakes in the same places.
+- **The dev server reloads on every source edit, and a reload wipes the page
+  globals a driving script keeps.** Three DPR 2 measurements were lost to
+  `window.__sub` vanishing mid-run. Nothing under `src` is edited while a
+  drive invocation is in flight; test files and `.scratch/` are safe. A
+  "before" figure is `git stash`, measure, `git stash pop`.
+- **The seabed is right only under a sheet, and every producer emitted it
+  everywhere.** A mapped body gets no water sheet because its photograph is
+  its sea, and with the clamp off Earth's ocean floor streamed as a trench
+  under the photograph while the stance stayed at the datum: 347 of 400
+  directions below it, 4,955 m at worst. `HeightfieldRequest.seabed` carries
+  the choice now, set exactly where the streamer hands `buildPatch` a sheet
+  datum and defaulting to the clamp; `universe.test.ts` holds the default
+  clamped over a submarine region and `terrainKernel.gpu.test.ts` runs
+  Earth's seabed through both sides. Found by the review, beside the sphere's
+  fixed navy sea and a bake that thrashed with five bodies in frame.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

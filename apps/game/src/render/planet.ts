@@ -1,17 +1,21 @@
 import {
   Color,
+  type CubeTexture,
   DataTexture,
   DoubleSide,
+  HalfFloatType,
   LinearFilter,
   MeshBasicNodeMaterial,
   RGBAFormat,
   type Texture,
   Vector3,
+  WebGLCubeRenderTarget,
 } from 'three/webgpu'
 import {
   cameraPosition,
   cos,
   cross,
+  cubeTexture,
   dot,
   exp,
   float,
@@ -37,6 +41,7 @@ import {
   vec2,
   vec3,
 } from 'three/tsl'
+import { OPEN_OCEAN } from '@inertialref/rendering'
 import type { BodyTextures } from './planetTextures.ts'
 
 /*
@@ -129,6 +134,24 @@ const CLEAR = pixel(255, 255, 255, 0)
  * and the layout that shares is the layout the warm-up freezes. */
 const RING_WHITE = pixel(255, 255, 255, 255)
 
+/*
+ * The bake's stand-in: a four-texel cube target, never rendered into, so a
+ * body with no bake runs the identical graph over black with an alpha of
+ * zero. A render target rather than a `CubeTexture` built from images
+ * because the bake *is* a render target, and the sampler a pipeline is
+ * frozen with has to be the one the real bake binds — the same argument
+ * `BLANK` in `terrain.ts` makes about filtering.
+ */
+const BLANK_CUBE = /*@__PURE__*/ (() => {
+  const target = new WebGLCubeRenderTarget(4, {
+    type: HalfFloatType,
+    magFilter: LinearFilter,
+    minFilter: LinearFilter,
+    generateMipmaps: false,
+  })
+  return target
+})()
+
 export interface PlanetMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Unit vector toward the star, render space. */
@@ -203,6 +226,8 @@ export interface PlanetMaterial {
   readonly ringOuter: { value: number }
   readonly ringOpacity: { value: number }
   setTextures(maps: BodyTextures): void
+  /** The orbital bake to wear — its reflectance and its sea mask — or null. */
+  setBake(maps: { albedo: Texture; mask: Texture } | null): void
 }
 
 /**
@@ -231,6 +256,15 @@ export function createPlanetMaterial(): PlanetMaterial {
    * Two 1×1 textures cost nothing and keep the warmed layout the drawn one.
    */
   const ringMap = texture(RING_WHITE)
+  /*
+   * The orbital bake: the ground material's own picture of a generated body,
+   * six faces sampled by the body-fixed direction, with the sea mask in the
+   * alpha. `baked` is the switch; a mapped body keeps its photograph and a
+   * generated one wears this the moment it is ready.
+   */
+  const bakeMap = cubeTexture(BLANK_CUBE.texture)
+  const bakeMask = cubeTexture(BLANK_CUBE.texture)
+  const baked = uniform(0)
 
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
@@ -252,10 +286,11 @@ export function createPlanetMaterial(): PlanetMaterial {
   const hazeColour = uniform(new Color(0.28, 0.48, 0.95))
   const hazeLimb = uniform(new Color(0.92, 0.42, 0.2))
   const hazeStrength = uniform(0)
-  // Open-ocean reflectance in linear sRGB — a few percent, blue. Measured off
-  // the mid-Pacific in orbital photographs, not off the albedo map, whose
-  // "ocean" is bathymetry data wearing water's color.
-  const oceanColour = uniform(new Color(0.012, 0.04, 0.13))
+  // Open-ocean reflectance to start; `Bodies` writes the body's own liquid
+  // over it every frame, so a bake's sea is the colour the ground gives it.
+  const oceanColour = uniform(
+    new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
+  )
   const cloudHeight = uniform(0)
   const cloudShadow = uniform(0)
   const ringInner = uniform(0)
@@ -410,11 +445,20 @@ export function createPlanetMaterial(): PlanetMaterial {
    * Fully replacing it would erase the real shallow-water turquoise on the
    * banks and reefs, which photographs do show; 0.65 keeps them.
    */
-  const ocean = normalMap.b
-  const surfaceAlbedo = albedoMap
-    .sample(flowUv)
-    .rgb.mul(baseColour)
-    .mul(albedoScale)
+  /*
+   * The sphere's own local axes are the body's — the mesh is rotated by the
+   * body's orientation — so the unit position *is* the body-fixed direction
+   * the bake was taken by. A photographed body reads its albedo by UV, a
+   * generated one by direction, and `baked` chooses.
+   */
+  const bakeDirection = normalize(positionLocal)
+  const bakeSample = bakeMap.sample(bakeDirection)
+  const ocean = mix(normalMap.b, bakeMask.sample(bakeDirection).r, baked)
+  const surfaceAlbedo = mix(
+    albedoMap.sample(flowUv).rgb.mul(baseColour),
+    bakeSample.rgb,
+    baked,
+  ).mul(albedoScale)
   // Chroma about the sample's own luminance; past 1 the mix extrapolates,
   // which is what a saturation boost is.
   const rich = mix(vec3(luminance(surfaceAlbedo)), surfaceAlbedo, saturation)
@@ -537,6 +581,14 @@ export function createPlanetMaterial(): PlanetMaterial {
       nightMap.value = maps.night ?? BLACK
       cloudMap.value = maps.clouds ?? CLEAR
       ringMap.value = maps.ring ?? RING_WHITE
+    },
+    setBake(maps) {
+      const albedo = (maps?.albedo ?? BLANK_CUBE.texture) as CubeTexture
+      const mask = (maps?.mask ?? BLANK_CUBE.texture) as CubeTexture
+      if (bakeMap.value !== albedo) bakeMap.value = albedo
+      if (bakeMask.value !== mask) bakeMask.value = mask
+      const on = maps === null ? 0 : 1
+      if (baked.value !== on) baked.value = on
     },
   }
   return handle

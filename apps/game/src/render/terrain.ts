@@ -13,29 +13,23 @@ import {
   atan,
   attribute,
   clamp,
-  cross,
   dFdx,
   dFdy,
   dot,
   exp,
   float,
-  floor,
-  fract,
   Fn,
+  If,
   length,
   max,
   mix,
-  mx_fractal_noise_float,
   normalize,
   normalLocal,
   oneMinus,
   min,
   positionLocal,
   pow,
-  mod,
   saturate,
-  sign,
-  sin,
   smoothstep,
   sqrt,
   texture,
@@ -48,10 +42,18 @@ import {
 import type { LinearRgb } from '@inertialref/universe'
 import {
   NO_MORPH_DISTANCE,
+  OPEN_OCEAN,
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
   type TerrainPalette,
 } from '@inertialref/rendering'
+import { asVector, bumped, fbmFetch, noiseSampler } from './noiseNodes.ts'
+import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
+import {
+  DEFAULT_SURFACE_QUALITY,
+  groundBandsFor,
+  type GroundDetail,
+} from './quality.ts'
 
 /*
  * The ground's own material.
@@ -104,6 +106,17 @@ export interface TerrainMaterial {
    * whatever the manifest says exists.
    */
   setAlbedoMap(map: Texture | null, hasMap: boolean): void
+  /**
+   * The ground's slice of the surface-quality lever — the sea's goes to
+   * `WaterMaterial`, the rocks' to the scatter. Compares before it writes.
+   */
+  setQuality(ground: GroundDetail): void
+  /**
+   * Bake mode: 0 draws the ground, 1 writes its reflectance, 2 writes the
+   * sea mask as a grey. On for the orbital bake's twelve draws and back to 0
+   * before the frame's own.
+   */
+  setBakeMode(mode: 0 | 1 | 2): void
 }
 
 /**
@@ -150,8 +163,8 @@ const MICRO_RELIEF = 0.25
  */
 export const GRAIN_METRES = 0.7
 
-/** Octaves of it. Three reaches 9 cm, which is a pixel at arm's length. */
-const GRAIN_OCTAVES = 3
+/** Octaves of it. Two reaches 17 cm; the third, at 9 cm, was a fetch a pixel over the whole near ground for a band the chop under it already carries. */
+const GRAIN_OCTAVES = 2
 
 /** Peak-to-peak relief of the coarsest grain octave, meters. */
 const GRAIN_RELIEF = 0.035
@@ -173,12 +186,13 @@ const GRAIN_RELIEF = 0.035
  * evaluate the same periodic function of the same reduced coordinate — and the
  * coordinate stays under 45 m, where float32 resolves microns.
  *
- * Sixty-four, because every octave has to close on the same period: octave `i`
- * has `64 · 2ⁱ` wavelengths in it, which is a whole number for all three. The
- * repeat is 45 m of ground, which at the distance this band survives to is
- * always less than one period across the frame.
+ * `NOISE_CELLS`, because every octave has to close on the texture's period:
+ * octave `i` has `32 · 2ⁱ` wavelengths in it, a whole number for both. The
+ * repeat is 22.4 m of ground — a few periods across the frame at the distance
+ * the band survives to from a standing stance, more from a hover, and the
+ * grain is under the swell and the macro band there.
  */
-export const GRAIN_PERIOD = 64
+export const GRAIN_PERIOD = NOISE_CELLS
 
 export function createTerrainMaterial(): TerrainMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
@@ -200,6 +214,8 @@ export function createTerrainMaterial(): TerrainMaterial {
   const sand = deposit()
   const evaporite = deposit()
   const ice = deposit()
+  const seabed = deposit()
+  const pigment = deposit()
 
   const mineralLow = uniform(new Color(1, 1, 1))
   const mineralHigh = uniform(new Color(1, 1, 1))
@@ -212,7 +228,36 @@ export function createTerrainMaterial(): TerrainMaterial {
   const maxElevation = uniform(1)
   const seaEnabled = uniform(0)
   const seaDatum = uniform(0)
-  const oceanColour = uniform(new Color(0.012, 0.04, 0.13))
+  const oceanColour = uniform(
+    new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
+  )
+  /*
+   * Whether the sea is a sheet over this ground or a colour painted on it.
+   *
+   * One where `WaterPatches` draws the datum as a surface of its own, and the
+   * ground under it is a seabed; zero where there is no sheet — a mapped body
+   * — and the flat clamped ground wears the water's colour.
+   */
+  const seaSheet = uniform(0)
+  const liquidGlow = uniform(new Color(0, 0, 0))
+  /*
+   * The surface-quality lever, as the count of detail bands that run:
+   * two is the macro and micro octaves with the grain, one the macro alone,
+   * zero none. A uniform rather than a build option so the setting takes
+   * effect on the next frame, and a *branch* on it rather than a multiply
+   * by zero, because a noise multiplied by zero is a noise evaluated — and
+   * the evaluation is the cost this exists to remove.
+   */
+  const detailBands = uniform(groundBandsFor(DEFAULT_SURFACE_QUALITY.ground))
+  /*
+   * Bake mode: the graph answers "what does this ground reflect, and is it
+   * sea" instead of "what colour is this pixel". One graph rather than a
+   * second material, so the sphere's picture of a body and the ground's are
+   * the same deposits, the same tints and the same rivers by construction —
+   * the one way the seam rule can hold for a bake without a second copy of
+   * the stack to keep in step.
+   */
+  const bakeMode = uniform(0)
   const skyColour = uniform(new Color(0, 0, 0))
   const hazeColour = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
@@ -242,6 +287,8 @@ export function createTerrainMaterial(): TerrainMaterial {
    */
   const albedoMap = texture(BLANK)
   const mapped = uniform(0)
+  // The baked noise every detail octave is a fetch of. See `noiseTexture.ts`.
+  const noise = noiseSampler(noiseTexture())
 
   const eyeLocal = uniform(new Vector3()).onObjectUpdate(
     ({ object }) => (object?.userData.eyeLocal as Vector3 | undefined) ?? ZERO,
@@ -303,6 +350,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   const shadedNormal = varying(vec3(), 'terrainShaded')
   const localPosition = varying(vec3(), 'terrainLocal')
   const surfaceCover = varying(vec4(), 'terrainDeposit')
+  const surfaceCover2 = varying(vec4(), 'terrainDeposit2')
 
   const material = new MeshBasicNodeMaterial()
 
@@ -319,6 +367,8 @@ export function createTerrainMaterial(): TerrainMaterial {
     const targetNormal = attribute('terrainMorphNormal', 'vec3')
     const cover = attribute('terrainCover', 'vec4')
     const targetCover = attribute('terrainMorphCover', 'vec4')
+    const cover2 = attribute('terrainCover2', 'vec4')
+    const targetCover2 = attribute('terrainMorphCover2', 'vec4')
     const distance = length(positionLocal.sub(eyeLocal))
     // `max` on the denominator rather than a branch: a patch at level 0 has no
     // parent and arrives with both ends of its band at the same enormous
@@ -332,12 +382,14 @@ export function createTerrainMaterial(): TerrainMaterial {
     shadedNormal.assign(normalize(mix(normalLocal, targetNormal, k)))
     localPosition.assign(moved)
     surfaceCover.assign(mix(cover, targetCover, k))
+    surfaceCover2.assign(mix(cover2, targetCover2, k))
     return moved
   })()
 
   material.colorNode = Fn(() => {
     const local = localPosition
     const cover = surfaceCover
+    const cover2 = surfaceCover2
 
     /* --- where on the body this is ---------------------------------------- */
 
@@ -444,19 +496,46 @@ export function createTerrainMaterial(): TerrainMaterial {
       smoothstep(float(MICRO_METRES * 0.4), float(MICRO_METRES * 2), footprint),
     )
 
+    /*
+     * Each octave runs only where it is worth anything: inside a branch on
+     * its own fade as well as on the quality lever. Past its fade an octave
+     * multiplies out to zero, and a zero that cost a Perlin evaluation per
+     * pixel is most of what a whole-screen ground costs at a retina size —
+     * the far ground, which is most of the frame from any height, pays for
+     * none of the micro or the grain this way.
+     */
     // Direction-domain, so it is one continuous field over the whole body with
     // no patch, no cube face and no level in it.
-    const macro = mx_fractal_noise_float(up.mul(macroFrequency), 3, 2, 0.5).mul(
-      macroFade,
-    )
+    /*
+     * Each field is a value and a gradient — `x` and `yzw` of the fetch —
+     * and the gradient is carried in meters per meter along the body-fixed
+     * axes: the direction-domain band's slope over `|anchor|`, because a
+     * step of one meter on the ground is `1/|anchor|` of a unit direction;
+     * the meter-domain bands' over their own wavelengths.
+     */
+    const macro = vec4(0).toVar()
+    If(detailBands.greaterThan(0.5).and(macroFade.greaterThan(0)), () => {
+      const field = fbmFetch(noise, asVector(up.mul(macroFrequency)), 2)
+      macro.assign(
+        vec4(field.x, field.yzw.mul(macroFrequency).div(anchorLength)).mul(
+          macroFade,
+        ),
+      )
+    })
     // Meters-domain, so it stays sharp at arm's length. See `MICRO_METRES`.
-    const micro = mx_fractal_noise_float(
-      local.mul(float(1 / MICRO_METRES)),
-      2,
-      2.1,
-      0.55,
-    ).mul(microFade)
-    const detail = macro.mul(0.6).add(micro.mul(0.4))
+    const micro = vec4(0).toVar()
+    If(detailBands.greaterThan(1.5).and(microFade.greaterThan(0)), () => {
+      const field = fbmFetch(
+        noise,
+        asVector(local.mul(float(1 / MICRO_METRES))),
+        1,
+      )
+      micro.assign(
+        vec4(field.x, field.yzw.mul(float(1 / MICRO_METRES))).mul(microFade),
+      )
+    })
+    const detail = macro.x.mul(0.6).add(micro.x.mul(0.4))
+    const detailSlope = macro.yzw.mul(0.6).add(micro.yzw.mul(0.4))
 
     /*
      * And the grain: the band between a mesh cell and a pixel.
@@ -473,11 +552,17 @@ export function createTerrainMaterial(): TerrainMaterial {
         footprint,
       ),
     )
-    const grit = periodicFbm(
-      asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
-      GRAIN_OCTAVES,
-      GRAIN_PERIOD,
-    ).mul(grainFade)
+    const grit = vec4(0).toVar()
+    If(detailBands.greaterThan(1.5).and(grainFade.greaterThan(0)), () => {
+      const field = fbmFetch(
+        noise,
+        asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
+        GRAIN_OCTAVES,
+      )
+      grit.assign(
+        vec4(field.x, field.yzw.mul(float(1 / GRAIN_METRES))).mul(grainFade),
+      )
+    })
 
     /* --- which deposit is here --------------------------------------------- */
 
@@ -549,9 +634,19 @@ export function createTerrainMaterial(): TerrainMaterial {
      * the wrong places. Where a photograph exists it wins, which is the same
      * rule the maria and the ray systems already follow.
      */
-    const water = seaEnabled
+    const flat = seaEnabled
       .mul(invented)
       .mul(oneMinus(smoothstep(seaDatum, seaDatum.add(4), altitude)))
+    /*
+     * Under a sheet the ground here is the *seabed* and is drawn as one: a
+     * shelf that shows through the water. The painted water survives only
+     * where there is no sheet. The rivers are the cover's `wet` channel and
+     * are painted whichever way the sea is drawn, because a river is a few
+     * hundred meters wide and a sheet of its own would be a mesh per valley.
+     */
+    const submerged = flat.mul(seaSheet)
+    const river = saturate(cover2.x).mul(invented)
+    const water = max(flat.mul(oneMinus(seaSheet)), river)
     const dry = oneMinus(water)
     /*
      * Low ground, measured from the *shoreline* rather than from the datum.
@@ -603,17 +698,36 @@ export function createTerrainMaterial(): TerrainMaterial {
      * the same `mantled` weight the regolith does.
      */
     const frozen = saturate(cover.w).mul(mantled)
+    /*
+     * The seabed under a sheet, and the growth over the land.
+     *
+     * The seabed goes on after the wind-blown and evaporite deposits and
+     * before the ice, because a shelf is sorted fines whatever the shore
+     * beside it is made of, and frost lies on a frozen sea's floor as it does
+     * on anything. The pigment goes on *before* the ice and after every
+     * mineral deposit: a biosphere covers whatever soil it grows in, and the
+     * cap covers the biosphere. It is thinned on steep ground with the
+     * regolith it roots in — bare rock at the angle of repose is bare.
+     */
+    const seafloor = submerged.mul(
+      smoothstep(seaDatum.sub(maxElevation.mul(0.12)), seaDatum, altitude),
+    )
+    const grown = saturate(cover2.y).mul(invented).mul(dry).mul(mantled)
 
     let colour = mix(rock.albedo, regolith.albedo, mantled)
     colour = mix(colour, basalt.albedo, flooded)
     colour = mix(colour, sand.albedo, blown)
     colour = mix(colour, evaporite.albedo, dried)
+    colour = mix(colour, seabed.albedo, seafloor)
+    colour = mix(colour, pigment.albedo, grown)
     colour = mix(colour, ice.albedo, frozen)
 
     let scalars = mix(rock.params, regolith.params, mantled)
     scalars = mix(scalars, basalt.params, flooded)
     scalars = mix(scalars, sand.params, blown)
     scalars = mix(scalars, evaporite.params, dried)
+    scalars = mix(scalars, seabed.params, seafloor)
+    scalars = mix(scalars, pigment.params, grown)
     scalars = mix(scalars, ice.params, frozen)
 
     const roughness = scalars.x
@@ -699,16 +813,20 @@ export function createTerrainMaterial(): TerrainMaterial {
         along.y.div(sqrt(horizontal)).mul(1 / Math.PI),
       )
     }
-    const published = mix(
-      vec3(1),
-      sampled(
-        albedoMap,
-        mapUv,
-        uvGradient(dFdx(local)),
-        uvGradient(dFdy(local)),
-      ),
-      mapped,
-    )
+    // Sampled only on a mapped body. The stand-in is one white texel, and a
+    // fetch with explicit gradients is legal inside a branch — but it is
+    // still a fetch, on every pixel of every mapless world.
+    const published = vec3(1).toVar()
+    If(mapped.greaterThan(0.5), () => {
+      published.assign(
+        sampled(
+          albedoMap,
+          mapUv,
+          uvGradient(dFdx(local)),
+          uvGradient(dFdy(local)),
+        ),
+      )
+    })
 
     /*
      * The ceiling, spent once and here.
@@ -738,73 +856,48 @@ export function createTerrainMaterial(): TerrainMaterial {
       min(float(1), float(REFLECTANCE_CEILING).div(max(peak, float(1e-4)))),
     )
 
-    const surfaceAlbedo = mix(ground, oceanColour, water)
+    /*
+     * The painted water's colour. Open sea — where there is no sheet — is
+     * the liquid's deep colour; a river is a few meters deep and shows its
+     * bed through the water, so the channel is the bed tinted rather than
+     * the deep colour laid on.
+     */
+    const riverColour = mix(ground.mul(0.55), oceanColour.mul(2.2), float(0.6))
+    const surfaceAlbedo = mix(
+      mix(ground, oceanColour, water),
+      riverColour,
+      river.mul(seaSheet.add(oneMinus(seaEnabled))),
+    )
     // Water is smooth and rock is not; the glint below is what the roughness
     // is actually spent on.
     const surfaceRoughness = mix(roughness, float(0.06), water)
+    // A magma river is its own light; the sea sheet carries the glow for the
+    // sea, and the painted water carries it for the channels.
+    const emission = liquidGlow.mul(water)
 
     /* --- the shading normal ------------------------------------------------- */
 
     /*
-     * Detail relief, as a screen-space gradient of the height field.
+     * Detail relief, as the height field's own gradient.
      *
-     * Mikkelsen's unparametrized bump mapping, which is what `bumpMap()` in TSL
-     * does for a texture — written out here because the base normal it has to
-     * perturb is the *morphed* one, in body-fixed axes, and the built-in reads
-     * `normalView`. Working in body-fixed axes throughout is what keeps this
-     * consistent with the rest of the graph; the algorithm needs only that the
-     * position and the normal are in the same frame.
+     * The fields carry their slopes, so the shading normal is the mesh normal
+     * tilted by the tangential part of the summed slope — no screen-space
+     * derivative anywhere in it. Differencing the height across pixels is
+     * the form the texture cannot take: a trilinear fetch is piecewise linear, so its screen difference
+     * is constant across a texel and the texel grid shows through the shading
+     * as a crease at arm's length. The analytic gradient is smooth where the
+     * value is only continuous.
      *
-     * Water gets none of it. A wave field is not in this noise, and mottling a
-     * flat sea with rock grain is the one thing that would make an ocean read
-     * as wet concrete.
+     * Water gets none of it. A wave field is not in this noise, and mottling
+     * a flat sea with rock grain is the one thing that would make an ocean
+     * read as wet concrete.
      */
-    const height = detail
+    const slopeOfDetail = detailSlope
       .mul(float(MICRO_RELIEF))
-      .add(grit.mul(float(GRAIN_RELIEF)))
+      .add(grit.yzw.mul(float(GRAIN_RELIEF)))
       .mul(bump)
       .mul(dry)
-    /*
-     * The position derivatives are **not** normalized, and that is the one
-     * place this departs from `bumpMap()` in TSL.
-     *
-     * The built-in differences a *texture*, so its `dH` is dimensionless and
-     * normalizing the position derivatives is what makes the result independent
-     * of the texture's scale. Here `height` is in meters, so the two halves have
-     * to be measured against the same ruler: left normalized, `det` is a
-     * per-triangle constant while `dH` grows with the pixel footprint, which
-     * makes the bump strengthen with distance *and* step at every triangle
-     * edge. At two kilometers up, with the far ground coarse enough that one
-     * cell covers a hundred pixels, that draws flat-toned quadrilaterals across
-     * the plain.
-     *
-     * Unnormalized, `det` goes as the footprint squared and so does the
-     * gradient term, so the quotient is scale-free — which is what Mikkelsen's
-     * derivation actually says.
-     */
-    const sigmaX = dFdx(local)
-    const sigmaY = dFdy(local)
-    const r1 = cross(sigmaY, normal)
-    const r2 = cross(normal, sigmaX)
-    const determinant = dot(sigmaX, r1)
-    const gradient = sign(determinant).mul(
-      dFdx(height).mul(r1).add(dFdy(height).mul(r2)),
-    )
-    /*
-     * The floor on `|det|` is a NaN guard, not a term.
-     *
-     * A quad that is degenerate in screen space — a sliver at the limb, or one
-     * whose two triangles carry the same `local` — has `sigmaX ≈ sigmaY ≈ 0`, so
-     * `det` is zero and `sign(det)` takes `gradient` to zero with it. The
-     * argument is then the zero vector, and `normalize` of that is NaN across
-     * the whole quad, through `mu0`, `mu` and `skyView` into the final colour.
-     * 1e-9 is far below any real determinant — it goes as the pixel footprint
-     * squared, which is 1e-4 m² on the finest patch under a landing ship — and
-     * its square survives float32, which 1e-20 would not.
-     */
-    const shaded = normalize(
-      max(determinant.abs(), float(1e-9)).mul(normal).sub(gradient),
-    )
+    const shaded = bumped(asVector(normal), asVector(slopeOfDetail))
 
     /* --- the light ---------------------------------------------------------- */
 
@@ -919,8 +1012,22 @@ export function createTerrainMaterial(): TerrainMaterial {
      * view out — clamped where it stops being true and the shell's halo takes
      * over anyway.
      */
-    const airmass = float(1)
-      .div(max(mu, float(0.09)))
+    /*
+     * The view leg is the shorter of two paths, because the flat-atmosphere
+     * `1/μ` is a statement about looking down from space and says something
+     * absurd from a standing camera: the ground forty meters away, seen at
+     * five degrees, is not behind eleven atmospheres of air. The air between
+     * a point and the eye is at most the distance between them over the
+     * scale height, and that term takes over exactly where the orbital one
+     * stops being true — below the gate, at the ground, where the seam the
+     * disk shares has no say. `AIR_SCALE_HEIGHT` is Earth's; the haze's own
+     * thickness already scales the whole veil.
+     */
+    const viewLeg = min(
+      float(1).div(max(mu, float(0.09))),
+      length(toEye).div(float(AIR_SCALE_HEIGHT)),
+    )
+    const airmass = viewLeg
       .add(float(1).div(max(incidence, float(0.09))))
       .mul(0.5)
     const veil = oneMinus(exp(airmass.mul(-0.15)))
@@ -928,11 +1035,25 @@ export function createTerrainMaterial(): TerrainMaterial {
       .mul(smoothstep(float(-0.06), float(0.28), incidence))
     const veilColour = mix(hazeColour, vec3(1), veil.mul(0.55)).mul(sunlight)
 
-    const surface = direct.add(indirect).add(sunlight.mul(glint))
+    const surface = direct.add(indirect).add(sunlight.mul(glint)).add(emission)
     // 0.68 for the reason the disk uses it: at 0.8 the whole thing goes milky
     // and the ocean loses its depth, where the photographs keep a saturated
     // blue mid-disk under the veil.
-    return mix(surface, veilColour, veil.mul(0.68))
+    const lit = mix(surface, veilColour, veil.mul(0.68))
+    /*
+     * The bake: mode 1 is the reflectance alone, mode 2 the sea mask as a
+     * grey. Two passes rather than the mask in the alpha lane, because an
+     * opaque node material writes an alpha of one whatever the opacity node
+     * says — measured as a mask of 1.0 over every face of the first bake,
+     * and a sphere that was all sea.
+     */
+    const seaMask = max(flat, river)
+    const baked = mix(
+      mix(ground, riverColour, river),
+      vec3(seaMask),
+      saturate(bakeMode.sub(1)),
+    )
+    return mix(lit, baked, saturate(bakeMode))
   })()
 
   return {
@@ -950,6 +1071,8 @@ export function createTerrainMaterial(): TerrainMaterial {
       write(sand, palette.sand)
       write(evaporite, palette.evaporite)
       write(ice, palette.ice)
+      write(seabed, palette.seabed)
+      write(pigment, palette.pigment)
       paint(mineralLow, palette.mineralLow)
       paint(mineralHigh, palette.mineralHigh)
       freshGain.value = palette.freshGain
@@ -961,7 +1084,9 @@ export function createTerrainMaterial(): TerrainMaterial {
       maxElevation.value = palette.maxElevation
       seaEnabled.value = palette.seaLevel === null ? 0 : 1
       seaDatum.value = palette.seaLevel ?? 0
+      seaSheet.value = palette.sheet
       paint(oceanColour, palette.oceanColour)
+      paint(liquidGlow, palette.liquid?.glow ?? BLACK_RGB)
       paint(skyColour, palette.skyColour)
       paint(hazeColour, palette.hazeColour)
       skyStrength.value = palette.airThickness
@@ -975,6 +1100,13 @@ export function createTerrainMaterial(): TerrainMaterial {
        * four kilometers of ground on both.
        */
       macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
+    },
+    setQuality(ground) {
+      const bands = groundBandsFor(ground)
+      if (detailBands.value !== bands) detailBands.value = bands
+    },
+    setBakeMode(mode) {
+      bakeMode.value = mode
     },
     setAlbedoMap(map, hasMap) {
       /*
@@ -1004,83 +1136,6 @@ export function grainWrap(meters: number): number {
   const cycles = meters / GRAIN_METRES
   return cycles - Math.floor(cycles / GRAIN_PERIOD) * GRAIN_PERIOD
 }
-
-/**
- * Value noise on a wrapped integer lattice, in [-1, 1].
- *
- * Written out rather than taken from `mx_*`, because the one property this band
- * needs is the one none of the built-ins has: **periodicity**. The domain is a
- * patch-local position offset by an origin already reduced modulo the period, so
- * two patches agree wherever they overlap only if the field itself closes on
- * that period — otherwise the reduction is the seam it was added to remove.
- *
- * The hash is the classic `fract(sin(dot))`, which is a poor hash at large
- * coordinates and a perfectly good one here: `wrap` keeps every lattice index
- * under `period`, so the argument to `sin` never leaves the range float32
- * resolves finely. Eight corners, smoothstep interpolation, three octaves —
- * twenty-four hashes a fragment, on a band that has already faded out by a meter
- * of footprint.
- */
-function periodicFbm(point: Vector, octaves: number, period: number): Scalar {
-  let sum: Scalar = asScalar(float(0))
-  let norm = 0
-  let amplitude = 1
-  for (let i = 0; i < octaves; i += 1) {
-    const scale = 2 ** i
-    sum = asScalar(
-      sum.add(
-        periodicNoise(asVector(point.mul(float(scale))), period * scale).mul(
-          amplitude,
-        ),
-      ),
-    )
-    norm += amplitude
-    amplitude *= 0.5
-  }
-  return asScalar(sum.mul(float(1 / norm)))
-}
-
-/** One octave of it: eight wrapped corners, trilinear through a Hermite step. */
-function periodicNoise(point: Vector, period: number): Scalar {
-  const cell = asVector(floor(point))
-  const inside = asVector(point.sub(cell))
-  // The same Hermite `smoothstep` uses, spelled out because the endpoints are 0
-  // and 1 and a `smoothstep(0, 1, x)` would be two more constants to read.
-  const t = asVector(inside.mul(inside).mul(inside.mul(-2).add(3)))
-  const corner = (dx: number, dy: number, dz: number): Scalar =>
-    latticeValue(asVector(cell.add(vec3(dx, dy, dz))), period)
-  const x00 = mix(corner(0, 0, 0), corner(1, 0, 0), t.x)
-  const x10 = mix(corner(0, 1, 0), corner(1, 1, 0), t.x)
-  const x01 = mix(corner(0, 0, 1), corner(1, 0, 1), t.x)
-  const x11 = mix(corner(0, 1, 1), corner(1, 1, 1), t.x)
-  return mix(mix(x00, x10, t.y), mix(x01, x11, t.y), t.z)
-    .mul(2)
-    .sub(1)
-}
-
-/** One lattice cell's value in [0, 1), wrapped so the field is periodic. */
-function latticeValue(cell: Vector, period: number): Scalar {
-  const wrapped = asVector(mod(cell, float(period)))
-  return asScalar(
-    fract(sin(dot(wrapped, vec3(127.1, 311.7, 74.7))).mul(float(43758.5453))),
-  )
-}
-
-/**
- * The two node shapes the noise above passes around, and the two re-narrowings
- * that keep it readable.
- *
- * TSL's builders each return their own node class — `vec3()` a join, `.mul()` an
- * operator, `mix()` a math node — so an arithmetic chain changes type at every
- * step and a helper typed against one of them cannot be called with the result
- * of another. Every one of them is the same thing at runtime and generates the
- * same WGSL; the cast is a re-narrowing rather than a lie, and it is the same
- * one `sampled` above makes for the same reason.
- */
-type Vector = ReturnType<typeof vec3>
-type Scalar = ReturnType<typeof float>
-const asVector = (node: unknown): Vector => node as Vector
-const asScalar = (node: unknown): Scalar => node as Scalar
 
 /**
  * A texture read with explicit gradients, as a colour.
@@ -1128,7 +1183,7 @@ function write(into: Deposit, from: SurfaceMaterial): void {
  * `skyColour.b` pasted into the `hazeColour` block type-checks through and then
  * reads as an art choice rather than as a bug.
  */
-function paint(into: { value: Color }, from: LinearRgb): void {
+export function paint(into: { value: Color }, from: LinearRgb): void {
   into.value.setRGB(from.r, from.g, from.b)
 }
 
@@ -1149,9 +1204,20 @@ function paint(into: { value: Color }, from: LinearRgb): void {
  * which is what `SceneView` warns about.
  *
  * It is scaled by how much sky the point can see, so a crater floor is darker
- * at night than the plain around it rather than a flat wash.
+ * at night than the plain around it rather than a flat wash. The sea keeps
+ * the same floor, or the sheet and the shore differ at night.
  */
-const AMBIENT = 0.03
+export const AMBIENT = 0.03
+
+/**
+ * The scale height the ground-level veil measures a path against, meters.
+ *
+ * Earth's 8.5 km. A horizontal path of one scale height at sea level holds
+ * about the air a vertical column does, which is what makes it the unit the
+ * orbital `1/μ` term is already in; the two legs of the veil can then be the
+ * lesser of each other with nothing converted.
+ */
+export const AIR_SCALE_HEIGHT = 8_500
 
 /**
  * How much of the light under a full atmosphere arrives from the sky rather
@@ -1161,7 +1227,7 @@ const AMBIENT = 0.03
  * one under overcast, which is a state this model does not carry. Scaled by
  * `airThickness` so Mars's 0.15 gives 5% and Luna's absent air gives none.
  */
-const SKY_FRACTION = 0.33
+export const SKY_FRACTION = 0.33
 
 /*
  * A one-pixel white stand-in, so a body with no map runs the identical graph.
@@ -1196,6 +1262,7 @@ const BLANK = /*@__PURE__*/ (() => {
 })()
 
 const ZERO = new Vector3()
+export const BLACK_RGB: LinearRgb = { r: 0, g: 0, b: 0 }
 /**
  * Both ends past any distance: a patch with no parent never morphs. The
  * selection's own finite sentinel, because `Number.MAX_VALUE` rounds to

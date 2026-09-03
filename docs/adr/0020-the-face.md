@@ -1,6 +1,7 @@
 # ADR-0020: The ground is a cover field, a palette and one material
 
-Status: accepted · 2026-08-29
+Status: accepted · 2026-08-29 · amended by [ADR-0026](0026-the-liquid.md):
+the cover is six channels in eight bytes, two attributes
 
 ## Context
 

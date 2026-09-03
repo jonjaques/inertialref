@@ -17,7 +17,7 @@ import {
   Vector3,
 } from 'three/webgpu'
 import { buildPatch } from '@inertialref/rendering'
-import { regionAddress } from '@inertialref/universe'
+import { COVER_CHANNELS, regionAddress } from '@inertialref/universe'
 import { scatteringFor } from './atmosphereLuts.ts'
 import { createLensFlare } from './flare.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
@@ -32,6 +32,12 @@ import {
   createRingMaterial,
 } from './planet.ts'
 import { createTerrainMaterial } from './terrain.ts'
+import { createWaterMaterial } from './water.ts'
+import {
+  attachCover,
+  COVER_ATTRIBUTES,
+  MORPH_COVER_ATTRIBUTES,
+} from './terrainAttributes.ts'
 import { createWarpEffects } from './warpEffects.ts'
 
 /*
@@ -87,7 +93,7 @@ function patchMesh(material: Mesh['material']): Mesh {
     resolution,
     border,
     elevations: new Float32Array(stride * stride),
-    cover: new Uint8Array(resolution * resolution * 4),
+    cover: new Uint8Array(resolution * resolution * COVER_CHANNELS),
     bodyRadius: 1_737_400,
   })
   const geometry = new BufferGeometry()
@@ -101,14 +107,7 @@ function patchMesh(material: Mesh['material']): Mesh {
     'terrainMorphNormal',
     new BufferAttribute(patch.morphNormals, 3),
   )
-  geometry.setAttribute(
-    'terrainCover',
-    new BufferAttribute(patch.cover, 4, true),
-  )
-  geometry.setAttribute(
-    'terrainMorphCover',
-    new BufferAttribute(patch.morphCover, 4, true),
-  )
+  attachCover(geometry, patch.cover, patch.morphCover)
   geometry.setIndex(new BufferAttribute(patch.indices, 1))
   const mesh = new Mesh(geometry, material)
   mesh.userData.eyeLocal = new Vector3()
@@ -357,19 +356,88 @@ describe('what the WGSL contains', () => {
     expect(bindings).toHaveLength(2)
   })
 
-  it('the ground reads all four of its morph attributes in the vertex stage', async () => {
+  it('the ground reads all six of its morph attributes in the vertex stage', async () => {
     const ground = patchMesh(createTerrainMaterial().material)
     const { vertexShader } = await gpu.shader(ground, camera, staged(ground))
     for (const name of [
       'terrainMorph',
       'terrainMorphNormal',
-      'terrainCover',
-      'terrainMorphCover',
+      ...COVER_ATTRIBUTES,
+      ...MORPH_COVER_ATTRIBUTES,
     ]) {
       // Word-bounded, because `terrainMorph` is a prefix of two of the others:
       // a plain `toContain` for it is satisfied by `terrainMorphNormal`, so
       // dropping the morph position — the read whose absence cracks every LOD
       // switch — would leave this green.
+      expect(vertexShader).toMatch(new RegExp(`\\b${name}\\b`))
+    }
+  })
+})
+
+/** A sheet over the same nine-by-nine patch, at a datum the ground crosses. */
+function sheetMesh(material: Mesh['material']): Mesh {
+  const resolution = 9
+  const border = 2
+  const stride = resolution + 2 * border
+  const elevations = new Float32Array(stride * stride)
+  for (let i = 0; i < elevations.length; i += 1) elevations[i] = (i % 7) - 3
+  const patch = buildPatch({
+    region: regionAddress(0, 0, 0, 0),
+    resolution,
+    border,
+    elevations,
+    cover: new Uint8Array(resolution * resolution * COVER_CHANNELS),
+    bodyRadius: 1_737_400,
+    seaLevel: 0,
+  })
+  const sheet = patch.water
+  if (sheet === null) throw new Error('the sea reaches this patch')
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(sheet.positions, 3))
+  geometry.setAttribute(
+    'terrainMorph',
+    new BufferAttribute(sheet.morphPositions, 3),
+  )
+  geometry.setAttribute('waterDepth', new BufferAttribute(sheet.depths, 1))
+  geometry.setAttribute(
+    'waterMorphDepth',
+    new BufferAttribute(sheet.morphDepths, 1),
+  )
+  geometry.setIndex(new BufferAttribute(patch.indices, 1))
+  const mesh = new Mesh(geometry, material)
+  mesh.userData.eyeLocal = new Vector3()
+  mesh.userData.morphBand = new Vector2(1, 2)
+  mesh.userData.anchor = new Vector3(
+    patch.anchor.x,
+    patch.anchor.y,
+    patch.anchor.z,
+  )
+  mesh.userData.waveOrigin = new Vector3()
+  return mesh
+}
+
+describe('the sea', () => {
+  it('compiles over a sheet, and reads the depth and the morph in the vertex stage', async () => {
+    /*
+     * Built without the frame read. `viewportSharedTexture` copies the
+     * framebuffer before the first sheet of a frame is drawn — ending the
+     * render pass and beginning it again — and the harness has neither a swap
+     * chain to copy nor a pass that survives being re-begun around its single
+     * draw, so the production graph cannot be drawn here. What can is
+     * everything else in it: the sheet's own attributes, the morph, the
+     * waves, the Fresnel split. The copy is exercised where it runs, in the
+     * browser, and `WaterBuild` says why the option exists.
+     */
+    const sea = sheetMesh(createWaterMaterial({ refraction: false }).material)
+    const scene = staged(sea)
+    gpu.warnings()
+    await gpu.compile(sea, camera, scene)
+    const missing = gpu
+      .warnings()
+      .filter((entry) => /not found on geometry/.test(entry.message))
+    expect(missing).toEqual([])
+    const { vertexShader } = await gpu.shader(sea, camera, scene)
+    for (const name of ['terrainMorph', 'waterDepth', 'waterMorphDepth']) {
       expect(vertexShader).toMatch(new RegExp(`\\b${name}\\b`))
     }
   })

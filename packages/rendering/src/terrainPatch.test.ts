@@ -3,6 +3,7 @@ import { Vec, vec3, type Vec3 } from '@inertialref/spatial'
 import { World } from '@inertialref/simulation'
 import {
   type Body,
+  COVER_CHANNELS,
   generateHeightfield,
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
@@ -190,9 +191,9 @@ describe('a terrain patch', () => {
           const parentIndex =
             (half * qj + (row & ~1) / 2) * RESOLUTION +
             (half * qi + (col & ~1) / 2)
-          for (let channel = 0; channel < 4; channel += 1) {
-            expect(child.morphCover[index * 4 + channel]).toBe(
-              parent.cover[parentIndex * 4 + channel],
+          for (let channel = 0; channel < COVER_CHANNELS; channel += 1) {
+            expect(child.morphCover[index * COVER_CHANNELS + channel]).toBe(
+              parent.cover[parentIndex * COVER_CHANNELS + channel],
             )
           }
         }

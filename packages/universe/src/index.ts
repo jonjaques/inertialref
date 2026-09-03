@@ -1,5 +1,6 @@
 export * from './address.ts'
 export * from './archetype.ts'
+export * from './appearance.ts'
 export * from './bands.ts'
 export * from './catalog/index.ts'
 export * from './cells.ts'

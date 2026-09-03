@@ -130,9 +130,14 @@ advance at all. The consequence for anyone reading the counters: `visited`,
 
 ### Two fields, and which one each reader gets
 
-The mesh, the detail floor, the material and the observatory's standing camera
-read `drawnElevation`. The contact test, the saves and the survey sites read
-`groundElevation`. The first is the second plus a presentational tail, and
+The detail floor and the observatory's standing camera read `drawnElevation`;
+the mesh reads `drawnGroundElevation`, which is the same field with the sea
+clamp left off — the seabed, over which the sea is drawn as a sheet of its own.
+The request says which (`seabed`), and the streamer sets it exactly where it
+hands `buildPatch` a sheet datum: a mapped body gets no sheet, its photograph
+is its sea, and its mesh keeps the clamp.
+The contact test, the saves and the survey sites read `groundElevation`. The
+drawn fields are the canonical one plus a presentational tail, and
 `drawnDivergence` publishes how far apart they may get: **1.25 m**.
 
 They are two functions rather than one because of a single line of arithmetic.
@@ -297,7 +302,8 @@ extremes — and there are two. The worker pool runs `generateHeightfield`
 itself, which is the canonical field: 22 to 50 ms a patch across the zoo on one
 core, and a pool of eight does not divide a landing's nine hundred patches far
 enough. The GPU tile producer (`apps/game/src/render/terrainProducer.ts`) runs
-`terrainKernel.ts`, a TSL port of `drawnElevation` and the cover, one
+`terrainKernel.ts`, a TSL port of `drawnElevation` — of `drawnGroundElevation` where the
+request says `seabed` — and the cover, one
 invocation per bordered sample: sixteen tiles a dispatch, one dispatch in
 flight at a time, one body per batch, and a readback that is a copy — measured
 through Dawn on an M5, a batch of sixteen Luna tiles at the detail floor is
@@ -435,10 +441,10 @@ gone.
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                                                                           | [roadmap](../roadmap.md#streaming-and-scale) |
 | The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                              | [roadmap](../roadmap.md#terrain)             |
-| Vertex attributes are float32                    | 237 KB a patch, so a whole-disk selection is 113–255 MB at the flight lens                                                        | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                    | 270 KB a patch, so a whole-disk selection is 129–291 MB at the flight lens                                                        | [roadmap](../roadmap.md#terrain)             |
 | Scatter resolves on the main thread              | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame     | [roadmap](../roadmap.md#terrain)             |
 | The mesh is built on the main thread             | 0.25 ms a patch, budgeted at eight a frame; the producer already has the field                                                    | [roadmap](../roadmap.md#terrain)             |
-| A generated body's sphere is a flat tint         | Its ground has maria, rays and caps below the eight-pixel gate, and none above it                                                 | [roadmap](../roadmap.md#terrain)             |
+| A generated body's sphere has no relief          | It wears the ground's reflectance and sea mask, and shades as a smooth ball above the eight-pixel gate                            | [roadmap](../roadmap.md#terrain)             |
 | Deposits are chosen from the mesh, not the field | Two patches at different levels report different slopes for the same ground, so a deposit weight steps by ~4% at a level boundary | [roadmap](../roadmap.md#terrain)             |
 
 **The morph closes one level, and that is a constraint rather than a setting.**

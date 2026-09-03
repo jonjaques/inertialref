@@ -496,28 +496,43 @@ describe('the crater field', () => {
      * A body with `plateCount === 1` never enters the branches that read
      * `sample.plate.*`, so a list of Luna, Mercury, Mars, Callisto and Miranda
      * exercises the crater ladder and nothing else — it cannot fail for
-     * anything the tectonic bands do, however large. Earth carries 22 plates
-     * and Proxima Centauri II 20, which is why they are named individually
-     * rather than left to whichever bodies a zoo sweep happens to pick.
+     * anything the tectonic bands do, however large. Earth carries 22 plates,
+     * which is why it is named individually rather than left to whichever
+     * bodies a zoo sweep happens to pick.
      *
-     * Proxima Centauri II is the worst case in `TEST_CATALOG` and it is worth a
-     * generated system for: a plate boundary stepped 9,433.9 m there, 46% of
-     * everything that world has, against 891.2 m on Earth. Both are closed; the
-     * seam that survives on it is pinned below rather than asserted away.
+     * The generated subject is the most-plated solid world in `TEST_CATALOG`,
+     * found rather than named. It was Proxima Centauri II, at twenty plates —
+     * the worst case, where a plate boundary stepped 9,433.9 m, 46% of
+     * everything that world has, against 891.2 m on Earth — until its sea was
+     * read against its 491 K ground and went, and with it the ocean that
+     * weakens a lithosphere into plates. A name pins the test to one body's
+     * facts; a search pins it to the claim, which is about any plate world.
      */
-    const plated = generateSystem(
-      ROOT,
-      MILKY_WAY,
-      catalogStub(
-        TEST_CATALOG.stars.find(
-          (star) => star.name === 'Proxima Centauri',
-        ) as (typeof TEST_CATALOG.stars)[number],
-      ),
-    )
-    const proxima = [...walkBodies(plated)].find(
-      (body) => body.name === 'Proxima Centauri II',
-    )
-    expect(proxima?.surface.grammar.plateCount).toBeGreaterThan(1)
+    let plated: Body | null = null
+    for (const star of TEST_CATALOG.stars) {
+      if (star.name === 'Sol') continue
+      let system: ReturnType<typeof generateSystem>
+      try {
+        system = generateSystem(ROOT, MILKY_WAY, catalogStub(star))
+      } catch {
+        continue
+      }
+      for (const body of walkBodies(system)) {
+        if (body.surface.maxElevation <= 0 || body.radius < 1e6) continue
+        if (
+          plated === null ||
+          body.surface.grammar.plateCount > plated.surface.grammar.plateCount
+        ) {
+          plated = body
+        }
+      }
+    }
+    /*
+     * The floor is the measured one: Sirius II at nine plates is the most-plated
+     * generated body in the fixture. `> 1` passed on a two-plate body and proved
+     * nothing about the ranked-identity rule the tectonic bands exist to hold.
+     */
+    expect(plated?.surface.grammar.plateCount).toBeGreaterThanOrEqual(9)
     expect(find('Earth').surface.grammar.plateCount).toBeGreaterThan(1)
 
     const subjects: readonly Body[] = [
@@ -530,8 +545,9 @@ describe('the crater field', () => {
     }
 
     /*
-     * Proxima Centauri II is held to the same meter as everything else, and it
-     * is the body that had to earn it.
+     * The generated plate world is held to the same meter as everything else,
+     * and Proxima Centauri II — which held the role while it had a sea — is
+     * the body that had to earn it.
      *
      * The seam here was never a plate boundary. `plateAt` used to return the
      * second-nearest plate, and which plate that *is* changes discontinuously
@@ -549,7 +565,7 @@ describe('the crater field', () => {
      * happened to miss, while a sweep of twenty-four great circles found
      * 3,081 m of it — reads 1.2e-4.
      */
-    for (const body of [find('Earth'), proxima as Body]) {
+    for (const body of [find('Earth'), plated as Body]) {
       expect(`${body.name}: ${sweep(body, 16) < 1}`).toBe(`${body.name}: true`)
     }
   })

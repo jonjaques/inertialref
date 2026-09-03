@@ -337,6 +337,9 @@ ir.zoo() // one body per surface archetype, found rather than listed
 ir.descend(address?, { site, steps }) // fly a descent on paper
 ir.terrain() // what the live streamer holds this frame, rocks included, and who produces it
 ir.terrainBaseline() // the zoo, its descents, and measured patch cost
+engine.surfaceQuality = { terrain: 'coarse', ground: 'lean', sea: 'plain', rocks: false } // the levers
+orbitalBaker.report() // which generated bodies have a baked sphere, and whether it is ready
+orbitalBaker.targetFor(address) // its two cube targets, for a face readback
 ir.dossier(address) // the record, whose Geology card is the surface grammar
 ```
 
@@ -384,6 +387,14 @@ is a field filling in, and the same pair beside `starved` is a descent
 outrunning both budgets at once. `range` is how far rocks are drawn this frame —
 212 m at the flight lens over the baseline viewport, and a function of the lens
 like everything else here.
+
+**Every frame-rate figure is a function of the surface levers as well, so
+state them.** `engine.surfaceQuality` is the persisted record the graphics
+panel edits — the refinement threshold, the ground's octaves, the sea's
+refraction and waves, the rocks — and a driving script can set it between two
+`--cast`s to measure one term: `render/quality.ts` names what each step
+spends. The materials compare before they write, so flipping a lever costs
+the next frame nothing but the change.
 
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end

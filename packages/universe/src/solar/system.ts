@@ -20,6 +20,7 @@ import {
 } from '../address.ts'
 import { meanRadiusOf, tidalProxyOf } from '../archetype.ts'
 import { blackbodyColour } from '../catalog/photometry.ts'
+import { liquidAppearance, PIGMENTS } from '../appearance.ts'
 import { equilibriumTemperature, surfaceGrammar } from '../grammar.ts'
 import type { SystemStub } from '../galaxy.ts'
 import { systemSeedOf } from '../galaxy.ts'
@@ -81,7 +82,11 @@ function theSun(name: string): Star {
   }
 }
 
-const appearanceOf = (body: SolarBody): BodyAppearance => ({
+const appearanceOf = (
+  body: SolarBody,
+  surface: SurfaceParameters,
+  seed: Seed,
+): BodyAppearance => ({
   texture: body.texture,
   // Which maps exist is the manifest's business, not this file's: the host
   // resolves the key and uses whatever it finds. Listing them here would be a
@@ -98,6 +103,19 @@ const appearanceOf = (body: SolarBody): BodyAppearance => ({
   // were mapped in monochrome — and stands in entirely before the texture
   // arrives, so a body reads as itself on the first frame rather than as white.
   colour: body.tint,
+  // Earth's is chlorophyll and no other body here grows anything; the
+  // pigment rides along because the record is total, not because it is read.
+  pigment: PIGMENTS[0]?.colour ?? { r: 0.08, g: 0.21, b: 0.05 },
+  /*
+   * The liquid the grammar admits, drawn from the surface seed exactly as a
+   * projected world's is. Earth's sea is in its photograph and the renderer
+   * draws no sheet over a map, so this is read where a mapless Sol body has
+   * rivers to draw — Titan's, in liquid methane.
+   */
+  liquid: liquidAppearance(
+    surface.grammar.liquidKind,
+    new Rng(deriveSeed(seed, 'appearance')).fork('liquid'),
+  ),
 })
 
 const atmosphereOf = (body: SolarBody): Atmosphere | null =>
@@ -266,6 +284,40 @@ function buildBody(
     )
   }
 
+  const surface = surfaceOf(
+    body,
+    deriveSeed(seed, 'surface'),
+    rng,
+    equilibriumTemperature(
+      starLuminosity / (4 * Math.PI * starDistance * starDistance),
+    ),
+    /*
+     * Zero for a planet, whose parent here is the star.
+     *
+     * `parentMass` is `star.mass` at the top of the recursion, and feeding
+     * that to the proxy is the mistake `GrammarFacts.tidalProxy` names in as
+     * many words — "the star is not the primary". It put Mercury at 9.27e-8
+     * and every other planet between 2e-10 and 1e-9, which moved `young`,
+     * `mobility`, `relaxation` and the band shares on the four bodies the
+     * whole grammar is calibrated against. The generated path passes a literal
+     * zero for the same reason; `path.length === 1` is what "orbits the star"
+     * means here.
+     */
+    path.length > 1
+      ? tidalProxyOf(
+          body.mass,
+          meanRadiusOf(
+            body.radius,
+            body.figure?.intermediateRadius ?? null,
+            body.polarRadius,
+          ),
+          body.semiMajorAxis,
+          body.eccentricity,
+          parentMass,
+        )
+      : 0,
+  )
+
   return {
     address,
     id: entityIdForAddress(address),
@@ -293,7 +345,7 @@ function buildBody(
     // Straight through. Sol is the one system where a body's figure is a
     // measurement rather than a draw, and this is where that arrives.
     figure: body.figure,
-    appearance: appearanceOf(body),
+    appearance: appearanceOf(body, surface, seed),
     mu: bodyMu,
     elements,
     // `G(M + m)`: the Moon is 1.2% of Earth and the difference is 0.5% of its
@@ -302,39 +354,7 @@ function buildBody(
     rotationPeriod: body.rotationPeriod,
     axialTilt: body.axialTilt,
     atmosphere: atmosphereOf(body),
-    surface: surfaceOf(
-      body,
-      deriveSeed(seed, 'surface'),
-      rng,
-      equilibriumTemperature(
-        starLuminosity / (4 * Math.PI * starDistance * starDistance),
-      ),
-      /*
-       * Zero for a planet, whose parent here is the star.
-       *
-       * `parentMass` is `star.mass` at the top of the recursion, and feeding
-       * that to the proxy is the mistake `GrammarFacts.tidalProxy` names in as
-       * many words — "the star is not the primary". It put Mercury at 9.27e-8
-       * and every other planet between 2e-10 and 1e-9, which moved `young`,
-       * `mobility`, `relaxation` and the band shares on the four bodies the
-       * whole grammar is calibrated against. The generated path passes a literal
-       * zero for the same reason; `path.length === 1` is what "orbits the star"
-       * means here.
-       */
-      path.length > 1
-        ? tidalProxyOf(
-            body.mass,
-            meanRadiusOf(
-              body.radius,
-              body.figure?.intermediateRadius ?? null,
-              body.polarRadius,
-            ),
-            body.semiMajorAxis,
-            body.eccentricity,
-            parentMass,
-          )
-        : 0,
-    ),
+    surface,
     sphereOfInfluence: soi,
     moons,
   }

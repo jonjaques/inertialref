@@ -14,6 +14,7 @@ still open, the constraints that bind it, and the risks that are still live.
 | The face — cover field, palette, one material                 | [ADR-0020](../../docs/adr/0020-the-face.md)                |
 | The ground — meter-scale relief and rock scatter              | [ADR-0021](../../docs/adr/0021-the-ground.md)              |
 | The GPU producer — heightfield tiles as a TSL compute kernel  | [ADR-0023](../../docs/adr/0023-the-gpu-producer.md)        |
+| The liquid — valleys, the coast, the sea sheet, the families  | [ADR-0026](../../docs/adr/0026-the-liquid.md)              |
 
 The rig every phase is judged through — the observatory's surface arm, the
 derived survey sites, the terrain zoo, `ir.descend`, `ir.terrain` and
@@ -36,13 +37,13 @@ from the palette derived from its own facts.
 
 **Out, each with its seam named:**
 
-| Deferred                           | Why now is wrong                                                                                                                                          | The seam that waits for it                                                                                                                                                                                    |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Macro relief for mapped Sol bodies | Their relief is _published_, and the art doctrine requires using it verbatim ([art](../../docs/design/art.md)) — a DEM-ingest workstream, not a generator | The same band stack with the macro band read from an ingested tile set instead of from noise                                                                                                                  |
-| Gas and ice giants                 | No surface. The `surface` LOD tier must never fire for them                                                                                               | The streamer gates on body kind                                                                                                                                                                               |
-| Figured bodies at walking distance | A figure's datum is a measured radius grid, not the cube-sphere's near-sphere ([ADR-0013](../../docs/adr/0013-measured-figures.md))                       | The streamer carves them out — a spherical-datum patch floats around the measured ellipsoid, so deep terrain on figures is a projection problem                                                               |
-| Caves, overhangs, arches           | A radial heightfield cannot hold two surfaces per ray, and the fix is a bounded volumetric overlay rather than a different planet                         | `density(p) = elevation(seed, d̂) − r`: a cave is an SDF CSG-combined into it, meshed per chunk with [Transvoxel](https://transvoxel.org/), whose 2:1 transition cells assume exactly this restricted quadtree |
-| River _networks_, vegetation       | Valley networks need a per-region drainage graph (Génevaux-style); flora needs authored biomes to exist first                                             | § 5                                                                                                                                                                                                           |
+| Deferred                           | Why now is wrong                                                                                                                                                                                                                                                               | The seam that waits for it                                                                                                                                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Macro relief for mapped Sol bodies | Their relief is _published_, and the art doctrine requires using it verbatim ([art](../../docs/design/art.md)) — a DEM-ingest workstream, not a generator                                                                                                                      | The same band stack with the macro band read from an ingested tile set instead of from noise                                                                                                                  |
+| Gas and ice giants                 | No surface. The `surface` LOD tier must never fire for them                                                                                                                                                                                                                    | The streamer gates on body kind                                                                                                                                                                               |
+| Figured bodies at walking distance | A figure's datum is a measured radius grid, not the cube-sphere's near-sphere ([ADR-0013](../../docs/adr/0013-measured-figures.md))                                                                                                                                            | The streamer carves them out — a spherical-datum patch floats around the measured ellipsoid, so deep terrain on figures is a projection problem                                                               |
+| Caves, overhangs, arches           | A radial heightfield cannot hold two surfaces per ray, and the fix is a bounded volumetric overlay rather than a different planet                                                                                                                                              | `density(p) = elevation(seed, d̂) − r`: a cave is an SDF CSG-combined into it, meshed per chunk with [Transvoxel](https://transvoxel.org/), whose 2:1 transition cells assume exactly this restricted quadtree |
+| River _networks_, flora            | The valleys are the zero-level strip of a noise and do not know which way is downhill; a network that drains needs a per-body drainage graph, which is [the erosion plan](erosion.md). Flora as geometry needs authored parts; the biosphere's pigment is in the cover already | [erosion](erosion.md)                                                                                                                                                                                         |
 
 One consequence of the appearance carve-out: `elevationAt` is a single canonical
 function shared by rendering and the contact test, so a generator version bump
@@ -54,15 +55,15 @@ record ([ADR-0005](../../docs/adr/0005-procedural-seeds.md) § versioning).
 
 ## 2. Open work
 
-**The orbital albedo bake.** A generated body's `sphere` tier is a flat tint
-while its ground carries maria, rays and caps, so the streamer gates terrain on
-relief covering eight display pixels (`TERRAIN_RELIEF_PIXELS`) rather than
-drawing the level-0–2 shell unconditionally: five flat tinted patches over
-Earth's photograph is worse than the sphere they replace. A mapped body has no
-such gap. What closes it is a per-face normal and albedo tile generated in a
-worker like any patch, cached and regenerable, carrying the octaves below mesh
-resolution — after which the shell _is_ the silhouette at every distance and the
-gate retires.
+**The orbital bake carries no relief.** The sphere of a generated body wears
+the ground's own reflectance and sea mask now ([ADR-0026](../../docs/adr/0026-the-liquid.md)),
+and the gate switches between two pictures of the same geology. What it does
+not wear is a normal: the disk's slope path reads the archive's tangent-space
+map, and a baked one — the heightfield's gradient in the sphere's own
+east-north frame, at the same six faces — is the half of the plan's bake
+still open. The other consequence stands: the bake is a hitch of a few tens
+of milliseconds in the frame its tiles arrive, once per body, and spreading
+the ninety-six builds across frames is the plain fix if it is felt.
 
 **The plate review.** "Reads as a Moon, not as noise" is a taste judgment and
 the acceptance test for it is a set of before/after plates of the zoo's survey
@@ -80,8 +81,10 @@ the canonical floor. Fourteen halvings moves the detail floor by 0 to 2 levels
 and costs 13% a patch — and it moves the field the contact test integrates,
 which is a version bump rather than a presentational change.
 
-**The cover needs more channels, and two open defects share that fix.**
-Deposits and rocks are both chosen from the mesh, and the mesh is level-dependent:
+**The cover has two spare bytes, and two open defects share the channel that
+would fill them.** The record is eight bytes now — six channels, four to an
+attribute — and the last two are written as zero. Deposits and rocks are both
+chosen from the mesh, and the mesh is level-dependent:
 
 - Deposits step by about 4% of the drawn value at a level boundary, because two
   patches at different levels report different slopes for the same ground.
@@ -93,11 +96,30 @@ Reading slope and seat from the canonical field through extra cover channels
 answers both at once.
 
 **Authored material sets, and the two techniques that wait on them.** The detail
-in `render/terrain.ts` is gradient noise on the body-fixed position, which has
-neither a period to break nor a projection to choose. Hex-tiling and triplanar
-are answers to questions only an authored material set asks, so they land with
-the eight sets the design bible commits to
-([content § biomes](../../docs/design/content.md#biomes)).
+in `render/terrain.ts` is a baked tiling noise fetched on the body-fixed
+position — periodic by construction, over 22 m for the grain — with no
+projection to choose. Hex-tiling and triplanar are answers to questions only an
+authored material set asks, so they land with the eight sets the design bible
+commits to ([content § biomes](../../docs/design/content.md#biomes)). The
+texture is the seam: a set's own albedo and normal go where the noise is
+fetched now.
+
+**The sea reflects the sky and not the land.** `render/water.ts` refracts the
+frame behind the sheet and reflects the sky and the sun by Fresnel; a cliff
+mirrored in the water beneath it is a screen-space reflection search the
+material does not make. A river is painted on its bed rather than drawn as a
+sheet, because a sheet per valley is a mesh per valley.
+
+**The frame is fragment-bound at retina sizes, and the levers are named.**
+Measured at 1920×1200 over a device pixel ratio of 2, standing two meters over
+the sea with 1,227 patches: 9.5 fps before this phase, 12.2 with the octaves
+branched on their fades, 16.3 with every octave a fetch of a baked texture
+that carries its own gradient, and 18.0 with every octave off — which is the
+base cost of the two surfaces, and the next thing to instrument.
+[ADR-0026](../../docs/adr/0026-the-liquid.md) has the table. `render/quality.ts` names four levers
+— the refinement threshold, the ground's octaves, the sea's refraction and
+waves, the rocks — and each is one measured cost; what is not done is choosing
+them for the machine, which needs `render/measure.ts` on a handheld first.
 
 **The normal-tile cache.** The GPU produces heightfield tiles; normal tiles and
 the mesh stay on the main thread at 0.25 ms a patch. That is the texture-array
@@ -116,6 +138,14 @@ field. The border rows already make them exact and equal across patches, so the
 gain is cost rather than correctness — and analytic crater derivatives are a
 second implementation of every profile that has to agree with the first or the
 mesh cracks.
+
+**A hot world has no sea, and the fixture's plate world lost its plates.**
+`makeSurface` reads the sea draw against the ground temperature, so a body at
+491 K that drew a datum keeps the draw and loses the ocean — and with it the
+lithospheric weakening that gave it plates. Proxima Centauri II was the
+generated plate world every tectonic test named, at twenty plates; it is a
+stagnant lid now, and `geology.test.ts` finds the most-plated solid body in the
+fixture instead. The claim did not move; the example did.
 
 **The zoo has no generated `icy-active` body.** No generated system within 25 ly
 of Sol contains one: generated moons come out on orbits too circular for the
@@ -194,7 +224,7 @@ anchor-relative patch spans meters and float32 is comfortable.
 
 ## 5. Named seams, not scheduled work
 
-Hydrology graphs (Génevaux) for valley networks; the density-overlay
+The drainage graph and the erosion look, planned in [erosion](erosion.md); the density-overlay
 cave/overhang layer with Transvoxel meshing; belts as an `o:` population;
 collision for scatter, which is [on foot](../../docs/design/onfoot.md)'s; the
 DEM workstream that ends the mapped-body carve-out; concurrent binary trees if

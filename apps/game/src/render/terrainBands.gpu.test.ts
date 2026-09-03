@@ -5,7 +5,11 @@ import { vec3 } from '@inertialref/spatial'
 import {
   beltBand,
   type Body,
+  coastRemap,
+  coastWidth,
   craterField,
+  drainageCarve,
+  drainageDatum,
   findBody,
   GRIT_OCTAVES,
   gritCycles,
@@ -26,10 +30,13 @@ import {
   reliefBand,
   SCALAR,
   SCALARS_AT,
+  seaDatumElevation,
   softLimit,
   SOL,
   surfaceKernel,
   terrainSketch,
+  tributaryValley,
+  trunkValley,
   volcanicBand,
   walkBodies,
   writeTileFrame,
@@ -95,6 +102,8 @@ type Band =
   | 'craters'
   | 'tail'
   | 'grit'
+  | 'drainage'
+  | 'coast'
 
 /**
  * The kernel's view of a body with every share but `band`'s zeroed, and the
@@ -116,10 +125,24 @@ function isolate(body: Body, band: Band): void {
     craters: null,
     tail: null,
     grit: null,
+    drainage: null,
+    coast: null,
   }
   for (const [name, index] of Object.entries(shares)) {
     if (index !== null && name !== band) zero(index)
   }
+  /*
+   * The drainage and the coast are not bands with shares: one carves the
+   * landform the others made and the other remaps it. Isolated, each runs
+   * over the *hypsometry* alone — a landform to carve, a datum to meet —
+   * and the CPU reference is that band plus the term under test.
+   */
+  if (band === 'drainage' || band === 'coast') {
+    records[SCALARS_AT * 4 + SCALAR.SHARE_HYPSOMETRY] =
+      body.surface.grammar.bands.hypsometry
+  }
+  if (band !== 'drainage') zero(SCALAR.DRAINAGE)
+  if (band !== 'coast') zero(SCALAR.COAST_WIDTH)
   if (band !== 'craters') {
     /*
      * The canonical ladder stays in the list and its ceiling goes to zero, so
@@ -131,7 +154,7 @@ function isolate(body: Body, band: Band): void {
   }
   if (band !== 'tail') zero(SCALAR.MICRO_CEILING)
   if (band !== 'grit') zero(SCALAR.GRIT_RELIEF)
-  zero(SCALAR.SEA_ENABLED)
+  zero(SCALAR.SEA_CLAMP)
   ;(kernel.records.array as Float32Array).set(records)
   ;(kernel.words.array as Uint32Array).set(words)
   kernel.records.needsUpdate = true
@@ -245,6 +268,44 @@ function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
         )
       )
     }
+    case 'drainage': {
+      const landform =
+        bands.hypsometry *
+        hypsometryBand(
+          sketch,
+          grammar,
+          plates,
+          direction,
+          bands.hypsometry * budget,
+        ) *
+        budget
+      return (
+        landform +
+        drainageCarve(
+          grammar,
+          trunkValley(sketch, direction),
+          tributaryValley(sketch, direction),
+          landform - drainageDatum(surface),
+          budget,
+        )
+      )
+    }
+    case 'coast': {
+      const landform =
+        bands.hypsometry *
+        hypsometryBand(
+          sketch,
+          grammar,
+          plates,
+          direction,
+          bands.hypsometry * budget,
+        ) *
+        budget
+      const sea = seaDatumElevation(surface)
+      return sea === null || grammar.liquid <= 0
+        ? landform
+        : coastRemap(landform, sea, coastWidth(surface))
+    }
   }
 }
 
@@ -320,6 +381,15 @@ function bound(band: Band, body: Body, level: number): number {
       return 0.01 + 8 * offset
     case 'grit':
       return 0.005 + 2 * offset
+    // The hypsometry's own bound, plus the carve and the remap on top of
+    // it. The carve is the worse: a warped three-octave fBm sharpened by
+    // 2.6 and raised to the sixth power, so a float32 step in the warp is
+    // amplified before it is capped — measured at 9.8 × 10⁻⁶ of the budget
+    // on Earth at level 0, and 2.5 × 10⁻⁵ is that with room.
+    case 'drainage':
+      return 2.5e-5 * budget
+    case 'coast':
+      return 4e-6 * budget
   }
 }
 
@@ -341,6 +411,8 @@ describe('each band, on its own', () => {
       'craters',
       'tail',
       'grit',
+      'drainage',
+      'coast',
     ]
     const rows: string[] = []
     const failures: string[] = []

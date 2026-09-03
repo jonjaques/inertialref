@@ -3,6 +3,7 @@ import { getLogger, getTimer, type TimingDetail } from '@inertialref/shared'
 import { parseSeed } from '@inertialref/procedural'
 import type { JobId } from '@inertialref/protocol'
 import {
+  COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
   heightfieldStride,
@@ -169,8 +170,10 @@ export function createTileProducer(
   let tiles = 0
   const batchMs: number[] = []
 
+  // `seabed` is in the key because it is in the packed record: a body asked
+  // for both ways is two uploads, not one record answering both.
   const keyOf = (payload: HeightfieldRequestPayload): string =>
-    `${payload.surfaceSeed}|${payload.maxElevation}|${payload.roughness}|${payload.seaLevel}`
+    `${payload.surfaceSeed}|${payload.maxElevation}|${payload.roughness}|${payload.seaLevel}|${payload.seabed === true ? 1 : 0}`
 
   const surfaceOf = (payload: HeightfieldRequestPayload): SurfaceParameters => {
     const key = keyOf(payload)
@@ -230,8 +233,9 @@ export function createTileProducer(
     inFlight = taken.length
     const started = performance.now()
     try {
-      const surface = surfaceOf((taken[0] as Queued).payload)
-      const packed = surfaceKernel(surface)
+      const head = (taken[0] as Queued).payload
+      const surface = surfaceOf(head)
+      const packed = surfaceKernel(surface, head.seabed ?? false)
       if (uploaded !== key) {
         ;(kernel.records.array as Float32Array).set(packed.records)
         ;(kernel.words.array as Uint32Array).set(packed.words)
@@ -287,7 +291,10 @@ export function createTileProducer(
           unpack(
             job.payload,
             elevations.slice(i * kernel.samples, (i + 1) * kernel.samples),
-            cover.slice(i * kernel.interior * 4, (i + 1) * kernel.interior * 4),
+            cover.slice(
+              i * kernel.interior * COVER_CHANNELS,
+              (i + 1) * kernel.interior * COVER_CHANNELS,
+            ),
           ),
         )
       })

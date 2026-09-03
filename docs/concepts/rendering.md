@@ -234,15 +234,25 @@ streamer, the worker task and capability check 10 — which compares worker outp
 to main-thread output sample by sample, and would otherwise be capable of
 comparing two differently sized grids and calling them equal.
 
-The heightfield is `drawnElevation`, not the bare `elevationAt`: the same
-sea-level clamp the physics uses, and then the presentational tail below the
-canonical floor. The clamp has exactly one owner, because a `seaLevel` carried
-from the generator through the worker to the mesh and read by neither puts the
-landing pad on the water datum while the mesh draws the seabed underneath it,
-and a test asserts they agree there. The tail is the one term the mesh has that
-the contact test does not, it is bounded by `drawnDivergence` at 1.25 m, and
-[streaming](streaming.md#two-fields-and-which-one-each-reader-gets) has why the
-two fields have to be two.
+The heightfield is `drawnGroundElevation`, not the bare `elevationAt`: the
+presentational tail below the canonical floor, and **no sea clamp** where a
+sheet is drawn — the mesh is the seabed, and the sea is a sheet drawn over it
+at the datum. The request carries the flag (`seabed`), and a body that gets no
+sheet — a mapped one, whose photograph is its sea — is built from the clamped
+`drawnElevation` instead, or its ocean floor is a trench under the photograph
+kilometers below the datum the ship lands on. The clamp
+still has exactly one owner, `groundElevation`, and `drawnElevation` keeps it
+for the two readers that stand on the water rather than look through it — the
+observatory's stance and the detail-floor search. The tail is the one term the
+mesh has that the contact test does not, it is bounded by `drawnDivergence` at
+1.25 m, and [streaming](streaming.md#two-fields-and-which-one-each-reader-gets)
+has why the two fields have to be two.
+
+A patch the sea reaches carries a second grid, `RenderPatch.water`: the datum
+sphere on the patch's own vertices, anchor-relative, with the water depth over
+each and a morph target for both, so the sheet hands over to its parent where
+the seabed does. `render/water.ts` draws it, and
+[ADR-0026](../adr/0026-the-liquid.md) says how.
 
 ```mermaid
 sequenceDiagram
@@ -305,7 +315,7 @@ still wearing its own vertex's cover when it gets there, the frame the parent
 takes over is the frame every crater ray and every mare margin jumps by one
 child cell. That is worse than a pop, because it slides continuously as the
 camera moves rather than happening once. `morphCover` is the parent's vertex's
-four bytes, and it indexes off the patch's own grid rather than the bordered
+eight bytes, and it indexes off the patch's own grid rather than the bordered
 one — the cover carries no border, because the border rows exist to be
 differenced against and nothing differences the cover.
 
@@ -388,6 +398,14 @@ Normal maps are exaggerated, and the honest name for it is in `tuningFor`. At
 kilometers is a fraction of a degree — the map's standard deviation is 2.4 out of 255. `docs/design/art.md` licenses exactly this ("roughness and detail are art")
 and forbids the thing next door to it: the elevation is the published one and the
 terrain is where it really is; only how sharply it catches the light is turned up.
+
+A body with none of them is most of the galaxy, and it wears the ground. The
+orbital bake ([ADR-0026](../adr/0026-the-liquid.md)) draws the streamed ground
+material from the body's center into six faces of reflectance and a sea mask,
+and the sphere samples them by direction, so what the sphere shows from orbit
+is the geology the descent arrives at rather than a base color standing in for
+it. The bake carries no relief: the sphere is flat-shaded under the same
+photometry, and the eight-pixel gate is where the ground's own normals take over.
 
 ### Two shapes, and which one is not a rendering choice
 
@@ -532,13 +550,16 @@ fragment has all three for free, and shipping them per vertex would be paying to
 send the renderer something it is standing on. What a shader cannot derive is
 the body's _past_: whether this plain is flood basalt, whether this ground was
 excavated last week or three billion years ago, which way the crust's
-composition varies, where the volatiles have condensed. Those four are the
-cover, four bytes a vertex, generated with the heightfield.
+composition varies, where the volatiles have condensed, where the liquid runs
+and where something grows beside it. Those six are the cover — eight bytes a
+vertex, two attributes of four, through `render/terrainAttributes.ts` —
+generated with the heightfield.
 
-**Deposits are layered rather than splatted** — five `mix`es in the order the
+**Deposits are layered rather than splatted** — seven `mix`es in the order the
 material is laid down: regolith wherever a slope holds it, basalt in the flooded
 basins, wind-sorted fines on the low flat ground, evaporite on the flattest and
-lowest, volatiles on top. A six-way normalized splat has to invent a rule for
+lowest, silt on the seabed, the biosphere's pigment over every soil it grows
+in, volatiles on top. A six-way normalized splat has to invent a rule for
 what happens when three weights all say 0.4; a stack says the ice is on the
 sand, which is true. The angle of repose does most of the visible work, and 33°
 is a fact about friction rather than about a planet.
