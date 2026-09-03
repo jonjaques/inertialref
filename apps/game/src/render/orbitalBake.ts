@@ -1,6 +1,5 @@
 import {
   BufferAttribute,
-  BufferGeometry,
   CubeCamera,
   Group,
   HalfFloatType,
@@ -33,7 +32,11 @@ import {
   terrainPalette,
 } from '@inertialref/rendering'
 import type { TerrainMaterial } from './terrain.ts'
-import { patchGeometry, wearGround } from './groundWear.ts'
+import {
+  disposeKeepingSharedIndex,
+  patchGeometry,
+  wearGround,
+} from './groundWear.ts'
 
 /*
  * The orbital bake: a generated world's sphere learns what its ground looks
@@ -321,10 +324,10 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     const scene = new Scene()
     const group = new Group()
     scene.add(group)
-    const geometries: BufferGeometry[] = []
+    const built: Mesh[] = []
     for (const patch of patches) {
       const mesh = new Mesh(patchGeometry(patch, indices), terrain.material)
-      geometries.push(mesh.geometry)
+      built.push(mesh)
       mesh.position.set(patch.anchor.x, patch.anchor.y, patch.anchor.z)
       mesh.frustumCulled = false
       // At its anchor and unmorphed: the bake draws every patch at one level.
@@ -349,10 +352,9 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       bake.ready = true
     } finally {
       terrain.setBakeMode(0)
-      for (const geometry of geometries) {
-        geometry.setIndex(null)
-        geometry.dispose()
-      }
+      // Every bake mesh holds the one shared index, so the eviction rule the
+      // streamer's patches use applies here too.
+      for (const mesh of built) disposeKeepingSharedIndex(mesh)
     }
   }
 

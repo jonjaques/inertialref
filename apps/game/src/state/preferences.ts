@@ -608,11 +608,14 @@ function readRaw(key: string): unknown {
   }
 }
 
-function writeRaw(key: string, value: unknown): void {
+/** Store one value, and say whether the store took it. See `write`. */
+function writeRaw(key: string, value: unknown): boolean {
   try {
     store().setItem(PREFIX + key, JSON.stringify(value))
+    return true
   } catch {
     // See readRaw: the panel still works, it just forgets.
+    return false
   }
 }
 
@@ -648,8 +651,25 @@ function storedKeys(): readonly string[] {
  * screen showing the value it had before.
  */
 export function write(preference: AnyPreference, value: unknown): void {
-  writeRaw(preference.key, value)
-  announce(preference.key, resolve(preference))
+  /*
+   * What it *resolves* to, so a value the preference refuses announces the
+   * default rather than itself — which is what makes an import of a broken
+   * file land as the defaults on screen rather than as nothing.
+   *
+   * Except where the store refused the write, because then `resolve` reads
+   * back the value that is still there and announcing it reverts the caller's
+   * own change. A browser with site data blocked throws from `setItem`, and
+   * `state/engineKnobs.ts` carries `camera.lens` from here to
+   * `engine.flightLens` — so a lens `ir.preset` had just fitted would snap
+   * back to the flight default one line after being set. The asked-for value
+   * stands in when it is one the preference believes; when it is not, the
+   * resolved default is still the honest answer.
+   */
+  const stored = writeRaw(preference.key, value)
+  announce(
+    preference.key,
+    stored || !preference.accept(value) ? resolve(preference) : value,
+  )
 }
 
 /** One stored preference, believed, or its default. */

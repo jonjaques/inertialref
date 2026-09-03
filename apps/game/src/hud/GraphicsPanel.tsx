@@ -110,21 +110,21 @@ export function GraphicsPanel({
           detail="how many pixels a ground cell may cover before it is refined"
           value={surface.terrain}
           values={TERRAIN_DETAILS}
-          onChange={(terrain) => setSurface({ ...surface, terrain })}
+          onChange={(terrain) => setSurface((held) => ({ ...held, terrain }))}
         />
         <SurfaceRow
           label="Ground detail"
           detail="the per-pixel octaves under a mesh cell; lean keeps the coarse one"
           value={surface.ground}
           values={GROUND_DETAILS}
-          onChange={(ground) => setSurface({ ...surface, ground })}
+          onChange={(ground) => setSurface((held) => ({ ...held, ground }))}
         />
         <SurfaceRow
           label="Sea"
           detail="full refracts the seabed; plain reflects the sky; flat has no waves"
           value={surface.sea}
           values={SEA_DETAILS}
-          onChange={(sea) => setSurface({ ...surface, sea })}
+          onChange={(sea) => setSurface((held) => ({ ...held, sea }))}
         />
         <SwitchRow
           bordered
@@ -132,7 +132,7 @@ export function GraphicsPanel({
           label="Rocks"
           detail="the instanced scatter on the ground"
           on={surface.rocks}
-          onChange={(rocks) => setSurface({ ...surface, rocks })}
+          onChange={(rocks) => setSurface((held) => ({ ...held, rocks }))}
         />
       </Section>
 
