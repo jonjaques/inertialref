@@ -102,6 +102,12 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   import and the live subscription each need the whole set, which is why the
   calls cannot be spread out — and an import reaches mounted hooks through that
   subscription, because a reload rebuilds the `WebGPURenderer`.
+- **Derive a stored value with the updater form, never from a captured snapshot.**
+  `setSurface((held) => ({ ...held, terrain }))`. Two writes composed against one
+  snapshot discard the first, and the snapshot is not scoped to a frame: a panel drawn
+  in the dock _and_ at `/settings/display` holds two of one key while both are mounted.
+  `usePersistentState` returns a setter that takes either form; only one of them is
+  safe.
 - **No key name in a label** — not a title, not an `aria-label`, not a help
   table. `useActionTitle(id, text)` and `KeySheet` read the live chord.
 - **The aim is an offset on the pose, cleared only by what replaces the pose.**

@@ -28,6 +28,8 @@ table is one of those three, not drift.
 | No field value read off a rank                                                                | [ADR-0019](../adr/0019-the-geology.md) · [Determinism](../concepts/determinism.md)                         |
 | No planetary radius subtracted in a shader                                                    | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
 | The ground and the sphere behind it shade alike                                               | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
+| No `dispose()` on a mesh holding the shared index                                             | [ADR-0021](../adr/0021-the-ground.md) · [Rendering](../concepts/rendering.md)                              |
+| No stored value derived from a captured snapshot                                              | [ADR-0012](../adr/0012-dockable-panels.md) · [Client](../guides/client.md)                                 |
 | No varying named after an attribute                                                           | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
 | No attribute object under two names                                                           | [ADR-0021](../adr/0021-the-ground.md) · [Rendering](../concepts/rendering.md)                              |
 | A stand-in `DataTexture` is filtered like its map                                             | [Testing](../guides/testing.md#shader-behavior-runs-on-the-real-gpu-from-node)                             |

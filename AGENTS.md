@@ -274,6 +274,13 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never move a workspace panel by splicing an array at a call site.**
   `dock/layout.ts` owns every move. Use the updater form of the setter.
   [ADR-0012](docs/adr/0012-dockable-panels.md).
+- **Never derive a stored value from a captured snapshot.**
+  `set((held) => ({ ...held, field }))`, never `set({ ...value, field })`. Two
+  writes composed against one snapshot discard the first, and the window is not
+  a frame: a preference drawn in two places — the dock's panel and its
+  `/settings` twin — holds two snapshots of one key for as long as both are
+  mounted. The dock's splice rule above is one instance of this, not the
+  general case.
 - **Never put two components in one file.** `react/no-multi-comp` is an
   error. A constant or type goes in a sibling `.ts`. Exemption:
   `apps/game/src/components/ui/*.tsx`.
@@ -359,6 +366,15 @@ error`, with the real message on a channel the page console does not carry
   on an _instanced_ attribute builds, which is how it was isolated; the
   mechanism is unexplained and the rule is deliberately the wider claim. Two
   attribute objects over one array is a few bytes and one fewer trap.
+  [ADR-0021](docs/adr/0021-the-ground.md).
+- **Never call `geometry.dispose()` on anything holding the shared index.**
+  Go through `render/groundWear.ts`'s `disposeKeepingSharedIndex`. Every patch
+  geometry references the one session-wide index attribute, and three r182's
+  dispose path destroys each referenced attribute's GPU buffer with no
+  refcount — so disposing one evicted mesh kills the 98 KB index under every
+  patch still drawn and re-uploads it next frame. It is the churn the shared
+  attribute exists to prevent, it is silent, and the ground, the sheet and the
+  orbital bake all evict through the one helper.
   [ADR-0021](docs/adr/0021-the-ground.md).
 - **Never leave a stand-in `DataTexture` at its nearest default.** Every
   material here runs one graph whether or not its maps have arrived, on the

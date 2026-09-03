@@ -116,6 +116,14 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   instanced attribute builds, which is how it was isolated; the mechanism is a guess and
   the rule is deliberately the wider claim. ADR-0021.
 
+- **Never call `geometry.dispose()` on a mesh holding the shared index.** Use
+  `render/groundWear.ts`'s `disposeKeepingSharedIndex`. Every patch geometry references
+  the one session-wide index, and three r182 destroys each referenced attribute's GPU
+  buffer with no refcount — so one eviction takes the 98 KB index down under every patch
+  still drawn, and it re-uploads next frame. The ground, the sea sheet and the orbital
+  bake all evict through that one function; a hand-rolled `setIndex(null)` beside a
+  `dispose()` is the same two lines until somebody writes only the second. ADR-0021.
+
 - **Never read the drawn ground where the canonical one belongs, or the reverse.**
   `groundElevation`/`surfaceRadius` are what the contact test integrates and what a save
   records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail
