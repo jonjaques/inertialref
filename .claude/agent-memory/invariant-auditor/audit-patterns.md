@@ -1213,3 +1213,124 @@ on a branch that deleted `SimulationClock.advance` and moved the store's write h
 `packages/devtools/src/observatory.ts:716` ("the shell writes `engine.flightLens`") and two
 test-file comments. **The pass sweeps markdown. Deleted identifiers hide in `.ts` comments,
 and `rg` for the retired name across `apps/` and `packages/` is the whole check.**
+
+## The fixture that makes a module's two named rituals into no-ops
+
+Sharpest finding on `refactor/five-modules-deepened`'s final tree, and the shape
+generalizes to every "the ritual is the whole trick" module. `groundWear.ts`'s
+`anchorGround` does two things its docstring calls load-bearing: `Math.fround`
+the anchor before measuring its altitude, and reduce the grain origin from the
+**unrounded** anchor. `groundWear.test.ts` uses `buildPatch({bodyRadius:
+1_737_400, region: regionAddress(0,0,0,0)})`, whose anchor is `(1737400, 0, -0)`
+— **exactly representable in float32**, so `fround` is the identity on every
+axis and `anchorAltitude` is exactly 0. Deleting either ritual passes the whole
+file. `materials.gpu.test.ts` uses the same fixture, so the GPU suite cannot see
+it either. The `toBeLessThan(0.25)` bound is unexercised for the same reason: the
+rounding it bounds is zero.
+
+**The check:** for every constant in a test fixture, ask whether `Math.fround(x)
+=== x`. A round metric radius on a cardinal axis almost always is. An arming
+fixture is one off-axis Earth anchor: `x = y = z = 6371000/√3 = 3678298.565…`
+gives `anchorAltitude` **−0.1126 m** with the fround and **9.3e-10** without,
+and moves the grain origin by 0.065 m — a tenth of `GRAIN_METRES`.
+
+Same file, same class: line 90's `expect(wear.anchorAltitude).toBe(hypot(ax,ay,az)
+
+- LUNA)` restates the implementation on both sides. It is only line 93's
+  independent bound that could ever fail, and the fixture disarms that too.
+
+## A rock's datum and a patch's datum are two fields with the same name
+
+`body.radius` and `body.surface.radius` **differ** for any generated body with a
+`figure`: `system.ts:714` is `radius: shape?.radius ?? radius` while
+`makeSurface(..., { radius })` above it takes the pre-shape one. Sol bodies agree
+(`radius: body.radius`, surface built from the same). The terrain material's
+`datumRadius` uniform is `TerrainState.datumRadius` = `surface.radius`
+(`terrainStreamer.ts:896`), so `anchorAltitude` must be measured against
+`surface.radius` and not `body.radius` — which is what the branch's
+`anchorGround(mesh, anchor, state.datumRadius)` fixes and what
+`scatterField`'s deleted `anchorAltitude` (`− body.radius`) got wrong for figure
+bodies. **When two call sites subtract "the radius", check which of the two they
+took.**
+
+## `world.entities` as a read view: what actually enforces it
+
+`EntityView` is a getter's declared type over the real `EntityStore`, so
+`update` still exists at runtime and a console/`.mjs` caller can reach it.
+`AGENTS.md` says "there is no `update` to reach for"; `entity.ts`'s own docstring
+says "no such door **on the type**", which is the precise claim. The enforcement
+that can fail is `world.test.ts`'s
+`expectTypeOf(world.entities).not.toHaveProperty('update')` — and it is armed:
+expect-type 1.4.0 types `not.toHaveProperty` as `(key, ...MISMATCH:
+MismatchArgs<Extends<KeyType, keyof Actual>, false>)`, so a present key demands a
+`never` argument, and the root `tsconfig.json` `include: ["packages/*/src"]`
+covers `.test.ts`. **Read the expect-type signature rather than trusting a
+type-level assertion, and confirm the tsconfig includes the test file.**
+
+## A new "never derive a stored value from a captured snapshot" rule, and the file the sweep missed
+
+Sixth instance of "a branch that adds an invariant violates it once". A
+concurrent session added `AGENTS.md` "Never derive a stored value from a captured
+snapshot" + `.claude/rules/react-shell.md` + an `invariants.md` row after fixing
+`GraphicsPanel`'s four `setSurface({...surface, x})` to the updater form. What it
+did not sweep, and it is the sibling panel: **`hud/LensSlider.tsx:50`**
+`camera.onLens(spec.at(camera.lens, scrub))`, where `camera.lens` is
+`LensSection`'s captured `usePersistentState(CAMERA_LENS)` and `spec.at` keeps the
+other three channels. `LensSection` is the one preference explicitly drawn in two
+simultaneously-mounted places — the planetarium dock's `CameraPanel` and
+`/settings/camera` over it — which is the exact pairing the new bullet's own text
+names. Also `pages/ControlsSection.tsx:98` (`{...overrides, [id]: chord}`) and
+`:111`, and `planetarium/CataloguePanel.tsx:306` (`setFiltering(!filtering)`).
+Clean: `dock/useWorkspace.ts` is updater-form throughout; `firstLight.ts`'s
+`{...store.getState()}` is a live read, not a snapshot.
+
+**The grep:** `rg -n "usePersistentState\(" apps/game/src` for the mounts, then
+read every writer of each object-or-boolean-valued one.
+
+## `.claude/settings.json` deny rules are part of the diff, and the justification is checkable
+
+`refactor/five-modules-deepened` removed `Read(./.env)` / `Read(./.env.*)` from
+the deny list (a bare `rg` resolves as a read of `.` and the deny beat the
+`Bash(rg:*)` allow, one dialog per search — a real cost, especially to subagents).
+The `CLAUDE.md` paragraph justifying it says the two files under `apps/game/` are
+"a GA measurement id and a committed example". Only `.env.example` is tracked;
+`apps/game/.env.production` is **present on disk and gitignored**, and
+`.gitignore:18-20`'s own comment says the id is deliberately kept out because
+"this repository is public". **Check a permission-relaxation's stated premise with
+`git ls-files` and `git status --ignored` — never by reading the file.**
+
+## What came back clean on the final `refactor/five-modules-deepened` tree
+
+Worth not re-deriving. `pnpm graph` (12 packages, layering intact), `typecheck`,
+`lint`, `format:check`, `docs:build` (1269 pages), `presets:check`, `brand:check`
+all green; `pnpm test` 98 files / 1585 passed / 4 skipped in 7.0 s;
+`pnpm sim --self-test` 12/12, save 998 bytes.
+
+- `bandStack.ts` has **zero runtime imports** (all four `import type`), so
+  `terrain.ts → bandStack.ts` and `terrainKernel.ts → bandStack.ts` add no edge.
+  `d9147a8` dropped the last one (`gritRelief` from `micro.ts`).
+- `bandStack.test.ts` is now armed: the "every gate takes both answers" census
+  test is the thing my earlier note asked for, and Venus/Phobos supply the
+  tail-off and bare-budget rows.
+- `renderHost()`'s defaults reproduce every previous `?.() ?? x` exactly:
+  `framingLens → LENS_PRESETS.flight`, `pixelRatio → 1`, the rest null/no-op.
+  `Object.assign(host, extras)` keeps the `world` getter (source has no `world`
+  key), and `devtools.test.ts` now proves it by replacing the world.
+- `three` r182's `UniformNode.onUpdate` does `this.value = value` — an
+  assignment, never an in-place `copy` — so `wear.ts`'s `Object.freeze`d
+  `UNDRESSED_GROUND` vectors are safe as uniform values.
+- All 13 removed `entities.update` call sites went to a verb or a spawn
+  argument; no write half remains outside `World`. `stateHash` already carried
+  `control` and `flightAssist`, so `EntityInit` gaining them adds no field.
+- Mirror discipline complete for the entity-write amendment, including the
+  path-scope half that used to fail: the bullet went into
+  `.claude/rules/packages.md` (`packages/**/*.ts`), which is what actually covers
+  `packages/persistence` and `packages/devtools` — `determinism.md`'s scope does
+  not. Both `.cursor/*.mdc` globs still equal their `paths:`.
+- No new `Math.random`/`Date.now`/`performance.*`/`localStorage`; no `three` in
+  `packages/*`; no bare `three` in `apps/game`; no `text-slate-500`; no
+  `'use no memo'` directive added or removed; no plan under `docs/`; the two new
+  `docs/agents/invariants.md` rows point at a heading that exists
+  (`architecture.md#invariants`, line 332).
+- Glossary figures check out: `MIN_DISTANCE_RADII = 1.5`, `MIN_STANCE_HEIGHT = 2`,
+  and the `RenderHost` member list matches `harness.ts` in order.
