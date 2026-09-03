@@ -211,6 +211,14 @@ interface Placed {
   readonly morphBand: Vector2
 }
 
+/** The ground's record alone: a sea wearer has no grain origin to move. */
+function wornGround(object: Object3D): GroundWear {
+  const wear = object.userData[GROUND_WEAR] as GroundWear | undefined
+  if (wear === undefined)
+    throw new Error(`${object.type} is not dressed as the ground`)
+  return wear
+}
+
 /** The record an object is wearing, or a throw at the one moment a throw is the right answer. */
 function worn(object: Object3D): Placed {
   const wear = (object.userData[GROUND_WEAR] ?? object.userData[SEA_WEAR]) as
@@ -264,7 +272,7 @@ export function anchorGround(
   anchor: Point,
   datumRadius: number,
 ): void {
-  const wear = worn(object) as GroundWear
+  const wear = wornGround(object)
   const ax = Math.fround(anchor.x)
   const ay = Math.fround(anchor.y)
   const az = Math.fround(anchor.z)

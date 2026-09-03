@@ -1823,8 +1823,12 @@ export function createTerrainKernel(
           )
           elevation.addAssign(softLimit(tail, microCeiling))
         })
+        // An amplitude guard, not a stage gate: the grit is always on inside
+        // the stack (`BAND_STACK` says why), and this skips its octaves only
+        // where the packer wrote a zero, which is the bare body the outer
+        // branch already took.
         const gritAmplitude = scalar(SCALAR.GRIT_RELIEF)
-        If(gate('grit'), () => {
+        If(gritAmplitude.greaterThan(0), () => {
           // `fbm3` over the grit's frames: each octave has its own cell and
           // fraction, because at eight meters of wavelength it is as fine as
           // the tail's craters.

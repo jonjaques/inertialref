@@ -33,8 +33,8 @@ table is one of those three, not drift.
 | A stand-in `DataTexture` is filtered like its map                                             | [Testing](../guides/testing.md#shader-behavior-runs-on-the-real-gpu-from-node)                             |
 | No canonical reader of the drawn ground, or the reverse                                       | [ADR-0021](../adr/0021-the-ground.md) · [Terrain](../concepts/streaming.md)                                |
 | No fine lattice coordinate from an absolute float32 direction, no lattice decision in a float | [ADR-0023](../adr/0023-the-gpu-producer.md) · [Rendering](../concepts/rendering.md#terrain-meshing)        |
-| Entity writes go through `World`                                                              | [Extending](../guides/extending.md)                                                                        |
-| Landedness is a consequence, never asserted                                                   | [Extending](../guides/extending.md)                                                                        |
+| Entity writes go through `World`'s verbs; `world.entities` is the read half                   | [Architecture](../architecture.md#invariants) · [ADR-0025](../adr/0025-the-rails.md)                       |
+| Landedness is a consequence, never asserted                                                   | [Architecture](../architecture.md#invariants)                                                              |
 | A coasting entity's epoch does not survive a move it did not make                             | [Time](../concepts/time.md) · [ADR-0025](../adr/0025-the-rails.md)                                         |
 | Saves store references, not regenerable content                                               | [Persistence](../concepts/persistence.md) · [ADR-0007](../adr/0007-persistence.md)                         |
 | The star catalog is an argument, not a singleton                                              | [Galaxy](../design/galaxy.md) · [Catalog](../guides/catalogue.md)                                          |

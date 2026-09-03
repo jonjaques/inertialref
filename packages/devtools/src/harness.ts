@@ -1785,7 +1785,7 @@ export class GameHarness {
    * frame-relative rotation written out twice, differing only in whether it
    * then set the throttle. Forward is −Z, so the orientation that aims at the
    * target is the rotation taking −Z onto the target direction, and it goes
-   * through `teleport` rather than `entities.update` because a discontinuous
+   * through `teleport` rather than a raw state write because a discontinuous
    * change of attitude has to reset the interpolation history with it.
    */
   #lookAt(target: UniverseVector): void {

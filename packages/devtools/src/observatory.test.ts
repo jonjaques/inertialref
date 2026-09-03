@@ -41,9 +41,9 @@ function harness(): {
   /*
    * The session gets a lens the way a browser does, and it has to.
    *
-   * With no host, `framingLens` and `setFlightLens` are both absent:
-   * `Observatory.#lens` falls back to `LENS_PRESETS.flight` and `#fitLens` is a
-   * silent no-op — so every picture composes at 65° whatever it names, and the
+   * With no render side, `renderHost()` answers `framingLens` with
+   * `LENS_PRESETS.flight` and `setFlightLens` with a no-op — so every picture
+   * composes at 65° whatever it names, and the
    * `fovDeg` a test asserts against is the literal echoed back out of
    * `PICTURES`. `preset`'s central claim, that a `fill` standoff is solved
    * *against* the lens and so the lens is fitted first, was exercised by

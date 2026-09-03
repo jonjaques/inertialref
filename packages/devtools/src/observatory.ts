@@ -713,8 +713,8 @@ export class Observatory {
    *
    * Returns the field of view it solved, because the caller has to fit it: the
    * observatory has no lens of its own by design (`#lens` says why), so the
-   * shell writes `engine.flightLens` and the standoff arithmetic here reads it
-   * back.
+   * host's `setFlightLens` carries it to the flight lens and the standoff
+   * arithmetic here reads it back.
    */
   rise(
     options: { readonly clearance?: Radians; readonly height?: Meters } = {},

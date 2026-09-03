@@ -1131,3 +1131,85 @@ re-checked against the flag.**
 - ADR index: table row, Mermaid node and two incoming edges all present — but the
   count words are **not**: `docs/adr/README.md:3` and `README.md:387` still say
   "Twenty-five decisions" with twenty-six in the table.
+
+## Rerouting a writer through a persisted preference inserts a second predicate
+
+Richest finding on `refactor/five-modules-deepened`, and the shape generalizes to every
+"the preference is the owner" refactor. `GameEngine.requestLens` sets the field and then
+calls the sink, which is now `write(CAMERA_LENS, lens)` — and `preferences.ts`'s `write`
+announces **`resolve(preference)`**, not the value it was handed. So a value the _field's_
+guard accepts and the _preference's_ `accept` rejects comes back as the **default** and the
+binding clobbers the field with it.
+
+Measured: `isUsableLens` is "finite and positive"; `isLens` additionally clamps to
+`FOCAL_MIN..FOCAL_MAX` = `lensForFov(FOV_MAX=110)..lensForFov(FOV_MIN=20)`. So
+`engine.requestLens(lensForFov(5))` leaves `engine.flightLens` at **65°**, silently, where
+`origin/main` kept the 5° lens (React state held the raw value). Unreachable from the
+shipped verbs — `riseFov` clamps to `[FOV_MIN, FOV_MAX]` and every `PICTURES.fovDeg` is 65
+or 80 — and reachable from `window.engine`, which the field's own docstring names as the
+case ("a capture script … reaches it without a storage predicate in the way").
+
+**The check:** when a diff routes a field's writer through storage, put the field's
+predicate and the preference's `accept` side by side and ask whether one is strictly
+narrower. Then read `write` — if it announces the _resolved_ value, the narrower predicate
+wins and the wider one is decoration.
+
+## A table that becomes the one description needs a gate census, not just a green test
+
+The band-stack refactor's `bandStack.test.ts` compares `stageOn(id, body)` against
+`packedStageOn(pack, id)` over `terrainZoo` + Luna/Earth/Mercury. Count on/off per gate over
+that fixture before believing it: `ice` 4/10, `drainage` 2/12, `craters` 12/2, `coast` 2/12,
+`clamp` 1/13 — and **`tail` 14/0, `grit` 14/0**, plus **zero bare bodies**, so the
+"packs a bare body as bare" case is `false === false` seven times. `grit`'s gate
+(`gritRelief(grammar) > 0` = `0.45·(1 − 0.35·air)`) can never be false at all.
+
+Widened to Sol + 80 catalog systems: 258 bodies, **214 bare**, `tail` off on 4 — so one gas
+giant and one tail-free body arm all three rows. Same run: **0 disagreements** across every
+gate, so the packer is faithful far beyond the fixture, which is worth not re-deriving.
+
+**The generic check:** for any test that asserts "two spellings of a predicate agree over a
+population", print the on/off counts per predicate. A row that is all-on is a row that would
+pass against `() => true`.
+
+## `Object.assign(host, extras)` keeps an accessor; the test for it usually cannot fail
+
+`openSession` now returns `Object.assign(host, { harness, store, … })`. The `world` getter
+survives because the source has no `world` key — proved in one line with
+`Object.getOwnPropertyDescriptor(session, 'world').get`, and behaviorally with
+`session.world !== before` after `harness.load(save)`. Both hold.
+
+The assertion the branch added, `expect(partial.harness.world).toBe(partial.world)`, reads
+the _same accessor on the same object_ twice and passes however the getter is built. The
+property is really covered by the older load test, which compares `stateHash` before and
+after. **When a diff changes how an object is assembled, ask what the new assertion would
+say if the assembly were wrong** — an identity check across two paths into one object is
+not it.
+
+## The gate-substitution refactor: prove it with the two-revision sample loop, then check the version
+
+`refactor/five-modules-deepened` replaced five inline conditions in `evaluate` with
+`stageOn(...)` and `budget <= 0` with `bareGround(surface)`. `git archive origin/main`,
+symlink `node_modules` **and each `packages/*/node_modules`**, import both `terrain.ts` by
+absolute path: `elevationAt`, `drawnElevation`, `drawnGroundElevation` and `surfaceCoverAt`
+were **bit-identical over 15,480 samples × 258 bodies**, so `TERRAIN_ALGORITHM` correctly
+stayed at 3.
+
+Trap in the loop: `bodyFixedDirection` needs a frame and throws on a bare vector — pass a
+plain unit `Vec3` cast to the branded type for a sampling sweep.
+
+Layering half, settled by reading imports rather than `pnpm graph`: `bandStack.ts` imports
+`terrainKernel.ts` with `import type` only (erased), so the runtime edges are
+`terrain.ts → bandStack.ts → micro.ts` and `terrainKernel.ts → bandStack.ts`, with no back
+edge from `micro/craters/sketch/grammar/bands/cover/system` to `terrain.ts`. No cycle.
+
+## The concurrent docs pass now reaches `.claude/agents/` — and still not a code comment
+
+Sixth branch running. Mid-audit the tree gained `.claude/agents/invariant-auditor.md`
+(rewriting this agent's own `world.entities.update` bullet — a finding I was about to file),
+`docs/agents/invariants.md`, `docs/glossary.md` and `CONTEXT.md`. What it did **not** reach,
+on a branch that deleted `SimulationClock.advance` and moved the store's write half:
+`apps/game/src/scene/EngineTick.tsx:19` ("`SimulationClock.advance` already caps a step"),
+`packages/devtools/src/harness.ts:1788` ("through `teleport` rather than `entities.update`"),
+`packages/devtools/src/observatory.ts:716` ("the shell writes `engine.flightLens`") and two
+test-file comments. **The pass sweeps markdown. Deleted identifiers hide in `.ts` comments,
+and `rg` for the retired name across `apps/` and `packages/` is the whole check.**

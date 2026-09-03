@@ -369,8 +369,9 @@ holding. Read it beside the rest or `visited: 446` will describe a frame that
 walked nothing.
 
 `ir.terrain().producer` is where the _next_ heightfield request goes — `gpu`
-for the tile producer, `pool` for the worker pool, `none` headlessly — rather
-than where the ground on screen came from, because a producer can stop mid
+for the tile producer, `pool` for the worker pool, `none` for a session with
+neither; headlessly `ir.terrain()` itself is null — rather than where the
+ground on screen came from, because a producer can stop mid
 session and the fields already held came from wherever they came from.
 `?producer=cpu` on the URL keeps the pool on a WebGPU page, which is the A/B
 every GPU figure was taken against.

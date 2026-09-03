@@ -76,6 +76,22 @@ describe('the engine knobs', () => {
     release()
   })
 
+  it('keeps a lens the sliders cannot reach on the field, and off the owner', () => {
+    // The field's guard admits a 5° lens; the preference's does not. Asking the
+    // owner anyway would announce the default back onto the field — a script's
+    // picture reverted for wanting an angle the panel does not offer.
+    const bound = engine()
+    const release = bindEngineKnobs(bound)
+    const before = read(CAMERA_LENS)
+    const narrow = lensForFov(5)
+    expect(CAMERA_LENS.accept(narrow)).toBe(false)
+    bound.flightLens = narrow
+    bound.onLensRequest?.(narrow)
+    expect(read(CAMERA_LENS)).toEqual(before)
+    expect(bound.flightLens).toBe(narrow)
+    release()
+  })
+
   it('stops following once released', () => {
     const bound = engine()
     const release = bindEngineKnobs(bound)

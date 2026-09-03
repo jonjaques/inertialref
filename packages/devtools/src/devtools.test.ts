@@ -91,8 +91,15 @@ describe('harness', () => {
     expect(partial.render.pixelRatio()).toBe(2)
     expect(partial.render.scene()).toBeNull()
     expect(partial.now?.()).toBe(42)
-    // The session is the host: one object, one `world` getter.
-    expect(partial.harness.world).toBe(partial.world)
+    // The session is the host: one object, one `world` getter — so replacing
+    // the world moves what the session and the harness both answer with.
+    const other = openSession({ workers: null, seed: 'another' })
+    const before = partial.world
+    partial.replaceWorld(other.world, null)
+    expect(partial.world).not.toBe(before)
+    expect(partial.world).toBe(other.world)
+    expect(partial.harness.world).toBe(other.world)
+    other.dispose()
     partial.dispose()
   })
 

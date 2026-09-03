@@ -332,7 +332,9 @@ function evaluate(
   const bands = grammar.bands
   // The stages below run in `BAND_STACK`'s order and behind its gates; the
   // kernel reads the same table, so the structure around the bands is written
-  // once even though the bands are written twice.
+  // once even though the bands are written twice. `seabed` is false here
+  // because no canonical gate reads it — the clamp is the drawn field's and
+  // `groundCoverAt` asks with the real flag.
   const stack: StageContext = {
     surface,
     sketch,

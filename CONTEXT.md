@@ -106,8 +106,8 @@ pnpm typecheck   # five tsconfig projects
 pnpm lint        # oxlint
 pnpm graph       # dependency layering + cycle check
 pnpm brand       # re-render every brand artifact from design/brand/brandmark.svg
-pnpm build       # optional media pull, typecheck, vite build
-pnpm check       # all of the above
+pnpm build       # optional media pull, docs:build, typecheck, vite build
+pnpm check       # graph, brand:check, presets:check, format:check, lint, typecheck, test, build
 pnpm vitest run <substring>   # single test file
 pnpm run deploy:worker        # pnpm build, then wrangler deploy
 
@@ -6695,7 +6695,7 @@ concentrate complexity or just move it. What each one cost before, measured:
 | one band (the valleys sub-commit)  | 8 code files, port +263 lines against the band's +237    | `bandStack.ts`, one table               |
 | one render knob (`render.surface`) | 8 files in the client, +181 lines                        | one definition, one binding row         |
 | one host capability (the timeline) | 7 files, harness +82 and engine +234                     | one `Host`, one `render` object         |
-| one heightfield producer's wear    | 12, 12 and 14 `userData` writes across three scene files | `groundWear.ts`, one record             |
+| one heightfield producer's wear    | 11, 11 and 13 `userData` writes across three scene files | `groundWear.ts`, one record             |
 | one entity state write in a test   | 13 sites past the world's verbs                          | none: the store's write half is private |
 
 **The band stack's composition is one description, and the kernel is not a

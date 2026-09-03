@@ -48,20 +48,53 @@ function solBody(name: string): Body {
   throw new Error(`no ${name} in Sol`)
 }
 
+/**
+ * The zoo, the three Sol anchors, and two bodies chosen so every row below can
+ * go red: Venus, whose ground carries no tail, and Phobos, whose budget is
+ * zero. Without them the tail's gate is on for every body and the bare check
+ * compares false to false.
+ */
 const bodies = (): readonly Body[] => [
   ...terrainZoo(session.world).map((entry) => bodyAt(entry.address)),
   solBody('Luna'),
   solBody('Earth'),
   solBody('Mercury'),
+  solBody('Venus'),
+  solBody('Phobos'),
 ]
 
 describe('the band stack', () => {
   it('has each gated stage packed into the slot the kernel reads', () => {
     // Every stage that can be off names the slot the kernel gates on; the
-    // always-on landform bands name none and run in both evaluations.
+    // always-on landform bands and the grit name none and run in both
+    // evaluations.
     for (const stage of BAND_STACK) {
       expect(stage.on === null).toBe(stage.packed === null)
     }
+  })
+
+  it('is asked about a population where every gate takes both answers', () => {
+    // A parity row over a gate that is never off passes against a decoder
+    // hard-wired to `true`; this is the check that the rows below can fail.
+    const seen = new Map<string, Set<boolean>>()
+    for (const body of bodies()) {
+      const surface = body.surface
+      if (bareGround(surface)) continue
+      const context = {
+        surface,
+        sketch: terrainSketch(surface),
+        sea: seaDatumElevation(surface),
+        seabed: false,
+      }
+      for (const stage of BAND_STACK) {
+        if (stage.on === null) continue
+        const answers = seen.get(stage.id) ?? new Set<boolean>()
+        answers.add(stageOn(stage.id, context))
+        seen.set(stage.id, answers)
+      }
+    }
+    for (const [id, answers] of seen)
+      expect([id, answers.size]).toEqual([id, 2])
   })
 
   it("encodes every gate as the body's own, on every body, for both sides of the sea", () => {
@@ -91,11 +124,14 @@ describe('the band stack', () => {
   it('packs a bare body as bare', () => {
     // The whole stack is skipped on a zero budget, on both sides: the CPU
     // returns before it and the kernel's stack is the `Else` of this slot.
+    let bare = 0
     for (const body of bodies()) {
       const pack = surfaceKernel(body.surface)
       const budget = pack.records[SCALARS_AT * 4 + SCALAR.BUDGET]!
       expect(budget <= 0).toBe(bareGround(body.surface))
+      if (bareGround(body.surface)) bare += 1
     }
+    expect(bare).toBeGreaterThan(0)
   })
 
   it('names the drawn tail as presentational and the rest as canon', () => {

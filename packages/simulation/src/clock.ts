@@ -114,7 +114,7 @@ export interface ClockStatus {
   /** Ticks dropped because the step budget ran out, cumulative. */
   readonly droppedTicks: number
   /**
-   * The time scale actually being delivered, as of the last `advance`.
+   * The time scale actually being delivered, as of the last `settle`.
    *
    * Exactly `timeScale` whenever the clock is keeping up — this is a ratio of
    * ticks wanted to ticks run, not a sampled rate, so it does not wobble at 1×.

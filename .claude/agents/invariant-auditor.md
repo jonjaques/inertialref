@@ -27,14 +27,16 @@ still a useful finding; a fix you applied without being asked is a merge conflic
    The path-scoped extracts in `.claude/rules/` load automatically as you open files, but
    they carry only the imperative — `AGENTS.md` carries the reasoning you need to judge a
    borderline case.
-4. Read the ADR for each area the diff touches. `docs/adr/` — twelve of them.
+4. Read the ADR for each area the diff touches. `docs/adr/README.md` is the index.
 
 ## What to look for, in descending order of cost
 
 **Determinism and addressing.** `Math.random()`, `Date.now()` or `performance.now()`
 anywhere canonical. Generation that depends on order rather than deriving a seed from the
-address. An absolute position in a `Vec3` instead of a `UniverseVector`. A write through
-`world.entities.update` instead of `teleport`/`setControl`. A bare `Vec3` reaching terrain
+address. An absolute position in a `Vec3` instead of a `UniverseVector`. Entity state
+written around the world's verbs — `world.entities` is the read half, so a ship that starts
+moving is spawned moving, and after that it is `teleport`/`setControl`; anything reaching
+for a write on the store is the finding. A bare `Vec3` reaching terrain
 sampling instead of a `BodyFixedDirection`. A new field in canonical state that is missing
 from `world.stateHash()` — check this one specifically, because the fields it omitted were
 exactly the ones a shipped bug lived in.

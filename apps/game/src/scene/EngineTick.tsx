@@ -16,7 +16,7 @@ export function EngineTick({ engine }: { engine: GameEngine }) {
   useFrame((_, delta) => {
     // The one place the wall clock enters the game, and it is handed over raw.
     // It used to be clamped to 0.25 s here, which changed nothing about the
-    // spiral of death — `SimulationClock.advance` already caps a step at
+    // spiral of death — `clock.plan` already caps a frame's integration at
     // DEFAULT_MAX_STEPS — and did corrupt the diagnostic: the clock books the
     // excess as `droppedTicks`, so a three-minute background stall was reported
     // in the HUD as 8 dropped ticks instead of 11,520.

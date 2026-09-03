@@ -256,8 +256,10 @@ session.harness.orbit('g:milky-way/s:SOL/b:0', 400)
 
 It performs seven steps in the one order that works — derive the world from a
 seed, load a system, choose a landable body, put a ship above it, stand up a
-worker pool, pick a save store, wire the harness — and returns `{ world, player,
-harness, pool, store, system, target, dispose }`.
+worker pool, pick a save store, wire the harness — and returns the host the
+harness is built over, with the session's extras on the same object: `world`
+(a getter), `player()`, `pool()`, `replaceWorld()`, `authority()`, `now`,
+`render`, plus `harness`, `store`, `system`, `target` and `dispose()`.
 
 | Option            | For                                                                                                                                                                                            |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

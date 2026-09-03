@@ -1,5 +1,4 @@
 import type { Meters } from '@inertialref/shared'
-import { gritRelief } from './micro.ts'
 import type { TerrainSketch } from './sketch.ts'
 import type { SurfaceParameters } from './system.ts'
 import type { SCALAR, WORD } from './terrainKernel.ts'
@@ -19,9 +18,11 @@ import type { SCALAR, WORD } from './terrainKernel.ts'
  * a TypeScript function — so the tolerance test was the only thing that could
  * notice a drift between them, and it needs a physical adapter.
  *
- * This table is the one description. `evaluate` and the drawn field ask
- * `stageOn`; the kernel builds each gate from the packed slot named beside it;
- * the band test isolates a band through the same gate; and
+ * This table is the one description. `evaluate` asks `stageOn` for the gated
+ * canonical stages and the drawn field asks it for the clamp; the tail's own
+ * guard is inside `microRelief`, which is the band's body rather than the
+ * stack's structure. The kernel builds each gate from the packed slot named
+ * beside it; the band test isolates a band through the same gate; and
  * `packedStageOn` in `terrainKernel.ts` reads a gate back out of a packed
  * record, so `bandStack.test.ts` holds the packer's encoding to the body's
  * gate over the whole zoo, in Node, in milliseconds.
@@ -146,11 +147,14 @@ export const BAND_STACK: readonly Stage[] = [
     packed: { scalar: 'MICRO_CEILING', above: 0 },
   },
   {
+    // Always on inside the stack: `gritRelief` bottoms out at 0.29 with the
+    // air's loss capped, so the amplitude is never zero on a body with a
+    // budget. The kernel reads the amplitude, not a gate.
     id: 'grit',
     kind: 'additive',
     canonical: false,
-    on: ({ surface }) => gritRelief(surface.grammar) > 0,
-    packed: { scalar: 'GRIT_RELIEF', above: 0 },
+    on: null,
+    packed: null,
   },
   {
     // The sea's `max`, before the cover and after the tail — under the clamp,

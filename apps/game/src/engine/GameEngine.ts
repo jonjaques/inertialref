@@ -396,9 +396,12 @@ export class GameEngine {
    * the lens on screen. The binding carries it back to this field, which is the
    * same value again.
    *
-   * Declined whole, not half: a lens the field's setter would refuse must not
-   * reach the owner either, or the preference holds a NaN the next reload
-   * rejects while the picture keeps the last good one.
+   * Declined at both boundaries, each by its own guard: a lens the field's
+   * setter would refuse does not reach the owner either, or the preference
+   * holds a NaN the next reload rejects while the picture keeps the last good
+   * one; and a lens the owner refuses — outside the sliders' band, which a
+   * capture script may well ask for — stays on the field alone, because
+   * `state/engineKnobs.ts` asks the owner only what it accepts.
    *
    * Not a second producer: `engine.lens` still resolves cutscene-then-flight,
    * and this writes the one flight lens a panel's slider also writes.

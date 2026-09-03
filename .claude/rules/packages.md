@@ -25,6 +25,10 @@ Reasoning: `docs/guides/development.md`, `pnpm graph`.
   through a `Timer` from `shared/src/timing.ts`; `Span.end()` returns `void`, so nothing
   here can observe a duration. `apps/headless/src/coreHostApis.test.ts` greps for it,
   because a global is not an import and `pnpm graph` cannot see one. ADR-0022.
+- **Entity state is written through the world's verbs, never around them.** `world.entities`
+  is `EntityView`, the store's read half; `spawnShip` takes a velocity, `teleport`,
+  `setControl`, `setFlightAssist` and `killRotation` carry the interpolation, landed-set
+  and rails bookkeeping a write needs. The full rule is `.claude/rules/determinism.md`.
 - **Imports carry their `.ts` extension.** `allowImportingTsExtensions` is on and Node
   runs the sources directly.
 - **No `enum`, no parameter properties, no runtime namespaces** — `erasableSyntaxOnly`.
