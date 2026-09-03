@@ -26,6 +26,7 @@ import {
   trunkValley,
   volcanicBand,
 } from './bands.ts'
+import { bareGround, type StageContext, stageOn } from './bandStack.ts'
 import { craterField, softLimit } from './craters.ts'
 import {
   BARE_COVER,
@@ -324,11 +325,20 @@ function evaluate(
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
   const budget = surface.maxElevation
-  if (budget <= 0) {
+  if (bareGround(surface)) {
     if (out !== null) packCover(BARE_COVER, out, at)
     return 0
   }
   const bands = grammar.bands
+  // The stages below run in `BAND_STACK`'s order and behind its gates; the
+  // kernel reads the same table, so the structure around the bands is written
+  // once even though the bands are written twice.
+  const stack: StageContext = {
+    surface,
+    sketch,
+    sea: seaDatumElevation(surface),
+    seabed: false,
+  }
   // Three of the bands below read the plate this sample sits on. One lookup,
   // handed to all three — see `plateContext`.
   const plates = plateContext(sketch, d)
@@ -341,7 +351,7 @@ function evaluate(
       volcanicBand(sketch, grammar, plates, d, bands.volcanism * budget) +
     bands.relief *
       reliefBand(sketch, grammar, surface.roughness, d, bands.relief * budget)
-  if (bands.ice > 0) {
+  if (stageOn('ice', stack)) {
     height += bands.ice * iceBand(sketch, grammar, d, bands.ice * budget)
   }
   let elevation = height * budget
@@ -356,7 +366,7 @@ function evaluate(
    * riverbed is decided from the same number the floor was cut to.
    */
   let drainage: DrainageSample = NO_DRAINAGE
-  if (grammar.drainage > 0) {
+  if (stageOn('drainage', stack)) {
     const datum = drainageDatum(surface)
     const valley = trunkValley(sketch, d)
     const tributary = tributaryValley(sketch, d)
@@ -380,7 +390,7 @@ function evaluate(
    * Moon.
    */
   let craters = 0
-  if (sketch.craterLevels.length > 0) {
+  if (stageOn('craters', stack)) {
     craters = craterField(sketch, grammar, d)
     elevation += softLimit(craters, craterLimit)
   }
@@ -391,9 +401,8 @@ function evaluate(
    * sea cannot reach, and before the tail, which is added by `groundCoverAt`
    * and is a meter of grit the remap has no business flattening.
    */
-  const sea = seaDatumElevation(surface)
-  if (sea !== null && grammar.liquid > 0) {
-    elevation = coastRemap(elevation, sea, coastWidth(surface))
+  if (stageOn('coast', stack) && stack.sea !== null) {
+    elevation = coastRemap(elevation, stack.sea, coastWidth(surface))
   }
   if (out !== null) {
     packCover(
@@ -464,7 +473,13 @@ export function groundCoverAt(
   const d = Vec.normalize(direction)
   const sea = seaDatumElevation(surface)
   const elevation = evaluate(surface, d, out, at) + tail(surface, d)
-  return sea === null || seabed ? elevation : Math.max(elevation, sea)
+  const clamp = stageOn('clamp', {
+    surface,
+    sketch: terrainSketch(surface),
+    sea,
+    seabed,
+  })
+  return clamp && sea !== null ? Math.max(elevation, sea) : elevation
 }
 
 /**
@@ -515,7 +530,7 @@ export function drawnElevation(
 
 /** The tail, or nothing on a body whose relief budget is zero. */
 function tail(surface: SurfaceParameters, d: Vec3): Meters {
-  if (surface.maxElevation <= 0) return 0
+  if (bareGround(surface)) return 0
   return microRelief(terrainSketch(surface), surface.grammar, d)
 }
 

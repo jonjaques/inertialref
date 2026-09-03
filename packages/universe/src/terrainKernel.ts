@@ -2,6 +2,7 @@ import { invariant } from '@inertialref/shared'
 import { DEFAULT_FBM } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
 import type { RegionAddress } from './address.ts'
+import { type StageId, stageOf } from './bandStack.ts'
 import {
   ARC_SHAPE,
   BELT_SHAPE,
@@ -310,6 +311,24 @@ export function surfaceKernel(
   return built
 }
 
+/**
+ * Whether a stage's gate holds in a packed record, read exactly as the kernel
+ * reads it: the slot `BAND_STACK` names, against the threshold beside it.
+ *
+ * What `bandStack.test.ts` holds `pack` to. The packer encodes each gate by
+ * zeroing a slot where the body's own gate is closed — a coast width of zero
+ * is a remap that returns its argument — and this is the one place that
+ * decoding is written, so a slot the kernel gates on and the packer forgot to
+ * zero is a failing Node test rather than a drift only the tolerance test on
+ * the adapter could notice.
+ */
+export function packedStageOn(pack: KernelSurface, id: StageId): boolean {
+  const packed = stageOf(id).packed
+  if (packed === null) return true
+  if ('word' in packed) return pack.words[WORD[packed.word]]! > 0
+  return pack.records[SCALARS_AT * 4 + SCALAR[packed.scalar]]! > packed.above
+}
+
 function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
@@ -393,9 +412,9 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   scalar(SCALAR.LIQUID, grammar.liquid)
   scalar(SCALAR.BIOTA, grammar.biota)
   scalar(SCALAR.DRAINAGE_DATUM, drainageDatum(surface))
-  // Zero where there is no sea or no liquid, which is the gate `evaluate`
-  // takes before `coastRemap` — a width of zero is a remap that returns its
-  // argument, so the kernel needs no second flag for it.
+  // Zero where there is no sea or no liquid, which is the coast stage's gate
+  // in `BAND_STACK` — a width of zero is a remap that returns its argument,
+  // so the kernel needs no second flag for it. `packedStageOn` reads it back.
   scalar(
     SCALAR.COAST_WIDTH,
     sea !== null && grammar.liquid > 0 ? coastWidth(surface) : 0,
