@@ -1,6 +1,5 @@
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
-import type { CameraState } from '../hud/controls.ts'
 import type { LabelDensity } from './layers.ts'
 
 /*
@@ -37,8 +36,6 @@ export interface PlanetariumContext {
   /** How much of the lens's artifact stack is showing, 0..1. */
   readonly flare: number
   readonly onFlare: (amount: number) => void
-  /** The lens, and the only writer of it — see `hud/controls.ts`. */
-  readonly camera: CameraState
   /**
    * Whether the primary drag and the arrow keys turn the head instead of
    * orbiting.

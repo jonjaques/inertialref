@@ -28,11 +28,7 @@ import {
   viewportSharedTexture,
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
-import {
-  NO_MORPH_DISTANCE,
-  OPEN_OCEAN,
-  type TerrainPalette,
-} from '@inertialref/rendering'
+import { OPEN_OCEAN, type TerrainPalette } from '@inertialref/rendering'
 import {
   asVector,
   bumped,
@@ -41,6 +37,7 @@ import {
   type Vector,
 } from './noiseNodes.ts'
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
+import { seaWearOf } from './wear.ts'
 import { WAVE_OCTAVES } from './quality.ts'
 import {
   AIR_SCALE_HEIGHT,
@@ -177,15 +174,16 @@ export function createWaterMaterial(
   const refraction = uniform(1)
   const waveOctaves = uniform(DEFAULT_WATER_QUALITY.waveOctaves)
 
+  // The per-mesh inputs, read off what the sheet wears — one record, one key,
+  // dressed by `groundWear.ts`; `wear.ts` says what each is.
   const eyeLocal = uniform(new Vector3()).onObjectUpdate(
-    ({ object }) => (object?.userData.eyeLocal as Vector3 | undefined) ?? ZERO,
+    ({ object }) => seaWearOf(object).eyeLocal,
   )
   const morphBand = uniform(new Vector2()).onObjectUpdate(
-    ({ object }) =>
-      (object?.userData.morphBand as Vector2 | undefined) ?? NO_MORPH,
+    ({ object }) => seaWearOf(object).morphBand,
   )
   const anchor = uniform(new Vector3()).onObjectUpdate(
-    ({ object }) => (object?.userData.anchor as Vector3 | undefined) ?? ZERO,
+    ({ object }) => seaWearOf(object).anchor,
   )
   /*
    * The anchor reduced modulo the wave period, in wavelengths — the sea's
@@ -194,8 +192,7 @@ export function createWaterMaterial(
    * it is quantized out of existence. See `WAVE_PERIOD`.
    */
   const waveOrigin = uniform(new Vector3()).onObjectUpdate(
-    ({ object }) =>
-      (object?.userData.waveOrigin as Vector3 | undefined) ?? ZERO,
+    ({ object }) => seaWearOf(object).waveOrigin,
   )
 
   const localPosition = varying(vec3(), 'waterLocal')
@@ -484,6 +481,3 @@ const WATER_ABSORPTION: LinearRgb = { r: 0.35, g: 0.065, b: 0.025 }
  * smear.
  */
 const REFRACTION_SHIFT = 0.6
-
-const ZERO = new Vector3()
-const NO_MORPH = new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)

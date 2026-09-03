@@ -1,5 +1,5 @@
 import fc from 'fast-check'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
   LIGHT_YEAR,
   type Meters,
@@ -53,16 +53,12 @@ function solarWorld(seed = 'inertialref'): World {
 function coastingShip(world: World, radii = 3) {
   const planet = landingTarget(world)
   const radius = planet.radius * radii
-  const ship = world.spawnShip(
+  return world.spawnShip(
     'coaster',
     bodyFrameId(planet.address),
     vec3(radius, 0, 0),
+    vec3(0, 0, -circularSpeed(planet.mu, radius)),
   )
-  world.teleport(ship.id, {
-    ...ship.state,
-    velocity: vec3(0, 0, -circularSpeed(planet.mu, radius)),
-  })
-  return ship
 }
 
 /** The same orbit with the main drive lit, so every tick has to be integrated. */
@@ -372,6 +368,33 @@ describe('simulation clock', () => {
 })
 
 describe('flight', () => {
+  it('spawns a ship moving, and the first tick integrates from that motion', () => {
+    const world = solarWorld()
+    const ship = world.spawnShip(
+      'drifter',
+      systemFrameId(SOL),
+      vec3(1e9, 0, 0),
+      vec3(0, 0, -1_000),
+    )
+    expect(ship.state.velocity).toEqual(vec3(0, 0, -1_000))
+    // Born integrated; the epoch is earned by coasting through a tick.
+    expect(world.isCoasting(ship.id)).toBe(false)
+    world.step()
+    // Gravity here is radial, so the sideways axis carries the velocity alone.
+    const after = world.entities.require(ship.id).state
+    expect(after.position.z).toBeCloseTo(-1_000 * TICK_DURATION, 6)
+  })
+
+  it('hands out the read half of the store only', () => {
+    const world = solarWorld()
+    // The write half is the world's alone: every write has the interpolation,
+    // landed-set and rails bookkeeping beside it, and the verbs carry that.
+    expectTypeOf(world.entities).not.toHaveProperty('update')
+    expectTypeOf(world.entities).not.toHaveProperty('add')
+    expectTypeOf(world.entities).not.toHaveProperty('remove')
+    expectTypeOf(world.entities).toHaveProperty('require')
+  })
+
   it('holds a circular orbit', () => {
     const world = solarWorld()
     const planet = landingTarget(world)
@@ -381,13 +404,8 @@ describe('flight', () => {
       'orbiter',
       bodyFrameId(planet.address),
       vec3(radius, 0, 0),
+      vec3(0, 0, -speed),
     )
-    world.entities.update(ship.id, {
-      state: {
-        ...world.entities.require(ship.id).state,
-        velocity: vec3(0, 0, -speed),
-      },
-    })
 
     world.runTicks(20_000)
     const state = world.entities.require(ship.id).state
@@ -409,20 +427,11 @@ describe('flight', () => {
       const rng = new Rng(rootSeed('pilot-inputs'))
       for (let i = 0; i < 2_000; i += 1) {
         if (i % 40 === 0) {
-          world.entities.update(ship.id, {
-            control: {
-              translation: vec3(
-                rng.range(-1, 1),
-                rng.range(-1, 1),
-                rng.range(-1, 1),
-              ),
-              rotation: vec3(
-                rng.range(-1, 1),
-                rng.range(-1, 1),
-                rng.range(-1, 1),
-              ),
-            },
-          })
+          world.setControl(
+            ship.id,
+            vec3(rng.range(-1, 1), rng.range(-1, 1), rng.range(-1, 1)),
+            vec3(rng.range(-1, 1), rng.range(-1, 1), rng.range(-1, 1)),
+          )
         }
         world.step()
       }
@@ -447,12 +456,9 @@ describe('flight', () => {
       toPlanet,
       Vec.length(toPlanet) - planet.sphereOfInfluence * 1.02,
     )
-    const ship = world.spawnShip('inbound', systemFrameId(SOL), inbound)
     // Arrival speed of something that has just crossed interstellar space.
     const fall = Vec.scale(Vec.normalize(Vec.sub(toPlanet, inbound)), 200_000)
-    world.entities.update(ship.id, {
-      state: { ...world.entities.require(ship.id).state, velocity: fall },
-    })
+    const ship = world.spawnShip('inbound', systemFrameId(SOL), inbound, fall)
 
     const before = world.canonicalPositionOf(ship.id)
     let changedAt = -1
@@ -493,13 +499,8 @@ describe('flight', () => {
       'lander',
       bodyFrameId(planet.address),
       vec3(groundRadius(world, planet) + 30, 0, 0),
+      vec3(-2, 0, 0),
     )
-    world.entities.update(ship.id, {
-      state: {
-        ...world.entities.require(ship.id).state,
-        velocity: vec3(-2, 0, 0),
-      },
-    })
 
     let landedAt = -1
     for (let i = 0; i < 60_000 && landedAt < 0; i += 1) {
@@ -532,19 +533,12 @@ describe('flight', () => {
       'lander',
       bodyFrameId(planet.address),
       vec3(groundRadius(world, planet) + 30, 0, 0),
+      vec3(-2, 0, 0),
     )
-    world.entities.update(ship.id, {
-      state: {
-        ...world.entities.require(ship.id).state,
-        velocity: vec3(-2, 0, 0),
-      },
-    })
     for (let i = 0; i < 60_000 && !world.isLanded(ship.id); i += 1) world.step()
     expect(world.isLanded(ship.id)).toBe(true)
 
-    world.entities.update(ship.id, {
-      control: { translation: vec3(0, 1, 0), rotation: Vec.ZERO },
-    })
+    world.setControl(ship.id, vec3(0, 1, 0), Vec.ZERO)
     world.step()
     world.step()
     expect(world.isLanded(ship.id)).toBe(false)
@@ -574,13 +568,8 @@ describe('flight', () => {
       'doomed',
       bodyFrameId(planet.address),
       vec3(groundRadius(world, planet) + 5_000, 0, 0),
+      vec3(-400, 0, 0),
     )
-    world.entities.update(ship.id, {
-      state: {
-        ...world.entities.require(ship.id).state,
-        velocity: vec3(-400, 0, 0),
-      },
-    })
     for (let i = 0; i < 20_000 && !world.isLanded(ship.id); i += 1) world.step()
 
     expect(world.isLanded(ship.id)).toBe(true)

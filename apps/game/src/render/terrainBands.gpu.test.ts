@@ -33,6 +33,8 @@ import {
   seaDatumElevation,
   softLimit,
   SOL,
+  type StageContext,
+  stageOn,
   surfaceKernel,
   terrainSketch,
   tributaryValley,
@@ -176,7 +178,13 @@ async function gpuTile(
   )
 }
 
-/** The CPU's value for one band at one direction, as `evaluate` scales it. */
+/**
+ * The CPU's value for one band at one direction, as `evaluate` scales it.
+ *
+ * Each band's gate is `BAND_STACK`'s, through `stageOn`, so this isolates a
+ * band behind the same gate both evaluations use rather than a third
+ * spelling of it.
+ */
 function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
   const surface = body.surface
   const grammar = surface.grammar
@@ -184,6 +192,12 @@ function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
   const budget = surface.maxElevation
   const bands = grammar.bands
   const plates = plateContext(sketch, direction)
+  const stack: StageContext = {
+    surface,
+    sketch,
+    sea: seaDatumElevation(surface),
+    seabed: false,
+  }
   switch (band) {
     case 'hypsometry':
       return (
@@ -228,20 +242,20 @@ function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
         budget
       )
     case 'ice':
-      return bands.ice > 0
+      return stageOn('ice', stack)
         ? bands.ice *
             iceBand(sketch, grammar, direction, bands.ice * budget) *
             budget
         : 0
     case 'craters':
-      return sketch.craterLevels.length > 0
+      return stageOn('craters', stack)
         ? softLimit(
             craterField(sketch, grammar, direction),
             bands.craters * budget,
           )
         : 0
     case 'tail':
-      return sketch.microLevels.length > 0
+      return stageOn('tail', stack)
         ? softLimit(
             ladderField(
               sketch.latticeSeed,
@@ -301,10 +315,9 @@ function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
           bands.hypsometry * budget,
         ) *
         budget
-      const sea = seaDatumElevation(surface)
-      return sea === null || grammar.liquid <= 0
-        ? landform
-        : coastRemap(landform, sea, coastWidth(surface))
+      return stageOn('coast', stack) && stack.sea !== null
+        ? coastRemap(landform, stack.sea, coastWidth(surface))
+        : landform
     }
   }
 }

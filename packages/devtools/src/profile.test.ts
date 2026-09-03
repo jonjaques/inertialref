@@ -242,7 +242,7 @@ describe('the ir.timing verb', () => {
 
     // A host with no timeline answers rather than throwing: the headless
     // runner has no `console.timeStamp` worth the name and says so.
-    const absent = makeTimingVerb(() => undefined)
+    const absent = makeTimingVerb(() => null)
     expect(absent('full')).toBe('off')
     expect(absent.drain()).toEqual([])
   })
@@ -291,7 +291,7 @@ describe('ir.profile, against a fake port', () => {
   }
 
   const harnessOver = (port: TimingPort): GameHarness =>
-    openSession({ workers: null, host: { timing: () => port } }).harness
+    openSession({ workers: null, render: { timing: () => port } }).harness
 
   it('arms, records, disarms, and reports', async () => {
     const port = fakePort()

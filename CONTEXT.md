@@ -106,8 +106,8 @@ pnpm typecheck   # five tsconfig projects
 pnpm lint        # oxlint
 pnpm graph       # dependency layering + cycle check
 pnpm brand       # re-render every brand artifact from design/brand/brandmark.svg
-pnpm build       # optional media pull, typecheck, vite build
-pnpm check       # all of the above
+pnpm build       # optional media pull, docs:build, typecheck, vite build
+pnpm check       # graph, brand:check, presets:check, format:check, lint, typecheck, test, build
 pnpm vitest run <substring>   # single test file
 pnpm run deploy:worker        # pnpm build, then wrangler deploy
 
@@ -6680,6 +6680,90 @@ remembering from doing it:
   clamped over a submarine region and `terrainKernel.gpu.test.ts` runs
   Earth's seabed through both sides. Found by the review, beside the sphere's
   fixed navy sea and a bake that thrashed with five bodies in frame.
+
+## Five modules, deepened — and the structure the tolerance test was holding alone (3 Sep 2026)
+
+The second architecture review walked where the last fourteen commits landed
+and found eighteen frictions; five are in the tree and the rest are
+[the deepening plan](design/plans/arch-review.md). The vocabulary is the
+design skill's — a module is deep when a small interface hides a lot of
+behavior, and the test of a candidate is whether deleting it would
+concentrate complexity or just move it. What each one cost before, measured:
+
+| Change                             | Files touched                                            | Where it is now                         |
+| ---------------------------------- | -------------------------------------------------------- | --------------------------------------- |
+| one band (the valleys sub-commit)  | 8 code files, port +263 lines against the band's +237    | `bandStack.ts`, one table               |
+| one render knob (`render.surface`) | 8 files in the client, +181 lines                        | one definition, one binding row         |
+| one host capability (the timeline) | 7 files, harness +82 and engine +234                     | one `Host`, one `render` object         |
+| one heightfield producer's wear    | 11, 11 and 13 `userData` writes across three scene files | `groundWear.ts`, one record             |
+| one entity state write in a test   | 13 sites past the world's verbs                          | none: the store's write half is private |
+
+**The band stack's composition is one description, and the kernel is not a
+table-walker.** Which stages exist, in what order, behind which gate was
+spelled in `evaluate`, in the TSL kernel against packed scalars the packer
+zeroes to mean the same thing, and a third time in the band isolation test.
+`BAND_STACK` names each stage's gate once as the body spells it and once as
+the packed slot, and both evaluations read it; `packedStageOn` decodes a gate
+from a packed record so a Node test holds the packer's encoding to the body's
+over the zoo and Luna, Earth and Mercury for both sides of the sea. It ran
+green on the first pass, which is the point: the packer _was_ faithful, and
+nothing could say so without an adapter. The obvious next step — the kernel
+iterating the table and composing from `kind` — was rejected on ADR-0023's own
+ground: it is the scalar mirror one level up. The bodies stay two, and the
+tolerance test is left holding what only it can hold.
+
+**A mesh that wears the ground reads one record, and an undressed mesh is a
+default rather than a throw.** The material's `onObjectUpdate` uniforms run
+inside the frame, where a throw takes the canvas; `groundWearOf` answers the
+undressed record — at the origin, unmorphed, on the datum — and the test is
+where an undressed wearer fails. The three anchor terms move together through
+`anchorGround`, never one without the others, because the rocks were computing
+their altitude from the scatter field's own copy of `hypot(fround) − datum`.
+
+**The session is the host.** `openSession` used to return a second object
+with five of the host's members copied onto it, the `world` getter written
+twice. It returns the host itself with the session's extras assigned onto it —
+`Object.assign` keeps the getter; a spread would have copied its value, which
+is the bug the getter exists to prevent. `setPlayer` had no caller and is gone.
+
+**The preference binding is one subscription per key, and that is the fix, not
+the tidiness.** A single effect keyed on every render preference re-asserted
+every field whenever any moved, and a lens a verb fitted held its picture only
+until the next unrelated toggle (Saturn 0.660 → 0.812 of frame height). A
+binding per key cannot do that, and `engineKnobs.test.ts` holds the Saturn
+case in Node, which the effect's dependency list never could.
+`requestLens` declines an unusable lens whole: the field's setter refused it
+while the callback still forwarded it, so the preference could hold a NaN the
+next reload rejects while the picture kept the last good one.
+
+**A store that refuses a write reverts the value it was asked to keep.** The
+same Saturn defect, from a second cause, found after the binding fix landed.
+`write` announced `resolve()` unconditionally, and `resolve` reads the
+preference back — so where `setItem` throws, which is a private window,
+blocked site data or a full quota, the announce carried the _old_ value one
+line after the caller set the new one. Harmless while the sink was React
+state; load-bearing the moment `camera.lens` became the road from `ir.preset`
+to `engine.flightLens`. `writeRaw` now says whether the store took the write,
+and `resolve()` stands where it did and where the preference refuses the
+value — which is what makes an import of a broken file land as the defaults
+on screen rather than as nothing.
+
+**The store's write half is private, and the guard can fail.**
+`expectTypeOf(world.entities).not.toHaveProperty('update')` was proven by
+inverting it and watching `tsc` fail on that line — the check that a
+regression test can go red, applied to a type. Thirteen writes past the verbs
+were nine velocities on a ship spawned the line before, three `setControl`s
+waiting to be called, and the save loader, which now hands control and assist
+to `spawn` so a restored coaster is whole at birth rather than written after
+through a verb that drops the epoch on a non-neutral input.
+
+**One process trap, recorded so it is not repeated.** Undoing a scratch `sed`
+on an uncommitted test file with `git checkout --` restored the file to
+`HEAD` and discarded every edit since; the negative type check it was meant to
+run had also proven nothing, because `tsc` is not on the shell's path and its
+absence was a zero on the grep. The way to perturb a working file for a
+negative check is a copy in the scratchpad and `pnpm exec`, restored from the
+copy.
 
 ## Known gaps
 

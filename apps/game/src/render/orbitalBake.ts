@@ -1,6 +1,5 @@
 import {
   BufferAttribute,
-  BufferGeometry,
   CubeCamera,
   Group,
   HalfFloatType,
@@ -8,8 +7,6 @@ import {
   Mesh,
   Scene,
   type Texture,
-  Vector2,
-  Vector3,
   WebGLCubeRenderTarget,
   type WebGPURenderer,
 } from 'three/webgpu'
@@ -29,14 +26,17 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
-  NO_MORPH_DISTANCE,
   patchIndices,
   type RenderPatch,
   seaSheetDatum,
   terrainPalette,
 } from '@inertialref/rendering'
-import { grainWrap, type TerrainMaterial } from './terrain.ts'
-import { attachCover } from './terrainAttributes.ts'
+import type { TerrainMaterial } from './terrain.ts'
+import {
+  disposeKeepingSharedIndex,
+  patchGeometry,
+  wearGround,
+} from './groundWear.ts'
 
 /*
  * The orbital bake: a generated world's sphere learns what its ground looks
@@ -324,40 +324,14 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     const scene = new Scene()
     const group = new Group()
     scene.add(group)
-    const geometries: BufferGeometry[] = []
+    const built: Mesh[] = []
     for (const patch of patches) {
-      const geometry = new BufferGeometry()
-      geometry.setAttribute('position', new BufferAttribute(patch.positions, 3))
-      geometry.setAttribute('normal', new BufferAttribute(patch.normals, 3))
-      geometry.setAttribute(
-        'terrainMorph',
-        new BufferAttribute(patch.morphPositions, 3),
-      )
-      geometry.setAttribute(
-        'terrainMorphNormal',
-        new BufferAttribute(patch.morphNormals, 3),
-      )
-      attachCover(geometry, patch.cover, patch.morphCover)
-      geometry.setIndex(indices)
-      geometries.push(geometry)
-      const mesh = new Mesh(geometry, terrain.material)
+      const mesh = new Mesh(patchGeometry(patch, indices), terrain.material)
+      built.push(mesh)
       mesh.position.set(patch.anchor.x, patch.anchor.y, patch.anchor.z)
       mesh.frustumCulled = false
-      mesh.userData.eyeLocal = new Vector3()
-      mesh.userData.morphBand = new Vector2(
-        NO_MORPH_DISTANCE,
-        NO_MORPH_DISTANCE,
-      )
-      const ax = Math.fround(patch.anchor.x)
-      const ay = Math.fround(patch.anchor.y)
-      const az = Math.fround(patch.anchor.z)
-      mesh.userData.anchor = new Vector3(ax, ay, az)
-      mesh.userData.anchorAltitude = Math.hypot(ax, ay, az) - body.radius
-      mesh.userData.grainOrigin = new Vector3(
-        grainWrap(patch.anchor.x),
-        grainWrap(patch.anchor.y),
-        grainWrap(patch.anchor.z),
-      )
+      // At its anchor and unmorphed: the bake draws every patch at one level.
+      wearGround(mesh, patch.anchor, body.radius)
       group.add(mesh)
     }
 
@@ -378,10 +352,9 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       bake.ready = true
     } finally {
       terrain.setBakeMode(0)
-      for (const geometry of geometries) {
-        geometry.setIndex(null)
-        geometry.dispose()
-      }
+      // Every bake mesh holds the one shared index, so the eviction rule the
+      // streamer's patches use applies here too.
+      for (const mesh of built) disposeKeepingSharedIndex(mesh)
     }
   }
 

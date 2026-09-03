@@ -26,14 +26,9 @@ function flownWorld(ticks = 500) {
     'Debug One',
     bodyFrameId(planet.address),
     vec3(planet.radius * 3, 0, 0),
+    vec3(0, 0, -3_000),
   )
-  world.entities.update(ship.id, {
-    state: {
-      ...world.entities.require(ship.id).state,
-      velocity: vec3(0, 0, -3_000),
-    },
-    control: { translation: vec3(0, 0, 0.4), rotation: vec3(0, 0.1, 0) },
-  })
+  world.setControl(ship.id, vec3(0, 0, 0.4), vec3(0, 0.1, 0))
   world.runTicks(ticks)
   return { world, ship, planet }
 }
@@ -153,13 +148,8 @@ describe('save round trip', () => {
       'Lander',
       bodyFrameId(planet.address),
       vec3(planet.radius + 30, 0, 0),
+      vec3(-2, 0, 0),
     )
-    world.entities.update(ship.id, {
-      state: {
-        ...world.entities.require(ship.id).state,
-        velocity: vec3(-2, 0, 0),
-      },
-    })
     for (let i = 0; i < 60_000 && !world.isLanded(ship.id); i += 1) world.step()
     expect(world.isLanded(ship.id)).toBe(true)
 

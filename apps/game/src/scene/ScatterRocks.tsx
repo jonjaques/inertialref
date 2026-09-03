@@ -5,10 +5,8 @@ import {
   BufferGeometry,
   type Group,
   InstancedMesh,
-  Matrix4,
   type Scene,
   Sphere,
-  Vector2,
   Vector3,
 } from 'three/webgpu'
 import {
@@ -19,8 +17,15 @@ import {
 import { COVER_CHANNELS } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { MAX_ROCKS, type ScatterBatch } from '../engine/scatterField.ts'
-import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
-import { attachCover, type CoverBuffers } from '../render/terrainAttributes.ts'
+import type { TerrainMaterial } from '../render/terrain.ts'
+import {
+  anchorGround,
+  attachCover,
+  type CoverBuffers,
+  groundDummy,
+  placeEye,
+  wearGround,
+} from '../render/groundWear.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -131,14 +136,8 @@ export function ScatterRocks({
       mesh.userData.coverBuffers = buffers
       mesh.count = 0
       mesh.frustumCulled = false
-      mesh.userData.eyeLocal = new Vector3()
-      mesh.userData.morphBand = new Vector2(
-        NO_MORPH_DISTANCE,
-        NO_MORPH_DISTANCE,
-      )
-      mesh.userData.anchor = new Vector3()
-      mesh.userData.anchorAltitude = 0
-      mesh.userData.grainOrigin = new Vector3()
+      // Anchored every frame at the field's own anchor, and never morphed.
+      wearGround(mesh, { x: 0, y: 0, z: 0 }, 0)
       built.push(mesh)
     }
     return built
@@ -160,46 +159,16 @@ export function ScatterRocks({
       label: 'compiling the scatter',
       units: 1,
       run: async (done) => {
-        const geometry = new BufferGeometry()
-        // Four attribute objects over two arrays, exactly as the real geometry
-        // above — a warm-up that aliased them compiled nothing, and
-        // `warmCompile` swallows its rejection, so the failure was invisible
-        // until the real draw hit the same wall.
-        const points = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0])
-        const ups = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1])
-        geometry.setAttribute('position', new BufferAttribute(points, 3))
-        geometry.setAttribute('normal', new BufferAttribute(ups, 3))
-        geometry.setAttribute('terrainMorph', new BufferAttribute(points, 3))
-        geometry.setAttribute('terrainMorphNormal', new BufferAttribute(ups, 3))
-        const bytes = new Uint8Array(COVER_CHANNELS)
-        attachCover(geometry, bytes, bytes, true)
-        geometry.setIndex([0, 1, 2])
-        /*
-         * At the real capacity, and drawn one instance deep.
-         *
-         * `InstanceNode` branches on `instanceMatrix.count`: a UBO read at or
-         * under a thousand matrices, four instanced `vec4` attributes over an
-         * interleaved buffer above it. Different WGSL, different vertex layout,
-         * different pipeline — so a dummy of one compiled a program the real
-         * meshes never use, and the first frame a landing brought rocks into
-         * range still paid the build this effect exists to remove. `count`
-         * limits the draw; the capacity is what picks the path.
-         */
-        const dummy = new InstancedMesh(geometry, material, INSTANCE_CAPACITY)
-        dummy.count = 1
-        dummy.setMatrixAt(0, new Matrix4())
-        dummy.userData.eyeLocal = new Vector3()
-        dummy.userData.morphBand = new Vector2(
-          NO_MORPH_DISTANCE,
-          NO_MORPH_DISTANCE,
-        )
-        dummy.userData.anchor = new Vector3(0, 0, 1)
+        // The dresser's own dummy, at the real capacity: the four attribute
+        // objects over two arrays exactly as the real geometry above, and the
+        // instanced program rather than the patches' — see `groundDummy`.
+        const dummy = groundDummy(material, INSTANCE_CAPACITY)
         await warmCompile(warmRenderer(gl), {
           object: dummy,
           camera,
           scene: scene as Scene,
         }).then(done)
-        geometry.dispose()
+        dummy.geometry.dispose()
       },
     })
   }, [gl, camera, scene, material])
@@ -207,7 +176,8 @@ export function ScatterRocks({
   useTimedFrame('scatterRocks', () => {
     const container = group.current
     if (container === null) return
-    const scatter = engine.terrainState().scatter
+    const state = engine.terrainState()
+    const scatter = state.scatter
     const placement = scatter.placement
     const anchor = scatter.anchor
     if (placement === null || anchor === null || scatter.batches.length === 0) {
@@ -234,27 +204,13 @@ export function ScatterRocks({
       // The body's own compression, exactly as a patch wears it: rocks placed at
       // true meters against ground drawn at compressed ones are somewhere else.
       mesh.scale.setScalar(placement.scale)
-      // `Math.fround` for the reason `TerrainPatches` gives — the uniform is
-      // float32 and the altitude arithmetic below it is exact only against the
-      // vector the shader actually receives.
-      ;(mesh.userData.anchor as Vector3).set(
-        Math.fround(anchor.x),
-        Math.fround(anchor.y),
-        Math.fround(anchor.z),
-      )
-      mesh.userData.anchorAltitude = scatter.anchorAltitude
-      // The grain field's domain, wrapped into one period on this side of the
-      // uniform. A rock and the ground under it have to read the same field or
-      // the two carry different texture at the point they touch.
-      ;(mesh.userData.grainOrigin as Vector3).set(
-        grainWrap(anchor.x),
-        grainWrap(anchor.y),
-        grainWrap(anchor.z),
-      )
+      // The field's anchor, with its altitude and the grain origin beside it:
+      // a rock and the ground under it have to read the same field or the two
+      // carry different texture at the point they touch.
+      anchorGround(mesh, anchor, state.datumRadius)
       const eye = scatter.eyeLocal
-      if (eye !== null) {
-        ;(mesh.userData.eyeLocal as Vector3).set(eye.x, eye.y, eye.z)
-      }
+      if (eye !== null)
+        placeEye(mesh, eye, NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)
     }
     /*
      * The buffers are re-uploaded only when the field laid out a new list.

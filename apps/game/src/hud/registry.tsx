@@ -76,7 +76,7 @@ export function devPanels(context: DevContext): readonly DockPanelDefinition[] {
       defaultOpen: false,
       hint: 'render features and the extended-range override',
       render: () => (
-        <GraphicsPanel graphics={context.graphics} render={context.render} />
+        <GraphicsPanel render={context.render} onNotice={context.onNotice} />
       ),
     },
     {

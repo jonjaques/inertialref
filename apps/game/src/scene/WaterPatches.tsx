@@ -1,24 +1,21 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
-import {
-  BufferAttribute,
-  BufferGeometry,
-  type Group,
-  Mesh,
-  type Scene,
-  Sphere,
-  Vector2,
-  Vector3,
-} from 'three/webgpu'
+import { BufferAttribute, type Group, Mesh, type Scene } from 'three/webgpu'
 import { Quaternion as Q, Vec } from '@inertialref/spatial'
 import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
 import { patchIndices, pixelAngle } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { seaQualityFor } from '../render/quality.ts'
-import { type WaterMaterial, waveWrap } from '../render/water.ts'
+import type { WaterMaterial } from '../render/water.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
-import { disposeKeepingSharedIndex } from '../render/terrainAttributes.ts'
+import {
+  disposeKeepingSharedIndex,
+  placeEye,
+  seaDummy,
+  sheetGeometry,
+  wearSea,
+} from '../render/groundWear.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
@@ -62,25 +59,13 @@ export function WaterPatches({
       label: 'compiling the sea',
       units: 1,
       run: async (done) => {
-        const geometry = new BufferGeometry()
-        const triangle = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0])
-        const depths = new Float32Array([1, 1, 1])
-        geometry.setAttribute('position', new BufferAttribute(triangle, 3))
-        geometry.setAttribute('terrainMorph', new BufferAttribute(triangle, 3))
-        geometry.setAttribute('waterDepth', new BufferAttribute(depths, 1))
-        geometry.setAttribute('waterMorphDepth', new BufferAttribute(depths, 1))
-        geometry.setIndex([0, 1, 2])
-        const dummy = new Mesh(geometry, material)
-        dummy.userData.eyeLocal = new Vector3()
-        dummy.userData.morphBand = new Vector2(1, 2)
-        dummy.userData.anchor = new Vector3(0, 0, 1)
-        dummy.userData.waveOrigin = new Vector3()
+        const dummy = seaDummy(material)
         await warmCompile(warmRenderer(gl), {
           object: dummy,
           camera,
           scene: scene as Scene,
         }).then(done)
-        geometry.dispose()
+        dummy.geometry.dispose()
       },
     })
   }, [gl, camera, scene, material])
@@ -129,44 +114,8 @@ export function WaterPatches({
           mesh = undefined
         }
         if (mesh === undefined) {
-          const geometry = new BufferGeometry()
-          geometry.setAttribute(
-            'position',
-            new BufferAttribute(sheet.positions, 3),
-          )
-          geometry.setAttribute(
-            'terrainMorph',
-            new BufferAttribute(sheet.morphPositions, 3),
-          )
-          geometry.setAttribute(
-            'waterDepth',
-            new BufferAttribute(sheet.depths, 1),
-          )
-          geometry.setAttribute(
-            'waterMorphDepth',
-            new BufferAttribute(sheet.morphDepths, 1),
-          )
-          geometry.setIndex(indices)
-          geometry.boundingSphere = new Sphere(
-            new Vector3(
-              sheet.boundsCentre.x,
-              sheet.boundsCentre.y,
-              sheet.boundsCentre.z,
-            ),
-            sheet.boundsRadius,
-          )
-          mesh = new Mesh(geometry, material)
-          mesh.userData.eyeLocal = new Vector3()
-          mesh.userData.morphBand = new Vector2()
-          const ax = Math.fround(patch.anchor.x)
-          const ay = Math.fround(patch.anchor.y)
-          const az = Math.fround(patch.anchor.z)
-          mesh.userData.anchor = new Vector3(ax, ay, az)
-          mesh.userData.waveOrigin = new Vector3(
-            waveWrap(patch.anchor.x),
-            waveWrap(patch.anchor.y),
-            waveWrap(patch.anchor.z),
-          )
+          mesh = new Mesh(sheetGeometry(sheet, indices), material)
+          wearSea(mesh, patch.anchor)
           mesh.userData.patch = patch
           meshes.set(key, mesh)
         }
@@ -183,15 +132,7 @@ export function WaterPatches({
           placement.orientation.w,
         )
         mesh.scale.setScalar(placement.scale)
-        ;(mesh.userData.eyeLocal as Vector3).set(
-          placed.eyeLocal.x,
-          placed.eyeLocal.y,
-          placed.eyeLocal.z,
-        )
-        ;(mesh.userData.morphBand as Vector2).set(
-          placed.morphStart,
-          placed.morphEnd,
-        )
+        placeEye(mesh, placed.eyeLocal, placed.morphStart, placed.morphEnd)
       }
     }
 

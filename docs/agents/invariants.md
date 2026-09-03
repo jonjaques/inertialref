@@ -28,13 +28,15 @@ table is one of those three, not drift.
 | No field value read off a rank                                                                | [ADR-0019](../adr/0019-the-geology.md) · [Determinism](../concepts/determinism.md)                         |
 | No planetary radius subtracted in a shader                                                    | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
 | The ground and the sphere behind it shade alike                                               | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
+| No `dispose()` on a mesh holding the shared index                                             | [ADR-0021](../adr/0021-the-ground.md) · [Rendering](../concepts/rendering.md)                              |
+| No stored value derived from a captured snapshot                                              | [ADR-0012](../adr/0012-dockable-panels.md) · [Client](../guides/client.md)                                 |
 | No varying named after an attribute                                                           | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
 | No attribute object under two names                                                           | [ADR-0021](../adr/0021-the-ground.md) · [Rendering](../concepts/rendering.md)                              |
 | A stand-in `DataTexture` is filtered like its map                                             | [Testing](../guides/testing.md#shader-behavior-runs-on-the-real-gpu-from-node)                             |
 | No canonical reader of the drawn ground, or the reverse                                       | [ADR-0021](../adr/0021-the-ground.md) · [Terrain](../concepts/streaming.md)                                |
 | No fine lattice coordinate from an absolute float32 direction, no lattice decision in a float | [ADR-0023](../adr/0023-the-gpu-producer.md) · [Rendering](../concepts/rendering.md#terrain-meshing)        |
-| Entity writes go through `World`                                                              | [Extending](../guides/extending.md)                                                                        |
-| Landedness is a consequence, never asserted                                                   | [Extending](../guides/extending.md)                                                                        |
+| Entity writes go through `World`'s verbs; `world.entities` is the read half                   | [Architecture](../architecture.md#invariants) · [ADR-0025](../adr/0025-the-rails.md)                       |
+| Landedness is a consequence, never asserted                                                   | [Architecture](../architecture.md#invariants)                                                              |
 | A coasting entity's epoch does not survive a move it did not make                             | [Time](../concepts/time.md) · [ADR-0025](../adr/0025-the-rails.md)                                         |
 | Saves store references, not regenerable content                                               | [Persistence](../concepts/persistence.md) · [ADR-0007](../adr/0007-persistence.md)                         |
 | The star catalog is an argument, not a singleton                                              | [Galaxy](../design/galaxy.md) · [Catalog](../guides/catalogue.md)                                          |

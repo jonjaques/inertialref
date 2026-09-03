@@ -22,8 +22,9 @@ import {
 } from '@inertialref/net'
 import {
   GameHarness,
-  type PresentationHost,
-  type SimulationHost,
+  type Host,
+  type RenderHost,
+  renderHost,
 } from './harness.ts'
 
 /*
@@ -42,9 +43,9 @@ import {
  * nothing to compare against.
  *
  * The other thing this owns is the mutable pair (`world`, `player`). Loading a
- * save replaces both, and the reason `SimulationHost.world` is a getter is that
- * a host which captured the reference kept reporting on the discarded world.
- * That is now written once, here, instead of being a rule each host remembers.
+ * save replaces both, and the reason `Host.world` is a getter is that a host
+ * which captured the reference kept reporting on the discarded world. That is
+ * written once, here, instead of being a rule each host remembers.
  */
 
 const log = getLogger('devtools.session')
@@ -71,13 +72,25 @@ export interface SessionOptions {
   readonly now?: () => number
   readonly store?: SaveStore
   /**
-   * The host's render side. Omitted headlessly, where there is none.
+   * The host's render side, as much of it as it has.
    *
-   * One parameter because it is one thing: what the host can answer about a
-   * frame, and what it needs to be told when the world underneath it changes.
-   * They were two, and they always travelled together.
+   * What is not supplied, `renderHost` answers headlessly — so a test names
+   * the two members it is about and the harness sees a whole port. A nested
+   * object rather than members beside `world`: nothing in it can shadow the
+   * getter this module exists to protect.
    */
-  readonly host?: SessionHost
+  readonly render?: Partial<RenderHost>
+  /**
+   * Called after the world is replaced, so a host can drop derived state.
+   *
+   * There is exactly one question here — "what becomes stale when the world
+   * changes?" — and a host answers it in one place. Spread over three methods
+   * and answered differently in each, the client reset the origin and the scene
+   * and forgot the starfield and the terrain, so loading a save taken four light
+   * years away kept the old stars: the re-survey is gated on having *moved*, and
+   * from the cache's point of view nothing had.
+   */
+  readonly onWorldReplaced?: () => void
   /**
    * Who owns the part of the simulation this client does not.
    *
@@ -90,59 +103,13 @@ export interface SessionOptions {
   readonly authority?: AuthorityPort
 }
 
-/**
- * What a rendering host contributes to a session.
- *
- * **Named fields, not a spread**, and that is the whole reason this type
- * exists rather than `PresentationHost & { onWorldReplaced }`. The
- * `presentation` option used to be spread into the host object *last*, so a
- * stray `world` key in it would silently shadow the getter this module exists
- * to protect — the bug class recorded at the top of this file as having
- * happened once. Naming what may be supplied makes it unrepresentable rather
- * than commented against.
- */
-export interface SessionHost {
-  /** The frame's render description, for `ir.status().render`. */
-  readonly scene?: PresentationHost['scene']
-  /** Frames per second and frame time, for `ir.status().frame`. */
-  readonly frameStats?: PresentationHost['frameStats']
-  /** What the terrain streamer holds this frame, for `ir.terrain()`. */
-  readonly terrain?: PresentationHost['terrain']
-  /** The lens the frame is composed through, for `ir.lens()` and the panel. */
-  readonly lensView?: PresentationHost['lensView']
-  /** The flight lens alone, for the observatory's framing solver. */
-  readonly framingLens?: PresentationHost['framingLens']
-  /** Fit a lens — `ir.preset` and `ir.rise` each solve one. */
-  readonly setFlightLens?: PresentationHost['setFlightLens']
-  /** Display pixels per CSS pixel, for the drag sensitivity. */
-  readonly pixelRatio?: PresentationHost['pixelRatio']
-  /** Put the interface in or out of the frame, for a plate capture. */
-  readonly setChrome?: PresentationHost['setChrome']
-  /** Names and traces in or out of the frame, for the same. */
-  readonly setLayers?: PresentationHost['setLayers']
-  /** The performance timeline, for `ir.timing` and `ir.profile`. */
-  readonly timing?: PresentationHost['timing']
-  /**
-   * Called after the world is replaced, so a host can drop derived state.
-   *
-   * There is exactly one question here — "what becomes stale when the world
-   * changes?" — and before this hook the answer was spread over three methods
-   * and answered differently in each. The client reset the origin and the scene
-   * and forgot the starfield and the terrain, so loading a save taken four light
-   * years away kept the old stars: the re-survey is gated on having *moved*, and
-   * from the cache's point of view nothing had.
-   */
-  readonly onWorldReplaced?: () => void
-}
-
-export interface Session extends SimulationHost {
+/** A running session: the host the harness is built over, and what came with it. */
+export interface Session extends Host {
   readonly harness: GameHarness
   readonly store: SaveStore
   /** The system loaded at open, and the body the ship was placed above. */
   readonly system: StarSystem
   readonly target: Body
-  /** Always present here, unlike on `SimulationHost` — a session always joins one. */
-  authority(): AuthorityPort
   dispose(): void
 }
 
@@ -212,55 +179,25 @@ export function openSession(options: SessionOptions = {}): Session {
     options.authority ??
     new LocalAuthority({ world: () => world, player: () => player })
 
-  const host: SimulationHost & Partial<PresentationHost> = {
+  const host: Host = {
     get world() {
       return world
     },
     player: () => player,
-    setPlayer: (id) => {
-      player = id
-    },
     pool: () => pool,
     // The host's clock, for the measuring verbs. Nothing below `apps/` may
     // reach for one itself, so a session that was given none reports "not
     // timed" rather than inventing a number.
-    ...(options.now === undefined ? {} : { now: options.now }),
+    now: options.now ?? null,
     replaceWorld: (next, nextPlayer) => {
       world = next
       player = nextPlayer
-      options.host?.onWorldReplaced?.()
+      options.onWorldReplaced?.()
     },
     authority: () => authority,
-    // Named, never spread. A spread landing after `world` above would shadow
-    // the getter — see `SessionHost`.
-    ...(options.host?.scene === undefined ? {} : { scene: options.host.scene }),
-    ...(options.host?.frameStats === undefined
-      ? {}
-      : { frameStats: options.host.frameStats }),
-    ...(options.host?.terrain === undefined
-      ? {}
-      : { terrain: options.host.terrain }),
-    ...(options.host?.lensView === undefined
-      ? {}
-      : { lensView: options.host.lensView }),
-    ...(options.host?.framingLens === undefined
-      ? {}
-      : { framingLens: options.host.framingLens }),
-    ...(options.host?.setFlightLens === undefined
-      ? {}
-      : { setFlightLens: options.host.setFlightLens }),
-    ...(options.host?.pixelRatio === undefined
-      ? {}
-      : { pixelRatio: options.host.pixelRatio }),
-    ...(options.host?.setChrome === undefined
-      ? {}
-      : { setChrome: options.host.setChrome }),
-    ...(options.host?.setLayers === undefined
-      ? {}
-      : { setLayers: options.host.setLayers }),
-    ...(options.host?.timing === undefined
-      ? {}
-      : { timing: options.host.timing }),
+    // Whole, whatever the caller supplied: the headless adapter answers the
+    // rest, so no reader of the port asks whether a member is there.
+    render: renderHost(options.render),
   }
 
   const harness = new GameHarness(host)
@@ -286,23 +223,18 @@ export function openSession(options: SessionOptions = {}): Session {
       })
   }
 
-  return {
-    get world() {
-      return world
-    },
-    player: () => player,
-    setPlayer: host.setPlayer,
-    pool: () => pool,
-    replaceWorld: host.replaceWorld,
+  // The session *is* the host, with the rest laid onto the same object — so
+  // the `world` getter is written once and there is no second copy of the
+  // simulation half to keep in step with it.
+  return Object.assign(host, {
     harness,
     store,
     system,
     target,
-    authority: () => authority,
     dispose: () => {
       authority.leave()
       pool?.terminate()
       pool = null
     },
-  }
+  })
 }

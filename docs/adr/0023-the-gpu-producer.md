@@ -102,6 +102,17 @@ adapter.**
 - Every band's shape table is shared, and a band's change is a kernel change:
   `pnpm test:gpu` is the check, and it needs a physical adapter, so it is
   outside `pnpm check` and a CI without a GPU cannot run it.
+- The structure around the bands is shared as well. `BAND_STACK` in
+  `packages/universe/src/bandStack.ts` is the one description of which stages
+  there are, in what order, behind which gate — spelled once against the body
+  and once as the packed slot the kernel reads — and `evaluate`, the kernel and
+  the band test all take their gates from it. `packedStageOn` decodes a gate
+  from a packed record, so `bandStack.test.ts` holds the packer's encoding to
+  the body's over the whole zoo in Node; the tolerance test is left holding
+  the bands' arithmetic, which is the only thing it has to. It is a
+  description, not a third executable spelling: the bodies stay two, and a
+  kernel that walked the table would be the scalar mirror this decision
+  refuses, one level up.
 - Two producers agree only to the tolerance. A screenshot from the GPU and one
   from `?producer=cpu` differ at the sub-meter tail, and a figure about the
   drawn ground names its producer (`ir.terrain().producer`).

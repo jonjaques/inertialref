@@ -1,7 +1,7 @@
 import { formatReading } from '@inertialref/shared'
 import { lensReadout } from '@inertialref/rendering'
 import { useEngine, useShallow } from '../state/engineStore.ts'
-import type { CameraState } from './controls.ts'
+import { CAMERA_LENS, usePersistentState } from '../state/preferences.ts'
 import { Row } from './Row.tsx'
 import { Section } from './Section.tsx'
 
@@ -21,7 +21,8 @@ import { Section } from './Section.tsx'
  * came to look at Saturn. It still persists like the rest, so opening it once
  * is a decision that sticks.
  */
-export function OpticsSection({ camera }: { camera: CameraState }) {
+export function OpticsSection() {
+  const [lens] = usePersistentState(CAMERA_LENS)
   /*
    * The viewport the derived readouts are resolved against, and only it.
    *
@@ -36,7 +37,7 @@ export function OpticsSection({ camera }: { camera: CameraState }) {
     useShallow((snapshot) => snapshot.status?.lens?.viewport ?? null),
   )
   if (viewport === null) return null
-  const view = lensReadout(camera.lens, viewport)
+  const view = lensReadout(lens, viewport)
 
   return (
     <Section
@@ -86,7 +87,7 @@ export function OpticsSection({ camera }: { camera: CameraState }) {
       />
       <Row
         label="Exposure"
-        value={`EV ${view.exposureValue.toFixed(1)} · 1/${Math.round(1 / camera.lens.shutter)} s · ISO ${camera.lens.iso}`}
+        value={`EV ${view.exposureValue.toFixed(1)} · 1/${Math.round(1 / lens.shutter)} s · ISO ${lens.iso}`}
       />
     </Section>
   )

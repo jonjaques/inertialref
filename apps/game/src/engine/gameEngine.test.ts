@@ -128,6 +128,21 @@ describe('the game engine, headless', () => {
     game.harness.stopCutscene()
     game.frame(1 / 60)
     expect(verticalFovDegrees(game.lens)).toBeCloseTo(30, 9)
+
+    // A fitted lens goes to the field and to the owner; one the field's guard
+    // refuses is declined whole — the field keeps the last good one and the
+    // owner is not asked.
+    let sunk: ReturnType<typeof lensForFov> | null = null
+    game.onLensRequest = (lens) => {
+      sunk = lens
+    }
+    game.requestLens({ ...lensForFov(30), focalLength: Number.NaN })
+    expect(verticalFovDegrees(game.lens)).toBeCloseTo(30, 9)
+    expect(sunk).toBeNull()
+    game.requestLens(lensForFov(40))
+    expect(verticalFovDegrees(game.lens)).toBeCloseTo(40, 9)
+    expect(sunk).toEqual(lensForFov(40))
+    game.onLensRequest = null
     game.dispose()
   })
 

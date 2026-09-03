@@ -47,7 +47,7 @@ export function LensSlider({
       aria-valuetext={spec.format(camera.lens)}
       onValueChange={([next]) => {
         if (next !== undefined)
-          camera.onLens(spec.at(camera.lens, next / LENS_SLIDER_STEPS))
+          camera.onLens((held) => spec.at(held, next / LENS_SLIDER_STEPS))
       }}
       // A pointer that grabbed the thumb has the keyboard; hand it back, the
       // same as every other control in the overlay. Not on `onValueChange`,

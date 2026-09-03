@@ -21,9 +21,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
 - **Never make generation depend on order.** Derive the seed from the address, never draw
   from a shared stream. If generating a different object first changes this one's output,
   it is wrong.
-- **Never write entity state through `world.entities.update`.** Use `teleport` for a
-  discontinuous move, `setControl` / `setFlightAssist` / `killRotation` for input — those
-  reset interpolation history and the landed set, and `update` does not.
+- **Never write entity state around the world's verbs.** `world.entities` is the read
+  half of the store. A ship that starts moving is spawned moving (`spawnShip` takes the
+  velocity); after that, `teleport` for a discontinuous move, `setControl` /
+  `setFlightAssist` / `killRotation` for input — each carries the interpolation, landed-set
+  and rails bookkeeping a write needs.
 - **Never assert that something is landed.** Landedness is a consequence of the contact
   test, owned by `World.#land`.
 - **Never let a coasting entity keep its epoch through a move it did not make.** An

@@ -209,7 +209,12 @@ export function restoreSave(
         `entity ${entity.id} refers to frame ${state.value.frame}, which does not exist`,
       )
     }
-    const spawned = world.spawn({
+    // Whole at birth — control, assist and epoch included — because a write
+    // after the spawn would go through a verb, and the verbs drop the epoch on
+    // a non-neutral input. A restored coaster has a neutral one by ADR-0025,
+    // so the verb would leave it alone, but "would" is a reading of two rules
+    // where a spawn argument is one.
+    world.spawn({
       id: entity.id as EntityId,
       kind: entity.kind as EntityKind,
       name: entity.name,
@@ -217,9 +222,6 @@ export function restoreSave(
       mass: entity.mass,
       thrusters: entity.hasThrusters ? DEBUG_SHIP_THRUSTERS : null,
       ballisticCoefficient: entity.ballisticCoefficient,
-      rails: rails.value,
-    })
-    world.entities.update(spawned.id, {
       control: {
         translation: vec3(
           entity.control.translation[0],
@@ -233,11 +235,12 @@ export function restoreSave(
         ),
       },
       flightAssist: entity.flightAssist,
+      rails: rails.value,
     })
     if (entity.landed) landed.push(entity.id as EntityId)
   }
 
-  world.entities.restoreDynamicIdCounter(save.dynamicIdCounter)
+  world.restoreDynamicIdCounter(save.dynamicIdCounter)
   world.restoreLanded(landed)
 
   return ok({

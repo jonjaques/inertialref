@@ -95,8 +95,9 @@ export function ControlsSection() {
     }
     event.preventDefault()
     event.stopPropagation()
-    const next = { ...overrides, [action.id]: formatChord(pressed) }
-    setOverrides(next)
+    const chord = formatChord(pressed)
+    const next = { ...overrides, [action.id]: chord }
+    setOverrides((held) => ({ ...held, [action.id]: chord }))
     setCapturing(null)
     const taken = clashesIn(resolveBindings(next)).get(action.id) ?? null
     setRefusal(
@@ -107,8 +108,7 @@ export function ControlsSection() {
   }
 
   const reset = (id: string): void => {
-    const { [id]: _dropped, ...rest } = overrides
-    setOverrides(rest)
+    setOverrides(({ [id]: _dropped, ...rest }) => rest)
     setCapturing(null)
   }
 

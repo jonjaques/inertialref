@@ -45,6 +45,23 @@ Most of `.claude/` runs without being asked.
   rule would fire; `writing.md`, because a commit message is not a file a glob
   can match; and `browser.md`, because "check the app" is answered by picking a
   tool before anything has been opened.
+- **The deny list holds no repository-relative `Read` rule, and that is
+  deliberate.** A deny beats an allow, and `rg pattern` with no path searches
+  `.` — which the permission checker resolves as a read of every path under the
+  repository. So a single `Read(./.env)` in `.claude/settings.json` turned every
+  bare `rg` into an approval dialog, `Bash(rg:*)` sitting two lines above it
+  notwithstanding, and it bit hardest on subagents: the dialog stops work nobody
+  is watching, and the user answers it for a search they did not start. It was
+  guarding a path that does not exist: there is no `.env` at the root, and both
+  rules were anchored there, so neither ever covered the two files that are
+  real. Those live under `apps/game/` — `.env.example`, committed as the
+  documentation of what may be set, and `.env.production`, ignored and holding
+  the GA measurement id, which `.gitignore` calls not a secret (it ships in the
+  bundle) and keeps out of the tree only so a fork does not measure into it.
+  The secrets that matter are outside the
+  tree and still denied: `~/.env`, `~/.ssh/**`, the `gh` and `ctx7` credentials,
+  none of them reachable from a search here. A new secret goes behind `op`, not
+  behind a rule that costs a dialog on every search.
 - **The session knows what tree it is in.** `SessionStart` fetches `origin`,
   fast-forwards local `main` when it can do so without a checkout, and states
   the branch, the uncommitted count, and the distance from `origin/main`. It
@@ -70,20 +87,27 @@ Most of `.claude/` runs without being asked.
   does **not** fire for subagents: an agent working in a worktree must run
   `pnpm install --frozen-lockfile --prefer-offline` itself, first.
 
-| Skill          | For                                                     |
-| -------------- | ------------------------------------------------------- |
-| `/drive`       | Driving the game: harness, headless runner, CDP driver  |
-| `/ship`        | Rebase → check → audit → verify → PR, ready. You invoke |
-| `/parallel`    | Fanning work across worktrees. Never auto-invoked       |
-| `/adr`         | Writing an ADR in house style                           |
-| `/context-log` | Appending to `CONTEXT.md`                               |
+| Skill          | For                                                    |
+| -------------- | ------------------------------------------------------ |
+| `/drive`       | Driving the game: harness, headless runner, CDP driver |
+| `/ship`        | Rebase → check → verify → PR, ready. You invoke        |
+| `/parallel`    | Fanning work across worktrees. Never auto-invoked      |
+| `/adr`         | Writing an ADR in house style                          |
+| `/context-log` | Appending to `CONTEXT.md`                              |
 
-| Agent                  | For                                               |
-| ---------------------- | ------------------------------------------------- |
-| `invariant-auditor`    | Auditing a diff against the invariants. Read-only |
-| `property-tester`      | `fast-check` properties for anything mathematical |
-| `worktree-implementer` | One isolated change, in its own worktree          |
-| `docs-curator`         | Checking that the docs still describe the code    |
+| Agent                  | For                                                           |
+| ---------------------- | ------------------------------------------------------------- |
+| `invariant-auditor`    | Auditing a diff against the invariants. Read-only. You invoke |
+| `property-tester`      | `fast-check` properties for anything mathematical             |
+| `worktree-implementer` | One isolated change, in its own worktree                      |
+| `docs-curator`         | Checking that the docs still describe the code. You invoke    |
+
+**`invariant-auditor` and `docs-curator` are not launched on your behalf.**
+Neither is cheap — the pair over one branch runs to most of half a million
+subagent tokens and several minutes — and both read a diff the gate, the review
+and the author have already been over. `/ship` names the one it would have
+triggered and opens the PR without it; ask for either by name when the change
+is worth it, and its findings are edited into the PR afterwards.
 
 **Cloud sessions need one manual step.** Cloud images ship Node 20/21/22;
 this repository needs Node 26 for type stripping. Paste

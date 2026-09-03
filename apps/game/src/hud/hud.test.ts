@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openSession } from '@inertialref/devtools'
 import { engineStore } from '../state/engineStore.ts'
+import { CAMERA_LENS, RENDER_LENS_FLARE, write } from '../state/preferences.ts'
 import { LensSection } from './LensSection.tsx'
 import type { DevContext } from './context.ts'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
@@ -13,12 +14,11 @@ import { TargetRow } from './TargetRow.tsx'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
-  DEFAULT_SURFACE_QUALITY,
   GROUND_DETAILS,
   SEA_DETAILS,
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
-import { LENS_PRESETS, lensForFov } from '@inertialref/rendering'
+import { lensForFov } from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
 
 /*
@@ -55,15 +55,6 @@ function devContext(
       output: null,
       onPreference: () => {},
     },
-    graphics: {
-      lensFlare: true,
-      onLensFlare: () => {},
-      aa: '2x',
-      onAa: () => {},
-      surface: DEFAULT_SURFACE_QUALITY,
-      onSurface: () => {},
-    },
-    camera: { lens: LENS_PRESETS.flight, onLens: () => {} },
     connection: DISCONNECTED,
     onCheckConnection: () => {},
     commands: {
@@ -237,8 +228,9 @@ describe('the author’s instruments', () => {
 
   it('renders the graphics and camera panels with their controls', () => {
     /*
-     * These two are pure controls over engine fields, so the whole test is that
-     * they render and show the state they were given.
+     * These two are pure controls over preferences, so the whole test is that
+     * they render and show what the registry holds — written here through the
+     * registry's own non-React path, which is what an import uses.
      *
      * Asserted through the ARIA state rather than through visible text, and
      * that is not a preference: the switch used to write the words `on` and
@@ -247,23 +239,18 @@ describe('the author’s instruments', () => {
      * anti-aliasing levels, printed a few nodes away. A test that cannot fail
      * is worse than no test, so it now names the control it means.
      */
+    write(RENDER_LENS_FLARE, false)
     const graphics = renderToStaticMarkup(
       createElement(GraphicsPanel, {
-        graphics: {
-          lensFlare: false,
-          onLensFlare: () => {},
-          aa: '2x' as const,
-          onAa: () => {},
-          surface: DEFAULT_SURFACE_QUALITY,
-          onSurface: () => {},
-        },
         render: {
           preference: 'auto' as const,
           output: null,
           onPreference: () => {},
         },
+        onNotice: () => {},
       }),
     )
+    write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
     expect(graphics).toContain('Lens Flare')
     // The lens-flare switch, off, and the rocks switch, on: no other switch
     // on this panel.
@@ -296,15 +283,11 @@ describe('the author’s instruments', () => {
     // than reading "auto → null".
     expect(graphics).not.toContain('auto →')
 
+    write(CAMERA_LENS, lensForFov(42))
     const camera = renderToStaticMarkup(
-      createElement(
-        KeymapProvider,
-        null,
-        createElement(LensSection, {
-          camera: { lens: lensForFov(42), onLens: () => {} },
-        }),
-      ),
+      createElement(KeymapProvider, null, createElement(LensSection)),
     )
+    write(CAMERA_LENS, CAMERA_LENS.initial)
     // The lens section, which the planetarium's Camera panel and
     // `/settings/camera` both draw — one component, because the lens is a
     // persisted preference and two sets of sliders for one preference is how a

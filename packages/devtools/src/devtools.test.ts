@@ -16,6 +16,7 @@ import {
   type EntityId,
 } from '@inertialref/universe'
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
+import { LENS_PRESETS } from '@inertialref/rendering'
 import { runCapabilityChecks, summarizeCapabilities } from './capabilities.ts'
 import { canHoldOrbit, sameTargets } from './travel.ts'
 import type { GameHarness } from './harness.ts'
@@ -67,6 +68,41 @@ describe('capability checks', () => {
 })
 
 describe('harness', () => {
+  it('is built over one host, whose render side is whole', () => {
+    // A session with no render side answers every render question the way a
+    // display-less runtime honestly can — null, the flight lens, a ratio of
+    // one — rather than through ten optional members a reader has to test.
+    const bare = openSession({ workers: null })
+    expect(bare.harness.status().render).toBeNull()
+    expect(bare.harness.status().frame).toBeNull()
+    expect(bare.harness.lens()).toBeNull()
+    expect(bare.harness.terrain()).toBeNull()
+    expect(bare.render.framingLens()).toEqual(LENS_PRESETS.flight)
+    expect(bare.render.pixelRatio()).toBe(1)
+    expect(bare.now).toBeNull()
+    bare.dispose()
+
+    // A partial render side names what it is about; the adapter fills the rest.
+    const partial = openSession({
+      workers: null,
+      render: { pixelRatio: () => 2 },
+      now: () => 42,
+    })
+    expect(partial.render.pixelRatio()).toBe(2)
+    expect(partial.render.scene()).toBeNull()
+    expect(partial.now?.()).toBe(42)
+    // The session is the host: one object, one `world` getter — so replacing
+    // the world moves what the session and the harness both answer with.
+    const other = openSession({ workers: null, seed: 'another' })
+    const before = partial.world
+    partial.replaceWorld(other.world, null)
+    expect(partial.world).not.toBe(before)
+    expect(partial.world).toBe(other.world)
+    expect(partial.harness.world).toBe(other.world)
+    other.dispose()
+    partial.dispose()
+  })
+
   it('drives the simulation deterministically', () => {
     const { harness: ir } = harness()
     const before = ir.status().world.stateHash

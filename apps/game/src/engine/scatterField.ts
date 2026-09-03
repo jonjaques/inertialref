@@ -63,10 +63,12 @@ export interface ScatterBatch {
 }
 
 export interface ScatterState {
-  /** Where the instance coordinates are measured from, in body-fixed axes. */
+  /**
+   * Where the instance coordinates are measured from, in body-fixed axes.
+   * Its altitude above the datum is the dresser's to compute, from this and
+   * the datum radius, exactly as a patch's is (`render/groundWear.ts`).
+   */
   readonly anchor: Vec3 | null
-  /** How far that anchor sits above the datum. See `TerrainPatches`. */
-  readonly anchorAltitude: Meters
   readonly placement: PatchPlacement | null
   /** The eye in the field's own frame, for the material's fade and bump. */
   readonly eyeLocal: Vec3 | null
@@ -79,7 +81,6 @@ export interface ScatterState {
 
 const EMPTY: ScatterState = {
   anchor: null,
-  anchorAltitude: 0,
   placement: null,
   eyeLocal: null,
   batches: [],
@@ -286,15 +287,6 @@ export class ScatterField {
 
     this.#state = {
       anchor,
-      // A region center is a point on the datum sphere by construction, so this
-      // is zero up to the float32 the uniform carries — the patches' own
-      // `anchorAltitude` argument, restated at a different anchor.
-      anchorAltitude:
-        Math.hypot(
-          Math.fround(anchor.x),
-          Math.fround(anchor.y),
-          Math.fround(anchor.z),
-        ) - body.radius,
       placement: {
         position: Vec.add(
           pose.position,

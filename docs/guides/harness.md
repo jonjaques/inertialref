@@ -369,8 +369,9 @@ holding. Read it beside the rest or `visited: 446` will describe a frame that
 walked nothing.
 
 `ir.terrain().producer` is where the _next_ heightfield request goes — `gpu`
-for the tile producer, `pool` for the worker pool, `none` headlessly — rather
-than where the ground on screen came from, because a producer can stop mid
+for the tile producer, `pool` for the worker pool, `none` for a session with
+neither; headlessly `ir.terrain()` itself is null — rather than where the
+ground on screen came from, because a producer can stop mid
 session and the fields already held came from wherever they came from.
 `?producer=cpu` on the URL keeps the pool on a WebGPU page, which is the A/B
 every GPU figure was taken against.
@@ -389,12 +390,15 @@ outrunning both budgets at once. `range` is how far rocks are drawn this frame �
 like everything else here.
 
 **Every frame-rate figure is a function of the surface levers as well, so
-state them.** `engine.surfaceQuality` is the persisted record the graphics
-panel edits — the refinement threshold, the ground's octaves, the sea's
-refraction and waves, the rocks — and a driving script can set it between two
-`--cast`s to measure one term: `render/quality.ts` names what each step
-spends. The materials compare before they write, so flipping a lever costs
-the next frame nothing but the change.
+state them.** `engine.surfaceQuality` is the field the frame loop reads — the
+refinement threshold, the ground's octaves, the sea's refraction and waves,
+the rocks — and a driving script can set it between two `--cast`s to measure
+one term: `render/quality.ts` names what each step spends. The materials
+compare before they write, so flipping a lever costs the next frame nothing
+but the change. The record that outlives the session is the `render.surface`
+preference, which the graphics panel edits and `state/engineKnobs.ts` carries
+to the field, so a script's write holds until that key next moves and does not
+survive a reload — which is what you want of a measurement.
 
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end

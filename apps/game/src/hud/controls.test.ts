@@ -119,9 +119,10 @@ describe('the lens channels', () => {
   })
 
   it('produces a lens the storage guard believes', () => {
-    // The channels write `engine.flightLens` and the same object is what gets
-    // persisted, so a channel whose range fell outside `isLens` would be a
-    // setting that silently reset on the next reload.
+    // The channels write the `camera.lens` preference, and the same object is
+    // what `state/engineKnobs.ts` carries to `engine.flightLens`, so a channel
+    // whose range fell outside `isLens` would be a setting that silently reset
+    // on the next reload.
     for (const id of CHANNELS) {
       for (const scrub of [0, 0.25, 0.5, 0.75, 1]) {
         const held = LENS_CHANNELS[id].at(LENS_PRESETS.flight, scrub)

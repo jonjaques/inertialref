@@ -6,9 +6,7 @@ import {
   lensForFov,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import type { AaLevel, OutputPreference } from '../render/output.ts'
-import type { SurfaceQuality } from '../render/quality.ts'
-import type { RendererDescription } from '../render/output.ts'
+import type { OutputPreference, RendererDescription } from '../render/output.ts'
 
 /*
  * The knobs the shell owns, as types.
@@ -16,14 +14,10 @@ import type { RendererDescription } from '../render/output.ts'
  * Its own module for the reason `planetarium/context.ts` gives: a `.tsx` file
  * that exports anything besides components is a file Vite's Fast Refresh gives
  * up on, and in this app a full reload means rebuilding the renderer and losing
- * the camera. These four shapes were declared in the four component files that
- * happen to draw them, and every one of those files is edited while iterating
- * on a panel.
- *
- * They are also read in two places each — the dev dock and the `/settings`
- * page — which is the other half of why they are here: two inline object
- * literals for "the graphics knobs" is how a build ends up with two
- * anti-aliasing switches that disagree.
+ * the camera. The shapes here are what the shell still assembles — the renderer
+ * as the dock sees it, the command table — and the lens as a slider sees it.
+ * The graphics knobs have no shape here: they are preferences, the panel reads
+ * their definitions, and `state/engineKnobs.ts` carries each to the engine.
  */
 
 /*
@@ -251,18 +245,25 @@ export const isLens = (value: unknown): value is Lens => {
 export const reviveLens = (lens: Lens): Lens =>
   Number.isFinite(lens.focus) ? lens : { ...lens, focus: Infinity }
 
+/**
+ * The lens and its one writer, as a slider sees them.
+ *
+ * Built by `LensSection` from the `camera.lens` preference and handed to each
+ * channel's slider; nothing above the section assembles one. The graphics
+ * knobs have no shape like this at all — the panel reads their definitions.
+ */
 export interface CameraState {
   readonly lens: Lens
-  readonly onLens: (lens: Lens) => void
-}
-
-export interface GraphicsState {
-  readonly lensFlare: boolean
-  readonly onLensFlare: (on: boolean) => void
-  readonly aa: AaLevel
-  readonly onAa: (level: AaLevel) => void
-  readonly surface: SurfaceQuality
-  readonly onSurface: (next: SurfaceQuality) => void
+  /**
+   * Takes the updater form, and a channel slider has to use it.
+   *
+   * A lens is seven fields and a slider changes one, so every write here is
+   * derived from the lens before it. `camera.lens` is one hook's captured
+   * value and `camera.lens` is held by up to four at once — `LensSection` in
+   * the dock *and* at `/settings/camera`, plus Optics and the presets — so the
+   * snapshot a handler closed over can be a write behind the store.
+   */
+  readonly onLens: (lens: Lens | ((held: Lens) => Lens)) => void
 }
 
 /**

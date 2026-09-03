@@ -1,11 +1,6 @@
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { Connection } from '../net/health.ts'
-import type {
-  CameraState,
-  GraphicsState,
-  HudCommands,
-  HudRenderState,
-} from './controls.ts'
+import type { HudCommands, HudRenderState } from './controls.ts'
 
 /**
  * Everything the author's instruments read, in one shape.
@@ -26,8 +21,6 @@ import type {
 export interface DevContext {
   readonly engine: GameEngine
   readonly render: HudRenderState
-  readonly graphics: GraphicsState
-  readonly camera: CameraState
   readonly connection: Connection
   readonly onCheckConnection: () => void
   readonly commands: HudCommands

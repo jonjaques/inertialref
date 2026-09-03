@@ -205,9 +205,7 @@ function checkAstronomicalDistances(world: World): CapabilityResult {
 function checkMovementWithinSystem(): CapabilityResult {
   const world = scratchWorld()
   const ship = world.spawnShip('probe', systemFrameId(SOL), vec3(1e9, 0, 0))
-  world.entities.update(ship.id, {
-    control: { translation: vec3(0, 0, 1), rotation: Vec.ZERO },
-  })
+  world.setControl(ship.id, vec3(0, 0, 1), Vec.ZERO)
   const before = world.canonicalPositionOf(ship.id)
   world.runTicks(640)
   const travelled = UV.distance(before, world.canonicalPositionOf(ship.id))
@@ -279,13 +277,12 @@ function checkFrameTransition(): CapabilityResult {
     toPlanet,
     Vec.length(toPlanet) - planet.sphereOfInfluence * 1.02,
   )
-  const ship = world.spawnShip('inbound', systemFrameId(SOL), start)
-  world.entities.update(ship.id, {
-    state: {
-      ...world.entities.require(ship.id).state,
-      velocity: Vec.scale(Vec.normalize(Vec.sub(toPlanet, start)), 200_000),
-    },
-  })
+  const ship = world.spawnShip(
+    'inbound',
+    systemFrameId(SOL),
+    start,
+    Vec.scale(Vec.normalize(Vec.sub(toPlanet, start)), 200_000),
+  )
 
   const canonicalBefore = world.canonicalPositionOf(ship.id)
   let changed = false
@@ -494,17 +491,12 @@ function checkFrameRateIndependence(): CapabilityResult {
     const world = scratchWorld()
     const planet = firstSolidBody(world)
     const speed = circularSpeed(planet.mu, planet.radius * 2)
-    const ship = world.spawnShip(
+    world.spawnShip(
       'probe',
       bodyFrameId(planet.address),
       vec3(planet.radius * 2, 0, 0),
+      vec3(0, 0, -speed),
     )
-    world.entities.update(ship.id, {
-      state: {
-        ...world.entities.require(ship.id).state,
-        velocity: vec3(0, 0, -speed),
-      },
-    })
     return world
   }
 

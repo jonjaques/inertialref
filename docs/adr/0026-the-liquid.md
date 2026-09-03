@@ -57,7 +57,7 @@ riverbed; `biota` what grows — the biosphere's window read against the same
 latitude term the frost uses, a treeline, a rainfall, a province-scale
 patchiness. A vertex attribute is four lanes, so the record is one
 `InterleavedBuffer` with an attribute object per name at its own offset,
-through `terrainAttributes.ts` for every geometry that wears the material,
+through `groundWear.ts` for every geometry that wears the material,
 warm-up dummies included. The two spare bytes are where the canonical slope
 the deposits still want will go.
 

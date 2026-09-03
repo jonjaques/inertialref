@@ -256,32 +256,36 @@ session.harness.orbit('g:milky-way/s:SOL/b:0', 400)
 
 It performs seven steps in the one order that works — derive the world from a
 seed, load a system, choose a landable body, put a ship above it, stand up a
-worker pool, pick a save store, wire the harness — and returns `{ world, player,
-harness, pool, store, system, target, dispose }`.
+worker pool, pick a save store, wire the harness — and returns the host the
+harness is built over, with the session's extras on the same object: `world`
+(a getter), `player()`, `pool()`, `replaceWorld()`, `authority()`, `now`,
+`render`, plus `harness`, `store`, `system`, `target` and `dispose()`.
 
-| Option            | For                                                                                                         |
-| ----------------- | ----------------------------------------------------------------------------------------------------------- |
-| `seed`, `system`  | what to generate                                                                                            |
-| `catalog`         | the star catalog; defaults to Sol alone                                                                     |
-| `workers`         | a `WorkerFactory`, or `null` for no pool at all                                                             |
-| `poolSize`, `now` | pool sizing and an injected clock                                                                           |
-| `store`           | a `SaveStore`; defaults to in-memory                                                                        |
-| `authority`       | an `AuthorityPort`; defaults to a `LocalAuthority` (ADR-0008)                                               |
-| `host`            | the render side: `scene()`, `frameStats()`, `terrain()`, `lensView()`, `framingLens()`, `onWorldReplaced()` |
+| Option            | For                                                                                                                                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `seed`, `system`  | what to generate                                                                                                                                                                               |
+| `catalog`         | the star catalog; defaults to Sol alone                                                                                                                                                        |
+| `workers`         | a `WorkerFactory`, or `null` for no pool at all                                                                                                                                                |
+| `poolSize`, `now` | pool sizing and an injected clock                                                                                                                                                              |
+| `store`           | a `SaveStore`; defaults to in-memory                                                                                                                                                           |
+| `authority`       | an `AuthorityPort`; defaults to a `LocalAuthority` (ADR-0008)                                                                                                                                  |
+| `render`          | as much of the render side as the host has: `scene()`, `frameStats()`, `terrain()`, `lensView()`, `framingLens()`, `setFlightLens()`, `pixelRatio()`, `setChrome()`, `setLayers()`, `timing()` |
+| `onWorldReplaced` | called after a load replaces the world, so the host can drop what it derived from the old one                                                                                                  |
 
-`host` is one parameter rather than three because they are one thing, and a
-_named_ one rather than a spread: the render answers used to be spread into the
-session object last, so a stray `world` key would silently shadow the getter
-`openSession` exists to protect.
+`render` is a nested object rather than members beside `world`, so nothing in
+it can shadow the getter `openSession` exists to protect; and it is `Partial`
+because a test names the two members it is about and `renderHost()` answers
+the rest the way a display-less runtime honestly can.
 
 Three things about it are load-bearing:
 
 - **`world` is a getter, never a captured reference.** Loading a save replaces
   the world wholesale, and a host that copied the reference kept reporting on the
   discarded one while the frame loop ran the new one.
-- **The host port is split.** `SimulationHost` is what every host can answer;
-  `PresentationHost` (`scene`, `frameStats`) is optional, so the headless runner
-  no longer stubs questions it has no concept of.
+- **The host port is one interface, and its render side is whole.** `Host` is
+  the simulation half plus `render: RenderHost`; a host that draws supplies the
+  whole render side, and one that does not gets the headless adapter, so no
+  reader of the port asks whether a member is there.
 - **Spawn policy lives here.** `landingTarget(system)` and `isLandable(body)` are
   the one place a target is chosen. When five call sites each did this
   themselves, two of them drifted to different spawn distances and nothing could

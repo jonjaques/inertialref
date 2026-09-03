@@ -129,6 +129,34 @@ than 4.0.
 cutting it stalls the strictly serial refinement ladder below one rung
 (~90 patches).
 
+### The stack's gates allocate a context per sample, unmeasured
+
+`evaluate` builds a `StageContext` — `{surface, sketch, sea, seabed}` — on every
+call and asks `stageOn` four times, for `ice`, `drainage`, `craters` and
+`coast`; each is a `Map` lookup in `stageOf` and a call through the stage's own
+closure. `groundCoverAt` pays a second literal and a third `terrainSketch`
+lookup for the clamp. That is the per-vertex path: thousands of samples a patch,
+~1,000 patches to the deepened floor, and `elevationAt` runs the same function
+per contact test per tick.
+
+**Nothing here is measured, and it may well be noise.** A literal that does not
+escape is scalar-replaced, and this one escapes only into `stageOn` and the
+stage's own predicate — both small enough to inline, after which it does not
+escape at all; the `Map` is eleven entries. It is written down because the shape
+is new: the composition is what makes the CPU stack and the kernel one
+description of `BAND_STACK` (`packages/universe/src/bandStack.ts`), which is the
+thing that stopped them drifting, so the cost of keeping it is worth knowing
+rather than assuming.
+
+**If it is real, hoisting is available and cheap.** The context is constant over
+a patch and the four gate answers are constant over a body, so they lift out of
+the sample loop into the job. That changes the sample signature, not the table —
+the one description survives it, which is the property that matters.
+
+**Where it would show.** Item 4 of the order below — one worker's first patch
+against its tenth on the same body — already walks this path with allocation
+attribution on. The answer comes out of that trace rather than a new one.
+
 ### The star survey's priority lane is unbuilt, and unneeded
 
 One reading of `Workers/queue universe.surveyRegion` on a return to Sol is

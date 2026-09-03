@@ -63,7 +63,6 @@ import {
   type ObserverState,
   observerPose,
   type Lens,
-  LENS_PRESETS,
   pixelAngle,
   placeComposition,
   RISE_CLEARANCE,
@@ -80,7 +79,7 @@ import {
   zoomFactorForNotches,
 } from '@inertialref/rendering'
 import { currentSystemOf, resolveDestination } from './travel.ts'
-import type { HarnessHost } from './harness.ts'
+import type { Host } from './harness.ts'
 
 /*
  * The observatory: the planetarium's camera, bound to a live world.
@@ -219,7 +218,7 @@ export const DEFAULT_FILL = 0.55
 export const RISE_HEIGHT_RADII = 0.063
 
 export class Observatory {
-  readonly #host: HarnessHost
+  readonly #host: Host
   #target: ObserverTarget | null = null
   #state: ObserverState = { azimuth: 0.6, elevation: 0.25, distance: 1e9 }
   #desired: ObserverState = this.#state
@@ -252,7 +251,7 @@ export class Observatory {
    */
   #look: LookOffset = NO_LOOK
 
-  constructor(host: HarnessHost) {
+  constructor(host: Host) {
     this.#host = host
   }
 
@@ -313,7 +312,7 @@ export class Observatory {
    * panel, not because the value is uncertain.
    */
   get #lens(): Lens {
-    return this.#host.framingLens?.() ?? LENS_PRESETS.flight
+    return this.#host.render.framingLens()
   }
 
   /**
@@ -582,20 +581,20 @@ export class Observatory {
    * in a script rather than a hand on a surface.
    */
   dragSensitivity(): number {
-    const view = this.#host.lensView?.()
-    if (view === null || view === undefined) return 1
+    const view = this.#host.render.lensView()
+    if (view === null) return 1
     /*
      * Whatever the host reports, floored only against nonsense.
      *
-     * An absent port is already 1 by the `??`, so a clamp at 1 could only ever
-     * fire on a ratio a host genuinely reported below one — which is exactly
+     * A headless host reports 1 through `renderHost`, so a clamp at 1 could
+     * only ever fire on a ratio a host genuinely reported below one — which is exactly
      * what `devicePixelRatio` is with the browser zoomed out (0.8 at 80%, 0.67
      * at 67%). The buffer really is that many device pixels per CSS pixel
      * there, so throwing the correction away moves the picture at 1.49× the
      * rate of the hand: the same defect as the 2× case, in the other
      * direction.
      */
-    const ratio = this.#host.pixelRatio?.() ?? 1
+    const ratio = this.#host.render.pixelRatio()
     const usable = Number.isFinite(ratio) && ratio > 0 ? ratio : 1
     return (
       (pixelAngle(view.lens, view.viewport) * usable) / DRAG_RADIANS_PER_PIXEL
@@ -714,8 +713,8 @@ export class Observatory {
    *
    * Returns the field of view it solved, because the caller has to fit it: the
    * observatory has no lens of its own by design (`#lens` says why), so the
-   * shell writes `engine.flightLens` and the standoff arithmetic here reads it
-   * back.
+   * host's `setFlightLens` carries it to the flight lens and the standoff
+   * arithmetic here reads it back.
    */
   rise(
     options: { readonly clearance?: Radians; readonly height?: Meters } = {},

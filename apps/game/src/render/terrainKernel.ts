@@ -87,6 +87,8 @@ import {
   SCALARS_AT,
   SHIELD_SHAPE,
   SLAB_AT,
+  type StageId,
+  stageOf,
   STRIPE_SHAPE,
   STRIPE_STRIDE,
   STRIPES_AT,
@@ -112,10 +114,14 @@ import {
  * **This is a port, and it is held rather than trusted.** Every number here is
  * imported from the module that spends it on the CPU — `HYPSOMETRY_SHAPE`,
  * `CRATER_SHAPE`, `COVER_SHAPE` and the rest — so there is no second copy of
- * `9` or `11.3` to drift. What can drift is structure: a band gaining a term,
- * a gate moving. The tolerance test is what notices, and it is the only thing
- * that can, because nothing mechanical relates a TSL graph to a TypeScript
- * function.
+ * `9` or `11.3` to drift. The structure around the bands is shared the same
+ * way: which stage runs, in what order, behind which gate is `BAND_STACK` in
+ * `packages/universe/src/bandStack.ts`, and every gate below is built from the
+ * packed slot that table names beside the body's own spelling of it, so a
+ * gate that moves in `evaluate` fails `bandStack.test.ts` in Node before it
+ * reaches an adapter. What is left to drift is a band's own arithmetic — a
+ * term gained, a shape misread — and the tolerance test is what notices that,
+ * because nothing mechanical relates a TSL graph to a TypeScript function.
  *
  * **Placement is integer and bit-identical; amplitude is float and bounded.**
  * That is the line `docs/adr/0023-the-gpu-producer.md` draws, and it is drawn
@@ -911,6 +917,18 @@ export function createTerrainKernel(
     asF(component(record(SCALARS_AT + (index >> 2)), index & 3))
   const word = (index: number): U =>
     asU(component(words.element(uint(index >> 2)), index & 3))
+  /**
+   * A stage's gate, from the slot `BAND_STACK` names for it — the one place
+   * the kernel's spelling of "does this stage run" is written, so the table
+   * and not this file decides which scalar or word means what.
+   */
+  const gate = (id: StageId) => {
+    const packed = stageOf(id).packed
+    if (packed === null) throw new Error(`${id} always runs; it has no gate`)
+    return 'word' in packed
+      ? word(WORD[packed.word]).greaterThan(uint(0))
+      : scalar(SCALAR[packed.scalar]).greaterThan(packed.above)
+  }
   /** A word at a runtime index: the rung's existence threshold. */
   const wordAt = (index: U): U => {
     const slot = words.element(index.div(uint(4)))
@@ -1668,7 +1686,7 @@ export function createTerrainKernel(
 
         const shareIce = scalar(SCALAR.SHARE_ICE)
         const ice = float(0).toVar()
-        If(shareIce.greaterThan(0), () => {
+        If(gate('ice'), () => {
           const chaos = scalar(SCALAR.CHAOS)
           const sulci = scalar(SCALAR.SULCI)
           const stripes = scalar(SCALAR.STRIPES)
@@ -1737,7 +1755,7 @@ export function createTerrainKernel(
         const valley = float(0).toVar()
         const tributary = float(0).toVar()
         const aboveDatum = float(0).toVar()
-        If(drainageAmount.greaterThan(0), () => {
+        If(gate('drainage'), () => {
           const datum = scalar(SCALAR.DRAINAGE_DATUM)
           valley.assign(
             valleyField(
@@ -1772,7 +1790,7 @@ export function createTerrainKernel(
         const craterLevels = word(WORD.CRATER_LEVELS)
         const craterLimit = scalar(SCALAR.CRATER_LIMIT)
         const craters = float(0).toVar()
-        If(craterLevels.greaterThan(uint(0)), () => {
+        If(gate('craters'), () => {
           craters.assign(
             ladder(d, d0, delta, tile, uint(0), craterLevels, radius),
           )
@@ -1781,10 +1799,10 @@ export function createTerrainKernel(
 
         /* --- the coast ------------------------------------------------------- */
 
-        // `evaluate`'s last term: after the craters, before the tail, and
-        // gated by the width the packer zeroes where `evaluate` skips it.
+        // `evaluate`'s last term: after the craters, before the tail. The
+        // gate is the width, which the packer zeroes where the stage is off.
         const coast = scalar(SCALAR.COAST_WIDTH)
-        If(coast.greaterThan(0), () => {
+        If(gate('coast'), () => {
           elevation.assign(
             coastRemap(elevation, scalar(SCALAR.SEA_DATUM), coast),
           )
@@ -1793,7 +1811,7 @@ export function createTerrainKernel(
         /* --- the tail: sub-floor craters and the grit ----------------------- */
 
         const microCeiling = scalar(SCALAR.MICRO_CEILING)
-        If(microCeiling.greaterThan(0), () => {
+        If(gate('tail'), () => {
           const tail = ladder(
             d,
             d0,
@@ -1805,6 +1823,10 @@ export function createTerrainKernel(
           )
           elevation.addAssign(softLimit(tail, microCeiling))
         })
+        // An amplitude guard, not a stage gate: the grit is always on inside
+        // the stack (`BAND_STACK` says why), and this skips its octaves only
+        // where the packer wrote a zero, which is the bare body the outer
+        // branch already took.
         const gritAmplitude = scalar(SCALAR.GRIT_RELIEF)
         If(gritAmplitude.greaterThan(0), () => {
           // `fbm3` over the grit's frames: each octave has its own cell and
@@ -1848,7 +1870,7 @@ export function createTerrainKernel(
          * drawn: a mapped body's photograph is its sea, and the ground under
          * the photograph is the datum, not the trench.
          */
-        If(scalar(SCALAR.SEA_CLAMP).greaterThan(0.5), () => {
+        If(gate('clamp'), () => {
           elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
         })
 

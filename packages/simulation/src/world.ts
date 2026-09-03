@@ -60,6 +60,7 @@ import {
   type Entity,
   type EntityInit,
   EntityStore,
+  type EntityView,
   type RailsEpoch,
 } from './entity.ts'
 import {
@@ -153,8 +154,13 @@ export class World implements FlightWorld {
   readonly galaxySeed: Seed
   readonly catalog: StarCatalog
   readonly frames = new FrameGraph()
-  readonly entities = new EntityStore()
   readonly clock: SimulationClock
+
+  readonly #entities = new EntityStore()
+  /** The entities, to read. Every write is a verb on the world (`EntityView`). */
+  get entities(): EntityView {
+    return this.#entities
+  }
 
   readonly #systems = new Map<SystemId, StarSystem>()
   readonly #bindings = new Map<FrameId, FrameBinding>()
@@ -221,7 +227,7 @@ export class World implements FlightWorld {
   unloadSystem(id: SystemId): void {
     const system = this.#systems.get(id)
     if (system === undefined) return
-    for (const entity of this.entities.all()) {
+    for (const entity of this.#entities.all()) {
       const chain = this.frames.has(entity.state.frame)
         ? this.frames.chain(entity.state.frame)
         : []
@@ -354,19 +360,31 @@ export class World implements FlightWorld {
 
   spawn(init: EntityInit): Entity {
     const entity = createEntity({ ...init, spawnedAt: this.clock.time })
-    this.entities.add(entity)
+    this.#entities.add(entity)
     this.#previous.set(entity.id, entity.state)
     return entity
   }
 
-  /** Spawn the debug spacecraft, at rest in a frame. */
-  spawnShip(name: string, frame: FrameId, position: Vec3): Entity {
-    const id = dynamicEntityId(this.entities.nextDynamicIndex())
+  /**
+   * Spawn the debug spacecraft in a frame, at rest unless given a velocity.
+   *
+   * The velocity is a spawn argument rather than a later write: a ship that
+   * begins in orbit, or falling, or inbound from interstellar space is spawned
+   * that way, so the interpolation history it is born with already describes
+   * that motion and nothing has to reach past the verbs to set it.
+   */
+  spawnShip(
+    name: string,
+    frame: FrameId,
+    position: Vec3,
+    velocity: Vec3 = Vec.ZERO,
+  ): Entity {
+    const id = dynamicEntityId(this.#entities.nextDynamicIndex())
     return this.spawn({
       id,
       kind: 'ship',
       name,
-      state: { ...restState(frame), position },
+      state: { ...restState(frame), position, velocity },
       mass: 40_000,
       thrusters: DEBUG_SHIP_THRUSTERS,
       ballisticCoefficient: 320,
@@ -384,7 +402,7 @@ export class World implements FlightWorld {
   /** Whether an entity is coasting on rails rather than being integrated. */
   isCoasting(id: EntityId): boolean {
     // `?.rails !== null` alone says a missing entity coasts.
-    return (this.entities.get(id)?.rails ?? null) !== null
+    return (this.#entities.get(id)?.rails ?? null) !== null
   }
 
   /**
@@ -415,11 +433,11 @@ export class World implements FlightWorld {
 
   /** Move an entity into another frame without moving it in the universe. */
   reframeEntity(id: EntityId, frame: FrameId): Entity {
-    const entity = this.entities.require(id)
+    const entity = this.#entities.require(id)
     const state = reframe(this.frames, entity.state, frame, this.clock.time)
     this.#landed.delete(id)
     this.#forgetDerived(id)
-    return this.entities.update(id, { state, rails: null })
+    return this.#entities.update(id, { state, rails: null })
   }
 
   /**
@@ -434,7 +452,7 @@ export class World implements FlightWorld {
   teleport(id: EntityId, state: FrameState): Entity {
     // Off the rails as well: the epoch describes where the entity was, and it
     // is not there now. It earns a new one on its next coasting tick.
-    const entity = this.entities.update(id, { state, rails: null })
+    const entity = this.#entities.update(id, { state, rails: null })
     this.#previous.set(id, state)
     this.#altitudes.delete(id)
     this.#forgetDerived(id)
@@ -454,9 +472,10 @@ export class World implements FlightWorld {
 
   /*
    * Control lives here rather than in the caller for the same reason `teleport`
-   * does: `entities.update` is public and unrestricted, so the door that skips
-   * the interpolation and landed-set bookkeeping was exactly as wide as the one
-   * that does it. These three are the whole of what a player can change.
+   * does: the store's write half is not on `World.entities`, so the
+   * interpolation, landed-set and rails bookkeeping a write needs cannot be
+   * skipped from outside. These three are the whole of what a player can
+   * change.
    *
    * Each takes an entity off the rails when what it changes is a term the
    * coast does not carry — thrust, a torque the assist will now apply, a spin
@@ -469,24 +488,24 @@ export class World implements FlightWorld {
     const neutral =
       Vec.lengthSquared(translation) === 0 && Vec.lengthSquared(rotation) === 0
     if (!neutral) this.#leaveRails(id)
-    return this.entities.update(id, { control: { translation, rotation } })
+    return this.#entities.update(id, { control: { translation, rotation } })
   }
 
   setFlightAssist(id: EntityId, enabled: boolean): boolean {
-    const entity = this.entities.require(id)
+    const entity = this.#entities.require(id)
     if (enabled && Vec.lengthSquared(entity.state.angularVelocity) !== 0)
       this.#leaveRails(id)
-    this.entities.update(id, { flightAssist: enabled })
+    this.#entities.update(id, { flightAssist: enabled })
     return enabled
   }
 
   /** Zero the spin without disturbing the trajectory. */
   killRotation(id: EntityId): Entity {
-    const entity = this.entities.require(id)
+    const entity = this.#entities.require(id)
     if (Vec.lengthSquared(entity.state.angularVelocity) !== 0)
       this.#leaveRails(id)
     const state = { ...entity.state, angularVelocity: Vec.ZERO }
-    const updated = this.entities.update(id, { state })
+    const updated = this.#entities.update(id, { state })
     // Interpolation history has to follow, or the overlay lerps the old spin
     // into the new one for a frame.
     this.#previous.set(id, state)
@@ -496,7 +515,7 @@ export class World implements FlightWorld {
   canonicalPositionOf(id: EntityId): UniverseVector {
     return canonicalPosition(
       this.frames,
-      this.entities.require(id).state,
+      this.#entities.require(id).state,
       this.clock.time,
     )
   }
@@ -518,7 +537,7 @@ export class World implements FlightWorld {
     const tick = this.clock.tick + 1
     const boundary = tick % RAILS_CHUNK === 0
     let checks: EntityId[] | null = null
-    for (const entity of this.entities.ordered()) {
+    for (const entity of this.#entities.ordered()) {
       this.#previous.set(entity.id, entity.state)
 
       if (entity.rails !== null) {
@@ -551,7 +570,7 @@ export class World implements FlightWorld {
       }
 
       if (result.touchdown) {
-        this.entities.update(entity.id, { state: result.state })
+        this.#entities.update(entity.id, { state: result.state })
         this.#land(entity.id, after, result.impactSpeed)
         continue
       }
@@ -559,7 +578,7 @@ export class World implements FlightWorld {
       if (result.liftOff) {
         // Commit the unstick offset before re-framing, or the ship is handed
         // back to the inertial frame still sitting on the ground.
-        this.entities.update(entity.id, { state: result.state })
+        this.#entities.update(entity.id, { state: result.state })
         this.#liftOff(entity.id, after)
         continue
       }
@@ -570,7 +589,7 @@ export class World implements FlightWorld {
       if (result.frameChange === null && result.altitude !== null)
         this.#groundAhead.set(entity.id, result.altitude)
       else this.#groundAhead.delete(entity.id)
-      this.entities.update(entity.id, { state: result.state })
+      this.#entities.update(entity.id, { state: result.state })
       // The ground and the frame settled, the tick may find nothing left to
       // integrate — in which case the next one coasts from here.
       if (!this.#landed.has(entity.id)) this.#enterRails(entity.id, after)
@@ -641,7 +660,7 @@ export class World implements FlightWorld {
   #coastable(remaining: number): number {
     let jump = remaining
     const tick = this.clock.tick
-    for (const entity of this.entities.all()) {
+    for (const entity of this.#entities.all()) {
       if (entity.rails === null) return 0
       jump = Math.min(jump, this.#coastRecord(entity).nextCheck - tick)
     }
@@ -654,7 +673,7 @@ export class World implements FlightWorld {
     const time = timeOfTick(asTick(tick))
     const boundary = tick % RAILS_CHUNK === 0
     let checks: EntityId[] | null = null
-    for (const entity of this.entities.ordered()) {
+    for (const entity of this.#entities.ordered()) {
       const epoch = entity.rails
       invariant(epoch !== null, `#jump over an integrating entity ${entity.id}`)
       // Interpolation wants the tick before, which a jump of one already
@@ -683,7 +702,7 @@ export class World implements FlightWorld {
   /** Put a coasting entity where its epoch says it is at `time`. */
   #coast(entity: Entity, epoch: RailsEpoch, time: Seconds): void {
     const state = coastState(this, entity.state.frame, epoch, time)
-    this.entities.update(entity.id, { state })
+    this.#entities.update(entity.id, { state })
     const binding = this.binding(state.frame)
     // Above the ground band by the rails' own condition, where the datum is
     // the exact answer and the one the integrator would give.
@@ -722,7 +741,7 @@ export class World implements FlightWorld {
    * stepped, the way the integrated path stamps its own before the commit.
    */
   #railsCheck(id: EntityId, time: Seconds, tick: number): void {
-    const entity = this.entities.require(id)
+    const entity = this.#entities.require(id)
     const epoch = entity.rails
     if (epoch === null) return
     const record = this.#coastRecord(entity)
@@ -746,7 +765,7 @@ export class World implements FlightWorld {
       return
     }
     const { state, change } = verdict.change
-    this.entities.update(id, { state, rails: null })
+    this.#entities.update(id, { state, rails: null })
     this.#previous.set(id, state)
     this.#forgetDerived(id)
     this.#record(
@@ -766,10 +785,10 @@ export class World implements FlightWorld {
    * boundary it seeds is the same one either way. One construction site.
    */
   #enterRails(id: EntityId, time: Seconds): void {
-    const entity = this.entities.require(id)
+    const entity = this.#entities.require(id)
     const epoch = railsEpoch(this, entity, this.#landed.has(id), time)
     this.#coasting.delete(id)
-    if (epoch !== null) this.entities.update(id, { rails: epoch })
+    if (epoch !== null) this.#entities.update(id, { rails: epoch })
   }
 
   /**
@@ -786,9 +805,9 @@ export class World implements FlightWorld {
    * docstring promises it is only ever the contact test's own sample.
    */
   #leaveRails(id: EntityId): void {
-    const entity = this.entities.get(id)
+    const entity = this.#entities.get(id)
     if (entity === undefined || entity.rails === null) return
-    this.entities.update(id, { rails: null })
+    this.#entities.update(id, { rails: null })
     this.#forgetDerived(id)
   }
 
@@ -800,7 +819,7 @@ export class World implements FlightWorld {
   }
 
   #land(id: EntityId, time: Seconds, impactSpeed: number): void {
-    const entity = this.entities.require(id)
+    const entity = this.#entities.require(id)
     const binding = this.binding(entity.state.frame)
     if (
       binding?.body === null ||
@@ -816,7 +835,7 @@ export class World implements FlightWorld {
     const { latitude, longitude } = directionToGeodetic(bodyFixed)
     const frame = installSurfaceFrame(this.frames, body, latitude, longitude)
     const landedState = reframe(this.frames, entity.state, frame, time)
-    this.entities.update(id, {
+    this.#entities.update(id, {
       state: {
         ...landedState,
         // Sit on the surface, not a fraction of a meter inside it: the contact
@@ -842,13 +861,13 @@ export class World implements FlightWorld {
   }
 
   #liftOff(id: EntityId, time: Seconds): void {
-    const entity = this.entities.require(id)
+    const entity = this.#entities.require(id)
     const binding = this.binding(entity.state.frame)
     if (binding === undefined) return
     // reframe supplies the ground speed the ship inherits — several hundred m/s
     // on a rotating planet — without anything here knowing that number.
     const state = reframe(this.frames, entity.state, binding.frame, time)
-    this.entities.update(id, { state })
+    this.#entities.update(id, { state })
     this.#landed.delete(id)
     this.#forgetDerived(id)
     this.#record('lift-off', id, binding.body?.name ?? binding.frame)
@@ -881,7 +900,7 @@ export class World implements FlightWorld {
     }
 
     const occupied = new Set<string>()
-    for (const entity of this.entities.all()) {
+    for (const entity of this.#entities.all()) {
       if (!this.frames.has(entity.state.frame)) continue
       for (const frame of this.frames.chain(entity.state.frame))
         occupied.add(frame)
@@ -941,7 +960,7 @@ export class World implements FlightWorld {
    */
   stateHash(): string {
     const parts: string[] = [`t=${this.clock.tick}`, `seed=${this.seedText}`]
-    for (const entity of this.entities.ordered()) {
+    for (const entity of this.#entities.ordered()) {
       const s = entity.state
       const c = entity.control
       const r = entity.rails
@@ -969,6 +988,11 @@ export class World implements FlightWorld {
   restoreLanded(ids: readonly EntityId[]): void {
     this.#landed.clear()
     for (const id of ids) this.#landed.add(id)
+  }
+
+  /** Restore the dynamic id counter after a load, so a replay issues the same ids. */
+  restoreDynamicIdCounter(value: number): void {
+    this.#entities.restoreDynamicIdCounter(value)
   }
 
   landedEntities(): readonly EntityId[] {

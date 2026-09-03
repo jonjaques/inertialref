@@ -221,6 +221,37 @@ spheroid; the measured ellipsoid for a body with a figure. Not the shape model �
 whole scene for. Only opens up, only below 0.12 geometric albedo, only as the
 body fills the frame. The mirror of a star stopping down as it fills the frame.
 
+**Observatory** — the planetarium's camera, `packages/devtools/src/observatory.ts`.
+It resolves an address, asks the world where that is at `renderTime`, and
+returns a pose; it never writes canonical state. Two arms that meet and do not
+overlap: the orbit camera, clamped `MIN_DISTANCE_RADII` (1.5 radii) from the
+center, and the surface stance below, whose ceiling is that same half radius
+above the ground. It produces a camera only while a stance layer is holding it,
+and it reads `framingLens()` — the flight lens alone. `ir.observatory` exposes
+it. → [ADR-0018](adr/0018-the-instrument.md), [planetarium](design/planetarium.md)
+
+**Stance** — two things, and the page says which. A _presentation_ stance is a
+`Stance` layer pushed on `engine.presentation`
+(`apps/game/src/engine/presentation.ts`): `showShip`, `showOrbits`, `labels`,
+`orbitScope`, `flareArtifacts`, whether this layer holds the observatory, and
+`chrome`. A mode pushes one on mount, a panel's override is another push, and
+`release()` restores what was underneath rather than a literal. A _surface_
+stance (`SurfaceStance`, `packages/rendering/src/surfaceStance.ts`) is where a
+viewer stands on a body: latitude, longitude, a height above the ground below
+that point — never above the datum — a heading and a pitch. `MIN_STANCE_HEIGHT`
+is 2 m, an eye height; "a two-meter stance on Luna" is that, and `ir.visit` sets
+one. → [ADR-0018](adr/0018-the-instrument.md)
+
+**Producer** — what answers a heightfield request: the GPU tile kernel
+(`apps/game/src/render/terrainProducer.ts`) on a WebGPU page, the worker pool
+otherwise. `ir.terrain().producer` names where the _next_ request goes, and
+`?producer=cpu` keeps the pool on a WebGPU page, which is the A/B every GPU
+figure is taken against. The pool's field is canonical and the kernel is held to
+it by a measured bound. In "one producer of the camera" and "the only producers
+of a `BodyFixedDirection`" the word is the ordinary one — the single writer of a
+value — and not this. → [ADR-0023](adr/0023-the-gpu-producer.md),
+[streaming](concepts/streaming.md)
+
 ---
 
 ## Infrastructure
@@ -228,6 +259,33 @@ body fills the frame. The mirror of a star stopping down as it fills the frame.
 **Port** — an interface a lower-layer package declares so a host can supply a
 capability it must not depend on. `WorkerPort`, `SaveStore`, `HeightfieldSource`.
 → [workers](concepts/workers.md#the-port-pattern)
+
+**Adapter** — what satisfies a port on the host's side: the browser `Worker`
+wrapper in `apps/game/src/engine/browserWorker.ts`, the IndexedDB save store,
+the local authority, `renderHost()` for a host with no display. `packages/*`
+declare the port and `apps/*` pass the adapter in, never the reverse — which is
+the rule that keeps a hosting vendor's SDK out of the core. ADR-0023 and the
+GPU suite use the word in WebGPU's own sense, the physical device
+`pnpm test:gpu` needs, and the two meanings never meet.
+
+**Host** — two things at two layers. In `packages/devtools`, `Host`
+(`harness.ts`) is what the harness is built over: the simulation half — `world`
+as a getter, `player()`, `pool()`, `replaceWorld`, `authority()`, `now` — and
+`render`, a `RenderHost` a drawing host supplies whole. `openSession` returns a
+`Session`, which is a `Host` with the harness, the store, the system, the target
+and `dispose` assigned onto it. In `packages/workers`, `HostPort`
+(`transport.ts`) is the far end of a `WorkerPort`: what a worker entry point
+implements to answer the thread that spawned it.
+→ [observability](concepts/observability.md), [workers](concepts/workers.md)
+
+**Render host** — `RenderHost`, the render side of a `Host`: `scene()`,
+`frameStats()`, `terrain()`, `lensView()`, `framingLens()`, `setFlightLens()`,
+`pixelRatio()`, `setChrome()`, `setLayers()`, `timing()`. `renderHost(overrides)`
+is the headless adapter: every member answered the way a runtime with no display
+honestly can, filled member by member rather than by spread so a caller's
+`undefined` cannot win over the default. A test names the two members it is
+about and the harness sees a whole port; no reader of the port asks whether a
+member is there. → [extending](guides/extending.md#standing-a-world-up-opensession)
 
 **Task** — a named, versioned function with a declared payload and result, run
 by the worker pool or called directly. Both sides import the same definition.
@@ -248,6 +306,13 @@ architecture, runnable in Node and in the browser. Reports measurements, not
 **Harness** — `window.ir`. Drives and interrogates the simulation without the
 UI. The same object the headless runner uses.
 → [harness](guides/harness.md)
+
+**Driver** — `scripts/drive.mjs`, `pnpm drive`: Chrome over the DevTools
+Protocol, launched on its own profile and port so it needs no focus, with
+`?presentation=occluded` on every URL so a driven boot is a measurement rather
+than a rig measuring itself. The one way an agent reaches the browser here.
+→ [harness](guides/harness.md#driving-from-an-automated-browser-session),
+[driving](agents/driving.md)
 
 **Dossier** — one star or one body as a page of astronomy: groups of `Fact`
 rows, its satellites, and how many fields are still empty. Derived on demand
