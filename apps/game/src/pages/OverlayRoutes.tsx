@@ -1,10 +1,6 @@
 import { AnimatePresence } from 'motion/react'
 import { Route, Routes, useLocation } from 'react-router'
-import type {
-  CameraState,
-  GraphicsState,
-  HudRenderState,
-} from '../hud/controls.ts'
+import type { HudRenderState } from '../hud/controls.ts'
 import { AboutPage } from './AboutPage.tsx'
 import { KeysPage } from './KeysPage.tsx'
 import { AuthCallbackPage } from './AuthCallbackPage.tsx'
@@ -28,9 +24,9 @@ import { SignUpPage } from './SignUpPage.tsx'
  * route test able to render them without an engine, a renderer or a canvas.
  */
 interface OverlayRouteProps {
-  readonly graphics: GraphicsState
-  readonly camera: CameraState
   readonly render: HudRenderState
+  /** Say what a press just did, through the notice the shell flashes. */
+  readonly onNotice: (message: string) => void
 }
 
 /**
@@ -57,22 +53,18 @@ interface OverlayRouteProps {
  * click of a tab. Keyed on the surface, a section change is content changing
  * inside a panel that never re-enters, which is what it looks like anyway.
  */
-export function OverlayRoutes({ graphics, camera, render }: OverlayRouteProps) {
+export function OverlayRoutes({ render, onNotice }: OverlayRouteProps) {
   const location = useLocation()
   return (
     <AnimatePresence>
       <Routes location={location} key={overlaySurface(location.pathname)}>
         <Route
           path={SETTINGS}
-          element={
-            <SettingsPage graphics={graphics} camera={camera} render={render} />
-          }
+          element={<SettingsPage render={render} onNotice={onNotice} />}
         />
         <Route
           path={`${SETTINGS}/:section`}
-          element={
-            <SettingsPage graphics={graphics} camera={camera} render={render} />
-          }
+          element={<SettingsPage render={render} onNotice={onNotice} />}
         />
         <Route path={ABOUT} element={<AboutPage />} />
         <Route path={KEYS} element={<KeysPage />} />

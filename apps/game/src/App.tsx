@@ -5,25 +5,18 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
-import type {
-  CameraState,
-  GraphicsState,
-  HudCommands,
-  HudRenderState,
-} from './hud/controls.ts'
+import type { HudCommands, HudRenderState } from './hud/controls.ts'
 import { BootOverlay } from './hud/BootOverlay.tsx'
 import { ChromeContext } from './hud/chrome.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { TrackOverlay } from './hud/TrackOverlay.tsx'
 import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
+import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
-  CAMERA_LENS,
   DEBUG_ON,
   RENDER_AA,
-  RENDER_SURFACE,
   RENDER_HDR,
-  RENDER_LENS_FLARE,
   usePersistentState,
 } from './state/preferences.ts'
 import { useAction } from './input/useKeymap.ts'
@@ -51,7 +44,6 @@ import {
   type RendererHandle,
 } from './render/createRenderer.ts'
 import {
-  type AaLevel,
   aaAntialias,
   aaDprFactor,
   dprCeiling,
@@ -213,26 +205,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   const [hdr, setHdr] = usePersistentState(RENDER_HDR)
   /*
-   * The graphics and camera panels' knobs. Persisted like the HDR override —
-   * a lens flare turned off to chase an artifact should stay off across the
-   * reload that tests the fix — and mirrored onto plain engine fields below,
-   * because the frame loop reads them and must not touch React to do it.
+   * The anti-aliasing level, held here because it is a fact about the
+   * renderer this component builds: MSAA is a constructor argument and joins
+   * the canvas key, and the supersample step is the drawing buffer's `dpr`.
+   * The other knobs the frame loop reads — the lens, the flare, the surface —
+   * never pass through here; `state/engineKnobs.ts` binds them to the engine
+   * and the panels read the definitions themselves.
    */
-  const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
-  const [aa, setAa] = usePersistentState(RENDER_AA)
-  const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
-  /*
-   * The lens, and the one preference in here that has changed shape.
-   *
-   * `camera.fov` held a single angle; `camera.lens` holds the instrument. The
-   * old key is read once, through `lensForFov`, so a player who moved the
-   * slider before this landed keeps the picture they chose and gains an
-   * aperture they did not — and the new key becomes canonical the first time
-   * they touch it. `isLens` guards the seven numbers the way `numberWithin`
-   * guarded the one: `localStorage` outlives the code that wrote it, and a
-   * focal length of zero is a division rather than a wide lens.
-   */
-  const [lens, setLens] = usePersistentState(CAMERA_LENS)
+  const [aa] = usePersistentState(RENDER_AA)
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
@@ -289,31 +269,16 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
 
   /*
-   * The shell owns the lens, so the engine is told where to send one.
+   * The knobs the frame loop reads, bound to the preferences that own them.
    *
-   * `ir.preset` and `ir.rise` solve a lens as part of the picture, and the
-   * effect below re-asserts `lens` onto `engine.flightLens` on every render
-   * preference change — so a verb that wrote the field would hold its picture
-   * only until the next unrelated toggle. Routing it into the preference is
-   * what makes a preset's lens survive, and what keeps the panel's sliders
-   * agreeing with the picture on screen.
+   * One effect and no mirror. `state/engineKnobs.ts` lists the engine fields a
+   * preference drives and follows each key alone, so a toggle reaches its own
+   * field and nobody else's — and a lens a verb fitted (`ir.preset`,
+   * `ir.rise`) goes into the preference through the same module, which is what
+   * keeps the panel's sliders agreeing with the picture and the picture alive
+   * across the next unrelated toggle.
    */
-  useEffect(() => {
-    engine.onLensRequest = setLens
-    return () => {
-      engine.onLensRequest = null
-    }
-  }, [engine, setLens])
-
-  useEffect(() => {
-    engine.lensFlare = lensFlare
-    engine.flightLens = lens
-    engine.surfaceQuality = surface
-    // What the drawing buffer is multiplied by, so the terrain predicate can
-    // divide it back out: supersampling raises the sample count, not the detail
-    // a viewer can resolve. See `GameEngine.supersample`.
-    engine.supersample = aaDprFactor(aa)
-  }, [engine, lensFlare, lens, aa, surface])
+  useEffect(() => bindEngineKnobs(engine), [engine])
 
   useEffect(() => {
     const unsubscribe = monitor.subscribe(setConnection)
@@ -549,28 +514,13 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }
 
   /*
-   * The render knobs, as one definition each.
+   * The renderer, as the dock and the `/settings` page see it.
    *
-   * They are read in two places now — the dock's tabs and the `/settings` page
-   * — and `docs/design/ux.md` puts the eventual home in the page rather than
-   * the dock. Two inline object literals would be two anti-aliasing switches
-   * that could drift apart, which is the same argument `hud/Action.tsx` makes
-   * about a label's color, applied to behavior.
+   * The one knob assembled here rather than read from its definition by the
+   * panel, because half of it is not a preference: `output` is what this
+   * component's renderer build came back with, and the reason the control
+   * exists is to show the ask beside the answer.
    */
-  const graphicsState: GraphicsState = {
-    lensFlare,
-    onLensFlare: setLensFlare,
-    aa,
-    onAa: (level: AaLevel) => {
-      // Crossing the MSAA boundary rebuilds the renderer, so say so — the
-      // stall would otherwise read as a hang.
-      setAa(level)
-      flash(`anti-aliasing ${level}`)
-    },
-    surface,
-    onSurface: setSurface,
-  }
-  const cameraState: CameraState = { lens, onLens: setLens }
   const renderState: HudRenderState = {
     preference: hdr,
     output,
@@ -599,8 +549,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     panels: devPanels({
       engine,
       render: renderState,
-      graphics: graphicsState,
-      camera: cameraState,
       connection,
       onCheckConnection: monitor.refresh,
       commands,
@@ -835,12 +783,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                 what={`the ${mode} mode`}
                 className="pointer-events-auto absolute inset-0"
               >
-                <ModeRoutes
-                  engine={engine}
-                  camera={cameraState}
-                  dev={dev}
-                  onNotice={flash}
-                />
+                <ModeRoutes engine={engine} dev={dev} onNotice={flash} />
               </ErrorBoundary>
             </div>
           )}
@@ -916,11 +859,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                 what="the page overlay"
                 className="pointer-events-auto absolute inset-0"
               >
-                <OverlayRoutes
-                  graphics={graphicsState}
-                  camera={cameraState}
-                  render={renderState}
-                />
+                <OverlayRoutes render={renderState} onNotice={flash} />
               </ErrorBoundary>
             </div>
           )}

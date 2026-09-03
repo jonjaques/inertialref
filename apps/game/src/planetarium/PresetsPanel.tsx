@@ -12,6 +12,7 @@ import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { attempt, describeCause } from '../hud/notice.ts'
 import { Section } from '../hud/Section.tsx'
 import { useEngine, useShallow } from '../state/engineStore.ts'
+import { CAMERA_LENS, usePersistentState } from '../state/preferences.ts'
 import type { PlanetariumContext } from './context.ts'
 import { PHASES } from './presets.ts'
 import { PictureCard } from './PictureCard.tsx'
@@ -43,7 +44,10 @@ import { ShotThumb } from './ShotThumb.tsx'
  * finger and no keyboard, so a preset is the only way to reach a framing that
  * would otherwise take a drag, a pinch and a phase solve.
  */
-export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
+export function PresetsPanel({ engine, onNotice }: PlanetariumContext) {
+  // The lens each card's fill is converted through: the one on screen, which
+  // is the preference — a preset's fitted lens lands there too.
+  const [lens] = usePersistentState(CAMERA_LENS)
   const observatory = engine.harness.observatory
   /*
    * Two facts, not the status object.
@@ -168,7 +172,7 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
                 // press will actually be solved against, rather than through a
                 // nominal one. A card that promised a framing the button does
                 // not take is the same defect as the phase above.
-                fill={fillOf(composition, camera.lens)}
+                fill={fillOf(composition, lens)}
               />
               {/* Wrapping rather than truncating. Three columns in a 19 rem
                   panel is about seven characters a line, and `truncate` turned

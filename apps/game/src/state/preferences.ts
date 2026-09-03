@@ -686,7 +686,7 @@ export function readObsolete<T>(key: string, accept: Accept<T>): T | null {
 /* ------------------------------------------------------------------------ */
 
 /*
- * Every mounted hook, by key.
+ * Every listener, by key: the mounted hooks, and the engine's bindings.
  *
  * An import writes storage, and storage is not something React watches — so
  * without this, applying one would leave every panel on screen showing the
@@ -695,15 +695,12 @@ export function readObsolete<T>(key: string, accept: Accept<T>): T | null {
  * exactly the cost this app pays to avoid everywhere else.
  *
  * A Set per key rather than one broadcast list: two panels can hold the same
- * section's open state, and a change to `render.hdr` must not re-render the
- * catalog.
+ * section's open state, a change to `render.hdr` must not re-render the
+ * catalog, and a change to the anti-aliasing must not re-assert the lens.
  */
 const listeners = new Map<string, Set<(value: unknown) => void>>()
 
-function subscribe(
-  key: string,
-  listener: (value: unknown) => void,
-): () => void {
+function listen(key: string, listener: (value: unknown) => void): () => void {
   const held = listeners.get(key) ?? new Set()
   held.add(listener)
   listeners.set(key, held)
@@ -715,6 +712,24 @@ function subscribe(
 
 function announce(key: string, value: unknown): void {
   for (const listener of listeners.get(key) ?? []) listener(value)
+}
+
+/**
+ * Follow one preference from outside React.
+ *
+ * What `state/engineKnobs.ts` binds the frame loop's fields with. The engine
+ * reads plain fields and must not touch React to do it, and the preference is
+ * the owner — a reload restores it, an import replaces it, a panel shows it —
+ * so the binding listens here rather than living in a component. Fires on
+ * every write to the key, whether from a hook's commit, from `write` or from
+ * an import, and on nothing else: a change to a neighboring key reaches a
+ * neighboring field.
+ */
+export function subscribe<T>(
+  preference: Preference<T>,
+  listener: (value: T) => void,
+): () => void {
+  return listen(preference.key, (value) => listener(value as T))
 }
 
 /* ------------------------------------------------------------------------ */
@@ -791,7 +806,7 @@ export function usePersistentState<T>(
    */
   useEffect(
     () =>
-      subscribe(key, (next) => {
+      listen(key, (next) => {
         persisted.current = next as T
         setValue(next as T)
       }),

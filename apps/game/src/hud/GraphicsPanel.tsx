@@ -5,7 +5,13 @@ import {
   SEA_DETAILS,
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
-import type { GraphicsState, HudRenderState } from './controls.ts'
+import {
+  RENDER_AA,
+  RENDER_LENS_FLARE,
+  RENDER_SURFACE,
+  usePersistentState,
+} from '../state/preferences.ts'
+import type { HudRenderState } from './controls.ts'
 import { OptionGroup } from './OptionGroup.tsx'
 import { Section } from './Section.tsx'
 import { SurfaceRow } from './SurfaceRow.tsx'
@@ -18,8 +24,14 @@ import { SwitchRow } from './SwitchRow.tsx'
  * visual iteration needs an off switch, both to see a before/after without
  * reloading and to isolate an artifact to its source — which is exactly how
  * the lens flare's alpha-compositing bug was pinned to the flare rather than
- * the tone curve. Switches write plain engine fields; the frame loop reads
- * them, and nothing here re-renders per frame.
+ * the tone curve. Switches write the preferences that own them, and
+ * `state/engineKnobs.ts` carries each to the plain engine field the frame
+ * loop reads; nothing here re-renders per frame.
+ *
+ * The knobs are read from their definitions rather than handed down. The
+ * panel is drawn in two places — the dock and `/settings/display` — and one
+ * definition per knob is what keeps those from being two anti-aliasing
+ * switches that could drift apart.
  *
  * The HDR override moved here from the transport strip, where it was the one
  * control on a row of *verbs* that was a preference. It is a rendering setting
@@ -28,12 +40,16 @@ import { SwitchRow } from './SwitchRow.tsx'
  */
 
 export function GraphicsPanel({
-  graphics,
   render,
+  onNotice,
 }: {
-  graphics: GraphicsState
   render: HudRenderState
+  /** Say what a press just did, through the notice the shell flashes. */
+  onNotice: (message: string) => void
 }) {
+  const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
+  const [aa, setAa] = usePersistentState(RENDER_AA)
+  const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
   const mode = render.output?.mode ?? null
   /*
    * Whether `auto` guessed something other than the obvious.
@@ -55,8 +71,8 @@ export function GraphicsPanel({
           icon={Sparkles}
           label="Lens Flare"
           detail="ghosts, streak and glow when the star is in frame"
-          on={graphics.lensFlare}
-          onChange={graphics.onLensFlare}
+          on={lensFlare}
+          onChange={setLensFlare}
         />
         {/* The same two-line shape `SwitchRow` uses, for the same reason: on
             one line the explanation was the half that truncated, and what a
@@ -70,9 +86,14 @@ export function GraphicsPanel({
           </span>
           <OptionGroup
             label="Anti-aliasing"
-            value={graphics.aa}
+            value={aa}
             values={AA_LEVELS}
-            onChange={graphics.onAa}
+            onChange={(level) => {
+              // Crossing the MSAA boundary rebuilds the renderer, so say so —
+              // the stall would otherwise read as a hang.
+              setAa(level)
+              onNotice(`anti-aliasing ${level}`)
+            }}
           />
         </div>
       </Section>
@@ -87,37 +108,31 @@ export function GraphicsPanel({
         <SurfaceRow
           label="Terrain"
           detail="how many pixels a ground cell may cover before it is refined"
-          value={graphics.surface.terrain}
+          value={surface.terrain}
           values={TERRAIN_DETAILS}
-          onChange={(terrain) =>
-            graphics.onSurface({ ...graphics.surface, terrain })
-          }
+          onChange={(terrain) => setSurface({ ...surface, terrain })}
         />
         <SurfaceRow
           label="Ground detail"
           detail="the per-pixel octaves under a mesh cell; lean keeps the coarse one"
-          value={graphics.surface.ground}
+          value={surface.ground}
           values={GROUND_DETAILS}
-          onChange={(ground) =>
-            graphics.onSurface({ ...graphics.surface, ground })
-          }
+          onChange={(ground) => setSurface({ ...surface, ground })}
         />
         <SurfaceRow
           label="Sea"
           detail="full refracts the seabed; plain reflects the sky; flat has no waves"
-          value={graphics.surface.sea}
+          value={surface.sea}
           values={SEA_DETAILS}
-          onChange={(sea) => graphics.onSurface({ ...graphics.surface, sea })}
+          onChange={(sea) => setSurface({ ...surface, sea })}
         />
         <SwitchRow
           bordered
           icon={Mountain}
           label="Rocks"
           detail="the instanced scatter on the ground"
-          on={graphics.surface.rocks}
-          onChange={(rocks) =>
-            graphics.onSurface({ ...graphics.surface, rocks })
-          }
+          on={surface.rocks}
+          onChange={(rocks) => setSurface({ ...surface, rocks })}
         />
       </Section>
 

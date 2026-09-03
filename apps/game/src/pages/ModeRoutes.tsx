@@ -1,7 +1,6 @@
 import { Route, Routes, useLocation } from 'react-router'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import type { CameraState } from '../hud/controls.ts'
 import { CinemaMode } from '../cinema/CinemaMode.tsx'
 import { DocsMode } from '../docs/DocsMode.tsx'
 import { FlightMode } from '../flight/FlightMode.tsx'
@@ -30,7 +29,6 @@ import { CINEMA, DOCS, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
 
 interface ModeRouteProps {
   readonly engine: GameEngine
-  readonly camera: CameraState
   /**
    * The author's instruments, and the disclosure that reveals them.
    *
@@ -88,13 +86,7 @@ export function ModeRoutes(props: ModeRouteProps) {
       />
       <Route
         path={PLANETARIUM}
-        element={
-          <PlanetariumMode
-            engine={props.engine}
-            camera={props.camera}
-            dev={props.dev}
-          />
-        }
+        element={<PlanetariumMode engine={props.engine} dev={props.dev} />}
       />
       {/*
        * One route for the whole section, and the splat is the point: the

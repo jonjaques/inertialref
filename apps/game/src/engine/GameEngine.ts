@@ -308,17 +308,18 @@ export class GameEngine implements PresentationHost {
    * Presentation switches the dock's graphics and camera panels drive.
    *
    * Plain fields like `showShip`, and for the same reason: the frame loop
-   * reads them every frame, React persists and edits them, and neither side
-   * needs the other to re-render. The lens is applied by `CameraRig` rather
-   * than written to the camera here, because the camera belongs to R3F and is
-   * replaced whenever the canvas remounts — a value pushed at a camera object
-   * would be lost with it.
+   * reads them every frame and must not touch React to do it. Each is bound
+   * to the persisted preference that owns it by `state/engineKnobs.ts`, so
+   * neither side needs the other to re-render. The lens is applied by
+   * `CameraRig` rather than written to the camera here, because the camera
+   * belongs to R3F and is replaced whenever the canvas remounts — a value
+   * pushed at a camera object would be lost with it.
    */
   lensFlare = true
 
   /**
-   * What the surface may be turned down to, written by the shell from the
-   * persisted preference exactly as `lensFlare` is, and reachable from a
+   * What the surface may be turned down to, bound to the persisted preference
+   * by `state/engineKnobs.ts` exactly as `lensFlare` is, and reachable from a
    * driving script as `engine.surfaceQuality = {...}`. The streamer reads
    * the refinement threshold off it every step; the scene components read
    * the rest every frame and write uniforms only when a value moved.
@@ -328,9 +329,10 @@ export class GameEngine implements PresentationHost {
   /**
    * The player's own lens — what the flight camera is looking through.
    *
-   * Written by the shell from the persisted preference, exactly as `lensFlare`
-   * is. It is not `lens`: a script's lens outranks it, and the resolution of
-   * that order is the getter below rather than a field anyone can overwrite.
+   * Bound to the persisted preference by `state/engineKnobs.ts`, exactly as
+   * `lensFlare` is. It is not `lens`: a script's lens outranks it, and the
+   * resolution of that order is the getter below rather than a field anyone
+   * can overwrite.
    *
    * **The setter declines a lens it cannot use and keeps the last good one**,
    * which is the guard the framing solver used to make on the angle it was
@@ -372,13 +374,10 @@ export class GameEngine implements PresentationHost {
   /**
    * Where a lens the engine did not choose goes.
    *
-   * Installed by the shell, because the shell *owns* the lens: `camera.lens` is
-   * a persisted preference and an effect mirrors it onto `flightLens` whenever
-   * any render preference changes. A verb that wrote the field directly would
-   * therefore hold the picture only until the next unrelated toggle — press
-   * The Rings, change the anti-aliasing, and Saturn goes from 0.660 of the
-   * frame height to 0.812 with the A ring's outer edge off both sides, which is
-   * exactly what that picture's 80° exists to prevent.
+   * Installed by `state/engineKnobs.ts`, because the persisted preference
+   * *owns* the lens: it is what a reload restores and what the panel's sliders
+   * show, so a lens a verb fitted has to reach it or the picture on screen and
+   * the picture the panel describes part company at the next slider move.
    *
    * Null headlessly, where there is no preference and no panel, and the field
    * is the whole of the truth.
@@ -390,22 +389,24 @@ export class GameEngine implements PresentationHost {
    *
    * The field first, because it is what `framingLens()` answers *this instant*
    * and `ir.preset` composes on the very next line: a `fill` standoff is solved
-   * against the lens, so a fit that only queued a React state update would
-   * compose against the lens from a moment ago. Measured: `the-rings` landed at
-   * 2.735 radii instead of 2.249, which is the 65° answer wearing an 80° label.
+   * against the lens, so a fit that only queued the owner's write would compose
+   * against the lens from a moment ago. Measured: `the-rings` landed at 2.735
+   * radii instead of 2.249, which is the 65° answer wearing an 80° label.
    *
-   * Then the shell's setter, because the field alone does not survive. The
-   * preference is the owner and an effect re-asserts it onto this field on
-   * every render-preference change, so a lens written here and nowhere else
-   * holds its picture until the next unrelated toggle — press The Rings, change
-   * the anti-aliasing, and Saturn goes from 0.660 of the frame height to 0.812
-   * with the A ring's outer edge off both sides.
+   * Then the owner, so the preference the panel shows and a reload restores is
+   * the lens on screen. The binding carries it back to this field, which is the
+   * same value again.
+   *
+   * Declined whole, not half: a lens the field's setter would refuse must not
+   * reach the owner either, or the preference holds a NaN the next reload
+   * rejects while the picture keeps the last good one.
    *
    * Not a second producer: `engine.lens` still resolves cutscene-then-flight,
    * and this writes the one flight lens a panel's slider also writes.
    */
   requestLens(lens: Lens): void {
-    this.flightLens = lens
+    if (!isUsableLens(lens)) return
+    this.#flightLens = lens
     this.onLensRequest?.(lens)
   }
 

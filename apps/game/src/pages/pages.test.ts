@@ -2,7 +2,6 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { type Location, MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
-import { LENS_PRESETS } from '@inertialref/rendering'
 import {
   ABOUT,
   AUTH_CALLBACK,
@@ -19,7 +18,6 @@ import {
   SIGN_UP,
 } from './paths.ts'
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
-import { DEFAULT_SURFACE_QUALITY } from '../render/quality.ts'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
 
 /*
@@ -41,22 +39,19 @@ import { OverlayRoutes } from './OverlayRoutes.tsx'
  * (`cinema/cinema.test.ts`).
  */
 
-/** The props a dialog receives, none of which it is asked to change here. */
+/**
+ * The props a dialog receives, none of which it is asked to change here. The
+ * graphics and camera knobs are not among them: the panels read those from
+ * their definitions, and the registry's in-memory storage answers with the
+ * defaults.
+ */
 const state = {
-  graphics: {
-    lensFlare: true,
-    onLensFlare: () => {},
-    aa: '2x' as const,
-    onAa: () => {},
-    surface: DEFAULT_SURFACE_QUALITY,
-    onSurface: () => {},
-  },
-  camera: { lens: LENS_PRESETS.flight, onLens: () => {} },
   render: {
     preference: 'auto' as const,
     output: null,
     onPreference: () => {},
   },
+  onNotice: () => {},
 }
 
 /*

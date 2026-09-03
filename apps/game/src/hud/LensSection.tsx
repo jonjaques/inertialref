@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { effectiveFocalLength } from '@inertialref/rendering'
 import { DEFAULT_FOV_DEG, DEFAULT_LENS } from '../engine/GameEngine.ts'
+import { CAMERA_LENS, usePersistentState } from '../state/preferences.ts'
 import { Action } from './Action.tsx'
 import { type CameraState, LENS_CHANNELS } from './controls.ts'
 import { LensSlider } from './LensSlider.tsx'
@@ -12,21 +13,20 @@ import { Section } from './Section.tsx'
  * One component, drawn in two places — the planetarium's Camera panel and
  * `/settings/camera` — because the lens is a persisted preference and two
  * copies of a control for one preference is how a build ends up with two
- * sliders that disagree. The same argument `hud/controls.ts` makes about the
+ * sliders that disagree. The same argument `GraphicsPanel` makes about the
  * graphics knobs, applied to the instrument they are knobs on.
  *
  * A lens rather than an angle, and the four channels are the argument: an angle
  * has no aperture, no focus and no exposure, and `docs/design/art.md` commits to
  * all three. 18.84 mm on a 24 mm gauge is the flying default and is also why a
  * planet filling the frame from close up wears a magnified cap of itself. The
- * sliders write `engine.flightLens`; `CameraRig` applies it, so the value
- * survives the canvas remounting under an HDR change.
+ * sliders write the `camera.lens` preference; `state/engineKnobs.ts` carries it
+ * to `engine.flightLens` and `CameraRig` applies it, so the value survives the
+ * canvas remounting under an HDR change.
  */
 export function LensSection({
-  camera,
   children,
 }: {
-  camera: CameraState
   /**
    * A fifth row, in the same three columns.
    *
@@ -37,6 +37,8 @@ export function LensSection({
    */
   children?: ReactNode
 }) {
+  const [lens, setLens] = usePersistentState(CAMERA_LENS)
+  const camera: CameraState = { lens, onLens: setLens }
   return (
     <Section
       id="camera.lens"

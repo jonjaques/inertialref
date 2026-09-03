@@ -36,7 +36,6 @@ import { useSurveySites } from './useSurveySites.ts'
  */
 export function CameraPanel({
   engine,
-  camera,
   target,
   dolly,
   frameSubject,
@@ -267,7 +266,7 @@ export function CameraPanel({
         </Section>
       )}
 
-      <LensSection camera={camera}>
+      <LensSection>
         {/*
          * Glare is the fifth channel, in the same two lines as the four above it.
          *
@@ -304,7 +303,7 @@ export function CameraPanel({
         </div>
       </LensSection>
 
-      <OpticsSection camera={camera} />
+      <OpticsSection />
     </div>
   )
 }

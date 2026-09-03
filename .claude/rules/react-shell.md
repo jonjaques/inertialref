@@ -82,7 +82,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
 - **One producer of the lens, and the field of view is derived from it.** `engine.lens`
   resolves the same order — a script's lens, then the flight one — and every consumer
   reads it. Focal length, gauge and zoom are canonical; the angle is arithmetic from
-  them. A panel writes `engine.flightLens`, never a `fov`, and never `camera.fov`:
+  them. A panel writes the `camera.lens` preference and `state/engineKnobs.ts` carries it
+  to `engine.flightLens` — never a `fov`, and never `camera.fov`:
   `CameraRig` is the one writer of that, `<Canvas camera>` is a constructor argument, and
   a consumer that cannot see the lens is a bug rather than a case to have a default for.
   The observatory's framing solver reads `framingLens()` — the flight lens alone —

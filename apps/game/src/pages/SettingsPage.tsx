@@ -8,11 +8,7 @@ import {
 } from 'lucide-react'
 import { LensSection } from '../hud/LensSection.tsx'
 import { OpticsSection } from '../hud/OpticsSection.tsx'
-import type {
-  CameraState,
-  GraphicsState,
-  HudRenderState,
-} from '../hud/controls.ts'
+import type { HudRenderState } from '../hud/controls.ts'
 import { GraphicsPanel } from '../hud/GraphicsPanel.tsx'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { ControlsSection } from './ControlsSection.tsx'
@@ -58,13 +54,11 @@ type SectionId = (typeof SECTIONS)[number]['id']
 const DEFAULT_SECTION: SectionId = 'display'
 
 export function SettingsPage({
-  graphics,
-  camera,
   render,
+  onNotice,
 }: {
-  graphics: GraphicsState
-  camera: CameraState
   render: HudRenderState
+  onNotice: (message: string) => void
 }) {
   const { section } = useParams<{ section?: string }>()
   /*
@@ -108,7 +102,7 @@ export function SettingsPage({
       </nav>
 
       {active === 'display' && (
-        <GraphicsPanel graphics={graphics} render={render} />
+        <GraphicsPanel render={render} onNotice={onNotice} />
       )}
       {active === 'camera' && (
         <>
@@ -118,8 +112,8 @@ export function SettingsPage({
                 disagree. What is absent here is the aim and the pose: those are
                 about a camera that is running, and this dialog opens over the
                 menu as readily as over a mode. */}
-          <LensSection camera={camera} />
-          <OpticsSection camera={camera} />
+          <LensSection />
+          <OpticsSection />
         </>
       )}
       {active === 'controls' && <ControlsSection />}
