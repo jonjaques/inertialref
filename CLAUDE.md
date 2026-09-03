@@ -83,20 +83,27 @@ Most of `.claude/` runs without being asked.
   does **not** fire for subagents: an agent working in a worktree must run
   `pnpm install --frozen-lockfile --prefer-offline` itself, first.
 
-| Skill          | For                                                     |
-| -------------- | ------------------------------------------------------- |
-| `/drive`       | Driving the game: harness, headless runner, CDP driver  |
-| `/ship`        | Rebase → check → audit → verify → PR, ready. You invoke |
-| `/parallel`    | Fanning work across worktrees. Never auto-invoked       |
-| `/adr`         | Writing an ADR in house style                           |
-| `/context-log` | Appending to `CONTEXT.md`                               |
+| Skill          | For                                                    |
+| -------------- | ------------------------------------------------------ |
+| `/drive`       | Driving the game: harness, headless runner, CDP driver |
+| `/ship`        | Rebase → check → verify → PR, ready. You invoke        |
+| `/parallel`    | Fanning work across worktrees. Never auto-invoked      |
+| `/adr`         | Writing an ADR in house style                          |
+| `/context-log` | Appending to `CONTEXT.md`                              |
 
-| Agent                  | For                                               |
-| ---------------------- | ------------------------------------------------- |
-| `invariant-auditor`    | Auditing a diff against the invariants. Read-only |
-| `property-tester`      | `fast-check` properties for anything mathematical |
-| `worktree-implementer` | One isolated change, in its own worktree          |
-| `docs-curator`         | Checking that the docs still describe the code    |
+| Agent                  | For                                                           |
+| ---------------------- | ------------------------------------------------------------- |
+| `invariant-auditor`    | Auditing a diff against the invariants. Read-only. You invoke |
+| `property-tester`      | `fast-check` properties for anything mathematical             |
+| `worktree-implementer` | One isolated change, in its own worktree                      |
+| `docs-curator`         | Checking that the docs still describe the code. You invoke    |
+
+**`invariant-auditor` and `docs-curator` are not launched on your behalf.**
+Neither is cheap — the pair over one branch runs to most of half a million
+subagent tokens and several minutes — and both read a diff the gate, the review
+and the author have already been over. `/ship` names the one it would have
+triggered and opens the PR without it; ask for either by name when the change
+is worth it, and its findings are edited into the PR afterwards.
 
 **Cloud sessions need one manual step.** Cloud images ship Node 20/21/22;
 this repository needs Node 26 for type stripping. Paste

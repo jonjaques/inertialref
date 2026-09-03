@@ -18,7 +18,7 @@ and clears at the next user message. If the user says something mid-flow and a p
 prompts, that is the harness, not a change of mind — approve-by-invocation still stands.
 
 **The PR opens ready for review, not as a draft.** Everything that could change the
-diff therefore happens _before_ it opens: the rebase, the gate, the audits, the
+diff therefore happens _before_ it opens: the rebase, the gate, the
 screenshots. Ready means the work is finished and the evidence is attached, which is
 exactly what makes it worth a reviewer's time.
 
@@ -45,7 +45,7 @@ git fetch origin
 git rebase origin/main
 ```
 
-Rebasing **first** rather than last is the point: `pnpm check`, the audits and the
+Rebasing **first** rather than last is the point: `pnpm check` and the
 screenshots below are only evidence about the commit that will actually merge. Run them
 against a stale base and they describe a tree that will never exist.
 
@@ -61,14 +61,14 @@ belong here, and `git push -f` is denied outright.
 something you do not already know. A check whose answer is already in front of you is
 not diligence; it is twenty minutes and a full build spent confirming a paragraph.
 
-| The diff is                                                                                 | Run                                                                                        |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Prose only — `docs/**`, `*.md`, `.claude/**`, `.cursor/**`                                  | `pnpm format:check`. Nothing else                                                          |
-| Prose that states a number, a command or an API                                             | ...plus the one command that proves the claim, and `docs-curator` if it is a behavior page |
-| Config and tooling — `.github/**`, `package.json`, a tsconfig, a linter or formatter config | `pnpm check`. No browser, no self-test                                                     |
-| Any `.ts` / `.tsx` under `packages/` or `apps/`                                             | The whole of step 3                                                                        |
-| ...and it touches `apps/game/src/render/` or a shader                                       | ...and `pnpm test:gpu`, which `pnpm check` and CI leave out                                |
-| ...and it touches rendering, the HUD, the dock or a cutscene                                | ...and step 4, with a picture                                                              |
+| The diff is                                                                                 | Run                                                         |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Prose only — `docs/**`, `*.md`, `.claude/**`, `.cursor/**`                                  | `pnpm format:check`. Nothing else                           |
+| Prose that states a number, a command or an API                                             | ...plus the one command that proves the claim               |
+| Config and tooling — `.github/**`, `package.json`, a tsconfig, a linter or formatter config | `pnpm check`. No browser, no self-test                      |
+| Any `.ts` / `.tsx` under `packages/` or `apps/`                                             | The whole of step 3                                         |
+| ...and it touches `apps/game/src/render/` or a shader                                       | ...and `pnpm test:gpu`, which `pnpm check` and CI leave out |
+| ...and it touches rendering, the HUD, the dock or a cutscene                                | ...and step 4, with a picture                               |
 
 The rows are about **evidence, not effort**. A documentation change is verified by
 reading it, and it is being read as it is written — the browser cannot say anything
@@ -85,11 +85,7 @@ Say which rows applied and which you skipped. "Docs only, so format check and no
 else" is a complete verification report for a docs PR, and a better one than a green
 build that proved nothing about the words.
 
-## 3. Run everything slow at once
-
-The gate and the read-only audits do not depend on each other, and the gate takes
-minutes. Launch the audits in a **single message** so they run concurrently, then run
-the gate while they work.
+## 3. Run the gate
 
 ```bash
 pnpm check          # graph, brand, presets, format:check, lint, typecheck, test, build
@@ -99,14 +95,17 @@ pnpm sim --self-test
 **Green, or stop and say what is red.** `pnpm check` is the same command CI runs, by
 construction, so a green local run means the only way CI fails is the environment.
 
-Both of these subagents are read-only and neither is optional when its trigger fires:
+**Do not launch `invariant-auditor` or `docs-curator` from here.** They are the user's
+to invoke, and shipping does not wait on them. Two of them over one branch cost most of
+half a million subagent tokens and several minutes of wall clock, on a diff that the
+gate, the review and the author have all already read — which is a price worth paying
+when somebody chose to pay it, and not otherwise.
 
-- **`invariant-auditor`** when the change touches more than one package, or any of the
-  rules in `AGENTS.md`. Nothing mechanical checks those; this is the only thing that
-  does. What it confirms goes into the PR's **Invariants** section.
-- **`docs-curator`** when the change altered behavior a page describes. A doc that
-  describes the previous version is the failure mode the whole `docs/` split exists to
-  prevent, and it is invisible in a diff.
+Say in one line which of them the diff would have triggered, so the choice is in front
+of the user rather than implied: `invariant-auditor` for a change touching more than one
+package or any rule in `AGENTS.md`, `docs-curator` for one that altered behavior a page
+describes. Then carry on and open the PR. If the user asks for either, its findings go
+into the PR's **Invariants** section and the body is edited after the fact.
 
 ## 4. Verify what CI cannot — in a real browser
 
@@ -173,7 +172,7 @@ git push -u origin HEAD                      # --force-with-lease if step 1 rewr
 ```
 
 The second rebase is cheap and catches the case the first cannot: `main` moving while
-the gate and the audits were running. If it replays anything at all, `pnpm check` again
+the gate was running. If it replays anything at all, `pnpm check` again
 before pushing — a clean replay is not the same as a passing one.
 
 ## 7. Open it ready
