@@ -438,7 +438,8 @@ export class GameEngine {
   /**
    * How much bigger the drawing buffer is than the display, per axis.
    *
-   * 2 at 4× AA, 1 otherwise, written by the shell beside `lensFlare`.
+   * 2 at 4× AA, 1 otherwise, bound to the anti-aliasing preference by
+   * `state/engineKnobs.ts` beside `lensFlare`.
    * Supersampling raises the sample count, not the detail a viewer can
    * resolve — so feeding the raw buffer height into the terrain predicate asks
    * for 6.5× the patches to draw geometry the resolve filter averages away.

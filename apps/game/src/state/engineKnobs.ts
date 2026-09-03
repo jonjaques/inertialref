@@ -89,11 +89,12 @@ export function bindEngineKnobs(engine: EngineKnobs): () => void {
    * boundary. The field's guard (`isUsableLens`) is wider than the
    * preference's (`isLens`, the sliders' band): a capture script may fit a 5°
    * lens the sliders cannot reach, and the field keeps it. `write` announces
-   * what the preference *resolves* to, so a lens the owner refuses would come
-   * back through the binding above as the default — the field reverted under
-   * the script for wanting an angle the panel does not offer. So the owner is
-   * asked only what it accepts; the field holds the rest, live, until the
-   * slider next moves, which is a lens write and may replace it.
+   * the *resolved* value for anything the preference refuses, so a lens the
+   * owner refuses would come back through the binding above as the default —
+   * the field reverted under the script for wanting an angle the panel does
+   * not offer. So the owner is asked only what it accepts; the field holds the
+   * rest, live, until the slider next moves, which is a lens write and may
+   * replace it.
    */
   engine.onLensRequest = (lens) => {
     if (CAMERA_LENS.accept(lens)) write(CAMERA_LENS, lens)

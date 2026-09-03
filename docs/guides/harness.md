@@ -390,12 +390,15 @@ outrunning both budgets at once. `range` is how far rocks are drawn this frame �
 like everything else here.
 
 **Every frame-rate figure is a function of the surface levers as well, so
-state them.** `engine.surfaceQuality` is the persisted record the graphics
-panel edits — the refinement threshold, the ground's octaves, the sea's
-refraction and waves, the rocks — and a driving script can set it between two
-`--cast`s to measure one term: `render/quality.ts` names what each step
-spends. The materials compare before they write, so flipping a lever costs
-the next frame nothing but the change.
+state them.** `engine.surfaceQuality` is the field the frame loop reads — the
+refinement threshold, the ground's octaves, the sea's refraction and waves,
+the rocks — and a driving script can set it between two `--cast`s to measure
+one term: `render/quality.ts` names what each step spends. The materials
+compare before they write, so flipping a lever costs the next frame nothing
+but the change. The record that outlives the session is the `render.surface`
+preference, which the graphics panel edits and `state/engineKnobs.ts` carries
+to the field, so a script's write holds until that key next moves and does not
+survive a reload — which is what you want of a measurement.
 
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end

@@ -6736,6 +6736,18 @@ case in Node, which the effect's dependency list never could.
 while the callback still forwarded it, so the preference could hold a NaN the
 next reload rejects while the picture kept the last good one.
 
+**A store that refuses a write reverts the value it was asked to keep.** The
+same Saturn defect, from a second cause, found after the binding fix landed.
+`write` announced `resolve()` unconditionally, and `resolve` reads the
+preference back — so where `setItem` throws, which is a private window,
+blocked site data or a full quota, the announce carried the _old_ value one
+line after the caller set the new one. Harmless while the sink was React
+state; load-bearing the moment `camera.lens` became the road from `ir.preset`
+to `engine.flightLens`. `writeRaw` now says whether the store took the write,
+and `resolve()` stands where it did and where the preference refuses the
+value — which is what makes an import of a broken file land as the defaults
+on screen rather than as nothing.
+
 **The store's write half is private, and the guard can fail.**
 `expectTypeOf(world.entities).not.toHaveProperty('update')` was proven by
 inverting it and watching `tsc` fail on that line — the check that a
