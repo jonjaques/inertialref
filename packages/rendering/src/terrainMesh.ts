@@ -110,7 +110,7 @@ export interface RenderPatch {
   /** The normal it shades with there — the parent's, over the parent's cells. */
   readonly morphNormals: Float32Array
   /**
-   * Surface cover per vertex, four bytes, as generated.
+   * Surface cover per vertex, `COVER_CHANNELS` bytes, as generated.
    *
    * The one buffer here that is `PatchInput`'s own array rather than a fresh
    * one — the heightfield's, which the caller may still be holding in a field

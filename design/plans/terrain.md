@@ -57,7 +57,7 @@ record ([ADR-0005](../../docs/adr/0005-procedural-seeds.md) § versioning).
 
 **The orbital bake carries no relief.** The sphere of a generated body wears
 the ground's own reflectance and sea mask now ([ADR-0026](../../docs/adr/0026-the-liquid.md)),
-and the gate no longer switches between a tint and a geology. What it does
+and the gate switches between two pictures of the same geology. What it does
 not wear is a normal: the disk's slope path reads the archive's tangent-space
 map, and a baked one — the heightfield's gradient in the sphere's own
 east-north frame, at the same six faces — is the half of the plan's bake

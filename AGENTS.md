@@ -339,9 +339,10 @@ Violating one of these is a rewrite later, not a refactor.
   same with the sea clamp left off — the seabed — and is what the mesh is
   made from where the sea is a sheet drawn over it, and only there: a mapped
   body has no sheet, its photograph is its sea, and its mesh keeps the clamp,
-  which the heightfield request says with `seabed`. The drawn fields
-  differ from the canonical one by at most `drawnDivergence`, which is
-  1.25 m. Physics reading the drawn one puts a
+  which the heightfield request says with `seabed`. `drawnElevation` and
+  `drawnSurfaceRadius` differ from the canonical field by at most
+  `drawnDivergence`, which is 1.25 m; `drawnGroundElevation` is below it by
+  the depth of the sea. Physics reading the drawn one puts a
   landing behind a term the renderer is free to change; a mesh reading the
   canonical one draws a plane at two meters, because the tolerance a patch is
   refined against **is** the amplitude floor the canonical field stops at, so
@@ -375,7 +376,8 @@ error`, with the real message on a channel the page console does not carry
   `materials.gpu.test.ts` holds each stand-in and a real map to one program.
 - **Never take a fine lattice coordinate from an absolute float32 direction,
   and never take a lattice decision in a float.** The GPU tile producer is a
-  port of `drawnElevation`, held to a measured bound; two things make that
+  port of `drawnElevation` — of `drawnGroundElevation` where the request says
+  `seabed` — held to a measured bound; two things make that
   bound small and both are easy to undo. A float32 unit vector resolves
   6 × 10⁻⁸ of a radian and the tail's one-meter crater on Luna subtends
   3 × 10⁻⁷, so `direction · cells` from an absolute direction quantizes every

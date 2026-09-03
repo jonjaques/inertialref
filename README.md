@@ -189,9 +189,9 @@ pnpm sim --help                # all flags
   the whole disk, seamless from orbit to standing height, generated on the GPU
   by a compute kernel held to the CPU's canonical field — `pnpm test:gpu` on a
   physical adapter is what proves that bound; the twelve checks prove the pool —
-  with the worker pool as fallback, and shaded from the body's own geology: six
-  deposits laid down in order
-  over an ocean, crater rays, and the archive's published photograph on the
+  with the worker pool as fallback, and shaded from the body's own geology: seven
+  deposits laid down in order, a sea drawn as a refracting sheet over its own
+  seabed, crater rays, and the archive's published photograph on the
   bodies that have one. It refines to cells of a third of a meter, with boulders
   addressed as `o:` objects lying on it — and the ground the ship lands on and
   the ground you can see are two functions 1.25 m apart, measured and written
@@ -224,7 +224,7 @@ PASS  6. Frame transitions — entered b:g:milky-way/s:SOL/b:0 after traveling 8
 PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic center
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
-PASS 10. Worker task — 4761 elevations and 16900 cover bytes generated in a worker, identical to local generation
+PASS 10. Worker task — 4761 elevations and 33800 cover bytes generated in a worker, identical to local generation
 PASS 11. Save round trip — 998 bytes restored to an identical state hash
 PASS 12. Frame-rate independence — identical state hash ec3ff6d1 at tick 513
 ```
@@ -384,7 +384,7 @@ The markdown in this repository is the source; the site has no copy of its own.
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Twenty-five decisions that are expensive to reverse                      |
+| [ADRs](docs/adr/README.md)                        | Twenty-six decisions that are expensive to reverse                       |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |
@@ -413,9 +413,10 @@ Stated plainly, because discovering these by surprise is worse than reading them
   seamless, measured to the ground rather than the datum — and it refines
   craters, plates, volcanism and ice from each body's own facts and shades them
   from a palette built out of the same facts. Above the eight-pixel gate a body
-  is drawn as its archive sphere, and a _generated_ world's sphere is a flat
-  tint, so its maria and ray systems stop at the switch until the albedo bake
-  exists; a mapped body has no such gap, because its ground wears the same
+  is drawn as its archive sphere, and a _generated_ world's sphere wears six
+  baked faces of its own ground's reflectance and sea mask, so its maria and
+  lakes survive the switch; what does not is relief, which the sphere shades
+  without until a normal bake exists. A mapped body's ground wears the same
   photograph its sphere does. Generating a bordered 65×65 patch costs 22 to 50 ms
   across the zoo — 22 on a world young enough to have no crater population, 50 on
   a battered icy one — against a documented ≤ 8 ms budget, and a whole-disk

@@ -6586,9 +6586,9 @@ generated world can go before the sphere behind it learns what it looks like.
 [ADR-0026](docs/adr/0026-the-liquid.md) is the record; what is worth
 remembering from doing it:
 
-- **A sea was drawn wherever the generator drew one, and twenty of the
-  thirty-nine within twenty light years were on ground between 400 and
-  1,200 K.** `makeSurface` still takes the draw and now reads it against the
+- **A sea was drawn wherever the generator drew one, and thirty of the
+  fifty-four within twenty light years were on ground between 400 and
+  1,200 K.** Fourteen remain. `makeSurface` still takes the draw and now reads it against the
   ground temperature through `liquidKind`; `SYSTEM_ALGORITHM` stays where it
   is because the `rng.bool` is still taken. Proxima Centauri II — the plate
   world every tectonic test named — sits at 491 K, lost its sea, and with the

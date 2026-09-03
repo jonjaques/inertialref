@@ -58,7 +58,7 @@ export interface ScatterBatch {
   readonly count: number
   /** Column-major 4×4 per instance, in the field's anchor-relative axes. */
   readonly matrices: Float32Array
-  /** Four bytes of surface cover per instance. See `cover.ts`. */
+  /** `COVER_CHANNELS` bytes of surface cover per instance. See `cover.ts`. */
   readonly cover: Uint8Array
 }
 
@@ -530,7 +530,7 @@ function writeInstance(
  *
  * A rock is drawn by the *same material* as the ground it lies on — same
  * palette, same photometry, same aerial veil, same published map where there is
- * one — so what it needs is the four bytes that material reads, and a block from
+ * one — so what it needs is the cover record that material reads, and a block from
  * a fresh crater says so by being `bright`. `tone` is signed, so a basalt block
  * on a highland plain lands in `dark` instead.
  */

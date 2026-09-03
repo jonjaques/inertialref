@@ -1040,3 +1040,94 @@ still does not reach `DESIGN.md`'s older prose or `.claude/rules/`.
   an incoming edge, and both count words moved to twenty-four.
 - `lint`, `typecheck`, `format:check`, `brand:check`, `presets:check`, `docs:build`,
   `fta:check` all green; `knip` reports the 5 unused files the report claims.
+
+## An invariant amended to name a third field, with the old bound left covering it
+
+`feat/the-liquid-worlds` is the cleanest instance yet of a rule going wrong while
+its mirror stays in step. The canonical/drawn bullet gained `drawnGroundElevation`
+(the seabed, sea clamp off) in `AGENTS.md:334`, `.claude/rules/determinism.md:42`
+and `.claude/rules/rendering.md:118` — all three swept, which is the discipline
+working — and the sentence that follows in all three still reads "**The drawn
+fields** differ from the canonical one by at most `drawnDivergence`, which is
+1.25 m." Measured over 2,000 directions: `|drawnGroundElevation − groundElevation|`
+is 4,913 m on Earth and 9,841 m on 85 Pegasi IV, because the canonical field is
+clamped up to the sea datum and the seabed is not. `drawnElevation` still holds
+the bound exactly (46 wet worlds × 600 directions, `gap − drawnDivergence` = 0.0000).
+**The check when a bullet gains a field: re-read every universally-quantified
+sentence in the rest of the bullet and ask whether the new field satisfies it.**
+
+## The `pack`-vs-reader asymmetry: `Math.max(x, 1)` on one side only
+
+`cover.ts`'s `biotaCover` uses `Math.max(grammar.reliefLimit, 1)` as its budget;
+the TSL port in `render/terrainKernel.ts` uses `scalar(SCALAR.BUDGET)`, which is
+`surface.maxElevation` = `grammar.reliefLimit` with no floor. Unreachable in
+practice (biota needs air, which needs kilometers of relief) but it is the shape
+to look for in any hand port: a clamp, a floor or an `?? default` applied on one
+side of the CPU/GPU pair.
+
+## The eight-byte cover record: the patch-memory figure is now wrong in seven places
+
+Third iteration of the same drift (220 KB → 237 KB → now stale again). Cover went
+4 → 8 bytes/vertex in two attributes, so a 65×65 patch is 203 KB geometry +
+67.6 KB cover ≈ **271 KB**, and 1,280 of them ≈ **347 MB**. Still reading 237 KB /
+303 MB / "four bytes": `packages/rendering/src/terrainSelect.ts:150-154`,
+`terrainMesh.ts:113` (line 52 in the _same file_ was updated), `docs/roadmap.md:197`
+(the diff reflowed the row's whitespace and left the numbers),
+`docs/concepts/streaming.md:443`, `docs/concepts/rendering.md:318`,
+`docs/concepts/determinism.md:137` (a Mermaid node), `docs/design/content.md:168`,
+`apps/game/src/engine/scatterField.ts:533`, `docs/adr/0021-the-ground.md:107`.
+Four of those files were in the diff. **`rg '237 KB|four bytes|four-byte'` is the
+whole check.**
+
+## Sea-census figures in an ADR: run both revisions, the counts were 39/20 and are 54/30
+
+ADR-0026 says "Twenty of the thirty-nine seas within twenty light years sat on
+ground between 400 and 1,200 K." Measured with the shipped default seed
+(`'inertialref'`, `session.ts:165`) and `data/catalog/stars-150ly.irsc`, over the
+85 stars inside 20 ly: **54** seas on `origin/main`, **30** of them on ground
+400–1,200 K, **14** left on HEAD. **Trap that cost ten minutes: `star.position` is
+a `UniverseVector`, so `Math.hypot(x,y,z)` silently matches every star in the
+catalog — use `UV.distance`.** The `git archive origin/main` + per-package
+`node_modules` symlink recipe is what makes the before/after count possible.
+
+## A grammar gate whose docstring excludes the case the `hasOcean` widener admits
+
+`grammar.ts`'s `liquid` is `airborne * max(liquidWindow(T), hasOcean ? 0.5 : 0)`,
+and its docstring says "Magma does not count: a lava sea stands and a lava channel
+is a volcanic feature, not a drainage one." A magma world that drew a sea has
+`liquidWindow = 0` and `hasOcean = true`, so it gets `liquid = 0.5` and
+`drainage ≈ 0.42–0.48` — river valleys and `wet` channels on ground at 1,871 K.
+Four bodies inside 20 ly: HIP 26013 b, HIP 65469 b, Gliese 9827 b, Gliese 1252 b.
+**Any `Math.max(window, flagged ? k : 0)` widener needs its docstring's exclusions
+re-checked against the flag.**
+
+## Cheap things that came back clean on `feat/the-liquid-worlds`
+
+- `pnpm graph` clean; no `three` in `packages/*`; only `three/webgpu` + `three/tsl`
+  in `apps/game`; no `performance.` in `packages/*`; no new
+  `Math.random`/`Date.now`/`localStorage`; no `text-slate-500`; new labels sentence case.
+- Draw order preserved: `makeSurface` still takes `rng.bool(0.4)` and reads it
+  after; the appearance palette is `new Rng(deriveSeed(surface.seed,'appearance'))`,
+  its own stream. `solar/system.ts`'s hoist of `surfaceOf` above the `moons` loop is
+  draw-order-neutral because each body's `rng` is `new Rng(deriveSeed(parentSeed,
+'b:i'))` — the moons recurse with their own.
+- `cellPixels` became a _mutable_ streamer field and **is** in the selection memo,
+  folded into `optics = pixelsPerRadian/cellPixels`; `terrainSelect.ts:457` is its
+  only reader, so the quotient is complete. (This was the open risk in the earlier
+  memo-key note — closed.)
+- `terrainAttributes.ts` gives each attribute name its own
+  `InterleavedBufferAttribute` over one `InterleavedBuffer`; the warm-up dummies in
+  `WaterPatches`/`TerrainPatches` construct a fresh `BufferAttribute` per name over a
+  shared array, which the rule explicitly allows.
+- Varyings (`terrainShaded/Local/Deposit/Deposit2`, `waterLocal`, `waterDeep`) collide
+  with no attribute name; `waterDeep` vs the `waterDepth` attribute is deliberate.
+- `WaterPatches` uses `placement.scale`, which for a _patch_ placement is
+  `body.placement.compression` (`terrainStreamer.ts:888`) — not the ADR-0015 violation
+  it looks like. Check the placement's producer before filing that one.
+- Both `seabed` deciders go through `seaSheetDatum(body)`; `terrainProducer`'s cache
+  key and `surfaceKernel`'s `WeakMap` both carry the flag; worker task version 4 → 5.
+- `drawnDivergence` unchanged and still exact; the coast remap is inside `evaluate`,
+  so canonical and drawn both get it and only the tail separates them.
+- ADR index: table row, Mermaid node and two incoming edges all present — but the
+  count words are **not**: `docs/adr/README.md:3` and `README.md:387` still say
+  "Twenty-five decisions" with twenty-six in the table.

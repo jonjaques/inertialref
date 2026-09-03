@@ -147,11 +147,11 @@ export const DEFAULT_MAX_LEVEL = 12
  * worst of the twenty-four descents wants 1,077 and would degrade by a level on
  * the ground, which is exactly where the new detail is.
  *
- * **What that buys costs 303 MB in the corner case.** A patch carries
+ * **What that buys costs 346 MB in the corner case.** A patch carries
  * positions, normals and both morph targets — 65² vertices, twelve floats
- * apiece, 203 KB — plus **two** four-byte cover attributes, the vertex's own and
- * its morph target's, which is 33.8 KB rather than the 17 one of them is. So a
- * patch is 237 KB, 1,280 of them is 5.4 M vertices and 303 MB of buffers, and
+ * apiece, 203 KB — plus **two** eight-byte cover records, the vertex's own and
+ * its morph target's, which is 67.6 KB rather than the 34 one of them is. So a
+ * patch is 270 KB, 1,280 of them is 5.4 M vertices and 346 MB of buffers, and
  * the old cap was 243 MB. The number is here so that the next person to want it
  * raised knows what they are buying, and `GEOMETRY_CACHE` is twice this, which
  * is the number that actually sizes the resident set. Packing the four vertex

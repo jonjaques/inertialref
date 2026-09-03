@@ -165,7 +165,7 @@ parameterized palette: a reflectance ratio, a roughness, a grain and a bump per
 deposit, expressed against the body's own published colour so that Mars stays
 ochre and Callisto stays grey while both get the same internal contrast. The
 lookup is split by who can answer — latitude, altitude and slope per pixel from
-the mesh, and a four-byte _cover_ per vertex for what only the generator knows:
+the mesh, and an eight-byte _cover_ per vertex for what only the generator knows:
 where the flood basalt is, where a young crater has thrown fresh material, which
 way the crust's composition varies, where the volatiles have condensed. A body
 with a published map wears it, and the invented channels switch off, because the

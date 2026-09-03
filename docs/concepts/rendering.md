@@ -315,7 +315,7 @@ still wearing its own vertex's cover when it gets there, the frame the parent
 takes over is the frame every crater ray and every mare margin jumps by one
 child cell. That is worse than a pop, because it slides continuously as the
 camera moves rather than happening once. `morphCover` is the parent's vertex's
-four bytes, and it indexes off the patch's own grid rather than the bordered
+eight bytes, and it indexes off the patch's own grid rather than the bordered
 one — the cover carries no border, because the border rows exist to be
 differenced against and nothing differences the cover.
 

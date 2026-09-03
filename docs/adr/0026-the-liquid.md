@@ -26,9 +26,9 @@ on a retina window 9.5.
 — water between 238 and 395 K, hydrocarbons around a hundred kelvin, magma
 above the basalt solidus — and `makeSurface` reads the sea draw against it:
 the draw is still taken in its place in the stream, so `SYSTEM_ALGORITHM`
-does not move, and a datum on ground outside every window is dry. Twenty of
-the thirty-nine seas within twenty light years sat on ground between 400 and
-1,200 K. The grammar gains `liquid`, `drainage` and `biota`, each gated on
+does not move, and a datum on ground outside every window is dry. Thirty of
+the fifty-four seas within twenty light years sat on ground between 400 and
+1,200 K, and fourteen remain. The grammar gains `liquid`, `drainage` and `biota`, each gated on
 air as well as temperature, because a puddle in a vacuum boils on the spot.
 
 **A valley is the zero-level strip of a warped noise.** `valleyField` is
@@ -49,7 +49,7 @@ the mesh reaches for the cost of a stateless field.
 over a band either side of it — a shelf a fifth as steep under the water and
 a plain two fifths as steep behind the beach, C¹ where the band lets go, with
 a kink at the waterline itself, which is what a beach is. The band is a tenth
-of the hypsometry share, the scale the datum is set on: 240 m on Gliese
+of the hypsometry share, the scale the datum is set on: 267 m on Gliese
 908 IV.
 
 **The cover grows to six channels in eight bytes.** `wet` marks the floored
