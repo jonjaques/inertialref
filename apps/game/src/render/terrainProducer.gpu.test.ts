@@ -1,22 +1,19 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { openSession, type Session } from '@inertialref/devtools'
-import { formatSeed } from '@inertialref/procedural'
 import { vec3 } from '@inertialref/spatial'
 import {
   type Body,
   generateHeightfield,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  type HeightfieldRequest,
   type RegionAddress,
   regionForDirection,
   regionSize,
   SOL,
   walkBodies,
 } from '@inertialref/universe'
-import type {
-  HeightfieldRequestPayload,
-  HeightfieldResponse,
-} from '@inertialref/workers'
+import type { HeightfieldResponse } from '@inertialref/workers'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createTileProducer, type TileProducer } from './terrainProducer.ts'
 
@@ -50,16 +47,9 @@ function solBody(name: string): Body {
   throw new Error(`no ${name} in Sol`)
 }
 
-function payloadFor(
-  body: Body,
-  region: RegionAddress,
-): HeightfieldRequestPayload {
+/** The request the streamer makes of a source, for one region. */
+function requestFor(region: RegionAddress): HeightfieldRequest {
   return {
-    surfaceSeed: formatSeed(body.surface.seed),
-    maxElevation: body.surface.maxElevation,
-    roughness: body.surface.roughness,
-    seaLevel: body.surface.seaLevel,
-    grammar: body.surface.grammar,
     region,
     resolution: HEIGHTFIELD_RESOLUTION,
     border: HEIGHTFIELD_BORDER,
@@ -120,13 +110,16 @@ describe('the tile producer', () => {
     const luna = solBody('Luna')
     const wanted = regions(12, 20)
     const batched = await Promise.all(
-      wanted.map((region) => producer.submit(payloadFor(luna, region)).result),
+      wanted.map(
+        (region) => producer.submit(luna.surface, requestFor(region)).result,
+      ),
     )
     const single = createTileProducer(gpu.renderer, { batch: 1 })
     try {
       for (let i = 0; i < wanted.length; i += 1) {
         const alone = await single.submit(
-          payloadFor(luna, wanted[i] as RegionAddress),
+          luna.surface,
+          requestFor(wanted[i] as RegionAddress),
         ).result
         expect(worstGap(batched[i] as HeightfieldResponse, alone)).toBe(0)
         expect((batched[i] as HeightfieldResponse).region).toEqual(wanted[i])
@@ -165,7 +158,8 @@ describe('the tile producer', () => {
     ] as const
     const results = await Promise.all(
       jobs.map(
-        ([body, region]) => producer.submit(payloadFor(body, region)).result,
+        ([body, region]) =>
+          producer.submit(body.surface, requestFor(region)).result,
       ),
     )
     jobs.forEach(([body, region], i) => {
@@ -198,7 +192,7 @@ describe('the tile producer', () => {
   it('cancels what is still queued and delivers what was already dispatched', async () => {
     const luna = solBody('Luna')
     const handles = regions(10, 40).map((region) =>
-      producer.submit(payloadFor(luna, region)),
+      producer.submit(luna.surface, requestFor(region)),
     )
     // The first batch is taken on a microtask, so at this instant nothing
     // has been dispatched; cancelling the tail leaves the head to run.
@@ -217,8 +211,8 @@ describe('the tile producer', () => {
   it('refuses a request shaped for another kernel rather than answering it wrong', async () => {
     const luna = solBody('Luna')
     const [region] = regions(8, 1) as [RegionAddress]
-    const payload = { ...payloadFor(luna, region), resolution: 33 }
-    await expect(producer.submit(payload).result).rejects.toThrow(
+    const request = { ...requestFor(region), resolution: 33 }
+    await expect(producer.submit(luna.surface, request).result).rejects.toThrow(
       /producer unavailable/,
     )
     expect(producer.available).toBe(true)
@@ -235,7 +229,9 @@ describe('the tile producer', () => {
     const wanted = regions(17, 16)
     const before = performance.now()
     await Promise.all(
-      wanted.map((region) => producer.submit(payloadFor(luna, region)).result),
+      wanted.map(
+        (region) => producer.submit(luna.surface, requestFor(region)).result,
+      ),
     )
     const gpuMs = performance.now() - before
     const cpuStart = performance.now()

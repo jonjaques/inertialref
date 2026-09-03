@@ -125,7 +125,9 @@ export const myTask = defineTask<Request, Response>({
 1. Define it beside the existing tasks and register it in the registry both
    sides import.
 2. Payload and result must be structured-cloneable — plain objects, arrays,
-   typed arrays. Seeds travel as hex strings, addresses as their text form.
+   typed arrays. Seeds travel as hex strings, addresses as their text form,
+   and a `SurfaceParameters` as a `WireSurface` through `encodeSurface` —
+   the seed converted, everything else as it is.
 3. Declare `transfers` for large buffers.
 4. Poll `context.cancelled()` at a granularity where the check costs less than
    the work.

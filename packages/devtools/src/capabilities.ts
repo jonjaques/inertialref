@@ -1,5 +1,5 @@
 import { LIGHT_YEAR } from '@inertialref/shared'
-import { formatSeed, rootSeed } from '@inertialref/procedural'
+import { rootSeed } from '@inertialref/procedural'
 import { circularSpeed } from '@inertialref/physics'
 import {
   createRenderOrigin,
@@ -30,6 +30,7 @@ import { snapshot, World } from '@inertialref/simulation'
 import { captureSave, restoreSave } from '@inertialref/persistence'
 import { placeAt } from '@inertialref/rendering'
 import {
+  encodeSurface,
   generateHeightfieldTask,
   runInline,
   type WorkerPool,
@@ -403,19 +404,12 @@ async function checkWorkerTask(
   pool: WorkerPool | null,
 ): Promise<CapabilityResult> {
   const planet = firstSolidBody(world)
-  const payload = {
-    surfaceSeed: formatSeed(planet.surface.seed),
-    maxElevation: planet.surface.maxElevation,
-    roughness: planet.surface.roughness,
-    seaLevel: planet.surface.seaLevel,
-    grammar: planet.surface.grammar,
+  const request = {
     region: { face: 1, level: 6, i: 20, j: 33 },
     resolution: HEIGHTFIELD_RESOLUTION,
   }
-  const local = generateHeightfield(planet.surface, {
-    region: payload.region,
-    resolution: HEIGHTFIELD_RESOLUTION,
-  })
+  const local = generateHeightfield(planet.surface, request)
+  const payload = { ...request, surface: encodeSurface(planet.surface) }
   const remote =
     pool === null
       ? await runInline(generateHeightfieldTask, payload)

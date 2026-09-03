@@ -2,16 +2,17 @@
 
 The second architecture review walked the three places the last month of
 commits landed — the terrain pipeline, the engine and shell, and the harness
-layer every headless test crosses — and found eighteen frictions. Five are in
+layer every headless test crosses — and found eighteen frictions. Six are in
 the tree, each carrying its reasoning in its own file:
 
-| Landed                                                       | Where                                                                                                       |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| The band stack's composition is one description              | [`packages/universe/src/bandStack.ts`](../../packages/universe/src/bandStack.ts), ADR-0023 § Consequences   |
-| A mesh that wears the ground is dressed in one place         | [`apps/game/src/render/groundWear.ts`](../../apps/game/src/render/groundWear.ts), `render/wear.ts`          |
-| The harness is built over one host                           | `Host` and `renderHost` in [`packages/devtools/src/harness.ts`](../../packages/devtools/src/harness.ts)     |
-| The preference registry owns every knob the frame loop reads | [`apps/game/src/state/engineKnobs.ts`](../../apps/game/src/state/engineKnobs.ts)                            |
-| The entity store hands out its read half                     | `EntityView` in [`packages/simulation/src/entity.ts`](../../packages/simulation/src/entity.ts), `spawnShip` |
+| Landed                                                       | Where                                                                                                           |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| The band stack's composition is one description              | [`packages/universe/src/bandStack.ts`](../../packages/universe/src/bandStack.ts), ADR-0023 § Consequences       |
+| A mesh that wears the ground is dressed in one place         | [`apps/game/src/render/groundWear.ts`](../../apps/game/src/render/groundWear.ts), `render/wear.ts`              |
+| The harness is built over one host                           | `Host` and `renderHost` in [`packages/devtools/src/harness.ts`](../../packages/devtools/src/harness.ts)         |
+| The preference registry owns every knob the frame loop reads | [`apps/game/src/state/engineKnobs.ts`](../../apps/game/src/state/engineKnobs.ts)                                |
+| The entity store hands out its read half                     | `EntityView` in [`packages/simulation/src/entity.ts`](../../packages/simulation/src/entity.ts), `spawnShip`     |
+| The heightfield request carries the surface                  | `HeightfieldSource.submit(surface, request)` and `WireSurface` in `packages/workers/src/tasks.ts`, ADR-0023 § 3 |
 
 The vocabulary is the design skill's: a **module** has an interface and an
 implementation; it is **deep** when a small interface hides a lot of behavior;
@@ -21,52 +22,13 @@ buys callers **leverage** and maintainers **locality**. The deletion test —
 does deleting the module concentrate complexity, or just move it — is what
 separates a candidate from a wrapper.
 
-This page is the remainder: four deepenings still worth making, each with the
-shape it should take, five smaller items, what the landed five deliberately
+This page is the remainder: three deepenings still worth making, each with the
+shape it should take, five smaller items, what the landed six deliberately
 left, and what is settled.
 
 ---
 
-## 1. The heightfield request carries the surface, not nine fields
-
-**Files.** `packages/workers/src/tasks.ts` (`HeightfieldRequestPayload`,
-`HeightfieldResponse`, the `Omit` that makes `SurfaceDetailFloorRequest`, and
-the two re-inflations at the task runs), `packages/universe/src/terrain.ts`
-(`HeightfieldRequest`, `Heightfield` — the same fields again),
-`apps/game/src/engine/terrainStreamer.ts` (`#detailFloor`, `#request`),
-`apps/game/src/render/orbitalBake.ts`, `packages/devtools/src/capabilities.ts`,
-`apps/game/src/render/terrainProducer.ts` (`surfaceOf`, `keyOf`).
-
-**The friction.** Four callers flatten `SurfaceParameters` into a nine-field
-payload and three producers re-inflate it. The GPU producer rebuilds a
-surface's identity from four fields plus `seabed` to key its uploads, because
-the object `surfaceKernel` memoizes on by `WeakMap` is lost at the seam — so
-it keeps a second, 64-entry cache of a thing already cached. One boolean, the
-`seabed` flag, cost eight code files and a task version.
-
-**The shape.** `HeightfieldSource.submit` takes what the caller holds:
-`{ surface, region, resolution, border, seabed }`. The GPU producer memoizes
-on the surface it is handed and `keyOf` goes. The pool adapter,
-`poolHeightfieldSource`, makes the one real conversion — the seed to a string
-for structured clone — at the wire, and the task payload keeps its wire shape
-under a bumped version, so the worker side is unchanged. The floor task takes
-the same request rather than an `Omit` of another one. `HeightfieldRequest`
-and `HeightfieldRequestPayload` become one type on the caller's side of the
-wire.
-
-**What tests hold it.** `terrainStreamer.test.ts`'s fake source receives the
-surface by identity; `terrainProducer.gpu.test.ts`'s batch ≡ singles and
-interleaved bodies are unchanged; `workers.test.ts` round-trips the wire
-payload. The figure to take is the one this page takes for every candidate:
-files touched by adding one request field, before and after.
-
-**The record it brushes.** ADR-0023 § 3 names the upload key spelling
-`seed|maxElevation|roughness|seaLevel`; the key becomes the surface's
-identity plus `seabed`, and that sentence moves with it.
-
----
-
-## 2. The flying verbs get a module with a name
+## 1. The flying verbs get a module with a name
 
 **Files.** `packages/devtools/src/harness.ts` (`orbit`, `#toStar`,
 `#trackOrbit`, `#orbitStar`, `shot`, `land`, `goTo`, `#arriveAt`,
@@ -102,7 +64,7 @@ the epoch — is answered in the module's header: every bookmark is a
 
 ---
 
-## 3. The engine's derived state keys on one generation
+## 2. The engine's derived state keys on one generation
 
 **Files.** `apps/game/src/engine/GameEngine.ts` — the starfield survey
 (`#survey`, `#starFieldWorld`, the sweep), the orbit-trace cache, and
@@ -136,7 +98,7 @@ methods of a 1,500-line class.
 
 ---
 
-## 4. Bodies: the mapping from a body to its uniforms becomes pure
+## 3. Bodies: the mapping from a body to its uniforms becomes pure
 
 **Files.** `apps/game/src/scene/Bodies.tsx` — the frame closure runs
 `:408–979`, seven concerns: visual lifecycle and eviction, tessellation tiers,
@@ -210,7 +172,7 @@ materials.
   answer a different consequence of the same event, and each is correct
   locally. A `Host.onWorldReplaced` subscription would let the director and
   the observatory register instead of check; it is a separate design, and
-  candidate 3 above is where the engine's half of it goes.
+  candidate 2 above is where the engine's half of it goes.
 - **`RENDER_HDR` and `RENDER_AA` stay in `App`.** Both are facts about the
   renderer it builds — a constructor argument and the drawing buffer's
   ratio — and the canvas key reads them. The knobs the frame loop reads are
@@ -257,5 +219,5 @@ carries the argument.
 ## Related
 
 - [ADR index](../../docs/adr/README.md) — the decisions each candidate sits under
-- [Terrain — what is left](terrain.md) · [Perf](perf.md) — the plans candidates 1 and 3 touch
-- [Harness](../../docs/guides/harness.md) — the surface candidate 2 reshapes
+- [Terrain — what is left](terrain.md) · [Perf](perf.md) — the plan candidate 2 touches, and the terrain plan beside it
+- [Harness](../../docs/guides/harness.md) — the surface candidate 1 reshapes

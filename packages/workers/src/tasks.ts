@@ -1,4 +1,4 @@
-import { parseSeed, type Seed } from '@inertialref/procedural'
+import { formatSeed, parseSeed } from '@inertialref/procedural'
 import {
   encodeUniverseVector,
   type WireUniverseVector,
@@ -14,10 +14,11 @@ import {
   generateHeightfield,
   generateSystem,
   type Heightfield,
+  type HeightfieldRequest,
   type RegionAddress,
   regionAddress,
-  type SurfaceGrammar,
   surfaceDetailFloor,
+  type SurfaceParameters,
   type SystemId,
   type SystemStub,
   walkBodies,
@@ -181,31 +182,44 @@ export const surveyRegionTask = defineTask<
   },
 })
 
-export interface HeightfieldRequestPayload {
+/**
+ * A `SurfaceParameters` in a form that survives structured clone.
+ *
+ * The seed is the one field that does not: it is four uint32 lanes and it
+ * travels as hex. Everything else is already plain data — the grammar by
+ * construction (`SurfaceParameters.grammar`), the rest numbers — and goes as
+ * it is, so a field added to the surface crosses the wire without an edit
+ * here. The grammar rides along rather than being looked up because a worker
+ * has no system, no star and no parent planet to derive it from, and shipping
+ * the *sketch* instead would be kilobytes per patch of something each worker
+ * can rebuild once and keep.
+ */
+export interface WireSurface extends Omit<SurfaceParameters, 'seed'> {
   /** Terrain seed of the body's surface, hex. */
-  readonly surfaceSeed: string
-  readonly maxElevation: number
-  readonly roughness: number
-  readonly seaLevel: number | null
-  /**
-   * Which bands this body's terrain has and how loud each is.
-   *
-   * Plain data by construction — numbers, one string and one nested record of
-   * numbers — so it crosses a structured clone unchanged. It is on the payload
-   * rather than looked up because a worker has no system, no star and no parent
-   * planet to derive it from, and shipping the *sketch* instead would be
-   * kilobytes per patch of something each worker can rebuild once and keep.
-   */
-  readonly grammar: SurfaceGrammar
-  readonly region: RegionAddress
-  readonly resolution: number
-  /** Rings of samples outside the patch. Omitted means `HEIGHTFIELD_BORDER`. */
-  readonly border?: number
-  /**
-   * The seabed rather than the clamped surface. See
-   * `HeightfieldRequest.seabed`; omitted means clamped.
-   */
-  readonly seabed?: boolean
+  readonly seed: string
+}
+
+export const encodeSurface = (surface: SurfaceParameters): WireSurface => ({
+  ...surface,
+  seed: formatSeed(surface.seed),
+})
+
+export const decodeSurface = (wire: WireSurface): SurfaceParameters => ({
+  ...wire,
+  seed: parseSeed(wire.seed),
+})
+
+/**
+ * A heightfield request on the wire: `generateHeightfield`'s own request,
+ * unchanged, beside the surface it is of.
+ *
+ * The request is the caller's type rather than a copy of its fields, so a
+ * field added to `HeightfieldRequest` reaches the worker without this file
+ * knowing. What a caller holds and what crosses the wire differ in the seed
+ * alone, and `poolHeightfieldSource` is where that conversion happens.
+ */
+export interface HeightfieldRequestPayload extends HeightfieldRequest {
+  readonly surface: WireSurface
 }
 
 export interface HeightfieldResponse {
@@ -246,30 +260,22 @@ export const generateHeightfieldTask = defineTask<
    * the request says whether the tile is the seabed. A version 4 worker's
    * cover is half the length `buildPatch` checks, which is an invariant
    * failure that names the mesh rather than the worker.
+   *
+   * 6: the surface travels as one record under `surface`, its seed as hex,
+   * rather than as four fields beside the grammar. A version 5 worker reads
+   * `surfaceSeed` off a payload that has no such field and `parseSeed`
+   * refuses `undefined` — loud, but named for a malformed seed rather than
+   * for the mismatch, which is what the version is for.
    */
-  version: 5,
+  version: 6,
   run(payload) {
-    const seed: Seed = parseSeed(payload.surfaceSeed)
-    const field: Heightfield = generateHeightfield(
-      {
-        seed,
-        maxElevation: payload.maxElevation,
-        roughness: payload.roughness,
-        seaLevel: payload.seaLevel,
-        grammar: payload.grammar,
-      },
-      {
-        region: regionAddress(
-          payload.region.face,
-          payload.region.level,
-          payload.region.i,
-          payload.region.j,
-        ),
-        resolution: payload.resolution,
-        border: payload.border,
-        seabed: payload.seabed,
-      },
-    )
+    const { surface, region, ...request } = payload
+    const field: Heightfield = generateHeightfield(decodeSurface(surface), {
+      ...request,
+      // Rebuilt rather than trusted: `regionAddress` carries the range checks
+      // the wire does not, so an address a clone mangled fails here by name.
+      region: regionAddress(region.face, region.level, region.i, region.j),
+    })
     return {
       region: field.region,
       resolution: field.resolution,
@@ -302,6 +308,13 @@ export const generateHeightfieldTask = defineTask<
  * request to the pool rather than queueing behind something that will reject
  * it. A source that is unavailable rejects with `producer unavailable`, which
  * the streamer treats like a cancellation: the producer has already said why.
+ *
+ * `submit` takes what `generateHeightfield` takes — the surface, and the
+ * request — so a caller hands over the object it holds rather than a
+ * flattening of it. That is what lets a producer memoize on the surface's
+ * identity, which is the identity `surfaceKernel` and `terrainSketch` already
+ * key on; the pool is the one source with a wire to cross, and its adapter
+ * is where the seed becomes a string.
  */
 export interface HeightfieldSource {
   /** `'pool'`, `'gpu'` — what `ir.terrain().producer` reports. */
@@ -313,29 +326,28 @@ export interface HeightfieldSource {
    * answer, and the default for a source that does not say.
    */
   readonly maxLevel?: number
-  submit(payload: HeightfieldRequestPayload): JobHandle<HeightfieldResponse>
+  submit(
+    surface: SurfaceParameters,
+    request: HeightfieldRequest,
+  ): JobHandle<HeightfieldResponse>
 }
 
 /** The pool, as a source: `generateHeightfieldTask` on a worker. */
 export const poolHeightfieldSource = (pool: WorkerPool): HeightfieldSource => ({
   kind: 'pool',
   available: true,
-  submit: (payload) => pool.submit(generateHeightfieldTask, payload),
+  submit: (surface, request) =>
+    pool.submit(generateHeightfieldTask, {
+      ...request,
+      surface: encodeSurface(surface),
+    }),
 })
 
-/**
- * The fields of a `SurfaceParameters` that cross a structured clone.
- *
- * Derived from the heightfield request rather than retyped beside it, because
- * "the two payloads describe a surface the same way" is the property that lets
- * a worker parse it once — and retyped, that property is a sentence in a
- * comment rather than something the compiler checks. Everything a *region*
- * needs is what is subtracted.
- */
-export type SurfaceDetailFloorRequest = Omit<
-  HeightfieldRequestPayload,
-  'region' | 'border'
->
+/** The surface on the wire, and the patch resolution the floor is measured at. */
+export interface SurfaceDetailFloorRequest {
+  readonly surface: WireSurface
+  readonly resolution: number
+}
 
 export const surfaceDetailFloorTask = defineTask<
   SurfaceDetailFloorRequest,
@@ -358,17 +370,15 @@ export const surfaceDetailFloorTask = defineTask<
    * which is what it already does for the heightfields themselves.
    */
   name: 'universe.surfaceDetailFloor',
-  version: 1,
+  /*
+   * 2: the surface travels under `surface` as the heightfield task's does,
+   * for the reason given at that task's version 6.
+   */
+  version: 2,
   run(payload) {
     return {
       level: surfaceDetailFloor(
-        {
-          seed: parseSeed(payload.surfaceSeed),
-          maxElevation: payload.maxElevation,
-          roughness: payload.roughness,
-          seaLevel: payload.seaLevel,
-          grammar: payload.grammar,
-        },
+        decodeSurface(payload.surface),
         payload.resolution,
       ),
     }
