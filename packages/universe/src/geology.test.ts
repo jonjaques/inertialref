@@ -527,7 +527,12 @@ describe('the crater field', () => {
         }
       }
     }
-    expect(plated?.surface.grammar.plateCount).toBeGreaterThan(1)
+    /*
+     * The floor is the measured one: Sirius II at nine plates is the most-plated
+     * generated body in the fixture. `> 1` passed on a two-plate body and proved
+     * nothing about the ranked-identity rule the tectonic bands exist to hold.
+     */
+    expect(plated?.surface.grammar.plateCount).toBeGreaterThanOrEqual(9)
     expect(find('Earth').surface.grammar.plateCount).toBeGreaterThan(1)
 
     const subjects: readonly Body[] = [

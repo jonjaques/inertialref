@@ -556,13 +556,18 @@ export function surfaceGrammar(
    * bar is about where a puddle survives long enough to run downhill. Magma
    * is the exception to the air, because a lava sea makes its own. The window
    * itself is `liquidWindow`, and `hasOcean` widens it because a sea is the
-   * one fact about the liquid the generator has actually committed to.
+   * one fact about the liquid the generator has actually committed to —
+   * unless that sea is magma, which stands and does not drain: a lava world
+   * that drew a sea is not a river world, whatever the draw says.
    */
   const airborne = smoothstep(0.12, 0.35, air)
   const liquid =
     limit > 0
       ? airborne *
-        Math.max(liquidWindow(groundTemperature), facts.hasOcean ? 0.5 : 0)
+        Math.max(
+          liquidWindow(groundTemperature),
+          facts.hasOcean && magmaWindow(groundTemperature) <= 0 ? 0.5 : 0,
+        )
       : 0
   const admitted = liquidKind(groundTemperature)
   const kind =

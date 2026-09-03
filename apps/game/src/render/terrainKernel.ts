@@ -2042,6 +2042,8 @@ export function createTerrainKernel(
           // `biotaCover`.
           const biotaAmount = scalar(SCALAR.BIOTA)
           const biota = float(0).toVar()
+          // `biotaCover` floors its budget at a meter; the port does the same.
+          const biotaBudget = max(budget, float(1))
           If(biotaAmount.greaterThan(0), () => {
             const cosZenith = max(
               float(COVER_SHAPE.zenithFloor),
@@ -2054,14 +2056,14 @@ export function createTerrainKernel(
             If(warmth.greaterThan(0), () => {
               const treeline = float(1).sub(
                 smoothstepf(
-                  budget.mul(COVER_SHAPE.treelineStart),
-                  budget.mul(COVER_SHAPE.treelineEnd),
+                  biotaBudget.mul(COVER_SHAPE.treelineStart),
+                  biotaBudget.mul(COVER_SHAPE.treelineEnd),
                   aboveDatum,
                 ),
               )
               const ashore = smoothstepf(
                 0,
-                budget.mul(COVER_SHAPE.shoreRise),
+                biotaBudget.mul(COVER_SHAPE.shoreRise),
                 aboveDatum,
               )
               const rain = noise3(
