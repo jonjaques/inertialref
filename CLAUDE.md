@@ -52,9 +52,13 @@ Most of `.claude/` runs without being asked.
   bare `rg` into an approval dialog, `Bash(rg:*)` sitting two lines above it
   notwithstanding, and it bit hardest on subagents: the dialog stops work nobody
   is watching, and the user answers it for a search they did not start. It was
-  guarding a path that does not exist — root `.env` is gitignored, and the two
-  under `apps/game/` are a GA measurement id and a committed example, which
-  `.gitignore` says in as many words. The secrets that matter are outside the
+  guarding a path that does not exist: there is no `.env` at the root, and both
+  rules were anchored there, so neither ever covered the two files that are
+  real. Those live under `apps/game/` — `.env.example`, committed as the
+  documentation of what may be set, and `.env.production`, ignored and holding
+  the GA measurement id, which `.gitignore` calls not a secret (it ships in the
+  bundle) and keeps out of the tree only so a fork does not measure into it.
+  The secrets that matter are outside the
   tree and still denied: `~/.env`, `~/.ssh/**`, the `gh` and `ctx7` credentials,
   none of them reachable from a search here. A new secret goes behind `op`, not
   behind a rule that costs a dialog on every search.

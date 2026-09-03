@@ -303,7 +303,7 @@ export function CataloguePanel({
           }
           onClick={(event) => {
             releaseFocus(event)
-            setFiltering(!filtering)
+            setFiltering((held) => !held)
           }}
           className={`flex size-7 shrink-0 items-center justify-center rounded border transition-colors ${FOCUS_RING} ${
             filtering || narrowed

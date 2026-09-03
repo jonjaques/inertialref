@@ -664,6 +664,12 @@ export function write(preference: AnyPreference, value: unknown): void {
    * back to the flight default one line after being set. The asked-for value
    * stands in when it is one the preference believes; when it is not, the
    * resolved default is still the honest answer.
+   *
+   * The stand-in is the argument as handed in, so it skips `revive` — which
+   * `resolve` applies and which exists to undo a JSON round trip the refused
+   * write never made. Identical for every caller today (`reviveLens` restores
+   * a `focus` that only `JSON.stringify` drops), and the thing to check first
+   * if a preference ever gains a reviver that is not the round trip's inverse.
    */
   const stored = writeRaw(preference.key, value)
   announce(

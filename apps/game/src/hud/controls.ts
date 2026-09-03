@@ -254,7 +254,16 @@ export const reviveLens = (lens: Lens): Lens =>
  */
 export interface CameraState {
   readonly lens: Lens
-  readonly onLens: (lens: Lens) => void
+  /**
+   * Takes the updater form, and a channel slider has to use it.
+   *
+   * A lens is seven fields and a slider changes one, so every write here is
+   * derived from the lens before it. `camera.lens` is one hook's captured
+   * value and `camera.lens` is held by up to four at once — `LensSection` in
+   * the dock *and* at `/settings/camera`, plus Optics and the presets — so the
+   * snapshot a handler closed over can be a write behind the store.
+   */
+  readonly onLens: (lens: Lens | ((held: Lens) => Lens)) => void
 }
 
 /**

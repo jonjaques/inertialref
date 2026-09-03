@@ -14,7 +14,7 @@ import {
   wearGround,
   wearSea,
 } from './groundWear.ts'
-import { GRAIN_PERIOD } from './terrain.ts'
+import { GRAIN_PERIOD, grainWrap } from './terrain.ts'
 import { WAVE_PERIOD } from './water.ts'
 import {
   groundWearOf,
@@ -70,6 +70,7 @@ function patch(seaLevel?: number) {
 }
 
 const LUNA = 1_737_400
+const EARTH = 6_371_000
 
 describe('a mesh that wears the ground', () => {
   it('carries the ritual the material relies on, from one anchor', () => {
@@ -103,15 +104,35 @@ describe('a mesh that wears the ground', () => {
     expect(wear.morphBand.toArray()).toEqual([10, 20])
   })
 
+  /*
+   * Off-axis and on no float32 boundary, which is the only fixture that can go
+   * red. A Luna region center is `(1737400, 0, -0)` — exactly representable, so
+   * `Math.fround` is the identity, the altitude beside it is exactly zero, and
+   * `grainWrap` returns one number either side of the rounding. Deleting both
+   * halves of the ritual passed this file. At `6371000/√3` the rounding is
+   * −0.1126 m of altitude against 9.3e-10 without it, and moves the grain
+   * origin 0.093 of a period — 0.065 m, a tenth of `GRAIN_METRES`.
+   */
   it('moves all three anchor terms together', () => {
     const mesh = new Mesh()
     const wear = wearGround(mesh, { x: 0, y: 0, z: 0 }, 0)
-    anchorGround(mesh, { x: LUNA, y: 0.3, z: -0.7 }, LUNA)
-    expect(wear.anchor.x).toBe(Math.fround(LUNA))
+    const axis = EARTH / Math.sqrt(3)
+    anchorGround(mesh, { x: axis, y: axis, z: -axis }, EARTH)
+    expect(wear.anchor.x).toBe(Math.fround(axis))
     expect(wear.anchorAltitude).toBe(
-      Math.hypot(Math.fround(LUNA), Math.fround(0.3), Math.fround(-0.7)) - LUNA,
+      Math.hypot(Math.fround(axis), Math.fround(axis), Math.fround(-axis)) -
+        EARTH,
     )
-    expect(wear.grainOrigin.z).toBeGreaterThanOrEqual(0)
+    // The altitude is the rounding, and the rounding is the whole term: it is
+    // 9.3e-10 measured against the float64 anchor the vertices were built from.
+    expect(wear.anchorAltitude).toBeCloseTo(-0.1126, 4)
+    // Reduced from the *unrounded* anchor, so it is not the rounded one's.
+    expect(wear.grainOrigin.x).toBe(grainWrap(axis))
+    expect(wear.grainOrigin.x).not.toBe(grainWrap(Math.fround(axis)))
+    for (const axisName of ['x', 'y', 'z'] as const) {
+      expect(wear.grainOrigin[axisName]).toBeGreaterThanOrEqual(0)
+      expect(wear.grainOrigin[axisName]).toBeLessThan(GRAIN_PERIOD)
+    }
   })
 
   it('reads as undressed, not as a throw, off an object nothing dressed', () => {
