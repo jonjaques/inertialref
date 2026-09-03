@@ -121,7 +121,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail
   and are what the material and a composing camera are made from;
   `drawnGroundElevation` is the same with the sea clamp off — the seabed, which is what
-  the mesh is built from under the sea's own sheet. Canonical and drawn are 1.25 m apart
+  the mesh is built from under the sea's own sheet and only there: a mapped body gets
+  no sheet and its mesh keeps the clamp (`HeightfieldRequest.seabed`). Canonical and drawn are 1.25 m apart
   at worst. The observatory's stance, `descent.ts` and the scatter field all choose here
   rather than in `packages/universe`, which is why this bullet is in two rules. ADR-0021.
 

@@ -337,7 +337,9 @@ Violating one of these is a rewrite later, not a refactor.
   presentational tail, and they are what the material and any camera that
   composes a picture of them are made from; `drawnGroundElevation` is the
   same with the sea clamp left off — the seabed — and is what the mesh is
-  made from, because the sea is a sheet drawn over it. The drawn fields
+  made from where the sea is a sheet drawn over it, and only there: a mapped
+  body has no sheet, its photograph is its sea, and its mesh keeps the clamp,
+  which the heightfield request says with `seabed`. The drawn fields
   differ from the canonical one by at most `drawnDivergence`, which is
   1.25 m. Physics reading the drawn one puts a
   landing behind a term the renderer is free to change; a mesh reading the

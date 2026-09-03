@@ -6670,6 +6670,16 @@ remembering from doing it:
   `window.__sub` vanishing mid-run. Nothing under `src` is edited while a
   drive invocation is in flight; test files and `.scratch/` are safe. A
   "before" figure is `git stash`, measure, `git stash pop`.
+- **The seabed is right only under a sheet, and every producer emitted it
+  everywhere.** A mapped body gets no water sheet because its photograph is
+  its sea, and with the clamp off Earth's ocean floor streamed as a trench
+  under the photograph while the stance stayed at the datum: 347 of 400
+  directions below it, 4,955 m at worst. `HeightfieldRequest.seabed` carries
+  the choice now, set exactly where the streamer hands `buildPatch` a sheet
+  datum and defaulting to the clamp; `universe.test.ts` holds the default
+  clamped over a submarine region and `terrainKernel.gpu.test.ts` runs
+  Earth's seabed through both sides. Found by the review, beside the sphere's
+  fixed navy sea and a bake that thrashed with five bodies in frame.
 
 ## Known gaps
 

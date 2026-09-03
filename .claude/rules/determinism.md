@@ -44,7 +44,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail
   and are what the material and a composing camera are made from;
   `drawnGroundElevation` is the same with the sea clamp off — the seabed, which is what
-  the mesh is built from under the sea's own sheet. The drawn fields differ from the
+  the mesh is built from under the sea's own sheet and only there: a mapped body gets
+  no sheet and its mesh keeps the clamp (`HeightfieldRequest.seabed`). The drawn fields differ from the
   canonical one by at most `drawnDivergence` — 1.25 m. Physics reading the drawn one puts a landing
   behind a term the renderer may change; a mesh reading the canonical one draws a plane
   at two meters. ADR-0021.
