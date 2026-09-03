@@ -45,6 +45,19 @@ Most of `.claude/` runs without being asked.
   rule would fire; `writing.md`, because a commit message is not a file a glob
   can match; and `browser.md`, because "check the app" is answered by picking a
   tool before anything has been opened.
+- **The deny list holds no repository-relative `Read` rule, and that is
+  deliberate.** A deny beats an allow, and `rg pattern` with no path searches
+  `.` — which the permission checker resolves as a read of every path under the
+  repository. So a single `Read(./.env)` in `.claude/settings.json` turned every
+  bare `rg` into an approval dialog, `Bash(rg:*)` sitting two lines above it
+  notwithstanding, and it bit hardest on subagents: the dialog stops work nobody
+  is watching, and the user answers it for a search they did not start. It was
+  guarding a path that does not exist — root `.env` is gitignored, and the two
+  under `apps/game/` are a GA measurement id and a committed example, which
+  `.gitignore` says in as many words. The secrets that matter are outside the
+  tree and still denied: `~/.env`, `~/.ssh/**`, the `gh` and `ctx7` credentials,
+  none of them reachable from a search here. A new secret goes behind `op`, not
+  behind a rule that costs a dialog on every search.
 - **The session knows what tree it is in.** `SessionStart` fetches `origin`,
   fast-forwards local `main` when it can do so without a checkout, and states
   the branch, the uncommitted count, and the distance from `origin/main`. It
