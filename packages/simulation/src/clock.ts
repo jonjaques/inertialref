@@ -17,8 +17,8 @@ import {
  *
  * Canonical state therefore depends only on the integer tick count. Wall clock
  * decides *how many* ticks to run and nothing else; rendering at 144 Hz and at
- * 60 Hz produce the same universe, and `stepExact` lets tests and replays run
- * with no wall clock at all.
+ * 60 Hz produce the same universe, and `World.runTicks` lets tests and replays
+ * run a count with no wall clock at all.
  */
 
 export const TICK_RATE = 64
@@ -221,21 +221,6 @@ export class SimulationClock {
   }
 
   /**
-   * Consume wall-clock time and report how many fixed steps to run.
-   *
-   * The caller runs exactly that many; nothing about the simulation looks at
-   * `realDelta` again. `plan` and `settle` are the two halves of this for a
-   * caller that can jump — the world — and this is the pair composed for one
-   * that steps every tick it is given.
-   */
-  advance(realDelta: Seconds): number {
-    const { wanted, budget } = this.plan(realDelta)
-    const steps = Math.min(wanted, budget)
-    this.settle(steps)
-    return steps
-  }
-
-  /**
    * Ticks the accumulator asked for on the frame being planned, for `settle`.
    * Null between frames and for a frame that bought nothing — paused, or no
    * wall clock passed — so `settle` can tell "asked for nothing and ran it"
@@ -338,15 +323,6 @@ export class SimulationClock {
     )
     this.#tick = asTick(this.#tick + count)
     return this.#tick
-  }
-
-  /** Run n ticks with no wall clock involved. Tests, replay and headless runs. */
-  stepExact(count: number): number {
-    invariant(
-      Number.isInteger(count) && count >= 0,
-      `stepExact needs a whole count, got ${count}`,
-    )
-    return count
   }
 
   status(): ClockStatus {

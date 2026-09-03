@@ -19,8 +19,8 @@ as a desync hours into a session.
 
 Wall clock enters at exactly one place: `clock.plan(realDelta)` says how many
 fixed steps this frame bought and how many of them may be integrated
-([ADR-0025](0025-the-rails.md); `clock.advance` composes the pair for a caller
-that steps everything). Nothing downstream ever sees `realDelta`.
+([ADR-0025](0025-the-rails.md)), and `clock.settle` takes back the count that
+ran. Nothing downstream ever sees `realDelta`.
 Canonical state depends only on the integer tick count.
 
 **Time warp multiplies how many ticks a second of wall clock buys**, never the

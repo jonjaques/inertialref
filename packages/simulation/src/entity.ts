@@ -94,7 +94,12 @@ export interface EntityInit {
   readonly ballisticCoefficient?: number
   readonly address?: UniverseAddress | null
   readonly spawnedAt?: Seconds
-  /** Restored from a save; a fresh entity has none and earns one by coasting. */
+  /**
+   * Restored from a save; a fresh entity has neutral input, assist on and no
+   * epoch, and earns an epoch by coasting.
+   */
+  readonly control?: ControlInput
+  readonly flightAssist?: boolean
   readonly rails?: RailsEpoch | null
 }
 
@@ -108,8 +113,8 @@ export function createEntity(init: EntityInit): Entity {
     state,
     mass: init.mass ?? 1_000,
     thrusters: init.thrusters ?? null,
-    control: NEUTRAL_CONTROL,
-    flightAssist: true,
+    control: init.control ?? NEUTRAL_CONTROL,
+    flightAssist: init.flightAssist ?? true,
     ballisticCoefficient: init.ballisticCoefficient ?? 400,
     address: init.address ?? null,
     spawnedAt: init.spawnedAt ?? 0,
@@ -126,7 +131,27 @@ export const DEBUG_SHIP_THRUSTERS: ThrusterProfile = {
   torque: 1.2,
 }
 
-export class EntityStore {
+/**
+ * The read half of the store, which is all `World.entities` hands out.
+ *
+ * The write half — `add`, `update`, `remove` — is the world's alone, because
+ * every write has bookkeeping beside it that a caller cannot see: the
+ * interpolation history, the landed set, the rails epoch. A door that skips
+ * that bookkeeping is exactly as wide as the one that does it, so there is no
+ * such door on the type. The writers are `spawn`, `spawnShip`, `teleport`,
+ * `reframeEntity`, `setControl`, `setFlightAssist` and `killRotation`.
+ */
+export interface EntityView {
+  get(id: EntityId): Entity | undefined
+  require(id: EntityId): Entity
+  has(id: EntityId): boolean
+  readonly size: number
+  ordered(): readonly Entity[]
+  all(): IterableIterator<Entity>
+  readonly dynamicIdCounter: number
+}
+
+export class EntityStore implements EntityView {
   readonly #entities = new Map<EntityId, Entity>()
   #nextDynamicId = 0
 

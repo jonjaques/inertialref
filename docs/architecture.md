@@ -346,7 +346,7 @@ in the [invariant map](agents/invariants.md).
 | 7   | No vendor SDK below the adapter layer                                | `pnpm graph` — `packages/*` may have no third-party dependency |
 | 8   | Terrain is sampled in body-fixed axes                                | a branded `BodyFixedDirection` type                            |
 | 9   | Landedness is a consequence, never asserted                          | `teleport` has no `landed` flag                                |
-| 10  | Entity state is written through `World`, not `entities.update`       | `teleport`, `setControl`, `setFlightAssist`, `killRotation`    |
+| 10  | Entity state is written through `World`'s verbs alone                | `world.entities` is a read view; `spawnShip` takes a velocity  |
 
 Invariant 8 is worth calling out as a pattern. It began as a bug — terrain was
 sampled with an inertial direction, so the mountains stood still while the

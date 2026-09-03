@@ -103,10 +103,12 @@ Violating one of these is a rewrite later, not a refactor.
   does. The weight has to reach zero before a candidate can leave the set, and
   the margin has to be no wider than the search that collected them.
   [ADR-0019](docs/adr/0019-the-geology.md).
-- **Never write entity state through `world.entities.update`.** Use `teleport`
-  for a discontinuous move and `setControl` / `setFlightAssist` /
-  `killRotation` for input. Those reset interpolation history and the landed
-  set; `update` does not.
+- **Never write entity state around the world's verbs.** `world.entities` is
+  the store's read half, so there is no `update` to reach for. A ship that
+  starts moving is spawned moving — `spawnShip` takes the velocity — and after
+  that it is `teleport` for a discontinuous move and `setControl` /
+  `setFlightAssist` / `killRotation` for input. Each carries the bookkeeping a
+  write needs: the interpolation history, the landed set, the rails epoch.
 - **Never assert that something is landed.** Landedness is a consequence of
   the contact test, owned by `World.#land`. `teleport` has no such flag.
 - **Never let a coasting entity keep its epoch through a move it did not
