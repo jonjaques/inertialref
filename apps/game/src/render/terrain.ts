@@ -41,7 +41,6 @@ import {
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
 import {
-  NO_MORPH_DISTANCE,
   OPEN_OCEAN,
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
@@ -49,6 +48,7 @@ import {
 } from '@inertialref/rendering'
 import { asVector, bumped, fbmFetch, noiseSampler } from './noiseNodes.ts'
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
+import { groundWearOf } from './wear.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   groundBandsFor,
@@ -290,12 +290,16 @@ export function createTerrainMaterial(): TerrainMaterial {
   // The baked noise every detail octave is a fetch of. See `noiseTexture.ts`.
   const noise = noiseSampler(noiseTexture())
 
+  /*
+   * The per-mesh inputs, read off what the mesh wears — one record, one key,
+   * dressed by `groundWear.ts`. See `wear.ts` for what each is and why the
+   * anchor arrives rounded with its altitude measured against that rounding.
+   */
   const eyeLocal = uniform(new Vector3()).onObjectUpdate(
-    ({ object }) => (object?.userData.eyeLocal as Vector3 | undefined) ?? ZERO,
+    ({ object }) => groundWearOf(object).eyeLocal,
   )
   const morphBand = uniform(new Vector2()).onObjectUpdate(
-    ({ object }) =>
-      (object?.userData.morphBand as Vector2 | undefined) ?? NO_MORPH,
+    ({ object }) => groundWearOf(object).morphBand,
   )
   /*
    * The patch's own anchor, which is what turns an anchor-relative vertex back
@@ -308,34 +312,26 @@ export function createTerrainMaterial(): TerrainMaterial {
    * which never leaves the patch.
    */
   const anchor = uniform(new Vector3()).onObjectUpdate(
-    ({ object }) => (object?.userData.anchor as Vector3 | undefined) ?? ZERO,
+    ({ object }) => groundWearOf(object).anchor,
   )
   /*
-   * How far the *rounded* anchor sits above the datum, meters.
-   *
-   * An anchor is a point on the datum sphere by construction, so this would be
-   * zero — except that the uniform above is float32, and half a meter is one
-   * step at Earth's radius. Measured in float64 against the same rounded
-   * vector the shader receives, so `altitude` below is exact rather than
-   * exact-up-to-a-per-patch-offset. A constant offset per patch is a grid of
-   * rectangles across a flat sea.
+   * How far the *rounded* anchor sits above the datum, meters, so `altitude`
+   * below is exact rather than exact-up-to-a-per-patch-offset.
    */
   const anchorAltitude = uniform(0).onObjectUpdate(
-    ({ object }) =>
-      (object?.userData.anchorAltitude as number | undefined) ?? 0,
+    ({ object }) => groundWearOf(object).anchorAltitude,
   )
   /*
    * The patch anchor reduced modulo the grain period, in grain wavelengths.
    *
-   * Computed in float64 by the producer and handed over already small, which is
-   * the whole trick: added to `positionLocal` it gives a coordinate that is
-   * continuous across every patch boundary *and* exact, where the body-fixed
-   * position is continuous and quantized and the patch-local one is exact and
-   * discontinuous. See `GRAIN_PERIOD`.
+   * Handed over already small, which is the whole trick: added to
+   * `positionLocal` it gives a coordinate that is continuous across every
+   * patch boundary *and* exact, where the body-fixed position is continuous
+   * and quantized and the patch-local one is exact and discontinuous. See
+   * `GRAIN_PERIOD`.
    */
   const grainOrigin = uniform(new Vector3()).onObjectUpdate(
-    ({ object }) =>
-      (object?.userData.grainOrigin as Vector3 | undefined) ?? ZERO,
+    ({ object }) => groundWearOf(object).grainOrigin,
   )
 
   /*
@@ -1261,12 +1257,4 @@ const BLANK = /*@__PURE__*/ (() => {
   return map
 })()
 
-const ZERO = new Vector3()
 export const BLACK_RGB: LinearRgb = { r: 0, g: 0, b: 0 }
-/**
- * Both ends past any distance: a patch with no parent never morphs. The
- * selection's own finite sentinel, because `Number.MAX_VALUE` rounds to
- * Infinity in the float32 uniform and `Inf − Inf` is a NaN in the morph
- * denominator — see `NO_MORPH_DISTANCE`.
- */
-const NO_MORPH = new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)

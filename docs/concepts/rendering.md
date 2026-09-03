@@ -552,7 +552,7 @@ the body's _past_: whether this plain is flood basalt, whether this ground was
 excavated last week or three billion years ago, which way the crust's
 composition varies, where the volatiles have condensed, where the liquid runs
 and where something grows beside it. Those six are the cover — eight bytes a
-vertex, two attributes of four, through `render/terrainAttributes.ts` —
+vertex, two attributes of four, through `render/groundWear.ts` —
 generated with the heightfield.
 
 **Deposits are layered rather than splatted** — seven `mix`es in the order the

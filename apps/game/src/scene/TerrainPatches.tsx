@@ -1,26 +1,20 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
-import {
-  BufferAttribute,
-  BufferGeometry,
-  type Group,
-  Mesh,
-  type Scene,
-  Sphere,
-  Vector2,
-  Vector3,
-} from 'three/webgpu'
+import { BufferAttribute, type Group, Mesh, type Scene } from 'three/webgpu'
 import { Quaternion as Q, Vec } from '@inertialref/spatial'
-import { COVER_CHANNELS, HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
+import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
 import { patchIndices, pixelAngle } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { texturesFor } from '../render/planetTextures.ts'
-import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
+import type { TerrainMaterial } from '../render/terrain.ts'
 import {
-  attachCover,
   disposeKeepingSharedIndex,
-} from '../render/terrainAttributes.ts'
+  groundDummy,
+  patchGeometry,
+  placeEye,
+  wearGround,
+} from '../render/groundWear.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -77,38 +71,21 @@ export function TerrainPatches({
    * material leaves this one's first draw paying the build, synchronously on
    * the WebGL fallback, in the middle of a descent. The dummy mesh is never
    * parented; `compileAsync` takes the target scene by argument, and its
-   * traversal is synchronous, so nothing here can reach a drawn frame.
-   *
-   * The dummy carries the morph attributes too. They are read by the vertex
-   * stage, so a warm-up without them compiles a graph the real patches do not
-   * use — and the pipeline built for the real one would arrive mid-descent,
-   * which is the whole thing this exists to avoid.
+   * traversal is synchronous, so nothing here can reach a drawn frame. The
+   * dummy is the dresser's own, so it wears exactly what a real patch wears.
    */
   useEffect(() => {
     warmAtMount({
       label: 'compiling the ground',
       units: 1,
       run: async (done) => {
-        const geometry = new BufferGeometry()
-        const triangle = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0])
-        const up = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1])
-        geometry.setAttribute('position', new BufferAttribute(triangle, 3))
-        geometry.setAttribute('normal', new BufferAttribute(up, 3))
-        geometry.setAttribute('terrainMorph', new BufferAttribute(triangle, 3))
-        geometry.setAttribute('terrainMorphNormal', new BufferAttribute(up, 3))
-        const cover = new Uint8Array(3 * COVER_CHANNELS)
-        attachCover(geometry, cover, cover)
-        geometry.setIndex([0, 1, 2])
-        const dummy = new Mesh(geometry, material)
-        dummy.userData.eyeLocal = new Vector3()
-        dummy.userData.morphBand = new Vector2(1, 2)
-        dummy.userData.anchor = new Vector3(0, 0, 1)
+        const dummy = groundDummy(material)
         await warmCompile(warmRenderer(gl), {
           object: dummy,
           camera,
           scene: scene as Scene,
         }).then(done)
-        geometry.dispose()
+        dummy.geometry.dispose()
       },
     })
   }, [gl, camera, scene, material])
@@ -210,78 +187,10 @@ export function TerrainPatches({
         mesh = undefined
       }
       if (mesh === undefined) {
-        const geometry = new BufferGeometry()
-        geometry.setAttribute(
-          'position',
-          new BufferAttribute(patch.positions, 3),
-        )
-        geometry.setAttribute('normal', new BufferAttribute(patch.normals, 3))
-        geometry.setAttribute(
-          'terrainMorph',
-          new BufferAttribute(patch.morphPositions, 3),
-        )
-        geometry.setAttribute(
-          'terrainMorphNormal',
-          new BufferAttribute(patch.morphNormals, 3),
-        )
-        /*
-         * The cover, as normalized bytes rather than floats.
-         *
-         * Six channels of a fraction, read through a splat weight — eight bits
-         * resolves each to a four-hundredth, which is finer than anything
-         * downstream of a mip chain can tell from a float, and it is a quarter
-         * of the bandwidth. A whole-disk selection is several hundred patches
-         * and vertex memory is already the streamer's largest number.
-         */
-        attachCover(geometry, patch.cover, patch.morphCover)
-        geometry.setIndex(indices)
-        /*
-         * Set rather than computed. `computeBoundingSphere` walks the position
-         * attribute, which for two hundred patches of 4,225 vertices is a
-         * million points on the frame a descent refines — and the patch already
-         * carries the extent, measured while its vertices were being written.
-         */
-        geometry.boundingSphere = new Sphere(
-          new Vector3(
-            patch.boundsCentre.x,
-            patch.boundsCentre.y,
-            patch.boundsCentre.z,
-          ),
-          patch.boundsRadius,
-        )
-        mesh = new Mesh(geometry, material)
-        mesh.userData.eyeLocal = new Vector3()
-        mesh.userData.morphBand = new Vector2()
-        /*
-         * Body-fixed and constant for the life of the patch, which is what
-         * turns an anchor-relative vertex back into a place on the planet.
-         *
-         * `Math.fround` is not decoration: the uniform is float32, and the
-         * material's altitude arithmetic is exact only if the offset beside it
-         * describes the vector the shader actually gets rather than the float64
-         * one this array was built from. Half a meter at Earth's radius, which
-         * is a quarter of the water band.
-         */
-        const ax = Math.fround(patch.anchor.x)
-        const ay = Math.fround(patch.anchor.y)
-        const az = Math.fround(patch.anchor.z)
-        mesh.userData.anchor = new Vector3(ax, ay, az)
-        mesh.userData.anchorAltitude = Math.hypot(ax, ay, az) - datumRadius
-        /*
-         * The anchor in grain wavelengths, wrapped into one period.
-         *
-         * Reduced here, in float64, from the *unrounded* anchor — which is the
-         * whole trick and the reason it is not `anchor / GRAIN_METRES` in the
-         * shader. That quotient is 2.5 × 10⁶ on Luna, where float32 resolves 0.25
-         * of a wavelength; wrapped first it is under 64, where it resolves four
-         * microns. `mod` rather than `%`, so a negative anchor lands in [0, 64)
-         * rather than in (−64, 0] and the two sides of the body agree.
-         */
-        mesh.userData.grainOrigin = new Vector3(
-          grainWrap(patch.anchor.x),
-          grainWrap(patch.anchor.y),
-          grainWrap(patch.anchor.z),
-        )
+        mesh = new Mesh(patchGeometry(patch, indices), material)
+        // Body-fixed and constant for the life of the patch, which is what
+        // turns an anchor-relative vertex back into a place on the planet.
+        wearGround(mesh, patch.anchor, datumRadius)
         mesh.userData.patch = patch
         meshes.set(key, mesh)
       }
@@ -304,15 +213,7 @@ export function TerrainPatches({
       // Per-patch morph inputs, read by `onObjectUpdate` uniforms in the
       // material. The eye is in the patch's own frame and in true meters, so
       // the morph band is comparable to it whatever the placement did.
-      ;(mesh.userData.eyeLocal as Vector3).set(
-        placed.eyeLocal.x,
-        placed.eyeLocal.y,
-        placed.eyeLocal.z,
-      )
-      ;(mesh.userData.morphBand as Vector2).set(
-        placed.morphStart,
-        placed.morphEnd,
-      )
+      placeEye(mesh, placed.eyeLocal, placed.morphStart, placed.morphEnd)
     }
 
     for (const [key, mesh] of meshes) {

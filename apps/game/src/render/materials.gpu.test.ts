@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   BufferAttribute,
-  BufferGeometry,
   type Camera,
   DataTexture,
   LinearFilter,
@@ -13,8 +12,6 @@ import {
   Scene,
   SphereGeometry,
   Sprite,
-  Vector2,
-  Vector3,
 } from 'three/webgpu'
 import { buildPatch } from '@inertialref/rendering'
 import { COVER_CHANNELS, regionAddress } from '@inertialref/universe'
@@ -34,10 +31,14 @@ import {
 import { createTerrainMaterial } from './terrain.ts'
 import { createWaterMaterial } from './water.ts'
 import {
-  attachCover,
   COVER_ATTRIBUTES,
   MORPH_COVER_ATTRIBUTES,
-} from './terrainAttributes.ts'
+  patchGeometry,
+  placeEye,
+  sheetGeometry,
+  wearGround,
+  wearSea,
+} from './groundWear.ts'
 import { createWarpEffects } from './warpEffects.ts'
 
 /*
@@ -96,27 +97,12 @@ function patchMesh(material: Mesh['material']): Mesh {
     cover: new Uint8Array(resolution * resolution * COVER_CHANNELS),
     bodyRadius: 1_737_400,
   })
-  const geometry = new BufferGeometry()
-  geometry.setAttribute('position', new BufferAttribute(patch.positions, 3))
-  geometry.setAttribute('normal', new BufferAttribute(patch.normals, 3))
-  geometry.setAttribute(
-    'terrainMorph',
-    new BufferAttribute(patch.morphPositions, 3),
+  const mesh = new Mesh(
+    patchGeometry(patch, new BufferAttribute(patch.indices, 1)),
+    material,
   )
-  geometry.setAttribute(
-    'terrainMorphNormal',
-    new BufferAttribute(patch.morphNormals, 3),
-  )
-  attachCover(geometry, patch.cover, patch.morphCover)
-  geometry.setIndex(new BufferAttribute(patch.indices, 1))
-  const mesh = new Mesh(geometry, material)
-  mesh.userData.eyeLocal = new Vector3()
-  mesh.userData.morphBand = new Vector2(1, 2)
-  mesh.userData.anchor = new Vector3(
-    patch.anchor.x,
-    patch.anchor.y,
-    patch.anchor.z,
-  )
+  wearGround(mesh, patch.anchor, 1_737_400)
+  placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2)
   return mesh
 }
 
@@ -392,27 +378,12 @@ function sheetMesh(material: Mesh['material']): Mesh {
   })
   const sheet = patch.water
   if (sheet === null) throw new Error('the sea reaches this patch')
-  const geometry = new BufferGeometry()
-  geometry.setAttribute('position', new BufferAttribute(sheet.positions, 3))
-  geometry.setAttribute(
-    'terrainMorph',
-    new BufferAttribute(sheet.morphPositions, 3),
+  const mesh = new Mesh(
+    sheetGeometry(sheet, new BufferAttribute(patch.indices, 1)),
+    material,
   )
-  geometry.setAttribute('waterDepth', new BufferAttribute(sheet.depths, 1))
-  geometry.setAttribute(
-    'waterMorphDepth',
-    new BufferAttribute(sheet.morphDepths, 1),
-  )
-  geometry.setIndex(new BufferAttribute(patch.indices, 1))
-  const mesh = new Mesh(geometry, material)
-  mesh.userData.eyeLocal = new Vector3()
-  mesh.userData.morphBand = new Vector2(1, 2)
-  mesh.userData.anchor = new Vector3(
-    patch.anchor.x,
-    patch.anchor.y,
-    patch.anchor.z,
-  )
-  mesh.userData.waveOrigin = new Vector3()
+  wearSea(mesh, patch.anchor)
+  placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2)
   return mesh
 }
 
