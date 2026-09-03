@@ -32,7 +32,7 @@ export interface TimingEntry {
  *
  * A port for the usual reason — `console.timeStamp` and `performance.measure`
  * are host globals whose types are not in scope here — and `wait` is on it for
- * the same reason `now` is on `SimulationHost`: `setTimeout` is a DOM or Node
+ * the same reason `now` is on `Host`: `setTimeout` is a DOM or Node
  * facility and `packages/*` pulls in neither library.
  */
 export interface TimingPort {
@@ -77,10 +77,10 @@ export interface TimingVerb {
  * The port is resolved per call rather than captured, because the host supplies
  * it through a getter and a session can replace what is underneath.
  */
-export function makeTimingVerb(port: () => TimingPort | undefined): TimingVerb {
+export function makeTimingVerb(port: () => TimingPort | null): TimingVerb {
   const verb = (level?: string): string => {
     const held = port()
-    if (held === undefined) return 'off'
+    if (held === null) return 'off'
     if (level !== undefined) held.setLevel(level)
     return held.level()
   }

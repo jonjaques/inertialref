@@ -59,7 +59,6 @@ import {
   type OrbitPath,
   orbitPaths,
   orbitScopeKey,
-  type PresentationHost,
   type Session,
   visibleOrbits,
 } from '@inertialref/devtools'
@@ -240,7 +239,7 @@ export interface GameEngineOptions {
  * left here is what genuinely belongs to a rendering host: the frame loop, the
  * render origin, the scene, the terrain streamer and the starfield.
  */
-export class GameEngine implements PresentationHost {
+export class GameEngine {
   readonly session: Session
   readonly harness: GameHarness
   /**
@@ -263,9 +262,9 @@ export class GameEngine implements PresentationHost {
   readonly presentation: PresentationStack
   readonly saves: SaveStore
   /*
-   * Private, because `terrain()` is the `PresentationHost` member and
-   * `terrainState()` is the renderer's way in. Nothing outside reaches for the
-   * streamer itself.
+   * Private, because `terrain()` is what the host answers `ir.terrain()` with
+   * and `terrainState()` is the renderer's way in. Nothing outside reaches for
+   * the streamer itself.
    *
    * The name is the harness's: `ir.terrain()` asks the host what the streamer
    * holds, and the host cannot answer with the streamer object because that
@@ -447,9 +446,8 @@ export class GameEngine implements PresentationHost {
   /**
    * How many *display* pixels one CSS pixel is, written by the shell.
    *
-   * Named for what it holds rather than for the port that reads it, because
-   * `GameEngine` implements `PresentationHost` and a field cannot share a name
-   * with the method the interface asks for.
+   * Named for what it holds rather than for the port that reads it: the
+   * session's render side answers `pixelRatio()` from this field.
    *
    * The companion to `supersample` and a different number: that one is the
    * factor the buffer is inflated by for anti-aliasing and is divided back out,
@@ -694,7 +692,8 @@ export class GameEngine implements PresentationHost {
       poolSize: poolSize(),
       now: options.now ?? (() => performance.now()),
       store: options.store ?? new IndexedDbSaveStore(),
-      host: {
+      // The one production adapter of the render side, whole.
+      render: {
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
@@ -705,8 +704,8 @@ export class GameEngine implements PresentationHost {
         timing: () => browserTimingPort,
         setChrome: (visible) => this.setChrome(visible),
         setLayers: (visible) => this.setLayers(visible),
-        onWorldReplaced: () => this.#invalidateDerived(),
       },
+      onWorldReplaced: () => this.#invalidateDerived(),
     })
     this.harness = this.session.harness
     this.cutscene = createCutsceneSession({
@@ -785,7 +784,7 @@ export class GameEngine implements PresentationHost {
   }
 
   /* ----------------------------------------------------------------------- */
-  /* PresentationHost                                                         */
+  /* The render side of the host                                             */
   /* ----------------------------------------------------------------------- */
 
   scene(): RenderScene | null {

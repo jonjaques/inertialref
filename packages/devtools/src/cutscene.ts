@@ -3,7 +3,7 @@ import { type FrameState, UV, type Vec3 } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import type { EntityId } from '@inertialref/universe'
 import { type CinematicSample, isUsableLens } from '@inertialref/rendering'
-import type { HarnessHost } from './harness.ts'
+import type { Host } from './harness.ts'
 
 /*
  * The cutscene director: scripted scenes over a running world.
@@ -94,12 +94,12 @@ export interface CutsceneOutcome {
 }
 
 export class CutsceneDirector {
-  readonly #host: HarnessHost
+  readonly #host: Host
   readonly #scripts: readonly CutsceneScript[]
   #active: ActiveCutscene | null = null
   #last: CutsceneOutcome | null = null
 
-  constructor(host: HarnessHost, scripts: readonly CutsceneScript[]) {
+  constructor(host: Host, scripts: readonly CutsceneScript[]) {
     this.#host = host
     this.#scripts = scripts
   }

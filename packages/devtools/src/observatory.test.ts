@@ -57,7 +57,7 @@ function harness(): {
     seed: 'inertialref',
     workers: () => createInlineWorker(registry),
     catalog: TEST_CATALOG,
-    host: {
+    render: {
       framingLens: () => held,
       setFlightLens: (next) => {
         held = next
@@ -610,7 +610,7 @@ describe('the drag sensitivity', () => {
         seed: 'inertialref',
         workers: () => createInlineWorker(registry),
         catalog: TEST_CATALOG,
-        host: {
+        render: {
           lensView: () => ({
             lens: LENS_PRESETS.flight,
             // A 1000×750 CSS window, at whatever ratio the display has.

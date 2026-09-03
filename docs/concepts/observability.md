@@ -151,11 +151,12 @@ were both found by driving the browser and then pinned by a Node test.
 
 What makes that possible is that every host is assembled the same way, by
 `openSession`: seed → system → target → ship → pool → store → harness, once,
-instead of five times. And the host port is split so a host answers only what it
-has a concept of — `SimulationHost` (`world`, `player`, `pool`, `replaceWorld`)
-for everyone, `PresentationHost` (`scene`, `frameStats`) only for a host that
-draws. The headless runner used to satisfy a single wide port by returning
-`null` twice and throwing once.
+instead of five times. And the host port is one interface whose render side is
+whole: `Host` carries the simulation half (`world`, `player`, `pool`,
+`replaceWorld`, `authority`) and a `render: RenderHost` a drawing host supplies
+entire, while a headless one gets `renderHost()` — an adapter that answers
+every render question the way a display-less runtime honestly can. No reader of
+the port asks whether a member is there.
 
 One detail on that port is an observability property rather than a style choice:
 `world` is a **getter**. A host that captured the reference kept the debug

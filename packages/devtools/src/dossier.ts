@@ -45,7 +45,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { currentSystemOf, resolveDestination } from './travel.ts'
-import type { HarnessHost } from './harness.ts'
+import type { Host } from './harness.ts'
 
 /*
  * What a thing *is*, as a page of astronomy.
@@ -188,7 +188,7 @@ const noData = (label: string, why: string, note?: string): Fact => ({
  * the same resolver: this is fed the address the observatory is already holding,
  * and a second parser would be a second addressing scheme.
  */
-export function dossier(host: HarnessHost, address: string): Dossier | null {
+export function dossier(host: Host, address: string): Dossier | null {
   const world = host.world
   /*
    * `loadSystem` is inside the guard, not after it.

@@ -141,53 +141,29 @@ export interface FrameStats {
 }
 
 /**
- * What every host can answer, whether or not it draws anything.
+ * The render side of a host: what a frame can answer, and what it can be told.
  *
- * `world` must be a *getter*, not a captured reference. Loading a save replaces
- * the world wholesale, and a host that copied the reference in at construction
- * leaves the harness — and therefore the debug overlay — reporting on the world
- * that was thrown away while the frame loop runs the new one. That split brain
- * looked exactly like "load silently does nothing" from the outside.
- * `openSession` is the one implementation that matters; it gets this right once.
+ * One object rather than ten optional members on the host, because "absent
+ * headlessly" is one fact about a host and not ten. A host that draws supplies
+ * the whole thing; a host that does not — the headless runner, a test — gets
+ * `renderHost()`, which answers every question the way a display-less runtime
+ * honestly can: no scene, no frame, no timeline, the flight lens, a ratio of
+ * one, and switches that move nothing. Because the default is an adapter and
+ * not a set of `?.` calls, a test can supply the two members it is about and
+ * no reader ever asks whether a member is there.
  */
-export interface SimulationHost {
-  readonly world: World
-  /** The entity the camera follows. */
-  player(): EntityId | null
-  setPlayer(id: EntityId): void
-  pool(): WorkerPool | null
-  /** Replace the running world (used by load). */
-  replaceWorld(world: World, player: EntityId | null): void
-  /**
-   * Whoever owns the part of the simulation this client does not.
-   *
-   * Optional because a host may not have one yet, not because being alone is a
-   * missing authority — a solo player has a `LocalAuthority`, which is an
-   * implementation rather than the absence of one. `openSession` always
-   * supplies it.
-   */
-  authority?(): AuthorityPort
-  /**
-   * The host's clock, for the things here that measure rather than simulate.
-   *
-   * Optional because a host may not have one and the terrain baseline degrades
-   * to "not timed" rather than reaching for `performance.now()` itself — which
-   * nothing below `apps/` is allowed to do. Both real hosts supply it.
-   */
-  now?(): number
-}
-
-/**
- * The half only a host that renders can answer.
- *
- * Split out because it was not optional before, so the headless runner and the
- * tests each had to write `scene: () => null, frameStats: () => null` and, in
- * the runner's case, a `replaceWorld` that threw — three of eight members
- * stubbed to satisfy a port for questions they have no concept of.
- */
-export interface PresentationHost {
+export interface RenderHost {
   scene(): RenderScene | null
   frameStats(): FrameStats | null
+  /**
+   * What the terrain streamer is doing this frame.
+   *
+   * The one number in the terrain rig that cannot be derived: `simulateDescent`
+   * says what the streamer *would* be asked for, and this says what it actually
+   * has — how many patches are on screen, how deep the worker queue is, and
+   * whether the cache is holding. The two disagreeing is the interesting case.
+   */
+  terrain(): TerrainReport | null
   /**
    * The lens the picture is being taken with, and the pixels it lands on.
    *
@@ -197,7 +173,7 @@ export interface PresentationHost {
    * hold a second producer of it, which is the rule this phase exists to keep.
    * `ir.lens()` reads it to print the instrument; the terrain predicate reads it
    * to measure one. The observatory does not — it takes `framingLens()` below,
-   * and the block there says why. Absent headlessly, where there is no camera
+   * and the block there says why. Null headlessly, where there is no camera
    * and no display.
    */
   lensView(): LensView | null
@@ -211,6 +187,7 @@ export interface PresentationHost {
    * solves is *stored*, so the error outlives the cutscene that caused it.
    * Measured: `focus('s:SOL/b:2')` during `tng-intro` parks the camera 29.8 Mm
    * out against the 20.8 Mm the flight lens asks for, 43% too far, permanently.
+   * The flight preset headlessly, where there is no camera panel.
    */
   framingLens(): Lens
   /**
@@ -219,14 +196,12 @@ export interface PresentationHost {
    * `preset` and `rise` compose a picture whose lens is part of it — Earth is
    * 1.9° across from Luna and Mars is 42.39° from Phobos, so a rise that did
    * not fit its own lens would produce two very different frames under one
-   * name. Optional, because a headless host has no camera to fit it to and the
-   * arithmetic is worth running there anyway.
-   *
-   * Not a second producer of the lens: `engine.lens` still resolves the
+   * name. Not a second producer of the lens: `engine.lens` still resolves the
    * cutscene arm first and the flight lens second, and this writes the same
-   * flight lens a panel's slider writes.
+   * flight lens a panel's slider writes. A no-op headlessly, where there is no
+   * camera to fit it to and the arithmetic is worth running anyway.
    */
-  setFlightLens?(lens: Lens): void
+  setFlightLens(lens: Lens): void
   /**
    * How many display pixels one CSS pixel is, on this host.
    *
@@ -235,21 +210,18 @@ export interface PresentationHost {
    * and the device ratio deliberately kept — the terrain predicate and the
    * circle of confusion are claims about physical pixels. A pointer delta is in
    * CSS pixels. On a 2× display the two differ by two, and a sensitivity that
-   * conflated them moved the picture at half the rate of the hand.
-   *
-   * 1 headlessly, and 1 is also the honest answer for a display that has no
-   * ratio to report.
+   * conflated them moved the picture at half the rate of the hand. 1 headlessly,
+   * which is also the honest answer for a display that has no ratio to report.
    */
-  pixelRatio?(): number
+  pixelRatio(): number
   /**
    * Put the interface in or out of the frame.
    *
    * A plate is defined as the frame taken with the chrome cleared, and a plate
    * has to be reproducible from a script — so the state `Shift+H` reaches has
-   * to be reachable from here too. Optional for the same reason: headlessly
-   * there is no interface to clear.
+   * to be reachable from here too. Headlessly there is no interface to clear.
    */
-  setChrome?(visible: boolean): void
+  setChrome(visible: boolean): void
   /**
    * Put the sky's own layers — names and traces — in or out of the frame.
    *
@@ -258,28 +230,75 @@ export interface PresentationHost {
    * the second. A plate wants both gone, because a thumbnail of a picture is a
    * thumbnail of what the camera does and the layers are the viewer's.
    */
-  setLayers?(visible: boolean): void
-  /**
-   * What the terrain streamer is doing this frame.
-   *
-   * The one number in the terrain rig that cannot be derived: `simulateDescent`
-   * says what the streamer *would* be asked for, and this says what it actually
-   * has — how many patches are on screen, how deep the worker queue is, and
-   * whether the cache is holding. The two disagreeing is the interesting case
-   * and there was no way to see it.
-   */
-  terrain(): TerrainReport | null
+  setLayers(visible: boolean): void
   /**
    * The performance timeline, when the host has one.
    *
-   * Optional rather than stubbed, because a host without one has a real answer
-   * — "this runtime does not put entries anywhere" — and `ir.profile()` says so
-   * instead of returning an empty report that reads like a fast session.
+   * Null rather than an empty port, because a host without one has a real
+   * answer — "this runtime does not put entries anywhere" — and `ir.profile()`
+   * says so instead of returning an empty report that reads like a fast session.
    */
-  timing?(): TimingPort
+  timing(): TimingPort | null
 }
 
-export type HarnessHost = SimulationHost & Partial<PresentationHost>
+/**
+ * The render side of a host that has none, with whatever a caller does supply
+ * laid over it — the second adapter of `RenderHost`, and the one every test
+ * and the headless runner use.
+ *
+ * Member by member rather than a spread, because a caller's `undefined` would
+ * otherwise win over the default and put a `?.` back into every reader.
+ */
+export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
+  return {
+    scene: overrides.scene ?? (() => null),
+    frameStats: overrides.frameStats ?? (() => null),
+    terrain: overrides.terrain ?? (() => null),
+    lensView: overrides.lensView ?? (() => null),
+    framingLens: overrides.framingLens ?? (() => LENS_PRESETS.flight),
+    setFlightLens: overrides.setFlightLens ?? (() => {}),
+    pixelRatio: overrides.pixelRatio ?? (() => 1),
+    setChrome: overrides.setChrome ?? (() => {}),
+    setLayers: overrides.setLayers ?? (() => {}),
+    timing: overrides.timing ?? (() => null),
+  }
+}
+
+/**
+ * What the harness is built over: the simulation, and the render side.
+ *
+ * `world` must be a *getter*, not a captured reference. Loading a save replaces
+ * the world wholesale, and a host that copied the reference in at construction
+ * leaves the harness — and therefore the debug overlay — reporting on the world
+ * that was thrown away while the frame loop runs the new one. That split brain
+ * looked exactly like "load silently does nothing" from the outside.
+ * `openSession` is the one implementation; it gets this right once.
+ */
+export interface Host {
+  readonly world: World
+  /** The entity the camera follows. */
+  player(): EntityId | null
+  pool(): WorkerPool | null
+  /** Replace the running world (used by load). */
+  replaceWorld(world: World, player: EntityId | null): void
+  /**
+   * Whoever owns the part of the simulation this client does not.
+   *
+   * Always present: a solo player has a `LocalAuthority`, which is an
+   * implementation rather than the absence of one, and `openSession` supplies
+   * it when a caller does not.
+   */
+  authority(): AuthorityPort
+  /**
+   * The host's clock, for the things here that measure rather than simulate.
+   *
+   * Null where the host has none, and the terrain baseline then reports "not
+   * timed" rather than reaching for `performance.now()` itself — which nothing
+   * below `apps/` is allowed to do.
+   */
+  readonly now: (() => number) | null
+  readonly render: RenderHost
+}
 
 export interface HarnessStatus {
   readonly world: WorldInspection
@@ -321,14 +340,14 @@ export interface LoadOutcome {
 const log = getLogger('devtools.harness')
 
 export class GameHarness {
-  readonly #host: HarnessHost
+  readonly #host: Host
   readonly #logSink = new RingBufferSink(256)
   readonly #cutscenes: CutsceneDirector
   readonly #observatory: Observatory
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
 
-  constructor(host: HarnessHost) {
+  constructor(host: Host) {
     this.#host = host
     this.#cutscenes = new CutsceneDirector(host, [TNG_INTRO])
     this.#observatory = new Observatory(host)
@@ -346,14 +365,14 @@ export class GameHarness {
   /** Everything the debug overlay shows, as data. */
   status(): HarnessStatus {
     const player = this.#host.player()
-    const scene = this.#host.scene?.() ?? null
+    const scene = this.#host.render.scene()
     return {
       world: inspectWorld(this.world),
       player: player === null ? null : inspectEntity(this.world, player),
       render: scene === null ? null : inspectRender(scene),
       workers: this.#host.pool()?.stats() ?? null,
-      frame: this.#host.frameStats?.() ?? null,
-      authority: this.#host.authority?.().status() ?? null,
+      frame: this.#host.render.frameStats(),
+      authority: this.#host.authority().status(),
       lens: this.lens(),
     }
   }
@@ -367,7 +386,7 @@ export class GameHarness {
    * resolution nobody is looking at.
    */
   lens(): LensReadout | null {
-    const view = this.#host.lensView?.() ?? null
+    const view = this.#host.render.lensView()
     return view === null ? null : lensReadout(view.lens, view.viewport)
   }
 
@@ -767,7 +786,7 @@ export class GameHarness {
        * lens for exactly this reason; a bookmark that framed against a lens
        * nobody is looking through is the defect `ir.preset` was fixed for.
        */
-      verticalFovDegrees(this.#host.framingLens?.() ?? LENS_PRESETS.flight),
+      verticalFovDegrees(this.#host.render.framingLens()),
     )
     const distance = Vec.length(placement.position)
     this.world.teleport(player, {
@@ -1339,13 +1358,13 @@ export class GameHarness {
      * claim about what the frame contains, and a zoom left on top of it would
      * make the frame something else.
      */
-    const current = this.#host.framingLens?.()
-    const fitted = lensForFov(fovDeg, current?.gauge)
-    this.#host.setFlightLens?.(
-      current === undefined
-        ? fitted
-        : { ...current, focalLength: fitted.focalLength, zoom: 1 },
-    )
+    const current = this.#host.render.framingLens()
+    const fitted = lensForFov(fovDeg, current.gauge)
+    this.#host.render.setFlightLens({
+      ...current,
+      focalLength: fitted.focalLength,
+      zoom: 1,
+    })
   }
 
   /**
@@ -1357,7 +1376,7 @@ export class GameHarness {
    * fixture nobody can regenerate.
    */
   chrome(visible: boolean): boolean {
-    this.#host.setChrome?.(visible)
+    this.#host.render.setChrome(visible)
     return visible
   }
 
@@ -1370,7 +1389,7 @@ export class GameHarness {
    * a trace slashing across it promises a layer the press does not set.
    */
   layers(visible: boolean): boolean {
-    this.#host.setLayers?.(visible)
+    this.#host.render.setLayers(visible)
     return visible
   }
 
@@ -1524,7 +1543,7 @@ export class GameHarness {
      * *would* be asked for, the other what is held, and the two disagreeing is
      * the interesting case only when they are asked at the same lens.
      */
-    const live = this.#host.lensView?.() ?? null
+    const live = this.#host.render.lensView()
     const optics =
       live === null
         ? {}
@@ -1561,7 +1580,7 @@ export class GameHarness {
    * honest answer rather than a zero.
    */
   terrain(): TerrainReport | null {
-    return this.#host.terrain?.() ?? null
+    return this.#host.render.terrain()
   }
 
   /**
@@ -1585,7 +1604,7 @@ export class GameHarness {
   terrainBaseline(
     options: BaselineOptions = {},
   ): TerrainBaseline & { readonly text: string } {
-    const now = this.#host.now?.bind(this.#host) ?? null
+    const now = this.#host.now
     const baseline = terrainBaseline(this.world, now, options)
     return { ...baseline, text: summarizeBaseline(baseline) }
   }
@@ -1604,7 +1623,7 @@ export class GameHarness {
    * one.
    */
   get timing(): TimingVerb {
-    this.#timingVerb ??= makeTimingVerb(() => this.#host.timing?.())
+    this.#timingVerb ??= makeTimingVerb(() => this.#host.render.timing())
     return this.#timingVerb
   }
 
@@ -1623,8 +1642,8 @@ export class GameHarness {
    * the rest of it.
    */
   async profile(ms = 2000): Promise<ProfileReport> {
-    const port = this.#host.timing?.()
-    if (port === undefined) {
+    const port = this.#host.render.timing()
+    if (port === null) {
       return {
         ...summarizeProfile([]),
         verdict: 'this host has no performance timeline',
