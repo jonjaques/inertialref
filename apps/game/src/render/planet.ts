@@ -803,17 +803,25 @@ export function createRingMaterial(): RingMaterial {
    * rings turn edge-on to the *sun*, which is the seasonal cycle that took
    * Cassini seven years to watch once.
    *
-   * `ω₀ = 0.6` is water ice. The gain that follows is the I/F convention's
-   * factor of π, which is what turns a reflectance into something the tone
-   * mapper can treat like every other surface in the scene.
+   * `ω₀ = 0.9` is clean water ice in the visible. The strip's colour
+   * multiplies it, and the strip is where the darkening lives — Saturn's B
+   * ring is 0.51 in its photograph and Uranus's rubble 0.06 — so the two
+   * together are the particle albedo Cassini measured, 0.5 to 0.6 for the
+   * bright rings; at 0.6 the albedo was in the product twice and the lit
+   * face of a sheet sat at a sixth of its planet. The gain that follows is
+   * the I/F convention's factor of π, which is what turns a reflectance into
+   * something the tone mapper can treat like every other surface in the
+   * scene. The transmitted term below carries the same ω₀, so the lit-to-
+   * backlit crossover `rings.gpu.test.ts` holds near unit depth does not move.
    */
+  const RING_ALBEDO = 0.9
   const opticalThickness = opticalDepth.mul(band.a)
   const muLight = max(lightSide.abs(), float(0.03))
   const muView = max(viewSide.abs(), float(0.02))
   const crossings = opticalThickness.mul(
     float(1).div(muLight).add(float(1).div(muView)),
   )
-  const single = float(0.6 / 4)
+  const single = float(RING_ALBEDO / 4)
     .mul(muLight.div(muLight.add(muView)))
     .mul(oneMinus(exp(crossings.negate())))
     .mul(Math.PI)
@@ -835,7 +843,7 @@ export function createRingMaterial(): RingMaterial {
   const transmitted = band.rgb
     .mul(vec3(1.0, 0.86, 0.68))
     .mul(exp(opticalThickness.div(muLight).negate()))
-    .mul(0.6)
+    .mul(RING_ALBEDO)
 
   /*
    * The planet's shadow on its own rings.

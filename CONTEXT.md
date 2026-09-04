@@ -6965,6 +6965,50 @@ equatorial radius and the spherical field, and the rng sequence is unchanged.
 and to 10% with the class factor, the uniform limit to Maclaurin, and every
 generated planet in the fixture above its floor with no giant past 0.14.
 
+## A ring system is drawn from a character, and Sol's seven are looked up (3 Sep 2026)
+
+`proceduralRingStrip` branched on the host's kind: every generated ice giant
+in the galaxy wore the same six to eleven charcoal threads and every gas giant
+the same three to five bands, and the ice-giant look measured 3.8e-4 over the
+annulus, which is nothing. It now draws a character from the body's seed —
+sheet, threads or mixed, with the host leaning the odds; a particle albedo
+and a tint that follow the architecture, since the three have one cause —
+and a profile from the character: plateaus with a diffuse inner edge and a
+sharp outer one, a grain of density waves, Cassini divisions, shepherded
+ringlets, a C ring of dust, paired hairlines, a dominant outer thread. The
+strip is mipmapped for the grain, which is sampler state and changes no
+program. Over twelve seeds at τ 0.7 the ice-giant median is 4.5e-3 against
+3.8e-4, the gas giant's 8.2e-3 against 5.9e-3, and each class spans two to
+three hundred times between its faintest and brightest; the plan has the
+table.
+
+**The seed was tossing a coin on Uranus.** Uranus, Neptune, Jupiter, Haumea,
+Quaoar, Chariklo and Chiron have no ring photograph, so all seven went
+through the generator, where a kind-lean is a probability and Uranus had a
+two-in-five chance of a Saturn sheet. A table keyed by address gives each its
+published character, and `proceduralRings.test.ts` holds the table to the
+catalog both ways — every key a mapless ringed body in Sol, every such body a
+key — because the small bodies are keyed by issue-ordinal addresses nothing
+else in the file can see.
+
+**The ring's albedo was in the product twice.** The strip's colour multiplies
+`ω₀` and the strip is where the darkening lives — Saturn's B ring is 0.51 in
+its photograph, Uranus's rubble 0.06 — so at 0.6 a τ 1 sheet's lit face sat
+at a sixth of its planet. `ω₀` is 0.9, clean water ice in the visible, on
+both the backscatter and the transmission terms, so the lit-to-backlit
+crossover the rings test holds near unit depth does not move.
+
+**What is still faint is geometry, and one lever was spent.** A planet of
+ordinary tilt spends most of its orbit with its star within a few degrees of
+the ring plane, and a slab lit at grazing incidence is honestly dark — the
+plates of Xi Boötis V and Kapteyn's Star c under the same framing as Saturn
+are dim the way Saturn's own are there. The planet tilt draw stretches its
+tail from the same single gaussian, one planet in eleven past 34° up to 86°,
+so a share of ring systems are open to their star the way Uranus's is; no
+extra draw, so no moon, colour or ground moves. A multiple-scattering floor
+for the equinox case is written down in the plan and not in TSL, because it
+is a number nobody here has measured.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

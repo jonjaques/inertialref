@@ -901,7 +901,7 @@ function makePlanet(
     elements,
     orbitalPeriod: orbitalPeriod(star.mu + bodyMu, semiMajorAxis),
     rotationPeriod,
-    axialTilt: Math.abs(rng.gaussian(0, 0.35)),
+    axialTilt: planetTilt(rng.gaussian(0, 0.35)),
     atmosphere,
     surface,
     sphereOfInfluence: soi,
@@ -994,6 +994,25 @@ export function rotationalFlattening(
  * class factor above, which is visibly a fast rotator and still a planet.
  */
 export const HYDROSTATIC_SPIN_LIMIT = 0.2
+
+/**
+ * A planet's axial tilt from one gaussian draw, with the tail stretched.
+ *
+ * The body of the draw is `|N(0, 0.35)|`: most planets within thirty degrees,
+ * which is Earth, Mars, Saturn and Neptune. What a plain gaussian cannot
+ * reach is Uranus — 82° on one giant in four, from an impact — and a ring
+ * system on a body of ordinary tilt spends most of its orbit with its star
+ * within a few degrees of the ring plane, lit edge-on and drawn dark. So the
+ * draw past 34° (1.7σ, about one planet in eleven) is stretched five times,
+ * up to the 86° a magnitude can carry: the retrograde half of the circle
+ * lives in the sign of the rotation period. One draw either way, so no
+ * planet's moons, colour or ground move for the change.
+ */
+export function planetTilt(draw: number): Radians {
+  const tilt = Math.abs(draw)
+  const knee = 0.6
+  return tilt <= knee ? tilt : Math.min(1.5, knee + (tilt - knee) * 5)
+}
 
 /** The shortest sidereal period a planet of `mass` and `radius` may draw. */
 export function hydrostaticSpinFloor(mass: Kilograms, radius: Meters): Seconds {
@@ -1510,7 +1529,7 @@ function makeObservedPlanet(
     elements,
     orbitalPeriod: period,
     rotationPeriod,
-    axialTilt: Math.abs(rng.gaussian(0, 0.35)),
+    axialTilt: planetTilt(rng.gaussian(0, 0.35)),
     atmosphere,
     surface,
     sphereOfInfluence: soi,
