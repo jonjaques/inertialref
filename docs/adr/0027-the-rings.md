@@ -100,20 +100,28 @@ would be at 82° if it were not charcoal. One planet in eleven now lands past
 34°, up to 86°, from the same single gaussian. The Solar System's own eight
 support the distribution, two of them on their sides.
 
-**The `SYSTEM_ALGORITHM` bump that tail requires is owed and deferred.** It is
-recorded here rather than left implicit, because the reasoning that first held
-the version is wrong and must not be reused: keeping the draw order protects a
-body's _neighbors_ and says nothing about the body. `planetTilt` consumes
-exactly one gaussian, as the plain `Math.abs` did, so nothing downstream shifts
-in the stream — and the angle that comes back is different on 142 of 6,496
-generated bodies, the worst by 41°. Those are not presentation: `spinEvaluator`
-builds the body-fixed frame from `axialTilt` and `rotationPeriod`, so a moved
-pole moves the ground terrain is sampled on and the pose a landed entity is
-held against. `world.stateHash()` cannot see it, because a landed entity's
-numbers are body-frame-relative and identical on both sides. The bump goes with
-the next change that touches generated system state, so one version covers
-both; `system.ts` carries the warning at the constant and
-[determinism](../concepts/determinism.md) carries the rule.
+**That tail spends `SYSTEM_ALGORITHM` on 4.** The reasoning that first held the
+version is recorded here rather than left implicit, because it is wrong and
+must not be reused: keeping the draw order protects a body's _neighbors_ and
+says nothing about the body. `planetTilt` consumes exactly one gaussian, as the
+plain `Math.abs` did, so nothing downstream shifts in the stream — and the angle
+that comes back is different on 142 of 6,496 generated bodies, the worst by 41°.
+Those are not presentation: `spinEvaluator` builds the body-fixed frame from
+`axialTilt` and `rotationPeriod`, so a moved pole moves the ground terrain is
+sampled on and the pose a landed entity is held against. `world.stateHash()`
+cannot see it, because a landed entity's numbers are body-frame-relative and
+identical on both sides.
+
+**One bump covers every field that moved, not one bump per field.** The
+hydrostatic spin floor lengthens a rotation period and `polarRadius` moves on
+1,515 bodies; the second of those is presentation — `datumRadius` reads the
+equatorial radius whenever `figure` is null, so the flattening reaches the
+dossier and the silhouette and never the ground's datum or the contact test —
+and it rides along rather than earning a number of its own. A version is what a
+loader compares, and it answers one question: is the world this save was
+written against the world this build generates. `system.ts` carries the
+argument at the constant and [determinism](../concepts/determinism.md) carries
+the rule.
 
 ## Alternatives considered
 
@@ -158,10 +166,10 @@ variety a player meets across a hundred worlds is the thing that was missing.
   annulus: the typical ice giant goes from 3.8 × 10⁻⁴ to a median 4.5 × 10⁻³ —
   twelve times brighter — and the gas giant's median rises by a third to
   8.2 × 10⁻³. `rings.gpu.test.ts` holds the spread and the photometry.
-- **A version is owed and the manifest does not say so.** Until it is spent, a
-  `main` client and this one both report `system@3` at the handshake and place
-  Proxima Centauri II's pole 41° apart with nothing to notice. This is the cost
-  of the deferral and it is real.
+- **`system@4` invalidates every save's system references.** That is what the
+  version is for, and the alternative was worse: two builds reporting `system@3`
+  while placing Proxima Centauri II's pole 41° apart, with nothing at the
+  handshake or in the state hash able to notice.
 - The record's optical depth now means the densest band rather than an annulus
   mean. That matches the published figures and leaves `RingSystem` — one
   annulus, one number — describing less than the strip draws. A per-ring

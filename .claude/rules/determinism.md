@@ -28,9 +28,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   and 142 poles in 6,496 moved, the worst by 41°, into a manifest that still said
   `system@3`. `world.stateHash()` cannot catch it either: a landed entity's numbers are
   body-frame-relative and identical on both sides of a pole that moved. If a generated
-  **value** changed, spend the version. (That bump is currently owed and deferred by
-  [ADR-0027](../../docs/adr/0027-the-rings.md) — a decision on the record, not a licence
-  to repeat the reasoning.)
+  **value** changed, spend the version. `system@4` is that bump, and
+  [ADR-0027](../../docs/adr/0027-the-rings.md) records the argument it settles.
 - **Never write entity state around the world's verbs.** `world.entities` is the read
   half of the store. A ship that starts moving is spawned moving (`spawnShip` takes the
   velocity); after that, `teleport` for a discontinuous move, `setControl` /

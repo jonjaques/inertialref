@@ -335,8 +335,9 @@ reference: the WebGPU frame is the one the target applies to.
   not answered by the draw order: a draw that keeps its place in the stream and
   returns a different number is still a version
   ([determinism](../../docs/concepts/determinism.md)). It moves if any generated
-  value does, and a bump to 4 is already owed from the tilt tail, so this phase
-  is the natural place to spend it.
+  value does — the tilt tail spent 4 on exactly that reading — so this phase
+  spends 5 if the drainage reaches anything `system.ts` generates, and nothing
+  if it stays inside the terrain field.
 - **The sketch grows, and workers get it by value.** A few megabytes per body,
   built once, cloned to each worker as typed arrays. The GPU producer uploads
   it once per body; the WebGL 2 path pays the CPU band and nothing else.

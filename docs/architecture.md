@@ -226,7 +226,7 @@ Nothing is stored. Content is a pure function of a seed and an address.
 flowchart LR
     SEED["global seed<br/><code>'inertialref'</code>"]
     ADDR["address<br/><code>g:milky-way/s:SOL/b:2</code>"]
-    VER["algorithm version<br/><code>system@3</code>"]
+    VER["algorithm version<br/><code>system@4</code>"]
     GEN(("derive"))
     OUT["the same planet,<br/>every time,<br/>everywhere"]
 

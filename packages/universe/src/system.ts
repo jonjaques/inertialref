@@ -104,36 +104,31 @@ import { ROUNDING_RADIUS } from './rounding.ts'
  * of the same address space with nothing to notice.
  */
 /*
- * **A bump to 4 is owed and deliberately deferred.** Do not read this 3 as
- * evidence that nothing generated has moved.
+ * Bumped to 4 when the figure and the spin floor moved canonical fields.
  *
- * The figure and the spin floor moved canonical fields. `axialTilt` and
- * `rotationPeriod` are not presentation: `spinEvaluator` in `frames.ts`
- * builds the body-fixed frame out of them, so they orient the ground terrain
- * is sampled on and the pose a landed entity is held against. Measured over
- * 400 catalog stars and 6,496 generated bodies, the tilt's stretched tail
- * moves 142 of them, the worst by 41°, and the hydrostatic floor lengthens
- * one rotation period. A pole 41° from where a save left it is a different
- * world under the same address.
+ * `axialTilt` and `rotationPeriod` are not presentation: `spinEvaluator` in
+ * `frames.ts` builds the body-fixed frame out of them, so they orient the
+ * ground terrain is sampled on and the pose a landed entity is held against.
+ * Measured over 400 catalog stars and 6,496 generated bodies, the tilt's
+ * stretched tail moves 142 of them, the worst by 41°, and the hydrostatic
+ * floor lengthens one rotation period. A pole 41° from where a save left it is
+ * a different world under the same address, and nothing else in the game can
+ * notice: `stateHash` cannot see it, because a landed entity's numbers are
+ * body-frame-relative and identical on both sides.
  *
- * Preserving the draw order does not hold a version, which is the trap to
- * take from this. `planetTilt` consumes exactly one gaussian, as the plain
+ * Preserving the draw order does not hold a version, which is the trap to take
+ * from this. `planetTilt` consumes exactly one gaussian, as the plain
  * `Math.abs` did, so nothing downstream of it shifts in the stream — and the
  * number it returns is still different. Order protects a body's neighbors and
- * says nothing about the body. `stateHash` cannot see it either: a landed
- * entity's numbers are body-frame-relative and identical on both sides.
+ * says nothing about the body.
  *
- * `polarRadius` moves on 1,515 bodies and would not be worth a version alone —
+ * `polarRadius` moves on 1,515 bodies and rides along rather than earning it —
  * `datumRadius` in `terrain.ts` reads the equatorial radius whenever `figure`
  * is null, so the flattening reaches the dossier and the silhouette and never
- * the ground's datum or the contact test.
- *
- * Spend the version with the next change that touches generated system state,
- * so one bump covers both. Until then a `main` client and this one report
- * `system@3` at the handshake and place Proxima Centauri II's pole 41° apart
- * with nothing to notice. ADR-0027 records the deferral.
+ * the ground's datum or the contact test. ADR-0027 records the argument, which
+ * is one bump for whatever moved, not one per field.
  */
-export const SYSTEM_ALGORITHM = algorithm('system', 3)
+export const SYSTEM_ALGORITHM = algorithm('system', 4)
 /*
  * Bumped to 2 when the three noise bands became a band stack.
  *

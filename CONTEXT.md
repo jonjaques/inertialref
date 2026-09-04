@@ -7031,11 +7031,16 @@ identical on either side. `polarRadius` moved on 1,515 bodies and is the one
 field that genuinely is presentation: `datumRadius` reads the equatorial radius
 whenever `figure` is null.
 
-**The bump is owed and deferred**, to be spent with the next change that touches
-generated system state so one version covers both. Until then two builds report
-`system@3` and place Proxima Centauri II's pole 41° apart with nothing to
-notice. [ADR-0027](docs/adr/0027-the-rings.md) records the decision;
-`system.ts` carries the warning at the constant; the rule is now an invariant.
+**The bump is spent: `SYSTEM_ALGORITHM` is 4.** It was first held back to be
+paid by the next change that touched generated system state, on the argument
+that one version could cover both — which is a real saving only if the interval
+costs nothing, and it does not: two builds reporting `system@3` while placing
+Proxima Centauri II's pole 41° apart is exactly the disagreement the manifest
+exists to make visible, and a handshake that cannot see it is worse than a
+regenerated save. One bump covers every field that moved with it, including
+`polarRadius`, which rides along rather than earning its own number.
+[ADR-0027](docs/adr/0027-the-rings.md) carries the argument; `system.ts` carries
+it at the constant; the rule is an invariant.
 
 **Four figures were retired and copied forward anyway.** The pattern is the
 same each time — a comment rewritten around numbers measured before the change

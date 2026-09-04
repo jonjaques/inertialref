@@ -179,7 +179,7 @@ Generators carry an `AlgorithmVersion`. The version is part of what defines the
 universe, and a save records the versions it was written with:
 
 ```
-generation: { galaxy: 2, system: 3, terrain: 4, photometry: 1 }
+generation: { galaxy: 2, system: 4, terrain: 4, photometry: 1 }
 ```
 
 `system` went to 3 when generated systems gained a belt — six to eighteen small
@@ -200,16 +200,17 @@ deliberately did not move with the band stack, and that case is sound:
 stream, so the ground under a landed ship changed while every other property of
 every body in the galaxy stayed exactly where it was.
 
-The opposite case is the trap, and `system@3` is currently sitting in it. The
-axial-tilt draw consumes exactly one gaussian and the spin floor beside it
-consumes none, so nothing downstream of either shifts — and the angle that comes
-back is different on 142 of 6,496 bodies, the worst by 41°. Order is what
-protects a body's _neighbors_; it says nothing about the body. The state hash
-cannot cover the gap either, because a landed entity's numbers are
-body-frame-relative and identical on both sides of a pole that moved. The bump
-to 4 is owed and deferred to the next change that touches generated system
-state, so that one bump covers both; [ADR-0027](../adr/0027-the-rings.md)
-records the decision and `system.ts` carries the same warning at the constant.
+The opposite case is the trap, and `system@4` is what it costs. The axial-tilt
+draw consumes exactly one gaussian and the spin floor beside it consumes none,
+so nothing downstream of either shifts — and the angle that comes back is
+different on 142 of 6,496 bodies, the worst by 41°. Order is what protects a
+body's _neighbors_; it says nothing about the body. The state hash cannot cover
+the gap either, because a landed entity's numbers are body-frame-relative and
+identical on both sides of a pole that moved. One bump covers everything that
+moved with it — the spin floor's lengthened period, and `polarRadius` on 1,515
+bodies, which is presentation and rides along rather than earning its own
+number. [ADR-0027](../adr/0027-the-rings.md) records the argument and
+`system.ts` carries it at the constant.
 
 So "this save was made with terrain v4" is a statement the loader can act on,
 rather than a mystery about why the coastline moved. Deciding _what_ to do about
