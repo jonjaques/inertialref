@@ -62,6 +62,53 @@ the epoch — is answered in the module's header: every bookmark is a
 `goToSystem`, `burnToward` and `face` get their own; the placement geometry in
 `shots.ts` keeps its property tests.
 
+**Decisions from the reading pass** — resolved against the code, not yet
+written:
+
+- **Construct `Maneuvers` over the whole `Host`, as `Observatory` does**
+  (`new Observatory(host)`, `import type { Host } from './harness.ts'` — the
+  type-only import is erased, so the harness→maneuvers value edge is the only
+  runtime one and there is no cycle). The verbs read three things off it: the
+  `world` getter, `player()`, and `render.framingLens()` — `shot` alone needs
+  the last, to solve a `fill` standoff against the lens the camera is wearing
+  rather than the flight default (the `ir.preset` defect).
+- **The harness verbs keep returning `HarnessStatus`.** `ir.land(...).player.landed`
+  and `ir.shot` returning the lens-carrying status are both documented in
+  `docs/guides/harness.md` and read by the photo-mode metadata seam, so the
+  public return cannot become a bare `ManeuverResult`. Each verb becomes a
+  two-line forward: call `this.#maneuvers.<verb>(…)`, then `return this.status()`.
+- **`ManeuverResult` is `{ state, heading, phase, droppedEpoch }`** and is
+  reached by testing the module directly (`new Maneuvers(session)` — a `Session`
+  is a `Host`), so it is a read type rather than dead code the harness discards.
+  `droppedEpoch` is `entity.rails === null` read after the write, and it is
+  always true for these verbs — that is the point, and the header carries the
+  one sentence (ADR-0025).
+- **Move into the module:** `orbit`, `shot`, `land`, `goTo`, `goToSystem`,
+  `face`, `burnToward`, and the privates `#toStar` (export it as `sunDirection`
+  for the phase helper), `#trackOrbit`, `#orbitStar`, `#arriveAt`, `#lookAt`,
+  `#bodyPosition`, `#currentBodyAddress`, plus a module-private `requirePlayer`.
+  **Stays in the harness:** `shots()` (a listing of `SHOTS`, no world or
+  player), and the simulation-control verbs `control` / `hold` / `flightAssist`
+  / `pause` / `resume` / `timeWarp` / `step` / `runSeconds`.
+- **`EntityInspection` gains `heading` and `phase`, computed by two exported
+  pure helpers in `maneuvers.ts`** so `inspect.ts` and the module share them:
+  `headingOf(state)` is `Q.rotate(state.orientation, [0,0,-1])` — the
+  **frame-local** forward, matching what the going-places tests read today —
+  and `orbitalPhase(world, entity)` is the sun–body–camera angle in degrees,
+  `null` unless `entity.state.frame` starts with `b:` (a landing's `sf:`, an
+  interstellar frame, and a star orbit's `s:` all yield `null`). It resolves
+  the system with `currentSystemOf(world, entity.id)` and the sun with the
+  moved `sunDirection`; the angle is frame-independent, so no rotation into the
+  body frame is needed — `acos(dot(normalize(state.position), sunDirection))`.
+  `inspect.ts` importing `maneuvers.ts` adds no cycle: maneuvers imports
+  `travel.ts` and neither imports `inspect.ts`.
+- **The test rewrite is the payoff:** every going-places case that reads
+  `session.world.entities.require(player).state.orientation` and recomputes a
+  dot or a phase becomes an assertion on `ir.status().player.heading` /
+  `.phase`, or on the module's `ManeuverResult`. "Arrives looking at it" is
+  `dot(player.heading, normalize(negate(player.local))) ≈ 1`. `goToSystem`,
+  `burnToward` and `face` — untested today — get cases in the same shape.
+
 ---
 
 ## 2. The engine's derived state keys on one generation
