@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   type Camera,
+  CustomToneMapping,
   FloatType,
   LinearSRGBColorSpace,
   Mesh,
@@ -145,6 +146,105 @@ describe('the spine', () => {
     sensor.dispose()
     own.dispose()
     chain.dispose()
+  })
+
+  it('leaves the renderer as it found it when a frame throws', async () => {
+    const { renderer } = gpu
+    installToneCurve(renderer, 1)
+    renderer.outputColorSpace = SRGBColorSpace
+    declareSceneTarget(renderer, { samples: 0 })
+
+    /*
+     * The scene renders inside `PostProcessing.render`'s swap of the renderer
+     * to no curve and the working space, and the swap is undone by two plain
+     * assignments after the quad. A throw from the scene — an `onBeforeRender`
+     * here, in the app a draw against a pipeline the warm-up is still
+     * building — leaves the swapped values on the renderer, where the chain's
+     * own rebuild check reads them as a mode change. The chain restores them;
+     * this is the frame that throws, and the frame after it.
+     */
+    const scene = new Scene()
+    const flat = new MeshBasicNodeMaterial()
+    flat.colorNode = vec3(0.18)
+    const slab = new Mesh(new SphereGeometry(3, 8, 6), flat)
+    let armed = true
+    slab.onBeforeRender = () => {
+      if (armed) throw new Error('a frame that throws')
+    }
+    scene.add(slab)
+    scene.updateMatrixWorld(true)
+
+    const target = floatTarget()
+    const sensor = createSensor(renderer, scene, camera)
+    expect(() => sensor.render(target)).toThrow('a frame that throws')
+    expect(renderer.toneMapping).toBe(CustomToneMapping)
+    expect(renderer.outputColorSpace).toBe(SRGBColorSpace)
+
+    // And the next frame is the curve's. Held to the renderer's own output
+    // rather than to a number, the way the first gate is: the poisoned
+    // rebuild would present 0.18 as 0.18, and the curve and the transfer put
+    // it near 0.45.
+    armed = false
+    sensor.render(target)
+    const ours = (await gpu.read(target)).at(SIZE / 2, SIZE / 2)
+    const own = floatTarget()
+    renderer.setRenderTarget(null)
+    renderer.setOutputRenderTarget(own)
+    renderer.render(scene, camera)
+    renderer.setOutputRenderTarget(null)
+    const theirs = (await gpu.read(own)).at(SIZE / 2, SIZE / 2)
+    expect(theirs[0]).toBeGreaterThan(0.3)
+    for (let channel = 0; channel < 3; channel += 1)
+      expect(
+        Math.abs((ours[channel] as number) - (theirs[channel] as number)),
+      ).toBeLessThan(1e-5)
+
+    sensor.dispose()
+    target.dispose()
+    own.dispose()
+  })
+
+  it('draws the scene once per call, so a measured frame is a frame', async () => {
+    const { renderer } = gpu
+    installToneCurve(renderer, 1)
+    renderer.outputColorSpace = SRGBColorSpace
+    declareSceneTarget(renderer, { samples: 0 })
+
+    /*
+     * Three frames through one chain, back to back in one task, with no frame
+     * of three's own between them — `measureGpuFrameMs`'s loop, and the shape
+     * of every second frame in this file. A pass keyed on `nodeFrame.frameId`
+     * draws the scene on the first and the quad alone on the rest: the
+     * harness stubs the `requestAnimationFrame` that advances the counter, so
+     * here that is once and never again. `info.calls` counts scene renders,
+     * and a chain frame is two, the pass and the quad; the picture changing
+     * between frames is what says the pass was the frame's own.
+     */
+    const scene = new Scene()
+    const flat = new MeshBasicNodeMaterial()
+    flat.colorNode = vec3(0.5)
+    const slab = new Mesh(new SphereGeometry(3, 8, 6), flat)
+    scene.add(slab)
+    scene.updateMatrixWorld(true)
+
+    const target = floatTarget()
+    const sensor = createSensor(renderer, scene, camera)
+    const before = renderer.info.calls
+    sensor.render(target)
+    const first = (await gpu.read(target)).at(SIZE / 2, SIZE / 2)
+    slab.visible = false
+    sensor.render(target)
+    const second = (await gpu.read(target)).at(SIZE / 2, SIZE / 2)
+    slab.visible = true
+    sensor.render(target)
+    const third = (await gpu.read(target)).at(SIZE / 2, SIZE / 2)
+    expect(renderer.info.calls - before).toBe(6)
+    expect(first[0]).toBeGreaterThan(0.3)
+    expect(second[0]).toBe(0)
+    expect(third[0]).toBe(first[0])
+
+    sensor.dispose()
+    target.dispose()
   })
 
   it('carries a value above white to its output unclamped', async () => {

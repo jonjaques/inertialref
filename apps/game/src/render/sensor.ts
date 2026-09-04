@@ -2,6 +2,7 @@ import {
   type Camera,
   DepthTexture,
   HalfFloatType,
+  NodeUpdateType,
   PostProcessing,
   RenderTarget,
   type Scene,
@@ -173,6 +174,25 @@ export function createSensor(
 ): Sensor {
   const shape = sceneTargetShape(renderer)
   const scenePass = pass(scene, camera, { samples: shape.samples })
+  /*
+   * The pass draws the scene once per *render call*, not once per three
+   * frame.
+   *
+   * `PassNode` ships as `NodeUpdateType.FRAME`: its scene render is gated on
+   * `nodeFrame.frameId`, and the only thing that advances that counter is the
+   * `requestAnimationFrame` loop three starts for itself in `init()` — not a
+   * call to `render()`. R3F drives this chain from its own loop, one call per
+   * rAF, so in the page the two agree by coincidence; anywhere the chain is
+   * asked for two frames in one task they do not. `measureGpuFrameMs` submits
+   * forty `render()` calls back to back and would time one scene and
+   * thirty-nine quads; a headless gate that draws a second frame through one
+   * chain reads the first frame's pass back, because the harness stubs the
+   * loop and the counter stays at one; and a throw inside the pass leaves the
+   * frame marked as drawn, so nothing renders again until three's loop moves
+   * on. Keyed on the render call, the pass runs exactly when `render()` does
+   * — once per presented frame in the app, once per call everywhere else.
+   */
+  scenePass.updateBeforeType = NodeUpdateType.RENDER
   const post = new PostProcessing(renderer)
 
   /*
@@ -227,7 +247,27 @@ export function createSensor(
       // see the interface note. The pass's own `updateBefore` saves and
       // restores this around the scene render, so the quad draws to it.
       renderer.setRenderTarget(target)
-      post.render()
+      /*
+       * `PostProcessing.render` swaps the renderer to `NoToneMapping` and the
+       * working color space while the quad draws and puts both back with two
+       * assignments after it — no `finally`. The scene renders *inside* that
+       * swap, through the pass, so a throw from anywhere in the scene leaves
+       * the renderer holding the swapped values for good, and the check above
+       * then reads them as a mode change and rebuilds the output with no curve
+       * and no transfer. Every frame after that presents raw linear radiance
+       * clamped to one: the pixel the curve puts at 59/255 on a lit hull
+       * reaches the canvas at 15, on every scene, uniformly, and nothing in
+       * the picture says why. Restoring here makes an exception cost the one
+       * frame it was thrown in. `sensor.gpu.test.ts` throws one to hold it.
+       */
+      const toneMapping = renderer.toneMapping
+      const outputColorSpace = renderer.outputColorSpace
+      try {
+        post.render()
+      } finally {
+        renderer.toneMapping = toneMapping
+        renderer.outputColorSpace = outputColorSpace
+      }
     },
     dispose() {
       post.dispose()
