@@ -6794,6 +6794,42 @@ whole-disk walk, and by the GPU suite's batch ≡ singles case, which is the
 check that the cut still separates bodies without the key. ADR-0023 § 3 named
 the key's spelling and now names the identity.
 
+## The ladder deepens to fourteen, and the ground moves under every save (3 Sep 2026)
+
+Terrain algorithm v4. `MAX_CRATER_LEVELS` goes from eleven to fourteen, which
+ADR-0021 measured and declined and the terrain plan carried as the one change
+still waiting on a version. Every cratered body's canonical field moved — a
+world whose largest basin is 2,170 km carries craters down to 265 m where the
+ladder stopped at 2.1 km — and nothing else in the stack did: a body `young`
+left without a population is untouched to the last bit, and `SYSTEM_ALGORITHM`
+stays at 3 because no draw moved.
+
+**Measured, and the floor did not move.** `pnpm sim --terrain-baseline` before
+and after, on the same machine with nothing beside it:
+
+| Body                         | Floor v3 → v4 | ms/patch v3 → v4 |
+| ---------------------------- | ------------- | ---------------- |
+| Gliese 1061 d, rocky-airless | 19 → 19       | 54.2 → 62.3      |
+| Gliese 1061 IV, atmosphered  | 17 → 17       | 53.1 → 59.6      |
+| Iapetus, icy-dead            | 14 → 14       | 59.1 → 69.6      |
+| Miranda, icy-active          | 12 → 12       | 23.6 → 23.5      |
+
+The plan's "0 to 2 levels" was measured before the presentational tail
+existed; with the tail in place the floor is the tail's on every zoo member
+and the three extra rungs sit above it, so they cost the walk — 12 to 18% a
+patch — and change the mesh's depth not at all. Mercury's finest crater is
+134 m at a floor of 15, Luna's 95 m at 17, Callisto's 13 m at 17. The kernel
+holds the fourteen-rung ladder to its tolerance on every body in
+`terrainKernel.gpu.test.ts` with no change to the kernel: `MAX_KERNEL_LEVELS`
+is derived, `SLAB_AT` moves from 48 to 56, and the records grow with it.
+
+**The survey sites moved with the field.** A deeper ladder puts craters
+where the `rough` search had found none: Gliese 1061 d's rough site went from
+−875 m to 358 m and Iapetus's from 683 m to −2,403 m. A site is derived from
+the field, so this is the version bump doing what a version bump does rather
+than a defect — and it is why a site named in a save is a claim about a
+version.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

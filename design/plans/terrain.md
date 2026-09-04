@@ -75,12 +75,6 @@ review will use is `ir.preset` and `Shift+H` — seven pictures of particular
 places, each with a vendored plate — but the zoo is a set of _sites_ rather than
 pictures, so its own fixture is still `ir.visit` plus the drive rig.
 
-**The crater ladder's cap.** `MAX_CRATER_LEVELS` is 11, so a body's finest
-crater is a two-thousandth of its largest and the population stops well above
-the canonical floor. Fourteen halvings moves the detail floor by 0 to 2 levels
-and costs 13% a patch — and it moves the field the contact test integrates,
-which is a version bump rather than a presentational change.
-
 **The cover has two spare bytes, and two open defects share the channel that
 would fill them.** The record is eight bytes now — six channels, four to an
 attribute — and the last two are written as zero. Deposits and rocks are both
@@ -207,8 +201,9 @@ anchor-relative patch spans meters and float32 is comfortable.
   Measured before optimized; per-level merging is the known out.
 - **The version bump moves the ground.** Every save's landed ship sits on the
   terrain version it was written with. The loader's version record makes that a
-  stated migration, and the crater ladder's cap is the next change that would
-  spend one.
+  stated migration; the crater ladder's cap spent one at v4, and the next
+  candidate is the canonical floor itself, which [on foot](../../docs/design/onfoot.md)
+  names.
 - **Taste risk.** Craters and plates can be statistically correct and still read
   as texture. The plate review is the control, the published anchors are what
   "correct" means, and the judgment is acknowledged as judgment.

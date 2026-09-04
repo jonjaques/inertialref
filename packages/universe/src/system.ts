@@ -131,7 +131,19 @@ export const SYSTEM_ALGORITHM = algorithm('system', 3)
  * `SYSTEM_ALGORITHM` stays where it is for the reason above: the sea's draw
  * is still taken, only read differently.
  */
-export const TERRAIN_ALGORITHM = algorithm('terrain', 3)
+/*
+ * Bumped to 4 when the crater ladder went from eleven halvings to fourteen.
+ *
+ * Every cratered body's ground moved: a world whose largest basin is
+ * 2,170 km carries canonical craters down to 265 m where it stopped at 2.1 km,
+ * and the contact test integrates the difference. Nothing else in the stack
+ * moved — the bands, the seeds and the lattice are where they were, so a
+ * body with no craters is untouched to the last bit — and `SYSTEM_ALGORITHM`
+ * stays put for the reason above. Measured across the zoo the detail floor
+ * stays where the presentational tail put it and a cratered patch costs 12
+ * to 18% more; `MAX_CRATER_LEVELS` in `sketch.ts` carries the figures.
+ */
+export const TERRAIN_ALGORITHM = algorithm('terrain', 4)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 2)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.
