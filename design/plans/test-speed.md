@@ -24,9 +24,11 @@ Everything else sums to 37.6 s of file time and finishes in ten seconds of wall
 clock across the cores, at 826% CPU over that run. No single file there is worth
 a change: each already runs beside the others.
 
-The descent currently carries `describe.skip`, which buys the gate its ninety
-seconds back by dropping the coverage from `pnpm check` and CI as well. Item 1
-below is the version that keeps it.
+The descent is the slow suite — `gameEngine.descent.slow.test.ts`, a second
+vitest project behind `pnpm test:slow` that `pnpm check` and CI run and the
+Stop gate does not — so the per-turn gate pays the ten seconds and the landing
+is still proved once per pull request. That moves the payment, not the price;
+what follows is what would move the price.
 
 The GPU producer does not move any of this. The descent is a CPU descent because
 the canonical field is the CPU one, so the producer moves the browser's cost,
@@ -42,24 +44,7 @@ field gets deeper.
 
 In the order they are worth doing.
 
-### 1. The descent leaves the per-turn gate
-
-Put any test that streams a landing in a second vitest project the gate does not
-run, and keep it in `pnpm check` and in CI, which is where "the ship still lands
-on the ground it drew" has to be proved before a merge. The per-turn gate goes
-from 103 s to about 15 s, and the descent is still run at least once per pull
-request by `/ship`.
-
-The mechanism already exists:
-[`apps/game/vitest.gpu.config.ts`](../../apps/game/vitest.gpu.config.ts) is a
-second project selected by a file suffix, and the root config excludes that
-suffix. A `*.slow.test.ts` suffix — or a `describe` tag, which vitest 4 also
-filters on — is the same shape. The cost is one more command in the table and
-one more sentence in the gate's header.
-
-This does not make the descent cheaper. It moves the payment, not the price.
-
-### 2. The descent gets cheaper: a heightfield cache for tests
+### 1. The descent gets cheaper: a heightfield cache for tests
 
 Generation is a pure function of `(algorithm version, surface seed, region,
 resolution, border)` — that is the determinism the whole core is built on — so a
@@ -81,7 +66,7 @@ shape of, and a directory under `.data/` the way the drive rig has. It would
 also make `pnpm sim --terrain-baseline` and the descent scenarios
 warm-startable.
 
-### 3. A real worker pool in the test
+### 2. A real worker pool in the test
 
 The inline worker runs the real host loop serially on the test's thread. A
 `worker_threads` port would put the same generation on the other nine cores,
@@ -92,7 +77,7 @@ mock, and a value that is not structured-cloneable still fails. A threads port
 keeps that property; the work is the port, and it is the same port the game's
 own `browserWorker.ts` has already defined once for the browser.
 
-### 4. Two small things, measured before believed
+### 3. Two small things, measured before believed
 
 - **`vitest --changed`** in the gate would run only the files affected by the
   turn's edits. It is the cheapest change on this page and the least

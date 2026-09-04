@@ -52,7 +52,19 @@ export default defineConfig({
      * `requestAdapter` for a reason that has nothing to do with the change
      * under test. Excluded here so `pnpm test` keeps the claim in the header.
      */
-    exclude: [...configDefaults.exclude, '**/*.gpu.test.ts'],
+    /*
+     * The slow suite is `apps/game/vitest.slow.config.ts` and `pnpm test:slow`:
+     * the tests that stream a landing, about a hundred seconds in one
+     * `beforeAll` against ten for everything else here. Excluded so the Stop
+     * hook, which runs this suite after every turn, stays at ten seconds;
+     * `pnpm check` runs both, and that project makes the same plain-Node claim
+     * this header does.
+     */
+    exclude: [
+      ...configDefaults.exclude,
+      '**/*.gpu.test.ts',
+      '**/*.slow.test.ts',
+    ],
     /*
      * 20 seconds, not vitest's default 5.
      *

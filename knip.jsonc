@@ -66,6 +66,7 @@
         "src/render/gpuSetup.ts",
         "vite.config.ts",
         "vitest.gpu.config.ts",
+        "vitest.slow.config.ts",
         "src/**/*.test.{ts,tsx}",
       ],
       "project": ["src/**/*.{ts,tsx}", "public/sw.js", "*.ts"],

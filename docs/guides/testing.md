@@ -194,7 +194,7 @@ and both looked exactly like one. `--down` before the gate, and treat a single
 timeout that moves between runs as a machine reading rather than a code one.
 
 **A test that needs more says so at the call site, with the same reasoning one
-order of magnitude up.** `gameEngine.test.ts` streams a landing — a whole-disk
+order of magnitude up.** `gameEngine.descent.slow.test.ts` streams a landing — a whole-disk
 selection's worth of heightfields through an _inline_ worker, which is to say
 serially on the test's own thread — and takes about a hundred seconds for it. Its
 timeout is five minutes, not two: two is barely over the idle cost, and this
@@ -206,18 +206,19 @@ four landings is nearly seven minutes where one is a hundred — and because an
 before it. What brings the number down is the GPU tile producer or a pool with
 real worker threads in it, not a shorter landing.
 
-**That descent carries `describe.skip`, so the suite does not currently run
-it.** One file is ninety percent of `pnpm test`'s wall clock, and all of that
-file is this `beforeAll` — so the skip buys the Stop gate its ninety seconds
-back and costs `pnpm check` and CI the one place "the ship lands on the ground
-it drew" is proved. It is a trade rather than a fix, and the version that keeps
-both puts any test that streams a landing in a second vitest project the
-per-turn gate does not run: `apps/game/vitest.gpu.config.ts` is already that
-shape, a project selected by a file suffix the root config excludes. Until
-then, a change under `engine/terrainStreamer.ts` or the terrain path is
-unproven by the gate — drop the `.skip` and run the file before shipping one.
-[Test speed](../../design/plans/test-speed.md) carries the measurements and the
-options.
+**That descent is the slow suite.** `*.slow.test.ts` is a second vitest
+project — `apps/game/vitest.slow.config.ts`, behind `pnpm test:slow` — selected
+by suffix the way the GPU suite is and excluded from the root config for the
+opposite reason: it makes the same plain-Node claim the root suite does, and it
+costs a hundred seconds in one `beforeAll` against ten for everything else. The
+Stop gate runs the root suite after every turn, so it proves the rest of the
+engine in ten seconds; `pnpm check` and CI run both, which is where "the ship
+lands on the ground it drew" has to be proved before a merge. Anything else
+that streams a landing takes the suffix. A change under
+`engine/terrainStreamer.ts` or the terrain path is therefore proved by `/ship`
+rather than by the gate, and `pnpm test:slow` by hand is how to prove it
+sooner. [Test speed](../../design/plans/test-speed.md) carries the
+measurements and what would make the landing itself cheaper.
 
 **The figure moves with the field, which is why it is not a budget.** A bordered
 65×65 patch costs 24 to 69 ms across the zoo, and every level the detail floor

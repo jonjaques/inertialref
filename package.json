@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "test:me": "vitest run --reporter=dot --reporter=vitest-nyancat-reporter",
     "test:gpu": "vitest run --config apps/game/vitest.gpu.config.ts",
+    "test:slow": "vitest run --config apps/game/vitest.slow.config.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/ingest/tsconfig.json",
     "lint": "oxlint",
     "fta": "fta .",
@@ -44,7 +45,7 @@
     "solar:fetch": "node apps/ingest/src/main.ts solar",
     "shapes:build": "node apps/ingest/src/main.ts shapes",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
-    "check": "pnpm graph && pnpm brand:check && pnpm presets:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm graph && pnpm brand:check && pnpm presets:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:slow && pnpm build"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

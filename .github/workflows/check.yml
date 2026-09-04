@@ -62,8 +62,10 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # graph → brand → presets → format → lint → typecheck → test → build,
-      # failing fast.
+      # graph → brand → presets → format → lint → typecheck → test → test:slow
+      # → build, failing fast. `test:slow` is the terrain descent, about a
+      # hundred seconds on an M5 and longer here; the job's twenty minutes has
+      # room for it.
       - name: Check
         run: pnpm check
 
