@@ -7,8 +7,8 @@ import type {
 } from 'three/webgpu'
 import { Vector3 } from 'three/webgpu'
 import {
-  chaseCameraPosition,
-  chaseOffsetFor,
+  CHASE_OFFSET,
+  flightCameraPose,
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -186,29 +186,35 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
       perspective.updateProjectionMatrix()
     }
 
-    camera.quaternion.set(
-      scene.camera.orientation.x,
-      scene.camera.orientation.y,
-      scene.camera.orientation.z,
-      scene.camera.orientation.w,
-    )
-    // Offset and ground clearance both come from `chaseCameraPosition`. They
-    // were three lines of vector arithmetic here, which is exactly where a rule
-    // goes to become untestable: nothing in Node could see that pitching up on
-    // the pad put the camera under the crust.
-    // The offset scales with the modeled hull once one is mounted; the
-    // hand-tuned 6 m default covers the debug cone. `engine.hull` rather than
-    // anything module-scoped here — see the field's comment in `GameEngine`.
-    const eye =
+    /*
+     * The ship arm's pose comes from `flightCameraPose`: the chase behind the
+     * hull or the orbit beside it, each with the head turned as the flight
+     * camera says, and the ground clearance under both. It was three lines
+     * of vector arithmetic here, which is exactly where a rule goes to become
+     * untestable: nothing in Node could see that pitching up on the pad put
+     * the camera under the crust.
+     *
+     * The offset scales with the modeled hull once one is mounted; the
+     * hand-tuned 6 m default covers the debug cone, whose orbit is measured
+     * against the same length. `engine.hull` rather than anything
+     * module-scoped here — see the field's comment in `GameEngine`.
+     */
+    const pose =
       override === null
-        ? chaseCameraPosition(
+        ? flightCameraPose(
             scene,
-            engine.hull === null
-              ? undefined
-              : chaseOffsetFor(engine.hull.lengthMetres),
+            engine.harness.flightCamera.state,
+            engine.hull === null ? 6 : engine.hull.lengthMetres,
+            engine.hull === null ? CHASE_OFFSET : undefined,
           )
-        : override.camera.position
-    camera.position.set(eye.x, eye.y, eye.z)
+        : override.camera
+    camera.quaternion.set(
+      pose.orientation.x,
+      pose.orientation.y,
+      pose.orientation.z,
+      pose.orientation.w,
+    )
+    camera.position.set(pose.position.x, pose.position.y, pose.position.z)
     camera.updateMatrixWorld()
 
     // Sunlight comes from the nearest star's rendered position, so shadows and

@@ -13,6 +13,7 @@ import { Starfield } from './Starfield.tsx'
 import { SunFlare } from './SunFlare.tsx'
 import { ScatterRocks } from './ScatterRocks.tsx'
 import { TerrainPatches } from './TerrainPatches.tsx'
+import { ThrusterFx } from './ThrusterFx.tsx'
 import { WarpFx } from './WarpFx.tsx'
 import { WaterPatches } from './WaterPatches.tsx'
 
@@ -86,6 +87,7 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <OrbitTraces engine={engine} />
       <SunFlare engine={engine} />
       <ShipModel engine={engine} />
+      <ThrusterFx engine={engine} />
       <NearFieldProps engine={engine} />
       <WarpFx engine={engine} />
       {/* Last, and at priority 1: the sensor takes the frame away from R3F
