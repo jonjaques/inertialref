@@ -422,6 +422,15 @@ again in a neighboring system.
   compiling it and swallowing the rejection. Found by the first run of
   `materials.gpu.test.ts`, which now holds each stand-in and a real map to one
   program. Photographed bodies never showed it because a loaded map is linear.
+- **One stand-in texture under two nodes.** A texture node's uniform hash is
+  its texture's uuid, so two nodes over one stand-in compile to one binding
+  owned by the first, and the second node's later swap binds nothing. The
+  sphere's relief sampler read the reflectance that way, an icy moon's albedo
+  was its sea mask, and every mapless moon in Sol was a dark disk under a
+  sun-glint over a bake that read back correct. `materials.gpu.test.ts` counts
+  the cube bindings in its signature and draws a bake through a program frozen
+  over the stand-ins first. The ocean world it was verified on hid it, because
+  a mask read out of a sea world's albedo is a plausible sea.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -6870,6 +6879,56 @@ archive's encoding; the same wearer under the body's sea datum reads back
 flat with the mask at one. The fixture is the nearest generated world with a
 sea, swept for rather than named, because the zoo is chosen by archetype and
 none of its four members draws one.
+
+## Every mapless moon in Sol was a dark disk under a sun-glint — it was one stand-in bound twice (3 Sep 2026)
+
+Enceladus, looked at from the planetarium: a black sphere, a bright soft
+hot-spot left of centre, a grey marbling on the lit limb. Rhea, Mimas, every
+Saturnian and Uranian moon without a vendored map the same. The three obvious
+guesses were the bake, the relief encoding and the tone curve, and the bake was
+the first thing measured: its two cube targets read back through
+`readRenderTargetPixelsAsync` on the driven page were correct to three places —
+relief (0.506, 0.504, 0) with the mask at zero over all of face 0, reflectance
+(0.81, 0.83, 0.88). The streamer was idle. So the sphere was wearing a correct
+record wrongly, and the picture said how: a hot-spot with a Fresnel skirt is the
+sun-glint, and the glint is gated on the sea mask.
+
+**The relief sampler was reading the reflectance.** `TextureNode.getUniformHash`
+is the texture's uuid, and `UniformNode.generate` hands every later node with the
+same hash the first node's uniform — so `bakeMap` and `bakeRelief`, both built
+over the one `BLANK_CUBE.texture`, compiled to a single `texture_cube` owned by
+the reflectance node. The warm-up freezes the program there, and `setBake`'s
+later value swap on the relief node binds nothing. The sphere then decoded the
+ice's 0.8 of albedo as a slope of 0.6 east and north and a sea mask of 0.8:
+the normal tilted off the star, the albedo went two thirds of the way to the
+ocean colour, and the glint landed on it. The same collapse was already in
+`planet.ts` for the 2D maps, and `RING_WHITE` exists because of it; the cube
+stand-in was written once and used twice anyway. Two stand-ins now,
+`BLANK_REFLECTANCE` and `BLANK_RELIEF`, and the invariant is in `AGENTS.md`.
+
+It was invisible on the body the relief pass was verified on. Gliese 908 IV is
+an ocean world whose reflectance under the sea is dark and whose land is
+mid-toned, so a mask read out of the albedo was a plausible sea in roughly the
+right places. An icy moon is white everywhere, which is a sea everywhere, which
+is what Enceladus drew.
+
+**Two things the suite already had did not catch it, and each was a decision.**
+`textureSignature` counted `texture_2d` bindings and not `texture_cube`, so the
+stand-in and the bound bake compared equal at five bindings while the cube count
+was one against two; it counts cubes now. And a drawn test of the sphere over a
+bake passed against the shared stand-in twice: bound before the first compile,
+two distinct cubes get two bindings whatever the stand-ins share, and after
+that was fixed a `compile` followed by a `draw` into a fresh target still
+passed, because a pipeline is keyed on its attachment and the second draw
+built a second program over the bake. The test holds one float target across
+a stand-in draw and the bake draw — the boot's own sequence — and only then
+reads 0.36 at the centre against the shared stand-in where the fix reads 0.80.
+
+With the sphere wearing relief for the first time on a Sol moon, Enceladus's
+tiger stripes are visible from orbit as four hairlines running pole to pole.
+`StripeAxis` is a great-circle trough by design, so the picture is the
+geology's; whether four whole great circles read as Enceladus is a plate-review
+question, noted in the terrain plan.
 
 ## Known gaps
 

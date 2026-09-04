@@ -69,7 +69,12 @@ simple-to-complex transition holding `D·g = 29,000`, and Earth's hypsometry
 bimodal at 0.583 against 0.36–0.40 for four stagnant lids. The mechanism the
 review will use is `ir.preset` and `Shift+H` — seven pictures of particular
 places, each with a vendored plate — but the zoo is a set of _sites_ rather than
-pictures, so its own fixture is still `ir.visit` plus the drive rig.
+pictures, so its own fixture is still `ir.visit` plus the drive rig. One
+question for it is already on the table: now that a mapless sphere wears its
+relief, Enceladus's tiger stripes read from orbit as four hairlines from pole to
+pole, because `StripeAxis` is a whole great circle. The published fractures are
+a south-polar family about 130 km long, so the stripe wants an extent, or the
+sphere's exaggeration wants to leave a trough of a few hundred meters alone.
 
 **The cover has two spare bytes, and two open defects share the channel that
 would fill them.** The record is eight bytes now — six channels, four to an

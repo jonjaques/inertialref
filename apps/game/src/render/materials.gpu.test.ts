@@ -2,16 +2,21 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   BufferAttribute,
   type Camera,
+  Color,
   DataTexture,
+  FloatType,
+  HalfFloatType,
   LinearFilter,
   Mesh,
   type Object3D,
   PerspectiveCamera,
+  RenderTarget,
   RGBAFormat,
   RingGeometry,
   Scene,
   SphereGeometry,
   Sprite,
+  WebGLCubeRenderTarget,
 } from 'three/webgpu'
 import { openSession, type Session } from '@inertialref/devtools'
 import { buildPatch, terrainPalette } from '@inertialref/rendering'
@@ -181,6 +186,9 @@ function textureSignature(fragmentShader: string): string {
   const samplers = (fragmentShader.match(/:\s*sampler\s*;/g) ?? []).length
   const textures = (fragmentShader.match(/texture_2d\s*<\s*f32\s*>/g) ?? [])
     .length
+  // The bake's two records are cubes, and they are the pair that shared.
+  const cubes = (fragmentShader.match(/texture_cube\s*<\s*f32\s*>/g) ?? [])
+    .length
   /*
    * Vacuity is the failure mode to guard, not a missed read. Every part of
    * this is a formatting detail of `WGSLNodeBuilder.getUniforms`, and a three
@@ -205,7 +213,7 @@ function textureSignature(fragmentShader: string): string {
    * object for this reason; `RING_WHITE` in `planet.ts` is the one that had
    * to be split out.
    */
-  return `${textures} bound, ${samplers === textures ? 'sampled' : 'unsampled'}: ${reads.join(' ')}`
+  return `${textures} bound, ${cubes} cube, ${samplers === textures + cubes ? 'sampled' : 'unsampled'}: ${reads.join(' ')}`
 }
 
 /** A 1×1 map loaded the way `TextureLoader` loads one: linear both ways. */
@@ -287,6 +295,18 @@ describe('a stand-in texture compiles the program the real one draws with', () =
       night: linearPixel(),
       clouds: linearPixel(),
       ring: linearPixel(),
+    })
+    /*
+     * And a bake, which is two cube records. The stand-in program has to
+     * declare two `texture_cube` bindings for the two the bake binds: a node
+     * hashes its uniform on the texture's uuid, so two nodes over one
+     * stand-in cube compile to one binding, and the relief node's later
+     * swap binds nothing — the sphere then reads its sea mask out of the
+     * reflectance, which is Enceladus as a dark disk under a sun-glint.
+     */
+    real.setBake({
+      albedo: filledCube(0.8, 0.8, 0.8).texture,
+      relief: filledCube(0.5, 0.5, 0).texture,
     })
     const a = new Mesh(new SphereGeometry(1, 8, 8), standIn.material)
     const b = new Mesh(new SphereGeometry(1, 8, 8), real.material)
@@ -558,5 +578,103 @@ describe('the orbital bake', () => {
     expect(east).toBeCloseTo(0.5, 4)
     expect(north).toBeCloseTo(0.5, 4)
     expect(mask).toBeCloseTo(1, 4)
+  })
+})
+
+/**
+ * A cube target whose six faces hold one colour, the way a bake's arrive:
+ * the same type and filtering the baker builds, cleared rather than drawn.
+ */
+function filledCube(
+  red: number,
+  green: number,
+  blue: number,
+): WebGLCubeRenderTarget {
+  const target = new WebGLCubeRenderTarget(4, {
+    type: HalfFloatType,
+    magFilter: LinearFilter,
+    minFilter: LinearFilter,
+    generateMipmaps: false,
+  })
+  const { renderer } = gpu
+  const held = renderer.getRenderTarget()
+  // The getter wants three's `Color4`, which `three/webgpu` does not export;
+  // a `Color` carrying an alpha is the shape, and `copy` fills the three lanes.
+  const heldColour = renderer.getClearColor(
+    Object.assign(new Color(), { a: 1 }) as unknown as Parameters<
+      typeof renderer.getClearColor
+    >[0],
+  )
+  const heldAlpha = renderer.getClearAlpha()
+  renderer.setClearColor(new Color(red, green, blue), 1)
+  for (let face = 0; face < 6; face += 1) {
+    renderer.setRenderTarget(target, face)
+    renderer.clear()
+  }
+  renderer.setRenderTarget(held)
+  renderer.setClearColor(heldColour, heldAlpha)
+  return target
+}
+
+describe('the sphere wearing a bake', () => {
+  /*
+   * The two records are read through two bindings, and the picture says so.
+   *
+   * Drawn rather than inferred from the WGSL: the signature test above holds
+   * the binding count, and this holds what the count is for. A sphere facing
+   * both the camera and the star, at its centre, is its reflectance times
+   * one — every photometric term is unity there — so a bake of 0.8 with a
+   * relief record saying dry ground and no slope draws 0.8. Read through the
+   * reflectance instead, the record says a slope of 0.6 and a sea mask of
+   * 0.8: the normal tilts off the star, the albedo goes to the ocean colour,
+   * and the centre is the sun-glint.
+   */
+  async function centre(
+    relief: readonly [number, number, number],
+  ): Promise<[number, number, number, number]> {
+    const planet = createPlanetMaterial()
+    planet.reliefScale.value = 2.2
+    planet.sunDirection.value.set(0, 0, 1)
+    const mesh = new Mesh(new SphereGeometry(1, 32, 24), planet.material)
+    const scene = staged(mesh)
+    /*
+     * In the boot's order: the program is compiled over the stand-ins first
+     * and the bake is bound into it afterwards. Bound before the compile,
+     * two distinct cubes get two bindings whatever the stand-ins share, and
+     * the draw passes over the defect it exists to hold. The target is held
+     * still across both draws for the same reason — a pipeline is keyed on
+     * its attachment, so a fresh target per draw is a fresh program, built
+     * over the bake rather than frozen before it.
+     */
+    const into = new RenderTarget(64, 64, {
+      depthBuffer: false,
+      type: FloatType,
+    })
+    try {
+      await gpu.draw(scene, camera, { into })
+      planet.setBake({
+        albedo: filledCube(0.8, 0.8, 0.8).texture,
+        relief: filledCube(...relief).texture,
+      })
+      const pixels = await gpu.draw(scene, camera, { into })
+      return pixels.at(32, 32)
+    } finally {
+      into.dispose()
+    }
+  }
+
+  it('draws the reflectance where the relief record says dry ground', async () => {
+    const [red, green, blue] = await centre([0.5, 0.5, 0])
+    expect(red).toBeCloseTo(0.8, 2)
+    expect(green).toBeCloseTo(0.8, 2)
+    expect(blue).toBeCloseTo(0.8, 2)
+  })
+
+  it('draws the sea where the relief record says so, and nothing else moved', async () => {
+    const [dryRed] = await centre([0.5, 0.5, 0])
+    const [red, , blue] = await centre([0.5, 0.5, 1])
+    // The ocean colour is a deep blue: darker than the ice, and bluer.
+    expect(red).toBeLessThan(dryRed * 0.6)
+    expect(blue).toBeGreaterThan(red)
   })
 })

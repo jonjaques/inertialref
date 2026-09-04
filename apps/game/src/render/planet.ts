@@ -137,22 +137,35 @@ const CLEAR = pixel(255, 255, 255, 0)
 const RING_WHITE = pixel(255, 255, 255, 255)
 
 /*
- * The bake's stand-in: a four-texel cube target, never rendered into, so a
+ * The bake's stand-ins: four-texel cube targets, never rendered into, so a
  * body with no bake runs the identical graph over black with an alpha of
  * zero. A render target rather than a `CubeTexture` built from images
  * because the bake *is* a render target, and the sampler a pipeline is
  * frozen with has to be the one the real bake binds — the same argument
  * `BLANK` in `terrain.ts` makes about filtering.
+ *
+ * **One per record, never one bound twice.** The builder shares a uniform
+ * between nodes whose textures carry one uuid — `TextureNode.getUniformHash`
+ * is the texture's uuid, and `UniformNode.generate` hands every later node
+ * with that hash the first node's binding — so two `cubeTexture` nodes over
+ * one stand-in compile to a single `texture_cube`, owned by the reflectance
+ * node. The program is frozen there, and the relief node's later value swap
+ * binds nothing: the sphere reads its slopes and its sea mask out of the
+ * reflectance, an icy body's 0.8 of albedo is a sea mask of 0.8, and
+ * Enceladus is a dark disk under a sun-glint. `RING_WHITE` is the same rule
+ * for the 2D maps, and `materials.gpu.test.ts` holds a bake to the stand-in's
+ * binding count.
  */
-const BLANK_CUBE = /*@__PURE__*/ (() => {
-  const target = new WebGLCubeRenderTarget(4, {
+function blankCube(): WebGLCubeRenderTarget {
+  return new WebGLCubeRenderTarget(4, {
     type: HalfFloatType,
     magFilter: LinearFilter,
     minFilter: LinearFilter,
     generateMipmaps: false,
   })
-  return target
-})()
+}
+const BLANK_REFLECTANCE = /*@__PURE__*/ blankCube()
+const BLANK_RELIEF = /*@__PURE__*/ blankCube()
 
 export interface PlanetMaterial {
   readonly material: MeshBasicNodeMaterial
@@ -267,8 +280,8 @@ export function createPlanetMaterial(): PlanetMaterial {
    * mapped body keeps its photograph and a generated one wears this the
    * moment it is ready.
    */
-  const bakeMap = cubeTexture(BLANK_CUBE.texture)
-  const bakeRelief = cubeTexture(BLANK_CUBE.texture)
+  const bakeMap = cubeTexture(BLANK_REFLECTANCE.texture)
+  const bakeRelief = cubeTexture(BLANK_RELIEF.texture)
   const baked = uniform(0)
 
   const sunDirection = uniform(new Vector3(1, 0, 0))
@@ -591,8 +604,8 @@ export function createPlanetMaterial(): PlanetMaterial {
       ringMap.value = maps.ring ?? RING_WHITE
     },
     setBake(maps) {
-      const albedo = (maps?.albedo ?? BLANK_CUBE.texture) as CubeTexture
-      const slopes = (maps?.relief ?? BLANK_CUBE.texture) as CubeTexture
+      const albedo = (maps?.albedo ?? BLANK_REFLECTANCE.texture) as CubeTexture
+      const slopes = (maps?.relief ?? BLANK_RELIEF.texture) as CubeTexture
       if (bakeMap.value !== albedo) bakeMap.value = albedo
       if (bakeRelief.value !== slopes) bakeRelief.value = slopes
       const on = maps === null ? 0 : 1
