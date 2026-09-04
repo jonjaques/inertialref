@@ -95,17 +95,19 @@ describe('warmCompile', () => {
 
   it('and a frame drawn before the compile lands draws nothing of it, quietly', async () => {
     /*
-     * `compileAsync` registers the pipeline in the cache on its synchronous
-     * walk and fills in the GPU object when `createRenderPipelineAsync`
-     * resolves. A frame in between finds the entry and, in r182 as shipped,
+     * `compileAsync` walks the tree, then builds what it queued one object at
+     * a time: each pipeline is registered in the cache when the device is
+     * asked for it, and the GPU object arrives when `createRenderPipelineAsync`
+     * resolves. A frame in between finds the entry and, in r185 as shipped,
      * hands `setPipeline` an undefined — a TypeError out of the whole render,
      * which is one lost frame on every body the build-ahead materialises and,
      * inside the sensor chain, the throw `sensor.gpu.test.ts` guards the
-     * renderer against. `patches/three@0.182.0.patch` has the backend skip
+     * renderer against. `patches/three@0.185.1.patch` has the backend skip
      * the draw instead, the way it already skips a pipeline that failed to
      * build. This holds the patch: the frame before the promise is quiet,
      * empty and builds no second pipeline, and the frame after it has the
-     * object.
+     * object. The window is microseconds wide, so the harness holds the
+     * promise open and the frame is drawn inside it on purpose.
      */
     const { scene, mesh, camera } = staged()
     // A program of its own — a constant in the graph is one — so the pipeline
@@ -120,7 +122,9 @@ describe('warmCompile', () => {
     renderer.setRenderTarget(target)
 
     const before = created()
+    const gate = gpu.holdNextPipeline()
     const compiled = warmCompile(renderer, { object: mesh, camera, scene })
+    await gate.requested
     const walked = created()
     expect(walked).toBeGreaterThan(before)
 
@@ -130,6 +134,7 @@ describe('warmCompile', () => {
     const early = await gpu.read(target)
     expect(early.data.every((value) => value === 0)).toBe(true)
 
+    gate.release()
     await compiled
     renderer.render(scene, camera)
     expect(created()).toBe(walked)

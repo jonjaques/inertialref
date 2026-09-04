@@ -184,7 +184,8 @@ async function buildRenderer(
     // The single switch. `outputType: HalfFloatType` sets *both* the canvas
     // format (`rgba16float`) and `context.configure({ toneMapping: { mode:
     // 'extended' } })`. Spike 1 verified that setting `outputColorSpace`
-    // instead does nothing whatever, because nothing in r182 reads it.
+    // instead does nothing whatever: the backend derives the mode from
+    // `outputType` alone, in r182 where that was measured and in r185.
     ...(requested === 'extended' ? { outputType: HalfFloatType } : {}),
   })
 

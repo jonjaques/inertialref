@@ -112,12 +112,14 @@ export const warmRenderer = (gl: object): WarmRenderer => {
  * tree exactly as a render would and skips invisible objects, so a warm-up of
  * something dormant — the warp effects, a body visual built ahead of need —
  * compiles nothing at all unless it is made visible first. Its traversal is
- * *synchronous*, though; only the backend's pipeline promises are awaited, so
- * restoring visibility on the very next line happens in the same task and no
- * unit sphere at the origin can reach a drawn frame. That is also why this is
- * not an `async` function: the synchronous half has to stay synchronous, which
- * is what lets `TerrainPatches` flip `transparent` between two calls and get
- * one pipeline variant each.
+ * *synchronous*, though: the walk that decides what to build runs before the
+ * first `await`, so restoring visibility on the very next line happens in the
+ * same task and no unit sphere at the origin can reach a drawn frame. The
+ * build itself is queued and runs after the call returns, one object at a
+ * time with a yield between — the material is read *then*, not now — so two
+ * variants of one material are two calls each awaited before the flag flips,
+ * never two calls in a row. That is also why this is not an `async` function:
+ * the synchronous half has to stay synchronous.
  *
  * The previous visibility is restored rather than set to false, because two of
  * the three callers warm objects that are already on screen.

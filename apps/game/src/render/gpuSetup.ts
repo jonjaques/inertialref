@@ -1,3 +1,4 @@
+import { scheduler } from 'node:timers/promises'
 import { create, globals } from 'webgpu'
 
 /*
@@ -9,7 +10,7 @@ import { create, globals } from 'webgpu'
  * imported `three/webgpu` would import it first and install them second. The
  * setup file runs before any test file's imports do.
  *
- * Three things, and none of them is guessable from the error it produces.
+ * Four things, and none of them is guessable from the error it produces.
  */
 
 /*
@@ -70,7 +71,20 @@ Object.defineProperty(globalThis, 'self', {
 })
 
 /*
- * 3. There is deliberately no `document`. The renderer reaches for
+ * 3. `scheduler.yield`, so a compile can breathe without a frame.
+ *
+ * `compileAsync` builds the queued pipelines one object at a time and yields
+ * between them through `yieldToMain()`, which takes `self.scheduler.yield()`
+ * when it exists and `requestAnimationFrame` otherwise — and the frame above
+ * never fires, so without this every compile that walks anything hangs after
+ * its first object. Node has the same API in `timers/promises`; installing it
+ * keeps the frame stub honest (still no frame, still one `nodeFrame`) while a
+ * yield is what it says, one macrotask.
+ */
+Object.assign(globalThis, { scheduler })
+
+/*
+ * 4. There is deliberately no `document`. The renderer reaches for
  * `document.createElementNS` only when it is not handed a canvas, and
  * `gpuHarness.ts` always hands it one — a stub whose `getCurrentTexture` throws,
  * so a test that forgets `setRenderTarget` fails loudly rather than drawing

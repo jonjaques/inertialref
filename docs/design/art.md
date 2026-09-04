@@ -201,11 +201,11 @@ const renderer = new THREE.WebGPURenderer({
 ```
 
 > ⚠️ **Setting `renderer.outputColorSpace = ExtendedSRGBColorSpace` alone does
-> nothing.** In r182 `ExtendedSRGBColorSpace` is an _addon_
+> nothing.** In r185 `ExtendedSRGBColorSpace` is an _addon_
 > (`three/examples/jsm/math/ColorSpaces.js`), not a core export, and the
 > `toneMappingMode` it declares is never read — `ColorManagement.getToneMappingMode()`
 > has no caller anywhere in `src/`. The WebGPU backend derives the mode solely
-> from `outputType`. This was verified against the r182 sources, and an earlier
+> from `outputType`. This was verified against the r182 sources and holds in r185, and an earlier
 > revision of this page had it wrong.
 
 `renderOutput(color, toneMapping, outputColorSpace)` in TSL gives explicit control

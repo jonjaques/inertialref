@@ -6,6 +6,8 @@ import {
   RGBAFormat,
   type Texture,
   Vector2,
+  type Node,
+  type UniformNode,
   Vector3,
 } from 'three/webgpu'
 import {
@@ -361,12 +363,12 @@ export function createTerrainMaterial(): TerrainMaterial {
    * for all three: a fully morphed child *is* its parent.
    */
   material.positionNode = Fn(() => {
-    const target = attribute('terrainMorph', 'vec3')
-    const targetNormal = attribute('terrainMorphNormal', 'vec3')
-    const cover = attribute('terrainCover', 'vec4')
-    const targetCover = attribute('terrainMorphCover', 'vec4')
-    const cover2 = attribute('terrainCover2', 'vec4')
-    const targetCover2 = attribute('terrainMorphCover2', 'vec4')
+    const target = attribute<'vec3'>('terrainMorph', 'vec3')
+    const targetNormal = attribute<'vec3'>('terrainMorphNormal', 'vec3')
+    const cover = attribute<'vec4'>('terrainCover', 'vec4')
+    const targetCover = attribute<'vec4'>('terrainMorphCover', 'vec4')
+    const cover2 = attribute<'vec4'>('terrainCover2', 'vec4')
+    const targetCover2 = attribute<'vec4'>('terrainMorphCover2', 'vec4')
     const distance = length(positionLocal.sub(eyeLocal))
     // `max` on the denominator rather than a branch: a patch at level 0 has no
     // parent and arrives with both ends of its band at the same enormous
@@ -798,9 +800,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * not its rate of change.
      */
     const horizontal = max(oneMinus(up.y.mul(up.y)), float(1e-8))
-    const uvGradient = (
-      step: ReturnType<typeof dFdx>,
-    ): ReturnType<typeof vec2> => {
+    const uvGradient = (step: Node<'vec3'>): ReturnType<typeof vec2> => {
       const along = step.sub(up.mul(dot(step, up))).div(anchorLength)
       return vec2(
         up.z
@@ -1187,8 +1187,8 @@ function deposit(): Deposit {
 }
 
 interface Deposit {
-  readonly albedo: ReturnType<typeof uniform<Color>>
-  readonly params: ReturnType<typeof uniform<Vector3>>
+  readonly albedo: UniformNode<'color', Color>
+  readonly params: UniformNode<'vec3', Vector3>
 }
 
 function write(into: Deposit, from: SurfaceMaterial): void {

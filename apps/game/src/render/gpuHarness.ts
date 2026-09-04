@@ -42,30 +42,27 @@ import {
  *  - **A pipeline that will not build does not reject, on either path.** A
  *    draw builds pipelines synchronously inside the backend's own validation
  *    scope and reports the failure through three's console sink;
- *    `compileAsync` builds them with `createRenderPipelineAsync`, whose
- *    *rejection* carries the failure — and the backend catches that rejection
- *    and discards it, so its scope pops clean and the sink hears nothing.
- *    Either way the pipeline is marked broken and the first draw with it is
- *    what fails, which is the `[Invalid RenderPipeline]` a browser shows as a
- *    canvas that never presents. `warmCompile` in `warmup.ts` swallows even
- *    that. So every verb here runs inside a validation scope of its own,
- *    which catches the shader module Tint refused *before* the pipeline that
- *    would have used it, and listens on the sink as well; a failure on
- *    either channel is a red test with the compiler's message in it.
+ *    `compileAsync` builds them with `createRenderPipelineAsync` after its
+ *    walk, catches the rejection, marks the pipeline broken and reports that
+ *    through the sink too — the promise it hands back resolves either way.
+ *    The first draw with a broken pipeline draws nothing, which is the
+ *    `[Invalid RenderPipeline]` a browser shows as a canvas that never
+ *    presents. `warmCompile` in `warmup.ts` swallows even that. So every
+ *    verb here runs inside a validation scope of its own, which catches the
+ *    shader module Tint refused *before* the pipeline that would have used
+ *    it, and listens on the sink as well; a failure on either channel is a
+ *    red test with the compiler's message in it.
  *  - **`compileAsync` and `getShaderAsync` take their arguments in opposite
  *    orders** — `(object, camera, scene)` and `(scene, camera, object)`. Both
  *    verbs here take the `WarmRenderer` order, so one call site cannot mean
  *    two things.
  *  - **A compile that walked nothing still resolves.** `compileAsync` skips an
- *    invisible object, and it frustum-culls against a module-level `Frustum`
- *    that only `render()` ever fills in — so on a renderer that has not drawn,
- *    every object whose bounding sphere sits at negative x is culled and the
- *    compile builds no pipeline at all. Measured: a sphere at the origin
- *    builds one, the same sphere at x = −500 builds none, and both resolve.
- *    `compile` refuses an invisible object and turns culling off for the walk.
- *    A pipeline count cannot stand in for either, because three caches a
- *    pipeline across material instances: the second identical compile in a
- *    file legitimately builds none.
+ *    invisible object, and it culls against the camera's frustum — so an
+ *    object out of view builds no pipeline at all and resolves exactly like
+ *    one that built everything. `compile` refuses an invisible object and
+ *    turns culling off for the walk. A pipeline count cannot stand in for
+ *    either, because three caches a pipeline across material instances: the
+ *    second identical compile in a file legitimately builds none.
  */
 
 /** One line three routed through its console sink while a verb ran. */
@@ -155,6 +152,19 @@ export interface GpuSession {
    * about a warm-up does not have to reach for it too.
    */
   pipelinesBuilt(): number
+  /**
+   * Hold the next render pipeline the device is asked to build asynchronously.
+   *
+   * `compileAsync` registers a pipeline in the backend's cache when it asks
+   * the device for it and fills in the GPU object when the promise resolves,
+   * and a frame drawn in between is the case the draw guard in
+   * `patches/three@0.185.1.patch` exists for. The window is real and it is
+   * microseconds wide, so a test that wants to draw inside it holds the
+   * promise open: `requested` resolves once the constructor has been called
+   * — the cache entry exists, the object does not — and `release()` lets the
+   * pipeline land. One pipeline per hold, the next one asked for.
+   */
+  holdNextPipeline(): { readonly requested: Promise<void>; release(): void }
   dispose(): void
 }
 
@@ -346,6 +356,14 @@ export async function openGpu(
    * replaced once, here, so no test has to reach for `backend.device` itself.
    */
   let pipelines = 0
+  /*
+   * An armed hold: the next async build resolves `requested` at call time
+   * and hands three a promise that lands only after `release`. Three awaits
+   * the pipeline inside its own validation scope, so a draw made while the
+   * hold is on reports into that scope rather than into a verb's; the draw
+   * the guard skips reports nothing, which is the claim being tested.
+   */
+  let hold: { requested: () => void; released: Promise<void> } | null = null
   const createSync = device.createRenderPipeline.bind(device)
   const createAsync = device.createRenderPipelineAsync.bind(device)
   device.createRenderPipeline = (descriptor) => {
@@ -354,7 +372,12 @@ export async function openGpu(
   }
   device.createRenderPipelineAsync = (descriptor) => {
     pipelines += 1
-    return createAsync(descriptor)
+    const built = createAsync(descriptor)
+    if (hold === null) return built
+    const { requested, released } = hold
+    hold = null
+    requested()
+    return built.then((pipeline) => released.then(() => pipeline))
   }
 
   /*
@@ -374,6 +397,30 @@ export async function openGpu(
   // `requestAnimationFrame` returns 0); this says so in the renderer's own
   // terms as well, so nothing reads `getAnimationLoop()` and expects one.
   renderer.setAnimationLoop(null)
+
+  /*
+   * Let the reports that follow a failure land, and drop them.
+   *
+   * A pipeline that will not build is reported three times over, on three
+   * different turns: the shader module, in the verb's own scope, at once; the
+   * pipeline, from the `.then` on three's inner scope, a turn later; and the
+   * compiler's diagnostics, once `getCompilationInfo()` has resolved, later
+   * still. The verb throws on the first. The other two describe the same
+   * failure and would arrive during whatever verb runs next, which would then
+   * fail for a shader it never touched — so a verb that failed waits until
+   * the sink has been quiet for three turns and discards what came in since
+   * it began. Its own warnings go with them, which a test about a failure
+   * has no use for.
+   */
+  async function settleLateReports(from: number): Promise<void> {
+    let quiet = 0
+    for (let turn = 0; turn < 50 && quiet < 3; turn += 1) {
+      const seen = messages.length
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      quiet = messages.length === seen ? quiet + 1 : 0
+    }
+    messages.splice(from)
+  }
 
   /**
    * Run a verb with the sink watched, and throw the first error it reported.
@@ -405,10 +452,12 @@ export async function openGpu(
       result = await work()
     } catch (failure) {
       await device.popErrorScope().catch(() => null)
+      await settleLateReports(from)
       throw failure
     }
     const scoped = await device.popErrorScope()
     if (scoped !== null) {
+      await settleLateReports(from)
       throw new Error(`gpuHarness: the device reported: ${scoped.message}`)
     }
     /*
@@ -423,6 +472,7 @@ export async function openGpu(
      */
     const failure = messages.slice(from).find((entry) => entry.type === 'error')
     if (failure !== undefined) {
+      await settleLateReports(from)
       throw new Error(`gpuHarness: the backend reported: ${failure.message}`)
     }
     return result
@@ -512,15 +562,12 @@ export async function openGpu(
          * a mistake rather than a state to toggle around: a test that means to
          * compile something says so.
          *
-         * **Culled** is the one nothing warns about. `_projectObject` tests
-         * `frustum.intersectsObject`, but `compileAsync` — unlike `_render` —
-         * never calls `setFromProjectionMatrix`, so the module-level `Frustum`
-         * it reads is whatever the last draw left, and six default planes on a
-         * renderer that has not drawn. Measured: a sphere at the origin builds
-         * a pipeline, the same sphere at x = −500 builds none, and both
-         * resolve. Culling is off for the walk and restored after, because a
-         * compile is a question about the program and not about where the
-         * object is standing.
+         * **Culled** is the one nothing warns about. `compileAsync` fills the
+         * frustum from the camera and `_projectObject` tests every object
+         * against it, so a sphere behind the camera builds no pipeline and
+         * resolves as if it had. Culling is off for the walk and restored
+         * after, because a compile is a question about the program and not
+         * about where the object is standing.
          */
         if (!object.visible) {
           throw new Error(
@@ -551,7 +598,7 @@ export async function openGpu(
          * `_objects.get(...).getNodeBuilderState()` builds the state whether
          * or not the object survived culling — so it answers for an invisible
          * object as readily as a drawn one, and the null the types allow is
-         * not a case r182 produces. What it cannot do is answer for an object
+         * not a case r185 produces. What it cannot do is answer for an object
          * whose material built no program.
          */
         if (!vertexShader || !fragmentShader) {
@@ -590,6 +637,19 @@ export async function openGpu(
 
     pipelinesBuilt() {
       return pipelines
+    },
+
+    holdNextPipeline() {
+      let requested: () => void = () => {}
+      let release: () => void = () => {}
+      const called = new Promise<void>((resolve) => {
+        requested = resolve
+      })
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      hold = { requested, released }
+      return { requested: called, release }
     },
 
     dispose() {

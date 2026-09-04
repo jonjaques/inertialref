@@ -1,9 +1,9 @@
 diff --git a/build/three.webgpu.js b/build/three.webgpu.js
-index 31ff163d67f4cc5dec060a11bc7151c64f949fd9..10de8fd770ba4e39caf7ca81c2d8674247155e7f 100644
+index 2e490796d4d4aa9479b04a5c46ddbf31cc05b1a1..611f010e352ea81bf57538f4b918bd6770966cff 100644
 --- a/build/three.webgpu.js
 +++ b/build/three.webgpu.js
-@@ -79413,6 +79413,12 @@ class WebGPUBackend extends Backend {
- 
+@@ -85620,6 +85620,12 @@ class WebGPUBackend extends Backend {
+ 		// Skip if pipeline has error
  		if ( pipelineData.error === true ) return;
  
 +		// A pipeline `compileAsync` is still building has no GPU object yet:
@@ -12,15 +12,15 @@ index 31ff163d67f4cc5dec060a11bc7151c64f949fd9..10de8fd770ba4e39caf7ca81c2d86742
 +		// render. Draw nothing for it this frame; it lands on the next.
 +		if ( pipelineGPU === undefined ) return;
 +
- 		const index = renderObject.getIndex();
- 		const hasIndex = ( index !== null );
+ 		const drawParams = renderObject.getDrawParameters();
+ 		if ( drawParams === null ) return;
  
 diff --git a/build/three.webgpu.nodes.js b/build/three.webgpu.nodes.js
-index eeae8ec606e6acade3c6e90264ab84f2cd1daff4..ff0e64298baa32afbc364cd44ee63daef27bd06f 100644
+index f707acc24f5711fdae065ce920b08435b0869c1b..7ce8d10d7aca22398300a6500565becfe0b83e42 100644
 --- a/build/three.webgpu.nodes.js
 +++ b/build/three.webgpu.nodes.js
-@@ -79413,6 +79413,12 @@ class WebGPUBackend extends Backend {
- 
+@@ -85620,6 +85620,12 @@ class WebGPUBackend extends Backend {
+ 		// Skip if pipeline has error
  		if ( pipelineData.error === true ) return;
  
 +		// A pipeline `compileAsync` is still building has no GPU object yet:
@@ -29,15 +29,15 @@ index eeae8ec606e6acade3c6e90264ab84f2cd1daff4..ff0e64298baa32afbc364cd44ee63dae
 +		// render. Draw nothing for it this frame; it lands on the next.
 +		if ( pipelineGPU === undefined ) return;
 +
- 		const index = renderObject.getIndex();
- 		const hasIndex = ( index !== null );
+ 		const drawParams = renderObject.getDrawParameters();
+ 		if ( drawParams === null ) return;
  
 diff --git a/src/renderers/webgpu/WebGPUBackend.js b/src/renderers/webgpu/WebGPUBackend.js
-index 01afbc472e6a25efa348f49bcd3010e7896618dc..823733d27ac1349d59ee9a38fa38ec67dbd899c9 100644
+index 06e203693ed9b168a2bddf773cd8ce8dc23196e4..76546883237a50633b9fd003ec41971fc399e08f 100644
 --- a/src/renderers/webgpu/WebGPUBackend.js
 +++ b/src/renderers/webgpu/WebGPUBackend.js
-@@ -1477,6 +1477,12 @@ class WebGPUBackend extends Backend {
- 
+@@ -1908,6 +1908,12 @@ class WebGPUBackend extends Backend {
+ 		// Skip if pipeline has error
  		if ( pipelineData.error === true ) return;
  
 +		// A pipeline `compileAsync` is still building has no GPU object yet:
@@ -46,6 +46,6 @@ index 01afbc472e6a25efa348f49bcd3010e7896618dc..823733d27ac1349d59ee9a38fa38ec67
 +		// render. Draw nothing for it this frame; it lands on the next.
 +		if ( pipelineGPU === undefined ) return;
 +
- 		const index = renderObject.getIndex();
- 		const hasIndex = ( index !== null );
+ 		const drawParams = renderObject.getDrawParameters();
+ 		if ( drawParams === null ) return;
  

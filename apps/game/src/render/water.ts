@@ -1,4 +1,10 @@
-import { Color, MeshBasicNodeMaterial, Vector2, Vector3 } from 'three/webgpu'
+import {
+  Color,
+  MeshBasicNodeMaterial,
+  type Node,
+  Vector2,
+  Vector3,
+} from 'three/webgpu'
 import {
   attribute,
   dFdx,
@@ -153,6 +159,17 @@ export interface WaterBuild {
   readonly refraction: boolean
 }
 
+/**
+ * `mix` with one weight per channel. The typings admit only a scalar `t`;
+ * WGSL's `mix(vec3, vec3, vec3)` is the operation a transmittance needs, one
+ * weight per wavelength, and the node built is the same either way.
+ */
+const blend = (
+  a: Node<'vec3'>,
+  b: Node<'vec3'>,
+  t: Node<'vec3'>,
+): Node<'vec3'> => mix(a, b, t as unknown as Node<'float'>)
+
 export function createWaterMaterial(
   build: WaterBuild = { refraction: true },
 ): WaterMaterial {
@@ -204,9 +221,9 @@ export function createWaterMaterial(
   material.depthWrite = true
 
   material.positionNode = Fn(() => {
-    const target = attribute('terrainMorph', 'vec3')
-    const depth = attribute('waterDepth', 'float')
-    const targetDepth = attribute('waterMorphDepth', 'float')
+    const target = attribute<'vec3'>('terrainMorph', 'vec3')
+    const depth = attribute<'float'>('waterDepth', 'float')
+    const targetDepth = attribute<'float'>('waterMorphDepth', 'float')
     const distance = length(positionLocal.sub(eyeLocal))
     const k = saturate(
       distance
@@ -338,7 +355,7 @@ export function createWaterMaterial(
     )
     const behind = build.refraction
       ? asVector(viewportSharedTexture(shifted).rgb)
-      : liquidColour
+      : asVector(liquidColour)
     /*
      * The liquid's own colour, lit: what scatters back out of the body of
      * the water where the seabed's light has been absorbed. Lambert on the
@@ -346,7 +363,7 @@ export function createWaterMaterial(
      * and the shore agree about how bright the day is.
      */
     const skyView = float(1)
-    const bodyLight = liquidColour
+    const bodyLight = asVector(liquidColour)
       .mul(
         max(incidence, float(0))
           .mul(daylight)
@@ -355,7 +372,7 @@ export function createWaterMaterial(
           .add(skyView.mul(float(AMBIENT))),
       )
       .mul(sunlight)
-    const subsurface = mix(
+    const subsurface = blend(
       bodyLight,
       mix(bodyLight, behind, refraction),
       transmittance,

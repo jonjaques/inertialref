@@ -46,6 +46,15 @@ let camera: Camera
 
 beforeAll(async () => {
   gpu = await openGpu(SIZE, SIZE)
+  /*
+   * Opaque black, the way `createRenderer` clears. `renderOutput`
+   * unpremultiplies before the curve and premultiplies after it, so a pixel
+   * the renderer's own path leaves at alpha 0 — the harness default, under
+   * every additive sprite — comes out black however bright its rgb was. The
+   * chain writes alpha 1 and never sees that; the claim is about the frame
+   * the renderer draws for itself with the production clear.
+   */
+  gpu.renderer.setClearColor(0x000000, 1)
   camera = new PerspectiveCamera(60, 1, 0.1, 100)
   camera.position.set(0, 0, 4)
   camera.updateMatrixWorld()
@@ -138,9 +147,8 @@ describe('the spine', () => {
     // And the picture had something in it — a black frame equal to a black
     // frame proves nothing.
     expect(lit).toBeGreaterThan(SIZE * SIZE * 0.1)
-    // Alpha is the one channel the two paths are *meant* to differ in: the
-    // renderer's own passes the target's through, and this harness renderer
-    // clears it to zero; the chain writes 1 everywhere, by construction.
+    // Alpha is asserted on the chain alone: it writes 1 everywhere, by
+    // construction, whatever the clear was.
     expect(alphaOne).toBe(SIZE * SIZE)
 
     sensor.dispose()
@@ -155,7 +163,7 @@ describe('the spine', () => {
     declareSceneTarget(renderer, { samples: 0 })
 
     /*
-     * The scene renders inside `PostProcessing.render`'s swap of the renderer
+     * The scene renders inside `RenderPipeline.render`'s swap of the renderer
      * to no curve and the working space, and the swap is undone by two plain
      * assignments after the quad. A throw from the scene — an `onBeforeRender`
      * here, in the app a draw against a pipeline the warm-up is still

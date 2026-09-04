@@ -41,7 +41,7 @@
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0",
     "tailwind-merge": "^3.6.0",
-    "three": "^0.182.0",
+    "three": "^0.185.1",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -51,7 +51,7 @@
     "@types/babel__core": "^7.20.5",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^6.0.4",
     "@webgpu/types": "^0.1.72",
     "babel-plugin-react-compiler": "^1.0.0",

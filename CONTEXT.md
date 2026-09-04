@@ -7241,6 +7241,104 @@ scene once per forty submissions.
 The one piece of phase 0 still open is the chain's own warm-up producer: the
 quad's pipeline is the one compile the first presented frame pays.
 
+## three r185, and what moving the renderer three releases costs (4 Sep 2026)
+
+The renderer is on three r185.1, from r182, because
+[the upscaler plan](design/plans/the-upscaler.md) needs
+`@pmndrs/upscaler`, whose peer range starts at r184. The bump itself is two
+lines; what it took to get the gate green again is worth the record, because
+each item is a fact about three that nothing here would have predicted.
+
+- **`compileAsync` no longer builds pipelines during its walk.** r185 queues one
+  work item per object and processes the queue after the walk, one object at a
+  time, yielding between them through `yieldToMain()` — `scheduler.yield()`
+  where it exists and `requestAnimationFrame` otherwise. The GPU harness's
+  frame stub returns 0 and never fires, so every compile that walked anything
+  hung after its first object, and the warm-up test that counted pipelines
+  synchronously after `warmCompile` counted none. `gpuSetup.ts` installs
+  Node's own `timers/promises` scheduler, which keeps the frame stub honest —
+  still no frame, still one `nodeFrame` — and the harness grew
+  `holdNextPipeline()`, which holds the next async pipeline's promise open so
+  the "frame drawn before the compile lands" window can be drawn inside on
+  purpose rather than raced. The draw guard is still needed: r185's
+  `WebGPUBackend.draw` skips a pipeline that failed and not one that is
+  pending, so the hunk is re-cut as `patches/three@0.185.1.patch`.
+- **A refused shader is reported three times, on three turns.** The module
+  error lands in the verb's own validation scope at once; r185 then reports the
+  pipeline from the `.then` on its inner scope a turn later, and the compiler's
+  diagnostics after `getCompilationInfo()` later still — into whatever verb is
+  running by then. The harness's compute test failed for a shader the
+  refused-shader test had asked for. A verb that fails now waits until the sink
+  has been quiet for three turns and drops what arrived since it began.
+- **`renderOutput` premultiplies.** r185's output node clamps alpha,
+  unpremultiplies, tone-maps and premultiplies again, so a pixel the renderer's
+  own path leaves at alpha 0 comes out black however bright its rgb was. The
+  harness clears to alpha 0 by default and the sensor gate's "the frame the
+  renderer draws for itself" compared black sprites against the chain's lit
+  ones, worst pixel 0.93. Production clears opaque (`createRenderer` has since
+  the flare's compositor artifact) and the gate now clears the same way. The
+  chain writes alpha 1 and never sees any of this.
+- **`@types/three` 0.185 puts every operator on `Node<'float'>` and none on
+  `Node`.** Three hundred errors, almost all in the terrain kernel's five
+  aliases, which were `type F = Node`; typed, the residue was a colour uniform
+  multiplied by a vector (the typings allow a scalar), a `mix` with a
+  per-channel weight (the typings allow a scalar `t`), `mat3 × vec3` typed as a
+  matrix, `attribute()` widening its type argument to `string`, and
+  `NodeLibrary` declared as an empty class with `addToneMapping` gone from the
+  types and present at runtime. Each got a cast with the reason beside it.
+- **Two renames and a removal.** `PostProcessing` is `RenderPipeline` since
+  r183 and the old name warns on every build; `WebGLCubeRenderTarget` cannot be
+  used with the WebGPU renderer since r183 and `CubeRenderTarget` is its
+  replacement — the bake, the planet's four-texel stand-ins and their test.
+  R3F 9.7 still constructs a `THREE.Clock`, which r185 deprecates with one
+  console warning per boot; not ours.
+
+**The plate gate.** Baseline `origin/main` in its own worktree on port 5174,
+this branch on 5175, one driven Chrome at a time, 1600×900 at DPR 1, the world
+pinned by one save at tick 1158 (hash `108f8f67`) loaded and paused in one
+task after the look, plates at `--max-px 0`, differences counted above 1/255:
+
+| Operating point                            | Pixels differing | Peak   |
+| ------------------------------------------ | ---------------- | ------ |
+| Earth from 14,402 km, planetarium          | 15               | 15/255 |
+| Earth summit, converged (877 patches)      | 1,205            | 29/255 |
+| Proxima Centauri d from orbit, planetarium | 623              | 28/255 |
+| Proxima Centauri d summit (838 patches)    | 16,607           | 11/255 |
+| `tng-intro` at frame 800, parked           | 0                | 0      |
+
+The cutscene plate was taken from `/cinema/tng-intro?t=800` parked on the
+frame, and two boots of either build differ there in zero pixels — the
+`ir.play` → `ir.pause` → `ir.seekCutscene(800)` protocol read the playhead at
+799.67 on one boot and 800.00 on the next, and that third of a frame was 141,208
+pixels of difference that had nothing to do with the upgrade. Every pixel that
+differs at the summits is a rock. The ground is black in the amplified
+difference and each instance of the scatter lights up on its sunlit face, in
+place, by up to 11/255: r185's `transformNormal` is the inverse-transpose
+normal matrix, normalized, where r182 divided the normal by the squared column
+lengths and multiplied by the matrix — right for a rotation with a uniform
+scale and wrong by a little for the scatter's per-instance scales. The rocks
+are now lit by their true normals. Nothing else in the frame moved.
+
+**Cost**, `ir.gpu(60)` through the chain, the smallest of three at each point,
+both builds under the same conditions:
+
+| Operating point                      | r182, ms | r185, ms |
+| ------------------------------------ | -------- | -------- |
+| Earth summit, converged              | 6.02     | 5.72     |
+| Proxima Centauri d from orbit        | 0.66     | 0.72     |
+| Proxima Centauri d summit, converged | 4.45     | 4.74     |
+
+Level within the spread of the runs; the first baseline pass read 12–16 ms at
+the Earth summit with something else on the GPU, which is the reminder that a
+figure taken beside anything is a figure about that thing.
+
+One flake surfaced in `pnpm check` and is not the upgrade's:
+`packages/physics/src/universal.test.ts`'s "agrees with the element form on
+every ellipse" missed its tolerance by 0.05 % at eccentricity 0.9888 on seed
+1192846684, and the package has no dependency on three and no diff on this
+branch. It passes on the next seed; the bound wants a look near the parabolic
+end.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

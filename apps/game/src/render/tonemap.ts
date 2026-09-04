@@ -1,4 +1,9 @@
-import { CustomToneMapping, type Node, type Renderer } from 'three/webgpu'
+import {
+  CustomToneMapping,
+  type Node,
+  type Renderer,
+  type ToneMapping,
+} from 'three/webgpu'
 import {
   clamp,
   Fn,
@@ -64,6 +69,13 @@ const ACES_OUTPUT = /*@__PURE__*/ mat3(
 )
 
 /**
+ * `mat3 × vec3`. The typings hand `Node<'mat3'>.mul` a matrix back whatever
+ * it is given; the operator node it builds is the vector.
+ */
+const transform = (m: Node<'mat3'>, v: Node<'vec3'>): Node<'vec3'> =>
+  (m as unknown as Node<'vec3'>).mul(v)
+
+/**
  * Live handles on the curve.
  *
  * Structural rather than the TSL uniform type: all this module needs to promise
@@ -101,9 +113,10 @@ export function installToneCurve(
   const headroomUniform = uniform(headroom)
   const shoulderUniform = uniform(DEFAULT_SHOULDER)
 
-  const toneCurve = Fn(([color, exposure]: [Node, Node]) => {
-    const graded = ACES_OUTPUT.mul(
-      rrtAndOdtFit(ACES_INPUT.mul(color.mul(exposure).div(0.6))),
+  const toneCurve = Fn(([color, exposure]: [Node<'vec3'>, Node<'float'>]) => {
+    const graded = transform(
+      ACES_OUTPUT,
+      rrtAndOdtFit(transform(ACES_INPUT, color.mul(exposure).div(0.6))),
     )
 
     // Lift by luminance, not per channel: scaling the channels independently
@@ -123,7 +136,12 @@ export function installToneCurve(
     return clamp(graded.mul(lift), vec3(0), vec3(headroomUniform))
   })
 
-  renderer.library.addToneMapping(toneCurve, CustomToneMapping)
+  // `@types/three` declares `NodeLibrary` as an empty class; the method is
+  // there at runtime, in `renderers/common/nodes/NodeLibrary.js`.
+  const library = renderer.library as unknown as {
+    addToneMapping(node: unknown, toneMapping: ToneMapping): void
+  }
+  library.addToneMapping(toneCurve, CustomToneMapping)
   selectToneCurve(renderer)
 
   return { headroom: headroomUniform, shoulder: shoulderUniform }
@@ -143,7 +161,7 @@ export function selectToneCurve(renderer: Renderer): void {
 }
 
 /** The ACES RRT + ODT rational fit. Source: selfshadow/ltc_code `ltc_blit.fs`. */
-const rrtAndOdtFit = /*@__PURE__*/ Fn(([color]: [Node]) => {
+const rrtAndOdtFit = /*@__PURE__*/ Fn(([color]: [Node<'vec3'>]) => {
   const a = color.mul(color.add(0.0245786)).sub(0.000090537)
   const b = color.mul(color.add(0.432951).mul(0.983729)).add(0.238081)
   return a.div(b)

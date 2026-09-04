@@ -750,11 +750,11 @@ const biotaWindowCode = wgslFn(
  * value *is* rather than a distinction the compiler can hold; the casts below
  * are the re-narrowings `terrain.ts` makes, for the reason it gives.
  */
-type F = Node
-type U = Node
-type I = Node
-type V3 = Node
-type V4 = Node
+type F = Node<'float'>
+type U = Node<'uint'>
+type I = Node<'int'>
+type V3 = Node<'vec3'>
+type V4 = Node<'vec4'>
 type Bool = Node
 
 const asF = (node: unknown): F => node as F
@@ -1287,7 +1287,9 @@ export function createTerrainKernel(
                 .greaterThan(0)
                 .select(c, c.add(1).lessThan(0).select(c.add(1), int(0))),
             )
-          const farCorner = (c: I): I => max(c.abs(), c.add(1).abs())
+          const farCorner = (c: I): I =>
+            // `max` is typed for floats alone; the int operator is the same node.
+            asI(max(asF(c.abs()), asF(c.add(1).abs())))
           const squared = (m: I): Node => square48Code({ m })
           const summed = (a: Node, b: Node): Node => add64Code({ a, b })
           const beyond = (sum: Node, limit: Node): Bool =>

@@ -9,7 +9,7 @@ import {
   RGBAFormat,
   type Texture,
   Vector3,
-  WebGLCubeRenderTarget,
+  CubeRenderTarget,
 } from 'three/webgpu'
 import {
   cameraPosition,
@@ -156,8 +156,8 @@ const RING_WHITE = pixel(255, 255, 255, 255)
  * for the 2D maps, and `materials.gpu.test.ts` holds a bake to the stand-in's
  * binding count.
  */
-function blankCube(): WebGLCubeRenderTarget {
-  return new WebGLCubeRenderTarget(4, {
+function blankCube(): CubeRenderTarget {
+  return new CubeRenderTarget(4, {
     type: HalfFloatType,
     magFilter: LinearFilter,
     minFilter: LinearFilter,

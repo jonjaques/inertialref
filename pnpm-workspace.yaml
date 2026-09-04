@@ -32,4 +32,4 @@ minimumReleaseAgeExclude:
   - wrangler@4.125.0
 
 patchedDependencies:
-  three@0.182.0: patches/three@0.182.0.patch
+  three@0.185.1: patches/three@0.185.1.patch

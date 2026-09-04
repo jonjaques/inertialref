@@ -7,7 +7,7 @@ import {
   Mesh,
   Scene,
   type Texture,
-  WebGLCubeRenderTarget,
+  CubeRenderTarget,
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
@@ -120,8 +120,8 @@ export interface OrbitalBakeMaps {
 
 /** One bake's state: the targets it renders into, and whether it has. */
 interface Bake {
-  readonly target: WebGLCubeRenderTarget
-  readonly reliefTarget: WebGLCubeRenderTarget
+  readonly target: CubeRenderTarget
+  readonly reliefTarget: CubeRenderTarget
   /** The tile jobs in flight, cancelled if the bake is evicted under them. */
   readonly jobs: JobHandle<HeightfieldResponse>[]
   /** When the body last asked, in `performance.now()` ms. */
@@ -142,7 +142,7 @@ export interface OrbitalBaker {
   /** A held bake's targets, for a readback. Null while none is held. */
   targetFor(
     address: string,
-  ): { albedo: WebGLCubeRenderTarget; relief: WebGLCubeRenderTarget } | null
+  ): { albedo: CubeRenderTarget; relief: CubeRenderTarget } | null
   dispose(): void
 }
 
@@ -202,14 +202,14 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       return null
     }
     if (bakes.size >= KEPT && !evictOne(now)) return null
-    const target = new WebGLCubeRenderTarget(FACE_SIZE, {
+    const target = new CubeRenderTarget(FACE_SIZE, {
       type: HalfFloatType,
       magFilter: LinearFilter,
       minFilter: LinearFilter,
       generateMipmaps: false,
       depthBuffer: true,
     })
-    const reliefTarget = new WebGLCubeRenderTarget(RELIEF_SIZE, {
+    const reliefTarget = new CubeRenderTarget(RELIEF_SIZE, {
       type: HalfFloatType,
       magFilter: LinearFilter,
       minFilter: LinearFilter,

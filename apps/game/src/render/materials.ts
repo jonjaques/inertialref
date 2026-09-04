@@ -523,7 +523,7 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   // the blend is cheaper than the branch at this instance count.
   const radius = length(uv().sub(0.5)).mul(2)
   const profile = oneMinus(smoothstep(0.15, 1, radius))
-  const scale = instancedBufferAttribute(prominence)
+  const scale = instancedBufferAttribute<'float'>(prominence, 'float')
 
   const material = new PointsNodeMaterial()
   material.positionNode = instancedBufferAttribute(positions)
@@ -544,7 +544,7 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
    */
   material.sizeNode = size.mul(scale.mul(0.55).add(0.45))
   material.sizeAttenuation = false
-  material.colorNode = instancedBufferAttribute(colours)
+  material.colorNode = instancedBufferAttribute<'vec3'>(colours, 'vec3')
     .mul(profile.mul(profile))
     .mul(scale.mul(1.15).add(0.45))
   material.opacityNode = profile

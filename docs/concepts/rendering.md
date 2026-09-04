@@ -791,7 +791,7 @@ exists to carry.
 
 Nothing draws straight onto the canvas. `scene/Sensor.tsx` takes the frame from
 React Three Fiber at priority 1 and hands it to `render/sensor.ts`: one
-`PostProcessing` around `pass(scene, camera)`, ending in its own `renderOutput`
+`RenderPipeline` around `pass(scene, camera)`, ending in its own `renderOutput`
 with the house curve and the canvas's color space baked in, writing opaque
 alpha. The scene is multisampled where it has edges — on the pass target — and
 the canvas is single-sampled, because what reaches it is one full-screen quad.
@@ -806,7 +806,7 @@ keyed on the render call rather than on three's own frame counter, which only
 three's own animation loop advances, so forty `render()` calls in one task — the
 GPU measurement — are forty frames and not one frame and thirty-nine quads. And
 `render()` restores the renderer's tone mapping and color space in a `finally`,
-because `PostProcessing.render` swaps both around the quad with no `finally` of
+because `RenderPipeline.render` swaps both around the quad with no `finally` of
 its own, and one throw from the scene inside that swap left every later frame
 one sRGB transfer too dark.
 
