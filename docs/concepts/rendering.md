@@ -415,10 +415,13 @@ decides is whether gravity rounded it off.
 **Spheroids** are the unit sphere scaled on the spin axis, so the quaternion
 tilts the bulge with it. Saturn is 9.8% flattened and Jupiter 6.5%, which reads
 as wrong long before anyone can say why. Real bodies carry their measured polar
-radius; generated ones derive it from their own rotation, because the
-uniform-density relation that does so overstates Jupiter's by 70% and there is
-nothing better to derive it from — and a sphere is not the neutral choice here,
-it is the wrong one.
+radius; generated ones derive it from their own rotation through the
+Darwin–Radau relation, with a moment of inertia factor for their class, which
+reaches Jupiter, Saturn, Earth and Neptune within 5% of the published figure —
+and a sphere is not the neutral choice here, it is the wrong one. A generated
+planet's spin is floored at a fifth of its own equatorial gravity, a little past
+Saturn, so the most oblate giant the generator draws is about a seventh
+flattened rather than the lens a six-hour day on a puffy giant made.
 
 **Figures** are for everything below about 200 km, where self-gravity loses to
 material strength and the body keeps whatever the last collision left. That is

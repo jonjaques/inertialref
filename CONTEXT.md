@@ -6930,6 +6930,41 @@ tiger stripes are visible from orbit as four hairlines running pole to pole.
 geology's; whether four whole great circles read as Enceladus is a plate-review
 question, noted in the terrain plan.
 
+## A generated giant was a lens with rings through it — it was the uniform-fluid flattening, and a six-hour day (3 Sep 2026)
+
+Gliese 876 c, seen wide from the planetarium: an ellipsoid with an axis ratio
+near 0.7, its rings a straight line through it. The record said why —
+"Polar radius 62,436 km, 30.00% flattened", a sidereal day of 8.67 h — and
+the 30.00 was the ceiling of the model. `rotationalFlattening` was the
+Maclaurin relation for a uniform fluid, `f = (5/4)·q`, and its own docstring
+conceded a factor of two against real giants and kept it because there was
+nothing better. There is: the Darwin–Radau relation,
+`f = (5/2)·q / (1 + (25/4)·(1 − (3/2)·C)²)`, which takes the moment of inertia
+factor and thereby knows a giant keeps its mass in the middle. With each
+body's published `C` it reaches Jupiter at 6.6% against 6.5, Saturn 9.85
+against 9.8, Earth 0.333 against 0.335 and Neptune 1.77 against 1.71; with
+the class factor a generated body gets — 0.23 for a giant, 0.35 for a rocky
+world, 0.4 for a rubble pile, which is the uniform limit where the expression
+is Maclaurin's again — all four land within 10%.
+
+The relation was half of it. The planet draw takes a day from 0.25 to 3 days
+whatever the body, and six hours on a giant of 0.65 g/cm³ is a spin at half
+its own equatorial gravity — a body shedding its equator, not holding a
+figure. Saturn is the fastest known relative to breakup at `q = 0.155`. The
+draw is floored at `q = 0.2` by the body's own mass and radius,
+`hydrostaticSpinFloor`, which spends no draw and so moves nothing else in the
+system; a giant at the floor comes out 13.6% flattened, which is Gliese 876 c
+now, on a 10.93 h day. The small bodies keep their own rubble-pile barrier —
+strength holds a rock the fluid relation says would fly apart, and their
+figures are measured shapes rather than spheroids in any case.
+
+No version is spent. The polar radius is presentation and the dossier's
+number; the ground's datum, the contact test and the saves read the
+equatorial radius and the spherical field, and the rng sequence is unchanged.
+`universe.test.ts` holds the four published bodies to 5% with their own `C`
+and to 10% with the class factor, the uniform limit to Maclaurin, and every
+generated planet in the fixture above its floor with no giant past 0.14.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
