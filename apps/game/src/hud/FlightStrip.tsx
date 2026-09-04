@@ -41,6 +41,7 @@ export function FlightStrip() {
       </div>
       <div className="text-slate-400">
         tick {world.tick} · {world.timeScale}×{world.paused ? ' · paused' : ''}
+        {status.flightCamera.view === 'orbit' ? ' · orbit' : ''}
       </div>
     </div>
   )

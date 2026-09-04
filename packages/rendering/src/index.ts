@@ -22,6 +22,7 @@ export * from './surfaceColour.ts'
 export * from './terrainMesh.ts'
 export * from './terrainPalette.ts'
 export * from './terrainSelect.ts'
+export * from './thrusters.ts'
 export * from './shape.ts'
 
 export * from './galaxyView.ts'

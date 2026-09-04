@@ -43,6 +43,8 @@ for (const [path, url] of Object.entries(URLS)) {
 }
 
 export interface LoadedShip {
+  /** The manifest id, so the plumes can find the layout measured for it. */
+  readonly id: string
   readonly group: Group
   /** The manifest's true length — what the hull was scaled to. */
   readonly lengthMetres: number
@@ -142,6 +144,7 @@ async function build(
   ship.name = `ship:${spec.id}`
   ship.add(oriented)
   return {
+    id: spec.id,
     group: ship,
     lengthMetres: spec.lengthMetres,
     beamMetres: size.x * scale,

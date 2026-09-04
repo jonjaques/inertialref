@@ -444,21 +444,88 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
   }
 }
 
-function rotateOnly(entity: Entity, dt: Seconds): FrameState {
+/**
+ * What the thrusters are commanded to produce this tick, in body axes: the
+ * linear acceleration in m/s² and the angular one in rad/s², the assist's
+ * damping torque included.
+ *
+ * One function, read by both integrators and by the snapshot's `thrustDemand`,
+ * so the nozzles a frame draws firing are the ones the tick fired. Two copies
+ * of the assist condition — one in the physics, one in the picture — would
+ * agree until the day one of them was edited, and a plume that lit while the
+ * hull did not turn is a bug nobody can measure from a screenshot.
+ *
+ * The assist is a torque added to the commanded one, not a replacement for it,
+ * and it applies only while no rotation is being asked for: a pilot holding
+ * pitch has already said what the angular velocity should be.
+ */
+export function commandedAcceleration(
+  entity: Entity,
+  dt: Seconds,
+): { readonly linear: Vec3; readonly angular: Vec3 } {
   const thrusters = entity.thrusters
-  invariant(thrusters !== null, 'rotateOnly needs thrusters')
-  const { angular } = resolveThrust(thrusters, entity.control)
-  const assist =
+  invariant(thrusters !== null, 'commandedAcceleration needs thrusters')
+  const resolved = resolveThrust(thrusters, entity.control)
+  const angular =
     entity.flightAssist && Vec.lengthSquared(entity.control.rotation) < 1e-6
-      ? dampingTorque(entity.state.angularVelocity, thrusters, dt)
-      : Vec.ZERO
+      ? Vec.add(
+          resolved.angular,
+          dampingTorque(entity.state.angularVelocity, thrusters, dt),
+        )
+      : resolved.angular
+  return { linear: resolved.linear, angular }
+}
+
+/**
+ * The commanded acceleration as fractions of the thruster profile's authority,
+ * in body axes — what a renderer needs to decide which nozzles are firing and
+ * how hard, without holding a copy of the profile.
+ *
+ * `linear` is signed along each body axis, so a burn ahead is `linear.z = −1`
+ * (forward is −Z) and a strafe to starboard is `linear.x = +1`; `angular` is
+ * about the body axes — pitch X, yaw Y, roll Z — as a fraction of `torque`.
+ * Each component is in −1..1 by construction: the control is clamped there
+ * and the damping torque is bounded by the same authority.
+ */
+export interface ThrustDemand {
+  readonly linear: Vec3
+  readonly angular: Vec3
+}
+
+/** Null for anything that cannot maneuver. */
+export function thrustDemand(entity: Entity, dt: Seconds): ThrustDemand | null {
+  const thrusters = entity.thrusters
+  if (thrusters === null) return null
+  const { linear, angular } = commandedAcceleration(entity, dt)
+  // A profile with no authority on an axis commands nothing on it; a division
+  // there would be a NaN dressed as a demand. And a zero is a zero: the
+  // forward axis arrives as `−0` from the sign flip in `resolveThrust`, and a
+  // signed zero is a fraction no valve can be open by.
+  const over = (value: number, authority: number): number =>
+    authority > 0 && value !== 0 ? value / authority : 0
+  return {
+    linear: vec3(
+      over(linear.x, thrusters.rcsThrust),
+      over(linear.y, thrusters.rcsThrust),
+      over(linear.z, thrusters.mainThrust),
+    ),
+    angular: vec3(
+      over(angular.x, thrusters.torque),
+      over(angular.y, thrusters.torque),
+      over(angular.z, thrusters.torque),
+    ),
+  }
+}
+
+function rotateOnly(entity: Entity, dt: Seconds): FrameState {
+  const { angular } = commandedAcceleration(entity, dt)
   const body: BodyState = {
     position: entity.state.position,
     velocity: Vec.ZERO,
     orientation: entity.state.orientation,
     angularVelocity: entity.state.angularVelocity,
   }
-  const next = integrateBody(body, Vec.ZERO, Vec.add(angular, assist), dt)
+  const next = integrateBody(body, Vec.ZERO, angular, dt)
   return {
     frame: entity.state.frame,
     position: entity.state.position,
@@ -473,27 +540,17 @@ function integrateFree(
   externalAcceleration: Vec3,
   dt: Seconds,
 ): FrameState {
-  const thrusters = entity.thrusters
   let linear = externalAcceleration
   let angular = Vec.ZERO
 
-  if (thrusters !== null) {
-    const resolved = resolveThrust(thrusters, entity.control)
+  if (entity.thrusters !== null) {
+    const commanded = commandedAcceleration(entity, dt)
     // Thrust is generated in body axes and applied in frame axes.
     linear = Vec.add(
       linear,
-      Q.rotate(entity.state.orientation, resolved.linear),
+      Q.rotate(entity.state.orientation, commanded.linear),
     )
-    angular = resolved.angular
-    if (
-      entity.flightAssist &&
-      Vec.lengthSquared(entity.control.rotation) < 1e-6
-    ) {
-      angular = Vec.add(
-        angular,
-        dampingTorque(entity.state.angularVelocity, thrusters, dt),
-      )
-    }
+    angular = commanded.angular
   }
 
   const body: BodyState = {

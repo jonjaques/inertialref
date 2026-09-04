@@ -16,6 +16,7 @@ import {
 import type {
   BodySnapshot,
   EntitySnapshot,
+  ThrustDemand,
   WorldSnapshot,
 } from '@inertialref/simulation'
 import type { BodyAppearance, EntityId } from '@inertialref/universe'
@@ -121,6 +122,12 @@ export interface RenderEntity {
   readonly position: Vec3
   readonly orientation: Quat
   readonly isCamera: boolean
+  /**
+   * What its thrusters are firing, as the snapshot states it, so the plumes
+   * are drawn from the same command the tick integrated. Null for anything
+   * that cannot maneuver.
+   */
+  readonly thrust: ThrustDemand | null
 }
 
 export interface RenderScene {
@@ -347,6 +354,7 @@ export function buildScene(
       position: toRenderSpace(origin, entity.position),
       orientation: orientationToRenderSpace(origin, entity.orientation),
       isCamera: entity.id === cameraEntity,
+      thrust: entity.thrust,
     }),
   )
 
