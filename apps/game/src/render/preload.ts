@@ -26,6 +26,7 @@ import {
   breathe,
   type BootProgress,
   warmCompile,
+  warmRenderer,
 } from './warmup.ts'
 
 /*
@@ -226,7 +227,7 @@ async function warm(
       const view = await sceneView(engine)
       if (view === null) return
       warmGroup ??= buildWarmGroup()
-      await warmCompile(renderer, {
+      await warmCompile(warmRenderer(renderer), {
         object: warmGroup,
         camera: view.camera,
         scene: view.scene as Scene,
@@ -245,7 +246,7 @@ async function warm(
       if (view === null) return
       const hull = await loadShipModel(DEFAULT_SHIP, anisotropy)
       if (hull === null) return
-      await warmCompile(renderer, {
+      await warmCompile(warmRenderer(renderer), {
         object: hull.group,
         camera: view.camera,
         scene: view.scene as Scene,

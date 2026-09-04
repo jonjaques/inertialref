@@ -120,6 +120,11 @@ export interface GpuSession {
   /** Render a scene into a target and read it back. */
   draw(scene: Scene, camera: Camera, options?: DrawOptions): Promise<Pixels>
   /**
+   * Read a target something else drew into — the chain, the renderer's own
+   * output path — with the same unpadding `draw` applies to its own.
+   */
+  read(target: RenderTarget): Promise<Pixels>
+  /**
    * Build every pipeline `object` needs, in `WarmRenderer` argument order, and
    * reject with the backend's message if one will not build.
    */
@@ -491,6 +496,10 @@ export async function openGpu(
 
     draw(scene, camera, options = {}) {
       return watched(() => renderInto(scene, camera, options))
+    },
+
+    read(target) {
+      return watched(() => readback(target))
     },
 
     compile(object, camera, scene) {

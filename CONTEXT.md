@@ -31,22 +31,22 @@ server **stopped**, the page still loads from the service worker and passes
 rails: a 100,000× frame over it is one jump, and 10⁷× is delivered in the
 planetarium at 0.37 ms of engine (ADR-0025).
 
-| Package         | Layer | State                                                                                                                                                |
-| --------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                                                     |
-| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                  |
-| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                           |
-| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                            |
-| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                         |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                     |
-| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                 |
-| `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                             |
-| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                     |
-| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                      |
-| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                                       |
-| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                  |
-| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
-| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                        |
+| Package         | Layer | State                                                                                                                                                                                                       |
+| --------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                                                                                                            |
+| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                                                                         |
+| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
+| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
+| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                                                                                |
+| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                                                                        |
+| `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                                    |
+| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                                                                            |
+| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                                                                             |
+| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                                                                                              |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                                                                         |
+| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
+| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
 
 ## Decisions that are expensive to reverse
 
@@ -431,6 +431,33 @@ again in a neighboring system.
   the cube bindings in its signature and draws a bake through a program frozen
   over the stand-ins first. The ocean world it was verified on hid it, because
   a mask read out of a sea world's albedo is a plausible sea.
+- **A throw inside `PostProcessing.render` leaves the renderer with no curve
+  and a linear output, for good.** The quad draws with `toneMapping` and
+  `outputColorSpace` swapped and two plain assignments put them back — no
+  `finally` — and the scene renders inside the swap, through the pass. The
+  sensor read the two as a mode signal and rebuilt its output for the poisoned
+  state, and every later frame was one sRGB transfer too dark: 59/255 on a lit
+  hull arriving at 15. `render/sensor.ts` restores both around the quad;
+  `sensor.gpu.test.ts` throws from an `onBeforeRender` and holds the renderer
+  and the next frame. The trigger was the next bug.
+- **A frame drawn against a pipeline `compileAsync` is still building throws
+  out of the whole render.** The warm-up's walk registers the pipeline and the
+  promise fills in the GPU object later; `WebGPUBackend.draw` in r182 skips a
+  pipeline that failed and not one that is pending, so `setPipeline` gets an
+  undefined. The build-ahead materialises a body in view and warms it in the
+  same task, so the next frame threw — twice at every boot, once per body in
+  flight, one lost frame each without the chain and the picture with it.
+  `patches/three@0.182.0.patch` skips the draw instead; `warmup.gpu.test.ts`
+  draws the frame before the promise and holds it quiet and empty, and fails
+  with the guard stripped.
+- **A pass keyed on three's frame counter draws once per task.** `PassNode`
+  is `NodeUpdateType.FRAME`, gated on `nodeFrame.frameId`, which only three's
+  own animation loop advances. Forty `render()` calls in the GPU measurement
+  were one scene and thirty-nine quads, and the harness — whose loop is a
+  stub — drew a second frame through one chain over the first frame's pass and
+  read it black. The sensor's pass is `NodeUpdateType.RENDER`;
+  `sensor.gpu.test.ts` draws three frames in one task and counts six scene
+  renders with the picture changing between them.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -7160,6 +7187,59 @@ move every body in the galaxy, including the ones the change never touched, and
 the loader could no longer distinguish "this save's ground moved" from
 "everything moved". So a bump moves nothing by itself. It is the honest half of a
 change that already happened, and it has to be spent by hand.
+||||||| parent of 9aa5891 (docs(adr): the sensor spine gets a record, and the plan keeps only what is open)
+
+## The sensor owns the frame, and the picture that was one transfer too dark (4 Sep 2026)
+
+Phase 0 of [the sensor plan](design/plans/the-sensor.md) is on the default
+path: `render/sensor.ts` draws every frame through one `PostProcessing` around
+the scene pass and the house curve, `scene/Sensor.tsx` takes the frame from R3F
+at priority 1, the renderer is built at zero samples with MSAA on the pass, and
+`ir.gpu()` measures through the chain.
+[ADR-0029](docs/adr/0029-the-sensor-spine.md) has the decision and the three
+facts about r182 that cost the handoff — the swap `PostProcessing.render` does
+not undo on a throw, the draw against a pipeline still building, and the pass
+gated on a frame counter only three's own loop advances — each of them now in
+"Bugs the tests found" above.
+
+What the handoff had ruled out was right and what it had not tried was the
+answer: reading the canvas from inside the page, on one frame, through the
+chain and through the renderer's own path, gave identical pixels — and the
+renderer found sitting at `NoToneMapping` and a linear output. The screenshot
+was never lying; the state under it was.
+
+Measured on the M-series at 1600×900, DPR 1, occluded rig, one Chrome on the
+GPU at a time, the world pinned by one save at tick 272, the baseline being the
+parent commit in its own worktree and dev server, drained-queue ms per frame,
+median of five sixty-frame runs after the first:
+
+| Operating point                      | Baseline | Chain |
+| ------------------------------------ | -------- | ----- |
+| Earth from 14,400 km                 | 1.84     | 1.78  |
+| Earth summit, converged              | 6.17     | 5.87  |
+| Proxima Centauri d from orbit        | 0.47     | 0.49  |
+| Proxima Centauri d summit, converged | 4.37     | 4.43  |
+| `tng-intro` at frame 800             | 0.84     | 0.90  |
+
+Against a 0.15 ms budget the spine adds at most 0.06 ms anywhere, inside the
+spread. The plate gate is **zero** differing pixels at the four planetarium
+points; the cutscene differs from the baseline by 531 pixels at 15/255 and from
+itself across two boots by the same 531 and 15.
+
+Two protocol facts for anyone taking plates across boots. A world paused before
+its star survey has settled draws a sparser sky, differently each boot — the
+first Proxima plates were 83 KB against 259 KB settled, and a patch of sky held
+seven stars on one build and one on the other with the pause first, none of it
+the chain's. And two boots paused at different ticks differ by a sub-pixel
+drift of the surface that reads as hundreds of pixels at a few levels. The
+sequence that is exact is `ir.look`, twelve seconds, then `ir.load` of one
+save, then `ir.pause`: the survey has settled and the tick is the save's.
+`ir.gpu()` under the old pass would have reported the quad's cost, not the
+frame's; the first figures taken through it were about a path that drew the
+scene once per forty submissions.
+
+The one piece of phase 0 still open is the chain's own warm-up producer: the
+quad's pipeline is the one compile the first presented frame pays.
 
 ## Known gaps
 

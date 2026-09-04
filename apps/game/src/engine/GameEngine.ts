@@ -64,6 +64,7 @@ import {
 } from '@inertialref/devtools'
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
+import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
@@ -283,6 +284,39 @@ export class GameEngine {
    * canvas element and does not hand it out. `null` until `onCreated`.
    */
   view: { readonly scene: Object3D; readonly camera: Camera } | null = null
+
+  /**
+   * Whatever presents a frame — the sensor's chain, once `scene/Sensor.tsx`
+   * has mounted, and null before.
+   *
+   * Beside `view` because it answers the same question for the measurement
+   * rig: `measureGpu` submits frames through this when it is set and through
+   * `renderer.render` on `view` when it is not, so the figure is about the path
+   * the loop actually presents. The chain is the only writer; nothing reads it
+   * per frame.
+   */
+  present: (() => void) | null = null
+
+  /** Whether `measureGpu` has a frame to submit at all. */
+  canDrawFrame(): boolean {
+    return this.present !== null || this.view !== null
+  }
+
+  /**
+   * Submit `frames` frames and time them across a drained queue, or null when
+   * there is nothing to submit or no device to drain — see `measureGpuFrameMs`.
+   */
+  measureGpu(frames?: number): Promise<number> | null {
+    const gl = this.gl
+    if (gl === null || !canMeasureGpu(gl.renderer)) return null
+    const present = this.present
+    const view = this.view
+    const draw =
+      present ??
+      (view === null ? null : () => gl.renderer.render(view.scene, view.camera))
+    if (draw === null) return null
+    return measureGpuFrameMs(gl.renderer, draw, frames)
+  }
 
   origin: RenderOrigin | null = null
   snapshot: WorldSnapshot | null = null
@@ -708,6 +742,7 @@ export class GameEngine {
         timing: () => browserTimingPort,
         setChrome: (visible) => this.setChrome(visible),
         setLayers: (visible) => this.setLayers(visible),
+        measureGpu: (frames) => this.measureGpu(frames),
       },
       onWorldReplaced: () => this.#invalidateDerived(),
     })

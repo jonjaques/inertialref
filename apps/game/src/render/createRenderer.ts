@@ -8,6 +8,7 @@ import {
   type RendererDescription,
   resolveOutputMode,
 } from './output.ts'
+import { declareSceneTarget } from './sensor.ts'
 import {
   installToneCurve,
   selectToneCurve,
@@ -164,10 +165,17 @@ async function buildRenderer(
 
   const renderer = new WebGPURenderer({
     canvas: surface,
-    // MSAA is a constructor fact like `outputType`: on WebGPU it is samples 4
-    // or nothing (the spec allows no 2×), and changing it remounts the canvas
-    // through the same `<Canvas key>` the HDR preference uses.
-    antialias,
+    // Never multisampled here. MSAA is a constructor fact on WebGPU — samples
+    // 4 or nothing, the spec allows no 2× — and it belongs to the scene pass,
+    // not the canvas: `scene/Sensor.tsx` owns the frame, the scene is drawn
+    // into the sensor's pass target, and the canvas receives one full-screen
+    // quad with no edge in it. A renderer built with `antialias` would give
+    // that quad a four-sample color buffer and a resolve, every frame, for
+    // nothing — `render/sensor.ts` has the mechanism. The preference reaches
+    // the pass through `declareSceneTarget` below, and changing it still
+    // remounts the canvas through the same `<Canvas key>` the HDR preference
+    // uses, because the pass is built once per renderer.
+    antialias: false,
     // Twenty orders of magnitude of depth in one scene. A linear buffer
     // z-fights everywhere in that range and this costs one fragment shader
     // instruction. Reversed-Z is complementary and is a separate change.
@@ -181,6 +189,7 @@ async function buildRenderer(
   })
 
   await renderer.init()
+  declareSceneTarget(renderer, { samples: antialias ? 4 : 0 })
 
   /*
    * Clear to *opaque* black. The default clear alpha is 0, and on the

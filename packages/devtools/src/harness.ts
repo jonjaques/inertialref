@@ -239,6 +239,17 @@ export interface RenderHost {
    * says so instead of returning an empty report that reads like a fast session.
    */
   timing(): TimingPort | null
+  /**
+   * Submit `frames` frames through whatever presents one and time them across
+   * a drained queue — milliseconds per frame.
+   *
+   * The one GPU figure this project trusts, and the reason it is a verb and not
+   * a field: the queue drain is an `await` in the middle of a frame, which is
+   * the stall being measured, so it cannot be sampled. Null where there is no
+   * device to drain — the WebGL backend, and every headless host — so
+   * `ir.gpu()` says so rather than printing a number about nothing.
+   */
+  measureGpu(frames?: number): Promise<number> | null
 }
 
 /**
@@ -261,6 +272,7 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
     setChrome: overrides.setChrome ?? (() => {}),
     setLayers: overrides.setLayers ?? (() => {}),
     timing: overrides.timing ?? (() => null),
+    measureGpu: overrides.measureGpu ?? (() => null),
   }
 }
 
@@ -1673,6 +1685,20 @@ export class GameHarness {
     }
   }
 
+  /**
+   * The GPU's cost per presented frame, in milliseconds.
+   *
+   * The perf dock's "measure GPU" button from a script, so a driver can take
+   * the figure without a click — `render/measure.ts` says why it is the only
+   * GPU number here worth quoting. Null, and a sentence, where the host has
+   * no device to drain.
+   */
+  async gpu(frames?: number): Promise<{ ms: number; frames: number } | null> {
+    const measurement = this.#host.render.measureGpu(frames)
+    if (measurement === null) return null
+    return { ms: await measurement, frames: frames ?? 40 }
+  }
+
   /** The observatory's camera, or null when it has no target. */
   observerStatus(): ObserverStatus | null {
     return this.#observatory.target === null ? null : this.#observatory.status()
@@ -1740,6 +1766,7 @@ export class GameHarness {
       '  ir.timing(level?)             off | trace | full — what reaches the timeline',
       '  ir.timing.tracks() / .mark(name) / .drain()',
       '  await ir.profile(ms)          arm, record, disarm; .text is the answer',
+      '  await ir.gpu(frames?)         ms per presented frame, across a drained queue',
       '  ir.logs(n)',
     ].join('\n')
   }

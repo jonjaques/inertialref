@@ -7,6 +7,7 @@ import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
 import { NearFieldProps } from './NearFieldProps.tsx'
 import { OrbitTraces } from './OrbitTraces.tsx'
+import { Sensor } from './Sensor.tsx'
 import { ShipModel } from './ShipModel.tsx'
 import { Starfield } from './Starfield.tsx'
 import { SunFlare } from './SunFlare.tsx'
@@ -87,6 +88,10 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <ShipModel engine={engine} />
       <NearFieldProps engine={engine} />
       <WarpFx engine={engine} />
+      {/* Last, and at priority 1: the sensor takes the frame away from R3F
+          once every priority-0 consumer above has written its uniforms, and
+          presents it through `render/sensor.ts`. */}
+      <Sensor engine={engine} />
     </>
   )
 }

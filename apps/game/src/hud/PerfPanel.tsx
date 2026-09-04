@@ -12,7 +12,6 @@ import {
   ENGINE_BUDGET_MS,
   FRAME_BUDGET_MS,
 } from '../engine/perfBudgets.ts'
-import { measureGpuFrameMs } from '../render/measure.ts'
 import { TIMING_LEVEL, write } from '../state/preferences.ts'
 import { GpuMeasureButton } from './GpuMeasureButton.tsx'
 import { OptionGroup } from './OptionGroup.tsx'
@@ -79,11 +78,10 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
   const heap = metrics.heapMb.summarise()
 
   const measureGpu = (): void => {
-    const gl = engine.gl
-    const view = engine.view
-    if (gl === null || view === null || gpuBusy) return
+    const measurement = gpuBusy ? null : engine.measureGpu()
+    if (measurement === null) return
     setGpuBusy(true)
-    void measureGpuFrameMs(gl.renderer, view.scene, view.camera)
+    void measurement
       .then((ms) => {
         metrics.gpuMs = ms
       })

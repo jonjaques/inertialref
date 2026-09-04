@@ -787,6 +787,29 @@ authored one — and it is why the stock tonemapper could not simply be selected
 it ends in `color.clamp()`, which throws away exactly the range extended output
 exists to carry.
 
+### The frame is the sensor's
+
+Nothing draws straight onto the canvas. `scene/Sensor.tsx` takes the frame from
+React Three Fiber at priority 1 and hands it to `render/sensor.ts`: one
+`PostProcessing` around `pass(scene, camera)`, ending in its own `renderOutput`
+with the house curve and the canvas's color space baked in, writing opaque
+alpha. The scene is multisampled where it has edges — on the pass target — and
+the canvas is single-sampled, because what reaches it is one full-screen quad.
+That is the spine [the sensor plan](../../design/plans/the-sensor.md) hangs
+exposure, glare and the rest from: the scene's radiance is a texture the chain
+can read before the curve sees it, which the renderer's own output pass could
+never give a meter or a point-spread function.
+
+Two things the chain has to do that a reader would not guess, both measured
+rather than argued in [ADR-0029](../adr/0029-the-sensor-spine.md). The pass is
+keyed on the render call rather than on three's own frame counter, which only
+three's own animation loop advances, so forty `render()` calls in one task — the
+GPU measurement — are forty frames and not one frame and thirty-nine quads. And
+`render()` restores the renderer's tone mapping and color space in a `finally`,
+because `PostProcessing.render` swaps both around the quad with no `finally` of
+its own, and one throw from the scene inside that swap left every later frame
+one sRGB transfer too dark.
+
 ### Three passes that stayed separable
 
 Terrain, atmosphere and the star field are the three places

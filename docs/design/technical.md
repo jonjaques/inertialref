@@ -50,6 +50,16 @@ curve exactly at headroom 1 and lifts only the highlights above it. WebGL 2 is
 retained as `WebGPURenderer`'s own fallback backend rather than a second renderer,
 so there is one set of node graphs and no second material path to keep in sync.
 
+The frame is drawn by a chain rather than by the renderer, since 2026-09-04:
+`render/sensor.ts` is one `PostProcessing` around the scene pass and the tone
+curve, MSAA on the pass and the canvas single-sampled, measured level with the
+frame it replaced at five operating points
+([ADR-0029](../adr/0029-the-sensor-spine.md)). It is the spine
+[the sensor plan](../../design/plans/the-sensor.md) hangs exposure, glare and
+the rest from, and it carries one patch to three itself: the backend draws
+nothing for a pipeline the warm-up is still building, where r182 as shipped
+throws out of the whole frame.
+
 **What has not**: indirect draw and GPU-driven culling — capabilities in the
 table above that the table promised. The heightfield producer is the one
 compute pass, a TSL kernel over storage buffers (ADR-0023); the star field is

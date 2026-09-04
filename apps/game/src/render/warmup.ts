@@ -1,6 +1,7 @@
 import { getLogger, getTimer } from '@inertialref/shared'
-import type { Camera, Object3D, Scene } from 'three/webgpu'
+import type { Camera, Object3D, Scene, WebGPURenderer } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
+import { warmTargetFor } from './sensor.ts'
 
 /*
  * The compile-ahead recipe, and the census of what boot is warming.
@@ -77,8 +78,32 @@ export interface WarmTarget {
  * `WebGPURenderer` is not assignable to and which does not carry
  * `compileAsync`; the three scene components each made this cast for
  * themselves, which is three places for the day the union changes.
+ *
+ * **The compile is bound to a target of the scene pass's shape.** A pipeline
+ * is keyed on the sample count and the formats of what it draws into, and the
+ * scene is drawn into the sensor's pass target — four samples, half-float —
+ * while the renderer's own framebuffer, which `compileAsync` binds when no
+ * target is set, is built at zero. A compile against that builds a variant
+ * nothing draws with, and every warmed pipeline is then compiled again on the
+ * first presented frame, which is the hitch the census exists to hide.
+ *
+ * Bound synchronously on both sides of the call. `compileAsync` walks the tree
+ * before its first `await` — the same fact `warmCompile`'s visibility toggle
+ * stands on — so the target can be put back on the next line, and a frame
+ * drawn while the pipelines are still building goes to the canvas.
  */
-export const warmRenderer = (gl: object): WarmRenderer => gl as WarmRenderer
+export const warmRenderer = (gl: object): WarmRenderer => {
+  const renderer = gl as WebGPURenderer
+  return {
+    compileAsync(object, camera, scene) {
+      const previous = renderer.getRenderTarget()
+      renderer.setRenderTarget(warmTargetFor(renderer))
+      const compiled = renderer.compileAsync(object, camera, scene)
+      renderer.setRenderTarget(previous)
+      return compiled
+    },
+  }
+}
 
 /**
  * Compile one object's pipelines now, so no frame has to.
