@@ -8,6 +8,7 @@ import {
   type RendererDescription,
   resolveOutputMode,
 } from './output.ts'
+import { declareSceneTarget } from './sensor.ts'
 import {
   installToneCurve,
   selectToneCurve,
@@ -166,7 +167,10 @@ async function buildRenderer(
     canvas: surface,
     // MSAA is a constructor fact like `outputType`: on WebGPU it is samples 4
     // or nothing (the spec allows no 2×), and changing it remounts the canvas
-    // through the same `<Canvas key>` the HDR preference uses.
+    // through the same `<Canvas key>` the HDR preference uses. It moves onto
+    // the scene pass once `scene/Sensor.tsx` owns the frame — see
+    // `render/sensor.ts` — but the chain is not mounted yet, so the renderer
+    // keeps it.
     antialias,
     // Twenty orders of magnitude of depth in one scene. A linear buffer
     // z-fights everywhere in that range and this costs one fragment shader
@@ -181,6 +185,7 @@ async function buildRenderer(
   })
 
   await renderer.init()
+  declareSceneTarget(renderer, { samples: antialias ? 4 : 0 })
 
   /*
    * Clear to *opaque* black. The default clear alpha is 0, and on the

@@ -1,4 +1,4 @@
-import type { Camera, Object3D, WebGPURenderer } from 'three/webgpu'
+import type { WebGPURenderer } from 'three/webgpu'
 
 /*
  * GPU frame cost, measured the one way that is known to be honest.
@@ -49,11 +49,15 @@ export function canMeasureGpu(renderer: WebGPURenderer): boolean {
  * Blocks the render loop for roughly `frames × frame time` — a third of a second
  * at 8 ms a frame — which is why it is a button and not a subscription. Returns
  * `NaN` on the WebGL backend.
+ *
+ * `draw` is whatever presents a frame — the sensor's chain, in the app — rather
+ * than a scene and a camera, because a figure taken by calling
+ * `renderer.render` directly is a figure about a path nothing presents once
+ * the chain owns the frame. `GameEngine.measureGpu` supplies it.
  */
 export async function measureGpuFrameMs(
   renderer: WebGPURenderer,
-  scene: Object3D,
-  camera: Camera,
+  draw: () => void,
   frames: number = DEFAULT_FRAMES,
 ): Promise<number> {
   const device = deviceOf(renderer)
@@ -63,7 +67,7 @@ export async function measureGpuFrameMs(
   // the render loop had in flight when the button was pressed.
   await device.queue.onSubmittedWorkDone()
   const started = performance.now()
-  for (let i = 0; i < frames; i += 1) renderer.render(scene, camera)
+  for (let i = 0; i < frames; i += 1) draw()
   await device.queue.onSubmittedWorkDone()
   return (performance.now() - started) / frames
 }

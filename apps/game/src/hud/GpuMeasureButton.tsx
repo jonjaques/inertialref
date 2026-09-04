@@ -25,7 +25,7 @@ export function GpuMeasureButton({
 
   const gl = engine.gl
   const ready =
-    gl !== null && engine.view !== null && canMeasureGpu(gl.renderer)
+    gl !== null && engine.canDrawFrame() && canMeasureGpu(gl.renderer)
   return (
     <Action
       label={busy ? 'Measuring…' : 'Measure GPU'}

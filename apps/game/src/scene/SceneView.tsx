@@ -7,6 +7,7 @@ import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
 import { NearFieldProps } from './NearFieldProps.tsx'
 import { OrbitTraces } from './OrbitTraces.tsx'
+import { Sensor } from './Sensor.tsx'
 import { ShipModel } from './ShipModel.tsx'
 import { Starfield } from './Starfield.tsx'
 import { SunFlare } from './SunFlare.tsx'
@@ -87,6 +88,24 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <ShipModel engine={engine} />
       <NearFieldProps engine={engine} />
       <WarpFx engine={engine} />
+      {/* `Sensor` — the priority-1 chain — takes the frame away from R3F, and
+          it is behind `?sensor=1` while phase 0 is being brought up in the
+          browser. The spine is proven headless (`sensor.gpu.test.ts`); mounted,
+          it is still being made to present a live frame, so it is opt-in rather
+          than default and the app renders through R3F until the flag is set. */}
+      {SENSOR_CHAIN && <Sensor engine={engine} />}
     </>
   )
 }
+
+/**
+ * Whether the sensor chain owns the frame this session.
+ *
+ * A dev flag read once, not a preference: turning it on remounts nothing and
+ * has no panel, and it exists only while phase 0 is being finished in the
+ * browser. Read at module scope because it cannot change within a session —
+ * `?sensor=1` on the URL the driver boots.
+ */
+const SENSOR_CHAIN =
+  typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).has('sensor')
