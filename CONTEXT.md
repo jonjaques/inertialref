@@ -6830,6 +6830,47 @@ the field, so this is the version bump doing what a version bump does rather
 than a defect — and it is why a site named in a save is a claim about a
 version.
 
+## The generated sphere gets its mountains back (3 Sep 2026)
+
+The orbital bake's second pass wrote the sea mask as a grey and nothing
+else, so a generated body's disk had the ground's reflectance — its lakes,
+its maria, its biosphere — laid over a normal that was flat everywhere. The
+mountains were in the near half of a descent and gone in the far half, which
+is the one thing the eight-pixel gate is supposed to make invisible.
+
+That pass now writes the sphere's whole normal-map record: the mesh normal's
+components along geographic east and north, and the sea mask beside them.
+Three things had to be true at once and each was a decision.
+
+**The frame is built the way the sphere builds it, not the way the ground
+does.** `render/planet.ts` takes north as the spin axis with its radial part
+removed and east as north × up; the bake writes the slope against those same
+two lines, so a photograph and a bake decode through one path and the disk
+has no idea which it is wearing.
+
+**A signed channel does not survive the output stage.** The first version
+wrote the slope raw and measured a north of −0.19 reading back as exactly
+zero from a float target — half the relief on the body, the downhill half.
+The archive's `x / 2 + 1/2` is not only symmetry with the published maps; it
+is what makes the record representable.
+
+**A byte is not enough, and this is where a bake differs from a
+photograph.** At forty kilometers a texel the real slope is a few
+hundredths, which a byte resolves to five steps — and the sphere's relief
+exaggeration, 6 on an atmosphered body, draws every one of those steps as a
+facet. The relief target is half float, where the same range is forty steps.
+It is 256 texels a face against the reflectance's 512, because the bake is
+drawn from level-2 patches at 64 cells across a quarter face: a texel per
+mesh normal is all there is to keep.
+
+`materials.gpu.test.ts` holds it on the real adapter, both ways: a ground
+wearer with a known tilted normal anchored a million meters up +Z, where
+north is +Y and east is +X, reads back as the normal's own components in the
+archive's encoding; the same wearer under the body's sea datum reads back
+flat with the mask at one. The fixture is the nearest generated world with a
+sea, swept for rather than named, because the zoo is chosen by archetype and
+none of its four members draws one.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

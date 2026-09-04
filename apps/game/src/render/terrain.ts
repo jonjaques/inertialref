@@ -13,6 +13,7 @@ import {
   atan,
   attribute,
   clamp,
+  cross,
   dFdx,
   dFdy,
   dot,
@@ -113,8 +114,9 @@ export interface TerrainMaterial {
   setQuality(ground: GroundDetail): void
   /**
    * Bake mode: 0 draws the ground, 1 writes its reflectance, 2 writes the
-   * sea mask as a grey. On for the orbital bake's twelve draws and back to 0
-   * before the frame's own.
+   * sphere's normal-map record — the slopes east and north in RG and the sea
+   * mask in B. On for the orbital bake's twelve draws and back to 0 before
+   * the frame's own.
    */
   setBakeMode(mode: 0 | 1 | 2): void
 }
@@ -1037,16 +1039,38 @@ export function createTerrainMaterial(): TerrainMaterial {
     // blue mid-disk under the veil.
     const lit = mix(surface, veilColour, veil.mul(0.68))
     /*
-     * The bake: mode 1 is the reflectance alone, mode 2 the sea mask as a
-     * grey. Two passes rather than the mask in the alpha lane, because an
-     * opaque node material writes an alpha of one whatever the opacity node
-     * says — measured as a mask of 1.0 over every face of the first bake,
-     * and a sphere that was all sea.
+     * The bake: mode 1 is the reflectance alone; mode 2 is the sphere's
+     * normal-map record — the mesh normal's components along geographic east
+     * and north in RG as `x / 2 + 1/2`, and the sea mask in B, which is the
+     * layout `render/planet.ts` reads the archive's map in, so the disk
+     * decodes a bake and a photograph through one path. The half-up encoding
+     * is not only for symmetry with the archive: a signed channel does not
+     * survive the material's output stage — measured through the harness,
+     * a north of −0.19 read back as zero from a float target — and half the
+     * relief is downhill. Two passes rather than the mask in the
+     * reflectance's alpha lane, because an opaque node material writes an
+     * alpha of one whatever the opacity node says — measured as a mask of
+     * 1.0 over every face of the first bake, and a sphere that was all sea.
+     *
+     * The frame is the sphere's own. The spin axis is +Y in body-fixed axes,
+     * north is the axis with its radial part removed, and east is north × up
+     * — the same three lines `planet.ts` builds from `normalWorld` and the
+     * rotated axis, so a slope written here is read back in the frame it was
+     * measured in. Degenerate at the two poles, where the sphere's frame is
+     * too. The slope is the *mesh* normal's rather than the bumped one's: at
+     * a texel of kilometers every detail octave has faded to nothing, and the
+     * sphere's own exaggeration is applied where it reads. Under the sea the
+     * mesh is the seabed and the sea is flat, so the mask zeroes the slope.
      */
     const seaMask = max(flat, river)
+    const bakeNorth = normalize(vec3(0, 1, 0).sub(up.mul(up.y)))
+    const bakeEast = cross(bakeNorth, up)
+    const bakeSlope = vec2(dot(normal, bakeEast), dot(normal, bakeNorth)).mul(
+      oneMinus(seaMask),
+    )
     const baked = mix(
       mix(ground, riverColour, river),
-      vec3(seaMask),
+      vec3(bakeSlope.mul(0.5).add(0.5), seaMask),
       saturate(bakeMode.sub(1)),
     )
     return mix(lit, baked, saturate(bakeMode))

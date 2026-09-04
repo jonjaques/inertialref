@@ -649,7 +649,16 @@ export function Bodies({
         planet.albedoScale.value = adaptationFor(body)
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
-        planet.reliefScale.value = maps.normal === null ? 0 : tuning.reliefScale
+        /*
+         * The bake carries relief as the archive's normal map does, and it
+         * is exaggerated by the same number for the same reason: at forty
+         * kilometers a texel the real slope is a fraction of a degree, and
+         * a generated disk drawn at unity is the smooth ball it was before
+         * it had a bake. No map and no bake is the one case with nothing
+         * to scale.
+         */
+        planet.reliefScale.value =
+          maps.normal === null && bake === null ? 0 : tuning.reliefScale
         planet.limbDarkening.value = tuning.limbDarkening
         planet.saturation.value = tuning.saturation
         planet.flowRate.value = tuning.flowRate
@@ -679,8 +688,8 @@ export function Bodies({
           )
         }
         // Sun-glint needs an ocean to land on, and the mask that says where one
-        // is rides in the normal map's blue — or in the bake's alpha. No mask,
-        // no ocean, no glint.
+        // is rides in the normal map's blue — or in the bake's relief record's.
+        // No mask, no ocean, no glint.
         planet.specularStrength.value =
           maps.normal === null && bake === null ? 0 : tuning.specular
         planet.nightStrength.value = maps.night === null ? 0 : tuning.night

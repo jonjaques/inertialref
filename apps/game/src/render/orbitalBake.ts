@@ -58,9 +58,11 @@ import {
  * camera at the body's centre. What the sphere then samples by direction is
  * the deposit stack, the mineral tint and the rivers the ground draws, by
  * construction rather than by a second implementation kept in step; the
- * seam rule in `AGENTS.md` holds because there is one graph. The alpha lane
- * carries the sea mask, which is what the sphere's ocean colour and sun-glint
- * key on, as they do for a photographed body's mask.
+ * seam rule in `AGENTS.md` holds because there is one graph. A second pass
+ * writes the relief record — the mesh normal's slopes east and north, and
+ * the sea mask — in the layout the sphere reads the archive's normal map
+ * in, so a generated disk shades its mountains and keys its ocean colour
+ * and sun-glint exactly as a photographed one does.
  *
  * A bake is a presentation cache — regenerable from the seed, never saved —
  * and a few are kept: a body that leaves the frame and comes back should not
@@ -89,21 +91,37 @@ const KEPT = 4
  */
 const RESIDENCY_MS = 500
 
-/** The sea mask's face size. A mask needs fewer texels than a picture. */
-const MASK_SIZE = 256
+/**
+ * The relief record's face size.
+ *
+ * The bake is drawn from level-2 patches, sixty-four cells across a quarter
+ * face, so a face holds 256 mesh normals a side and a texel per normal is
+ * the whole of what there is to keep; the reflectance is drawn at twice
+ * that because the deposits and the rivers are per pixel, not per vertex.
+ */
+const RELIEF_SIZE = 256
 
 /** What a finished bake hands the sphere. */
 export interface OrbitalBakeMaps {
   /** The ground's reflectance, six faces, linear, half float. */
   readonly albedo: Texture
-  /** Where the sea is, six faces, as a grey in every lane. */
-  readonly mask: Texture
+  /**
+   * The relief record, six faces, half float: the mesh normal's slopes east
+   * and north in RG as `x / 2 + 1/2`, and the sea mask in B — the archive
+   * normal map's own layout and encoding.
+   *
+   * Half float rather than the byte a photograph's map is stored in, because
+   * a slope at forty kilometers a cell is a few hundredths: a byte resolves
+   * that to five steps, and the sphere's relief exaggeration draws every one
+   * of them as a facet. Half float about one half resolves it to forty.
+   */
+  readonly relief: Texture
 }
 
 /** One bake's state: the targets it renders into, and whether it has. */
 interface Bake {
   readonly target: WebGLCubeRenderTarget
-  readonly maskTarget: WebGLCubeRenderTarget
+  readonly reliefTarget: WebGLCubeRenderTarget
   /** The tile jobs in flight, cancelled if the bake is evicted under them. */
   readonly jobs: JobHandle<HeightfieldResponse>[]
   /** When the body last asked, in `performance.now()` ms. */
@@ -124,7 +142,7 @@ export interface OrbitalBaker {
   /** A held bake's targets, for a readback. Null while none is held. */
   targetFor(
     address: string,
-  ): { albedo: WebGLCubeRenderTarget; mask: WebGLCubeRenderTarget } | null
+  ): { albedo: WebGLCubeRenderTarget; relief: WebGLCubeRenderTarget } | null
   dispose(): void
 }
 
@@ -172,7 +190,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       bakes.delete(address)
       bakes.set(address, held)
       return held.ready
-        ? { albedo: held.target.texture, mask: held.maskTarget.texture }
+        ? { albedo: held.target.texture, relief: held.reliefTarget.texture }
         : null
     }
     if (flat.has(address)) return null
@@ -191,7 +209,8 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       generateMipmaps: false,
       depthBuffer: true,
     })
-    const maskTarget = new WebGLCubeRenderTarget(MASK_SIZE, {
+    const reliefTarget = new WebGLCubeRenderTarget(RELIEF_SIZE, {
+      type: HalfFloatType,
       magFilter: LinearFilter,
       minFilter: LinearFilter,
       generateMipmaps: false,
@@ -199,7 +218,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     })
     const bake: Bake = {
       target,
-      maskTarget,
+      reliefTarget,
       jobs: [],
       asked: now,
       ready: false,
@@ -253,7 +272,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     for (const job of bake.jobs) job.cancel()
     bake.jobs.length = 0
     bake.target.dispose()
-    bake.maskTarget.dispose()
+    bake.reliefTarget.dispose()
   }
 
   async function run(
@@ -342,7 +361,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       terrain.setBakeMode(1)
       new CubeCamera(near, far, bake.target).update(renderer, scene)
       terrain.setBakeMode(2)
-      new CubeCamera(near, far, bake.maskTarget).update(renderer, scene)
+      new CubeCamera(near, far, bake.reliefTarget).update(renderer, scene)
       bake.ready = true
     } finally {
       terrain.setBakeMode(0)
@@ -364,12 +383,12 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       const bake = bakes.get(address)
       return bake === undefined
         ? null
-        : { albedo: bake.target, mask: bake.maskTarget }
+        : { albedo: bake.target, relief: bake.reliefTarget }
     },
     dispose() {
       for (const bake of bakes.values()) {
         bake.target.dispose()
-        bake.maskTarget.dispose()
+        bake.reliefTarget.dispose()
       }
       bakes.clear()
     },

@@ -91,7 +91,9 @@ import type { BodyTextures } from './planetTextures.ts'
  *
  * A body with none of them still shades: the maps default to flat, and the base
  * color and albedo carry it. That is the procedural case, and it is most of the
- * galaxy.
+ * galaxy — until its orbital bake is ready, when the ground's own reflectance
+ * and relief take the albedo's and the normal's places through the same
+ * arithmetic (`render/orbitalBake.ts`).
  */
 
 /* ------------------------------------------------------------------------- */
@@ -226,8 +228,8 @@ export interface PlanetMaterial {
   readonly ringOuter: { value: number }
   readonly ringOpacity: { value: number }
   setTextures(maps: BodyTextures): void
-  /** The orbital bake to wear — its reflectance and its sea mask — or null. */
-  setBake(maps: { albedo: Texture; mask: Texture } | null): void
+  /** The orbital bake to wear — its reflectance and its relief record — or null. */
+  setBake(maps: { albedo: Texture; relief: Texture } | null): void
 }
 
 /**
@@ -258,12 +260,15 @@ export function createPlanetMaterial(): PlanetMaterial {
   const ringMap = texture(RING_WHITE)
   /*
    * The orbital bake: the ground material's own picture of a generated body,
-   * six faces sampled by the body-fixed direction, with the sea mask in the
-   * alpha. `baked` is the switch; a mapped body keeps its photograph and a
-   * generated one wears this the moment it is ready.
+   * six faces sampled by the body-fixed direction — its reflectance, and a
+   * relief record in this material's own normal-map layout: the slopes east
+   * and north in RG as `x / 2 + 1/2`, the archive's encoding in half float
+   * rather than bytes, and the sea mask in B. `baked` is the switch; a
+   * mapped body keeps its photograph and a generated one wears this the
+   * moment it is ready.
    */
   const bakeMap = cubeTexture(BLANK_CUBE.texture)
-  const bakeMask = cubeTexture(BLANK_CUBE.texture)
+  const bakeRelief = cubeTexture(BLANK_CUBE.texture)
   const baked = uniform(0)
 
   const sunDirection = uniform(new Vector3(1, 0, 0))
@@ -332,8 +337,18 @@ export function createPlanetMaterial(): PlanetMaterial {
   // Right-handed (east, north, up): east × north = up.
   const east = cross(north, geometric)
 
+  /*
+   * The sphere's own local axes are the body's — the mesh is rotated by the
+   * body's orientation — so the unit position *is* the body-fixed direction
+   * the bake was taken by. A photographed body reads its maps by UV, a
+   * generated one by direction, and `baked` chooses; both arrive here as one
+   * slope pair and one mask, so nothing downstream knows which it got.
+   */
+  const bakeDirection = normalize(positionLocal)
+  const relief = bakeRelief.sample(bakeDirection)
+
   // Slopes from RG; Z reconstructed, because B is the ocean mask (see header).
-  const tangentSlope = normalMap.xy.mul(2).sub(1)
+  const tangentSlope = mix(normalMap.xy, relief.xy, baked).mul(2).sub(1)
   const tangentUp = sqrt(
     max(
       oneMinus(
@@ -445,15 +460,8 @@ export function createPlanetMaterial(): PlanetMaterial {
    * Fully replacing it would erase the real shallow-water turquoise on the
    * banks and reefs, which photographs do show; 0.65 keeps them.
    */
-  /*
-   * The sphere's own local axes are the body's — the mesh is rotated by the
-   * body's orientation — so the unit position *is* the body-fixed direction
-   * the bake was taken by. A photographed body reads its albedo by UV, a
-   * generated one by direction, and `baked` chooses.
-   */
-  const bakeDirection = normalize(positionLocal)
   const bakeSample = bakeMap.sample(bakeDirection)
-  const ocean = mix(normalMap.b, bakeMask.sample(bakeDirection).r, baked)
+  const ocean = mix(normalMap.b, relief.b, baked)
   const surfaceAlbedo = mix(
     albedoMap.sample(flowUv).rgb.mul(baseColour),
     bakeSample.rgb,
@@ -584,9 +592,9 @@ export function createPlanetMaterial(): PlanetMaterial {
     },
     setBake(maps) {
       const albedo = (maps?.albedo ?? BLANK_CUBE.texture) as CubeTexture
-      const mask = (maps?.mask ?? BLANK_CUBE.texture) as CubeTexture
+      const slopes = (maps?.relief ?? BLANK_CUBE.texture) as CubeTexture
       if (bakeMap.value !== albedo) bakeMap.value = albedo
-      if (bakeMask.value !== mask) bakeMask.value = mask
+      if (bakeRelief.value !== slopes) bakeRelief.value = slopes
       const on = maps === null ? 0 : 1
       if (baked.value !== on) baked.value = on
     },

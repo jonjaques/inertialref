@@ -1,6 +1,7 @@
 # ADR-0026: The liquid — a sea is a sheet, a valley is a strip, and a world is drawn in families
 
-Status: accepted · 2 Sep 2026
+Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
+carries relief, so a generated sphere shades its mountains
 
 ## Context
 
@@ -118,10 +119,13 @@ the seam with the disk is untouched.
 the streamer's `HeightfieldSource` for a body's ninety-six level-2 regions,
 builds them with `buildPatch`, and draws them through the ground material in
 its bake mode from a `CubeCamera` at the body's center — the reflectance
-into one cube target and the sea mask into another, because an opaque node
-material writes an alpha of one whatever its opacity node says. The sphere
-samples both by its unit position and keys its ocean color and sun-glint on
-the mask as it does on a photographed body's. One graph draws the ground and
+into one cube target and a relief record into another, because an opaque node
+material writes an alpha of one whatever its opacity node says. The record is
+the mesh normal's slopes along geographic east and north as `x / 2 + 1/2`
+with the sea mask in the third lane, which is the layout and the encoding the
+sphere already reads the archive's normal map in, so one decode path serves a
+bake and a photograph. The sphere samples both by its unit position and keys
+its ocean color and sun-glint on the mask as it does on a photographed body's. One graph draws the ground and
 takes its picture, which is how the seam rule holds for a bake at all: there
 is no second deposit stack to keep in step. Asked the first time a mapless
 solid body's disk exceeds a hundredth of a radian, ready a few frames later,
@@ -209,11 +213,13 @@ most-plated solid body in the fixture rather than naming one.
 
 **A generated world is itself from orbit.** Measured against the streamed
 ground either side of the relief gate, at 650 and 1,100 km over Gliese
-908 IV: the same lakes in the same places. What the bake does not carry is
-relief — the sphere's normal-map path is fed by the archive alone, and a
-generated body's disk shades as a smooth sphere — and a bake camera inside
-the shell sees the ground's winding backwards, so the bake's index is the
-patch's turned over rather than a second cull mode on the material.
+908 IV: the same lakes in the same places. A bake camera inside the shell
+sees the ground's winding backwards, so the bake's index is the patch's
+turned over rather than a second cull mode on the material. The relief the
+bake did not carry at this phase — the sphere's normal-map path was fed by
+the archive alone, so a generated disk shaded as a smooth sphere — is the
+second pass amending this record: the mesh normal's slopes east and north
+in the archive's own encoding, with the sea mask beside them.
 
 **The bake's twelve draws are one frame's stall.** Ninety-six tiles of the
 producer, ninety-six patches built on the main thread, and twelve renders of

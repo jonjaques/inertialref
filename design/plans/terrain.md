@@ -55,15 +55,11 @@ record ([ADR-0005](../../docs/adr/0005-procedural-seeds.md) § versioning).
 
 ## 2. Open work
 
-**The orbital bake carries no relief.** The sphere of a generated body wears
-the ground's own reflectance and sea mask now ([ADR-0026](../../docs/adr/0026-the-liquid.md)),
-and the gate switches between two pictures of the same geology. What it does
-not wear is a normal: the disk's slope path reads the archive's tangent-space
-map, and a baked one — the heightfield's gradient in the sphere's own
-east-north frame, at the same six faces — is the half of the plan's bake
-still open. The other consequence stands: the bake is a hitch of a few tens
-of milliseconds in the frame its tiles arrive, once per body, and spreading
-the ninety-six builds across frames is the plain fix if it is felt.
+**The orbital bake's hitch.** The bake is a hitch of a few tens of
+milliseconds in the frame its tiles arrive, once per body, and spreading the
+ninety-six builds across frames is the plain fix if it is felt. It now takes
+two pictures rather than one — the reflectance and the relief record — for
+the same ninety-six tiles and one more set of six draws.
 
 **The plate review.** "Reads as a Moon, not as noise" is a taste judgment and
 the acceptance test for it is a set of before/after plates of the zoo's survey

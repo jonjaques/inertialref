@@ -13,8 +13,15 @@ import {
   SphereGeometry,
   Sprite,
 } from 'three/webgpu'
-import { buildPatch } from '@inertialref/rendering'
-import { COVER_CHANNELS, regionAddress } from '@inertialref/universe'
+import { openSession, type Session } from '@inertialref/devtools'
+import { buildPatch, terrainPalette } from '@inertialref/rendering'
+import {
+  type Body,
+  COVER_CHANNELS,
+  parseAddress,
+  regionAddress,
+  walkBodies,
+} from '@inertialref/universe'
 import { scatteringFor } from './atmosphereLuts.ts'
 import { createLensFlare } from './flare.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
@@ -31,7 +38,9 @@ import {
 import { createTerrainMaterial } from './terrain.ts'
 import { createWaterMaterial } from './water.ts'
 import {
+  anchorGround,
   COVER_ATTRIBUTES,
+  groundDummy,
   MORPH_COVER_ATTRIBUTES,
   patchGeometry,
   placeEye,
@@ -450,5 +459,104 @@ describe('a patch mesh supplies every attribute its material reads', () => {
     expect(missing.some((message) => /\bterrainMorph\b/.test(message))).toBe(
       true,
     )
+  })
+})
+
+describe('the orbital bake', () => {
+  /*
+   * Bake mode 2 is the sphere's normal-map record, and the record is right
+   * only if it is written in the frame `render/planet.ts` reads it in. A
+   * one-triangle ground wearer with a known tilted normal, anchored a
+   * million meters up +Z so the radial there is +Z to a part in a million:
+   * north is then +Y, east is +X, and RG have to come back as the normal's
+   * own x and y with B the sea mask. Drawn through the production graph and
+   * read from a float target, because a scalar mirror of the frame would
+   * pass while the graph drifted — which is the failure the terrain-normals
+   * test is remembered for.
+   *
+   * The anchor's altitude is what puts the triangle above or below the
+   * body's own sea, through the same `altitude` the deposits read, so the
+   * gate is exercised rather than assumed.
+   */
+  let session: Session
+  let wet: Body
+
+  /*
+   * The nearest generated world with a sea — searched for rather than named,
+   * because which star gets one is a property of the seed and the zoo is
+   * chosen by archetype, so none of its four members happens to draw one.
+   */
+  beforeAll(() => {
+    session = openSession({ seed: 'inertialref', workers: null })
+    for (const near of session.harness.systemsNearby(25)) {
+      // Through `parseAddress` rather than a cast: the harness reports an id
+      // as a plain string and `loadSystem` takes a branded one, and the
+      // parser is the only thing that may brand it.
+      const parsed = parseAddress(`g:milky-way/s:${near.id}`)
+      if (parsed.kind !== 'system') continue
+      const system = session.world.loadSystem(parsed.system)
+      const found = [...walkBodies(system)].find(
+        (body) =>
+          body.surface.maxElevation > 0 &&
+          terrainPalette(body).seaLevel !== null,
+      )
+      if (found !== undefined) {
+        wet = found
+        return
+      }
+    }
+    throw new Error(
+      'no ocean world within 25 light years; the bake test needs one',
+    )
+  })
+
+  afterAll(() => {
+    session.dispose()
+  })
+
+  const TILT = { x: 0.3, y: -0.2, z: 1 }
+  const RADIUS = 1_000_000
+  /** The dummy triangle's centroid, projected through `camera` onto 64×64. */
+  const CENTROID = { x: 36, y: 27 }
+
+  /** A ground wearer in bake mode 2, its normals tilted, at `altitude` over the datum. */
+  async function bakeRecord(
+    altitude: number,
+  ): Promise<[number, number, number, number]> {
+    const terrain = createTerrainMaterial()
+    terrain.setPalette(terrainPalette(wet), RADIUS)
+    terrain.setBakeMode(2)
+    const dummy = groundDummy(terrain.material)
+    const length = Math.hypot(TILT.x, TILT.y, TILT.z)
+    const normal = dummy.geometry.getAttribute('normal') as BufferAttribute
+    for (let i = 0; i < 3; i += 1) {
+      normal.setXYZ(i, TILT.x / length, TILT.y / length, TILT.z / length)
+    }
+    anchorGround(dummy, { x: 0, y: 0, z: RADIUS + altitude }, RADIUS)
+    const pixels = await gpu.draw(staged(dummy), camera, {
+      float: true,
+      width: 64,
+      height: 64,
+    })
+    return pixels.at(CENTROID.x, CENTROID.y)
+  }
+
+  it('writes the mesh normal along east and north, and no sea, on dry ground', async () => {
+    const sea = terrainPalette(wet).seaLevel as number
+    const [east, north, mask] = await bakeRecord(sea + 100)
+    const length = Math.hypot(TILT.x, TILT.y, TILT.z)
+    // The archive's `x / 2 + 1/2`, which is also why the tilt has a
+    // downhill component: a signed channel reads back as zero.
+    expect(east).toBeCloseTo(0.5 + TILT.x / length / 2, 3)
+    expect(north).toBeCloseTo(0.5 + TILT.y / length / 2, 3)
+    expect(mask).toBeCloseTo(0, 4)
+  })
+
+  it('flattens the slope and raises the mask under the sea', async () => {
+    const sea = terrainPalette(wet).seaLevel as number
+    const [east, north, mask] = await bakeRecord(sea - 10)
+    expect(east).toBeCloseTo(0.5, 4)
+    expect(north).toBeCloseTo(0.5, 4)
+    expect(mask).toBeCloseTo(1, 4)
   })
 })
