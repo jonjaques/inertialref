@@ -25,7 +25,9 @@ import { WorkerPool } from './pool.ts'
 import { defineTask, runInline, TaskRegistry } from './task.ts'
 import {
   createTaskRegistry,
+  decodeSurface,
   encodeStub,
+  encodeSurface,
   generateCellTask,
   generateHeightfieldTask,
   surfaceDetailFloorTask,
@@ -226,11 +228,13 @@ describe('terrain task', () => {
       publishedRelief: 8_000,
     })
     const payload = {
-      surfaceSeed: formatSeed(SEED),
-      maxElevation: 8_000,
-      roughness: 3,
-      seaLevel: null,
-      grammar,
+      surface: encodeSurface({
+        seed: SEED,
+        maxElevation: 8_000,
+        roughness: 3,
+        seaLevel: null,
+        grammar,
+      }),
       region: { face: 2, level: 5, i: 11, j: 4 },
       resolution: 33,
     }
@@ -285,11 +289,7 @@ describe('terrain task', () => {
       grammar,
     }
     const payload = {
-      surfaceSeed: formatSeed(SEED),
-      maxElevation: 8_000,
-      roughness: 3,
-      seaLevel: null,
-      grammar,
+      surface: encodeSurface(surface),
       resolution: HEIGHTFIELD_RESOLUTION,
     }
 
@@ -333,19 +333,53 @@ describe('terrain task', () => {
       reliefSpent: 1,
       publishedRelief: 8_848,
     })
-    const bigger = {
-      ...payload,
+    const biggerSurface = {
+      ...surface,
       maxElevation: 8_848,
       grammar: bigGrammar,
     }
-    const elsewhere = await pool().run(surfaceDetailFloorTask, bigger)
+    const elsewhere = await pool().run(surfaceDetailFloorTask, {
+      ...payload,
+      surface: encodeSurface(biggerSurface),
+    })
     expect(elsewhere.level).toBe(
-      surfaceDetailFloor(
-        { ...surface, maxElevation: 8_848, grammar: bigGrammar },
-        HEIGHTFIELD_RESOLUTION,
-      ),
+      surfaceDetailFloor(biggerSurface, HEIGHTFIELD_RESOLUTION),
     )
     expect(elsewhere.level).not.toBe(here)
+  })
+
+  it('carries a surface across the wire as the surface it was', () => {
+    /*
+     * The seed is the one field that does not survive structured clone as
+     * itself, and the two functions are the one place it is converted — so
+     * what is held here is that the conversion is lossless and that nothing
+     * else is touched, spelled as the decoded surface being equal to the
+     * original field for field. A field `SurfaceParameters` grows travels
+     * through both without either being edited, and this is what would say
+     * so if one of them started dropping it.
+     */
+    const grammar = surfaceGrammar(SEED, {
+      mass: 5.97e24,
+      meanRadius: 6.371e6,
+      atmosphere: null,
+      temperature: 288,
+      tidalProxy: 0,
+      hasOcean: true,
+      reliefSpent: 1,
+      publishedRelief: 8_848,
+    })
+    const surface = {
+      seed: SEED,
+      maxElevation: 8_848,
+      roughness: 2.5,
+      seaLevel: 0.31,
+      grammar,
+    }
+    const wire = encodeSurface(surface)
+    expect(wire.seed).toBe(formatSeed(SEED))
+    // Strict, because "nothing else is touched" includes a key that arrives
+    // holding `undefined`, which `toEqual` ignores.
+    expect(decodeSurface(wire)).toStrictEqual(surface)
   })
 
   it('surveys a system through the same generator the world uses', async () => {
@@ -501,19 +535,21 @@ describe('timing across the worker boundary', () => {
         now: clock.now,
       })
       await held.run(generateHeightfieldTask, {
-        surfaceSeed: formatSeed(SEED),
-        maxElevation: 8_000,
-        roughness: 3,
-        seaLevel: null,
-        grammar: surfaceGrammar(SEED, {
-          mass: 7.35e22,
-          meanRadius: 1.737e6,
-          atmosphere: null,
-          temperature: 270,
-          tidalProxy: 0,
-          hasOcean: false,
-          reliefSpent: 1,
-          publishedRelief: 8_000,
+        surface: encodeSurface({
+          seed: SEED,
+          maxElevation: 8_000,
+          roughness: 3,
+          seaLevel: null,
+          grammar: surfaceGrammar(SEED, {
+            mass: 7.35e22,
+            meanRadius: 1.737e6,
+            atmosphere: null,
+            temperature: 270,
+            tidalProxy: 0,
+            hasOcean: false,
+            reliefSpent: 1,
+            publishedRelief: 8_000,
+          }),
         }),
         region: { face: 2, level: 5, i: 11, j: 4 },
         resolution: 17,

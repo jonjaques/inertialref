@@ -19,10 +19,12 @@ import {
   type HeightfieldSource,
 } from '@inertialref/workers'
 import {
+  bodyFrameId,
   COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
   heightfieldStride,
-  regionAddress,
+  parseAddress,
+  type SurfaceParameters,
 } from '@inertialref/universe'
 import type { Seconds } from '@inertialref/shared'
 import { TerrainStreamer } from './terrainStreamer.ts'
@@ -265,36 +267,35 @@ describe('the terrain streamer', () => {
 
     let asked = 0
     let available = true
+    const surfaces = new Set<SurfaceParameters>()
     const source: HeightfieldSource = {
       kind: 'fake',
       get available() {
         return available
       },
-      submit(payload) {
+      submit(surface, request) {
         asked += 1
+        surfaces.add(surface)
         /*
          * A flat field, not the real one. The claims here are about where a
          * request goes and what the report says, and a fixture that ran the
          * band stack for every tile of a whole-disk selection was ten seconds
          * of the gate spent on a number the test never reads.
          */
-        const border = payload.border ?? HEIGHTFIELD_BORDER
+        const border = request.border ?? HEIGHTFIELD_BORDER
         const stride = heightfieldStride({
-          resolution: payload.resolution,
+          resolution: request.resolution,
           border,
         })
         const field: HeightfieldResponse = {
-          region: regionAddress(
-            payload.region.face,
-            payload.region.level,
-            payload.region.i,
-            payload.region.j,
-          ),
-          resolution: payload.resolution,
+          // The streamer's own address, on this side of any wire: nothing
+          // here has crossed a clone, so there is nothing to range-check.
+          region: request.region,
+          resolution: request.resolution,
           border,
           elevations: new Float32Array(stride * stride),
           cover: new Uint8Array(
-            payload.resolution * payload.resolution * COVER_CHANNELS,
+            request.resolution * request.resolution * COVER_CHANNELS,
           ),
           minElevation: 0,
           maxElevation: 0,
@@ -310,6 +311,17 @@ describe('the terrain streamer', () => {
     // The first walk requested through the source and nothing reached the
     // pool for ground — its only job so far is the level floor.
     expect(asked).toBeGreaterThan(0)
+    // The surface arrives by identity: the one object the loaded body holds,
+    // which is what a producer memoizes its packed record on. A source handed
+    // a fresh copy per request would pack the body once per tile.
+    const underfoot = session.world.bodyAt(
+      bodyFrameId(parseAddress(view.body.address)),
+    )
+    if (underfoot === null) throw new Error('no body underfoot')
+    // `size` and `has`, not a deep equality: `toEqual` passes a structurally
+    // equal copy, which is the very thing this is here to refuse.
+    expect(surfaces.size).toBe(1)
+    expect(surfaces.has(underfoot.surface)).toBe(true)
     expect(pool.stats().completed + pool.stats().active + pool.queued).toBe(1)
 
     // Answers from the source are the cache the next frames build from.

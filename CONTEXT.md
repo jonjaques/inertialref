@@ -6765,6 +6765,35 @@ absence was a zero on the grep. The way to perturb a working file for a
 negative check is a copy in the scratchpad and `pnpm exec`, restored from the
 copy.
 
+## The heightfield request carries the surface (3 Sep 2026)
+
+The sixth of the deepening plan's candidates, measured the way the five above
+were — what one request field cost before, and what it costs now:
+
+| Change                                | Files touched                                                                    | Where it is now                                                      |
+| ------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| one request field (the `seabed` flag) | 9 code files — four seam files beside the five that pack it — and a task version | `terrain.ts` and the callers that set it; the wire takes it as it is |
+
+`HeightfieldSource.submit` takes what `generateHeightfield` takes, the
+surface and the request, rather than a nine-field flattening of both. Four
+callers spelled the flattening and three producers re-inflated it; the GPU
+producer kept a 64-entry map keyed on `seed|maxElevation|roughness|seaLevel|seabed`
+to recover an identity `surfaceKernel` and `terrainSketch` already memoize on
+by `WeakMap` — a second cache of a thing cached, because the seam threw the
+object away. It now cuts a batch on the surface object and the seabed flag
+and holds no surface of its own. The one real conversion is the seed, four
+uint32 lanes that cross a structured clone as hex: `encodeSurface` in the pool
+adapter, `decodeSurface` in the two task runs, and `WireSurface` is
+`SurfaceParameters` with that one field retyped, so a field added to the
+surface or the request travels without an edit to the wire. The heightfield
+task is version 6 and the floor task version 2 for the shape; the worker host
+names a mismatch by version before a version-5 worker could read
+`surfaceSeed` off a payload that has none. Held by the streamer's fake source,
+which asserts it receives the body's own surface object once over a
+whole-disk walk, and by the GPU suite's batch ≡ singles case, which is the
+check that the cut still separates bodies without the key. ADR-0023 § 3 named
+the key's spelling and now names the identity.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

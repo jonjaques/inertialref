@@ -1,12 +1,13 @@
 import type { WebGPURenderer } from 'three/webgpu'
 import { getLogger, getTimer, type TimingDetail } from '@inertialref/shared'
-import { parseSeed } from '@inertialref/procedural'
 import type { JobId } from '@inertialref/protocol'
 import {
   COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  type HeightfieldRequest,
   heightfieldStride,
+  type KernelSurface,
   MAX_TILE_LEVEL,
   type SurfaceParameters,
   surfaceKernel,
@@ -14,7 +15,6 @@ import {
   writeTileFrame,
 } from '@inertialref/universe'
 import type {
-  HeightfieldRequestPayload,
   HeightfieldResponse,
   HeightfieldSource,
 } from '@inertialref/workers'
@@ -45,7 +45,11 @@ import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
  * **One body per batch.** The kernel reads one packed body; a batch is cut at
  * the first request for a different surface, and the body is uploaded only
  * when it changes. A retarget therefore costs one short batch and one upload,
- * and a hover costs no upload at all.
+ * and a hover costs no upload at all. "The same body" is the surface object
+ * itself, asked for the same side of the sea: it is the identity
+ * `surfaceKernel` memoizes its packed record on, a loaded body holds one for
+ * its lifetime, and a reseed under the same address makes a new one — so
+ * nothing here rebuilds or caches a surface, it keeps the one it was handed.
  *
  * **The pool stays canonical and stays the fallback.** A kernel that will not
  * build, a device the browser loses: `available` goes false, everything
@@ -116,12 +120,23 @@ export interface TileProducer extends HeightfieldSource {
 }
 
 interface Queued {
-  readonly payload: HeightfieldRequestPayload
-  readonly key: string
+  readonly surface: SurfaceParameters
+  readonly request: HeightfieldRequest
   readonly resolve: (response: HeightfieldResponse) => void
   readonly reject: (cause: Error) => void
   cancelled: boolean
 }
+
+/**
+ * Whether two queued requests can share a dispatch: one body, one side of
+ * the sea. The flag is half of it because it is half of the packed record —
+ * a body asked for both ways is two records and two uploads, not one record
+ * answering both — and an omitted flag is the clamped side, as
+ * `generateHeightfield` reads it.
+ */
+const sameBody = (a: Queued, b: Queued): boolean =>
+  a.surface === b.surface &&
+  (a.request.seabed ?? false) === (b.request.seabed ?? false)
 
 /**
  * Which producer a page asked for. `?producer=cpu` keeps the pool on a WebGPU
@@ -145,15 +160,13 @@ export function createTileProducer(
   })
   const queue: Queued[] = []
   /*
-   * A surface per key, so `surfaceKernel`'s memo hits: the payload arrives
-   * as plain fields and a fresh `SurfaceParameters` per request would pack
-   * the body once per tile. The key is the seed and the three fields that
-   * ride beside the grammar; the grammar itself is a function of the seed
-   * and the body's facts, so two requests that agree on the four agree on
-   * all of it.
+   * The packed record the kernel's buffers hold. `surfaceKernel` memoizes one
+   * record per surface and side of the sea, so the record's identity is the
+   * body's. Holding the head job instead would keep its surface — the
+   * `WeakMap` key under both of that body's records — and, through its
+   * settled promise, one tile's response, for as long as the producer lives.
    */
-  const held = new Map<string, SurfaceParameters>()
-  let uploaded: string | null = null
+  let uploaded: KernelSurface | null = null
   /*
    * The one switch. `fail` turns it off for a device that stopped answering
    * and `dispose` for a producer that is being retired, and every guard
@@ -170,35 +183,12 @@ export function createTileProducer(
   let tiles = 0
   const batchMs: number[] = []
 
-  // `seabed` is in the key because it is in the packed record: a body asked
-  // for both ways is two uploads, not one record answering both.
-  const keyOf = (payload: HeightfieldRequestPayload): string =>
-    `${payload.surfaceSeed}|${payload.maxElevation}|${payload.roughness}|${payload.seaLevel}|${payload.seabed === true ? 1 : 0}`
-
-  const surfaceOf = (payload: HeightfieldRequestPayload): SurfaceParameters => {
-    const key = keyOf(payload)
-    const known = held.get(key)
-    if (known !== undefined) return known
-    const surface: SurfaceParameters = {
-      seed: parseSeed(payload.surfaceSeed),
-      maxElevation: payload.maxElevation,
-      roughness: payload.roughness,
-      seaLevel: payload.seaLevel,
-      grammar: payload.grammar,
-    }
-    // Bounded: a session streams a handful of bodies, and the packed records
-    // behind each are a few kilobytes.
-    if (held.size >= 64) {
-      const oldest = held.keys().next().value
-      if (oldest !== undefined) held.delete(oldest)
-    }
-    held.set(key, surface)
-    return surface
-  }
-
   function fail(cause: unknown): void {
     if (!available) return
     available = false
+    // The streamer keeps a stopped producer for the session and routes on
+    // `available`; nothing else would ever let go of the last body's record.
+    uploaded = null
     log.error('the GPU tile producer stopped; the pool takes over', {
       cause: String(cause),
     })
@@ -214,7 +204,7 @@ export function createTileProducer(
     // Drop what was cancelled while queued; a batch of nothing is no batch.
     while (queue.length > 0 && (queue[0] as Queued).cancelled) queue.shift()
     if (queue.length === 0) return
-    const key = (queue[0] as Queued).key
+    const head = queue[0] as Queued
     const taken: Queued[] = []
     let cursor = 0
     while (taken.length < batch && cursor < queue.length) {
@@ -223,7 +213,7 @@ export function createTileProducer(
         queue.splice(cursor, 1)
         continue
       }
-      if (job.key !== key) {
+      if (!sameBody(job, head)) {
         cursor += 1
         continue
       }
@@ -233,19 +223,17 @@ export function createTileProducer(
     inFlight = taken.length
     const started = performance.now()
     try {
-      const head = (taken[0] as Queued).payload
-      const surface = surfaceOf(head)
-      const packed = surfaceKernel(surface, head.seabed ?? false)
-      if (uploaded !== key) {
+      const packed = surfaceKernel(head.surface, head.request.seabed)
+      if (packed !== uploaded) {
         ;(kernel.records.array as Float32Array).set(packed.records)
         ;(kernel.words.array as Uint32Array).set(packed.words)
         kernel.records.needsUpdate = true
         kernel.words.needsUpdate = true
-        uploaded = key
+        uploaded = packed
       }
       const frames = kernel.tiles.array as Float32Array
       taken.forEach((job, i) => {
-        writeTileFrame(packed, job.payload.region, frames, i * TILE_STRIDE * 4)
+        writeTileFrame(packed, job.request.region, frames, i * TILE_STRIDE * 4)
       })
       kernel.tiles.needsUpdate = true
       kernel.total.value = taken.length * kernel.samples
@@ -289,7 +277,7 @@ export function createTileProducer(
         }
         job.resolve(
           unpack(
-            job.payload,
+            job.request,
             elevations.slice(i * kernel.samples, (i + 1) * kernel.samples),
             cover.slice(
               i * kernel.interior * COVER_CHANNELS,
@@ -321,7 +309,7 @@ export function createTileProducer(
    * a value the mesh does not contain can be a rounding step too small.
    */
   function unpack(
-    payload: HeightfieldRequestPayload,
+    request: HeightfieldRequest,
     elevations: Float32Array,
     cover: Uint8Array,
   ): HeightfieldResponse {
@@ -338,7 +326,7 @@ export function createTileProducer(
       }
     }
     return {
-      region: payload.region,
+      region: request.region,
       resolution,
       border,
       elevations,
@@ -354,7 +342,7 @@ export function createTileProducer(
     get available() {
       return available
     },
-    submit(payload) {
+    submit(surface, request) {
       const id = nextId++
       let resolve!: (response: HeightfieldResponse) => void
       let reject!: (cause: Error) => void
@@ -363,8 +351,8 @@ export function createTileProducer(
         reject = rej
       })
       const job: Queued = {
-        payload,
-        key: keyOf(payload),
+        surface,
+        request,
         resolve,
         reject,
         cancelled: false,
@@ -375,9 +363,9 @@ export function createTileProducer(
       // deeper tile should not arrive here at all.
       if (
         !available ||
-        payload.resolution !== kernel.layout.resolution ||
-        (payload.border ?? HEIGHTFIELD_BORDER) !== kernel.layout.border ||
-        payload.region.level > MAX_TILE_LEVEL
+        request.resolution !== kernel.layout.resolution ||
+        (request.border ?? HEIGHTFIELD_BORDER) !== kernel.layout.border ||
+        request.region.level > MAX_TILE_LEVEL
       ) {
         reject(new Error('producer unavailable'))
         return { id, result, cancel() {} }
@@ -471,6 +459,7 @@ export function createTileProducer(
       // in flight on it rejects into `pump`'s catch — which then reaches
       // `fail`'s early return rather than logging that the producer stopped.
       available = false
+      uploaded = null
       for (const job of queue.splice(0)) {
         job.reject(new Error('producer unavailable'))
       }

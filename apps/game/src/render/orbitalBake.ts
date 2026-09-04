@@ -11,7 +11,6 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
-import { formatSeed } from '@inertialref/procedural'
 import type {
   HeightfieldResponse,
   HeightfieldSource,
@@ -268,12 +267,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     const sheet = seaSheetDatum(body)
     const fields = await Promise.all(
       regions.map((region) => {
-        const job = source.submit({
-          surfaceSeed: formatSeed(body.surface.seed),
-          maxElevation: body.surface.maxElevation,
-          roughness: body.surface.roughness,
-          seaLevel: body.surface.seaLevel,
-          grammar: body.surface.grammar,
+        const job = source.submit(body.surface, {
           region,
           resolution: HEIGHTFIELD_RESOLUTION,
           border: HEIGHTFIELD_BORDER,

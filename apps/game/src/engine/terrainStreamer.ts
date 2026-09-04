@@ -1,5 +1,4 @@
 import { getLogger, type Meters, type Seconds } from '@inertialref/shared'
-import { formatSeed } from '@inertialref/procedural'
 import {
   type FramePose,
   localToUniverse,
@@ -49,6 +48,7 @@ import {
   terrainPatchKey,
 } from '@inertialref/rendering'
 import {
+  encodeSurface,
   type HeightfieldSource,
   type JobHandle,
   poolHeightfieldSource,
@@ -1334,11 +1334,7 @@ export class TerrainStreamer {
     this.#floorsAsked.add(surface)
     void this.#pool
       .run(surfaceDetailFloorTask, {
-        surfaceSeed: formatSeed(surface.seed),
-        maxElevation: surface.maxElevation,
-        roughness: surface.roughness,
-        seaLevel: surface.seaLevel,
-        grammar: surface.grammar,
+        surface: encodeSurface(surface),
         resolution: HEIGHTFIELD_RESOLUTION,
       })
       .then((result) => {
@@ -1461,12 +1457,7 @@ export class TerrainStreamer {
         region.level > (source.maxLevel ?? Number.POSITIVE_INFINITY)
       if (deeper && pool === null) continue
       const to = deeper && pool !== null ? pool : source
-      const handle = to.submit({
-        surfaceSeed: formatSeed(body.surface.seed),
-        maxElevation: body.surface.maxElevation,
-        roughness: body.surface.roughness,
-        seaLevel: body.surface.seaLevel,
-        grammar: body.surface.grammar,
+      const handle = to.submit(body.surface, {
         region,
         resolution: HEIGHTFIELD_RESOLUTION,
         border: HEIGHTFIELD_BORDER,

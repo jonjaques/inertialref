@@ -51,15 +51,19 @@ adapter.**
    function's `'exact'` chord path adopts the same integer slab test — a
    presentational change, unversioned, because the tail is not canon.
 3. **A source is a port over the pool.** `HeightfieldSource` in
-   `packages/workers/src/tasks.ts` — `kind`, `available`, `submit(payload)` —
-   is what `TerrainStreamer` asks for heightfields. `poolHeightfieldSource`
-   wraps the pool; `createTileProducer(renderer)` in
+   `packages/workers/src/tasks.ts` — `kind`, `available`,
+   `submit(surface, request)`, the arguments `generateHeightfield` takes — is
+   what `TerrainStreamer` asks for heightfields. `poolHeightfieldSource`
+   wraps the pool and is where the seed becomes a string for the wire;
+   `createTileProducer(renderer)` in
    `apps/game/src/render/terrainProducer.ts` is the GPU one, installed by `App`
    at renderer ready once `warm()` has compiled the pipeline behind the boot
-   cover. One batch in flight, one body a batch, uploads keyed on
-   `seed|maxElevation|roughness|seaLevel`. `?producer=cpu` refuses it; a
-   failure sets `available = false` and the streamer falls back to the pool
-   for the rest of the session. WebGL 2 never sees it.
+   cover. One batch in flight, one body a batch, uploads keyed on the surface
+   object's identity and the seabed flag — the identity `surfaceKernel`
+   memoizes its packed record on, handed through the seam rather than rebuilt
+   behind it. `?producer=cpu` refuses it; a failure sets `available = false`
+   and the streamer falls back to the pool for the rest of the session.
+   WebGL 2 never sees it.
 4. **Tolerance is measured where the arithmetic runs.** Under `pnpm test:gpu`
    on the physical adapter: `terrainKernel.gpu.test.ts` holds every zoo body
    and Luna, Earth and Mercury at levels 0 through the drawn floor to
