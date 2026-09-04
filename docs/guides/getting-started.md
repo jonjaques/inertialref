@@ -22,7 +22,8 @@ and attaches the debugger. Attach/Launch Node target the headless runner.
 [Development](development.md#debugging) has the four configurations.
 
 The client opens on Earth, three-quarter lit, with the ship — a CC-BY
-USS Enterprise-D hull, or the debug cone while it loads — framed in the
+USS Enterprise-D hull by default, a CC-BY Rocinante if you choose it in
+Display settings, or the debug cone while either loads — framed in the
 foreground of a Solar System built from measurements rather than from a seed.
 
 ```mermaid

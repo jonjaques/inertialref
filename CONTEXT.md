@@ -7241,230 +7241,43 @@ move every body in the galaxy, including the ones the change never touched, and
 the loader could no longer distinguish "this save's ground moved" from
 "everything moved". So a bump moves nothing by itself. It is the honest half of a
 change that already happened, and it has to be spent by hand.
-||||||| parent of 9aa5891 (docs(adr): the sensor spine gets a record, and the plan keeps only what is open)
+## A second hull, a ship the player picks, and solo behind a dev flag (4 Sep 2026)
 
-## The sensor owns the frame, and the picture that was one transfer too dark (4 Sep 2026)
+`data/models/` now holds two hulls. The Rocinante — the _Corvette_-class light
+frigate of _The Expanse_, in its MCRN _Tachi_ livery — joins the Enterprise-D,
+CC BY 4.0 by Jakub.Vildomec, ~141k triangles against the Enterprise's ~50k, with
+four 1K PBR material sets and the same `asset.extras` attribution block the
+Enterprise carries, so the credit travels with the file. **Scaled to 46 m**, the
+length the Expanse wiki and the official _Ships of the Expanse_ RPG both give;
+the loader divides that by the model's own nose-axis extent exactly as it does
+for the Enterprise's 642.5 m, so `engine.hull` reads length 46, beam 16 in
+flight, and 642.5, 467 when the Enterprise is chosen back. The bow is +Z — the
+drive cone sits at the model's −Z, the antennas at its +Z — which the loader's
+half-turn faces to the game's −Z.
 
-Phase 0 of [the sensor plan](design/plans/the-sensor.md) is on the default
-path: `render/sensor.ts` draws every frame through one `PostProcessing` around
-the scene pass and the house curve, `scene/Sensor.tsx` takes the frame from R3F
-at priority 1, the renderer is built at zero samples with MSAA on the pass, and
-`ir.gpu()` measures through the chain.
-[ADR-0029](docs/adr/0029-the-sensor-spine.md) has the decision and the three
-facts about r182 that cost the handoff — the swap `PostProcessing.render` does
-not undo on a throw, the draw against a pipeline still building, and the pass
-gated on a frame counter only three's own loop advances — each of them now in
-"Bugs the tests found" above.
+Two changes made the manifest a chooser rather than a constant:
 
-What the handoff had ruled out was right and what it had not tried was the
-answer: reading the canvas from inside the page, on one frame, through the
-chain and through the renderer's own path, gave identical pixels — and the
-renderer found sitting at `NoToneMapping` and a linear output. The screenshot
-was never lying; the state under it was.
+- **The manifest is a data module now, `render/ships.ts`, holding no Three.js.**
+  `state/preferences.ts` needs the set of ship ids to guard the stored choice,
+  and it is imported by the Node preferences suite; `shipModels.ts` imports
+  `three/webgpu`, the `GLTFLoader` and an `import.meta.glob` of the `.glb` files,
+  none of which can load in Node. So the JSON lives in a leaf both import, and
+  the loader is the only thing that pulls the renderer in.
+- **`render.ship` is a preference like any other** — a string id into the
+  manifest, guarded by `oneOf(SHIP_IDS)`, defaulting to the Enterprise so every
+  screenshot and the reference cutscene keep their framing. `ShipModel` reads it
+  live and reloads the hull without a page reload, which here rebuilds the
+  renderer and loses the camera; the boot warm-up reads it too, so the compiled
+  hull is the one that will be drawn. The chooser is an `OptionGroup` at the top
+  of Display settings, the label a short chip and the value the id, so a saved
+  ship survives a name reword. A stored id this build cannot load degrades to the
+  default the same way a missing hull degrades to the debug cone.
 
-Measured on the M-series at 1600×900, DPR 1, occluded rig, one Chrome on the
-GPU at a time, the world pinned by one save at tick 272, the baseline being the
-parent commit in its own worktree and dev server, drained-queue ms per frame,
-median of five sixty-frame runs after the first:
-
-| Operating point                      | Baseline | Chain |
-| ------------------------------------ | -------- | ----- |
-| Earth from 14,400 km                 | 1.84     | 1.78  |
-| Earth summit, converged              | 6.17     | 5.87  |
-| Proxima Centauri d from orbit        | 0.47     | 0.49  |
-| Proxima Centauri d summit, converged | 4.37     | 4.43  |
-| `tng-intro` at frame 800             | 0.84     | 0.90  |
-
-Against a 0.15 ms budget the spine adds at most 0.06 ms anywhere, inside the
-spread. The plate gate is **zero** differing pixels at the four planetarium
-points; the cutscene differs from the baseline by 531 pixels at 15/255 and from
-itself across two boots by the same 531 and 15.
-
-Two protocol facts for anyone taking plates across boots. A world paused before
-its star survey has settled draws a sparser sky, differently each boot — the
-first Proxima plates were 83 KB against 259 KB settled, and a patch of sky held
-seven stars on one build and one on the other with the pause first, none of it
-the chain's. And two boots paused at different ticks differ by a sub-pixel
-drift of the surface that reads as hundreds of pixels at a few levels. The
-sequence that is exact is `ir.look`, twelve seconds, then `ir.load` of one
-save, then `ir.pause`: the survey has settled and the tick is the save's.
-`ir.gpu()` under the old pass would have reported the quad's cost, not the
-frame's; the first figures taken through it were about a path that drew the
-scene once per forty submissions.
-
-The one piece of phase 0 still open is the chain's own warm-up producer: the
-quad's pipeline is the one compile the first presented frame pays.
-
-## three r185, and what moving the renderer three releases costs (4 Sep 2026)
-
-The renderer is on three r185.1, from r182, because
-[the upscaler plan](design/plans/the-upscaler.md) needs
-`@pmndrs/upscaler`, whose peer range starts at r184. The bump itself is two
-lines; what it took to get the gate green again is worth the record, because
-each item is a fact about three that nothing here would have predicted.
-
-- **`compileAsync` no longer builds pipelines during its walk.** r185 queues one
-  work item per object and processes the queue after the walk, one object at a
-  time, yielding between them through `yieldToMain()` — `scheduler.yield()`
-  where it exists and `requestAnimationFrame` otherwise. The GPU harness's
-  frame stub returns 0 and never fires, so every compile that walked anything
-  hung after its first object, and the warm-up test that counted pipelines
-  synchronously after `warmCompile` counted none. `gpuSetup.ts` installs
-  Node's own `timers/promises` scheduler, which keeps the frame stub honest —
-  still no frame, still one `nodeFrame` — and the harness grew
-  `holdNextPipeline()`, which holds the next async pipeline's promise open so
-  the "frame drawn before the compile lands" window can be drawn inside on
-  purpose rather than raced. The draw guard is not needed, and the review
-  below found the re-cut hunk dead: r185's `Renderer._renderObjectDirect`
-  draws only when `Pipelines.isReady` says the GPU object has arrived.
-- **A refused shader is reported three times, on three turns.** The module
-  error lands in the verb's own validation scope at once; r185 then reports the
-  pipeline from the `.then` on its inner scope a turn later, and the compiler's
-  diagnostics after `getCompilationInfo()` later still — into whatever verb is
-  running by then. The harness's compute test failed for a shader the
-  refused-shader test had asked for. A verb that fails now waits until the sink
-  has been quiet for three turns and drops what arrived since it began.
-- **`renderOutput` premultiplies.** r185's output node clamps alpha,
-  unpremultiplies, tone-maps and premultiplies again, so a pixel the renderer's
-  own path leaves at alpha 0 comes out black however bright its rgb was. The
-  harness clears to alpha 0 by default and the sensor gate's "the frame the
-  renderer draws for itself" compared black sprites against the chain's lit
-  ones, worst pixel 0.93. Production clears opaque (`createRenderer` has since
-  the flare's compositor artifact) and the gate now clears the same way. The
-  chain writes alpha 1 and never sees any of this.
-- **`@types/three` 0.185 puts every operator on `Node<'float'>` and none on
-  `Node`.** Three hundred errors, almost all in the terrain kernel's five
-  aliases, which were `type F = Node`; typed, the residue was a color uniform
-  multiplied by a vector (the typings allow a scalar), a `mix` with a
-  per-channel weight (the typings allow a scalar `t`), `mat3 × vec3` typed as a
-  matrix, `attribute()` widening its type argument to `string`, and
-  `NodeLibrary` declared as an empty class with `addToneMapping` gone from the
-  types and present at runtime. Each got a cast with the reason beside it.
-- **Two renames and a removal.** `PostProcessing` is `RenderPipeline` since
-  r183 and the old name warns on every build; `WebGLCubeRenderTarget` cannot be
-  used with the WebGPU renderer since r183 and `CubeRenderTarget` is its
-  replacement — the bake, the planet's four-texel stand-ins and their test.
-  R3F 9.7 still constructs a `THREE.Clock`, which r185 deprecates with one
-  console warning per boot; not ours.
-
-**The plate gate.** Baseline `origin/main` in its own worktree on port 5174,
-this branch on 5175, one driven Chrome at a time, 1600×900 at DPR 1, the world
-pinned by one save at tick 1158 (hash `108f8f67`) loaded and paused in one
-task after the look, plates at `--max-px 0`, differences counted above 1/255:
-
-| Operating point                            | Pixels differing | Peak   |
-| ------------------------------------------ | ---------------- | ------ |
-| Earth from 14,402 km, planetarium          | 15               | 15/255 |
-| Earth summit, converged (877 patches)      | 1,205            | 29/255 |
-| Proxima Centauri d from orbit, planetarium | 623              | 28/255 |
-| Proxima Centauri d summit (838 patches)    | 16,607           | 11/255 |
-| `tng-intro` at frame 800, parked           | 0                | 0      |
-
-The cutscene plate was taken from `/cinema/tng-intro?t=800` parked on the
-frame, and two boots of either build differ there in zero pixels — the
-`ir.play` → `ir.pause` → `ir.seekCutscene(800)` protocol read the playhead at
-799.67 on one boot and 800.00 on the next, and that third of a frame was 141,208
-pixels of difference that had nothing to do with the upgrade. Every pixel that
-differs at the summits is a rock. The ground is black in the amplified
-difference and each instance of the scatter lights up on its sunlit face, in
-place, by up to 11/255: r185's `transformNormal` is the inverse-transpose
-normal matrix, normalized, where r182 divided the normal by the squared column
-lengths and multiplied by the matrix — right for a rotation with a uniform
-scale and wrong by a little for the scatter's per-instance scales. The rocks
-are now lit by their true normals. Nothing else in the frame moved.
-
-**Cost**, `ir.gpu(60)` through the chain, the smallest of three at each point,
-both builds under the same conditions:
-
-| Operating point                      | r182, ms | r185, ms |
-| ------------------------------------ | -------- | -------- |
-| Earth summit, converged              | 6.02     | 5.72     |
-| Proxima Centauri d from orbit        | 0.66     | 0.72     |
-| Proxima Centauri d summit, converged | 4.45     | 4.74     |
-
-Level within the spread of the runs; the first baseline pass read 12–16 ms at
-the Earth summit with something else on the GPU, which is the reminder that a
-figure taken beside anything is a figure about that thing.
-
-One flake surfaced in `pnpm check` and is not the upgrade's:
-`packages/physics/src/universal.test.ts`'s "agrees with the element form on
-every ellipse" missed its tolerance by 0.05 % at eccentricity 0.9888 on seed
-1192846684, and the package has no dependency on three and no diff on this
-branch. It passes on the next seed; the bound wants a look near the parabolic
-end.
-
-## The review of r185: the patch was dead, the second mesh compiled wrong, and boot is level (4 Sep 2026)
-
-A review of the bump above against the three sources rather than against the
-entry, before it shipped. [ADR-0030](docs/adr/0030-three-r185.md) carries the
-decisions; the mechanisms that must not come back are in "Bugs the tests
-found" above. What it turned up, in the order it matters:
-
-- **The re-cut draw guard was dead code.** r185's `Renderer._renderObjectDirect`
-  calls the backend's draw only when `Pipelines.isReady` says the GPU object
-  has arrived, so the hunk sat under a gate that never let its case through.
-  Measured: hunk stripped, `warmup.gpu.test.ts` green; hunk stripped and the
-  gate disabled as well, `no overload matched for setPipeline`. Every
-  sentence saying r185 as shipped throws was written from the r182 fact. The
-  patch is gone and the test holds the gate.
-- **A group warmed whole compiled its second mesh against the wrong target,
-  a warm-up dummy at the origin was culled, a pipeline hold leaked into the
-  next test, the sensor gate's alpha count was vacuous, the tone curve
-  installed once and said twice, and the sensor restored two of the three
-  fields `RenderPipeline.render` swaps.** Each is in "Bugs the tests found"
-  or in the commit that fixed it, with the number that settled it.
-- **A browser without `scheduler.yield` pays a frame per yield, and a hidden
-  one never boots.** three's `yieldToMain` falls back to an animation frame;
-  Safari 26 has no `scheduler` and Chrome before 129 no `yield`; boot is
-  designed to finish hidden. `render/schedulerYield.ts` installs a
-  `MessageChannel` yield at the entry point. Not measured in a browser that
-  needs it — the rig's Chrome is 152 and has the native one.
-- **One finding was wrong.** The type argument on `attribute<'vec3'>(name,
-'vec3')` is not a restatement: the parameter is unconstrained, so the
-  literal widens to `string` and `.mul` disappears — three type errors and
-  one silent `Node<string>` on a `colorNode`. It stays, with the reason
-  beside it.
-
-**Boot wall time**, which the entry above did not measure. The `preload`
-measure under `?timing=full` — the same two clock reads as the `scene
-warmed` log line's `ms` — at the home poster, occluded rig at 1600×900, DPR
-1, one Chrome on the GPU at a time, `origin/main` on r182 served from its own
-worktree on port 5174 and this branch on 5175, six boots per build on a wiped
-Chrome profile, the first cold and the five after it warm:
-
-| Build | Cold, ms | Warm, median of five, ms | Warm spread, ms |
-| ----- | -------- | ------------------------ | --------------- |
-| r182  | 1,481    | 1,425                    | 1,404–1,472     |
-| r185  | 1,508    | 1,430                    | 1,422–1,449     |
-
-Level: the median moves 5 ms, inside either spread, and the driver's own
-"renderer ready" is 5.3–5.4 s cold and 2.9 s warm on both. A cold profile
-costs the driver's first light two seconds and the preload almost nothing, so
-Chrome's shader cache is not where boot's time goes; the textures and the
-bakes are.
-
-Two rig traps, for the next comparison. A dev server started in a background
-task behind `| head` dies of SIGPIPE after that many lines, mid-run, and the
-boot whose fetches then fail reads a _third_ of the real preload — 433 ms —
-because a texture that fails to decode is one fewer unit; redirect to a file.
-And the profile wipe for a cold boot races the Chrome `--down` just closed,
-which is still releasing files; wipe it in a separate call.
-
-## One set of rules for three hosts (04 Sep 2026)
-
-The shared agent machinery stays in `.claude/`. Codex discovers the same skills
-through relative directory symlinks, reads the same agent briefs through TOML
-adapters, and translates its lifecycle payloads before calling the existing
-hooks. Copying the bodies produced nonexistent `.Codex/rules/` references and
-checkout-specific hook paths; neither belongs in a worktree-portable setup.
-The adapter normalizes the Git root, marks source deletions, and retains a
-failed Stop gate's retry budget across Codex continuation turns.
-
-`AGENTS.md` carries all 64 imperative rules; their full explanations and
-exceptions live in `docs/agents/invariants.md`. The shorter startup card points
-to that record before work in a governed area. Claude's rule extracts and
-Cursor's references retain their paths, so reducing startup text does not
-remove the reasoning or require maintaining a second set of constraints.
+Solo flight is offered from the menu **in development builds only**:
+`isEnterable` now returns true for a `built` mode when `import.meta.env.DEV` is,
+which Vite folds away in a production bundle. The routes stay mounted regardless,
+so a pasted `/play/solo` still resolves in every build — the gate is about what a
+visitor is invited into, not what the build can do.
 
 ## The sensor keeps its default sky, and half a pixel is not half resolution (4 Sep 2026)
 
