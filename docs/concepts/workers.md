@@ -170,8 +170,9 @@ failure, so the rejection is matched on and not logged.
 
 The streamer does not ask the pool for heightfields. It asks a
 `HeightfieldSource` — `kind`, `available`, an optional `maxLevel`,
-`submit(payload) → JobHandle` — and `poolHeightfieldSource(pool)` is the pool
-wearing that interface. The
+`submit(surface, request) → JobHandle`, the arguments `generateHeightfield`
+takes — and `poolHeightfieldSource(pool)` is the pool wearing that
+interface. The
 other implementation is `createTileProducer(renderer)` in
 `apps/game/src/render/terrainProducer.ts`: a TSL compute kernel that produces
 sixteen tiles a dispatch on the GPU, installed by `App` once the renderer is
@@ -189,8 +190,12 @@ figures are re-measured; `ir.terrain().producer` says which one answered.
 
 The interface lives here, in `packages/workers`, rather than beside the
 renderer, because the pool implements it and this layer cannot see the one
-above. Nothing in it names a renderer, a device or a buffer: a payload in, a
-handle out, the same envelope the worker task already speaks.
+above. Nothing in it names a renderer, a device or a buffer: a surface and a
+request in, a handle out. The caller hands over the `SurfaceParameters` it
+holds rather than a flattening of it — that is the identity `surfaceKernel`
+memoizes on, and what lets the GPU source batch by it — and the pool's
+adapter is the one place the seed becomes a string, through `encodeSurface`,
+because the pool is the one source with a wire to cross.
 
 ---
 

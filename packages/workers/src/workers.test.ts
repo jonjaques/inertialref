@@ -377,11 +377,9 @@ describe('terrain task', () => {
     }
     const wire = encodeSurface(surface)
     expect(wire.seed).toBe(formatSeed(SEED))
-    expect(wire.seed).toMatch(/^[0-9a-f]{32}$/)
-    expect(decodeSurface(wire)).toEqual(surface)
-    expect(Object.keys(decodeSurface(wire)).sort()).toEqual(
-      Object.keys(surface).sort(),
-    )
+    // Strict, because "nothing else is touched" includes a key that arrives
+    // holding `undefined`, which `toEqual` ignores.
+    expect(decodeSurface(wire)).toStrictEqual(surface)
   })
 
   it('surveys a system through the same generator the world uses', async () => {

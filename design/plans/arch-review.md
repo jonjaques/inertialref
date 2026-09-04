@@ -208,7 +208,7 @@ materials.
 
 ---
 
-## What the landed five left, deliberately
+## What the landed six left, deliberately
 
 - **The band stack's bodies are still two.** The kernel does not walk
   `BAND_STACK`; it reads its gates from it. A kernel that walked the table

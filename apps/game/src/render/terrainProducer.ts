@@ -7,6 +7,7 @@ import {
   HEIGHTFIELD_RESOLUTION,
   type HeightfieldRequest,
   heightfieldStride,
+  type KernelSurface,
   MAX_TILE_LEVEL,
   type SurfaceParameters,
   surfaceKernel,
@@ -121,20 +122,21 @@ export interface TileProducer extends HeightfieldSource {
 interface Queued {
   readonly surface: SurfaceParameters
   readonly request: HeightfieldRequest
-  /**
-   * Resolved from the request's optional flag once, because it is half of
-   * what cuts a batch: a body asked for both ways is two packed records and
-   * two uploads, not one record answering both.
-   */
-  readonly seabed: boolean
   readonly resolve: (response: HeightfieldResponse) => void
   readonly reject: (cause: Error) => void
   cancelled: boolean
 }
 
-/** Whether two queued requests can share a dispatch: one body, one side of the sea. */
+/**
+ * Whether two queued requests can share a dispatch: one body, one side of
+ * the sea. The flag is half of it because it is half of the packed record —
+ * a body asked for both ways is two records and two uploads, not one record
+ * answering both — and an omitted flag is the clamped side, as
+ * `generateHeightfield` reads it.
+ */
 const sameBody = (a: Queued, b: Queued): boolean =>
-  a.surface === b.surface && a.seabed === b.seabed
+  a.surface === b.surface &&
+  (a.request.seabed ?? false) === (b.request.seabed ?? false)
 
 /**
  * Which producer a page asked for. `?producer=cpu` keeps the pool on a WebGPU
@@ -157,8 +159,14 @@ export function createTileProducer(
     maxTiles: batch,
   })
   const queue: Queued[] = []
-  /** The head of the last batch dispatched: whose records the kernel holds. */
-  let uploaded: Queued | null = null
+  /*
+   * The packed record the kernel's buffers hold. `surfaceKernel` memoizes one
+   * record per surface and side of the sea, so the record's identity is the
+   * body's. Holding the head job instead would keep its surface — the
+   * `WeakMap` key under both of that body's records — and, through its
+   * settled promise, one tile's response, for as long as the producer lives.
+   */
+  let uploaded: KernelSurface | null = null
   /*
    * The one switch. `fail` turns it off for a device that stopped answering
    * and `dispose` for a producer that is being retired, and every guard
@@ -178,6 +186,9 @@ export function createTileProducer(
   function fail(cause: unknown): void {
     if (!available) return
     available = false
+    // The streamer keeps a stopped producer for the session and routes on
+    // `available`; nothing else would ever let go of the last body's record.
+    uploaded = null
     log.error('the GPU tile producer stopped; the pool takes over', {
       cause: String(cause),
     })
@@ -212,13 +223,13 @@ export function createTileProducer(
     inFlight = taken.length
     const started = performance.now()
     try {
-      const packed = surfaceKernel(head.surface, head.seabed)
-      if (uploaded === null || !sameBody(uploaded, head)) {
+      const packed = surfaceKernel(head.surface, head.request.seabed)
+      if (packed !== uploaded) {
         ;(kernel.records.array as Float32Array).set(packed.records)
         ;(kernel.words.array as Uint32Array).set(packed.words)
         kernel.records.needsUpdate = true
         kernel.words.needsUpdate = true
-        uploaded = head
+        uploaded = packed
       }
       const frames = kernel.tiles.array as Float32Array
       taken.forEach((job, i) => {
@@ -342,7 +353,6 @@ export function createTileProducer(
       const job: Queued = {
         surface,
         request,
-        seabed: request.seabed ?? false,
         resolve,
         reject,
         cancelled: false,
@@ -449,6 +459,7 @@ export function createTileProducer(
       // in flight on it rejects into `pump`'s catch — which then reaches
       // `fail`'s early return rather than logging that the producer stopped.
       available = false
+      uploaded = null
       for (const job of queue.splice(0)) {
         job.reject(new Error('producer unavailable'))
       }

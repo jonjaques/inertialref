@@ -19,12 +19,11 @@ import {
   type HeightfieldSource,
 } from '@inertialref/workers'
 import {
+  bodyFrameId,
   COVER_CHANNELS,
-  findBody,
   HEIGHTFIELD_BORDER,
   heightfieldStride,
   parseAddress,
-  regionAddress,
   type SurfaceParameters,
 } from '@inertialref/universe'
 import type { Seconds } from '@inertialref/shared'
@@ -289,12 +288,9 @@ describe('the terrain streamer', () => {
           border,
         })
         const field: HeightfieldResponse = {
-          region: regionAddress(
-            request.region.face,
-            request.region.level,
-            request.region.i,
-            request.region.j,
-          ),
+          // The streamer's own address, on this side of any wire: nothing
+          // here has crossed a clone, so there is nothing to range-check.
+          region: request.region,
           resolution: request.resolution,
           border,
           elevations: new Float32Array(stride * stride),
@@ -318,13 +314,13 @@ describe('the terrain streamer', () => {
     // The surface arrives by identity: the one object the loaded body holds,
     // which is what a producer memoizes its packed record on. A source handed
     // a fresh copy per request would pack the body once per tile.
-    const address = parseAddress(view.body.address)
-    if (address.kind !== 'body') throw new Error('the view is not on a body')
-    const system = session.world.system(address.system)
-    const underfoot =
-      system === undefined ? undefined : findBody(system, address.body)
-    if (underfoot === undefined) throw new Error('no body underfoot')
-    expect([...surfaces]).toEqual([underfoot.surface])
+    const underfoot = session.world.bodyAt(
+      bodyFrameId(parseAddress(view.body.address)),
+    )
+    if (underfoot === null) throw new Error('no body underfoot')
+    // `size` and `has`, not a deep equality: `toEqual` passes a structurally
+    // equal copy, which is the very thing this is here to refuse.
+    expect(surfaces.size).toBe(1)
     expect(surfaces.has(underfoot.surface)).toBe(true)
     expect(pool.stats().completed + pool.stats().active + pool.queued).toBe(1)
 
