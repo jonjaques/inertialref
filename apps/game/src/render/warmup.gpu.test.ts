@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   Mesh,
+  MeshBasicNodeMaterial,
   PerspectiveCamera,
   RenderTarget,
   Scene,
   SphereGeometry,
 } from 'three/webgpu'
+import { vec3 } from 'three/tsl'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createStarMaterial } from './materials.ts'
 import { warmCompile } from './warmup.ts'
@@ -88,6 +90,51 @@ describe('warmCompile', () => {
      * anything reached it is what makes that assertion falsifiable.
      */
     expect(pixels.data.some((value) => value !== 0)).toBe(true)
+    target.dispose()
+  })
+
+  it('and a frame drawn before the compile lands draws nothing of it, quietly', async () => {
+    /*
+     * `compileAsync` registers the pipeline in the cache on its synchronous
+     * walk and fills in the GPU object when `createRenderPipelineAsync`
+     * resolves. A frame in between finds the entry and, in r182 as shipped,
+     * hands `setPipeline` an undefined — a TypeError out of the whole render,
+     * which is one lost frame on every body the build-ahead materialises and,
+     * inside the sensor chain, the throw `sensor.gpu.test.ts` guards the
+     * renderer against. `patches/three@0.182.0.patch` has the backend skip
+     * the draw instead, the way it already skips a pipeline that failed to
+     * build. This holds the patch: the frame before the promise is quiet,
+     * empty and builds no second pipeline, and the frame after it has the
+     * object.
+     */
+    const { scene, mesh, camera } = staged()
+    // A program of its own — a constant in the graph is one — so the pipeline
+    // this test leaves in the cache is nobody else's: the star materials the
+    // other two stage compile to one fragment program, and the negative
+    // control below counts on its draw being the first to need it.
+    const own = new MeshBasicNodeMaterial()
+    own.colorNode = vec3(0.61, 0.3, 0.15)
+    mesh.material = own
+    const target = new RenderTarget(16, 16)
+    const { renderer } = gpu
+    renderer.setRenderTarget(target)
+
+    const before = created()
+    const compiled = warmCompile(renderer, { object: mesh, camera, scene })
+    const walked = created()
+    expect(walked).toBeGreaterThan(before)
+
+    mesh.visible = true
+    expect(() => renderer.render(scene, camera)).not.toThrow()
+    expect(created()).toBe(walked)
+    const early = await gpu.read(target)
+    expect(early.data.every((value) => value === 0)).toBe(true)
+
+    await compiled
+    renderer.render(scene, camera)
+    expect(created()).toBe(walked)
+    const landed = await gpu.read(target)
+    expect(landed.data.some((value) => value !== 0)).toBe(true)
     target.dispose()
   })
 

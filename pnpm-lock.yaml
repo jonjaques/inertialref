@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  three@0.182.0: e45313fe72247fe4617c1d423de7709253b426b2a22055f600070d77f7376f84
+
 importers:
 
   .:
@@ -121,7 +124,7 @@ importers:
         version: link:../../packages/workers
       '@react-three/fiber':
         specifier: ^9.3.0
-        version: 9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.182.0)
+        version: 9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.182.0(patch_hash=e45313fe72247fe4617c1d423de7709253b426b2a22055f600070d77f7376f84))
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -163,7 +166,7 @@ importers:
         version: 3.6.0
       three:
         specifier: ^0.182.0
-        version: 0.182.0
+        version: 0.182.0(patch_hash=e45313fe72247fe4617c1d423de7709253b426b2a22055f600070d77f7376f84)
       zustand:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
@@ -5551,7 +5554,7 @@ snapshots:
 
   '@react-dnd/shallowequal@4.0.2': {}
 
-  '@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.182.0)':
+  '@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.182.0(patch_hash=e45313fe72247fe4617c1d423de7709253b426b2a22055f600070d77f7376f84))':
     dependencies:
       '@babel/runtime': 7.29.7
       '@types/webxr': 0.5.24
@@ -5562,7 +5565,7 @@ snapshots:
       react-use-measure: 2.1.7(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       scheduler: 0.27.0
       suspend-react: 0.1.3(react@19.2.8)
-      three: 0.182.0
+      three: 0.182.0(patch_hash=e45313fe72247fe4617c1d423de7709253b426b2a22055f600070d77f7376f84)
       use-sync-external-store: 1.6.0(react@19.2.8)
       zustand: 5.0.15(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
     optionalDependencies:
@@ -7224,7 +7227,7 @@ snapshots:
 
   tapable@2.3.3: {}
 
-  three@0.182.0: {}
+  three@0.182.0(patch_hash=e45313fe72247fe4617c1d423de7709253b426b2a22055f600070d77f7376f84): {}
 
   tiny-inflate@1.0.3: {}
 
