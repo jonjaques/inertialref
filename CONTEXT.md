@@ -7241,6 +7241,44 @@ scene once per forty submissions.
 The one piece of phase 0 still open is the chain's own warm-up producer: the
 quad's pipeline is the one compile the first presented frame pays.
 
+## A second hull, a ship the player picks, and solo behind a dev flag (4 Sep 2026)
+
+`data/models/` now holds two hulls. The Rocinante — the _Corvette_-class light
+frigate of _The Expanse_, in its MCRN _Tachi_ livery — joins the Enterprise-D,
+CC BY 4.0 by Jakub.Vildomec, ~141k triangles against the Enterprise's ~50k, with
+four 1K PBR material sets and the same `asset.extras` attribution block the
+Enterprise carries, so the credit travels with the file. **Scaled to 46 m**, the
+length the Expanse wiki and the official _Ships of the Expanse_ RPG both give;
+the loader divides that by the model's own nose-axis extent exactly as it does
+for the Enterprise's 642.5 m, so `engine.hull` reads length 46, beam 16 in
+flight, and 642.5, 467 when the Enterprise is chosen back. The bow is +Z — the
+drive cone sits at the model's −Z, the antennas at its +Z — which the loader's
+half-turn faces to the game's −Z.
+
+Two changes made the manifest a chooser rather than a constant:
+
+- **The manifest is a data module now, `render/ships.ts`, holding no Three.js.**
+  `state/preferences.ts` needs the set of ship ids to guard the stored choice,
+  and it is imported by the Node preferences suite; `shipModels.ts` imports
+  `three/webgpu`, the `GLTFLoader` and an `import.meta.glob` of the `.glb` files,
+  none of which can load in Node. So the JSON lives in a leaf both import, and
+  the loader is the only thing that pulls the renderer in.
+- **`render.ship` is a preference like any other** — a string id into the
+  manifest, guarded by `oneOf(SHIP_IDS)`, defaulting to the Enterprise so every
+  screenshot and the reference cutscene keep their framing. `ShipModel` reads it
+  live and reloads the hull without a page reload, which here rebuilds the
+  renderer and loses the camera; the boot warm-up reads it too, so the compiled
+  hull is the one that will be drawn. The chooser is an `OptionGroup` at the top
+  of Display settings, the label a short chip and the value the id, so a saved
+  ship survives a name reword. A stored id this build cannot load degrades to the
+  default the same way a missing hull degrades to the debug cone.
+
+Solo flight is offered from the menu **in development builds only**:
+`isEnterable` now returns true for a `built` mode when `import.meta.env.DEV` is,
+which Vite folds away in a production bundle. The routes stay mounted regardless,
+so a pasted `/play/solo` still resolves in every build — the gate is about what a
+visitor is invited into, not what the build can do.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
