@@ -181,6 +181,21 @@ could go through the same task with the census counting arrivals rather than
 bakes. Worth doing only if the boot line below is ever worked, because it is a
 tenth of it.
 
+The prefetch's two branches do not pace alike, and only one of them was
+reasoned about. `prefetchScattering` in
+[`preload.ts`](../../apps/game/src/render/preload.ts) drains its no-pool queue
+one bake per macrotask, deliberately; the pool branch submits every haze of
+every newly-loaded system in one `for` loop into the same FIFO the terrain
+streamer feeds. A jump into a many-body system therefore puts N × 20–39 ms of
+bakes ahead of the heightfields the arrival frames are waiting on — the haze
+is cosmetic for those frames and the terrain is not, which is the ordering
+[ADR-0028](../../docs/adr/0028-client-tasks.md) argues for and this loop
+inverts. Unmeasured: the reading that would settle it is `pool.stats()`
+throughput and `ir.terrain().level` across a jump into a system with more than
+a handful of atmospheres, against the same jump with the loop paced. The fix
+is a queue on this branch too, or the priority lane the survey section above
+finds no other use for.
+
 ## Boot
 
 ### Boot is the texture warm, and that is the only line worth working

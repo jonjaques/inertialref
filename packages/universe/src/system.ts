@@ -1046,6 +1046,12 @@ export function planetTilt(draw: number): Radians {
 
 /** The shortest sidereal period a planet of `mass` and `radius` may draw. */
 export function hydrostaticSpinFloor(mass: Kilograms, radius: Meters): Seconds {
+  // The same guard `rotationalFlattening` opens with, and for a sharper reason:
+  // a mass of zero makes this `Infinity`, `Math.max` at the call site takes it
+  // over the draw, and `rotationPeriod` becomes a canonical field that
+  // `JSON.stringify` writes to a save as `null`. No floor is the honest answer
+  // for a body the relation has nothing to say about.
+  if (mass <= 0 || radius <= 0) return 0 as Seconds
   return (
     2 *
     Math.PI *

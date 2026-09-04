@@ -155,25 +155,43 @@ export function warmScattering(
   if (inFlight !== undefined) return inFlight
 
   const started = performance.now()
-  const job = pool
-    .submit(bakeAtmosphereTask, { haze, topRatio })
-    .result.then((baked) => {
-      const raced = cache.get(key)
-      if (raced !== undefined) return raced
-      const set: AtmosphereScattering = {
-        recipe: baked.recipe,
-        transmittance: toTexture(baked.transmittance),
-        multiScatter: toTexture(baked.multiScatter),
-      }
-      cache.set(key, set)
-      log.info('scattering tables baked on the pool', {
-        ms: Math.round(performance.now() - started),
-        topRatio: Number(topRatio.toFixed(4)),
-        thickness: haze.thickness,
+  /*
+   * The `try` is around `submit` and nothing else, and it is not decoration:
+   * a terminated pool is an `invariant` inside `WorkerPool.submit`, so it
+   * *throws* where every caller here hangs a `.catch` on the promise. A
+   * synchronous throw walks straight past that and out of whatever asked —
+   * a frame callback in `Bodies.tsx`, the interval in `preload.ts`. Handing
+   * back a rejected promise makes the failure the shape both callers already
+   * handle. `submit` stays inside the expression rather than behind a
+   * microtask so the bake keeps its place in the queue ahead of the tiles a
+   * later frame asks for.
+   */
+  let job: Promise<AtmosphereScattering>
+  try {
+    job = pool
+      .submit(bakeAtmosphereTask, { haze, topRatio })
+      .result.then((baked) => {
+        const raced = cache.get(key)
+        if (raced !== undefined) return raced
+        const set: AtmosphereScattering = {
+          recipe: baked.recipe,
+          transmittance: toTexture(baked.transmittance),
+          multiScatter: toTexture(baked.multiScatter),
+        }
+        cache.set(key, set)
+        log.info('scattering tables baked on the pool', {
+          ms: Math.round(performance.now() - started),
+          topRatio: Number(topRatio.toFixed(4)),
+          thickness: haze.thickness,
+        })
+        return set
       })
-      return set
-    })
-    .finally(() => pending.delete(key))
+      .finally(() => pending.delete(key))
+  } catch (cause: unknown) {
+    return Promise.reject(
+      cause instanceof Error ? cause : new Error(String(cause)),
+    )
+  }
   pending.set(key, job)
   return job
 }
@@ -196,8 +214,9 @@ export function scatteringVia(
   if (cached !== undefined) return cached
   void warmScattering(pool, haze, topRatio).catch(() => {
     // The one rejection is a pool that has gone away — a dispose during a
-    // reload. The next frame asks again, and a session that ends has no
-    // frame to draw the haze in anyway.
+    // reload, which `warmScattering` turns into a rejection because `submit`
+    // raises it as a throw. The next frame asks again, and a session that
+    // ends has no frame to draw the haze in anyway.
   })
   return null
 }

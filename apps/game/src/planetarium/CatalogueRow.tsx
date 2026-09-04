@@ -84,6 +84,11 @@ export function CatalogueRow({
         <button
           type="button"
           tabIndex={-1}
+          // State as well as action: out of the tab order it is still a
+          // control a screen reader reaches by pointer or by touch, and
+          // "Expand Sol" alone says what pressing it does and not what it
+          // would be undoing.
+          aria-expanded={expanded}
           aria-label={`${expanded === true ? 'Collapse' : 'Expand'} ${row.name}`}
           onClick={(event) => {
             releaseFocus(event)
