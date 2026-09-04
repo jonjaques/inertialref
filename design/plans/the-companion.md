@@ -1,23 +1,26 @@
 # The companion: a desk in the reading room
 
 A person types "show me a water world around a red dwarf" or "give me a tour of
-the Saturn system" into a panel in the planetarium, the camera goes there, and
-a paragraph in the Survey's voice says what is on screen. The language model
-runs in the browser, on the same GPU as the frame, through Transformers.js.
-Behind the one panel there are two agents — a **director** that turns language
-into camera moves through the harness, and a **narrator** that reads the record
-and says what it sees — and the person is never shown the seam. It ships as an
-**experimental** feature: labeled so, reached through a dialog that says what
-is about to happen and shows it happening, and kept — weights and all — in the
-browser's own cache on disk, so the download is paid once. This page is the plan
+the Saturn system" into a chat bar anchored at the top of the planetarium, the
+camera goes there, and a paragraph in the Survey's voice drops down beneath the
+bar saying what is on screen. The language model runs in the browser, on the
+same GPU as the frame, through Transformers.js. Behind the one bar there are two
+agents — a **director** that turns language into camera moves through the
+harness, and a **narrator** that reads the record and says what it sees — and
+the person is never shown the seam. It ships as an **experimental** feature:
+labeled so, reached through a dialog that says what is about to happen and
+shows it happening, and kept — weights and all — in the browser's own cache on
+disk, so the download is paid once. The narrator is written to be spoken from
+the first day, because a voice is what turns a captioned tour into a tour, and
+§ 10 says what that voice needs from every earlier phase. This page is the plan
 for building it.
 
 What this page is not: a narrator in the sense [world](../../docs/design/world.md)
 rules out, which is settled in § 1 and is the one decision on this page that
 belongs to the design bible rather than to the code; a companion in the
-cockpit, which is an NPC and stays absent; voice, which
-[audio](../../docs/design/audio.md) settles; a server-side model, which is a
-seam here and not a section.
+cockpit, which is an NPC and stays absent; the voice itself, which comes after
+these phases and is designed for in § 10 so that nothing built before it has to
+be undone; a server-side model, which is a seam here and not a section.
 
 | Landed                                                                           | The record                                                                                                                                                                         |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -122,7 +125,7 @@ phase 5 for a decision, not made here.
 **Experimental, behind a dialog that says what will happen, and the rig never
 pays for it.** The default model is 2.7 GB and the feature is a preview of a
 component whose answers are checked for tone and for figures but not for truth
-beyond the record. So it says so: the panel is labeled _Experimental_, and
+beyond the record. So it says so: the bar is labeled _Experimental_, and
 nothing downloads until a person has read a dialog that states the size, the
 source, where the bytes will be kept, what leaves the machine and what the
 device can hold, and has pressed the one button on it — and then watched the
@@ -155,10 +158,10 @@ dependency under `packages/`, so the model runtime, the AI SDK and its schema
 library cannot go below `apps/`. Everything that _does not need them_ can, and
 should, because that is where the tests are cheap.
 
-| Half        | Lives in                           | Holds                                                                                                                                                                                | Depends on                                                                               |
-| ----------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| **Pure**    | `packages/devtools/src/companion/` | `WorldQuery` and its matcher, `findWorlds`, `composeTour` → `Itinerary`, `brief(dossier)`, `resolveNamed`, the two prompts as strings, the evaluation fixtures                       | `universe`, `workers`, the rest of `devtools`; nothing third-party                       |
-| **Runtime** | `apps/game/src/companion/`         | the worker, the provider, the preflight and the cache check, `CompanionTransport`, the six tools and their executors, `TourRunner`, the dialog, the panel, the preferences, `ir.ask` | `@browser-ai/transformers-js`, `@huggingface/transformers`, `ai`, `@ai-sdk/react`, `zod` |
+| Half        | Lives in                           | Holds                                                                                                                                                                                               | Depends on                                                                               |
+| ----------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Pure**    | `packages/devtools/src/companion/` | `WorldQuery` and its matcher, `findWorlds`, `composeTour` → `Itinerary`, `brief(dossier)`, `resolveNamed`, the two prompts as strings, the evaluation fixtures                                      | `universe`, `workers`, the rest of `devtools`; nothing third-party                       |
+| **Runtime** | `apps/game/src/companion/`         | the worker, the provider, the preflight and the cache check, `CompanionTransport`, the six tools and their executors, `TourRunner`, the dialog, the bar and its dropdown, the preferences, `ir.ask` | `@browser-ai/transformers-js`, `@huggingface/transformers`, `ai`, `@ai-sdk/react`, `zod` |
 
 `devtools` is layer 6 and already depends on every other package; the pure half
 is a directory in it rather than a layer 7, because a package whose only job is
@@ -166,7 +169,7 @@ to be imported by one app is a package for the sake of a package. It moves out
 the day a second consumer appears — the headless runner wanting `ir.tour`
 without a browser is the likely one.
 
-**One turn, in order.** A message arrives from the panel; the transport does
+**One turn, in order.** A message arrives from the bar; the transport does
 the following and writes everything into a single assistant message:
 
 1. **The fast path.** If the whole message is something `resolveDestination`
@@ -293,7 +296,7 @@ interface Stop {
     | { kind: 'compose'; id: string }
     | { kind: 'picture'; id: string }
     | { kind: 'stand'; site: string }
-  dwell: Seconds // wall seconds, presentation only
+  dwell: Seconds // a floor, in wall seconds; a stop also holds until its narration ends
   cue: string // what the narrator is asked to speak to at this stop
 }
 ```
@@ -308,22 +311,29 @@ distinctive in the record — the only moon with an atmosphere, the one with a
 sea; then `far-crescent` on the primary as the way out. A system-level tour is
 the star at `wide`, then the planets in `orbitalOrder` at `portrait`, dwarfs
 included and rubble excluded, on the same rule the orbit traces use. Dwell is
-12 s at a primary and 8 s at a moon, wall clock, tunable from the panel and
+a floor, not a duration: 12 s at a primary and 8 s at a moon, wall clock, and a
+stop also holds until the narration for it has finished arriving. That second
+condition is the rule a spoken tour needs with one word changed — _finished
+being read_ for _finished arriving_ (§ 10) — so the itinerary and the runner do
+not change when the voice comes. Both figures are tunable from the bar and
 irrelevant to any canonical state.
 
 **The runner is a presentation object driven by the frame.** `TourRunner`
 advances with the same `dt` the observatory's `sample(dt)` takes, so it eases
 while paused the way a fly-to does. At each stop it calls the framing verb,
-waits until `status().travelling` is false, starts the dwell, and on expiry
-moves on; on arrival it raises `stopReached`, and the transport answers with a
-narrator pass whose cue is the stop's. It pushes a presentation stance for the
+waits until `status().travelling` is false, starts the dwell, and moves on when
+both the dwell and the stop's narration have ended — the narration's end is a
+signal the transport raises, and the voice later raises the same signal when it
+falls silent; on arrival it raises `stopReached`, and the transport answers with
+a narrator pass whose cue is the stop's. It pushes a presentation stance for the
 duration — labels at the eighteen-name step, orbit traces on the subject's
 siblings, which is the default scope and needs no `all` — and releases it on
 the way out, so the panels a person had arranged are exactly where they were.
 
 **The person is always in charge.** Typing anything pauses the tour; `next`,
-`back`, `pause` and `end` are buttons on the tour card and go through the action
-registry like every control; a `show` or `frame` from the director while a tour
+`back`, `pause` and `end` are buttons at the end of the bar while a tour runs
+and go through the action registry like every control; a `show` or `frame` from
+the director while a tour
 is paused is an ordinary move and the tour resumes from its next stop when
 asked. Ending a tour is `TourRunner.stop`, which releases the stance and leaves
 the camera where it is — the way `stopCutscene` hands the ship back.
@@ -370,6 +380,13 @@ action lines the person saw. Then the last eight turns. Nothing else.
   large is stated in kilometers.
 - Sentence case, American English, three to six sentences, the figure before the
   adjective.
+- Written to be read aloud, from the first day. Plain sentences: no markup, no
+  list, no table, no parenthetical aside. Units in words and never in symbols —
+  "1,200 kilometers", "288 kelvin", "5.1 grams per cubic centimeter", "5.97
+  sextillion kilograms" — because `km`, `M⊕` and `×10²⁴` read on a screen and
+  not off one. The text shown is the text a voice speaks (§ 10); there is no
+  second output to keep in step, and a test holds the fixture outputs to the
+  vocabulary.
 
 **Two mechanical checks, one measured figure.** `companion.test.ts` greps both
 prompts and every fixture output for the banned vocabularies above and fails on
@@ -418,7 +435,7 @@ by default; `toolChoice`, `stopSequences`, `seed` and `responseFormat` are
 unsupported and warned. Tools go into the chat template through
 `apply_chat_template({ tools })`, so the model sees them in its own trained
 format. **Tool calls are parsed after generation ends, not streamed**, so the
-director's pass is silent until it is done — the panel shows a working state,
+director's pass is silent until it is done — the bar shows a working state,
 and the narrator is the part that streams. Abort goes through an
 `InterruptableStoppingCriteria` and reaches the worker as an `interrupt`
 message; a person's next message aborts the pass in flight. Load progress
@@ -496,7 +513,8 @@ in § 7, in the Record register, and offered nothing else.
 
 **Two preferences, both in `state/preferences.ts`, in a `companion` group**:
 `companion.consented`, the fact that a person pressed the button in the dialog,
-and `companion.model`, the id. Nothing else about the companion persists in a
+and `companion.model`, the id — and from phase 7 a third, `companion.voice`,
+off until a person turns it on. Nothing else about the companion persists in a
 preference; the weights are the cache's business (§ 7), and the conversation is
 session state that ends with the session, because a chat log is not a save and
 the Almanac is the record a person keeps.
@@ -505,21 +523,21 @@ the Almanac is the record a person keeps.
 
 ## 7. The gate: the dialog, the download, and the cache on disk
 
-**Experimental, and labeled so wherever it is met.** The panel's header carries
-_Experimental_ beside its title; the dialog opens with the word; the settings
+**Experimental, and labeled so wherever it is met.** The bar carries
+_Experimental_ at its end; the dialog opens with the word; the settings
 section repeats it and says what it means in the Record register — a model that
 runs on this machine, whose answers are checked mechanically for tone and for
 figures against the record and for nothing else, that can be removed from this
 browser in one press, and that nothing else in the game depends on. The menu's
 mode card is unchanged: the planetarium is the planetarium, and the desk is a
-panel in it.
+bar across the top of it.
 
 **Nothing is offered that the machine cannot run: the preflight.** Before the
 dialog offers a button it asks the browser three questions, in the order Mote
 asks them, because that order is the one a person can act on:
 
 1. `navigator.gpu` is present. Knowable before the first paint. Absent, the
-   panel's empty state says so — Chrome 113+, Edge 113+, Safari 18+ — and offers
+   bar's placeholder says so — Chrome 113+, Edge 113+, Safari 18+ — and offers
    nothing. There is no degraded mode to fall back to and the copy does not
    pretend there is.
 2. `requestAdapter()` returns one. A null adapter is a virtual machine, a remote
@@ -547,25 +565,26 @@ record and a device profile and is tested as one.
 
 **The dialog is an overlay route.** [ADR-0011](../../docs/adr/0011-application-shell-and-modes.md):
 a dialog is a URL. `/companion` joins `isOverlayPath`, takes its own
-`overlaySurface`, opens from the panel through `overlayState` so the planetarium
+`overlaySurface`, opens from the bar through `overlayState` so the planetarium
 stays mounted behind it — the observatory keeps its target and the dock its
 layout — and closes through `useOverlay`. The `dialog` key context takes the
 keyboard from the mode, so `Escape` closes it and nothing typed reaches the
-camera. It never opens itself: the panel's empty state is one sentence and a
-button that opens it. Its rows, in order, in the Record register:
+camera. It never opens itself: before the model exists the bar's placeholder
+says what the desk is, and pressing the bar or typing into it opens the dialog.
+Its rows, in order, in the Record register:
 
-| Row                          | Says                                                                                                                                                                                                                                         |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **What this is**             | Experimental. A model that runs on this machine's GPU, inside this tab. It moves the planetarium's camera and reads the record in text.                                                                                                      |
-| **What will happen**         | `2.7 GB` downloads once from `<host>` — the figure from the manifest, the host named — into this browser's cache on disk. Then the weights go onto the GPU, about `N` s the first time (a phase-0 figure). The panel opens when it is ready. |
-| **Where it is kept**         | Cache Storage on this disk, under this site. Persistent storage is requested so the browser does not evict it. It can be deleted from Settings › Companion. `X used of Y` · `persistent` or `best effort`.                                   |
-| **What leaves this machine** | The request for the weights. Nothing typed here, and nothing on screen.                                                                                                                                                                      |
-| **What it needs**            | WebGPU with `shader-f16`; about `Z` GB of memory to spare. Detected: `<vendor · architecture> · shader-f16 · ~4.3 GB estimated`.                                                                                                             |
-| **Model**                    | The picker, filed by fit, the default preselected; each row with its size and whether it is already in the cache.                                                                                                                            |
-| **The button**               | `Download 2.7 GB` — or `Load` when every file is already in the cache, and the download row says so.                                                                                                                                         |
+| Row                          | Says                                                                                                                                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **What this is**             | Experimental. A model that runs on this machine's GPU, inside this tab. It moves the planetarium's camera and reads the record in text.                                                                                                          |
+| **What will happen**         | `2.7 GB` downloads once from `<host>` — the figure from the manifest, the host named — into this browser's cache on disk. Then the weights go onto the GPU, about `N` s the first time (a phase-0 figure). The bar takes focus when it is ready. |
+| **Where it is kept**         | Cache Storage on this disk, under this site. Persistent storage is requested so the browser does not evict it. It can be deleted from Settings › Companion. `X used of Y` · `persistent` or `best effort`.                                       |
+| **What leaves this machine** | The request for the weights. Nothing typed here, and nothing on screen.                                                                                                                                                                          |
+| **What it needs**            | WebGPU with `shader-f16`; about `Z` GB of memory to spare. Detected: `<vendor · architecture> · shader-f16 · ~4.3 GB estimated`.                                                                                                                 |
+| **Model**                    | The picker, filed by fit, the default preselected; each row with its size and whether it is already in the cache.                                                                                                                                |
+| **The button**               | `Download 2.7 GB` — or `Load` when every file is already in the cache, and the download row says so.                                                                                                                                             |
 
 A cold load of `/companion` with no background renders, the way `/settings`
-does, and its button leads to the planetarium with the panel open.
+does, and its button leads to the planetarium with the bar focused.
 
 **The progress indicator is the dialog's second state.** After the press the
 same dialog replaces its rows with a bar and a readout and stays on screen until
@@ -579,7 +598,7 @@ exactly those.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Fetching**             | `file 2 / 7 · 812 MB / 2,756 MB · <host> → browser cache`, and an estimate of the remainder from the first seconds' rate | the per-file `progress` events, summed; the estimate is labeled one. Mote measured 5–25 MB/s here, so 2.7 GB is two to nine minutes                    |
 | **Uploading to the GPU** | `browser cache → GPU`, indeterminate, with elapsed seconds                                                               | from the last file's `done` to the session's `ready`. On a cached model this is the only phase — the cache on disk made visible without a word of copy |
-| **Warming**              | one line                                                                                                                 | the provider's one-token generate; then the dialog closes and the panel takes focus                                                                    |
+| **Warming**              | one line                                                                                                                 | the provider's one-token generate; then the dialog closes and the bar takes focus                                                                      |
 
 Cancel aborts the session through its `AbortSignal`, which stops the fetches in
 flight. The runtime writes a file to the cache only when it is complete, so a
@@ -669,14 +688,41 @@ the 2.7 GB back, and it is the second place the word _Experimental_ is written.
 
 ---
 
-## 8. The panel
+## 8. The bar and its dropdown
 
-**A dock panel, closed by default, labeled Experimental.** `companion` joins
-`planetariumPanels` in `apps/game/src/planetarium/registry.tsx` in the left
-zone under the catalog, `defaultOpen: false`, with a hint that names the model
-size. Its header carries _Experimental_ beside the title. It is in the launcher
-rail like everything else, becomes a bottom-sheet tab on a phone, and carries
-no other chrome the other panels do not have.
+**A chat bar anchored at the top of the frame, and a transcript that drops down
+from it.** Not a dock panel. The companion is chrome of the mode, the way the
+cinema player's transport is chrome of cinema: one text input, anchored at the
+top edge of `.hud-layer` inside the insets and centered, with _Experimental_ at
+its end, present whenever the planetarium is. Below it, on focus or on a press,
+the conversation drops down as a sheet over the upper part of the frame, and it
+collapses back to the bar on `Escape`, on a click into the scene, or the moment
+a tour starts moving. Two reasons it is a bar and not a panel. A conversation
+is addressed to the whole picture, not to a tool beside it — "show me Titan" is
+a request about the frame and the reply is about what the frame now holds — so
+it belongs where the eye already is rather than in a column of instruments. And
+a tour is a thing to watch with the transcript out of the way: the collapsed bar
+shows the current action line and the latest sentence as a caption strip, which
+is the surface a voice later reads from (§ 10), and the whole conversation is
+one press away.
+
+The rules it inherits. `.hud-layer` spends the four insets, so the bar is an
+absolutely positioned child at its top and names no viewport unit;
+`pointer-events-auto` on the bar and the dropdown and nowhere else, so the scene
+under the collapsed bar stays reachable; "the middle of the frame is never
+covered by default" holds because the dropdown opens only on a deliberate act
+and closes on its own when the picture moves. The dock's launcher rail and its
+six panels are untouched, and `dock/layout.ts` never learns the companion
+exists. On a phone the bar sits at the top the way a search field does and the
+dropdown is the same sheet from the top edge, above the panels' bottom sheet.
+
+**Three states of the bar.**
+
+| State               | Shows                                                                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collapsed, idle     | the input with its placeholder, _Experimental_, and nothing else                                                                                                           |
+| Collapsed, replying | the latest action line and the latest sentence of the reply as a caption strip under the input, streaming; while a tour runs, `back · pause · next · end` at the bar's end |
+| Dropped down        | the transcript — every turn, every part — with the input still at the top and the last message scrolled into view                                                          |
 
 **One `useChat`, one transport, one message per turn.** `CompanionTransport`
 implements `ChatTransport` over the two passes in § 2, `reconnectToStream`
@@ -685,34 +731,38 @@ parts are the vocabulary:
 
 | Part          | Drawn as                                                                                                                                             |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `text`        | the narrator's prose, streamed, in the panel's body type                                                                                             |
+| `text`        | the narrator's prose, streamed, in the transcript's body type; its latest sentence is the caption strip                                              |
 | `data-move`   | a Record-register line — `→ Titan · portrait`, `→ standing · lit shore · 1.2 km` — muted, before the prose                                           |
-| `data-tour`   | the itinerary card: title, stops with the current one marked, `back · pause · next · end`                                                            |
+| `data-tour`   | the itinerary card in the transcript: title, stops with the current one marked; its four controls live in the bar                                    |
 | `data-load`   | the compact form of § 7's readout — one row, `browser cache → GPU · 4 s` — for a later session's warm load, when the dialog has already been through |
 | `data-notice` | what the browser cannot do, or what warp was actually delivered                                                                                      |
 
 The words _director_ and _narrator_ appear in source and in this page and never
-on screen. The empty state is one sentence saying what the desk is, and one
-button that opens the dialog in § 7; the download, its consent and its progress
-never happen inside the panel. Raw tool calls are never rendered: a move is a
-line, a failure to resolve is a sentence, a `clarify` is the reply.
+on screen. Before the model exists the bar's placeholder says what the desk is,
+and pressing the bar or typing into it opens the dialog in § 7; the download,
+its consent and its progress never happen in the bar. Raw tool calls are never
+rendered: a move is a line, a failure to resolve is a sentence, a `clarify` is
+the reply.
 
 **Typing never moves the camera.** The input is the same `<Input>` the catalog
 uses, and `isTyping(event)` in the keymap store already returns every key typed
 into a focused field to the field before a chord is built — that is the one
-mechanism and it needs no second. `Escape` blurs. A `companion.ask` action that
-focuses the field is registered with no default chord, because `/` is the
-catalog's and the choice of a key is a bible decision, and the tour card's four
-buttons go through `hud/Action.tsx` so their labels print the live chord if one
-is ever bound. A test drives `KeymapStore.handleKeyDown` with the field focused
-and asserts `F`, `L`, `Home` and the arrows reach nothing.
+mechanism and it needs no second. `Escape` collapses the dropdown first and
+blurs the input second. A `companion.ask` action that focuses the bar is
+registered with no default chord, because `/` is the catalog's and the choice
+of a key is a bible decision, and the tour's four buttons go through
+`hud/Action.tsx` so their labels print the live chord if one is ever bound. A
+test drives `KeymapStore.handleKeyDown` with the field focused and asserts `F`,
+`L`, `Home` and the arrows reach nothing.
 
-**Accessibility is the shell plan's rules plus one.** Streamed text goes into a
-polite live region so a screen reader hears a paragraph, not two hundred
-tokens; the dialog's progress bar is a `role="status"` region whose text is the
-readout, so the phase is announced when it changes; the panel material's
-contrast rules in [the shell](the-shell.md) apply unchanged; reduced motion
-turns the bar into a number.
+**Accessibility is the shell plan's rules plus one.** The caption strip is a
+polite live region, so a screen reader hears a sentence as it lands rather than
+two hundred tokens; the dialog's progress bar is a `role="status"` region whose
+text is the readout, so the phase is announced when it changes; the bar and the
+dropdown are drawn in the panel material and its contrast rules in
+[the shell](the-shell.md) apply unchanged, with a star behind the bar as the
+design case; reduced motion turns the drop-down into a cut and the progress bar
+into a number.
 
 ---
 
@@ -762,7 +812,7 @@ inspect is not done:
 
 | Verb                             | Returns                                                                                                                                  |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `await ir.ask(text)`             | `{ moves, text, toolCalls, timings }` — the whole turn, without the panel                                                                |
+| `await ir.ask(text)`             | `{ moves, text, toolCalls, timings }` — the whole turn, without the bar                                                                  |
 | `ir.tour(scope, include?)`       | the itinerary, started; deterministic and model-free                                                                                     |
 | `await ir.findWorlds(query, ly)` | the matches, nearest first, with the sweep's count and duration                                                                          |
 | `ir.companion()`                 | the preflight verdict and device profile, model id, cached or not, loaded, warm, tokens per second on the last pass, the last tool calls |
@@ -773,7 +823,56 @@ decoding is `--js "await ir.ask(...)"` beside the perf rig's sampler.
 
 ---
 
-## 10. Declined, with the reason
+## 10. The voice, later
+
+The narrator speaking is what makes this a tour rather than a captioned one,
+and it is deliberately after these phases: the tour has to be right in text —
+the moves, the figures, the tone — before it is right aloud, because a wrong
+sentence spoken is worse than a wrong sentence shown. It is designed for now,
+because four things built earlier would otherwise be built twice:
+
+- **The narrator's text is speakable as written** (§ 5): units in words, no
+  symbols, no markup, three to six plain sentences. The text on screen is the
+  text a voice reads, and there is no second output to keep in step.
+- **A stop holds until its narration ends** (§ 4): the runner already waits on
+  a signal beyond the dwell. The voice raises the same signal when it falls
+  silent, and the itinerary does not change.
+- **The caption strip is the voice's transcript** (§ 8): the collapsed bar shows
+  what is being said, sentence by sentence — which is the requirement
+  [ux](../../docs/design/ux.md#accessibility) already states for every audio cue
+  that carries information: a visual equivalent, always.
+- **The dialog has a second row and the cache a second entry** (§ 7): the voice
+  model is offered on the same consent screen with its own size on the button,
+  cached the same way, deleted from the same settings row.
+
+**Two ways to make sound, and the plan picks the second.** The Web Speech API's
+`speechSynthesis` costs nothing to download and speaks whatever voice the
+operating system has — a different voice on every machine, and on most of them
+one that sounds like a screen reader. A planetarium whose narrator is a person
+on one machine and an appliance on the next has no voice at all. Kokoro-82M
+through `kokoro-js` is an ONNX model on the runtime the companion already runs:
+82 MB at `q8f16`, 156 MB at `fp16`, fifty-five voices, measured from the Hub
+today. It goes through the same worker, into the same cache, behind the same
+dialog, and that is the argument — one download story, one preflight, one
+bucket. The cost is a second model resident beside the first, which is the
+phase-7 measurement on the same rig: synthesis has to stay ahead of speech while
+the language model idles between stops, and the frame has to hold while both
+are resident.
+
+**What it asks of the bible.** [audio](../../docs/design/audio.md) § Voice:
+none — then the resolution, twelve synthesized annunciator strings, because
+"nobody is performing; an instrument is annunciating". A synthesized narrator
+reading the record is that argument at paragraph length rather than at twelve
+strings, and it is not voice acting: no performance, no script, a machine
+reading what the record says in a machine's voice. That is the case for the
+amendment. Against it is that a paragraph read aloud is a presence in a way an
+annunciator is not, and the bible chose silence on purpose. The plan takes no
+side: the wording is proposed with phase 7 for a decision, and until then the
+tour is captioned.
+
+---
+
+## 11. Declined, with the reason
 
 - **WebLLM.** Faster decode on the same GPU, and `@browser-ai/web-llm` wraps it
   with the same AI SDK surface; it is also what Mote runs, so the gate's prior
@@ -803,12 +902,16 @@ decoding is `--js "await ir.ask(...)"` beside the perf rig's sampler.
 - **OPFS or IndexedDB for the weights.** § 7. The runtime reads the Cache API; a
   custom store is a second implementation over the same quota.
 - **Downloading automatically, at boot, in the preload census, or from the
-  panel without the dialog.** § 1 and § 7. A 2.7 GB download is a thing a person
+  bar without the dialog.** § 1 and § 7. A 2.7 GB download is a thing a person
   is told about first, in full, and watches.
+- **A dock panel for the conversation.** § 8. A conversation about the picture
+  belongs across the top of the picture, not in a column of instruments beside
+  it, and a tour wants the transcript out of the way.
 - **Compiling a tour to a cutscene.** § 4. A seam, not the design.
-- **Voice.** [audio](../../docs/design/audio.md): none. The twelve annunciator
-  strings are an instrument; a companion reading paragraphs aloud is a
-  performance.
+- **The voice in these phases, and the Web Speech API for it later.** § 10.
+  Nothing before phase 7 plays a sound, because the tour has to be right in text
+  first; and when it speaks it speaks through the runtime it already runs, not
+  through whatever voice the operating system happens to have.
 - **Retrieval over the documentation, or embeddings over the catalog.** The
   record is structured and the brief is built from it directly; the catalog's
   search is already an index at a third of a millisecond. Embeddings return the
@@ -821,7 +924,7 @@ decoding is `--js "await ir.ask(...)"` beside the perf rig's sampler.
 
 ---
 
-## 11. Phases
+## 12. Phases
 
 **Phase 0 — the spike.** A `.scratch/` page beside the running planetarium
 loads `Qwen3-4B-Instruct-2507` at `q4f16` through the provider in a module
@@ -871,14 +974,17 @@ the thirty Sol questions. Gate: zero vocabulary hits over every evaluated
 output; every number-with-unit traced to its brief; the Sol score written here
 with the decision on `solar/notes.ts` it implies.
 
-**Phase 5 — the panel.** The dock panel with its label, the five part
-renderers, the tour card, the empty state that opens the dialog, mobile, the
-live regions, the keymap test. And the proposed wording for the bible — one row
-in world.md's table, one paragraph in planetarium.md's tools — as a diff in the
-PR for a decision. Gate: a `--cast` of "give me a tour of the Saturn system"
-from a cold panel, dialog included, reviewed frame by frame; the shell plan's
-contrast rules hold on the panel and the dialog; typing `F` into the field moves
-nothing.
+**Phase 5 — the bar.** The bar at the top of the frame with its label and its
+three states, the dropdown transcript, the five part renderers, the caption
+strip, the tour controls at the bar's end, the placeholder that opens the
+dialog, mobile, the live regions, the keymap test. And the proposed wording for
+the bible — one row in world.md's table, one paragraph in planetarium.md's tools
+— as a diff in the PR for a decision. Gate: a `--cast` of "give me a tour of the
+Saturn system" from a cold bar, dialog included, reviewed frame by frame, with
+the transcript collapsing as the first fly-to begins; the shell plan's contrast
+rules hold on the bar over a star and on the dialog; typing `F` into the field
+moves nothing; the caption strip's live region announces one sentence per
+sentence.
 
 **Phase 6 — seams.** The R2 mirror and its manifest; `solar/notes.ts` if
 phase 4 said so; a server provider behind the same transport as a preference
@@ -886,9 +992,21 @@ that names where the question goes; Cross-Origin Storage when a browser ships
 it; an itinerary compiled to a `CutsceneScript` for cinema; bookmarks from a
 tour's stops, once bookmarks exist.
 
+**Phase 7 — the voice.** Kokoro-82M through `kokoro-js` in the companion's
+worker, its weights in the same bucket behind a second row of the same dialog
+and a second line of the same settings section; the runner's hold-until-ended
+signal raised by the voice falling silent; the caption strip as the spoken
+transcript, sentence by sentence; a `companion.voice` preference that is off
+until a person turns it on; and the audio.md amendment as a diff for a
+decision. Gate: a spoken Saturn tour as a `--cast` with its audio track; frame
+time with both models resident measured on the rig and written here; synthesis
+of a stop's narration finished before the fly-to to that stop ends, measured
+over the Saturn itinerary; `pnpm companion:eval` extended with the pronunciation
+of every unit word the narrator is allowed.
+
 ---
 
-## 12. The order it is worth taking
+## 13. The order it is worth taking
 
 1. **Phases 0 and 1 together.** One needs a GPU and no code; the other needs
    code and no GPU. The tour and the finder are the features a person would use
@@ -899,8 +1017,11 @@ tour's stops, once bookmarks exist.
    swapped in.
 3. **Phase 3 before 4.** A director that moves the camera correctly and says
    nothing is a feature; a narrator describing the wrong body is a bug.
-4. **Phase 5 last**, because a panel over an evaluated pipeline is a day and a
-   panel over an unevaluated one is a week of guessing which half is wrong.
+4. **Phase 5 next**, because a bar over an evaluated pipeline is a day and a
+   bar over an unevaluated one is a week of guessing which half is wrong.
+5. **Phase 7 last of all.** A voice reading an unevaluated narrator is that
+   week aloud, and the bible decision it needs is easier to make about a tour
+   that already exists in text.
 
 ---
 
@@ -938,10 +1059,18 @@ tour's stops, once bookmarks exist.
 - **The Sol evaluation grades recall, and recall is uneven.** A 4B model knows
   Titan and may not know Hyperion; the score is a mean, and the notes fallback
   is the answer to its variance, not to its mean.
+- **`kokoro-js` pins the previous major of the runtime.** Its dependency is
+  `@huggingface/transformers ^3.5.1` and the companion runs 4.2, so installing
+  it as published means two copies of ONNX Runtime in the bundle and two WebGPU
+  devices. Phase 7 measures that first, and the fix is either the package on
+  the current major or the model run through the companion's own runtime with
+  its phonemizer in front — which is all `kokoro-js` is.
+- **The voice's sizes are the Hub's today**, like the language model's, and its
+  frame cost beside a resident 4B is unmeasured until phase 7.
 
 ## Not in this plan, deliberately
 
-Voice in any form; the companion outside the planetarium; commissions, which
+The voice before phase 7; the companion outside the planetarium; commissions, which
 [exploration](../../docs/design/exploration.md) gives an authored voice that
 this is not; the Almanac; a chat log that persists; translation of the prompts;
 multiplayer presence in the reading room; a fallback runtime of any kind;
@@ -952,6 +1081,7 @@ anything the model would _decide_ about canonical state.
 ```bash
 # the development mirror: fill it once, from the Hub, into ./models/ (gitignored)
 pnpm companion:models download onnx-community/Qwen3-4B-Instruct-2507-ONNX
+pnpm companion:models download onnx-community/Kokoro-82M-v1.0-ONNX   # phase 7
 
 # phase 0: the spike page beside the running planetarium, measured on the perf rig
 node scripts/drive.mjs --url 'http://localhost:5173/planetarium?at=g:milky-way/s:SOL/b:5' \
@@ -991,7 +1121,12 @@ node scripts/drive.mjs --url 'http://localhost:5173/planetarium?at=g:milky-way/s
 - [ADR-0011](../../docs/adr/0011-application-shell-and-modes.md) — why the
   gate is a URL over a mode that stays mounted
 - [ADR-0012](../../docs/adr/0012-dockable-panels.md),
-  [ADR-0018](../../docs/adr/0018-the-instrument.md) — the panel and the keys
+  [ADR-0018](../../docs/adr/0018-the-instrument.md) — the panels the bar is
+  deliberately not, and the keys it yields
+- [ux](../../docs/design/ux.md#accessibility) — the visual equivalent every
+  audio cue owes, which the caption strip is
+- [audio](../../docs/design/audio.md) — the voice rule, and the amendment
+  phase 7 asks of it
 - [hosting](../../docs/hosting.md) — where the weights live in production, and
   the service worker that must not touch them
 - [perf](perf.md) — the rig every budget above is measured on
