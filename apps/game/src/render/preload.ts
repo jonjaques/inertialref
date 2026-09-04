@@ -10,7 +10,7 @@ import { getLogger, getTimer } from '@inertialref/shared'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import type { RendererHandle } from './createRenderer.ts'
-import { scatteringFor } from './atmosphereLuts.ts'
+import { scatteringFor, warmScattering } from './atmosphereLuts.ts'
 import { createAtmosphereMaterial, createStarMaterial } from './materials.ts'
 import {
   createCloudMaterial,
@@ -296,11 +296,15 @@ async function sceneView(
  * Keep atmospheres warm as new systems load mid-session.
  *
  * A jump to a procedural system generates bodies whose hazes the boot pass
- * has never seen, and the first look at one would pay the 50 ms bake on the
- * spot. This polls the loaded-system set — once a second, two string
- * compares — and bakes anything new one table per macrotask, which is far
- * more air than the flight to any body takes. The renderer upload is left to
- * first use: a LUT is 4 KB, not a 4096² surface map.
+ * has never seen. This polls the loaded-system set — once a second, two
+ * string compares — and hands every new haze to the pool at once, so in the
+ * ordinary case the tables are cached before a shell is in view and the
+ * frame pays only the upload; a shell drawn before the pool has answered
+ * draws without haze until it does (`Bodies.tsx`). With no pool the bakes
+ * run here, one per macrotask, which spreads a system's worth across frames
+ * without taking any one of them out of a frame — the shape the page had
+ * everywhere before ADR-0028. The renderer upload is left to first use either
+ * way: a LUT is 4 KB, not a 4096² surface map.
  */
 export function watchSystemAtmospheres(engine: GameEngine): () => void {
   let known = ''
@@ -325,7 +329,21 @@ export function watchSystemAtmospheres(engine: GameEngine): () => void {
     known = key
     // Re-plan the lot; the bake cache turns the already-warm entries into
     // string lookups, so only genuinely new atmospheres cost anything.
-    queue = scatteringBakes(systems)
+    const bakes = scatteringBakes(systems)
+    const pool = engine.pool()
+    if (pool !== null) {
+      for (const bake of bakes) {
+        void warmScattering(pool, bake.haze, bake.topRatio).catch(
+          (cause: unknown) => {
+            // A pool that has gone away mid-session is the only rejection;
+            // the draw-time ask falls back to the synchronous bake.
+            log.warn('atmosphere prefetch declined', { cause: String(cause) })
+          },
+        )
+      }
+      return
+    }
+    queue = bakes
     if (!draining) {
       draining = true
       setTimeout(drain, 0)

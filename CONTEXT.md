@@ -7065,6 +7065,60 @@ cost is amended rather than overwritten: it is the evidence the GPU producer was
 decided on, and the current 23.8–69.4 ms is a different measurement, not a
 correction of that one.
 
+## Three things the plans named as cheap, closed (3 Sep 2026)
+
+**The terrain descent is the slow suite.** `gameEngine.test.ts` carried a
+`describe.skip` around the one test that streams a landing — 101.5 of the root
+suite's 102.9 s in one `beforeAll`, and the root suite is the whole of the Stop
+gate — so the skip bought the gate its ten seconds by dropping "the ship lands
+on the ground it drew" from `pnpm check` and CI as well. It is
+`gameEngine.descent.slow.test.ts` now, a second vitest project behind
+`pnpm test:slow` that `pnpm check` and CI run and the gate does not; the root
+suite is 7–15 s and the descent is green again at 110 s. The engine recipe both
+suites build from is `engine/headlessEngine.ts`, because a test file cannot
+import a helper from another without running its tests. A root run started
+beside the slow one went red on a timeout and green alone, which is the
+contention the testing guide already warns about.
+
+**The crosshair reads over the Sun.** The shell review measured a `sky-300/40`
+ring at 1.05:1 against a star filling the frame — the one element with no panel
+behind it, by design. The mark is a light hairline between two dark ones now
+(`hud/crosshair.ts`): 11.3:1 over the Sun and 8.8:1 over Earth's disk on the
+dark strokes, 9.8:1 over the sky on the light one, read off native-resolution
+shots through the rig. An inverting blend mode was the obvious alternative and
+fails on a mid-gray limb, where an inverted mid-gray is mid-gray; two dark
+strokes and a light one cannot all vanish against one ground. `· projected` in
+the destination list is `slate-400` under a dashed rule — the provenance device
+the accessibility page names — rather than the retired `slate-500` at 3.4:1.
+
+**The catalog is a tree with one tab stop.** `/planetarium` had 281 real tab
+stops with the way home at 272, and 138 of them were catalog rows. The rows are
+`treeitem`s with `aria-level`, exactly one of them `tabIndex` 0 — the current
+row where it is drawn, else the first system — and the panel's `onKeyDown`
+moves between them, folds a system with `→` and `←`, and climbs from a body to
+its system; the disclosure buttons leave the tab order. The camera's arrows
+already yield to a focused row, because every one is `yieldsToFocus` and a row
+is a control inside `.hud-layer`, so nothing had to be stopped from
+propagating, and the rig's census confirms the azimuth does not move. 148 stops
+now, the menu at 133; what remains is six panels of instruments before the way
+home, which is a landmark problem rather than a list one, and the shell plan
+says so. Virtualizing the rows — the review's suggestion — was not taken: a
+windowed list still cannot be tabbed through, and the depth was a semantics
+problem rather than a rendering one.
+
+**The atmosphere bake is off the arrival frame.**
+[ADR-0028](docs/adr/0028-client-tasks.md). A jump to a generated system paid
+39.7 ms of scattering bake inside a 43.3 ms frame, and the pool task the shape
+wanted could not live in `packages/workers`, because the bake is in
+`packages/rendering` at the same layer. The game's worker entry serves
+`createGameTaskRegistry()` — the shared set plus `render.bakeAtmosphere` — and
+a shell whose tables are in flight draws a vacuum for those frames. Measured on
+the same jump into HIP 71683: three main-thread bakes before, none after,
+twelve made on the pool. Two alternatives were declined in the record: moving
+the scattering model into `universe`, which would put a rendering integrator
+under the determinism rules, and a new `optics` package for one module with one
+consumer.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

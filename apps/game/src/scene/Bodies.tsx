@@ -31,7 +31,7 @@ import {
   type PlanetMaterial,
   type RingMaterial,
 } from '../render/planet.ts'
-import { scatteringFor } from '../render/atmosphereLuts.ts'
+import { scatteringFor, scatteringVia } from '../render/atmosphereLuts.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -828,14 +828,24 @@ export function Bodies({
         air.flattening.value = body.flattening
         const haze = appearance.haze
         if (haze !== null) {
-          // Baked lazily on the first frame this shell is drawn, cached by
-          // its parameters after that — see `atmosphereLuts.ts`.
-          const scattering = scatteringFor(haze, body.atmosphereScale)
-          air.setScattering(
-            scattering.recipe,
-            scattering.transmittance,
-            scattering.multiScatter,
-          )
+          /*
+           * Cached after the first ask; baked on the pool when there is one,
+           * and drawn with the stand-ins — a vacuum — until the tables land,
+           * because a 40 ms bake inside this frame was the largest single
+           * thing an arrival paid. Written every frame, so the frame the
+           * tables arrive on is the frame they bind. `atmosphereLuts.ts`.
+           */
+          const pool = engine.pool()
+          const scattering =
+            pool === null
+              ? scatteringFor(haze, body.atmosphereScale)
+              : scatteringVia(pool, haze, body.atmosphereScale)
+          if (scattering !== null)
+            air.setScattering(
+              scattering.recipe,
+              scattering.transmittance,
+              scattering.multiScatter,
+            )
         }
         air.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
         if (keyLight !== null) air.sunDirection.value.copy(sun)

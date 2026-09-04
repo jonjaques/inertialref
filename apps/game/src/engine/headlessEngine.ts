@@ -1,5 +1,6 @@
-import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import { createInlineWorker } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
+import { createGameTaskRegistry } from '../workers/registry.ts'
 import { GameEngine } from './GameEngine.ts'
 
 /**
@@ -14,9 +15,12 @@ import { GameEngine } from './GameEngine.ts'
  * that need it are two vitest projects — `gameEngine.test.ts` in the per-turn
  * suite and `gameEngine.descent.slow.test.ts` in the slow one — and a test
  * file cannot import a helper from the other without running its tests too.
+ *
+ * The registry is the game's own rather than the shared one, so the inline
+ * pool a test drives serves exactly the names the browser's workers do.
  */
 export function headlessEngine(): GameEngine {
-  const registry = createTaskRegistry()
+  const registry = createGameTaskRegistry()
   let clock = 0
   return new GameEngine({
     seed: 'inertialref',

@@ -37,6 +37,7 @@ Twenty-six decisions that are expensive to reverse. Each records the **context**
 | [0025](0025-the-rails.md)                   | The rails                   | accepted     | A coasting entity's state at any tick is the two-body propagation of a canonical epoch, so a frame jumps the ticks nothing integrates; eligibility is physical, never the warp; sphere-of-influence tests run at fixed boundaries and are skipped by a triangle-inequality bound; the clock plans and settles rather than budgets.                                                                                                                                                                                                                                                 |
 | [0026](0026-the-liquid.md)                  | The liquid                  | accepted     | A sea is a liquid the ground temperature admits; valleys are the zero-level strip of a warped noise cut to a depth that shallows toward the datum; the coast is a C¹ remap either side of it; the sea is a sheet over a seabed the heightfield now carries, refracting the frame behind it; a world is drawn in families off its seed; every per-pixel octave is a fetch of one baked 3D texture; the sphere wears two cube maps the ground material bakes, its reflectance and its relief; and the surface has four named levers.                                                 |
 | [0027](0027-the-rings.md)                   | The rings                   | accepted     | A ring system's character — architecture, particle albedo and tint — is drawn once from the seed with the host only leaning it, because a ring is the debris of one event; Sol's seven mapless systems are looked up in a table keyed by address and held to the catalog both ways; the profile peaks at one so the record's optical depth means the densest band; ω₀ is 0.9 with the darkening living in the strip; the strip is mipmapped against a moiré that crawls; and the axial-tilt tail is stretched, which owes a `SYSTEM_ALGORITHM` bump that is deliberately deferred. |
+| [0028](0028-client-tasks.md)                | Client tasks                | accepted     | The shared registry is what every host serves, and a host's own worker entry registers what only it needs: the game's serves `render.bakeAtmosphere` over the pure bake in `rendering`, which the same-layer `workers` package cannot import; the response is arrays, transferred, and converted where the GPU is; a shell whose tables are in flight draws a vacuum for those frames rather than a stalled frame.                                                                                                                                                                 |
 
 ---
 
@@ -71,6 +72,7 @@ flowchart TB
     A25["<b>0025</b><br/>the rails"]
     A26["<b>0026</b><br/>the liquid"]
     A27["<b>0027</b><br/>the rings"]
+    A28["<b>0028</b><br/>client tasks"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -123,6 +125,8 @@ flowchart TB
     A19 -->|"the landform the<br/>valleys are cut into"| A26
     A14 -->|"a stated optical depth<br/>has to mean one ring"| A27
     A26 -->|"the material a ring<br/>is drawn beside"| A27
+    A21 -->|"the floor's task, then<br/>the bake's, off the<br/>arrival frame"| A28
+    A22 -->|"a worker's cost lands<br/>on the Tasks track"| A28
     A21 -->|"the seabed is the drawn<br/>ground under the sheet"| A26
 
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
