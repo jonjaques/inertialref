@@ -220,7 +220,7 @@ unproven by the gate — drop the `.skip` and run the file before shipping one.
 options.
 
 **The figure moves with the field, which is why it is not a budget.** A bordered
-65×65 patch costs 22 to 50 ms across the zoo, and every level the detail floor
+65×65 patch costs 24 to 69 ms across the zoo, and every level the detail floor
 gains is another ring of them paid here at full serial cost; the browser has a
 pool of up to eight and this has one thread.
 
@@ -289,12 +289,16 @@ verbs: `compile`, `shader` (the generated WGSL), `drawGraph` and `draw`
 storage buffer back from a kernel). The suite is `*.gpu.test.ts`, its config
 is `apps/game/vitest.gpu.config.ts`, and the whole of it — every production
 material compiled to a Metal pipeline, structural assertions on the WGSL, a
-pixel ramp, the terrain kernels against their CPU originals — runs in about
-**16 s** on an M5. One test is fifteen of them: `terrainKernel.gpu.test.ts`
-holding the tile kernel to `generateHeightfield` across the zoo and the levels.
-The bands are 2.4 s and the producer 1.2 s beside it, and the rest of the
-suite, Dawn's boot included, is under half a second. Why that config exists and
-why it sits outside `pnpm check` is its own header,
+pixel ramp, the orbital bake read back both ways, the ring strips, the terrain
+kernels against their CPU originals — runs in about **18 s** on an M5, eight
+files and 41 tests. One test is seventeen of those seconds:
+`terrainKernel.gpu.test.ts` holds the tile kernel to `generateHeightfield`
+across the zoo and the levels, and it walks all fourteen rungs of the crater
+ladder on every body. The bands are 3.2 s and the producer 1.4 s, running in
+parallel beside it; everything else together, Dawn's boot included, is about a
+second, which is why a question that is not about the kernel should name its own
+file. Why that config exists and why it sits outside `pnpm check` is its own
+header,
 [`apps/game/vitest.gpu.config.ts`](../../apps/game/vitest.gpu.config.ts); what
 is still open — whether a hosted macOS runner gives Dawn a Metal adapter, and
 the two limits on how far these answers travel — is

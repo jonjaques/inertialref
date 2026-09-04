@@ -381,9 +381,16 @@ one that looks like a billiard ball.
 | map      | carries                                                              |
 | -------- | -------------------------------------------------------------------- |
 | `albedo` | the surface, sRGB                                                    |
-| `normal` | tangent-space normals, with an **ocean mask in alpha**               |
+| `normal` | tangent-space slopes in **RG**, an **ocean mask in B**               |
 | `night`  | city lights, revealed just _before_ the terminator                   |
 | `clouds` | coverage in alpha, on its own shell — and its shadow, on the surface |
+
+The normal's Z is reconstructed as √(1 − x² − y²), which is exact for a unit
+normal, because the third color channel is carrying the mask. Alpha is the
+obvious place for a mask and is the one place it cannot go: alpha is semantic to
+everything that touches an image, and libwebp's lossless encoder zeroes the RGB
+under transparent pixels — which erased the whole Moon map the day that encoder
+went lossless. A color channel is just data.
 
 The tangent frame is built analytically from the body's spin axis rather than
 from a UV channel: geographic north is the axis with its radial part removed, and
@@ -401,11 +408,17 @@ terrain is where it really is; only how sharply it catches the light is turned u
 
 A body with none of them is most of the galaxy, and it wears the ground. The
 orbital bake ([ADR-0026](../adr/0026-the-liquid.md)) draws the streamed ground
-material from the body's center into six faces of reflectance and a sea mask,
-and the sphere samples them by direction, so what the sphere shows from orbit
-is the geology the descent arrives at rather than a base color standing in for
-it. The bake carries no relief: the sphere is flat-shaded under the same
-photometry, and the eight-pixel gate is where the ground's own normals take over.
+material from the body's center into six faces, and the sphere samples them by
+direction, so what the sphere shows from orbit is the geology the descent
+arrives at rather than a base color standing in for it. It takes two pictures:
+the reflectance, and a relief record carrying the mesh normal's slopes along
+geographic east and north with the sea mask beside them — **the same three
+lanes, the same `x / 2 + 1/2` encoding and the same tangent frame as the table
+above**, so the decode is one path and the sphere cannot tell a bake from a
+photograph. The record is half float rather than the byte a photograph's map is
+stored in, because at forty kilometers a texel the real slope is a few
+hundredths: a byte resolves that to five steps and the relief exaggeration draws
+every step as a facet.
 
 ### Two shapes, and which one is not a rendering choice
 
@@ -416,8 +429,9 @@ decides is whether gravity rounded it off.
 tilts the bulge with it. Saturn is 9.8% flattened and Jupiter 6.5%, which reads
 as wrong long before anyone can say why. Real bodies carry their measured polar
 radius; generated ones derive it from their own rotation through the
-Darwin–Radau relation, with a moment of inertia factor for their class, which
-reaches Jupiter, Saturn, Earth and Neptune within 5% of the published figure —
+Darwin–Radau relation, which reaches Jupiter, Saturn, Earth and Neptune within
+5% of the published figure given each body's own moment of inertia factor, and
+within 10% on the factor for its class, which is all a generated body gets —
 and a sphere is not the neutral choice here, it is the wrong one. A generated
 planet's spin is floored at a fifth of its own equatorial gravity, a little past
 Saturn, so the most oblate giant the generator draws is about a seventh
@@ -499,7 +513,35 @@ I/F = (ω₀/4) · μ₀/(μ₀ + μ) · [1 − e^(−τ(1/μ₀ + 1/μ))]
 ```
 
 which gets saturation, edge-on brightening and the seasonal fade to nothing as
-the rings turn edge-on to the sun, all from one expression.
+the rings turn edge-on to the sun, all from one expression. `ω₀` is 0.9 — clean
+water ice in the visible — and **the strip's own color is the other half of that
+product**: Saturn's B ring reads 0.51 in its photograph and Uranus's rubble
+0.06, so the two together are the 0.5 to 0.6 particle albedo Cassini measured.
+Put the darkening in both and a τ = 1 sheet's lit face sits at a sixth of the
+brightness of its planet. Both scattering terms carry the same `ω₀`, which is
+what keeps the lit-to-backlit crossover near unit optical depth where it is.
+
+**A body with no published ring map gets a strip generated from a character**,
+seeded from its address: a bright sheet, a system of dark threads, or a sheet
+with threads shepherded outside it. Branching on the host's _kind_ instead is
+the version that reads as a decal at the scale of a galaxy — every generated ice
+giant wearing one look and every gas giant another, two pictures across a
+hundred worlds, for a feature that exists to be a find. The host leans the draw
+rather than deciding it, because a body massive enough to hold a sheet is
+likelier to have one, and the particle albedo and tint follow the architecture
+rather than being drawn beside it: a sheet is held up by clean water ice and a
+thread system is the dark rubble the collision that made it ground. What keeps
+the strip off the decal is the profile — plateaus with a diffuse inner edge and
+a knife-sharp outer one, a grain of density waves at up to sixty cycles across
+the strip, Cassini divisions, ringlets shepherded in the gaps, and one dominant
+outer thread. One strip feeds both consumers, the slab and the shadow it casts
+on its planet, so the bands in the shadow are the bands in the rings.
+
+Sol's seven mapless ring systems — Jupiter, Uranus, Neptune, Haumea, Quaoar,
+Chariklo and Chiron — are looked up by address instead, because a lean is a
+probability and their architecture is published. Left to the draw, Uranus, whose
+thirteen narrow rings are the reason the thread architecture exists at all,
+takes a Saturn sheet two times in five.
 
 ### Tessellation
 

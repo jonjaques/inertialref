@@ -189,9 +189,11 @@ anchor-relative patch spans meters and float32 is comfortable.
 
 ## 4. Risks still live
 
-- **Per-sample cost.** A bordered 65×65 patch is 22 to 50 ms across the zoo on
-  the CPU — 9 to 37 for the canonical field on its own — and the crater walk is
-  most of it. [ADR-0023](../../docs/adr/0023-the-gpu-producer.md) moves tile
+- **Per-sample cost.** A bordered 65×65 patch is 24 to 69 ms across the zoo on
+  the CPU and the crater walk is most of it — which is why the fourteen-rung
+  ladder costs 12 to 18% a cratered patch and nothing at all on Miranda, whose
+  `young` grammar leaves no canonical population to walk.
+  [ADR-0023](../../docs/adr/0023-the-gpu-producer.md) moves tile
   production to the GPU and the pool remains the fallback and the WebGL 2 path,
   so the figure is still the one a WebGL 2 session pays. Two levers are
   deliberately unspent: the walk's radial bound, at the cube's full width where

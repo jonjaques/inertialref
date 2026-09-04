@@ -241,7 +241,7 @@ from the selection's own ceiling now, and eviction keeps everything the frame's
 request list names — the drawn set, the starved children, the whole pyramid —
 because the pyramid is re-asked for every frame: a keep set of the two
 selections' leaves alone turns the cap into a treadmill that evicts a rung,
-re-requests it, and regenerates it at 22 to 50 ms a patch.
+re-requests it, and regenerates it at 24 to 69 ms a patch.
 
 **The cap has to clear that keep set, and neither selection measures it.** The
 request set is two independently capped selections — the drawn one and the one
@@ -299,7 +299,7 @@ along the orbit rather than along the camera's track over the ground.
 The streamer asks a `HeightfieldSource` and gets back the same
 `HeightfieldResponse` either way — the bordered elevations, the cover, the
 extremes — and there are two. The worker pool runs `generateHeightfield`
-itself, which is the canonical field: 22 to 50 ms a patch across the zoo on one
+itself, which is the canonical field: 24 to 69 ms a patch across the zoo on one
 core, and a pool of eight does not divide a landing's nine hundred patches far
 enough. The GPU tile producer (`apps/game/src/render/terrainProducer.ts`) runs
 `terrainKernel.ts`, a TSL port of `drawnElevation` — of `drawnGroundElevation` where the
@@ -444,7 +444,6 @@ gone.
 | Vertex attributes are float32                    | 270 KB a patch, so a whole-disk selection is 129–291 MB at the flight lens                                                        | [roadmap](../roadmap.md#terrain)             |
 | Scatter resolves on the main thread              | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame     | [roadmap](../roadmap.md#terrain)             |
 | The mesh is built on the main thread             | 0.25 ms a patch, budgeted at eight a frame; the producer already has the field                                                    | [roadmap](../roadmap.md#terrain)             |
-| A generated body's sphere has no relief          | It wears the ground's reflectance and sea mask, and shades as a smooth ball above the eight-pixel gate                            | [roadmap](../roadmap.md#terrain)             |
 | Deposits are chosen from the mesh, not the field | Two patches at different levels report different slopes for the same ground, so a deposit weight steps by ~4% at a level boundary | [roadmap](../roadmap.md#terrain)             |
 
 **The morph closes one level, and that is a constraint rather than a setting.**

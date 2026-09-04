@@ -1,6 +1,12 @@
 # ADR-0023: The GPU produces the heightfield the CPU defines
 
-Status: accepted · 30 Aug 2026
+Status: accepted · 30 Aug 2026 · amended 3 Sep 2026: the Context's patch cost is
+the figure as it stood on 30 Aug 2026 and is deliberately not restated. It is
+the evidence the decision was made on. The same measurement on the CPU today is
+23.8 to 69.4 ms in Node over the four zoo bodies, the crater ladder at fourteen
+rungs and the liquid's bands having landed since; the browser-worker half has
+not been re-measured. Neither number changes the decision, and overwriting the
+first would falsify why it was taken.
 
 ## Context
 
@@ -34,7 +40,9 @@ adapter.**
 1. **The kernel is a port of the band stack, not a rewrite.**
    `packages/universe/src/terrainKernel.ts` packs a surface into records and
    words — 30 plates, 14 hotspots, 4 stripes, `MAX_CRATER_LEVELS + 4` crater
-   levels, 16 rays, 112 words — and `writeTileFrame` packs a tile's per-rung
+   levels, 16 rays, `KERNEL_WORDS` in all, which is 132 and is derived from
+   the ladder's depth rather than written down — and `writeTileFrame` packs a
+   tile's per-rung
    integer frame: the floor and fraction of the lattice coordinate at each
    crater level, computed in float64 before upload. Every shape table the
    bands read (`HYPSOMETRY_SHAPE`, `CRATER_SHAPE`, `COVER_SHAPE`, the rest) is

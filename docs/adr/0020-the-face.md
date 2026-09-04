@@ -1,7 +1,8 @@
 # ADR-0020: The ground is a cover field, a palette and one material
 
 Status: accepted · 2026-08-29 · amended by [ADR-0026](0026-the-liquid.md):
-the cover is six channels in eight bytes, two attributes
+the cover is six channels in eight bytes, two attributes, and the per-face bake
+this record declined is built
 
 ## Context
 
@@ -134,11 +135,12 @@ seam, and both come back with the textures that need them.
 
 **A per-face baked albedo cube for every body**, which would let a generated
 world's _sphere_ show its own maria and ray systems the way a mapped one shows
-its photograph. It is the right answer and it is not here: it needs a worker
-task, a cube texture with a slot allocator, and a second consumer in
+its photograph. It is the right answer and it is not in this phase: it needs a
+worker task, a cube texture with a slot allocator, and a second consumer in
 `render/planet.ts`. What it buys is the far half of the descent on bodies with
-no map; what is already true is that the near half is the geology and the far
-half is a plausible flat tint of the same colour.
+no map; what this phase leaves true is that the near half is the geology and the
+far half is a plausible flat tint of the same colour.
+[ADR-0026](0026-the-liquid.md) builds it, reflectance and relief both.
 
 **One absolute palette, tuned to look right.** Rejected on the first render: it
 made every world sandstone, which is the thing this phase exists to end.

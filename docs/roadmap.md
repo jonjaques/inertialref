@@ -84,9 +84,9 @@ change** — they are generators plus representations.
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                                                                                                                               |
 | Moons of real planets    | 🟡     | Sol's 62 are `observed` and measured; every exoplanet's moon is a projection, and `PackedPlanet` still has no moon list to change that                                                                                          |
 | Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel                                                                                                                |
-| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; craters, plates, volcanism and ice from a per-body grammar, shaded from a palette derived from the same facts; no authored material sets, and the baked sphere carries no relief             |
+| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; craters, plates, volcanism and ice from a per-body grammar, shaded from a palette derived from the same facts; the baked sphere carries relief. No authored material sets, and no erosion    |
 | Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems                                                                                                                    |
-| Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; procedural giants get a 1-in-6 chance                                                                      |
+| Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; a procedural giant gets a 1-in-6 chance and a strip drawn from its own character                           |
 | Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
 | Small-body figures       | ✅     | 92 of Sol's 129 bodies are not spheroids; 25 have published shape models and the rest are seeded — [ADR-0013](adr/0013-measured-figures.md)                                                                                     |
 | Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                                                                                                                                               |
@@ -187,6 +187,21 @@ algorithm version 3, and the frame at a retina size over the shore went from
 are the zero-level strip of a noise, and
 [the erosion plan](../design/plans/erosion.md) is the answer.
 
+The ladder and the relief landed 3 Sep 2026, and between them they close two
+rows of the table below. `MAX_CRATER_LEVELS` goes from eleven halvings
+to fourteen — the change [ADR-0021](adr/0021-the-ground.md) measured and declined
+to spend a version on in its own phase — so a world whose largest basin is
+2,170 km carries canonical craters down to 265 m where the ladder stopped at
+2.1 km, and Mercury reaches 134 m, Luna 95 m, Callisto 13 m. That is terrain
+algorithm version 4 and the ground moves under every save written before it,
+at 12 to 18% more per cratered patch. The orbital bake's second pass carries
+relief in the same layout and encoding the sphere already reads the archive's
+normal maps in ([ADR-0026](adr/0026-the-liquid.md), amended), so a generated
+world's disk shades its mountains instead of wearing correct maria over a flat
+normal — which is what the eight-pixel gate exists to make invisible and could
+not, because the mountains were in the near half of a descent and gone in the
+far half.
+
 | Gap                                       | Consequence today                                                                                                                                   | Seam                                                                                                                                                              |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Deposits are chosen from the mesh         | Two patches at different levels report different slopes for the same ground, so a weight read off the normal steps by ~4% at a level boundary       | More channels on the cover, so the deposits read the canonical field instead of the LOD                                                                           |
@@ -196,7 +211,7 @@ are the zero-level strip of a noise, and
 | A rock reads the field, not the mesh      | Its foot is 3–9 cm off the triangle under it in the mean and up to 0.70 m at the worst cell on the coarsest body; `MESH_SEAT` buries it 12 cm       | More channels on the cover, which is the same change the deposits want                                                                                            |
 | Scatter has no collision                  | A rock is presentational; the contact test does not know it exists                                                                                  | [On foot](design/onfoot.md), where the canonical floor drops as well                                                                                              |
 | The mesh is built on the main thread      | 0.25 ms a patch, eight a frame — the queue, now that the heightfield is 10 ms for sixteen                                                           | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
-| Patch generation is over its budget       | 21.6 to 49.8 ms per bordered 65×65 patch across the zoo, against a documented ≤ 8 ms — and a landing now wants 700 to 1,077 of them                 | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
+| Patch generation is over its budget       | 23.8 to 69.4 ms per bordered 65×65 patch across the zoo, against a documented ≤ 8 ms — and a landing now wants 700 to 1,077 of them                 | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
 | A coarse patch costs more than a fine one | Consecutive samples of a coarse patch land in different noise lattice cells                                                                         | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
 
 ---

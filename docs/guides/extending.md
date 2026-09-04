@@ -72,6 +72,18 @@ the previous one was small" — reintroduces order dependence. If you need
 correlation between siblings, derive both from the parent in a single pure
 function that produces the whole set at once.
 
+**The trap that looks like the opposite of order dependence.** Keeping the draw
+order is what protects a body's _neighbors_; it says nothing about the body. A
+draw that consumes exactly the values it always did and returns a different
+number is still a different universe at that address, and the version is what
+stops two builds agreeing they share an address space whose contents disagree.
+Stretching the axial-tilt tail is the case that made this rule: one gaussian in,
+one angle out, nothing downstream of it moved in the stream — and 142 bodies in
+6,496 now point their poles somewhere else, the worst by 41°. `world.stateHash()`
+cannot catch it either, because a landed entity's numbers are body-frame-relative
+and identical on both sides of a pole that moved. **If the value changed, spend
+the version.**
+
 **The other trap, from the same family.** A `??` that skips a draw is order
 dependence in miniature:
 
@@ -330,7 +342,8 @@ And then the honest questions:
 
 - Does a **test** fail if the invariant I relied on breaks?
 - Is anything new **inspectable** in the debug overlay or the harness?
-- If I changed generation, did I bump the **algorithm version**?
+- If any generated **value** moved — not just the draw order — did I bump the
+  **algorithm version**?
 - Did I add a rule that belongs in [AGENTS.md](../../AGENTS.md), or a decision
   that belongs in an [ADR](../adr/README.md)?
 - Did I record anything durable in [CONTEXT.md](../../CONTEXT.md)?

@@ -6830,7 +6830,8 @@ patch — and change the mesh's depth not at all. Mercury's finest crater is
 134 m at a floor of 15, Luna's 95 m at 17, Callisto's 13 m at 17. The kernel
 holds the fourteen-rung ladder to its tolerance on every body in
 `terrainKernel.gpu.test.ts` with no change to the kernel: `MAX_KERNEL_LEVELS`
-is derived, `SLAB_AT` moves from 48 to 56, and the records grow with it.
+is derived, `SLAB_AT` moves from 52 to 56, `KERNEL_WORDS` from 116 to 132,
+and the records grow with it.
 
 **The survey sites moved with the field.** A deeper ladder puts craters
 where the `rough` search had found none: Gliese 1061 d's rough site went from
@@ -6979,8 +6980,8 @@ ringlets, a C ring of dust, paired hairlines, a dominant outer thread. The
 strip is mipmapped for the grain, which is sampler state and changes no
 program. Over twelve seeds at τ 0.7 the ice-giant median is 4.5e-3 against
 3.8e-4, the gas giant's 8.2e-3 against 5.9e-3, and each class spans two to
-three hundred times between its faintest and brightest; the plan has the
-table.
+three hundred times between its faintest and brightest;
+[ADR-0027](docs/adr/0027-the-rings.md) has the table.
 
 **The seed was tossing a coin on Uranus.** Uranus, Neptune, Jupiter, Haumea,
 Quaoar, Chariklo and Chiron have no ring photograph, so all seven went
@@ -7004,10 +7005,65 @@ the ring plane, and a slab lit at grazing incidence is honestly dark — the
 plates of Xi Boötis V and Kapteyn's Star c under the same framing as Saturn
 are dim the way Saturn's own are there. The planet tilt draw stretches its
 tail from the same single gaussian, one planet in eleven past 34° up to 86°,
-so a share of ring systems are open to their star the way Uranus's is; no
-extra draw, so no moon, colour or ground moves. A multiple-scattering floor
+so a share of ring systems are open to their star the way Uranus's is. No
+extra draw is taken, so nothing downstream of the tilt shifts in the stream —
+which is not the same as nothing moving, and the audit below is about the
+difference. A multiple-scattering floor
 for the equinox case is written down in the plan and not in TSL, because it
 is a number nobody here has measured.
+
+## The audit that found a version owed, and the figures that had gone stale (3 Sep 2026)
+
+`invariant-auditor` and `docs-curator` over the terrain-and-rings branch, in
+that order. The finding worth keeping:
+
+**A draw that keeps its place in the stream can still be a version.** The tilt
+tail and the hydrostatic spin floor were held to spend no `SYSTEM_ALGORITHM`
+because `planetTilt` consumes exactly one gaussian, as the `Math.abs` before it
+did, so no draw downstream shifts. That is the wrong test. Order protects a
+body's _neighbors_ and says nothing about the body: measured over 400 catalog
+stars and 6,496 generated bodies, 142 axial tilts moved, the worst by 41°, and
+one rotation period lengthened at the floor. `spinEvaluator` builds the
+body-fixed frame out of both, so a moved pole moves the ground terrain is
+sampled on and the pose a landed entity is held against — and `world.stateHash()`
+cannot see it, because a landed entity's numbers are body-frame-relative and
+identical on either side. `polarRadius` moved on 1,515 bodies and is the one
+field that genuinely is presentation: `datumRadius` reads the equatorial radius
+whenever `figure` is null.
+
+**The bump is owed and deferred**, to be spent with the next change that touches
+generated system state so one version covers both. Until then two builds report
+`system@3` and place Proxima Centauri II's pole 41° apart with nothing to
+notice. [ADR-0027](docs/adr/0027-the-rings.md) records the decision;
+`system.ts` carries the warning at the constant; the rule is now an invariant.
+
+**Four figures were retired and copied forward anyway.** The pattern is the
+same each time — a comment rewritten around numbers measured before the change
+it describes:
+
+- `MAX_CRATER_LEVELS` said Mercury's detail floor goes "from 14 to 16" at the
+  deeper ladder. Measured at both caps, it is 16 → **15**: the floor _falls_.
+  The 600 → 1,250 patch figure beside it was derived from that reversed delta
+  and is gone rather than re-derived, because no rig here reports it.
+- "The detail floor does not move" is true of the four-body zoo and false over
+  192 bodies: Earth 15 → 17, Proxima Centauri II 14 → 16, Mars 15 → 16, Sirius I
+  17 → 18, Barnard's b and c 16 → 17. `surfaceDetailFloor` is a probe search for
+  where refinement stops paying, not a function of the ladder's depth, so it
+  moves either way. **A figure measured at one operating point is a figure about
+  that point**, again.
+- `SLAB_AT` "moves from 48 to 56". It moves from **52**; 48 is the constant's
+  own retired docstring, which the same commit had already corrected in place.
+- Darwin–Radau "within 5%" is the accuracy given each body's own moment of
+  inertia factor. A generated body gets the factor for its class, where the
+  bound is 10% — which is what the branch's own test asserts, in two separate
+  cases the doc had merged into one.
+
+**Rings landed with no ADR and a plan that outlived it.** ADR-0027 now carries
+the decision and `design/plans/rings.md` is reduced to the record's missing
+per-ring profile and the unmeasured multiple-scattering term. ADR-0023's patch
+cost is amended rather than overwritten: it is the evidence the GPU producer was
+decided on, and the current 23.8–69.4 ms is a different measurement, not a
+correction of that one.
 
 ## Known gaps
 

@@ -21,11 +21,17 @@ the browser exposes, so a scenario that reproduces a bug in Chrome replays here.
 ```bash
 pnpm sim --self-test          # the twelve capability claims, executed (~0.4s)
 pnpm sim --targets --goto b:2 # the same navigation from a terminal
-pnpm sim --terrain-baseline   # what a descent costs — patch ms, level churn (~2s)
+pnpm sim --terrain-baseline   # what a descent costs — patch ms, level churn (~16s)
 pnpm sim --help               # every flag
 pnpm vitest run <substring>   # one test file
-pnpm test:gpu                 # every shader compiled and run on the real GPU (~1s)
+pnpm test:gpu                 # every shader compiled and run on the real GPU (~18s)
 ```
+
+`test:gpu` is seventeen seconds of `terrainKernel.gpu.test.ts` and about one of
+everything else, so a question that is not about the kernel names its own file:
+`pnpm vitest run --config apps/game/vitest.gpu.config.ts materials.gpu` is 1.4 s.
+The root config excludes the `.gpu.test.ts` suffix, so the plain `pnpm vitest run`
+answers "No test files found" for one of these.
 
 A throwaway script against `openSession` is the next rung and still not the browser:
 `packages/devtools` runs the director, the observatory and the terrain selector in Node.

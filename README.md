@@ -182,7 +182,13 @@ pnpm sim --help                # all flags
   atmospheres and terrain, all a pure function of a global seed and an address —
   and a belt of six to eighteen small bodies in each, sized by Dohnanyi's
   collisional cascade and spinning no faster than the 2.2-hour rotation barrier
-  a rubble pile comes apart at.
+  a rubble pile comes apart at. A planet answers to the same kind of limit: no
+  day short enough to fling its own equator off, and the oblateness left over
+  comes from Darwin–Radau with a moment of inertia factor, because the
+  uniform-fluid relation draws a fast giant as a lens. One giant in six wears
+  rings, and its strip is generated from a character — a bright sheet, a system
+  of dark threads, or a sheet with threads shepherded outside it — so two ringed
+  worlds are not one picture at two radii.
 - A debug spacecraft with **6-DoF flight**, patched-conic gravity, atmospheric
   drag, sphere-of-influence frame transitions, and landing.
 - **Streamed cube-sphere terrain** — a restricted, morphing quadtree covering
@@ -272,6 +278,7 @@ apps/
   game               React + React Three Fiber client, WebGPU/TSL renderer
   headless           Node runner — no DOM, no React, no WebGL
   ingest             turns published catalogs into the packed star asset
+  server             the Cloudflare Worker — the only place Cloudflare appears
 packages/
   shared             units, invariants, structured logging          (layer 0)
   spatial            UniverseVector, frame graph, floating origin    (1)
@@ -408,20 +415,20 @@ Stated plainly, because discovering these by surprise is worse than reading them
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
 - **Collision is ground contact only** — no hull, no entity-to-entity.
-- **Terrain costs more than its budget, and only the near half of a generated
-  world's descent has a face.** The quadtree covers the whole disk — morphed,
-  seamless, measured to the ground rather than the datum — and it refines
-  craters, plates, volcanism and ice from each body's own facts and shades them
-  from a palette built out of the same facts. Above the eight-pixel gate a body
-  is drawn as its archive sphere, and a _generated_ world's sphere wears six
-  baked faces of its own ground's reflectance and sea mask, so its maria and
-  lakes survive the switch; what does not is relief, which the sphere shades
-  without until a normal bake exists. A mapped body's ground wears the same
-  photograph its sphere does. Generating a bordered 65×65 patch costs 22 to 50 ms
-  across the zoo — 22 on a world young enough to have no crater population, 50 on
-  a battered icy one — against a documented ≤ 8 ms budget, and a whole-disk
-  selection peaks at 1,077 patches, which is 255 MB of vertex buffers at the
-  flight lens. **That cost binds only where the pool draws the ground.** On a
+- **Terrain costs more than its budget.** The quadtree covers the whole disk —
+  morphed, seamless, measured to the ground rather than the datum — and it
+  refines craters, plates, volcanism and ice from each body's own facts and
+  shades them from a palette built out of the same facts. Above the eight-pixel
+  gate a body is drawn as its archive sphere, and a _generated_ world's sphere
+  wears six baked faces of its own ground — the reflectance, and a relief record
+  in the layout and encoding the archive's normal maps use, so one decode path
+  serves a bake and a photograph — and its maria, its lakes and its mountains
+  all survive the switch. A mapped body's ground wears the same photograph its
+  sphere does. Generating a bordered 65×65 patch costs 24 to 69 ms across the
+  zoo — 24 on a world young enough to have no crater population, 69 on a
+  battered icy one whose crater ladder runs all fourteen rungs — against a
+  documented ≤ 8 ms budget, and a whole-disk selection peaks at 1,077 patches,
+  which is 255 MB of vertex buffers at the flight lens. **That cost binds only where the pool draws the ground.** On a
   WebGPU page the tiles come from a TSL compute kernel
   ([ADR-0023](docs/adr/0023-the-gpu-producer.md)), and a two-meter stance on
   Luna converges in 4.4 s at 1600×900 and 7.5 s on a retina window, against

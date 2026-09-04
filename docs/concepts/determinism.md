@@ -179,7 +179,7 @@ Generators carry an `AlgorithmVersion`. The version is part of what defines the
 universe, and a save records the versions it was written with:
 
 ```
-generation: { galaxy: 2, system: 3, terrain: 2, photometry: 1 }
+generation: { galaxy: 2, system: 3, terrain: 4, photometry: 1 }
 ```
 
 `system` went to 3 when generated systems gained a belt — six to eighteen small
@@ -189,12 +189,29 @@ exactly what stops that; but a system now _contains_ things it did not, and a
 manifest that did not say so would let two builds of the game disagree about the
 contents of one address space with nothing to notice.
 
-`terrain` went to 2 with the band stack, and `system` deliberately did not move
-with it: `makeSurface` draws the same three values in the same order from the
-same stream, so the ground under a landed ship is a different number while every
-other property of every body in the galaxy is exactly where it was.
+`terrain` counts the three times the ground itself moved: 2 for the band stack,
+3 for the liquid — valleys, a coast and a sea read against the ground
+temperature — and 4 for the crater ladder reaching fourteen halvings. Each time,
+the number a save's landed ship is sitting on is a different number.
 
-So "this save was made with terrain v2" is a statement the loader can act on,
+**A draw that keeps its place in the stream can still be a version.** `system`
+deliberately did not move with the band stack, and that case is sound:
+`makeSurface` draws the same three values in the same order from the same
+stream, so the ground under a landed ship changed while every other property of
+every body in the galaxy stayed exactly where it was.
+
+The opposite case is the trap, and `system@3` is currently sitting in it. The
+axial-tilt draw consumes exactly one gaussian and the spin floor beside it
+consumes none, so nothing downstream of either shifts — and the angle that comes
+back is different on 142 of 6,496 bodies, the worst by 41°. Order is what
+protects a body's _neighbors_; it says nothing about the body. The state hash
+cannot cover the gap either, because a landed entity's numbers are
+body-frame-relative and identical on both sides of a pole that moved. The bump
+to 4 is owed and deferred to the next change that touches generated system
+state, so that one bump covers both; [ADR-0027](../adr/0027-the-rings.md)
+records the decision and `system.ts` carries the same warning at the constant.
+
+So "this save was made with terrain v4" is a statement the loader can act on,
 rather than a mystery about why the coastline moved. Deciding _what_ to do about
 it — regenerate, pin the old version, migrate content — is future work, but the
 information is captured now, which is the part that cannot be added

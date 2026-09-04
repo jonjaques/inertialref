@@ -15,21 +15,23 @@ the browser exposes as `window.ir`.
 ```bash
 pnpm sim --self-test              # twelve capability checks (~0.4s)
 pnpm sim --targets --goto b:2     # the same navigation from a terminal
-pnpm sim --terrain-baseline       # what terrain costs, measured (~14s)
+pnpm sim --terrain-baseline       # what terrain costs, measured (~16s)
 pnpm sim --help
 ```
 
 The baseline is the slow one because it is the one that generates: forty-eight
-patches per zoo body, at 22 to 50 ms each. Its request pattern is the
+patches per zoo body, at 24 to 69 ms each. Its request pattern is the
 deterministic half and costs nothing, which is what a caller that passes no clock
 gets.
 
 A shader question has a rung of its own between these and the browser:
 `pnpm test:gpu` compiles and runs a TSL graph on the physical GPU from a
-`*.gpu.test.ts`, in about a second for the whole suite
-([testing](../guides/testing.md)). Use the browser only for what only a
-compositor can prove: LOD at real display pixels, framing, a cutscene,
-presentation, a strobe.
+`*.gpu.test.ts`. Budget ~18 s for the whole suite, of which seventeen are
+`terrainKernel.gpu.test.ts` walking the fourteen-rung ladder on every zoo body —
+so name the file when the question is not about the kernel, and all twenty-one
+of `materials.gpu` come back in 1.4 s ([testing](../guides/testing.md)). Use the
+browser only for what only a compositor can prove: LOD at real display pixels,
+framing, a cutscene, presentation, a strobe.
 
 ```js
 ir.help()
