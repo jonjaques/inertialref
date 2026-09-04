@@ -8,9 +8,12 @@ import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FlightStrip } from '../hud/FlightStrip.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
 import { useFlightContext } from '../hud/useShipControls.ts'
+import { useKeyLabel } from '../input/useKeymap.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { DeferredMultiplayer } from './DeferredMultiplayer.tsx'
 import { NotConnected } from './NotConnected.tsx'
 import { flightPanels } from './panels.tsx'
+import { useFlightCameraInput } from './useFlightCameraInput.ts'
 
 /*
  * Flying.
@@ -69,11 +72,35 @@ export function FlightMode({
   // to orbiting a camera and `F` to framing a target, and both are flight axes.
   useFlightContext()
   const chromeHidden = useChromeHidden()
+  const surface = useFlightCameraInput(engine)
+  // The view, sampled with the rest of the status: a string, so it bails out
+  // of the re-render with `Object.is` while the strip beside it re-renders at
+  // the sample rate.
+  const view = useEngine(
+    (snapshot) => snapshot.status?.flightCamera.view ?? 'chase',
+  )
+  const viewKey = useKeyLabel('flight.view')
 
   if (play === 'multiplayer') return <DeferredMultiplayer />
 
   return (
     <>
+      {/*
+       * The camera's input surface, under every panel and over the canvas —
+       * the planetarium's, for the planetarium's reasons: a layer of its own
+       * so a renderer rebuild cannot take the listeners with it,
+       * `pointer-events-auto` because `.hud-layer` is `none`, `hud-bleed`
+       * because a drag that starts under the notch is still a drag. The
+       * cursor says which act a drag is: `grab` for the orbit, `move` for the
+       * head.
+       */}
+      <div
+        ref={surface}
+        className="hud-bleed pointer-events-auto absolute touch-none select-none"
+        style={{ cursor: view === 'orbit' ? 'grab' : 'move' }}
+        aria-hidden
+      />
+
       {/* The strip and the reticle are chrome, so `Shift+H` clears them. The
           workspace puts itself away — see `hud/chrome.ts`. */}
       {!chromeHidden && (
@@ -84,6 +111,15 @@ export function FlightMode({
           >
             <FlightStrip />
           </ErrorBoundary>
+
+          {/* Standing off to look at the hull, and how to get back: the one
+              hint the orbit view has to give, because a drag that orbits is
+              discoverable by trying it and the key that returns is not. */}
+          {view === 'orbit' && (
+            <p className="type-ui pointer-events-none absolute bottom-20 left-1/2 -translate-x-1/2 text-balance text-slate-400">
+              drag to orbit · wheel to dolly · {viewKey ?? '?'} for the chase
+            </p>
+          )}
 
           {/* The aiming reticle. Center of frame, and the only permanent piece
               of cockpit chrome this build has — `docs/design/ux.md` specifies

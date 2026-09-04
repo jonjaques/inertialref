@@ -190,6 +190,23 @@ the subject; it survives a drag, a dolly and a wheel notch, and is cleared by
 whatever replaces the pose — a focus, a frame, a stance, a composition. Standing,
 it drives the stance's own heading and pitch.
 
+In flight the ship arm has a camera of its own, with two views. `ir.view('orbit')`
+stands it off the hull and looks at the ship while it maneuvers — the view the
+thrusters and the drive are watched from — and `ir.view('chase')` puts it back
+behind the hull; `ir.view()` cycles. `ir.flightCamera` is the camera itself:
+
+```js
+ir.flightCamera.drag(dx, dy) // orbit, or turn the head in the chase
+ir.flightCamera.turn(dx, dy) // turn the head in either view
+ir.flightCamera.zoom(factor) // dolly the orbit; above 1 retreats
+ir.flightCamera.recentre() // look where the view aims again
+```
+
+The orbit is measured in hull lengths about the ship in the world's own axes,
+pole on the local up, and tethered at eight lengths; it opens where the chase was
+standing. `ir.status().flightCamera` reports the view, the orbit and the look,
+so a plate taken beside the hull records the camera it was taken from.
+
 ### Compositions
 
 Sixteen named framings, relative to whatever is under the camera, with two

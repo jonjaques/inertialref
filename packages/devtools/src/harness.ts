@@ -47,6 +47,7 @@ import {
 } from '@inertialref/persistence'
 import {
   FLIGHT_FOV,
+  type FlightView,
   type Lens,
   LENS_PRESETS,
   lensForFov,
@@ -95,6 +96,7 @@ import {
   type ObserverPose,
   type ObserverStatus,
 } from './observatory.ts'
+import { FlightCamera, type FlightCameraStatus } from './flightCamera.ts'
 import {
   type DescentOptions,
   type DescentReport,
@@ -329,6 +331,12 @@ export interface HarnessStatus {
    * record the photo-mode metadata seam eventually stamps.
    */
   readonly lens: LensReadout | null
+  /**
+   * Which view the ship arm stands in, and where — so a plate taken beside
+   * the hull records the orbit it was taken from, the way `lens` records the
+   * optics.
+   */
+  readonly flightCamera: FlightCameraStatus
 }
 
 export interface ScenarioResult {
@@ -356,6 +364,7 @@ export class GameHarness {
   readonly #logSink = new RingBufferSink(256)
   readonly #cutscenes: CutsceneDirector
   readonly #observatory: Observatory
+  readonly #flightCamera: FlightCamera
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
 
@@ -363,6 +372,7 @@ export class GameHarness {
     this.#host = host
     this.#cutscenes = new CutsceneDirector(host, [TNG_INTRO])
     this.#observatory = new Observatory(host)
+    this.#flightCamera = new FlightCamera(host)
     logHub.addSink(this.#logSink)
   }
 
@@ -386,6 +396,7 @@ export class GameHarness {
       frame: this.#host.render.frameStats(),
       authority: this.#host.authority().status(),
       lens: this.lens(),
+      flightCamera: this.#flightCamera.status(),
     }
   }
 
@@ -1234,6 +1245,28 @@ export class GameHarness {
   }
 
   /**
+   * The ship arm's own camera: which view it stands in, and where.
+   *
+   * The object, for the same reason the observatory is: a drag is forty
+   * calls a second. `ir.view` below is the verb worth typing.
+   */
+  get flightCamera(): FlightCamera {
+    return this.#flightCamera
+  }
+
+  /**
+   * Stand the flight camera in a view — `chase`, which flight is played in,
+   * or `orbit`, which the hull is looked at in — or cycle to the next with no
+   * argument. Nothing canonical moves: the ship is where it was, and only the
+   * eye beside it changes.
+   */
+  view(view?: FlightView): FlightCameraStatus {
+    return view === undefined
+      ? this.#flightCamera.cycleView()
+      : this.#flightCamera.setView(view)
+  }
+
+  /**
    * Look at something without going there.
    *
    * The planetarium's whole verb, and the difference from `goTo` is the point:
@@ -1753,6 +1786,8 @@ export class GameHarness {
       '  ir.chrome(false)              clear the interface — the plate state',
       '  ir.layers(false)              names and traces off, for a plate',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
+      "  ir.view('orbit' | 'chase')     stand the flight camera beside the hull, or behind it",
+      '  ir.flightCamera               that camera itself — drag, turn, zoom, recentre',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',

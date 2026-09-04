@@ -4,15 +4,28 @@
     {
       "id": "enterprise-d",
       "name": "USS Enterprise NCC-1701-D",
+      "label": "Enterprise-D",
       "file": "enterprise-d.glb",
       "lengthMetres": 642.5,
       "nose": "+z",
       "author": "LoganRolphh",
       "source": "https://sketchfab.com/3d-models/star-trek-online-uss-enterprise-d-595123c3348646a4a7e6871ebf0e9fae",
       "license": "cc-by-4.0"
+    },
+    {
+      "id": "rocinante",
+      "name": "Rocinante (MCRN Tachi)",
+      "label": "Rocinante",
+      "file": "rocinante.glb",
+      "lengthMetres": 46,
+      "nose": "+z",
+      "author": "Jakub.Vildomec",
+      "source": "https://sketchfab.com/3d-models/mcrn-tachi-expanse-tv-show-76fc983ab08c449b9042491a00e621cf",
+      "license": "cc-by-4.0"
     }
   ],
   "attribution": [
-    "“Star Trek Online | USS Enterprise D” by LoganRolphh (https://sketchfab.com/LoganRolphh), licensed CC BY 4.0 — https://sketchfab.com/3d-models/star-trek-online-uss-enterprise-d-595123c3348646a4a7e6871ebf0e9fae"
+    "“Star Trek Online | USS Enterprise D” by LoganRolphh (https://sketchfab.com/LoganRolphh), licensed CC BY 4.0 — https://sketchfab.com/3d-models/star-trek-online-uss-enterprise-d-595123c3348646a4a7e6871ebf0e9fae",
+    "“MCRN Tachi [Expanse TV Show]” by Jakub.Vildomec (https://sketchfab.com/Jakub.Vildomec), licensed CC BY 4.0 — https://sketchfab.com/3d-models/mcrn-tachi-expanse-tv-show-76fc983ab08c449b9042491a00e621cf"
   ]
 }

@@ -8,9 +8,11 @@ import {
 import {
   RENDER_AA,
   RENDER_LENS_FLARE,
+  RENDER_SHIP,
   RENDER_SURFACE,
   usePersistentState,
 } from '../state/preferences.ts'
+import { SHIP_IDS, SHIP_LABELS } from '../render/ships.ts'
 import type { HudRenderState } from './controls.ts'
 import { OptionGroup } from './OptionGroup.tsx'
 import { Section } from './Section.tsx'
@@ -18,7 +20,8 @@ import { SurfaceRow } from './SurfaceRow.tsx'
 import { SwitchRow } from './SwitchRow.tsx'
 
 /*
- * Render-feature switches, and the extended-range override.
+ * The ship's hull, the render-feature switches, and the extended-range
+ * override.
  *
  * The panel exists for the shape of the problem: a rendering feature under
  * visual iteration needs an off switch, both to see a before/after without
@@ -50,6 +53,7 @@ export function GraphicsPanel({
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
   const [aa, setAa] = usePersistentState(RENDER_AA)
   const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
+  const [ship, setShip] = usePersistentState(RENDER_SHIP)
   const mode = render.output?.mode ?? null
   /*
    * Whether `auto` guessed something other than the obvious.
@@ -65,6 +69,28 @@ export function GraphicsPanel({
 
   return (
     <div className="flex flex-col gap-2">
+      {/*
+       * Which hull the ship is drawn as.
+       *
+       * A closed set from the ship manifest, so it is an `OptionGroup` like the
+       * anti-aliasing and output rows — the stored value is the id and the chip
+       * is the short label, because a saved ship must not change when a name is
+       * reworded. The hull appears in flight and, when the ship layer is on, in
+       * the planetarium; the debug cone stands in until the chosen one loads.
+       */}
+      <Section id="graphics.ship" title="Ship">
+        <div className="rounded border border-slate-800/80 bg-slate-900/40 p-1.5">
+          <OptionGroup
+            label="Ship"
+            className="w-full [&>*]:flex-1"
+            value={ship}
+            values={SHIP_IDS}
+            labels={SHIP_LABELS}
+            onChange={setShip}
+          />
+        </div>
+      </Section>
+
       <Section id="graphics.features" title="Features">
         <SwitchRow
           bordered

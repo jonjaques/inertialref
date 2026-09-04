@@ -39,6 +39,7 @@ import {
   OUTPUT_PREFERENCES,
 } from '../render/output.ts'
 import { type TimingLevel, TIMING_LEVELS } from '../engine/browserTiming.ts'
+import { DEFAULT_SHIP, SHIP_IDS } from '../render/ships.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   isSurfaceQuality,
@@ -259,6 +260,23 @@ export const RENDER_SURFACE = define<SurfaceQuality>({
   what: 'terrain refinement, ground detail, the sea and the rocks',
   initial: DEFAULT_SURFACE_QUALITY,
   accept: isSurfaceQuality,
+})
+
+/**
+ * Which modeled hull the ship is drawn as.
+ *
+ * A string id into the ship manifest rather than a stored spec: the length,
+ * the license and the file are the manifest's to state, and a save from a
+ * build that had one more hull must degrade to the default rather than resolve
+ * an id this build cannot load. `ShipModel` and the boot warm-up both read it,
+ * so a chosen hull is the one that is compiled ahead as well as the one drawn.
+ */
+export const RENDER_SHIP = define<string>({
+  key: 'render.ship',
+  group: 'display',
+  what: 'which modeled hull the ship is drawn as',
+  initial: DEFAULT_SHIP,
+  accept: oneOf(SHIP_IDS),
 })
 
 /* ------------------------------------------------------------------------ */
@@ -504,6 +522,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_AA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
+  RENDER_SHIP,
   CAMERA_LENS,
   CONTROLS_KEYMAP,
   PLANETARIUM_LABELS,

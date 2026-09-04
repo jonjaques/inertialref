@@ -7241,6 +7241,115 @@ scene once per forty submissions.
 The one piece of phase 0 still open is the chain's own warm-up producer: the
 quad's pipeline is the one compile the first presented frame pays.
 
+## A second hull, a ship the player picks, and solo behind a dev flag (4 Sep 2026)
+
+`data/models/` now holds two hulls. The Rocinante — the _Corvette_-class light
+frigate of _The Expanse_, in its MCRN _Tachi_ livery — joins the Enterprise-D,
+CC BY 4.0 by Jakub.Vildomec, ~141k triangles against the Enterprise's ~50k, with
+four 1K PBR material sets and the same `asset.extras` attribution block the
+Enterprise carries, so the credit travels with the file. **Scaled to 46 m**, the
+length the Expanse wiki and the official _Ships of the Expanse_ RPG both give;
+the loader divides that by the model's own nose-axis extent exactly as it does
+for the Enterprise's 642.5 m, so `engine.hull` reads length 46, beam 16 in
+flight, and 642.5, 467 when the Enterprise is chosen back. The bow is +Z — the
+drive cone sits at the model's −Z, the antennas at its +Z — which the loader's
+half-turn faces to the game's −Z.
+
+Two changes made the manifest a chooser rather than a constant:
+
+- **The manifest is a data module now, `render/ships.ts`, holding no Three.js.**
+  `state/preferences.ts` needs the set of ship ids to guard the stored choice,
+  and it is imported by the Node preferences suite; `shipModels.ts` imports
+  `three/webgpu`, the `GLTFLoader` and an `import.meta.glob` of the `.glb` files,
+  none of which can load in Node. So the JSON lives in a leaf both import, and
+  the loader is the only thing that pulls the renderer in.
+- **`render.ship` is a preference like any other** — a string id into the
+  manifest, guarded by `oneOf(SHIP_IDS)`, defaulting to the Enterprise so every
+  screenshot and the reference cutscene keep their framing. `ShipModel` reads it
+  live and reloads the hull without a page reload, which here rebuilds the
+  renderer and loses the camera; the boot warm-up reads it too, so the compiled
+  hull is the one that will be drawn. The chooser is an `OptionGroup` at the top
+  of Display settings, the label a short chip and the value the id, so a saved
+  ship survives a name reword. A stored id this build cannot load degrades to the
+  default the same way a missing hull degrades to the debug cone.
+
+Solo flight is offered from the menu **in development builds only**:
+`isEnterable` now returns true for a `built` mode when `import.meta.env.DEV` is,
+which Vite folds away in a production bundle. The routes stay mounted regardless,
+so a pasted `/play/solo` still resolves in every build — the gate is about what a
+visitor is invited into, not what the build can do.
+
+## The valves fire, the drive burns, and the ship arm has an orbit (4 Sep 2026)
+
+The Rocinante maneuvers with its thrusters drawn firing, and its Epstein drive
+burns when it burns. Three layers, each testable without the one above it:
+
+- **The snapshot states the thrust demand.** `thrustDemand(entity, dt)` in
+  `packages/simulation/src/flight.ts` is the commanded acceleration as
+  fractions of the thruster profile's authority, in body axes, with the
+  assist's damping torque included — and it is computed by the same
+  `commandedAcceleration` the two integrators call, so a spin being nulled
+  draws the nozzles nulling it and a plume can never light while the hull does
+  not turn. `EntitySnapshot.thrust` carries it, `RenderEntity.thrust` passes it
+  through. A forward burn arrives as `linear.z = −1`, and a zero is a zero: the
+  sign flip in `resolveThrust` produces `−0`, and `flight.test.ts` found it.
+- **`packages/rendering/src/thrusters.ts` maps a demand onto valves.** A
+  projection, not an allocation: a valve opens in proportion to its thrust
+  against the linear demand plus its torque _direction_ against the angular
+  one, clamped to 0..1, and the physics — which applied the demand exactly —
+  makes the ship move as if the set were perfect. Torque is by direction and
+  not by lever so a pitch is drawn as a couple rather than as the nose alone,
+  with `TORQUE_LEVER` (2 m) scaling only valves near the centre of mass. A
+  hull with a drive burns ahead on the drive alone; the valves never see the
+  forward half of the demand, or a stern pod leaning aft would glow through
+  every burn. `thrusters.test.ts` holds it to nine properties, the mirror
+  symmetry among them: a mirrored hull under a mirrored demand fires the
+  mirrored set, which is the cross product's handedness checked by
+  `fast-check` rather than by eye.
+- **The layout is measured, never drawn.** `scripts/nozzles.mjs` parses the
+  GLB itself and walks each matching mesh into shells, reporting centroids,
+  mean face normals and boundary loops in the game's hull axes — recentred,
+  scaled, bow turned — so a number it prints is copied into
+  `render/thrusterLayouts.ts` as it stands. The reading found that these
+  nozzles are capped bumps whose open loop is the _attachment_: the exhaust
+  axis is the shell's mean normal, and the loop's normal points into the hull.
+  The Rocinante has fourteen bow jets in ten `thruster_N` shells, six belly
+  pods with a round lip at the tip of a hexagonal housing, and one stern pod
+  modeled at one corner with holes in `hull_rear` at all four, so the corners
+  are that pod mirrored twice. The drive's exit plane sits at z 21.0 between
+  the throat piece and the 3.70 m mouth, so the rim stands in front of it from
+  every angle but dead astern. `thrusterLayouts.test.ts` holds the table to
+  the hull's extent, unit exhausts, mirror symmetry, a valve for every
+  half-axis, and the couples a pitch and a retro should light.
+
+`render/plumes.ts` draws it in five draws for the whole hull: the jets and the
+pods are each one shell instanced by four attributes — mouth, axis, size,
+firing — of which only the last is written per frame; the drive is the same
+shell at a torch's profile with filaments scrolling aft and a crown of spikes
+at the rim, plus a disk at the exit plane carrying the turbulent core the
+reference plates show filling the cone. Additive in colour and silent in
+alpha on the flare's discipline, depth-tested against the hull, with the
+facing term carried down from the vertex stage so a shell seen edge-on
+softens and one seen down its axis shows the cap as a burning disk. No
+light: a point light on the skirt would be a second program for every
+material in the scene. `materials.gpu.test.ts` compiles all four.
+
+The ship arm of the camera precedence has two views. **Chase** is what it
+was, exactly — `flightCameraPose` with the head centred reproduces
+`chaseCameraPosition` and the ship's orientation bit for bit, and
+`camera.test.ts` says so — with a drag now turning the head. **Orbit** stands
+off in the world's own axes, pole on the scene's local up, distance in hull
+lengths and tethered at eight, looking at the ship while it turns: the only
+way to watch a maneuvering system fire, since a camera bolted to the hull
+shows every plume in the same place on screen whatever the ship does. Entering
+it seeds the angles from where the chase was standing, so the switch is a
+change of what the camera does next rather than a jump. The state lives in
+`packages/devtools/src/flightCamera.ts` beside the observatory, is reachable
+as `ir.view('orbit')` and `ir.flightCamera`, and rides `HarnessStatus` so a
+plate beside the hull records the orbit it was taken from. `V` cycles the
+views, `Home` levels the head, and the drag sensitivity is the one number
+every draggable camera now reads, `dragSensitivityOf`.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

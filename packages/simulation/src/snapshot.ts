@@ -19,7 +19,9 @@ import {
   formatAddress,
   type UniverseAddress,
 } from '@inertialref/universe'
+import { TICK_DURATION } from './clock.ts'
 import type { Entity, EntityKind } from './entity.ts'
+import { type ThrustDemand, thrustDemand } from './flight.ts'
 import type { World, WorldEvent } from './world.ts'
 
 /*
@@ -57,6 +59,12 @@ export interface EntitySnapshot {
   readonly speed: number
   readonly landed: boolean
   readonly altitude: Meters | null
+  /**
+   * What the thrusters are firing this tick, as fractions of their authority
+   * in body axes — the assist's damping included, so a spin being nulled draws
+   * the nozzles nulling it. Null for anything that cannot maneuver.
+   */
+  readonly thrust: ThrustDemand | null
 }
 
 export interface BodySnapshot {
@@ -163,6 +171,10 @@ export function entitySnapshot(
     speed: Vec.length(state.velocity),
     landed: world.isLanded(entity.id),
     altitude: world.altitudeOf(entity.id),
+    // The current tick's command, not an interpolation: a valve is open or it
+    // is not, and the assist term is a function of the spin the tick started
+    // with, which is the one the entity holds.
+    thrust: thrustDemand(entity, TICK_DURATION),
   }
 }
 

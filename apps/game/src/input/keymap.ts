@@ -337,6 +337,13 @@ export const ACTIONS: readonly ActionDefinition[] = [
   }),
   press('flight.assist', 'Flight Assist', 'Flight', 'flight', chord('KeyZ')),
   press('flight.kill', 'Kill Rotation', 'Flight', 'flight', chord('KeyX')),
+  press('flight.view', 'Camera View', 'Flight', 'flight', chord('KeyV'), {
+    hint: 'chase the ship, or stand off and orbit it — drag to look or orbit, wheel to dolly',
+  }),
+  press('flight.recentre', 'Recentre', 'Flight', 'flight', chord('Home'), {
+    yieldsToFocus: true,
+    hint: 'look where the view aims again',
+  }),
 
   /* ---------------------------- planetarium ----------------------------- */
   press(

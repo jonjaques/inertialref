@@ -22,7 +22,8 @@ and attaches the debugger. Attach/Launch Node target the headless runner.
 [Development](development.md#debugging) has the four configurations.
 
 The client opens on Earth, three-quarter lit, with the ship — a CC-BY
-USS Enterprise-D hull, or the debug cone while it loads — framed in the
+USS Enterprise-D hull by default, a CC-BY Rocinante if you choose it in
+Display settings, or the debug cone while either loads — framed in the
 foreground of a Solar System built from measurements rather than from a seed.
 
 ```mermaid
@@ -54,6 +55,8 @@ front of Vite and turn every edit into a caching investigation. See
 | `Q` / `E`   | roll                               |
 | `Z`         | flight assist (rotational damping) |
 | `X`         | kill rotation                      |
+| `V`         | camera view: chase, or orbit       |
+| `Home`      | look where the view aims again     |
 | `Space`     | pause                              |
 | `[` / `]`   | time warp down / up                |
 | `\`         | back to real time                  |
@@ -69,6 +72,13 @@ front of Vite and turn every edit into a caching investigation. See
 
 Flight is full 6-DoF with no artificial "space mode" — the same controls fly
 between stars, into orbit, and down to a landing.
+
+The camera has two views. The **chase** sits behind the hull and swings with
+it; a drag turns your head from there, and `Home` levels it again. The
+**orbit** stands off and looks at the ship while it maneuvers — drag to orbit,
+wheel or pinch to dolly, the secondary button to look — which is the view to
+watch the maneuvering thrusters and the drive from. `V` moves between them,
+and the orbit opens where the chase was standing, so the switch is not a jump.
 
 These are the **defaults**. Every act is rebindable at `/settings/controls`, and
 `?` prints the live chords rather than this table — a label that names a key

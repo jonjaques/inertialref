@@ -9,7 +9,7 @@ import {
 } from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { getLogger } from '@inertialref/shared'
-import manifest from '../../../../data/models/manifest.json'
+import { type ShipModelSpec, shipSpec } from './ships.ts'
 
 /*
  * Modeled ship hulls, loaded from `data/models/`.
@@ -41,27 +41,9 @@ for (const [path, url] of Object.entries(URLS)) {
   byFile.set(path.slice(path.lastIndexOf('/') + 1), url)
 }
 
-export interface ShipModelSpec {
-  readonly id: string
-  readonly name: string
-  readonly file: string
-  /** True overall length, which is also the model's extent along its nose axis. */
-  readonly lengthMetres: number
-  /** Which way the artist pointed the bow. The game's forward is −Z. */
-  readonly nose: '+z' | '-z'
-  readonly author: string
-  readonly source: string
-  readonly license: string
-}
-
-const specs = manifest.models as readonly ShipModelSpec[]
-
-/** Every attribution the shipped hulls require, for the credits screen. */
-export const MODEL_ATTRIBUTION = manifest.attribution as readonly string[]
-
-export const DEFAULT_SHIP = 'enterprise-d'
-
 export interface LoadedShip {
+  /** The manifest id, so the plumes can find the layout measured for it. */
+  readonly id: string
   readonly group: Group
   /** The manifest's true length — what the hull was scaled to. */
   readonly lengthMetres: number
@@ -161,6 +143,7 @@ async function build(
   ship.name = `ship:${spec.id}`
   ship.add(oriented)
   return {
+    id: spec.id,
     group: ship,
     lengthMetres: spec.lengthMetres,
     beamMetres: size.x * scale,
@@ -186,7 +169,7 @@ export function loadShipModel(
   const cached = loading.get(id)
   if (cached !== undefined) return cached
 
-  const spec = specs.find((candidate) => candidate.id === id)
+  const spec = shipSpec(id)
   if (spec === undefined) {
     log.warn('no such ship model in the manifest', { id })
     const missing = Promise.resolve(null)
