@@ -21,6 +21,16 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
 - **Never make generation depend on order.** Derive the seed from the address, never draw
   from a shared stream. If generating a different object first changes this one's output,
   it is wrong.
+
+- **Never hold an algorithm version because the draw order is intact.** Order protects a
+  body's _neighbors_ and says nothing about the body. `planetTilt` consumes exactly one
+  gaussian, as the `Math.abs` before it did, so nothing downstream shifted in the stream —
+  and 142 poles in 6,496 moved, the worst by 41°, into a manifest that still said
+  `system@3`. `world.stateHash()` cannot catch it either: a landed entity's numbers are
+  body-frame-relative and identical on both sides of a pole that moved. If a generated
+  **value** changed, spend the version. (That bump is currently owed and deferred by
+  [ADR-0027](../../docs/adr/0027-the-rings.md) — a decision on the record, not a licence
+  to repeat the reasoning.)
 - **Never write entity state around the world's verbs.** `world.entities` is the read
   half of the store. A ship that starts moving is spawned moving (`spawnShip` takes the
   velocity); after that, `teleport` for a discontinuous move, `setControl` /

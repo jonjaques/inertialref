@@ -69,6 +69,12 @@ Violating one of these is a rewrite later, not a refactor.
   cannot see it. [ADR-0022](docs/adr/0022-the-timeline.md).
 - **Never make generation depend on order.** Derive a seed from the address.
   Do not draw from a shared stream.
+- **Never hold an algorithm version because the draw order is intact.** Order
+  protects a body's _neighbors_ and says nothing about the body: a draw that
+  consumes the values it always did and returns a different number is still a
+  different universe at that address, and `world.stateHash()` cannot see it.
+  If a generated **value** moved, spend the version.
+  [ADR-0027](docs/adr/0027-the-rings.md).
 - **Never put canonical state in a React component,** and never put gameplay
   behavior in a lifecycle callback. Components consume snapshots from
   `apps/game/src/state/engineStore.ts`. Subscribe to the narrowest slice you

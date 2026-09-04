@@ -103,6 +103,36 @@ import { ROUNDING_RADIUS } from './rounding.ts'
  * did not say so would let two builds of the game disagree about the contents
  * of the same address space with nothing to notice.
  */
+/*
+ * **A bump to 4 is owed and deliberately deferred.** Do not read this 3 as
+ * evidence that nothing generated has moved.
+ *
+ * The figure and the spin floor moved canonical fields. `axialTilt` and
+ * `rotationPeriod` are not presentation: `spinEvaluator` in `frames.ts`
+ * builds the body-fixed frame out of them, so they orient the ground terrain
+ * is sampled on and the pose a landed entity is held against. Measured over
+ * 400 catalog stars and 6,496 generated bodies, the tilt's stretched tail
+ * moves 142 of them, the worst by 41°, and the hydrostatic floor lengthens
+ * one rotation period. A pole 41° from where a save left it is a different
+ * world under the same address.
+ *
+ * Preserving the draw order does not hold a version, which is the trap to
+ * take from this. `planetTilt` consumes exactly one gaussian, as the plain
+ * `Math.abs` did, so nothing downstream of it shifts in the stream — and the
+ * number it returns is still different. Order protects a body's neighbors and
+ * says nothing about the body. `stateHash` cannot see it either: a landed
+ * entity's numbers are body-frame-relative and identical on both sides.
+ *
+ * `polarRadius` moves on 1,515 bodies and would not be worth a version alone —
+ * `datumRadius` in `terrain.ts` reads the equatorial radius whenever `figure`
+ * is null, so the flattening reaches the dossier and the silhouette and never
+ * the ground's datum or the contact test.
+ *
+ * Spend the version with the next change that touches generated system state,
+ * so one bump covers both. Until then a `main` client and this one report
+ * `system@3` at the handshake and place Proxima Centauri II's pole 41° apart
+ * with nothing to notice. ADR-0027 records the deferral.
+ */
 export const SYSTEM_ALGORITHM = algorithm('system', 3)
 /*
  * Bumped to 2 when the three noise bands became a band stack.
@@ -138,10 +168,10 @@ export const SYSTEM_ALGORITHM = algorithm('system', 3)
  * 2,170 km carries canonical craters down to 265 m where it stopped at 2.1 km,
  * and the contact test integrates the difference. Nothing else in the stack
  * moved — the bands, the seeds and the lattice are where they were, so a
- * body with no craters is untouched to the last bit — and `SYSTEM_ALGORITHM`
- * stays put for the reason above. Measured across the zoo the detail floor
- * stays where the presentational tail put it and a cratered patch costs 12
- * to 18% more; `MAX_CRATER_LEVELS` in `sketch.ts` carries the figures.
+ * body with no craters is untouched to the last bit. A cratered patch costs
+ * 12 to 18% more; the detail floor holds across the zoo and rises by up to
+ * two levels elsewhere, Earth's from 15 to 17. `MAX_CRATER_LEVELS` in
+ * `sketch.ts` carries both figures and the bodies they were measured on.
  */
 export const TERRAIN_ALGORITHM = algorithm('terrain', 4)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 2)

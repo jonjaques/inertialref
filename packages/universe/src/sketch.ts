@@ -623,16 +623,26 @@ export const CANONICAL_AMPLITUDE_FLOOR: Meters = 0.5
  * two to three levels below whatever the finest crater is — a rim is about a
  * seventh of its crater wide, so resolving one to half a meter takes samples
  * seven times finer again — which sets how deep the quadtree refines and
- * therefore how many patches a landing generates. Measured on Mercury against
- * a cap of eleven: the finest crater goes from a kilometer to 134 m, the floor
- * from 14 to 16, and filling the disk under a landed ship from 600 patches to
- * 1,250. Measured across the zoo with the tail in place, the detail floor
- * does not move — the tail already sets it below the finest rung on every
- * member — and a cratered patch costs 12 to 18% more: 62, 60 and 70 ms
- * against 54, 53 and 59 on Gliese 1061 d, Gliese 1061 IV and Iapetus, with
- * Miranda, which `young` left without a canonical population, at 24 either
- * way. That is what the three extra rungs cost, and what they buy is the
- * ground between a kilometer and the tail's eight meters.
+ * therefore how many patches a landing generates. A level is a quadrupling of
+ * the patches a landing fills, so this is the expensive half of the number.
+ *
+ * **The floor does not track the cap, and it does not move in one direction.**
+ * Measured over 192 bodies against a cap of eleven, eight move and one of them
+ * falls: Earth 15 → 17, Proxima Centauri II 14 → 16, Mars 15 → 16, Sirius I
+ * 17 → 18, Barnard's Star b and c 16 → 17 — and Mercury 16 → **15**, whose
+ * finest crater goes from a kilometer to 134 m in the same step. `surfaceDetailFloor`
+ * is a probe search for where the field stops paying for refinement, not a
+ * function of the ladder's depth, so a deeper ladder redistributes amplitude
+ * and can move it either way. Quote it per body or not at all.
+ *
+ * The zoo is the exception rather than the rule: Gliese 1061 d, Gliese 1061 IV,
+ * Iapetus and Miranda all hold — Iapetus at 14 and Miranda at 12 — because the
+ * presentational tail already sets their floor below the finest rung. A cratered patch there
+ * costs 12 to 18% more — 54.2 → 62.3, 53.1 → 59.6 and 59.1 → 69.6 ms on the
+ * first three, with Miranda, which `young` left without a canonical
+ * population, at 24 either way. That is what the three extra rungs cost on a
+ * body whose depth they do not change, and what they buy is the ground between
+ * a kilometer and the tail's eight meters.
  *
  * The ladder is canonical, so this number is in `TERRAIN_ALGORITHM`: it went
  * from eleven to fourteen with version 4, and every save's landed hull sat on
