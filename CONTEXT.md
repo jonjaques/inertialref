@@ -7124,6 +7124,43 @@ the scattering model into `universe`, which would put a rendering integrator
 under the determinism rules, and a new `optics` package for one module with one
 consumer.
 
+## A guard that throws where its callers catch, and a version paid rather than deferred (4 Sep 2026)
+
+A review pass over the branch, and two of its three findings are worth keeping.
+
+**An `invariant` at the top of a function is a synchronous throw, and callers of
+an async function do not catch those.** `WorkerPool.submit` opens with
+`invariant(!this.#terminated)`, and both callers of `warmScattering` hang a
+`.catch()` on the promise it returns, each with a comment saying a pool that has
+gone away is the one rejection they handle. They handle nothing of the sort: the
+throw leaves before a promise exists and lands in the per-frame `Bodies` update
+and the 1 Hz prefetch interval. It never fired, because `session.dispose()`
+nulls `pool` in the same statement as `terminate()` — which is the thing to
+notice, since the code that reads as the guard and the code that is actually
+guarding are in different files. Wrapping `submit` so the failure comes back as
+a rejection makes the comment true. **The general shape: when a function is
+`async` or returns a promise, a validation that throws is reachable only by
+`try`, and a caller written around `.catch` will not see it.**
+
+**A version deferred is a handshake that lies.** `SYSTEM_ALGORITHM` was held at 3
+on the argument that the next change to touch generated system state would pay
+for both at once. That trade only saves anything if the interval is free, and the
+interval is exactly where the cost lives: `GENERATION_VERSIONS` is what `save.ts`
+stamps and what `ClientHello` carries, so the deferral buys a `main` client and
+this one agreeing on `system@3` while placing Proxima Centauri II's pole 41°
+apart. It is spent — 4 — and one bump covers every field that moved, including
+`polarRadius` on 1,515 bodies, which is presentation and rides along. A version
+answers one question, whether the world a save was written against is the world
+this build generates; it is not asked per field.
+
+**And the version is a declaration, not a seed input.** `version.ts` said it is
+"folded into the seed path"; nothing in `GENERATION_VERSIONS` reaches a seed, and
+folding it in would be wrong rather than merely unimplemented — every bump would
+move every body in the galaxy, including the ones the change never touched, and
+the loader could no longer distinguish "this save's ground moved" from
+"everything moved". So a bump moves nothing by itself. It is the honest half of a
+change that already happened, and it has to be spent by hand.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
