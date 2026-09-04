@@ -58,9 +58,17 @@ export function TargetRow({
         {/* Said in the detail line rather than as a badge: this list is already
             the densest in the interface, and provenance belongs beside the
             spectral type it qualifies. Only `projected` is marked — everything
-            the catalog knows is observed. */}
+            the catalog knows is observed.
+
+            `slate-400`, the floor grade, because `slate-500` measured 3.4:1
+            against a lit limb behind the pane — and this is the one string
+            that carries the provenance claim. The dashed rule under it is the
+            device `docs/design/ux.md` names for provenance, so the claim
+            survives a display with no color in it. */}
         {target.provenance === 'projected' && (
-          <span className="ml-1.5 text-slate-500">· projected</span>
+          <span className="ml-1.5 text-slate-400 underline decoration-slate-400/60 decoration-dashed underline-offset-2">
+            · projected
+          </span>
         )}
       </span>
       {/* Loaded reads as a value, unloaded as a stale one — 300 against 400,

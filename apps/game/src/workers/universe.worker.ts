@@ -2,17 +2,18 @@
  * Worker entry point.
  *
  * Three lines of real code: build the registry, adapt the global scope to the
- * host port, serve. Everything worth testing is in `packages/workers`, which is
- * why this file has no logic to get wrong.
+ * host port, serve. Everything worth testing is in `packages/workers` and
+ * `workers/registry.ts`, which is why this file has no logic to get wrong.
  */
-import { serveTasks, createTaskRegistry } from '@inertialref/workers'
+import { serveTasks } from '@inertialref/workers'
 import type { WorkerInbound, WorkerOutbound } from '@inertialref/protocol'
 import { isTimingLevel, setTimingLevel } from '../engine/browserTiming.ts'
+import { createGameTaskRegistry } from './registry.ts'
 
 const scope = self as unknown as DedicatedWorkerGlobalScope
 
 serveTasks(
-  createTaskRegistry(),
+  createGameTaskRegistry(),
   {
     post(message: WorkerOutbound, transfer: readonly ArrayBufferLike[] = []) {
       scope.postMessage(message, transfer as Transferable[])

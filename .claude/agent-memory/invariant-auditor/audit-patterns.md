@@ -1334,3 +1334,103 @@ all green; `pnpm test` 98 files / 1585 passed / 4 skipped in 7.0 s;
   (`architecture.md#invariants`, line 332).
 - Glossary figures check out: `MIN_DISTANCE_RADII = 1.5`, `MIN_STANCE_HEIGHT = 2`,
   and the `RenderHost` member list matches `harness.ts` in order.
+
+## The version bump is argued for the field the author thought about, and one other field moved
+
+Richest finding on `feat/terrain-v4-and-the-baked-relief`, and a new shape: the
+branch **did** reason about whether to bump `SYSTEM_ALGORITHM`, in a whole
+`CONTEXT.md` paragraph ("No version is spent. The polar radius is presentation…"),
+and the reasoning is _correct for `polarRadius`_ — `datumRadius` (`terrain.ts:846`)
+returns `body.radius` whenever `figure === null`, and a figure body takes
+`shape.polarRadius`, so the generated flattening never reaches the canonical field.
+What no paragraph covers is the field a **different commit on the same branch**
+changed: `planetTilt` at `system.ts:904`/`:1532`. `axialTilt` is not presentation —
+`frames.ts:222`'s `spinEvaluator` builds the body-fixed frame's orientation _and_
+angular velocity from `axialTilt` and `rotationPeriod`.
+
+Measured, `git archive origin/main` + per-package `node_modules`, 400 catalog stars /
+6,496 generated bodies: **1,515 `polarRadius`** (up to 16.4% of the body's own
+radius), **142 `axialTilt`** (max 0.72 rad = 41.2°), **1 `rotationPeriod`** (1.37×) —
+with `SYSTEM_ALGORITHM` still 3. `world.stateHash()` cannot see it (a landed entity's
+numbers are body-frame-relative and unchanged), and `versionDrift` reports `system@3`
+on both sides, which is exactly "two builds disagree about one address space with
+nothing to notice".
+
+**The check on any branch that argues a version:** the argument names one field. List
+_every_ field the branch writes into a generated `Body` — `git diff origin/main...HEAD --
+packages/universe/src/system.ts | rg '^\+.*(axialTilt|rotationPeriod|polarRadius|radius|mass):'` —
+and diff the whole body record across revisions rather than the field the prose
+discusses. The commit that moved the extra field is usually the _last_ one, landing
+after the version paragraph was written.
+
+Corollary that also fired: `design/plans/rings.md`'s "The seam" says "the character
+draw touches nothing in `packages/universe` … no version is spent", in the same commit
+that edits `packages/universe/src/system.ts`. A "the seam" / "what this does not touch"
+section in a plan is a `--stat` you can run.
+
+## `surfaceDetailFloor` moves in both directions, and the zoo is four bodies
+
+`MAX_CRATER_LEVELS` 11 → 14 carried a docstring saying Mercury's floor goes "from 14 to
+16" and "600 patches to 1,250". Measured `surfaceDetailFloor` both revisions: Mercury is
+**16 at cap 11 and 15 at cap 14** — the direction is reversed and both endpoints are
+wrong. `CONTEXT.md` in the same commit says "a floor of 15", which is right; the
+docstring carried the pre-tail figure verbatim through its own rewrite.
+
+The generalisation is the other half: "Measured across the zoo the detail floor does not
+move" is true of the zoo's four members (Gliese 1061 d 19→19, Gliese 1061 IV 17→17,
+Iapetus 14→14, Miranda 12→12) and false on 8 of 192 Sol+fixture bodies — **Earth 15→17**,
+Proxima Centauri II 14→16, Alpha Centauri IX b 10→12, Mars 15→16, Barnard's b/c 16→17,
+Sirius I 17→18, Mercury 16→15. The probe is ten lines: import both `terrain.ts` by
+absolute path and call `surfaceDetailFloor(body.surface)` over `walkBodies`.
+
+## A published-value table for Sol keyed by issue ordinal: run the loop, then check the _contents_
+
+`proceduralRings.ts`'s `PUBLISHED` maps seven `g:milky-way/s:SOL/b:N` strings to ring
+characters, and `proceduralRings.test.ts` holds the key set equal to the mapless ringed
+bodies both ways. That test cannot see a **swap** (Chariklo's character on Chiron's
+address). Verified by hand: b:4 Jupiter, b:6 Uranus, b:7 Neptune, b:11 Haumea, b:13
+Quaoar, b:53 Chariklo, b:54 Chiron — all match their comments. Also verified the second
+test is armed: without the lookup, `hash('ice-giant:g:milky-way/s:SOL/b:6')` draws
+`mixed`, not `threads`, so the >0.7-clear assertion would fail.
+
+Same file's plan opens "Nine bodies in Sol carry a ring system"; measured **8**
+(the seven plus Saturn). A count word in a plan's first sentence is one loop away.
+
+## Two moment-of-inertia accuracies, and the doc quotes the one no generated body gets
+
+`rotationalFlattening(mass, radius, period, C)` reaches Jupiter/Saturn/Earth/Neptune
+within 1.25/0.46/0.24/3.56% **with each body's own published `C`** and within
+6.63/7.32/7.09/3.56% **with `momentOfInertiaFactor(kind)`**, which is what a generated
+body gets. `universe.test.ts` encodes both correctly (5% own, 10% class); the CONTEXT
+entry gets it right; `docs/concepts/rendering.md` writes "with a moment of inertia factor
+for their class, which reaches … within 5%", conflating them. **When a branch ships two
+accuracy bounds, grep the published doc for the tighter number.**
+
+Clean on the same change, worth not re-deriving: the 0.42 Jacobi clamp is unreachable —
+0 bodies at it over 600 catalog stars, max generated flattening 0.152 — and
+`hydrostaticSpinFloor` holds over the whole 150 ly catalog (5,089 giants, 0 violations of
+the floor or of the 0.14 bound the test asserts).
+
+## What came back clean on `feat/terrain-v4-and-the-baked-relief`
+
+- `pnpm graph` (12 packages, layering intact), `pnpm typecheck`, `pnpm test` on the two
+  new plain-Node files (51 passed), `pnpm test:gpu` **41 passed / 8 files, 18.4 s** —
+  which is 20× `.claude/skills/drive/SKILL.md:27`'s "~1s".
+- No `three` in `packages/*`, no bare `three` in `apps/game`, no new
+  `Math.random`/`Date.now`/`performance.`/`localStorage`, no `text-slate-500`, no new
+  `as BodyFixedDirection`, no `entities.update`.
+- The two-texture-nodes-over-one-stand-in invariant is respected everywhere else:
+  `createPlanetMaterial` has seven distinct stand-ins (`WHITE`, `FLAT_NORMAL`, `BLACK`,
+  `CLEAR`, `RING_WHITE`, `BLANK_REFLECTANCE`, `BLANK_RELIEF`); `createCloudMaterial` and
+  `createRingMaterial` each hold one `texture(WHITE)` in their own program, which does not
+  collide. The `.claude/rules/rendering.md` mirror was swept in the same commit.
+- The bake frame is consistent: `terrain.ts`'s `bakeNorth = normalize(Y − up·up.y)`,
+  `bakeEast = cross(bakeNorth, up)` in body-fixed axes reproduces `planet.ts`'s
+  `north = axis − geometric(axis·geometric)`, `east = cross(north, geometric)` in world
+  axes, and the slope is taken from `normal` (line 452, the mesh normal) rather than
+  `shaded` (line 898, the bumped one), which is what its docstring claims.
+- Ring photometry: `RING_ALBEDO` scales `single` and `transmitted` alike, so the
+  lit/backlit crossover the GPU test holds really does not move. Mip filtering does not
+  fork the program (`isUnfilterable` is nearest+nearest only).
+- `MAX_KERNEL_LEVELS` 15→18, `SLAB_AT` 52→56, `KERNEL_WORDS` 116→132, `TILE_FRAMES`
+  17→20; the new "fifty-six, two words to spare" is right. `CONTEXT.md`'s "from 48" is not.

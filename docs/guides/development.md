@@ -18,6 +18,7 @@ pnpm dev              # Vite on 5173 and wrangler on 8787
 pnpm preview          # production build, served by the real Worker on 8787
 pnpm test             # Vitest, Node environment only
 pnpm test:gpu         # the shader suite on the real GPU via Dawn; not in check
+pnpm test:slow        # the terrain descent, about 100 s; in check and CI, not in the Stop gate
 pnpm typecheck        # five tsconfig projects
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
@@ -26,7 +27,7 @@ pnpm presets:plates   # recapture the seven preset thumbnails through the render
 pnpm presets:check    # every picture has a plate, every composition it names resolves
 pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Vite build
-pnpm check            # graph, brand, presets, format, lint, typecheck, test, build
+pnpm check            # graph, brand, presets, format, lint, typecheck, test, test:slow, build
 
 # The four instruments. They read the tree; none of them gates it.
 pnpm fta              # complexity per file; fta:check exits 1 above a score of 91

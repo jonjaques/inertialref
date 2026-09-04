@@ -91,7 +91,9 @@ import type { BodyTextures } from './planetTextures.ts'
  *
  * A body with none of them still shades: the maps default to flat, and the base
  * color and albedo carry it. That is the procedural case, and it is most of the
- * galaxy.
+ * galaxy — until its orbital bake is ready, when the ground's own reflectance
+ * and relief take the albedo's and the normal's places through the same
+ * arithmetic (`render/orbitalBake.ts`).
  */
 
 /* ------------------------------------------------------------------------- */
@@ -135,22 +137,35 @@ const CLEAR = pixel(255, 255, 255, 0)
 const RING_WHITE = pixel(255, 255, 255, 255)
 
 /*
- * The bake's stand-in: a four-texel cube target, never rendered into, so a
+ * The bake's stand-ins: four-texel cube targets, never rendered into, so a
  * body with no bake runs the identical graph over black with an alpha of
  * zero. A render target rather than a `CubeTexture` built from images
  * because the bake *is* a render target, and the sampler a pipeline is
  * frozen with has to be the one the real bake binds — the same argument
  * `BLANK` in `terrain.ts` makes about filtering.
+ *
+ * **One per record, never one bound twice.** The builder shares a uniform
+ * between nodes whose textures carry one uuid — `TextureNode.getUniformHash`
+ * is the texture's uuid, and `UniformNode.generate` hands every later node
+ * with that hash the first node's binding — so two `cubeTexture` nodes over
+ * one stand-in compile to a single `texture_cube`, owned by the reflectance
+ * node. The program is frozen there, and the relief node's later value swap
+ * binds nothing: the sphere reads its slopes and its sea mask out of the
+ * reflectance, an icy body's 0.8 of albedo is a sea mask of 0.8, and
+ * Enceladus is a dark disk under a sun-glint. `RING_WHITE` is the same rule
+ * for the 2D maps, and `materials.gpu.test.ts` holds a bake to the stand-in's
+ * binding count.
  */
-const BLANK_CUBE = /*@__PURE__*/ (() => {
-  const target = new WebGLCubeRenderTarget(4, {
+function blankCube(): WebGLCubeRenderTarget {
+  return new WebGLCubeRenderTarget(4, {
     type: HalfFloatType,
     magFilter: LinearFilter,
     minFilter: LinearFilter,
     generateMipmaps: false,
   })
-  return target
-})()
+}
+const BLANK_REFLECTANCE = /*@__PURE__*/ blankCube()
+const BLANK_RELIEF = /*@__PURE__*/ blankCube()
 
 export interface PlanetMaterial {
   readonly material: MeshBasicNodeMaterial
@@ -226,8 +241,8 @@ export interface PlanetMaterial {
   readonly ringOuter: { value: number }
   readonly ringOpacity: { value: number }
   setTextures(maps: BodyTextures): void
-  /** The orbital bake to wear — its reflectance and its sea mask — or null. */
-  setBake(maps: { albedo: Texture; mask: Texture } | null): void
+  /** The orbital bake to wear — its reflectance and its relief record — or null. */
+  setBake(maps: { albedo: Texture; relief: Texture } | null): void
 }
 
 /**
@@ -258,12 +273,15 @@ export function createPlanetMaterial(): PlanetMaterial {
   const ringMap = texture(RING_WHITE)
   /*
    * The orbital bake: the ground material's own picture of a generated body,
-   * six faces sampled by the body-fixed direction, with the sea mask in the
-   * alpha. `baked` is the switch; a mapped body keeps its photograph and a
-   * generated one wears this the moment it is ready.
+   * six faces sampled by the body-fixed direction — its reflectance, and a
+   * relief record in this material's own normal-map layout: the slopes east
+   * and north in RG as `x / 2 + 1/2`, the archive's encoding in half float
+   * rather than bytes, and the sea mask in B. `baked` is the switch; a
+   * mapped body keeps its photograph and a generated one wears this the
+   * moment it is ready.
    */
-  const bakeMap = cubeTexture(BLANK_CUBE.texture)
-  const bakeMask = cubeTexture(BLANK_CUBE.texture)
+  const bakeMap = cubeTexture(BLANK_REFLECTANCE.texture)
+  const bakeRelief = cubeTexture(BLANK_RELIEF.texture)
   const baked = uniform(0)
 
   const sunDirection = uniform(new Vector3(1, 0, 0))
@@ -332,8 +350,18 @@ export function createPlanetMaterial(): PlanetMaterial {
   // Right-handed (east, north, up): east × north = up.
   const east = cross(north, geometric)
 
+  /*
+   * The sphere's own local axes are the body's — the mesh is rotated by the
+   * body's orientation — so the unit position *is* the body-fixed direction
+   * the bake was taken by. A photographed body reads its maps by UV, a
+   * generated one by direction, and `baked` chooses; both arrive here as one
+   * slope pair and one mask, so nothing downstream knows which it got.
+   */
+  const bakeDirection = normalize(positionLocal)
+  const relief = bakeRelief.sample(bakeDirection)
+
   // Slopes from RG; Z reconstructed, because B is the ocean mask (see header).
-  const tangentSlope = normalMap.xy.mul(2).sub(1)
+  const tangentSlope = mix(normalMap.xy, relief.xy, baked).mul(2).sub(1)
   const tangentUp = sqrt(
     max(
       oneMinus(
@@ -445,15 +473,8 @@ export function createPlanetMaterial(): PlanetMaterial {
    * Fully replacing it would erase the real shallow-water turquoise on the
    * banks and reefs, which photographs do show; 0.65 keeps them.
    */
-  /*
-   * The sphere's own local axes are the body's — the mesh is rotated by the
-   * body's orientation — so the unit position *is* the body-fixed direction
-   * the bake was taken by. A photographed body reads its albedo by UV, a
-   * generated one by direction, and `baked` chooses.
-   */
-  const bakeDirection = normalize(positionLocal)
   const bakeSample = bakeMap.sample(bakeDirection)
-  const ocean = mix(normalMap.b, bakeMask.sample(bakeDirection).r, baked)
+  const ocean = mix(normalMap.b, relief.b, baked)
   const surfaceAlbedo = mix(
     albedoMap.sample(flowUv).rgb.mul(baseColour),
     bakeSample.rgb,
@@ -583,10 +604,10 @@ export function createPlanetMaterial(): PlanetMaterial {
       ringMap.value = maps.ring ?? RING_WHITE
     },
     setBake(maps) {
-      const albedo = (maps?.albedo ?? BLANK_CUBE.texture) as CubeTexture
-      const mask = (maps?.mask ?? BLANK_CUBE.texture) as CubeTexture
+      const albedo = (maps?.albedo ?? BLANK_REFLECTANCE.texture) as CubeTexture
+      const slopes = (maps?.relief ?? BLANK_RELIEF.texture) as CubeTexture
       if (bakeMap.value !== albedo) bakeMap.value = albedo
-      if (bakeMask.value !== mask) bakeMask.value = mask
+      if (bakeRelief.value !== slopes) bakeRelief.value = slopes
       const on = maps === null ? 0 : 1
       if (baked.value !== on) baked.value = on
     },
@@ -782,17 +803,25 @@ export function createRingMaterial(): RingMaterial {
    * rings turn edge-on to the *sun*, which is the seasonal cycle that took
    * Cassini seven years to watch once.
    *
-   * `ω₀ = 0.6` is water ice. The gain that follows is the I/F convention's
-   * factor of π, which is what turns a reflectance into something the tone
-   * mapper can treat like every other surface in the scene.
+   * `ω₀ = 0.9` is clean water ice in the visible. The strip's colour
+   * multiplies it, and the strip is where the darkening lives — Saturn's B
+   * ring is 0.51 in its photograph and Uranus's rubble 0.06 — so the two
+   * together are the particle albedo Cassini measured, 0.5 to 0.6 for the
+   * bright rings; at 0.6 the albedo was in the product twice and the lit
+   * face of a sheet sat at a sixth of its planet. The gain that follows is
+   * the I/F convention's factor of π, which is what turns a reflectance into
+   * something the tone mapper can treat like every other surface in the
+   * scene. The transmitted term below carries the same ω₀, so the lit-to-
+   * backlit crossover `rings.gpu.test.ts` holds near unit depth does not move.
    */
+  const RING_ALBEDO = 0.9
   const opticalThickness = opticalDepth.mul(band.a)
   const muLight = max(lightSide.abs(), float(0.03))
   const muView = max(viewSide.abs(), float(0.02))
   const crossings = opticalThickness.mul(
     float(1).div(muLight).add(float(1).div(muView)),
   )
-  const single = float(0.6 / 4)
+  const single = float(RING_ALBEDO / 4)
     .mul(muLight.div(muLight.add(muView)))
     .mul(oneMinus(exp(crossings.negate())))
     .mul(Math.PI)
@@ -814,7 +843,7 @@ export function createRingMaterial(): RingMaterial {
   const transmitted = band.rgb
     .mul(vec3(1.0, 0.86, 0.68))
     .mul(exp(opticalThickness.div(muLight).negate()))
-    .mul(0.6)
+    .mul(RING_ALBEDO)
 
   /*
    * The planet's shadow on its own rings.

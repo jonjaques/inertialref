@@ -72,6 +72,16 @@ Today's tasks:
 | `universe.generateCell`        | every star in one 20 ly generation cell                                                                                         |
 | `universe.surveyRegion`        | a block of cells — tens of thousands of stars                                                                                   |
 | `universe.surveySystem`        | a whole system's bodies, for the map                                                                                            |
+| `render.bakeAtmosphere`        | one atmosphere's scattering tables — 528 KB of `Float32Array`, 20–40 ms of CPU, once per distinct haze                          |
+
+The first five are `createTaskRegistry()` in `packages/workers`, the set every
+host serves. The last is the game's own: its bake lives in
+`packages/rendering`, which sits at the same layer as `packages/workers` and
+therefore cannot be imported by it, and the headless runner would never ask
+for it. So the game's worker entry serves `createGameTaskRegistry()` —
+`apps/game/src/workers/registry.ts`, the shared set plus what only a browser
+client needs — and the prefix on the name says which set a task belongs to.
+[ADR-0028](../adr/0028-client-tasks.md) is the record.
 
 `surfaceDetailFloor` is on the pool because it reads nothing a heightfield
 request does not already carry, and paying it on the main thread paid it inside

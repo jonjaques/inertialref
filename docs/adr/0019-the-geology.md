@@ -252,12 +252,14 @@ four children of every node on it have arrived — and a landing that used to
 sharpen in eighty frames wanted two hundred and fifty.
 
 **The crater ladder's depth is the dial that connects those two.** It is capped
-at eleven halvings, so a body's finest crater is a two-thousandth of its largest
-— a kilometer on Mercury, a hundred meters on Callisto. Fourteen halvings gives
-134 m craters on Mercury and pushes its detail floor from 14 to 16, which
-doubles the patches a landing generates. Three decades of crater diameter is
-what a body reads at from orbit to a landing; below that is the micro-relief
-tail Phase 4 synthesizes rather than meshes.
+at fourteen halvings, so a body's finest crater is an eight-thousandth of its
+largest — 134 m on Mercury, 95 m on Luna, 13 m on Callisto. Four decades of
+crater diameter carry a body from orbit to the last thing the mesh resolves;
+below that is the micro-relief tail [ADR-0021](0021-the-ground.md)
+synthesizes rather than meshes, and it is the tail rather than the ladder
+that sets the detail floor on every zoo body. The cap was eleven until
+terrain algorithm v4, and `MAX_CRATER_LEVELS` carries the measured cost of
+the three rungs.
 
 **The dossier has a geology card.** The grammar is a claim about the _place_ —
 how hard a mountain can stand on it, how saturated it is, whether its

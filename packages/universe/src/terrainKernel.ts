@@ -242,7 +242,7 @@ export const LEVEL_DRAW_AT = 36
  * written, because the thresholds are one word a rung from `LEVEL_DRAW_AT`
  * and a longer ladder would otherwise write its last thresholds over the
  * first rung's limits — silently, with nothing between the two blocks but
- * the arithmetic. Forty-eight today, with one word to spare.
+ * the arithmetic. Fifty-six today, with two words to spare.
  */
 export const SLAB_AT = Math.ceil((LEVEL_DRAW_AT + MAX_KERNEL_LEVELS) / 4) * 4
 

@@ -55,15 +55,11 @@ record ([ADR-0005](../../docs/adr/0005-procedural-seeds.md) § versioning).
 
 ## 2. Open work
 
-**The orbital bake carries no relief.** The sphere of a generated body wears
-the ground's own reflectance and sea mask now ([ADR-0026](../../docs/adr/0026-the-liquid.md)),
-and the gate switches between two pictures of the same geology. What it does
-not wear is a normal: the disk's slope path reads the archive's tangent-space
-map, and a baked one — the heightfield's gradient in the sphere's own
-east-north frame, at the same six faces — is the half of the plan's bake
-still open. The other consequence stands: the bake is a hitch of a few tens
-of milliseconds in the frame its tiles arrive, once per body, and spreading
-the ninety-six builds across frames is the plain fix if it is felt.
+**The orbital bake's hitch.** The bake is a hitch of a few tens of
+milliseconds in the frame its tiles arrive, once per body, and spreading the
+ninety-six builds across frames is the plain fix if it is felt. It now takes
+two pictures rather than one — the reflectance and the relief record — for
+the same ninety-six tiles and one more set of six draws.
 
 **The plate review.** "Reads as a Moon, not as noise" is a taste judgment and
 the acceptance test for it is a set of before/after plates of the zoo's survey
@@ -73,13 +69,12 @@ simple-to-complex transition holding `D·g = 29,000`, and Earth's hypsometry
 bimodal at 0.583 against 0.36–0.40 for four stagnant lids. The mechanism the
 review will use is `ir.preset` and `Shift+H` — seven pictures of particular
 places, each with a vendored plate — but the zoo is a set of _sites_ rather than
-pictures, so its own fixture is still `ir.visit` plus the drive rig.
-
-**The crater ladder's cap.** `MAX_CRATER_LEVELS` is 11, so a body's finest
-crater is a two-thousandth of its largest and the population stops well above
-the canonical floor. Fourteen halvings moves the detail floor by 0 to 2 levels
-and costs 13% a patch — and it moves the field the contact test integrates,
-which is a version bump rather than a presentational change.
+pictures, so its own fixture is still `ir.visit` plus the drive rig. One
+question for it is already on the table: now that a mapless sphere wears its
+relief, Enceladus's tiger stripes read from orbit as four hairlines from pole to
+pole, because `StripeAxis` is a whole great circle. The published fractures are
+a south-polar family about 130 km long, so the stripe wants an extent, or the
+sphere's exaggeration wants to leave a trough of a few hundred meters alone.
 
 **The cover has two spare bytes, and two open defects share the channel that
 would fill them.** The record is eight bytes now — six channels, four to an
@@ -194,9 +189,11 @@ anchor-relative patch spans meters and float32 is comfortable.
 
 ## 4. Risks still live
 
-- **Per-sample cost.** A bordered 65×65 patch is 22 to 50 ms across the zoo on
-  the CPU — 9 to 37 for the canonical field on its own — and the crater walk is
-  most of it. [ADR-0023](../../docs/adr/0023-the-gpu-producer.md) moves tile
+- **Per-sample cost.** A bordered 65×65 patch is 24 to 69 ms across the zoo on
+  the CPU and the crater walk is most of it — which is why the fourteen-rung
+  ladder costs 12 to 18% a cratered patch and nothing at all on Miranda, whose
+  `young` grammar leaves no canonical population to walk.
+  [ADR-0023](../../docs/adr/0023-the-gpu-producer.md) moves tile
   production to the GPU and the pool remains the fallback and the WebGL 2 path,
   so the figure is still the one a WebGL 2 session pays. Two levers are
   deliberately unspent: the walk's radial bound, at the cube's full width where
@@ -207,8 +204,9 @@ anchor-relative patch spans meters and float32 is comfortable.
   Measured before optimized; per-level merging is the known out.
 - **The version bump moves the ground.** Every save's landed ship sits on the
   terrain version it was written with. The loader's version record makes that a
-  stated migration, and the crater ladder's cap is the next change that would
-  spend one.
+  stated migration; the crater ladder's cap spent one at v4, and the next
+  candidate is the canonical floor itself, which [on foot](../../docs/design/onfoot.md)
+  names.
 - **Taste risk.** Craters and plates can be statistically correct and still read
   as texture. The plate review is the control, the published anchors are what
   "correct" means, and the judgment is acknowledged as judgment.

@@ -2,6 +2,7 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import {
   AU,
+  GRAVITATIONAL_CONSTANT,
   LIGHT_YEAR,
   type Radians,
   SECONDS_PER_DAY,
@@ -47,7 +48,10 @@ import {
   type Body,
   findBody,
   generateSystem,
+  hydrostaticSpinFloor,
+  momentOfInertiaFactor,
   orbitalOrder,
+  rotationalFlattening,
   walkBodies,
 } from './system.ts'
 import type { RegionAddress } from './address.ts'
@@ -268,6 +272,108 @@ describe('system generation', () => {
     expect(findBody(system, [0])).toBe(planet)
     expect(findBody(system, [999])).toBeUndefined()
     expect(bodyAddress(MILKY_WAY, SOL.id, [0])).toEqual(planet.address)
+  })
+})
+
+describe('rotational flattening', () => {
+  /*
+   * The four bodies whose interiors are published, from the NASA fact sheets:
+   * mass, equatorial radius, sidereal period, the measured flattening, and
+   * the moment of inertia factor the relation is given. Jupiter's is the
+   * pre-Juno 0.254; the relation is about the shape a body settles into and
+   * that is the figure its measured flattening was reached with.
+   */
+  const PUBLISHED = [
+    {
+      name: 'Jupiter',
+      mass: 1.8982e27,
+      radius: 71_492e3,
+      day: 35_730,
+      c: 0.254,
+      f: 0.06487,
+    },
+    {
+      name: 'Saturn',
+      mass: 5.6834e26,
+      radius: 60_268e3,
+      day: 38_362,
+      c: 0.21,
+      f: 0.09796,
+    },
+    {
+      name: 'Earth',
+      mass: 5.9722e24,
+      radius: 6_378_137,
+      day: 86_164.1,
+      c: 0.3307,
+      f: 0.0033528,
+    },
+    {
+      name: 'Neptune',
+      mass: 1.02413e26,
+      radius: 24_764e3,
+      day: 57_996,
+      c: 0.23,
+      f: 0.0171,
+    },
+  ] as const
+
+  it('reaches the published figure of every body whose inside is published, within 5%', () => {
+    for (const body of PUBLISHED) {
+      const f = rotationalFlattening(body.mass, body.radius, body.day, body.c)
+      expect(Math.abs(f / body.f - 1), body.name).toBeLessThan(0.05)
+    }
+  })
+
+  it('reaches them within 10% with the class factor a generated body gets', () => {
+    for (const body of PUBLISHED) {
+      const kind = body.name === 'Earth' ? 'rocky' : 'gas-giant'
+      const f = rotationalFlattening(
+        body.mass,
+        body.radius,
+        body.day,
+        momentOfInertiaFactor(kind),
+      )
+      expect(Math.abs(f / body.f - 1), body.name).toBeLessThan(0.1)
+    }
+  })
+
+  it('is the Maclaurin relation for a uniform body', () => {
+    // C = 0.4 is a uniform sphere, where Darwin–Radau reduces to (5/4)·q.
+    const { mass, radius, day } = PUBLISHED[0]
+    const omega = (2 * Math.PI) / day
+    const q = (omega * omega * radius ** 3) / (GRAVITATIONAL_CONSTANT * mass)
+    expect(rotationalFlattening(mass, radius, day, 0.4)).toBeCloseTo(
+      1.25 * q,
+      6,
+    )
+  })
+
+  it('floors every generated planet at the spin it can hold, so no giant is a lens', () => {
+    let giants = 0
+    // Every star but Sol: its bodies are published, Haumea's four-hour day
+    // among them, and a measured spin owes the generator's floor nothing.
+    for (const stub of CATALOG_STARS.slice(1).map(catalogStub)) {
+      const system = generateSystem(ROOT, MILKY_WAY, stub)
+      for (const planet of system.planets) {
+        // A rock is held by strength and spins to the rubble-pile barrier,
+        // which is past this floor; the floor is a fluid body's.
+        if (planet.kind === 'asteroid' || planet.kind === 'comet') continue
+        const floor = hydrostaticSpinFloor(planet.mass, planet.radius)
+        expect(
+          Math.abs(planet.rotationPeriod),
+          planet.name,
+        ).toBeGreaterThanOrEqual(floor * (1 - 1e-9))
+        const flattening = 1 - planet.polarRadius / planet.radius
+        if (planet.kind === 'gas-giant' || planet.kind === 'ice-giant') {
+          giants += 1
+          // A giant at the spin limit, with the class factor: 0.136.
+          expect(flattening, planet.name).toBeLessThanOrEqual(0.14)
+        }
+      }
+    }
+    // The fixture is small: four giants, and the claim is about each of them.
+    expect(giants).toBeGreaterThan(0)
   })
 })
 

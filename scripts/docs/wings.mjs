@@ -134,6 +134,8 @@ export const WINGS = [
           ['docs/adr/0024-the-type-system.md', 'The Type System'],
           ['docs/adr/0025-the-rails.md', 'The Rails'],
           ['docs/adr/0026-the-liquid.md', 'The Liquid'],
+          ['docs/adr/0027-the-rings.md', 'The Rings'],
+          ['docs/adr/0028-client-tasks.md', 'Client Tasks'],
         ],
       },
     ],

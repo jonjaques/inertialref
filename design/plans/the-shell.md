@@ -11,8 +11,10 @@ measurement makes on its own.
 > [`PRODUCT.md`](../../PRODUCT.md) sets it — "would this still be readable with
 > a star filling the frame behind it?" — and records that whether the dock meets
 > it has never been measured. It does, at every text grade, with margin. The one
-> element that fails is the one the system deliberately places at frame center
-> with no panel behind it: the crosshair, at **1.05:1** against a required 3.0.
+> element with no panel behind it, the crosshair, now carries a light hairline
+> between two dark ones (`hud/crosshair.ts`) and measures **11.3:1** over the
+> Sun on its dark strokes, 8.8:1 over Earth's disk, and 9.8:1 over the sky on
+> its light one, against 1.05:1 as a single pale stroke.
 
 ---
 
@@ -55,7 +57,7 @@ With the Sun filling the frame, scene luminance one pixel outside the chrome is
 | Catalog row value `slate-400`             | 10px   | 5.92     | 4.5   |
 | IR menu resting glyph `slate-400`         | —      | 6.49     | 3.0   |
 | IR menu pressed `sky-200` on `sky-500/15` | —      | 10.32    | 3.0   |
-| **Crosshair `border-sky-300/40`**         | —      | **1.05** | 3.0   |
+| Crosshair, dark strokes over the Sun      | —      | 11.32    | 3.0   |
 
 The second operating point agrees about the ink and adds the grades the system
 has already retired:
@@ -69,21 +71,13 @@ has already retired:
 That is the Legibility-Over-Glass Rule working as written, and it is the
 strongest argument the design system has for keeping its alpha where it is.
 
-### Three sites sit outside the panel and fail
+### One site sits outside the panel and fails
 
-- **The crosshair** — `flight/FlightMode.tsx:91`, `size-4 rounded-full
-border-sky-300/40`, and its `size-1.5` twin at
-  `planetarium/PlanetariumMode.tsx:345`. A pale blue ring on near-white, off by
-  2.9×. Nothing composites behind it by design: the Edge Rule reserves the
-  center of the frame for the subject, so the crosshair is the one element with
-  no ground of its own. A fix has to come from the mark rather than from a
-  surface — an outer stroke, or a blend mode that inverts against whatever is
-  behind it.
-- **`· projected`** — `hud/TargetRow.tsx:63` sets it in `text-slate-500`, the
-  grade `DESIGN.md` retires as a text color, at 3.4:1. That string carries the
-  provenance commitment, and `PRODUCT.md` also promises no information by color
-  alone. It wants `slate-400` and the dash pattern the accessibility section
-  already specifies.
+The crosshair and the `· projected` label are closed: the mark carries a dark
+stroke either side of its light one, which is the fix that survives a mid-gray
+limb where an inverting blend does not, and the label is `slate-400` with the
+dashed rule the accessibility section names for provenance. What is left:
+
 - **Navigation icons in the reading mode** — `docs/DocFooter.tsx:46,66` and
   `docs/DocsRailGroup.tsx:53` at `text-slate-600`, 2.2–2.6:1, below the 3:1
   non-text floor. `pages/ModeRow.tsx:31` is `slate-500` for the same reason —
@@ -98,15 +92,18 @@ carrying at least as much of the result as the translucency is.
 
 ---
 
-## The keyboard: navigation is 272 stops deep
+## The keyboard: navigation is 133 stops deep
 
-`/planetarium` at 1600×900 has **281 real tab stops** — visible, enabled, not
-inside `[inert]`, roving-tabindex items excluded — and the IR menu begins at
-**stop 272**. Counting every focusable element instead, without the roving
-filter, gives 259 and 246. Either way the order is the same: the Catalog panel,
-nine neighborhood rail dots, **138 unvirtualized catalog rows**, six more
-panels, and then the bar carrying the way home, every pane and panel toggle,
-and Settings.
+`/planetarium` at 1600×900 has **148 real tab stops** — visible, enabled, not
+inside `[inert]`, `tabIndex` 0 or above — and the IR menu begins at **stop
+133**. The catalog is a tree with one stop: `Tab` lands on the current row,
+the arrows move between the 138 rows and fold a system, and the camera's arrow
+bindings yield to it because a focused row is a control inside `.hud-layer`.
+Measured against the same census before the tree, 281 stops with the menu at
+272, so the catalog was 133 of them. What is left is the order itself: the
+Catalog panel's controls, nine neighborhood rail dots, six more panels' switches
+and sliders, and then the bar carrying the way home, every pane and panel
+toggle, and Settings.
 
 | Route               | Real tab stops | IR menu at  |
 | ------------------- | -------------- | ----------- |
@@ -114,17 +111,18 @@ and Settings.
 | `/cinema`           | 7              | 1–6         |
 | `/settings/display` | 15             | 2–4         |
 | `/docs`             | 84             | 78–83       |
-| `/planetarium`      | **281**        | **272–280** |
+| `/planetarium`      | **148**        | **133–147** |
 
-There is no skip link and no landmark shortcut. Nothing else about the order is
+There is no skip link and no landmark shortcut, and that is now the finding:
+a hundred and thirty stops of instruments before the way home is the shape of
+a page with no landmarks, not of a long list. Nothing else about the order is
 broken — no trap, and every stop is reachable.
 
 `pages/OverlayPage.tsx` already carries the argument, having found and fixed the
 identical defect for the dialog at 79 stops: "Open settings, then press Tab
-eighty times" is not a keyboard path. The workspace's own navigation is three
-and a half times worse, in the mode a visitor is sent to first. Virtualizing
-`CataloguePanel`'s rows removes most of the depth and most of the mobile
-target problem below at the same time.
+eighty times" is not a keyboard path. A skip link to the menu at the top of
+`.hud-layer`, or the menu earlier in DOM order than the panes it names, is the
+next step; the mobile target problem below is untouched by any of this.
 
 **`blur()` in click handlers costs more here than it looks.** A keyboard
 `Enter` or `Space` produces a click, so activating any control by keyboard drops

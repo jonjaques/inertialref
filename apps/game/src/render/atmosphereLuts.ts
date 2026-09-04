@@ -18,6 +18,8 @@ import {
   type HazeAuthoring,
   type ScatteringLut,
 } from '@inertialref/rendering'
+import type { WorkerPool } from '@inertialref/workers'
+import { bakeAtmosphereTask } from './atmosphereTask.ts'
 import { scatteringKey } from './preloadPlan.ts'
 
 /*
@@ -29,10 +31,14 @@ import { scatteringKey } from './preloadPlan.ts'
  * for `rgba32float` — and the cache, keyed on everything the recipe reads,
  * so two bodies with the same authored haze and shell share one bake.
  *
- * Baking is lazy, on the first frame a body's shell is actually drawn:
- * ~50 ms of CPU, at most once per body per session, spent at the same moment
- * the surface maps start streaming in. A worker would hide even that; the
- * seam is this function's signature.
+ * Baking is lazy, on the first ask for a body's shell, and it runs in one of
+ * two places. On the pool, through `render.bakeAtmosphere` — `warmScattering`
+ * and `scatteringVia` — for a page that has one, where this thread pays only
+ * the half-float conversion and the upload. On this thread — `scatteringFor`
+ * — for the boot prebake behind the overlay and for a page with no pool.
+ * 20–40 ms of CPU either way, at most once per haze per session; the
+ * difference is whether a frame pays it, which for a haze first met on an
+ * arrival was 39.7 ms inside a 43.3 ms frame. ADR-0028.
  */
 
 const log = getLogger('game.atmosphere')
@@ -45,6 +51,8 @@ export interface AtmosphereScattering {
 }
 
 const cache = new Map<string, AtmosphereScattering>()
+/** Bakes in flight on the pool, so two asks for one key submit one job. */
+const pending = new Map<string, Promise<AtmosphereScattering>>()
 
 function toTexture(lut: ScatteringLut): DataTexture {
   const half = new Uint16Array(lut.data.length)
@@ -123,4 +131,92 @@ export function scatteringFor(
     thickness,
   })
   return set
+}
+
+/**
+ * The tables for one body's haze, baked on the pool.
+ *
+ * The same recipe and the same two tables `scatteringFor` makes, made by
+ * `render.bakeAtmosphere` on a worker and converted and uploaded here, where
+ * the GPU is. Cached under the same key, so whichever of the two paths fills
+ * the cache first wins and the other reads it: a shell drawn before the
+ * worker answers may bake on this thread as before, and the worker's copy is
+ * then dropped rather than bound over the set the material already holds.
+ */
+export function warmScattering(
+  pool: WorkerPool,
+  haze: HazeAuthoring,
+  topRatio: number,
+): Promise<AtmosphereScattering> {
+  const key = scatteringKey(haze, topRatio)
+  const cached = cache.get(key)
+  if (cached !== undefined) return Promise.resolve(cached)
+  const inFlight = pending.get(key)
+  if (inFlight !== undefined) return inFlight
+
+  const started = performance.now()
+  /*
+   * The `try` is around `submit` and nothing else, and it is not decoration:
+   * a terminated pool is an `invariant` inside `WorkerPool.submit`, so it
+   * *throws* where every caller here hangs a `.catch` on the promise. A
+   * synchronous throw walks straight past that and out of whatever asked —
+   * a frame callback in `Bodies.tsx`, the interval in `preload.ts`. Handing
+   * back a rejected promise makes the failure the shape both callers already
+   * handle. `submit` stays inside the expression rather than behind a
+   * microtask so the bake keeps its place in the queue ahead of the tiles a
+   * later frame asks for.
+   */
+  let job: Promise<AtmosphereScattering>
+  try {
+    job = pool
+      .submit(bakeAtmosphereTask, { haze, topRatio })
+      .result.then((baked) => {
+        const raced = cache.get(key)
+        if (raced !== undefined) return raced
+        const set: AtmosphereScattering = {
+          recipe: baked.recipe,
+          transmittance: toTexture(baked.transmittance),
+          multiScatter: toTexture(baked.multiScatter),
+        }
+        cache.set(key, set)
+        log.info('scattering tables baked on the pool', {
+          ms: Math.round(performance.now() - started),
+          topRatio: Number(topRatio.toFixed(4)),
+          thickness: haze.thickness,
+        })
+        return set
+      })
+      .finally(() => pending.delete(key))
+  } catch (cause: unknown) {
+    return Promise.reject(
+      cause instanceof Error ? cause : new Error(String(cause)),
+    )
+  }
+  pending.set(key, job)
+  return job
+}
+
+/**
+ * The tables if they are cached, else `null` with a bake submitted to the
+ * pool — the draw-time ask for a page that has one.
+ *
+ * A shell asks every frame it is drawn, so `null` costs it the haze for the
+ * frames the bake is in flight and nothing else: the material keeps its
+ * stand-ins, which draw a vacuum, and binds the tables on the frame they
+ * land. The alternative is the bake inside this frame.
+ */
+export function scatteringVia(
+  pool: WorkerPool,
+  haze: HazeAuthoring,
+  topRatio: number,
+): AtmosphereScattering | null {
+  const cached = cache.get(scatteringKey(haze, topRatio))
+  if (cached !== undefined) return cached
+  void warmScattering(pool, haze, topRatio).catch(() => {
+    // The one rejection is a pool that has gone away — a dispose during a
+    // reload, which `warmScattering` turns into a rejection because `submit`
+    // raises it as a throw. The next frame asks again, and a session that
+    // ends has no frame to draw the haze in anyway.
+  })
+  return null
 }

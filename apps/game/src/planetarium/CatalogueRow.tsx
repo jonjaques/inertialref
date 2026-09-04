@@ -24,12 +24,22 @@ import { iconForKind, starColour } from './kinds.ts'
  * because the tree under a star is sorted outward — a column of distances from
  * the camera under a heading sorted by orbit is two orders in one list, and the
  * reader has to work out which one they are looking at.
+ *
+ * **The row is a tree item, and the list has one tab stop.** The panel that
+ * renders these owns the keyboard: `Tab` lands on the current row and leaves
+ * from it, the arrows move between rows and fold a system open or closed. So
+ * exactly one row carries `tabIndex` 0 — `tabbable` — and the rest are
+ * reachable by arrow and by pointer only. The hierarchy is stated with
+ * `aria-level` rather than nested groups, which ARIA allows for a tree whose
+ * DOM is flat, and it is flat here because each row is its own `<li>`.
  */
 export function CatalogueRow({
   row,
   selected,
   indent,
   measure,
+  tabbable,
+  parent,
   expanded,
   onExpand,
   onFocus,
@@ -40,6 +50,10 @@ export function CatalogueRow({
   indent: number
   /** The reading at the end of the row, already in its own unit. */
   measure: string
+  /** Whether this is the list's one tab stop. */
+  tabbable: boolean
+  /** The system row a body's `←` returns to; absent on a system. */
+  parent?: string
   /** Present only on a system that has bodies to fold. */
   expanded?: boolean
   onExpand?: () => void
@@ -51,7 +65,7 @@ export function CatalogueRow({
   const Chevron = expanded === true ? ChevronDown : ChevronRight
 
   return (
-    <li className="flex items-stretch">
+    <li role="none" className="flex items-stretch">
       {/*
        * The disclosure is its own button, beside the row rather than inside it.
        *
@@ -60,10 +74,20 @@ export function CatalogueRow({
        * folding Sol away is not the same act as pointing the camera at it, and
        * a reader who wanted the first and got the second has just flown four
        * light years. 24 px wide, which is WCAG 2.2's target minimum.
+       *
+       * Out of the tab order, for a pointer only: the keyboard folds with `→`
+       * and `←` on the row itself, which is the tree pattern, and a second
+       * stop per system would put the depth this list just gave up straight
+       * back.
        */}
       {foldable ? (
         <button
           type="button"
+          tabIndex={-1}
+          // State as well as action: out of the tab order it is still a
+          // control a screen reader reaches by pointer or by touch, and
+          // "Expand Sol" alone says what pressing it does and not what it
+          // would be undoing.
           aria-expanded={expanded}
           aria-label={`${expanded === true ? 'Collapse' : 'Expand'} ${row.name}`}
           onClick={(event) => {
@@ -80,7 +104,14 @@ export function CatalogueRow({
 
       <button
         type="button"
-        aria-current={selected}
+        role="treeitem"
+        aria-level={indent + 1}
+        aria-selected={selected}
+        aria-expanded={foldable ? expanded : undefined}
+        tabIndex={tabbable ? 0 : -1}
+        data-catalog-row=""
+        data-address={row.address}
+        data-parent={parent}
         title={row.detail}
         onClick={(event) => {
           releaseFocus(event)

@@ -168,32 +168,33 @@ retargets the observatory, which retires the terrain backlog first. A priority
 lane in the pool buys nothing until something else fires a survey behind a full
 window.
 
-### An atmosphere bakes on the main thread the first time one is seen
+### The atmosphere bake is on the pool, and the boot prebake is not
 
-`scatteringFor` is a synchronous ~40 ms bake. `watchSystemAtmospheres` polls the
-loaded-system set once a second and drains new hazes one table per macrotask,
-and the boot prebake covers the atmospheres of the systems loaded at boot —
-neither is fast enough for the frame a jump arrives on. A jump to a generated
-system lands a `Boot/bake atmosphere` entry mid-session: **39.7 ms inside a
-43.3 ms frame**, which is the largest single thing left in an arrival.
+The arrival bake is closed by [ADR-0028](../../docs/adr/0028-client-tasks.md):
+`render.bakeAtmosphere` runs on the pool, a shell whose tables are in flight
+draws a vacuum for those frames, and a jump's hazes reach the main thread as
+uploads only — measured on the rig as three `bake atmosphere` entries on the
+page thread after a look into HIP 71683 before, and none after. What is still
+synchronous is the boot prebake, nine bakes at 20–39 ms each behind the
+overlay and counted by the census: 200–350 ms of a 4.3 s cold boot, which
+could go through the same task with the census counting arrivals rather than
+bakes. Worth doing only if the boot line below is ever worked, because it is a
+tenth of it.
 
-**Deferring it is safe.** `createAtmosphereMaterial` binds 1×1 stand-ins so a
-shell whose tables have not arrived runs the identical graph — full
-transmittance, no multiple scattering, scattering coefficients at zero, a vacuum
-that draws nothing — so a body that arrives before its tables draws without haze
-rather than wrongly. `Bodies` calls `air.setScattering(…)` every frame the shell
-is drawn, so it picks them up on whichever frame they land.
-
-**What blocks it is the layer graph, not the risk.** The task shape is the one
-`universe.surfaceDetailFloor` takes — two `Float32Array`s back, `toTexture`'s
-half-float conversion staying on the main thread — but the bake lives in
-`packages/rendering` and so does `packages/workers`, both layer 5, and
-`pnpm graph` allows dependencies on strictly lower layers only. Moving the
-scattering model down is an architectural question rather than a plumbing one: a
-scattering LUT is arguably optics rather than rendering, and
-`packages/universe` already owns the `HazeAuthoring` it is derived from. That
-answer wants an ADR, not an import. Until then this is one dropped frame per
-distinct atmosphere per session, on an arrival that has other work in it anyway.
+The prefetch's two branches do not pace alike, and only one of them was
+reasoned about. `prefetchScattering` in
+[`preload.ts`](../../apps/game/src/render/preload.ts) drains its no-pool queue
+one bake per macrotask, deliberately; the pool branch submits every haze of
+every newly-loaded system in one `for` loop into the same FIFO the terrain
+streamer feeds. A jump into a many-body system therefore puts N × 20–39 ms of
+bakes ahead of the heightfields the arrival frames are waiting on — the haze
+is cosmetic for those frames and the terrain is not, which is the ordering
+[ADR-0028](../../docs/adr/0028-client-tasks.md) argues for and this loop
+inverts. Unmeasured: the reading that would settle it is `pool.stats()`
+throughput and `ir.terrain().level` across a jump into a system with more than
+a handful of atmospheres, against the same jump with the loop paced. The fix
+is a queue on this branch too, or the priority lane the survey section above
+finds no other use for.
 
 ## Boot
 
@@ -351,20 +352,18 @@ caveat as below.
 
 ## The order it is worth taking
 
-1. **One atmosphere bake, 39.7 ms, on the arrival frame** — the largest single
-   thing left in a transition, and the fix shape is already written down.
-2. **Shipped-build mode switches and docs pages.** Every figure is dev React at
+1. **Shipped-build mode switches and docs pages.** Every figure is dev React at
    about five times the real cost. Measure before acting.
-3. **The starfield under warp**, 0.6–0.8 ms a frame rewriting a sky that has
+2. **The starfield under warp**, 0.6–0.8 ms a frame rewriting a sky that has
    not moved a pixel, because the budget binds on the sun. A scene decision
    about the star whose body is drawn.
-4. **Per-job heightfield time**, which is what fallback convergence is made of.
+3. **Per-job heightfield time**, which is what fallback convergence is made of.
    One worker's first patch against its tenth on the same body separates the
    cold per-body caches from the grammar and the scheduler.
-5. **A heap breakdown of the 524 MB stance**, which gates both the cap tuning
+4. **A heap breakdown of the 524 MB stance**, which gates both the cap tuning
    and system eviction. The steady state is flat; what is left is what the
    working set is made of.
-6. **The transitions' retention.** One jump, one heap snapshot either side,
+5. **The transitions' retention.** One jump, one heap snapshot either side,
    diffed by constructor: that is where the tour's 906 MB lives, and neither
    the stance nor the collector explains it.
 

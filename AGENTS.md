@@ -69,6 +69,12 @@ Violating one of these is a rewrite later, not a refactor.
   cannot see it. [ADR-0022](docs/adr/0022-the-timeline.md).
 - **Never make generation depend on order.** Derive a seed from the address.
   Do not draw from a shared stream.
+- **Never hold an algorithm version because the draw order is intact.** Order
+  protects a body's _neighbors_ and says nothing about the body: a draw that
+  consumes the values it always did and returns a different number is still a
+  different universe at that address, and `world.stateHash()` cannot see it.
+  If a generated **value** moved, spend the version.
+  [ADR-0027](docs/adr/0027-the-rings.md).
 - **Never put canonical state in a React component,** and never put gameplay
   behavior in a lifecycle callback. Components consume snapshots from
   `apps/game/src/state/engineStore.ts`. Subscribe to the narrowest slice you
@@ -392,6 +398,19 @@ error`, with the real message on a channel the page console does not carry
   streams 706 patches into a black frame with `[Invalid ShaderModule
 "fragment"]` on the console. Set both filters linear;
   `materials.gpu.test.ts` holds each stand-in and a real map to one program.
+- **Never build two texture nodes over one stand-in object.** The builder
+  shares a uniform between nodes whose textures carry one uuid —
+  `TextureNode.getUniformHash` _is_ the uuid, and `UniformNode.generate`
+  hands every later node with that hash the first node's binding — so two
+  nodes over one stand-in compile to a single binding owned by the first,
+  the warm-up freezes the program there, and the second node's value swap
+  binds nothing. The sphere's relief record read its slopes and its sea
+  mask out of the reflectance that way: an icy moon's 0.8 of albedo was a
+  sea mask of 0.8, and Enceladus was a dark disk under a sun-glint, over a
+  bake that read back correct to three places. One stand-in object per
+  node — `RING_WHITE` beside `WHITE`, `BLANK_RELIEF` beside
+  `BLANK_REFLECTANCE` — costs a few texels, and `materials.gpu.test.ts`
+  holds a bound bake to the stand-in's binding count.
 - **Never take a fine lattice coordinate from an absolute float32 direction,
   and never take a lattice decision in a float.** The GPU tile producer is a
   port of `drawnElevation` — of `drawnGroundElevation` where the request says

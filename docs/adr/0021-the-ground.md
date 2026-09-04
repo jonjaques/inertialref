@@ -1,6 +1,7 @@
 # ADR-0021: The drawn ground goes below the field the ship lands on
 
-Status: accepted · 2026-08-30
+Status: accepted · 2026-08-30 · amended 2026-09-03: the canonical crater
+ladder is fourteen halvings deep, terrain algorithm v4
 
 ## Context
 
@@ -170,14 +171,19 @@ survives to.
 
 ## Alternatives
 
-**Deepen the canonical crater ladder instead.** `MAX_CRATER_LEVELS` is 11 and
-the canonical floor would allow 16 to 19, so a body whose largest basin is
-2,170 km has canonical craters down to 2.1 km and then nothing until eight
-meters. Measured, raising it to 14 moves the detail floor by 0 to 2 levels and
-costs 13% a patch — it works, and it moves the field the contact test
-integrates, which is terrain algorithm v3 and every save's landed hull.
-[The terrain plan](../../design/plans/terrain.md) § 1 says the ground moves under
-saves once; this is not the phase that spends it.
+**Deepen the canonical crater ladder instead.** `MAX_CRATER_LEVELS` was 11
+when this was decided and the canonical floor would allow 16 to 19, so a body
+whose largest basin is 2,170 km had canonical craters down to 2.1 km and then
+nothing until eight meters. Measured, raising it to 14 moves the detail floor
+by −1 to +2 levels — the floor is a probe search for where refinement stops
+paying, not a function of the ladder's depth, so Mercury's falls from 16 to 15
+while Earth's rises from 15 to 17 — and costs 13% a patch. It works, and it
+moves the field the
+contact test integrates, which is a terrain version and every save's landed
+hull. This phase did not spend it, because the tail was the larger gain for no
+version at all; terrain algorithm v4 spends it afterwards, on its own, and the
+two are complementary rather than alternatives — the ladder now reaches 265 m
+on that body and the tail still starts at eight.
 
 **Synthesize the tail per vertex only at deep levels.** Free detail control, and
 it breaks the morph: a fully morphed child is the child's own field at the

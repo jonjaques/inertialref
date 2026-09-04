@@ -31,7 +31,7 @@ import {
   type PlanetMaterial,
   type RingMaterial,
 } from '../render/planet.ts'
-import { scatteringFor } from '../render/atmosphereLuts.ts'
+import { scatteringFor, scatteringVia } from '../render/atmosphereLuts.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -649,7 +649,16 @@ export function Bodies({
         planet.albedoScale.value = adaptationFor(body)
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
-        planet.reliefScale.value = maps.normal === null ? 0 : tuning.reliefScale
+        /*
+         * The bake carries relief as the archive's normal map does, and it
+         * is exaggerated by the same number for the same reason: at forty
+         * kilometers a texel the real slope is a fraction of a degree, and
+         * a generated disk drawn at unity is the smooth ball it was before
+         * it had a bake. No map and no bake is the one case with nothing
+         * to scale.
+         */
+        planet.reliefScale.value =
+          maps.normal === null && bake === null ? 0 : tuning.reliefScale
         planet.limbDarkening.value = tuning.limbDarkening
         planet.saturation.value = tuning.saturation
         planet.flowRate.value = tuning.flowRate
@@ -679,8 +688,8 @@ export function Bodies({
           )
         }
         // Sun-glint needs an ocean to land on, and the mask that says where one
-        // is rides in the normal map's blue — or in the bake's alpha. No mask,
-        // no ocean, no glint.
+        // is rides in the normal map's blue — or in the bake's relief record's.
+        // No mask, no ocean, no glint.
         planet.specularStrength.value =
           maps.normal === null && bake === null ? 0 : tuning.specular
         planet.nightStrength.value = maps.night === null ? 0 : tuning.night
@@ -819,14 +828,24 @@ export function Bodies({
         air.flattening.value = body.flattening
         const haze = appearance.haze
         if (haze !== null) {
-          // Baked lazily on the first frame this shell is drawn, cached by
-          // its parameters after that — see `atmosphereLuts.ts`.
-          const scattering = scatteringFor(haze, body.atmosphereScale)
-          air.setScattering(
-            scattering.recipe,
-            scattering.transmittance,
-            scattering.multiScatter,
-          )
+          /*
+           * Cached after the first ask; baked on the pool when there is one,
+           * and drawn with the stand-ins — a vacuum — until the tables land,
+           * because a 40 ms bake inside this frame was the largest single
+           * thing an arrival paid. Written every frame, so the frame the
+           * tables arrive on is the frame they bind. `atmosphereLuts.ts`.
+           */
+          const pool = engine.pool()
+          const scattering =
+            pool === null
+              ? scatteringFor(haze, body.atmosphereScale)
+              : scatteringVia(pool, haze, body.atmosphereScale)
+          if (scattering !== null)
+            air.setScattering(
+              scattering.recipe,
+              scattering.transmittance,
+              scattering.multiScatter,
+            )
         }
         air.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
         if (keyLight !== null) air.sunDirection.value.copy(sun)

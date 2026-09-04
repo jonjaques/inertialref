@@ -103,7 +103,32 @@ import { ROUNDING_RADIUS } from './rounding.ts'
  * did not say so would let two builds of the game disagree about the contents
  * of the same address space with nothing to notice.
  */
-export const SYSTEM_ALGORITHM = algorithm('system', 3)
+/*
+ * Bumped to 4 when the figure and the spin floor moved canonical fields.
+ *
+ * `axialTilt` and `rotationPeriod` are not presentation: `spinEvaluator` in
+ * `frames.ts` builds the body-fixed frame out of them, so they orient the
+ * ground terrain is sampled on and the pose a landed entity is held against.
+ * Measured over 400 catalog stars and 6,496 generated bodies, the tilt's
+ * stretched tail moves 142 of them, the worst by 41°, and the hydrostatic
+ * floor lengthens one rotation period. A pole 41° from where a save left it is
+ * a different world under the same address, and nothing else in the game can
+ * notice: `stateHash` cannot see it, because a landed entity's numbers are
+ * body-frame-relative and identical on both sides.
+ *
+ * Preserving the draw order does not hold a version, which is the trap to take
+ * from this. `planetTilt` consumes exactly one gaussian, as the plain
+ * `Math.abs` did, so nothing downstream of it shifts in the stream — and the
+ * number it returns is still different. Order protects a body's neighbors and
+ * says nothing about the body.
+ *
+ * `polarRadius` moves on 1,515 bodies and rides along rather than earning it —
+ * `datumRadius` in `terrain.ts` reads the equatorial radius whenever `figure`
+ * is null, so the flattening reaches the dossier and the silhouette and never
+ * the ground's datum or the contact test. ADR-0027 records the argument, which
+ * is one bump for whatever moved, not one per field.
+ */
+export const SYSTEM_ALGORITHM = algorithm('system', 4)
 /*
  * Bumped to 2 when the three noise bands became a band stack.
  *
@@ -131,7 +156,19 @@ export const SYSTEM_ALGORITHM = algorithm('system', 3)
  * `SYSTEM_ALGORITHM` stays where it is for the reason above: the sea's draw
  * is still taken, only read differently.
  */
-export const TERRAIN_ALGORITHM = algorithm('terrain', 3)
+/*
+ * Bumped to 4 when the crater ladder went from eleven halvings to fourteen.
+ *
+ * Every cratered body's ground moved: a world whose largest basin is
+ * 2,170 km carries canonical craters down to 265 m where it stopped at 2.1 km,
+ * and the contact test integrates the difference. Nothing else in the stack
+ * moved — the bands, the seeds and the lattice are where they were, so a
+ * body with no craters is untouched to the last bit. A cratered patch costs
+ * 12 to 18% more; the detail floor holds across the zoo and rises by up to
+ * two levels elsewhere, Earth's from 15 to 17. `MAX_CRATER_LEVELS` in
+ * `sketch.ts` carries both figures and the bodies they were measured on.
+ */
+export const TERRAIN_ALGORITHM = algorithm('terrain', 4)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 2)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.
@@ -714,7 +751,14 @@ function makeMoon(
     radius: shape?.radius ?? radius,
     polarRadius:
       shape?.polarRadius ??
-      radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
+      radius *
+        (1 -
+          rotationalFlattening(
+            mass,
+            radius,
+            rotationPeriod,
+            momentOfInertiaFactor('moon'),
+          )),
     figure: shape?.figure ?? null,
     appearance: proceduralAppearance(rng, 'moon', radius, surface, atmosphere),
     mu: bodyMu,
@@ -847,9 +891,14 @@ function makePlanet(
     tidalProxy: 0,
   })
   // A retrograde spin one time in sixteen. Venus and Uranus are two of eight,
-  // which is a small sample and a real phenomenon; giant impacts happen.
+  // which is a small sample and a real phenomenon; giant impacts happen. The
+  // floor is the body's own: a draw of six hours on a puffy giant is a spin
+  // it cannot hold, and the clamp spends no draw of its own.
   const rotationPeriod =
-    rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1)
+    Math.max(
+      hydrostaticSpinFloor(mass, radius),
+      rng.range(0.25, 3) * SECONDS_PER_DAY,
+    ) * (rng.bool(0.06) ? -1 : 1)
 
   return {
     address,
@@ -864,13 +913,20 @@ function makePlanet(
     // thousand kilometers across. Rocks are moons and small bodies.
     figure: null,
     polarRadius:
-      radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
+      radius *
+      (1 -
+        rotationalFlattening(
+          mass,
+          radius,
+          rotationPeriod,
+          momentOfInertiaFactor(kind),
+        )),
     appearance: proceduralAppearance(rng, kind, radius, surface, atmosphere),
     mu: bodyMu,
     elements,
     orbitalPeriod: orbitalPeriod(star.mu + bodyMu, semiMajorAxis),
     rotationPeriod,
-    axialTilt: Math.abs(rng.gaussian(0, 0.35)),
+    axialTilt: planetTilt(rng.gaussian(0, 0.35)),
     atmosphere,
     surface,
     sphereOfInfluence: soi,
@@ -883,33 +939,121 @@ function makePlanet(
 /* ------------------------------------------------------------------------- */
 
 /**
- * Rotational flattening, from the Maclaurin relation for a uniform fluid body:
- * `f ≈ (5/4)·ω²R³/GM`.
+ * The moment of inertia factor `C / MR²` a generated body of this class is
+ * given, which is what the flattening relation needs to know about the inside
+ * of a body it cannot see.
  *
- * Real for procedural bodies, and wrong by a factor of two for real ones — which
- * is why every body in `solar/bodies.ts` carries its *measured* polar radius
- * instead. The error is central condensation: the relation assumes uniform
- * density, and a gas giant keeps most of its mass in the middle, so it resists
- * being flung outwards more than the formula expects. Applied to Jupiter it
- * gives 11% against a measured 6.5%.
+ * A uniform sphere is 0.4 and nothing rounded is that: mass settles toward the
+ * middle. The published values are Jupiter 0.254, Saturn 0.210, Uranus 0.225,
+ * Neptune 0.230; Earth 0.331, Venus 0.337, Mars 0.364, Mercury 0.346, Luna
+ * 0.393, Ganymede 0.311, Callisto 0.355, Titan 0.341. A giant keeps most of
+ * its mass in a core the size of a rocky planet, a rocky world has a dense
+ * core under a light mantle, and a rubble pile is as uniform as anything gets.
+ */
+export function momentOfInertiaFactor(kind: BodyKind): number {
+  switch (kind) {
+    case 'gas-giant':
+    case 'ice-giant':
+      return 0.23
+    case 'rocky':
+    case 'ice':
+    case 'dwarf':
+    case 'moon':
+      return 0.35
+    case 'asteroid':
+    case 'comet':
+      return 0.4
+  }
+}
+
+/**
+ * Rotational flattening, from the Darwin–Radau relation:
  *
- * Kept anyway, because a procedural gas giant spinning in ten hours *should* be
- * visibly oblate and there is nothing better to derive it from — and because a
- * sphere is not the neutral choice here, it is the wrong one.
+ *     f = (5/2)·q / (1 + (25/4)·(1 − (3/2)·C)²),   q = ω²R³/GM
+ *
+ * `q` is the spin's share of gravity at the equator and `C` is the moment of
+ * inertia factor, which is what lets the relation know that a giant keeps its
+ * mass in the middle and resists being flung out more than a uniform fluid
+ * would. It is the standard planetary-science relation for a body in
+ * hydrostatic equilibrium, and it earns its place here by hitting the four
+ * bodies whose insides are published: with their own `C`, Jupiter reads
+ * 6.6% against a measured 6.5, Saturn 9.85 against 9.8, Earth 0.333 against
+ * 0.335, Neptune 1.77 against 1.71. The uniform-fluid Maclaurin form,
+ * `f = (5/4)·q`, is the `C = 0.4` limit of the same expression, and it gave
+ * Jupiter 11% — so a generated giant in a ten-hour day was drawn twice as
+ * oblate as Saturn, and a puffy one hit the model's ceiling.
+ *
+ * Every body in `solar/bodies.ts` carries its *measured* polar radius and
+ * never reads this; a generated one has nothing else to derive a figure from,
+ * and a sphere is not the neutral choice, it is the wrong one. Above
+ * `HYDROSTATIC_SPIN_LIMIT` the spheroid is not the answer either — the
+ * Maclaurin sequence hands over to Jacobi ellipsoids near a flattening of
+ * 0.42 — and the spin draws floor the period at that limit, so this is
+ * capped there only for an input nothing generates.
  */
 export function rotationalFlattening(
   mass: Kilograms,
   radius: Meters,
   rotationPeriod: Seconds,
+  momentFactor: number,
 ): number {
   const period = Math.abs(rotationPeriod)
   if (period <= 0 || mass <= 0 || radius <= 0) return 0
   const omega = (2 * Math.PI) / period
-  const f =
-    1.25 * ((omega * omega * radius ** 3) / (GRAVITATIONAL_CONSTANT * mass))
-  // A body past ~0.3 would be a Jacobi ellipsoid rather than a spheroid, and
-  // this model has nothing to say about it.
-  return Math.min(0.3, Math.max(0, f))
+  const q = (omega * omega * radius ** 3) / (GRAVITATIONAL_CONSTANT * mass)
+  const eta = 1 - 1.5 * momentFactor
+  const f = (2.5 * q) / (1 + 6.25 * eta * eta)
+  return Math.min(0.42, Math.max(0, f))
+}
+
+/**
+ * The spin, as a fraction of gravity at the equator, that a planet's draw is
+ * floored at: `q = ω²R³/GM`, so this is the shortest day a body of that mass
+ * and size is allowed.
+ *
+ * Saturn is the fastest known relative to its own breakup, at 0.155, and a
+ * planet drawn at six hours with a giant's density would sit at half a
+ * gravity — a body that is shedding its equator rather than holding a
+ * figure, and drawn as a lens with rings through it. A fifth is a little past
+ * Saturn: a giant at the limit comes out about a seventh flattened with the
+ * class factor above, which is visibly a fast rotator and still a planet.
+ */
+export const HYDROSTATIC_SPIN_LIMIT = 0.2
+
+/**
+ * A planet's axial tilt from one gaussian draw, with the tail stretched.
+ *
+ * The body of the draw is `|N(0, 0.35)|`: most planets within thirty degrees,
+ * which is Earth, Mars, Saturn and Neptune. What a plain gaussian cannot
+ * reach is Uranus — 82° on one giant in four, from an impact — and a ring
+ * system on a body of ordinary tilt spends most of its orbit with its star
+ * within a few degrees of the ring plane, lit edge-on and drawn dark. So the
+ * draw past 34° (1.7σ, about one planet in eleven) is stretched five times,
+ * up to the 86° a magnitude can carry: the retrograde half of the circle
+ * lives in the sign of the rotation period. One draw either way, so no
+ * planet's moons, colour or ground move for the change.
+ */
+export function planetTilt(draw: number): Radians {
+  const tilt = Math.abs(draw)
+  const knee = 0.6
+  return tilt <= knee ? tilt : Math.min(1.5, knee + (tilt - knee) * 5)
+}
+
+/** The shortest sidereal period a planet of `mass` and `radius` may draw. */
+export function hydrostaticSpinFloor(mass: Kilograms, radius: Meters): Seconds {
+  // The same guard `rotationalFlattening` opens with, and for a sharper reason:
+  // a mass of zero makes this `Infinity`, `Math.max` at the call site takes it
+  // over the draw, and `rotationPeriod` becomes a canonical field that
+  // `JSON.stringify` writes to a save as `null`. No floor is the honest answer
+  // for a body the relation has nothing to say about.
+  if (mass <= 0 || radius <= 0) return 0 as Seconds
+  return (
+    2 *
+    Math.PI *
+    Math.sqrt(
+      radius ** 3 / (HYDROSTATIC_SPIN_LIMIT * GRAVITATIONAL_CONSTANT * mass),
+    )
+  )
 }
 
 /*
@@ -1345,7 +1489,10 @@ function makeObservedPlanet(
   const rotationPeriod =
     semiMajorAxis < 0.1 * AU
       ? period
-      : rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1)
+      : Math.max(
+          hydrostaticSpinFloor(mass, radius),
+          rng.range(0.25, 3) * SECONDS_PER_DAY,
+        ) * (rng.bool(0.06) ? -1 : 1)
   const soi = sphereOfInfluence(semiMajorAxis, mass, star.mass)
   const [inner, outer] = moonOrbitBand(radius, soi)
   const moons: Body[] = []
@@ -1397,7 +1544,14 @@ function makeObservedPlanet(
     mass,
     radius,
     polarRadius:
-      radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
+      radius *
+      (1 -
+        rotationalFlattening(
+          mass,
+          radius,
+          rotationPeriod,
+          momentOfInertiaFactor(kind),
+        )),
     // Confirmed or not, nobody has photographed an exoplanet's surface. The
     // orbit is observed and the appearance is a projection, and the two are
     // marked differently everywhere they are shown.
@@ -1406,7 +1560,7 @@ function makeObservedPlanet(
     elements,
     orbitalPeriod: period,
     rotationPeriod,
-    axialTilt: Math.abs(rng.gaussian(0, 0.35)),
+    axialTilt: planetTilt(rng.gaussian(0, 0.35)),
     atmosphere,
     surface,
     sphereOfInfluence: soi,

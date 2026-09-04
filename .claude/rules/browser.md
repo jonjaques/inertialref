@@ -12,7 +12,8 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
 
 - **Ask headlessly first.** `pnpm sim`, `pnpm vitest run <file>`, a throwaway script
   against `openSession` in `.scratch/`, or `pnpm test:gpu` for a shader — the graph
-  on the real GPU in a second. The browser is for what only a compositor can prove:
+  on the real GPU, in seconds if you name the file and eighteen if you do not. The
+  browser is for what only a compositor can prove:
   LOD at display pixels, framing, the cutscene, presentation, a strobe.
 
 - **One invocation carries the setup and the measurement.** Steps run in the order

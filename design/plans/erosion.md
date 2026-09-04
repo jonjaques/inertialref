@@ -330,8 +330,14 @@ reference: the WebGPU frame is the one the target applies to.
   segment buffer per body and a cell-to-range table are the storage shape the
   crater ladder's constants already have.
 - **It is a version bump.** The drainage band moves the canonical ground on
-  every wet world; `TERRAIN_ALGORITHM` goes to 4 and the loader's version
-  record says so. `SYSTEM_ALGORITHM` does not move: no rng draw order changes.
+  every wet world; `TERRAIN_ALGORITHM` goes to 5 — the crater ladder spent 4 —
+  and the loader's version record says so. Whether `SYSTEM_ALGORITHM` moves is
+  not answered by the draw order: a draw that keeps its place in the stream and
+  returns a different number is still a version
+  ([determinism](../../docs/concepts/determinism.md)). It moves if any generated
+  value does — the tilt tail spent 4 on exactly that reading — so this phase
+  spends 5 if the drainage reaches anything `system.ts` generates, and nothing
+  if it stays inside the terrain field.
 - **The sketch grows, and workers get it by value.** A few megabytes per body,
   built once, cloned to each worker as typed arrays. The GPU producer uploads
   it once per body; the WebGL 2 path pays the CPU band and nothing else.
@@ -356,7 +362,7 @@ Each phase lands green, on its own, with a plate.
 | ----- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 0     | The timestamp query per pass in the drive rig; four survey sites — a headwater, a confluence, a mouth, a lake | Every row of § 3 has a per-pass number at 3 m and at 2 km; `ir.preset` reaches the four sites in daylight                                                                |
 | 1     | The drainage graph in the sketch: lattice, flood, accumulation, incision                                      | Every node reaches the datum or a spill; Horton bifurcation ratio in 3–5; Hack's exponent 0.5–0.6; the build is under 50 ms across the zoo                               |
-| 2     | The field reads the graph: the floor carve, the spill levels, `TERRAIN_ALGORITHM = 4`; the kernel port        | `terrainBands.gpu.test.ts` holds the band to a named bound; a walk along any channel never gains height; the flooded craters are lakes at spill                          |
+| 2     | The field reads the graph: the floor carve, the spill levels, `TERRAIN_ALGORITHM = 5`; the kernel port        | `terrainBands.gpu.test.ts` holds the band to a named bound; a walk along any channel never gains height; the flooded craters are lakes at spill                          |
 | 3     | Dendry refinement per cell, and the incised lattice at the size the CPU affords                               | A stream at level 17 is on the graph; the divides sharpen; the per-sample cost is within 20% of the crater walk's; the lattice build is measured at 128² and 256² a face |
 | 4     | The cover reads the graph: width into `wet`, the corridor into `biota`, slope and seat in the spare bytes     | The green line from orbit; the deposit step and the seat tail gone                                                                                                       |
 | 5     | The look: gullies, talus, the derivative-damped grain; river sheets and lake sheets; the mouth                | Plates at the four sites, either side; the frame at the shore within two fps of the ADR's 16.3                                                                           |

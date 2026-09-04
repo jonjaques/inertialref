@@ -422,6 +422,15 @@ again in a neighboring system.
   compiling it and swallowing the rejection. Found by the first run of
   `materials.gpu.test.ts`, which now holds each stand-in and a real map to one
   program. Photographed bodies never showed it because a loaded map is linear.
+- **One stand-in texture under two nodes.** A texture node's uniform hash is
+  its texture's uuid, so two nodes over one stand-in compile to one binding
+  owned by the first, and the second node's later swap binds nothing. The
+  sphere's relief sampler read the reflectance that way, an icy moon's albedo
+  was its sea mask, and every mapless moon in Sol was a dark disk under a
+  sun-glint over a bake that read back correct. `materials.gpu.test.ts` counts
+  the cube bindings in its signature and draws a bake through a program frozen
+  over the stand-ins first. The ocean world it was verified on hid it, because
+  a mask read out of a sea world's albedo is a plausible sea.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -6793,6 +6802,364 @@ which asserts it receives the body's own surface object once over a
 whole-disk walk, and by the GPU suite's batch ≡ singles case, which is the
 check that the cut still separates bodies without the key. ADR-0023 § 3 named
 the key's spelling and now names the identity.
+
+## The ladder deepens to fourteen, and the ground moves under every save (3 Sep 2026)
+
+Terrain algorithm v4. `MAX_CRATER_LEVELS` goes from eleven to fourteen, which
+ADR-0021 measured and declined and the terrain plan carried as the one change
+still waiting on a version. Every cratered body's canonical field moved — a
+world whose largest basin is 2,170 km carries craters down to 265 m where the
+ladder stopped at 2.1 km — and nothing else in the stack did: a body `young`
+left without a population is untouched to the last bit, and `SYSTEM_ALGORITHM`
+stays at 3 because no draw moved.
+
+**Measured, and the floor did not move.** `pnpm sim --terrain-baseline` before
+and after, on the same machine with nothing beside it:
+
+| Body                         | Floor v3 → v4 | ms/patch v3 → v4 |
+| ---------------------------- | ------------- | ---------------- |
+| Gliese 1061 d, rocky-airless | 19 → 19       | 54.2 → 62.3      |
+| Gliese 1061 IV, atmosphered  | 17 → 17       | 53.1 → 59.6      |
+| Iapetus, icy-dead            | 14 → 14       | 59.1 → 69.6      |
+| Miranda, icy-active          | 12 → 12       | 23.6 → 23.5      |
+
+The plan's "0 to 2 levels" was measured before the presentational tail
+existed; with the tail in place the floor is the tail's on every zoo member
+and the three extra rungs sit above it, so they cost the walk — 12 to 18% a
+patch — and change the mesh's depth not at all. Mercury's finest crater is
+134 m at a floor of 15, Luna's 95 m at 17, Callisto's 13 m at 17. The kernel
+holds the fourteen-rung ladder to its tolerance on every body in
+`terrainKernel.gpu.test.ts` with no change to the kernel: `MAX_KERNEL_LEVELS`
+is derived, `SLAB_AT` moves from 52 to 56, `KERNEL_WORDS` from 116 to 132,
+and the records grow with it.
+
+**The survey sites moved with the field.** A deeper ladder puts craters
+where the `rough` search had found none: Gliese 1061 d's rough site went from
+−875 m to 358 m and Iapetus's from 683 m to −2,403 m. A site is derived from
+the field, so this is the version bump doing what a version bump does rather
+than a defect — and it is why a site named in a save is a claim about a
+version.
+
+## The generated sphere gets its mountains back (3 Sep 2026)
+
+The orbital bake's second pass wrote the sea mask as a grey and nothing
+else, so a generated body's disk had the ground's reflectance — its lakes,
+its maria, its biosphere — laid over a normal that was flat everywhere. The
+mountains were in the near half of a descent and gone in the far half, which
+is the one thing the eight-pixel gate is supposed to make invisible.
+
+That pass now writes the sphere's whole normal-map record: the mesh normal's
+components along geographic east and north, and the sea mask beside them.
+Three things had to be true at once and each was a decision.
+
+**The frame is built the way the sphere builds it, not the way the ground
+does.** `render/planet.ts` takes north as the spin axis with its radial part
+removed and east as north × up; the bake writes the slope against those same
+two lines, so a photograph and a bake decode through one path and the disk
+has no idea which it is wearing.
+
+**A signed channel does not survive the output stage.** The first version
+wrote the slope raw and measured a north of −0.19 reading back as exactly
+zero from a float target — half the relief on the body, the downhill half.
+The archive's `x / 2 + 1/2` is not only symmetry with the published maps; it
+is what makes the record representable.
+
+**A byte is not enough, and this is where a bake differs from a
+photograph.** At forty kilometers a texel the real slope is a few
+hundredths, which a byte resolves to five steps — and the sphere's relief
+exaggeration, 6 on an atmosphered body, draws every one of those steps as a
+facet. The relief target is half float, where the same range is forty steps.
+It is 256 texels a face against the reflectance's 512, because the bake is
+drawn from level-2 patches at 64 cells across a quarter face: a texel per
+mesh normal is all there is to keep.
+
+`materials.gpu.test.ts` holds it on the real adapter, both ways: a ground
+wearer with a known tilted normal anchored a million meters up +Z, where
+north is +Y and east is +X, reads back as the normal's own components in the
+archive's encoding; the same wearer under the body's sea datum reads back
+flat with the mask at one. The fixture is the nearest generated world with a
+sea, swept for rather than named, because the zoo is chosen by archetype and
+none of its four members draws one.
+
+## Every mapless moon in Sol was a dark disk under a sun-glint — it was one stand-in bound twice (3 Sep 2026)
+
+Enceladus, looked at from the planetarium: a black sphere, a bright soft
+hot-spot left of centre, a grey marbling on the lit limb. Rhea, Mimas, every
+Saturnian and Uranian moon without a vendored map the same. The three obvious
+guesses were the bake, the relief encoding and the tone curve, and the bake was
+the first thing measured: its two cube targets read back through
+`readRenderTargetPixelsAsync` on the driven page were correct to three places —
+relief (0.506, 0.504, 0) with the mask at zero over all of face 0, reflectance
+(0.81, 0.83, 0.88). The streamer was idle. So the sphere was wearing a correct
+record wrongly, and the picture said how: a hot-spot with a Fresnel skirt is the
+sun-glint, and the glint is gated on the sea mask.
+
+**The relief sampler was reading the reflectance.** `TextureNode.getUniformHash`
+is the texture's uuid, and `UniformNode.generate` hands every later node with the
+same hash the first node's uniform — so `bakeMap` and `bakeRelief`, both built
+over the one `BLANK_CUBE.texture`, compiled to a single `texture_cube` owned by
+the reflectance node. The warm-up freezes the program there, and `setBake`'s
+later value swap on the relief node binds nothing. The sphere then decoded the
+ice's 0.8 of albedo as a slope of 0.6 east and north and a sea mask of 0.8:
+the normal tilted off the star, the albedo went two thirds of the way to the
+ocean colour, and the glint landed on it. The same collapse was already in
+`planet.ts` for the 2D maps, and `RING_WHITE` exists because of it; the cube
+stand-in was written once and used twice anyway. Two stand-ins now,
+`BLANK_REFLECTANCE` and `BLANK_RELIEF`, and the invariant is in `AGENTS.md`.
+
+It was invisible on the body the relief pass was verified on. Gliese 908 IV is
+an ocean world whose reflectance under the sea is dark and whose land is
+mid-toned, so a mask read out of the albedo was a plausible sea in roughly the
+right places. An icy moon is white everywhere, which is a sea everywhere, which
+is what Enceladus drew.
+
+**Two things the suite already had did not catch it, and each was a decision.**
+`textureSignature` counted `texture_2d` bindings and not `texture_cube`, so the
+stand-in and the bound bake compared equal at five bindings while the cube count
+was one against two; it counts cubes now. And a drawn test of the sphere over a
+bake passed against the shared stand-in twice: bound before the first compile,
+two distinct cubes get two bindings whatever the stand-ins share, and after
+that was fixed a `compile` followed by a `draw` into a fresh target still
+passed, because a pipeline is keyed on its attachment and the second draw
+built a second program over the bake. The test holds one float target across
+a stand-in draw and the bake draw — the boot's own sequence — and only then
+reads 0.36 at the centre against the shared stand-in where the fix reads 0.80.
+
+With the sphere wearing relief for the first time on a Sol moon, Enceladus's
+tiger stripes are visible from orbit as four hairlines running pole to pole.
+`StripeAxis` is a great-circle trough by design, so the picture is the
+geology's; whether four whole great circles read as Enceladus is a plate-review
+question, noted in the terrain plan.
+
+## A generated giant was a lens with rings through it — it was the uniform-fluid flattening, and a six-hour day (3 Sep 2026)
+
+Gliese 876 c, seen wide from the planetarium: an ellipsoid with an axis ratio
+near 0.7, its rings a straight line through it. The record said why —
+"Polar radius 62,436 km, 30.00% flattened", a sidereal day of 8.67 h — and
+the 30.00 was the ceiling of the model. `rotationalFlattening` was the
+Maclaurin relation for a uniform fluid, `f = (5/4)·q`, and its own docstring
+conceded a factor of two against real giants and kept it because there was
+nothing better. There is: the Darwin–Radau relation,
+`f = (5/2)·q / (1 + (25/4)·(1 − (3/2)·C)²)`, which takes the moment of inertia
+factor and thereby knows a giant keeps its mass in the middle. With each
+body's published `C` it reaches Jupiter at 6.6% against 6.5, Saturn 9.85
+against 9.8, Earth 0.333 against 0.335 and Neptune 1.77 against 1.71; with
+the class factor a generated body gets — 0.23 for a giant, 0.35 for a rocky
+world, 0.4 for a rubble pile, which is the uniform limit where the expression
+is Maclaurin's again — all four land within 10%.
+
+The relation was half of it. The planet draw takes a day from 0.25 to 3 days
+whatever the body, and six hours on a giant of 0.65 g/cm³ is a spin at half
+its own equatorial gravity — a body shedding its equator, not holding a
+figure. Saturn is the fastest known relative to breakup at `q = 0.155`. The
+draw is floored at `q = 0.2` by the body's own mass and radius,
+`hydrostaticSpinFloor`, which spends no draw and so moves nothing else in the
+system; a giant at the floor comes out 13.6% flattened, which is Gliese 876 c
+now, on a 10.93 h day. The small bodies keep their own rubble-pile barrier —
+strength holds a rock the fluid relation says would fly apart, and their
+figures are measured shapes rather than spheroids in any case.
+
+No version is spent. The polar radius is presentation and the dossier's
+number; the ground's datum, the contact test and the saves read the
+equatorial radius and the spherical field, and the rng sequence is unchanged.
+`universe.test.ts` holds the four published bodies to 5% with their own `C`
+and to 10% with the class factor, the uniform limit to Maclaurin, and every
+generated planet in the fixture above its floor with no giant past 0.14.
+
+## A ring system is drawn from a character, and Sol's seven are looked up (3 Sep 2026)
+
+`proceduralRingStrip` branched on the host's kind: every generated ice giant
+in the galaxy wore the same six to eleven charcoal threads and every gas giant
+the same three to five bands, and the ice-giant look measured 3.8e-4 over the
+annulus, which is nothing. It now draws a character from the body's seed —
+sheet, threads or mixed, with the host leaning the odds; a particle albedo
+and a tint that follow the architecture, since the three have one cause —
+and a profile from the character: plateaus with a diffuse inner edge and a
+sharp outer one, a grain of density waves, Cassini divisions, shepherded
+ringlets, a C ring of dust, paired hairlines, a dominant outer thread. The
+strip is mipmapped for the grain, which is sampler state and changes no
+program. Over twelve seeds at τ 0.7 the ice-giant median is 4.5e-3 against
+3.8e-4, the gas giant's 8.2e-3 against 5.9e-3, and each class spans two to
+three hundred times between its faintest and brightest;
+[ADR-0027](docs/adr/0027-the-rings.md) has the table.
+
+**The seed was tossing a coin on Uranus.** Uranus, Neptune, Jupiter, Haumea,
+Quaoar, Chariklo and Chiron have no ring photograph, so all seven went
+through the generator, where a kind-lean is a probability and Uranus had a
+two-in-five chance of a Saturn sheet. A table keyed by address gives each its
+published character, and `proceduralRings.test.ts` holds the table to the
+catalog both ways — every key a mapless ringed body in Sol, every such body a
+key — because the small bodies are keyed by issue-ordinal addresses nothing
+else in the file can see.
+
+**The ring's albedo was in the product twice.** The strip's colour multiplies
+`ω₀` and the strip is where the darkening lives — Saturn's B ring is 0.51 in
+its photograph, Uranus's rubble 0.06 — so at 0.6 a τ 1 sheet's lit face sat
+at a sixth of its planet. `ω₀` is 0.9, clean water ice in the visible, on
+both the backscatter and the transmission terms, so the lit-to-backlit
+crossover the rings test holds near unit depth does not move.
+
+**What is still faint is geometry, and one lever was spent.** A planet of
+ordinary tilt spends most of its orbit with its star within a few degrees of
+the ring plane, and a slab lit at grazing incidence is honestly dark — the
+plates of Xi Boötis V and Kapteyn's Star c under the same framing as Saturn
+are dim the way Saturn's own are there. The planet tilt draw stretches its
+tail from the same single gaussian, one planet in eleven past 34° up to 86°,
+so a share of ring systems are open to their star the way Uranus's is. No
+extra draw is taken, so nothing downstream of the tilt shifts in the stream —
+which is not the same as nothing moving, and the audit below is about the
+difference. A multiple-scattering floor
+for the equinox case is written down in the plan and not in TSL, because it
+is a number nobody here has measured.
+
+## The audit that found a version owed, and the figures that had gone stale (3 Sep 2026)
+
+`invariant-auditor` and `docs-curator` over the terrain-and-rings branch, in
+that order. The finding worth keeping:
+
+**A draw that keeps its place in the stream can still be a version.** The tilt
+tail and the hydrostatic spin floor were held to spend no `SYSTEM_ALGORITHM`
+because `planetTilt` consumes exactly one gaussian, as the `Math.abs` before it
+did, so no draw downstream shifts. That is the wrong test. Order protects a
+body's _neighbors_ and says nothing about the body: measured over 400 catalog
+stars and 6,496 generated bodies, 142 axial tilts moved, the worst by 41°, and
+one rotation period lengthened at the floor. `spinEvaluator` builds the
+body-fixed frame out of both, so a moved pole moves the ground terrain is
+sampled on and the pose a landed entity is held against — and `world.stateHash()`
+cannot see it, because a landed entity's numbers are body-frame-relative and
+identical on either side. `polarRadius` moved on 1,515 bodies and is the one
+field that genuinely is presentation: `datumRadius` reads the equatorial radius
+whenever `figure` is null.
+
+**The bump is spent: `SYSTEM_ALGORITHM` is 4.** It was first held back to be
+paid by the next change that touched generated system state, on the argument
+that one version could cover both — which is a real saving only if the interval
+costs nothing, and it does not: two builds reporting `system@3` while placing
+Proxima Centauri II's pole 41° apart is exactly the disagreement the manifest
+exists to make visible, and a handshake that cannot see it is worse than a
+regenerated save. One bump covers every field that moved with it, including
+`polarRadius`, which rides along rather than earning its own number.
+[ADR-0027](docs/adr/0027-the-rings.md) carries the argument; `system.ts` carries
+it at the constant; the rule is an invariant.
+
+**Four figures were retired and copied forward anyway.** The pattern is the
+same each time — a comment rewritten around numbers measured before the change
+it describes:
+
+- `MAX_CRATER_LEVELS` said Mercury's detail floor goes "from 14 to 16" at the
+  deeper ladder. Measured at both caps, it is 16 → **15**: the floor _falls_.
+  The 600 → 1,250 patch figure beside it was derived from that reversed delta
+  and is gone rather than re-derived, because no rig here reports it.
+- "The detail floor does not move" is true of the four-body zoo and false over
+  192 bodies: Earth 15 → 17, Proxima Centauri II 14 → 16, Mars 15 → 16, Sirius I
+  17 → 18, Barnard's b and c 16 → 17. `surfaceDetailFloor` is a probe search for
+  where refinement stops paying, not a function of the ladder's depth, so it
+  moves either way. **A figure measured at one operating point is a figure about
+  that point**, again.
+- `SLAB_AT` "moves from 48 to 56". It moves from **52**; 48 is the constant's
+  own retired docstring, which the same commit had already corrected in place.
+- Darwin–Radau "within 5%" is the accuracy given each body's own moment of
+  inertia factor. A generated body gets the factor for its class, where the
+  bound is 10% — which is what the branch's own test asserts, in two separate
+  cases the doc had merged into one.
+
+**Rings landed with no ADR and a plan that outlived it.** ADR-0027 now carries
+the decision and `design/plans/rings.md` is reduced to the record's missing
+per-ring profile and the unmeasured multiple-scattering term. ADR-0023's patch
+cost is amended rather than overwritten: it is the evidence the GPU producer was
+decided on, and the current 23.8–69.4 ms is a different measurement, not a
+correction of that one.
+
+## Three things the plans named as cheap, closed (3 Sep 2026)
+
+**The terrain descent is the slow suite.** `gameEngine.test.ts` carried a
+`describe.skip` around the one test that streams a landing — 101.5 of the root
+suite's 102.9 s in one `beforeAll`, and the root suite is the whole of the Stop
+gate — so the skip bought the gate its ten seconds by dropping "the ship lands
+on the ground it drew" from `pnpm check` and CI as well. It is
+`gameEngine.descent.slow.test.ts` now, a second vitest project behind
+`pnpm test:slow` that `pnpm check` and CI run and the gate does not; the root
+suite is 7–15 s and the descent is green again at 110 s. The engine recipe both
+suites build from is `engine/headlessEngine.ts`, because a test file cannot
+import a helper from another without running its tests. A root run started
+beside the slow one went red on a timeout and green alone, which is the
+contention the testing guide already warns about.
+
+**The crosshair reads over the Sun.** The shell review measured a `sky-300/40`
+ring at 1.05:1 against a star filling the frame — the one element with no panel
+behind it, by design. The mark is a light hairline between two dark ones now
+(`hud/crosshair.ts`): 11.3:1 over the Sun and 8.8:1 over Earth's disk on the
+dark strokes, 9.8:1 over the sky on the light one, read off native-resolution
+shots through the rig. An inverting blend mode was the obvious alternative and
+fails on a mid-gray limb, where an inverted mid-gray is mid-gray; two dark
+strokes and a light one cannot all vanish against one ground. `· projected` in
+the destination list is `slate-400` under a dashed rule — the provenance device
+the accessibility page names — rather than the retired `slate-500` at 3.4:1.
+
+**The catalog is a tree with one tab stop.** `/planetarium` had 281 real tab
+stops with the way home at 272, and 138 of them were catalog rows. The rows are
+`treeitem`s with `aria-level`, exactly one of them `tabIndex` 0 — the current
+row where it is drawn, else the first system — and the panel's `onKeyDown`
+moves between them, folds a system with `→` and `←`, and climbs from a body to
+its system; the disclosure buttons leave the tab order. The camera's arrows
+already yield to a focused row, because every one is `yieldsToFocus` and a row
+is a control inside `.hud-layer`, so nothing had to be stopped from
+propagating, and the rig's census confirms the azimuth does not move. 148 stops
+now, the menu at 133; what remains is six panels of instruments before the way
+home, which is a landmark problem rather than a list one, and the shell plan
+says so. Virtualizing the rows — the review's suggestion — was not taken: a
+windowed list still cannot be tabbed through, and the depth was a semantics
+problem rather than a rendering one.
+
+**The atmosphere bake is off the arrival frame.**
+[ADR-0028](docs/adr/0028-client-tasks.md). A jump to a generated system paid
+39.7 ms of scattering bake inside a 43.3 ms frame, and the pool task the shape
+wanted could not live in `packages/workers`, because the bake is in
+`packages/rendering` at the same layer. The game's worker entry serves
+`createGameTaskRegistry()` — the shared set plus `render.bakeAtmosphere` — and
+a shell whose tables are in flight draws a vacuum for those frames. Measured on
+the same jump into HIP 71683: three main-thread bakes before, none after,
+twelve made on the pool. Two alternatives were declined in the record: moving
+the scattering model into `universe`, which would put a rendering integrator
+under the determinism rules, and a new `optics` package for one module with one
+consumer.
+
+## A guard that throws where its callers catch, and a version paid rather than deferred (4 Sep 2026)
+
+A review pass over the branch, and two of its three findings are worth keeping.
+
+**An `invariant` at the top of a function is a synchronous throw, and callers of
+an async function do not catch those.** `WorkerPool.submit` opens with
+`invariant(!this.#terminated)`, and both callers of `warmScattering` hang a
+`.catch()` on the promise it returns, each with a comment saying a pool that has
+gone away is the one rejection they handle. They handle nothing of the sort: the
+throw leaves before a promise exists and lands in the per-frame `Bodies` update
+and the 1 Hz prefetch interval. It never fired, because `session.dispose()`
+nulls `pool` in the same statement as `terminate()` — which is the thing to
+notice, since the code that reads as the guard and the code that is actually
+guarding are in different files. Wrapping `submit` so the failure comes back as
+a rejection makes the comment true. **The general shape: when a function is
+`async` or returns a promise, a validation that throws is reachable only by
+`try`, and a caller written around `.catch` will not see it.**
+
+**A version deferred is a handshake that lies.** `SYSTEM_ALGORITHM` was held at 3
+on the argument that the next change to touch generated system state would pay
+for both at once. That trade only saves anything if the interval is free, and the
+interval is exactly where the cost lives: `GENERATION_VERSIONS` is what `save.ts`
+stamps and what `ClientHello` carries, so the deferral buys a `main` client and
+this one agreeing on `system@3` while placing Proxima Centauri II's pole 41°
+apart. It is spent — 4 — and one bump covers every field that moved, including
+`polarRadius` on 1,515 bodies, which is presentation and rides along. A version
+answers one question, whether the world a save was written against is the world
+this build generates; it is not asked per field.
+
+**And the version is a declaration, not a seed input.** `version.ts` said it is
+"folded into the seed path"; nothing in `GENERATION_VERSIONS` reaches a seed, and
+folding it in would be wrong rather than merely unimplemented — every bump would
+move every body in the galaxy, including the ones the change never touched, and
+the loader could no longer distinguish "this save's ground moved" from
+"everything moved". So a bump moves nothing by itself. It is the honest half of a
+change that already happened, and it has to be spent by hand.
 
 ## Known gaps
 

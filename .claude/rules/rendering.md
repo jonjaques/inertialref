@@ -53,6 +53,13 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   sampler that was never declared, Tint refused the module, and every mapless body's
   ground was a black frame. `materials.gpu.test.ts` holds each stand-in and a real map to
   one program.
+- **Never build two texture nodes over one stand-in object.** A texture node's uniform
+  hash is its texture's uuid, and the builder hands every later node with that hash the
+  first node's binding — so two nodes over one stand-in compile to a single binding, the
+  warm-up freezes the program there, and the second node's value swap binds nothing. The
+  sphere's relief record read its slopes and its sea mask out of the reflectance that way,
+  and an icy moon's 0.8 of albedo was a sea mask of 0.8. One stand-in object per node:
+  `RING_WHITE` beside `WHITE`, `BLANK_RELIEF` beside `BLANK_REFLECTANCE`.
 - **Terrain is sampled in body-fixed axes** — see `.claude/rules/determinism.md`.
 - **Compile-ahead goes through `render/warmup.ts`.** `warmCompile` owns the visibility
   toggle (`compileAsync` skips invisible objects, silently), the `WebGPURenderer` cast and

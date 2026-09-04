@@ -9,14 +9,14 @@
 //
 //     graph 0.21s -> lint 0.23s -> typecheck 4.89s -> test 6.5s
 //
-// `pnpm test` is that cheap only because the terrain descent in
-// `gameEngine.test.ts` carries `describe.skip`. Running, it generates a landing's
-// worth of ground through an inline worker and the four stages sum to 103 s instead —
-// ninety percent of the gate in one `beforeAll`. Both figures move whenever the field
-// gets deeper, so treat them as measured rather than fixed, and re-measure before
-// tightening any budget below rather than reading one off this comment.
-// `design/plans/test-speed.md` has the accounting and the version that keeps the
-// coverage without paying for it every turn.
+// `pnpm test` is that cheap because the terrain descent lives in the slow suite —
+// `gameEngine.descent.slow.test.ts`, which `pnpm test:slow` runs from `pnpm check` and
+// CI and never from here. Running, it generates a landing's worth of ground through an
+// inline worker in about a hundred seconds, in one `beforeAll`: ninety percent of what
+// the gate would otherwise cost. Both figures move whenever the field gets deeper, so
+// treat them as measured rather than fixed, and re-measure before tightening any budget
+// below rather than reading one off this comment. `design/plans/test-speed.md` has the
+// accounting and what would make the landing itself cheaper.
 //
 // `pnpm build` is deliberately not in that list, and not for the reason it looks like:
 // its marginal cost is only the 1.7s of vite bundling, because `pnpm build` is

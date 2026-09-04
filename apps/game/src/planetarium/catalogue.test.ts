@@ -6,6 +6,7 @@ import {
   indentOf,
   measureOf,
   neighbours,
+  moveInList,
   orbitalOrder,
 } from './catalogue.ts'
 import { acceptsRow } from './kinds.ts'
@@ -322,5 +323,25 @@ describe('the neighborhood rail', () => {
     expect(
       neighbours([star({ address: 's:A' }), row({ address: 's:A/b:0' })], 10),
     ).toHaveLength(1)
+  })
+})
+
+describe('moveInList', () => {
+  it('moves one row at a time and does not wrap', () => {
+    expect(moveInList('ArrowDown', 0, 5)).toBe(1)
+    expect(moveInList('ArrowUp', 3, 5)).toBe(2)
+    expect(moveInList('ArrowDown', 4, 5)).toBe(4)
+    expect(moveInList('ArrowUp', 0, 5)).toBe(0)
+  })
+
+  it('jumps to either end', () => {
+    expect(moveInList('Home', 3, 5)).toBe(0)
+    expect(moveInList('End', 1, 5)).toBe(4)
+  })
+
+  it('leaves every other key, and an empty list, alone', () => {
+    expect(moveInList('ArrowRight', 2, 5)).toBeNull()
+    expect(moveInList('Enter', 2, 5)).toBeNull()
+    expect(moveInList('ArrowDown', 0, 0)).toBeNull()
   })
 })

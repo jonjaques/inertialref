@@ -339,7 +339,7 @@ ir.terrain() // what the live streamer holds this frame, rocks included, and who
 ir.terrainBaseline() // the zoo, its descents, and measured patch cost
 engine.surfaceQuality = { terrain: 'coarse', ground: 'lean', sea: 'plain', rocks: false } // the levers
 orbitalBaker.report() // which generated bodies have a baked sphere, and whether it is ready
-orbitalBaker.targetFor(address) // its two cube targets, for a face readback
+orbitalBaker.targetFor(address) // its two cube targets — albedo and relief — for a face readback
 ir.dossier(address) // the record, whose Geology card is the surface grammar
 ```
 

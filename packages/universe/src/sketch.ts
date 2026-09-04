@@ -496,7 +496,7 @@ export function craterLadder(
  * surface `young` deletes — Miranda, Enceladus, Europa. Anchored at a fixed rung
  * instead, the tail is a property of the body's *size and air* alone, its hashes
  * cannot collide with a canonical rung (the canonical ladder reaches nineteen at
- * its widest and is capped at eleven), and a rung is the same rung on every body
+ * its widest and is capped at fourteen), and a rung is the same rung on every body
  * of the same radius, which is what an eight-meter crater ought to be.
  *
  * **`young` does not enter and `air` enters harder**, and both follow from the
@@ -512,13 +512,13 @@ export function craterLadder(
  * 0.14, Earth 0.012, Venus 0.
  *
  * **There is a gap above this list on a body with large craters, and it is
- * `MAX_CRATER_LEVELS` rather than this.** The canonical ladder stops at eleven
- * halvings whether or not it has reached the floor, so a world whose largest
- * basin is 2,170 km has canonical craters down to 2.1 km and then nothing until
- * eight meters. Closing it is a deeper canonical ladder, which moves the field
- * the contact test integrates and is therefore a version bump —
- * [ADR-0021](../../../docs/adr/0021-the-ground.md) names it rather than
- * smuggling it in here.
+ * `MAX_CRATER_LEVELS` rather than this.** The canonical ladder stops at
+ * fourteen halvings whether or not it has reached the floor, so a world whose
+ * largest basin is 2,170 km has canonical craters down to 265 m and then
+ * nothing until eight meters. Closing it is a deeper canonical ladder, which
+ * moves the field the contact test integrates and is therefore a version bump
+ * — the cap's own docstring carries the cost, and
+ * [ADR-0021](../../../docs/adr/0021-the-ground.md) the argument.
  */
 export function microLadder(
   grammar: SurfaceGrammar,
@@ -558,7 +558,7 @@ export const microCraterDensity = (grammar: SurfaceGrammar): number =>
  *
  * Thirty-two, which is past any canonical rung a ladder can reach — an
  * uncapped one bottoms out at nineteen on the largest body in scope and
- * `MAX_CRATER_LEVELS` cuts it at eleven — so a sub-floor crater can never draw
+ * `MAX_CRATER_LEVELS` cuts it at fourteen — so a sub-floor crater can never draw
  * a basin's hashes however the canonical ladder is later extended. The rung
  * number is the fourth lane of the lattice hash and nothing else.
  */
@@ -610,10 +610,12 @@ export const CANONICAL_AMPLITUDE_FLOOR: Meters = 0.5
 /**
  * How deep the crater ladder is allowed to go.
  *
- * Eleven halvings is a factor of 2,048: on Mercury that is a 1,100 km basin
- * down to a kilometer, on Iapetus a 331 km one down to 320 m, and on Callisto
- * 104 km down to a hundred. Three decades of diameter, which is the range a
- * body's craters read at from orbit down to a landing.
+ * Fourteen halvings is a factor of 8,192 from the largest crater to the
+ * finest: on Mercury that is a 1,100 km basin down to 134 m, on Iapetus a
+ * 331 km one down to 40 m, and on Callisto 104 km down to 13 m. Four decades
+ * of diameter, which carries a body's craters from orbit to the last thing
+ * the mesh resolves before the presentational tail takes over at eight
+ * meters.
  *
  * **It is a cost ceiling and it sets the streaming depth, and both are worth
  * stating.** Each level is a hundred-odd cell tests and up to two hashes per
@@ -621,16 +623,37 @@ export const CANONICAL_AMPLITUDE_FLOOR: Meters = 0.5
  * two to three levels below whatever the finest crater is — a rim is about a
  * seventh of its crater wide, so resolving one to half a meter takes samples
  * seven times finer again — which sets how deep the quadtree refines and
- * therefore how many patches a landing generates. Measured on Mercury: at
- * fourteen levels the finest crater is 134 m, the floor is 16, and filling the
- * disk under a landed ship is 1,250 patches; at eleven it is a kilometer, the
- * floor is 14, and the fill is 600. The craters below it are the micro-relief
- * tail that is synthesized at render time rather than meshed.
+ * therefore how many patches a landing generates. A level is a quadrupling of
+ * the patches a landing fills, so this is the expensive half of the number.
+ *
+ * **The floor does not track the cap, and it does not move in one direction.**
+ * Measured over 192 bodies against a cap of eleven, eight move and one of them
+ * falls: Earth 15 → 17, Proxima Centauri II 14 → 16, Mars 15 → 16, Sirius I
+ * 17 → 18, Barnard's Star b and c 16 → 17 — and Mercury 16 → **15**, whose
+ * finest crater goes from a kilometer to 134 m in the same step. `surfaceDetailFloor`
+ * is a probe search for where the field stops paying for refinement, not a
+ * function of the ladder's depth, so a deeper ladder redistributes amplitude
+ * and can move it either way. Quote it per body or not at all.
+ *
+ * The zoo is the exception rather than the rule: Gliese 1061 d, Gliese 1061 IV,
+ * Iapetus and Miranda all hold — Iapetus at 14 and Miranda at 12 — because the
+ * presentational tail already sets their floor below the finest rung. A cratered patch there
+ * costs 12 to 18% more — 54.2 → 62.3, 53.1 → 59.6 and 59.1 → 69.6 ms on the
+ * first three, with Miranda, which `young` left without a canonical
+ * population, at 24 either way. That is what the three extra rungs cost on a
+ * body whose depth they do not change, and what they buy is the ground between
+ * a kilometer and the tail's eight meters.
+ *
+ * The ladder is canonical, so this number is in `TERRAIN_ALGORITHM`: it went
+ * from eleven to fourteen with version 4, and every save's landed hull sat on
+ * ground that moved with it. Deeper still is measured in the same coin — the
+ * canonical floor would admit sixteen to nineteen on the largest bodies — and
+ * spends another version.
  *
  * On a body whose largest crater is small, the canonical floor ends the ladder
  * before this does.
  */
-export const MAX_CRATER_LEVELS = 11
+export const MAX_CRATER_LEVELS = 14
 
 function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
   const plates: TectonicPlate[] = []
