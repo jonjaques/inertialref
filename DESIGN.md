@@ -422,8 +422,10 @@ flight strip bottom left, a transient notice at `bottom-16` so it clears the
 menu, the cutscene scrubber bottom center while a scene runs.
 
 **The center is reserved.** The only element at screen center is a small
-crosshair ring (`border-sky-300/40`). Nothing else may occupy the middle of the
-frame, because the middle of the frame is the subject. The menu is at the bottom
+crosshair ring — a light hairline between two dark ones (`hud/crosshair.ts`),
+because nothing composites a ground for it and a single pale stroke measured
+1.05:1 over the Sun. Nothing else may occupy the middle of the frame, because
+the middle of the frame is the subject. The menu is at the bottom
 _edge_, not in the middle distance.
 
 **A panel is `19rem` and never taller than 60% of the frame.** The cap is two

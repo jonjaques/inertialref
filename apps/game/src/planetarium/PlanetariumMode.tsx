@@ -24,6 +24,7 @@ import { useEngine } from '../state/engineStore.ts'
 import { QUERY } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
+import { CROSSHAIR_RING } from '../hud/crosshair.ts'
 import { pick } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
@@ -332,13 +333,14 @@ export function PlanetariumMode({
         target={target}
       />
 
-      {/* The aiming point. Small, dim and always there: it is the answer to
-          "what will a click hit", and in a mode with no ship it is the only
-          thing anchoring the center of the frame. Chrome, so `Shift+H` clears
-          it — the labels above are content and stay. */}
+      {/* The aiming point. Small and always there: it is the answer to "what
+          will a click hit", and in a mode with no ship it is the only thing
+          anchoring the center of the frame. Chrome, so `Shift+H` clears it —
+          the labels above are content and stay. The stroke is
+          `hud/crosshair.ts`, so it reads over a lit disk as well as the sky. */}
       {!chromeHidden && (
         <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="size-1.5 rounded-full border border-sky-300/40" />
+          <div className={`size-1.5 ${CROSSHAIR_RING}`} />
         </div>
       )}
 

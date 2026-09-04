@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { type KeyboardEvent, useRef, useState } from 'react'
 import { Search, SlidersHorizontal, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -20,6 +20,7 @@ import {
   groupBySystem,
   indentOf,
   measureOf,
+  moveInList,
   neighbours,
   systemOfAddress,
 } from './catalogue.ts'
@@ -242,6 +243,80 @@ export function CataloguePanel({
   )
 
   /*
+   * The list has one tab stop, and this is which row it is.
+   *
+   * The current row where it is drawn, else the first system: `Tab` should
+   * land where the reader is rather than at the top of a hundred rows, and a
+   * row inside a closed fold is not drawn, so it cannot be the stop.
+   */
+  const current = verbs === 'travel' ? selected : target
+  const drawn = new Set<string>()
+  for (const { group, open } of folded) {
+    drawn.add(group.system.address)
+    if (open) for (const body of group.bodies) drawn.add(body.address)
+  }
+  const tabbable =
+    current !== null && drawn.has(current)
+      ? current
+      : (folded[0]?.group.system.address ?? null)
+
+  const setOpen = (address: string, open: boolean): void =>
+    setDecided((held) => {
+      // The updater form, and it is required rather than tidy: a map derived
+      // from a captured snapshot silently discards a second toggle in the same
+      // commit. Same rule `dock/layout.ts` states.
+      const next = new Map(held)
+      next.set(address, open)
+      return next
+    })
+
+  /*
+   * The tree's keyboard. Arrows and Home/End move between the drawn rows, `→`
+   * opens a folded system, `←` closes an open one or climbs from a body to its
+   * system; Enter and Space stay the button's own. The camera's arrow bindings
+   * already yield here — every one of them is `yieldsToFocus`, and a focused
+   * row is a control inside `.hud-layer` — so nothing has to be stopped from
+   * propagating, and `preventDefault` only keeps the pane from scrolling under
+   * the focus it just moved.
+   */
+  const onKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
+    const rows = [
+      ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+        '[data-catalog-row]',
+      ),
+    ]
+    const index = rows.indexOf(event.target as HTMLButtonElement)
+    const row = rows[index]
+    if (row === undefined) return
+    const next = moveInList(event.key, index, rows.length)
+    if (next !== null) {
+      event.preventDefault()
+      rows[next]?.focus()
+      return
+    }
+    const address = row.dataset['address']
+    const expanded = row.getAttribute('aria-expanded')
+    if (event.key === 'ArrowRight') {
+      if (expanded === 'false' && address !== undefined) {
+        event.preventDefault()
+        setOpen(address, true)
+      }
+    } else if (event.key === 'ArrowLeft') {
+      if (expanded === 'true' && address !== undefined) {
+        event.preventDefault()
+        setOpen(address, false)
+        return
+      }
+      const parent = row.dataset['parent']
+      const up = rows.find((one) => one.dataset['address'] === parent)
+      if (up !== undefined) {
+        event.preventDefault()
+        up.focus()
+      }
+    }
+  }
+
+  /*
    * `/` focuses the search, which is what the table has always claimed it does.
    *
    * Registered here because this is the panel that owns the field. The binding
@@ -408,35 +483,33 @@ export function CataloguePanel({
         />
       )}
 
-      <ul className="flex min-h-0 flex-col">
+      {/* A tree with one tab stop — see `CatalogueRow` and `onKeyDown`. The
+          `<li>`s and inner `<ul>`s are `role="none"`: the tree items are the
+          row buttons, and the hierarchy is `aria-level` on each of them,
+          which is what ARIA prescribes for a tree whose DOM is flat. */}
+      <ul
+        role="tree"
+        aria-label="Catalog"
+        onKeyDown={onKeyDown}
+        className="flex min-h-0 flex-col"
+      >
         {folded.map(({ group, open }) => {
           const visible = open
             ? new Set(group.bodies.map((body) => body.address))
             : NOTHING_VISIBLE
           return (
-            <li key={group.system.address}>
-              <ul className="flex flex-col">
+            <li key={group.system.address} role="none">
+              <ul role="none" className="flex flex-col">
                 <CatalogueRow
                   row={group.system}
-                  selected={
-                    group.system.address ===
-                    (verbs === 'travel' ? selected : target)
-                  }
+                  selected={group.system.address === current}
                   indent={0}
                   measure={measureOf(group.system)}
+                  tabbable={group.system.address === tabbable}
                   {...(group.bodies.length > 0
                     ? {
                         expanded: open,
-                        onExpand: () =>
-                          setDecided((current) => {
-                            // The updater form, and it is required rather than
-                            // tidy: a map derived from a captured snapshot
-                            // silently discards a second toggle in the same
-                            // commit. Same rule `dock/layout.ts` states.
-                            const next = new Map(current)
-                            next.set(group.system.address, !open)
-                            return next
-                          }),
+                        onExpand: () => setOpen(group.system.address, !open),
                       }
                     : {})}
                   onFocus={() => act(group.system.address)}
@@ -446,17 +519,16 @@ export function CataloguePanel({
                     <CatalogueRow
                       key={body.address}
                       row={body}
-                      selected={
-                        body.address ===
-                        (verbs === 'travel' ? selected : target)
-                      }
+                      selected={body.address === current}
                       indent={indentOf(body, visible)}
                       measure={measureOf(body)}
+                      tabbable={body.address === tabbable}
+                      parent={group.system.address}
                       onFocus={() => act(body.address)}
                     />
                   ))}
                 {!open && group.bodies.length > 0 && (
-                  <li className="type-micro pl-12 text-slate-400">
+                  <li role="none" className="type-micro pl-12 text-slate-400">
                     {group.bodies.length} bodies
                   </li>
                 )}
@@ -475,7 +547,10 @@ export function CataloguePanel({
            * case reaches the whole catalog, so "no star is called that" is a
            * fact rather than a statement about how far the survey got.
            */
-          <li className="type-ui px-1 py-2 text-pretty text-slate-400">
+          <li
+            role="none"
+            className="type-ui px-1 py-2 text-pretty text-slate-400"
+          >
             {failure !== null
               ? `The survey did not answer: ${failure}`
               : !ready

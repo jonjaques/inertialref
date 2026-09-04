@@ -6,6 +6,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { useChromeHidden } from '../hud/chrome.ts'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FlightStrip } from '../hud/FlightStrip.tsx'
+import { CROSSHAIR_RING } from '../hud/crosshair.ts'
 import { useFlightContext } from '../hud/useShipControls.ts'
 import { DeferredMultiplayer } from './DeferredMultiplayer.tsx'
 import { NotConnected } from './NotConnected.tsx'
@@ -86,9 +87,10 @@ export function FlightMode({
 
           {/* The aiming reticle. Center of frame, and the only permanent piece
               of cockpit chrome this build has — `docs/design/ux.md` specifies
-              the rest and none of it is built. */}
+              the rest and none of it is built. The stroke is `hud/crosshair.ts`,
+              because the Sun fills this frame more often than any other. */}
           <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="size-4 rounded-full border border-sky-300/40" />
+            <div className={`size-4 ${CROSSHAIR_RING}`} />
           </div>
         </>
       )}

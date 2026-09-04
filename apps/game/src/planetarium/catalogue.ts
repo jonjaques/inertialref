@@ -273,3 +273,36 @@ export function neighbours(
     .sort((a, b) => a.lightYears - b.lightYears)
     .slice(0, RAIL_LIMIT)
 }
+
+/**
+ * Where a key moves focus among `count` rows, or `null` when it is not a
+ * navigation key.
+ *
+ * The rows are a tree with one tab stop: `Tab` lands on the current row and
+ * leaves from it, and the arrows move inside. Every row was a button in the
+ * tab order before, so the catalog was 138 stops between the search field and
+ * everything after it and the way back to the menu sat at stop 272 — a depth
+ * no keyboard path survives. Home and End are the tree pattern's, and the
+ * arrows do not wrap: a reader at the last row who presses Down learns from
+ * the stillness that it is the last, rather than arriving back at the top.
+ */
+export function moveInList(
+  key: string,
+  index: number,
+  count: number,
+): number | null {
+  if (count === 0) return null
+  const last = count - 1
+  switch (key) {
+    case 'ArrowDown':
+      return Math.min(index + 1, last)
+    case 'ArrowUp':
+      return Math.max(index - 1, 0)
+    case 'Home':
+      return 0
+    case 'End':
+      return last
+    default:
+      return null
+  }
+}
