@@ -112,3 +112,28 @@ it('partitions presentation time equally and reverses from the current position'
     b.dispose()
   }
 })
+
+it('resumes from a manually orbited pose and holds without snapping back to the route angles', () => {
+  const session = openSession({ workers: null })
+  try {
+    const ir = session.harness
+    ir.galaxyJourney(0.6)
+    ir.observatory.drag(45, -20)
+    const start = ir.observerSample(0)!
+    ir.galaxyJourney(1, 12)
+    const resumed = ir.observerSample(0)!
+    expect(UV.distance(resumed.position, start.position)).toBeLessThan(0.001)
+    ir.observerSample(4)
+    const holding = ir.observerSample(0)!
+    ir.observatory.holdGalaxyJourney()
+    expect(ir.observerSample(10)).toEqual(holding)
+    ir.galaxyJourney(1, 12)
+    ir.observerSample(12)
+    expect(
+      UV.distance(ir.observatory.eye!, UV.fromMeters(0, 30000 * PARSEC, 0)) /
+        PARSEC,
+    ).toBeLessThan(1e-8)
+  } finally {
+    session.dispose()
+  }
+})

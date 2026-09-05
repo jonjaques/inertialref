@@ -43,8 +43,7 @@ export function GalaxyJourneyControls({
           label="Hold"
           disabled={remaining === 0}
           onClick={() => {
-            const current = engine.harness.observatory.journey
-            if (current !== null) travel(current.progress)
+            engine.harness.observatory.holdGalaxyJourney()
           }}
         />
       </div>

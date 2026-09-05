@@ -241,7 +241,7 @@ export class Observatory {
     route: GalaxyJourneyRoute
     progress: number
     motion: {
-      from: number
+      from: ObserverState
       to: number
       duration: number
       elapsed: number
@@ -278,10 +278,10 @@ export class Observatory {
     }
     const held = this.#journey
     held.motion =
-      seconds === 0 || progress === held.progress
+      seconds === 0
         ? null
         : {
-            from: held.progress,
+            from: this.#state,
             to: progress,
             duration: seconds,
             elapsed: 0,
@@ -290,6 +290,13 @@ export class Observatory {
       held.progress = progress
       this.#state = this.#desired = galaxyJourneyState(held.route, progress)
     }
+    return this.status()
+  }
+
+  /** Hold the displayed pose, including an orbit gesture made during the journey. */
+  holdGalaxyJourney(): ObserverStatus {
+    this.#stopJourneyTravel()
+    this.#desired = this.#state
     return this.status()
   }
 
@@ -313,11 +320,28 @@ export class Observatory {
     if (motion.duration - motion.elapsed < 1e-9)
       motion.elapsed = motion.duration
     const t = motion.elapsed / motion.duration
+    const eased = t * t * (3 - 2 * t)
+    const destination = galaxyJourneyState(held.route, motion.to)
+    this.#state = this.#desired =
+      t === 0
+        ? motion.from
+        : t === 1
+          ? destination
+          : {
+              azimuth:
+                motion.from.azimuth +
+                shortestAngle(motion.from.azimuth, destination.azimuth) * eased,
+              elevation:
+                motion.from.elevation +
+                (destination.elevation - motion.from.elevation) * eased,
+              distance:
+                motion.from.distance *
+                (destination.distance / motion.from.distance) ** eased,
+            }
     held.progress =
       t === 1
         ? motion.to
-        : motion.from + (motion.to - motion.from) * t * t * (3 - 2 * t)
-    this.#state = this.#desired = galaxyJourneyState(held.route, held.progress)
+        : galaxyJourneyProgress(held.route, this.#state.distance)
     if (t === 1) held.motion = null
   }
 
