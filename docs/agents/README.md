@@ -7,7 +7,8 @@ lives under [`docs/`](../README.md). The visual system is
 [`CONTEXT.md`](../../CONTEXT.md).
 
 [`AGENTS.md`](../../AGENTS.md) at the repository root is the auto-loaded working
-card: the invariants, the definition of done, and pointers here. Keep that file
+card: the invariant imperatives, the definition of done, and pointers here.
+[The invariant handbook](invariants.md) holds their full constraints and reasoning. Keep that file
 short. Put anything an agent needs that is _not_ an invariant here, so a person
 reading the technical docs is not walking through session instructions.
 
@@ -35,11 +36,13 @@ reading the technical docs is not walking through session instructions.
 | Match the written voice             | [Style](../../STYLE.md)                                                 |
 
 Executable machinery — path-scoped rules, skills, hooks, subagents — lives in
-[`.claude/`](../../.claude/rules/README.md). Cursor's
+[`.claude/`](../../.claude/rules/README.md).
+[Codex's adapters](../../.codex/README.md) reuse those sources through native
+configuration and skill symlinks. Cursor's
 [adapters](../../.cursor/README.md) reference those files rather than copying
 their contents. This machinery is not documentation: it puts a one-line rule
 in context when you open a matching file. The rule's reasoning stays in
-`AGENTS.md` and the technical docs.
+`invariants.md` and the technical docs.
 
 ---
 

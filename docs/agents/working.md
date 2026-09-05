@@ -8,7 +8,11 @@ are in [`AGENTS.md`](../../AGENTS.md).
 
 ## Starting work
 
-A session begins by knowing what tree it is standing in. The `SessionStart`
+A session begins by knowing what tree it is standing in. Follow an explicit
+user-selected base branch or checkout; the defaults below apply when none is
+specified. Preserve other agents' worktrees and uncommitted changes.
+
+The `SessionStart`
 hook fetches `origin`, fast-forwards local `main` when it can do so without a
 checkout, and states the branch, the uncommitted count, and how far ahead of
 `origin/main` the branch is. The imperative half is
@@ -114,6 +118,12 @@ Not "the browser rendered something." Done means:
 - `pnpm check` is green.
 - The ADRs and `CONTEXT.md` reflect any meaningful architectural change.
 - The debug tooling can inspect whatever you added.
+
+Claude, Cursor, and Codex adapters share the hook implementations in
+`.claude/hooks/`. Codex translates lifecycle inputs through
+`scripts/agents/codex-hook.mjs`; its setup is documented in
+[`.codex/README.md`](../../.codex/README.md). When the host has not trusted or
+enabled hooks, perform setup, formatting, and verification explicitly.
 
 A Stop hook runs `graph → lint → typecheck → test` after a turn that touched
 source. It is a safety net, not the definition of done. The full `pnpm check`

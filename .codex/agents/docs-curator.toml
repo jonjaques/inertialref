@@ -1,0 +1,7 @@
+name = "docs-curator"
+description = "Checks whether the documentation still describes the code — CONTEXT.md, the ADRs, AGENTS.md, README's capability claims and the path-scoped rules — and updates what has gone stale. Use after a change lands, or when the docs are suspected of describing a previous version."
+developer_instructions = """
+Read AGENTS.md, then .claude/agents/docs-curator.md from the assigned repository checkout. Follow that brief's task and reporting instructions. The Markdown body is shared with Claude Code; its frontmatter configures Claude only.
+
+Use the tools available in this Codex session. Read relevant .claude/rules files explicitly; they do not auto-load in Codex. Full invariant reasoning is in docs/agents/invariants.md. Do not invent .Codex paths or assume Claude tool names, model names, memory, or isolation settings apply here.
+"""

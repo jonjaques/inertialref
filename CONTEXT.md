@@ -7426,6 +7426,22 @@ because a texture that fails to decode is one fewer unit; redirect to a file.
 And the profile wipe for a cold boot races the Chrome `--down` just closed,
 which is still releasing files; wipe it in a separate call.
 
+## One set of rules for three hosts (04 Sep 2026)
+
+The shared agent machinery stays in `.claude/`. Codex discovers the same skills
+through relative directory symlinks, reads the same agent briefs through TOML
+adapters, and translates its lifecycle payloads before calling the existing
+hooks. Copying the bodies produced nonexistent `.Codex/rules/` references and
+checkout-specific hook paths; neither belongs in a worktree-portable setup.
+The adapter normalizes the Git root, marks source deletions, and retains a
+failed Stop gate's retry budget across Codex continuation turns.
+
+`AGENTS.md` carries all 64 imperative rules; their full explanations and
+exceptions live in `docs/agents/invariants.md`. The shorter startup card points
+to that record before work in a governed area. Claude's rule extracts and
+Cursor's references retain their paths, so reducing startup text does not
+remove the reasoning or require maintaining a second set of constraints.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
