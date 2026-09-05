@@ -512,6 +512,16 @@ again in a neighboring system.
   happens to be near the origin and facing it. The dresser's dummies set
   `frustumCulled = false`; `warmup.gpu.test.ts` compiles one behind the
   camera beside a plain mesh that builds nothing.
+- **An orbit camera's basis mirrored through its own east–up plane.** Every
+  orthonormality and round-trip property passes on a frame whose azimuth runs
+  the other way about the pole; only a test that compares the _sign_ of a
+  drag's swing with the other camera's catches it. `orbitOffset` is the
+  planetarium's `observerOffset` in a local frame now, and `camera.test.ts`
+  holds the sign for any up.
+- **A bank measured against the wrong up.** `attitudeOf` read the roll's sine
+  off the horizon's up, which is the level up only at zero pitch; the error
+  is the cosine of the pitch and a round-trip property found it by failing
+  at its own tolerance boundary. The level triad is built about the nose.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -7242,6 +7252,229 @@ the loader could no longer distinguish "this save's ground moved" from
 "everything moved". So a bump moves nothing by itself. It is the honest half of a
 change that already happened, and it has to be spent by hand.
 
+## The sensor owns the frame, and the picture that was one transfer too dark (4 Sep 2026)
+
+Phase 0 of [the sensor plan](design/plans/the-sensor.md) is on the default
+path: `render/sensor.ts` draws every frame through one `PostProcessing` around
+the scene pass and the house curve, `scene/Sensor.tsx` takes the frame from R3F
+at priority 1, the renderer is built at zero samples with MSAA on the pass, and
+`ir.gpu()` measures through the chain.
+[ADR-0029](docs/adr/0029-the-sensor-spine.md) has the decision and the three
+facts about r182 that cost the handoff — the swap `PostProcessing.render` does
+not undo on a throw, the draw against a pipeline still building, and the pass
+gated on a frame counter only three's own loop advances — each of them now in
+"Bugs the tests found" above.
+
+What the handoff had ruled out was right and what it had not tried was the
+answer: reading the canvas from inside the page, on one frame, through the
+chain and through the renderer's own path, gave identical pixels — and the
+renderer found sitting at `NoToneMapping` and a linear output. The screenshot
+was never lying; the state under it was.
+
+Measured on the M-series at 1600×900, DPR 1, occluded rig, one Chrome on the
+GPU at a time, the world pinned by one save at tick 272, the baseline being the
+parent commit in its own worktree and dev server, drained-queue ms per frame,
+median of five sixty-frame runs after the first:
+
+| Operating point                      | Baseline | Chain |
+| ------------------------------------ | -------- | ----- |
+| Earth from 14,400 km                 | 1.84     | 1.78  |
+| Earth summit, converged              | 6.17     | 5.87  |
+| Proxima Centauri d from orbit        | 0.47     | 0.49  |
+| Proxima Centauri d summit, converged | 4.37     | 4.43  |
+| `tng-intro` at frame 800             | 0.84     | 0.90  |
+
+Against a 0.15 ms budget the spine adds at most 0.06 ms anywhere, inside the
+spread. The plate gate is **zero** differing pixels at the four planetarium
+points; the cutscene differs from the baseline by 531 pixels at 15/255 and from
+itself across two boots by the same 531 and 15.
+
+Two protocol facts for anyone taking plates across boots. A world paused before
+its star survey has settled draws a sparser sky, differently each boot — the
+first Proxima plates were 83 KB against 259 KB settled, and a patch of sky held
+seven stars on one build and one on the other with the pause first, none of it
+the chain's. And two boots paused at different ticks differ by a sub-pixel
+drift of the surface that reads as hundreds of pixels at a few levels. The
+sequence that is exact is `ir.look`, twelve seconds, then `ir.load` of one
+save, then `ir.pause`: the survey has settled and the tick is the save's.
+`ir.gpu()` under the old pass would have reported the quad's cost, not the
+frame's; the first figures taken through it were about a path that drew the
+scene once per forty submissions.
+
+The one piece of phase 0 still open is the chain's own warm-up producer: the
+quad's pipeline is the one compile the first presented frame pays.
+
+## three r185, and what moving the renderer three releases costs (4 Sep 2026)
+
+The renderer is on three r185.1, from r182, because
+[the upscaler plan](design/plans/the-upscaler.md) needs
+`@pmndrs/upscaler`, whose peer range starts at r184. The bump itself is two
+lines; what it took to get the gate green again is worth the record, because
+each item is a fact about three that nothing here would have predicted.
+
+- **`compileAsync` no longer builds pipelines during its walk.** r185 queues one
+  work item per object and processes the queue after the walk, one object at a
+  time, yielding between them through `yieldToMain()` — `scheduler.yield()`
+  where it exists and `requestAnimationFrame` otherwise. The GPU harness's
+  frame stub returns 0 and never fires, so every compile that walked anything
+  hung after its first object, and the warm-up test that counted pipelines
+  synchronously after `warmCompile` counted none. `gpuSetup.ts` installs
+  Node's own `timers/promises` scheduler, which keeps the frame stub honest —
+  still no frame, still one `nodeFrame` — and the harness grew
+  `holdNextPipeline()`, which holds the next async pipeline's promise open so
+  the "frame drawn before the compile lands" window can be drawn inside on
+  purpose rather than raced. The draw guard is not needed, and the review
+  below found the re-cut hunk dead: r185's `Renderer._renderObjectDirect`
+  draws only when `Pipelines.isReady` says the GPU object has arrived.
+- **A refused shader is reported three times, on three turns.** The module
+  error lands in the verb's own validation scope at once; r185 then reports the
+  pipeline from the `.then` on its inner scope a turn later, and the compiler's
+  diagnostics after `getCompilationInfo()` later still — into whatever verb is
+  running by then. The harness's compute test failed for a shader the
+  refused-shader test had asked for. A verb that fails now waits until the sink
+  has been quiet for three turns and drops what arrived since it began.
+- **`renderOutput` premultiplies.** r185's output node clamps alpha,
+  unpremultiplies, tone-maps and premultiplies again, so a pixel the renderer's
+  own path leaves at alpha 0 comes out black however bright its rgb was. The
+  harness clears to alpha 0 by default and the sensor gate's "the frame the
+  renderer draws for itself" compared black sprites against the chain's lit
+  ones, worst pixel 0.93. Production clears opaque (`createRenderer` has since
+  the flare's compositor artifact) and the gate now clears the same way. The
+  chain writes alpha 1 and never sees any of this.
+- **`@types/three` 0.185 puts every operator on `Node<'float'>` and none on
+  `Node`.** Three hundred errors, almost all in the terrain kernel's five
+  aliases, which were `type F = Node`; typed, the residue was a color uniform
+  multiplied by a vector (the typings allow a scalar), a `mix` with a
+  per-channel weight (the typings allow a scalar `t`), `mat3 × vec3` typed as a
+  matrix, `attribute()` widening its type argument to `string`, and
+  `NodeLibrary` declared as an empty class with `addToneMapping` gone from the
+  types and present at runtime. Each got a cast with the reason beside it.
+- **Two renames and a removal.** `PostProcessing` is `RenderPipeline` since
+  r183 and the old name warns on every build; `WebGLCubeRenderTarget` cannot be
+  used with the WebGPU renderer since r183 and `CubeRenderTarget` is its
+  replacement — the bake, the planet's four-texel stand-ins and their test.
+  R3F 9.7 still constructs a `THREE.Clock`, which r185 deprecates with one
+  console warning per boot; not ours.
+
+**The plate gate.** Baseline `origin/main` in its own worktree on port 5174,
+this branch on 5175, one driven Chrome at a time, 1600×900 at DPR 1, the world
+pinned by one save at tick 1158 (hash `108f8f67`) loaded and paused in one
+task after the look, plates at `--max-px 0`, differences counted above 1/255:
+
+| Operating point                            | Pixels differing | Peak   |
+| ------------------------------------------ | ---------------- | ------ |
+| Earth from 14,402 km, planetarium          | 15               | 15/255 |
+| Earth summit, converged (877 patches)      | 1,205            | 29/255 |
+| Proxima Centauri d from orbit, planetarium | 623              | 28/255 |
+| Proxima Centauri d summit (838 patches)    | 16,607           | 11/255 |
+| `tng-intro` at frame 800, parked           | 0                | 0      |
+
+The cutscene plate was taken from `/cinema/tng-intro?t=800` parked on the
+frame, and two boots of either build differ there in zero pixels — the
+`ir.play` → `ir.pause` → `ir.seekCutscene(800)` protocol read the playhead at
+799.67 on one boot and 800.00 on the next, and that third of a frame was 141,208
+pixels of difference that had nothing to do with the upgrade. Every pixel that
+differs at the summits is a rock. The ground is black in the amplified
+difference and each instance of the scatter lights up on its sunlit face, in
+place, by up to 11/255: r185's `transformNormal` is the inverse-transpose
+normal matrix, normalized, where r182 divided the normal by the squared column
+lengths and multiplied by the matrix — right for a rotation with a uniform
+scale and wrong by a little for the scatter's per-instance scales. The rocks
+are now lit by their true normals. Nothing else in the frame moved.
+
+**Cost**, `ir.gpu(60)` through the chain, the smallest of three at each point,
+both builds under the same conditions:
+
+| Operating point                      | r182, ms | r185, ms |
+| ------------------------------------ | -------- | -------- |
+| Earth summit, converged              | 6.02     | 5.72     |
+| Proxima Centauri d from orbit        | 0.66     | 0.72     |
+| Proxima Centauri d summit, converged | 4.45     | 4.74     |
+
+Level within the spread of the runs; the first baseline pass read 12–16 ms at
+the Earth summit with something else on the GPU, which is the reminder that a
+figure taken beside anything is a figure about that thing.
+
+One flake surfaced in `pnpm check` and is not the upgrade's:
+`packages/physics/src/universal.test.ts`'s "agrees with the element form on
+every ellipse" missed its tolerance by 0.05 % at eccentricity 0.9888 on seed
+1192846684, and the package has no dependency on three and no diff on this
+branch. It passes on the next seed; the bound wants a look near the parabolic
+end.
+
+## The review of r185: the patch was dead, the second mesh compiled wrong, and boot is level (4 Sep 2026)
+
+A review of the bump above against the three sources rather than against the
+entry, before it shipped. [ADR-0030](docs/adr/0030-three-r185.md) carries the
+decisions; the mechanisms that must not come back are in "Bugs the tests
+found" above. What it turned up, in the order it matters:
+
+- **The re-cut draw guard was dead code.** r185's `Renderer._renderObjectDirect`
+  calls the backend's draw only when `Pipelines.isReady` says the GPU object
+  has arrived, so the hunk sat under a gate that never let its case through.
+  Measured: hunk stripped, `warmup.gpu.test.ts` green; hunk stripped and the
+  gate disabled as well, `no overload matched for setPipeline`. Every
+  sentence saying r185 as shipped throws was written from the r182 fact. The
+  patch is gone and the test holds the gate.
+- **A group warmed whole compiled its second mesh against the wrong target,
+  a warm-up dummy at the origin was culled, a pipeline hold leaked into the
+  next test, the sensor gate's alpha count was vacuous, the tone curve
+  installed once and said twice, and the sensor restored two of the three
+  fields `RenderPipeline.render` swaps.** Each is in "Bugs the tests found"
+  or in the commit that fixed it, with the number that settled it.
+- **A browser without `scheduler.yield` pays a frame per yield, and a hidden
+  one never boots.** three's `yieldToMain` falls back to an animation frame;
+  Safari 26 has no `scheduler` and Chrome before 129 no `yield`; boot is
+  designed to finish hidden. `render/schedulerYield.ts` installs a
+  `MessageChannel` yield at the entry point. Not measured in a browser that
+  needs it — the rig's Chrome is 152 and has the native one.
+- **One finding was wrong.** The type argument on `attribute<'vec3'>(name,
+'vec3')` is not a restatement: the parameter is unconstrained, so the
+  literal widens to `string` and `.mul` disappears — three type errors and
+  one silent `Node<string>` on a `colorNode`. It stays, with the reason
+  beside it.
+
+**Boot wall time**, which the entry above did not measure. The `preload`
+measure under `?timing=full` — the same two clock reads as the `scene
+warmed` log line's `ms` — at the home poster, occluded rig at 1600×900, DPR
+1, one Chrome on the GPU at a time, `origin/main` on r182 served from its own
+worktree on port 5174 and this branch on 5175, six boots per build on a wiped
+Chrome profile, the first cold and the five after it warm:
+
+| Build | Cold, ms | Warm, median of five, ms | Warm spread, ms |
+| ----- | -------- | ------------------------ | --------------- |
+| r182  | 1,481    | 1,425                    | 1,404–1,472     |
+| r185  | 1,508    | 1,430                    | 1,422–1,449     |
+
+Level: the median moves 5 ms, inside either spread, and the driver's own
+"renderer ready" is 5.3–5.4 s cold and 2.9 s warm on both. A cold profile
+costs the driver's first light two seconds and the preload almost nothing, so
+Chrome's shader cache is not where boot's time goes; the textures and the
+bakes are.
+
+Two rig traps, for the next comparison. A dev server started in a background
+task behind `| head` dies of SIGPIPE after that many lines, mid-run, and the
+boot whose fetches then fail reads a _third_ of the real preload — 433 ms —
+because a texture that fails to decode is one fewer unit; redirect to a file.
+And the profile wipe for a cold boot races the Chrome `--down` just closed,
+which is still releasing files; wipe it in a separate call.
+
+## One set of rules for three hosts (04 Sep 2026)
+
+The shared agent machinery stays in `.claude/`. Codex discovers the same skills
+through relative directory symlinks, reads the same agent briefs through TOML
+adapters, and translates its lifecycle payloads before calling the existing
+hooks. Copying the bodies produced nonexistent `.Codex/rules/` references and
+checkout-specific hook paths; neither belongs in a worktree-portable setup.
+The adapter normalizes the Git root, marks source deletions, and retains a
+failed Stop gate's retry budget across Codex continuation turns.
+
+`AGENTS.md` carries all 64 imperative rules; their full explanations and
+exceptions live in `docs/agents/invariants.md`. The shorter startup card points
+to that record before work in a governed area. Claude's rule extracts and
+Cursor's references retain their paths, so reducing startup text does not
+remove the reasoning or require maintaining a second set of constraints.
+
 ## A second hull, a ship the player picks, and solo behind a dev flag (4 Sep 2026)
 
 `data/models/` now holds two hulls. The Rocinante — the _Corvette_-class light
@@ -8678,6 +8911,71 @@ as `ir.view('orbit')` and `ir.flightCamera`, and rides `HarnessStatus` so a
 plate beside the hull records the orbit it was taken from. `V` cycles the
 views, `Home` levels the head, and the drag sensitivity is the one number
 every draggable camera now reads, `dragSensitivityOf`.
+
+## The two engines, the throttle, the navigation cluster, and the mirrored orbit (4 Sep 2026)
+
+The second pass over the Rocinante's flight model, and the instrument that
+made the first pass's defects visible.
+
+**The forward translation axis fired the main drive at 3 g both ways.** A
+retro was the drive run backwards — fourteen bow jets the size of a fist
+drawn decelerating a frigate at three g — and a nudge ahead for docking was
+a transit burn for as long as W was down. `docs/design/flight.md` is built on
+the drive being one throttle a pilot sets and leaves, so `ControlInput` now
+carries the thrusters (`translation`, six ways at 8 m/s² on the debug hull)
+and the drive (`throttle`, 0..1 at 30 m/s², ahead only) apart, and
+`resolveThrust` hands back both shares beside their sum. The throttle is
+canonical: hashed, saved with a decoder that bounds it to a fraction and
+reads an older save as a cold drive, and a term the rails refuse. It has its
+own verb, `setThrottle`, because a key edge writes the thrusters forty times
+a burn and never means to touch the drive; `setControl` leaves it where it
+is, and every placement verb in the harness cuts it — a ship put into a
+circular orbit with its drive lit is not in that orbit on the next tick. The
+self-test's movement check burns on the drive now: on the thrusters alone
+the probe crossed 400 m of its 1 km floor in ten seconds, against 6.81 km.
+Keys: W/S are the thrusters; T and G walk the throttle a twentieth at a time
+on the operating system's repeat, Shift+T and Shift+G slam it.
+
+**The orbit beside the hull was mirrored.** `orbitFrame` built its basis as
+(east, pole × east), the right-handed geographic frame whose azimuth runs
+counter-clockwise from above, while `observerOffset` swings from +X toward
++Z, clockwise — and both cameras share `applyDrag`, whose sign was settled
+against the planetarium. Every property in `camera.test.ts` held, because
+the frame was orthonormal and consistent with its own inverse; what nothing
+asserted was the sense of the swing. The orbit is now `observerOffset`
+carried into a local frame whose y is the scene's up, and the test that
+holds it compares the sign of a rightward drag's swing about the pole with
+the planetarium's, for any up.
+
+**The navigation cluster.** A navball drawn on a canvas in an animation-frame
+loop from `engine.scene()`, because eight poses a second of a hull rolling
+through a flip is a ball that jumps rather than turns; the readings beside
+it — speed against the ground within ten kilometers of it and in the frame
+beyond, the throttle on a ring, the altitude, the rate of climb on a
+symmetric log ring that spends a tenth of its needle on the first meter a
+second, the thrusters' state, the assist, the conic — off the 8 Hz sampler
+through `EntityInspection`. The scene carries the horizon (`RenderScene.horizon`:
+the nearest body's up, its pole laid flat for north, and the ground's own
+velocity under the eye) and the frame-relative velocity per entity, because
+a prograde mark taken from the universe velocity of a ship in low Earth orbit
+points along the ecliptic — thirty kilometers a second of Earth's year —
+whatever the orbit does. Below the compact breakpoint it is not drawn.
+
+**The bank was scaled by the cosine of the pitch.** The first `attitudeOf`
+took the sine of the roll against the horizon's up rather than the level up
+that goes with the nose, so a hull banked a radian while pitched to 86° read
+a quarter of it. A round-trip property with a six-digit tolerance failed
+intermittently and shrank to the boundary, which is the signature of a
+region of the input space losing far more than rounding; a 200,000-sample
+probe put the worst case at 1.05 rad, and the fix took it to 2e-14. The
+example test pins the steep case so shrinking cannot hide it again.
+
+**Seen and left.** Flight opens with the assist off: the boot frames the menu
+through `shot('gibbous')`, which switches the assist off to hold the
+composition, and solo inherits that ship. The Enterprise draws no plumes
+still. `universal.test.ts`'s ellipse property failed once at a bound of
+2.55e-7 against 2.5499e-7 and passed three runs after; it is a pre-existing
+razor and worth a measured tolerance.
 
 ## Known gaps
 
