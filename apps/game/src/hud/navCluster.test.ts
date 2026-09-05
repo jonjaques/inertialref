@@ -5,6 +5,7 @@ import {
   arcPath,
   CLIMB_FULL_SCALE,
   climbGauge,
+  formatAltitude,
   formatClimb,
   formatDegrees,
   formatHeading,
@@ -93,6 +94,14 @@ describe('the figures', () => {
     expect(formatDegrees(0.3)).toBe('+17°')
     expect(formatDegrees(-0.3)).toBe('−17°')
     expect(formatDegrees(0)).toBe('0°')
+  })
+
+  it('reads the ground as zero meters, and everything else as a reading', () => {
+    expect(formatAltitude(0)).toBe('0 m')
+    expect(formatAltitude(0.2)).toBe('0 m')
+    expect(formatAltitude(47.75)).toBe('47.8 m')
+    expect(formatAltitude(400_000)).toBe('400 km')
+    expect(formatAltitude(null)).toBe('—')
   })
 
   it('writes a throttle as a percentage', () => {

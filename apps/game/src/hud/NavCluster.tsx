@@ -9,6 +9,7 @@ import {
   CLIMB_ARC,
   climbArc,
   climbGauge,
+  formatAltitude,
   formatClimb,
   formatSpeed,
   formatThrottle,
@@ -161,7 +162,7 @@ export function NavCluster({
               {player.landed ? 'Landed' : 'Altitude'}
             </span>
             <span className="type-figure block text-slate-200 tabular-nums">
-              {player.altitudeText ?? '—'}
+              {formatAltitude(player.altitude)}
             </span>
           </div>
           <div className="type-readout flex w-full items-baseline justify-between rounded border border-slate-700/60 bg-slate-950/85 px-2 py-1 backdrop-blur">

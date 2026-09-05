@@ -108,6 +108,17 @@ export function formatDegrees(radians: number): string {
   return `${degrees > 0 ? '+' : degrees < 0 ? '−' : ''}${Math.abs(degrees)}°`
 }
 
+/**
+ * An altitude for the readout: the shared reading, except that the ground
+ * itself is "0 m" rather than the "0.00 mm" the unit ladder bottoms out at.
+ * A ship on the pad reads zero to the millimeter by construction, and a
+ * figure in millimeters says the instrument is measuring something.
+ */
+export function formatAltitude(metres: number | null): string {
+  if (metres === null || !Number.isFinite(metres)) return '—'
+  return Math.abs(metres) < 0.5 ? '0 m' : formatReading(metres)
+}
+
 /** A throttle as a whole percentage. */
 export const formatThrottle = (fraction: number): string =>
   `${Math.round(fraction * 100)}%`
