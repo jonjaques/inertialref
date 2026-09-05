@@ -551,8 +551,8 @@ verifies each source, bandpass and viewing geometry before accepting its target:
 | Face-on central surface brightness from outside         | 21.65 B mag/arcsec² (Freeman's law)                                 | 0.3 mag   |
 
 The unit is the sensor's: luminance in cd/m², and 22 mag/arcsec² is 2 × 10⁻⁴
-cd/m², thirteen orders below the Sun's disk; which is the range the sensor's
-pre-exposure exists to carry. The bake stores nW m⁻² sr⁻¹, values from 10 to
+cd/m², thirteen orders below the Sun's disk. The sensor's pre-exposure carries
+the portion of that range visible in the current frame. The bake stores nW m⁻² sr⁻¹, values from 10 to
 10⁴, because the same numbers in W m⁻² sr⁻¹ sit at 10⁻⁸ and below half-float's
 normal range.
 
@@ -561,8 +561,8 @@ versioned through `algorithm()` and `manifest()` like every other one
 ([ADR-0005](../../docs/adr/0005-procedural-seeds.md)). One consequence is worth
 stating plainly: `proceduralCount` reads `stellarDensity`, so any change to the
 field moves which procedural systems exist beyond the survey cube and what their
-ids are. Nothing persistent references them yet. Each field revision carries an
-algorithm version. M2 through M6 build and calibrate the field without changing
+ids are. M9 checks save and address references before activating that change.
+Each field revision carries an algorithm version. M2 through M6 build and calibrate the field without changing
 the active population generator. M9 activates the calibrated field for
 population generation and records that version change. Later recalibration is
 another versioned change.
