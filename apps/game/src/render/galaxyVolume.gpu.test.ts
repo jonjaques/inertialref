@@ -14,10 +14,8 @@ import { rootSeed } from '@inertialref/procedural'
 import { createGalaxyField } from '@inertialref/universe'
 import {
   DEFAULT_SENSOR_SETTINGS,
-  exposureForLuminance,
-  exposureValue,
+  exposurePinnedToLens,
   GALAXY_VIEWS,
-  SURFACE_LUMINANCE,
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import { createGalaxyBackdrop, GalaxyVolumeNode } from './galaxyVolume.ts'
@@ -68,7 +66,7 @@ it('updates every sensor submission and composes foreground depth at full resolu
     settings: DEFAULT_SENSOR_SETTINGS,
     time: 0,
     headroom: 1,
-    pinned: exposureValue(view.lens) - exposureForLuminance(SURFACE_LUMINANCE),
+    pinned: exposurePinnedToLens(view.lens),
   }))
   try {
     await volume.warm(renderer)

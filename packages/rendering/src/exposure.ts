@@ -66,6 +66,19 @@ export function isSensorSettings(value: unknown): value is SensorSettings {
 export const exposureForLuminance = (luminance: number): number =>
   Math.log2(Math.max(1e-12, luminance) / 1.2)
 
+/**
+ * The pin that holds the meter at the lens's own exposure.
+ *
+ * `ExposureMeter.update` reads a pin as stops *from* the surface calibration
+ * and adds that back, so an instrument that wants its stated f-number, shutter
+ * and ISO honoured has to hand over the difference — which is arithmetic worth
+ * one name rather than the same three symbols imported wherever a fixed
+ * instrument is set up. Not the same thing as the `direct` response, which is
+ * a preference the viewer owns.
+ */
+export const exposurePinnedToLens = (lens: Lens): number =>
+  exposureValue(lens) - exposureForLuminance(SURFACE_LUMINANCE)
+
 export function splitExposure(ev: number, previous: number) {
   const total = exposureMultiplier(ev)
   const pre = exposureMultiplier(previous)
