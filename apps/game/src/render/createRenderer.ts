@@ -9,7 +9,7 @@ import {
   resolveOutputMode,
 } from './output.ts'
 import { declareSceneTarget } from './sensor.ts'
-import { configureGamut, DISPLAY_P3 } from './gamut.ts'
+import { createCanvasGamut, type CanvasGamut } from './gamut.ts'
 import {
   installToneCurve,
   selectToneCurve,
@@ -37,6 +37,7 @@ const log = getLogger('game.render')
 export interface RendererHandle {
   readonly renderer: WebGPURenderer
   readonly description: RendererDescription
+  readonly gamut: CanvasGamut
   readonly tone: ToneCurveControls
 }
 
@@ -226,28 +227,13 @@ async function buildRenderer(
   const backend = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl'
   const mode: OutputMode = backend === 'webgpu' ? requested : 'standard'
   const headroom = headroomFor(mode)
-  const wide = configureGamut(renderer, mode === 'extended')
-  if (wide) {
-    renderer.outputColorSpace = DISPLAY_P3
-    /*
-     * three configures the canvas lazily and forgets that configuration on
-     * every resize: `updateSize` drops the canvas target's record, and the
-     * next frame's `context` getter runs `configure()` again with no color
-     * space, so the canvas is sRGB again while the encoder keeps writing P3
-     * primaries. R3F's own `setSize` after this factory resolves is the first
-     * such resize, so without this the picture is desaturated from its first
-     * frame. three registered its listener in the renderer's constructor and
-     * listeners fire in registration order, which is what makes re-declaring
-     * here land after the reconfigure rather than before it.
-     */
-    renderer.getCanvasTarget().addEventListener('resize', () => {
-      configureGamut(renderer, true)
-    })
-  }
+  const gamut = createCanvasGamut(renderer, mode === 'extended')
 
   const tone = installToneCurve(renderer, headroom)
   const description: RendererDescription = {
-    gamut: wide ? 'display-p3' : 'srgb',
+    get gamut() {
+      return gamut.colorSpace
+    },
     backend,
     mode,
     preference,
@@ -265,7 +251,7 @@ async function buildRenderer(
     extendedCanvas: capability.extendedCanvas,
   })
 
-  live = { renderer, description, tone }
+  live = { renderer, description, tone, gamut }
   onReady(live)
   return renderer
 }
@@ -280,15 +266,12 @@ async function buildRenderer(
  * makes it worth a named function: on the extended path it throws away the
  * entire range this migration is for.
  *
- * `outputColorSpace` is deliberately left as R3F set it. `SRGBColorSpace` is
- * correct for extended output too — three applies the sRGB transfer without a
- * clamp, so 2.0 encodes to 1.353 and reaches the compositor intact, which is
- * what extended sRGB means.
+ * The gamut module restores the current negotiated primaries alongside the
+ * curve. The initial description cannot answer a resize that fell back to sRGB.
  */
 export function commitToneCurve(handle: RendererHandle): void {
   selectToneCurve(handle.renderer)
-  if (handle.description.gamut === 'display-p3')
-    handle.renderer.outputColorSpace = DISPLAY_P3
+  handle.gamut.commit()
 }
 
 /**
@@ -318,6 +301,7 @@ export function commitToneCurve(handle: RendererHandle): void {
  */
 export function releaseRenderer(): void {
   if (live === null) return
+  live.gamut.dispose()
   live.renderer.dispose()
   live = null
 }
