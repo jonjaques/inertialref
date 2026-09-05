@@ -206,11 +206,13 @@ function checkAstronomicalDistances(world: World): CapabilityResult {
 function checkMovementWithinSystem(): CapabilityResult {
   const world = scratchWorld()
   const ship = world.spawnShip('probe', systemFrameId(SOL), vec3(1e9, 0, 0))
-  world.setControl(ship.id, vec3(0, 0, 1), Vec.ZERO)
+  // The main drive, not the thrusters: the thrusters make under a g and a
+  // system is crossed on the drive.
+  world.setThrottle(ship.id, 1)
   const before = world.canonicalPositionOf(ship.id)
   world.runTicks(640)
   const travelled = UV.distance(before, world.canonicalPositionOf(ship.id))
-  // 10 s at 30 m/s² is ~1.5 km under thrust alone.
+  // 10 s at 30 m/s² is ~1.5 km under the drive alone.
   if (travelled < 1_000)
     return failure(
       4,

@@ -97,23 +97,20 @@ export function nozzleWrench(nozzle: Nozzle): NozzleWrench {
 }
 
 /**
- * A layout, prepared for `nozzleFiring`: every valve's wrench, and whether
- * the forward axis belongs to a drive.
+ * A layout, prepared for `nozzleFiring`: every valve's wrench, once.
  *
- * A hull with a main drive burns ahead on the drive alone, so the valves never
- * see the forward half of the linear demand — a stern pod whose exhaust leans
- * a little aft would otherwise glow at a quarter through every burn, which is
- * not how a ship with an Epstein drive is flown. A hull with no drive has
- * nothing else to push it, and its aft-blowing valves take the burn.
+ * The valves never see the drive. The demand keeps the two engines apart —
+ * `linear` is the thrusters and `drive` is the throttle — so a stern pod
+ * whose exhaust leans a little aft is lit by a push ahead on the thrusters,
+ * which is right, and not by a burn on the drive, which would glow it at a
+ * quarter through every transit.
  */
 export interface NozzleAllocation {
   readonly wrenches: readonly NozzleWrench[]
-  readonly forwardByDrive: boolean
 }
 
 export const prepareNozzles = (layout: ThrusterLayout): NozzleAllocation => ({
   wrenches: layout.nozzles.map(nozzleWrench),
-  forwardByDrive: layout.drive !== null,
 })
 
 // `<= 0` rather than `< 0`, so a negated zero comes out as the zero it is: a
@@ -139,12 +136,8 @@ export function nozzleFiring(
   demand: ThrustDemand,
   out: Float32Array,
 ): void {
-  const { wrenches, forwardByDrive } = allocation
-  const linear =
-    forwardByDrive && demand.linear.z < 0
-      ? { x: demand.linear.x, y: demand.linear.y, z: 0 }
-      : demand.linear
-  const angular = demand.angular
+  const { wrenches } = allocation
+  const { linear, angular } = demand
   for (let i = 0; i < wrenches.length; i += 1) {
     const wrench = wrenches[i] as NozzleWrench
     out[i] = clamp01(
@@ -155,11 +148,11 @@ export function nozzleFiring(
 }
 
 /**
- * The main drive's throttle, 0..1: the forward demand alone.
+ * The main drive's throttle, 0..1: the demand's own `drive`, clamped.
  *
- * Forward is −Z, so a burn ahead is a negative `linear.z`. A retro command
- * lights nothing here — the drive is not reversible — and the bow jets whose
- * exhaust points ahead pick it up through `nozzleFiring` instead.
+ * Nothing on the thrusters reaches it. A retro is a push astern on the
+ * thrusters and lights the bow jets through `nozzleFiring`; the drive is not
+ * reversible and has no picture for one.
  */
 export const driveThrottle = (demand: ThrustDemand): number =>
-  clamp01(-demand.linear.z)
+  clamp01(demand.drive)

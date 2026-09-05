@@ -863,10 +863,14 @@ export class GameHarness {
     this.world.clock.setTimeScale(scale)
   }
 
-  /** Set the player's control input directly, as the keyboard would. */
+  /**
+   * Set the player's control input directly, as the keyboard would: the
+   * thrusters, the attitude, and the drive's throttle, each only if given.
+   */
   control(input: {
     translation?: [number, number, number]
     rotation?: [number, number, number]
+    throttle?: number
   }): void {
     const player = this.#requirePlayer()
     const entity = this.world.entities.require(player)
@@ -879,10 +883,31 @@ export class GameHarness {
         ? entity.control.rotation
         : vec3(...input.rotation),
     )
+    if (input.throttle !== undefined)
+      this.world.setThrottle(player, input.throttle)
   }
 
+  /** The main drive, 0..1. Returns the setting the world kept. */
+  throttle(fraction: number): number {
+    return this.world.setThrottle(this.#requirePlayer(), fraction).control
+      .throttle
+  }
+
+  /** Hands off everything: thrusters neutral, attitude neutral, drive cold. */
   hold(): void {
-    this.control({ translation: [0, 0, 0], rotation: [0, 0, 0] })
+    this.control({ translation: [0, 0, 0], rotation: [0, 0, 0], throttle: 0 })
+  }
+
+  /**
+   * Neutral input after a teleport, drive included.
+   *
+   * Every placement verb ends here: a ship put into a circular orbit with
+   * its drive still lit is not in that orbit on the next tick, and a
+   * composition framed with the throttle open drifts out of its own picture.
+   */
+  #handsOff(player: EntityId): void {
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.world.setThrottle(player, 0)
   }
 
   flightAssist(enabled: boolean): void {
@@ -929,7 +954,7 @@ export class GameHarness {
       velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     log.info('placed in orbit', { address, altitudeKm, speed })
     return this.status()
   }
@@ -1015,7 +1040,7 @@ export class GameHarness {
       velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     log.info('placed in orbit of the star', { system: target.id, speed })
     return this.status()
   }
@@ -1085,7 +1110,7 @@ export class GameHarness {
       velocity: Vec.scale(placement.along, circularSpeed(body.mu, distance)),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     this.#trackOrbit()
     log.info('framed shot', { shot: name, address: target.text, distance })
     return this.status()
@@ -1130,7 +1155,7 @@ export class GameHarness {
       velocity: Vec.ZERO,
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     return this.status()
   }
 
@@ -1231,7 +1256,7 @@ export class GameHarness {
       velocity: Vec.ZERO,
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     return this.status()
   }
 
@@ -1250,7 +1275,7 @@ export class GameHarness {
   /** Aim the ship at a body and light the main drive. */
   burnToward(address: string, throttle = 1): HarnessStatus {
     this.#lookAt(this.#bodyPosition(address))
-    this.world.setControl(this.#requirePlayer(), vec3(0, 0, throttle), Vec.ZERO)
+    this.world.setThrottle(this.#requirePlayer(), throttle)
     return this.status()
   }
 
@@ -2142,7 +2167,7 @@ export class GameHarness {
       '  ir.dossier(address)           one star or body, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
-      '  ir.control({translation,rotation}) / ir.hold()',
+      '  ir.control({translation,rotation,throttle}) / ir.throttle(0..1) / ir.hold()',
       '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',

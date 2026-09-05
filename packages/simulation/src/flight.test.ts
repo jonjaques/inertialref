@@ -94,13 +94,66 @@ describe('the thrust demand', () => {
         const { rcsThrust, mainThrust, torque } = DEBUG_SHIP_THRUSTERS
         expect(demand.linear.x * rcsThrust).toBeCloseTo(commanded.linear.x, 9)
         expect(demand.linear.y * rcsThrust).toBeCloseTo(commanded.linear.y, 9)
-        expect(demand.linear.z * mainThrust).toBeCloseTo(commanded.linear.z, 9)
+        expect(demand.linear.z * rcsThrust).toBeCloseTo(
+          commanded.thrusters.z,
+          9,
+        )
+        expect(demand.drive * mainThrust).toBeCloseTo(commanded.drive, 9)
         expect(demand.angular.x * torque).toBeCloseTo(commanded.angular.x, 9)
         expect(demand.angular.y * torque).toBeCloseTo(commanded.angular.y, 9)
         expect(demand.angular.z * torque).toBeCloseTo(commanded.angular.z, 9)
       }),
       { numRuns: 40 },
     )
+  })
+
+  it('keeps the drive apart from the thrusters (property)', () => {
+    // The throttle is `drive` and nothing on the thrusters; a push ahead is
+    // a thruster at thruster authority and nothing on the drive. The sum the
+    // integrator applies is the two together, and only there do they meet.
+    const throttle = fc.double({ min: 0, max: 1, noNaN: true })
+    fc.assert(
+      fc.property(throttle, unit, (setting, ahead) => {
+        const { world, id } = shipInSpace()
+        world.setThrottle(id, setting)
+        world.setControl(id, vec3(0, 0, ahead), Vec.ZERO)
+        const entity = world.entities.require(id)
+        const demand = thrustDemand(entity, TICK_DURATION)
+        if (demand === null) throw new Error('a ship has thrusters')
+        expect(demand.drive).toBeCloseTo(setting, 12)
+        expect(demand.linear.z).toBeCloseTo(-ahead, 12)
+        const { rcsThrust, mainThrust } = DEBUG_SHIP_THRUSTERS
+        const commanded = commandedAcceleration(entity, TICK_DURATION)
+        expect(commanded.linear.z).toBeCloseTo(
+          -ahead * rcsThrust - setting * mainThrust,
+          9,
+        )
+      }),
+      { numRuns: 40 },
+    )
+  })
+
+  it('makes a retro the bow thrusters and never the drive run backwards', () => {
+    const { world, id } = shipInSpace()
+    world.setControl(id, vec3(0, 0, -1), Vec.ZERO)
+    const entity = world.entities.require(id)
+    const demand = thrustDemand(entity, TICK_DURATION)
+    expect(demand?.linear.z).toBe(1)
+    expect(demand?.drive).toBe(0)
+    // Less than a g astern, on a hull whose drive makes three ahead.
+    const commanded = commandedAcceleration(entity, TICK_DURATION)
+    expect(commanded.linear.z).toBe(DEBUG_SHIP_THRUSTERS.rcsThrust)
+    expect(commanded.drive).toBe(0)
+  })
+
+  it('clamps the throttle to a fraction and reads nonsense as a cold drive', () => {
+    const { world, id } = shipInSpace()
+    world.setThrottle(id, 4)
+    expect(world.entities.require(id).control.throttle).toBe(1)
+    world.setThrottle(id, -2)
+    expect(world.entities.require(id).control.throttle).toBe(0)
+    world.setThrottle(id, Number.NaN)
+    expect(world.entities.require(id).control.throttle).toBe(0)
   })
 
   it('rides the snapshot, so the picture reads the tick it was drawn from', () => {

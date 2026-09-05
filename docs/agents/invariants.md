@@ -192,7 +192,7 @@ the margin has to be no wider than the search that collected them.
 the store's read half, so there is no `update` to reach for. A ship that
 starts moving is spawned moving — `spawnShip` takes the velocity — and after
 that it is `teleport` for a discontinuous move and `setControl` /
-`setFlightAssist` / `killRotation` for input. Each carries the bookkeeping a
+`setThrottle` / `setFlightAssist` / `killRotation` for input. Each carries the bookkeeping a
 write needs: the interpolation history, the landed set, the rails epoch.
 
 ### Rule 13

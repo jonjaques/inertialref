@@ -127,6 +127,8 @@ export const DEBUG_SHIP_THRUSTERS: ThrusterProfile = {
   // 3 g of main drive, enough to cross a system in minutes under time warp
   // without being so brisk that maneuvering near a surface is unmanageable.
   mainThrust: 30,
+  // The thrusters, on every axis: a retro is these on the bow, at less than
+  // a g, which is why a ship that means to stop turns round and burns.
   rcsThrust: 8,
   torque: 1.2,
 }
@@ -139,7 +141,8 @@ export const DEBUG_SHIP_THRUSTERS: ThrusterProfile = {
  * interpolation history, the landed set, the rails epoch. A door that skips
  * that bookkeeping is exactly as wide as the one that does it, so there is no
  * such door on the type. The writers are `spawn`, `spawnShip`, `teleport`,
- * `reframeEntity`, `setControl`, `setFlightAssist` and `killRotation`.
+ * `reframeEntity`, `setControl`, `setThrottle`, `setFlightAssist` and
+ * `killRotation`.
  */
 export interface EntityView {
   get(id: EntityId): Entity | undefined

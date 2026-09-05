@@ -1599,6 +1599,21 @@ export class GameEngine {
     this.world.setControl(player, vec3(...translation), vec3(...rotation))
   }
 
+  /** The main drive, 0..1. Returns the setting the world kept. */
+  setThrottle(fraction: number): number {
+    const player = this.session.player()
+    if (player === null) return 0
+    return this.world.setThrottle(player, fraction).control.throttle
+  }
+
+  /** Walk the throttle by a step, from wherever it is. */
+  nudgeThrottle(delta: number): number {
+    const player = this.session.player()
+    if (player === null) return 0
+    const held = this.world.entities.require(player).control.throttle
+    return this.world.setThrottle(player, held + delta).control.throttle
+  }
+
   toggleFlightAssist(): boolean {
     const player = this.session.player()
     if (player === null) return false

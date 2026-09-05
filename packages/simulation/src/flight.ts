@@ -10,6 +10,7 @@ import {
   periapsis,
   pointMassAcceleration,
   propagateTwoBody,
+  type ResolvedThrust,
   resolveThrust,
 } from '@inertialref/physics'
 import {
@@ -172,8 +173,12 @@ function radiusVector(
   )
 }
 
-/** Air velocity at a point, from the body's rotation, in the entity's frame axes. */
-function airVelocity(
+/**
+ * Velocity of the air — and the ground — at a point, from the body's
+ * rotation, in the entity's frame axes. What a surface speed is measured
+ * against, and what the drag model measures the ship against.
+ */
+export function airVelocity(
   world: FlightWorld,
   binding: FrameBinding,
   radius: Vec3,
@@ -403,7 +408,8 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
     entity.thrusters !== null &&
     (Math.abs(entity.control.translation.x) > 0.01 ||
       Math.abs(entity.control.translation.y) > 0.01 ||
-      Math.abs(entity.control.translation.z) > 0.01)
+      Math.abs(entity.control.translation.z) > 0.01 ||
+      entity.control.throttle > 0.01)
 
   if (!wantsToLift) {
     // Attitude control still works on the pad; nothing else moves.
@@ -445,9 +451,10 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
 }
 
 /**
- * What the thrusters are commanded to produce this tick, in body axes: the
+ * What the engines are commanded to produce this tick, in body axes: the
  * linear acceleration in m/s² and the angular one in rad/s², the assist's
- * damping torque included.
+ * damping torque included, with the thrusters' and the drive's shares of the
+ * linear kept apart as `resolveThrust` hands them over.
  *
  * One function, read by both integrators and by the snapshot's `thrustDemand`,
  * so the nozzles a frame draws firing are the ones the tick fired. Two copies
@@ -462,7 +469,7 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
 export function commandedAcceleration(
   entity: Entity,
   dt: Seconds,
-): { readonly linear: Vec3; readonly angular: Vec3 } {
+): ResolvedThrust {
   const thrusters = entity.thrusters
   invariant(thrusters !== null, 'commandedAcceleration needs thrusters')
   const resolved = resolveThrust(thrusters, entity.control)
@@ -473,30 +480,32 @@ export function commandedAcceleration(
           dampingTorque(entity.state.angularVelocity, thrusters, dt),
         )
       : resolved.angular
-  return { linear: resolved.linear, angular }
+  return { ...resolved, angular }
 }
 
 /**
- * The commanded acceleration as fractions of the thruster profile's authority,
- * in body axes — what a renderer needs to decide which nozzles are firing and
+ * The commanded acceleration as fractions of the profile's authority, in
+ * body axes — what a renderer needs to decide which nozzles are firing and
  * how hard, without holding a copy of the profile.
  *
- * `linear` is signed along each body axis, so a burn ahead is `linear.z = −1`
- * (forward is −Z) and a strafe to starboard is `linear.x = +1`; `angular` is
- * about the body axes — pitch X, yaw Y, roll Z — as a fraction of `torque`.
- * Each component is in −1..1 by construction: the control is clamped there
- * and the damping torque is bounded by the same authority.
+ * `linear` is the thrusters, signed along each body axis, so a push ahead is
+ * `linear.z = −1` (forward is −Z) and a strafe to starboard is
+ * `linear.x = +1`; `angular` is about the body axes — pitch X, yaw Y, roll Z
+ * — as a fraction of `torque`; `drive` is the main drive's throttle. Each
+ * component is in −1..1 by construction, the drive in 0..1: the control is
+ * clamped there and the damping torque is bounded by the same authority.
  */
 export interface ThrustDemand {
   readonly linear: Vec3
   readonly angular: Vec3
+  readonly drive: number
 }
 
 /** Null for anything that cannot maneuver. */
 export function thrustDemand(entity: Entity, dt: Seconds): ThrustDemand | null {
   const thrusters = entity.thrusters
   if (thrusters === null) return null
-  const { linear, angular } = commandedAcceleration(entity, dt)
+  const commanded = commandedAcceleration(entity, dt)
   // A profile with no authority on an axis commands nothing on it; a division
   // there would be a NaN dressed as a demand. And a zero is a zero: the
   // forward axis arrives as `−0` from the sign flip in `resolveThrust`, and a
@@ -505,15 +514,16 @@ export function thrustDemand(entity: Entity, dt: Seconds): ThrustDemand | null {
     authority > 0 && value !== 0 ? value / authority : 0
   return {
     linear: vec3(
-      over(linear.x, thrusters.rcsThrust),
-      over(linear.y, thrusters.rcsThrust),
-      over(linear.z, thrusters.mainThrust),
+      over(commanded.thrusters.x, thrusters.rcsThrust),
+      over(commanded.thrusters.y, thrusters.rcsThrust),
+      over(commanded.thrusters.z, thrusters.rcsThrust),
     ),
     angular: vec3(
-      over(angular.x, thrusters.torque),
-      over(angular.y, thrusters.torque),
-      over(angular.z, thrusters.torque),
+      over(commanded.angular.x, thrusters.torque),
+      over(commanded.angular.y, thrusters.torque),
+      over(commanded.angular.z, thrusters.torque),
     ),
+    drive: over(commanded.drive, thrusters.mainThrust),
   }
 }
 
@@ -806,7 +816,8 @@ export function railsEpoch(
   const { control, state } = entity
   if (
     Vec.lengthSquared(control.translation) !== 0 ||
-    Vec.lengthSquared(control.rotation) !== 0
+    Vec.lengthSquared(control.rotation) !== 0 ||
+    control.throttle !== 0
   )
     return null
   if (entity.flightAssist && Vec.lengthSquared(state.angularVelocity) !== 0)

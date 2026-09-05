@@ -283,8 +283,9 @@ flowchart TB
     subgraph AIM["aim and burn"]
         F["ir.face(address)<br/><i>free — changes nothing else</i>"]
         BT["ir.burnToward(address, throttle)"]
-        C["ir.control({translation, rotation})"]
-        HOLD["ir.hold()"]
+        T["ir.throttle(0..1)<br/><i>the main drive — a setting,<br/>not a held key</i>"]
+        C["ir.control({translation, rotation, throttle})<br/><i>the thrusters, the attitude,<br/>and the drive if given</i>"]
+        HOLD["ir.hold()<br/><i>hands off everything,<br/>drive included</i>"]
     end
     POS --> AIM
 ```
@@ -298,6 +299,13 @@ Two notes worth internalising:
   and useless.
 - **`face` and `burnToward` are separate** because looking and accelerating are
   different acts. `face` costs nothing and does not perturb the trajectory.
+- **The thrusters and the drive are two controls.** `translation` is the
+  reaction-control system, six ways at under a g, and holds only while it is
+  set; `throttle` is the main drive, ahead only, at three g, and stays where
+  it is put — through `control` calls that do not mention it, and through a
+  save. `burnToward` sets the throttle, and every placement verb cuts it,
+  because a ship put into a circular orbit with its drive lit is not in that
+  orbit on the next tick.
 - **`land` does not land you.** It puts the ship on the pad — local `y = 0` in a
   surface frame _is_ the ground — and the contact test makes it landed on the
   next tick, so `ir.land(...).player.landed` is `false` and one `ir.step()`

@@ -17,6 +17,7 @@ const axes = fc.tuple(unit, unit, unit).map(([x, y, z]) => vec3(x, y, z))
 const demandArb: fc.Arbitrary<ThrustDemand> = fc.record({
   linear: axes,
   angular: axes,
+  drive: fc.double({ min: 0, max: 1, noNaN: true }),
 })
 
 /** A direction that is not degenerate: at least a tenth long before normalizing. */
@@ -105,7 +106,11 @@ describe('which nozzles fire', () => {
   it('none, for no demand (property)', () => {
     fc.assert(
       fc.property(layoutArb, (layout) => {
-        const out = fire(layout, { linear: Vec.ZERO, angular: Vec.ZERO })
+        const out = fire(layout, {
+          linear: Vec.ZERO,
+          angular: Vec.ZERO,
+          drive: 0,
+        })
         for (const value of out) expect(value).toBe(0)
       }),
     )
@@ -146,6 +151,7 @@ describe('which nozzles fire', () => {
           const part = fire(layout, {
             linear: Vec.scale(demand.linear, k),
             angular: Vec.scale(demand.angular, k),
+            drive: demand.drive,
           })
           for (let i = 0; i < full.length; i += 1)
             expect(part[i] as number).toBeLessThanOrEqual(
@@ -171,6 +177,7 @@ describe('which nozzles fire', () => {
         const right = fire(mirrored, {
           linear: mirrorX(demand.linear),
           angular: mirrorSpin(demand.angular),
+          drive: demand.drive,
         })
         for (let i = 0; i < left.length; i += 1)
           expect(right[i] as number).toBeCloseTo(left[i] as number, 9)
@@ -199,55 +206,75 @@ describe('which nozzles fire', () => {
       ],
       drive: null,
     }
-    const down = fire(layout, { linear: Vec.ZERO, angular: vec3(-1, 0, 0) })
+    const down = fire(layout, {
+      linear: Vec.ZERO,
+      angular: vec3(-1, 0, 0),
+      drive: 0,
+    })
     expect(Array.from(down)).toEqual([1, 1])
-    const up = fire(layout, { linear: Vec.ZERO, angular: vec3(1, 0, 0) })
+    const up = fire(layout, {
+      linear: Vec.ZERO,
+      angular: vec3(1, 0, 0),
+      drive: 0,
+    })
     expect(Array.from(up)).toEqual([0, 0])
     // A translation down lights only the jet whose thrust is down — the bow
     // one — at full, and the stern one not at all.
-    const sink = fire(layout, { linear: vec3(0, -1, 0), angular: Vec.ZERO })
+    const sink = fire(layout, {
+      linear: vec3(0, -1, 0),
+      angular: Vec.ZERO,
+      drive: 0,
+    })
     expect(Array.from(sink)).toEqual([1, 0])
   })
 })
 
 describe('the drive', () => {
-  it('owns the forward axis when there is one, and the valves take it when there is not', () => {
-    // A stern valve whose exhaust leans aft helps a burn ahead — unless a
-    // drive is doing the burning.
+  it('never reaches the valves, and the thrusters never reach it', () => {
+    // A stern valve whose exhaust leans aft helps a push ahead on the
+    // thrusters, with or without a drive on the hull — the drive is its own
+    // number and takes nothing from the valves' demand.
     const stern: Nozzle = {
       position: vec3(3, 3, 12),
       exhaust: Vec.normalize(vec3(0.7, 0.7, 0.25)),
       radius: 0.5,
       kind: 'pod',
     }
-    const ahead: ThrustDemand = { linear: vec3(0, 0, -1), angular: Vec.ZERO }
-    const withDrive = fire(
-      { nozzles: [stern], drive: { position: vec3(0, 0, 21), radius: 3 } },
-      ahead,
+    const drive = { position: vec3(0, 0, 21), radius: 3 }
+    const ahead: ThrustDemand = {
+      linear: vec3(0, 0, -1),
+      angular: Vec.ZERO,
+      drive: 0,
+    }
+    expect(fire({ nozzles: [stern], drive }, ahead)[0]).toBeGreaterThan(0.2)
+    expect(fire({ nozzles: [stern], drive: null }, ahead)[0]).toBeGreaterThan(
+      0.2,
     )
-    const without = fire({ nozzles: [stern], drive: null }, ahead)
-    expect(withDrive[0]).toBe(0)
-    expect(without[0]).toBeGreaterThan(0.2)
-    // The drive takes nothing else: a strafe still lights the valve either way.
-    const strafe: ThrustDemand = { linear: vec3(-1, 0, 0), angular: Vec.ZERO }
-    expect(
-      fire(
-        { nozzles: [stern], drive: { position: vec3(0, 0, 21), radius: 3 } },
-        strafe,
-      )[0],
-    ).toBeGreaterThan(0.5)
+    // A full burn on the drive alone opens no valve at all.
+    const burn: ThrustDemand = { linear: Vec.ZERO, angular: Vec.ZERO, drive: 1 }
+    expect(fire({ nozzles: [stern], drive }, burn)[0]).toBe(0)
+    expect(driveThrottle(burn)).toBe(1)
+    expect(driveThrottle(ahead)).toBe(0)
   })
 
-  it('opens on a burn ahead and stays shut for a retro (property)', () => {
+  it("is the demand's own throttle, clamped to a fraction (property)", () => {
     fc.assert(
       fc.property(demandArb, (demand) => {
         const throttle = driveThrottle(demand)
         expect(throttle).toBeGreaterThanOrEqual(0)
         expect(throttle).toBeLessThanOrEqual(1)
-        if (demand.linear.z < 0)
-          expect(throttle).toBeCloseTo(-demand.linear.z, 12)
-        else expect(throttle).toBe(0)
+        expect(throttle).toBeCloseTo(demand.drive, 12)
+        // Nothing on the thrusters moves it.
+        expect(driveThrottle({ ...demand, linear: vec3(0, 0, -1) })).toBe(
+          throttle,
+        )
       }),
     )
+    expect(
+      driveThrottle({ linear: Vec.ZERO, angular: Vec.ZERO, drive: 3 }),
+    ).toBe(1)
+    expect(
+      driveThrottle({ linear: Vec.ZERO, angular: Vec.ZERO, drive: -1 }),
+    ).toBe(0)
   })
 })

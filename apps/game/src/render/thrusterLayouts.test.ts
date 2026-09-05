@@ -20,7 +20,7 @@ import { LAID_OUT_SHIPS, thrusterLayoutFor } from './thrusterLayouts.ts'
 
 const fire = (layout: ThrusterLayout, linear: Vec3, angular: Vec3) => {
   const out = new Float32Array(layout.nozzles.length)
-  nozzleFiring(prepareNozzles(layout), { linear, angular }, out)
+  nozzleFiring(prepareNozzles(layout), { linear, angular, drive: 0 }, out)
   return Array.from(out)
 }
 type Vec3 = ReturnType<typeof vec3>
@@ -77,11 +77,11 @@ describe.each(LAID_OUT_SHIPS)('the %s layout', (id) => {
           axis === 1 ? sign : 0,
           axis === 2 ? sign : 0,
         )
-        // Ahead is the drive's, not a valve's.
-        const lit = fire(layout, linear, zero).some((v) => v > 0.3)
-        if (axis === 2 && sign === -1)
-          expect(driveThrottle({ linear, angular: zero })).toBe(1)
-        else expect(lit).toBe(true)
+        // A push ahead is the thrusters' too, and the only valves that
+        // lean aft are the stern corners at a quarter, so it is a dim set;
+        // every other way has a valve pointing the way it is asked.
+        const floor = axis === 2 && sign === -1 ? 0.2 : 0.3
+        expect(fire(layout, linear, zero).some((v) => v > floor)).toBe(true)
         expect(fire(layout, zero, linear).some((v) => v > 0.3)).toBe(true)
       }
   })
@@ -112,13 +112,25 @@ describe('the Rocinante in particular', () => {
     expect(firing[at(0, -0.05, -17.717)]).toBeCloseTo(0.999, 3)
     for (const n of layout.nozzles.keys())
       if ((layout.nozzles[n]?.position.z ?? 0) > 0) expect(firing[n]).toBe(0)
-    expect(driveThrottle({ linear: vec3(0, 0, 1), angular: Vec.ZERO })).toBe(0)
+    expect(
+      driveThrottle({ linear: vec3(0, 0, 1), angular: Vec.ZERO, drive: 0 }),
+    ).toBe(0)
   })
 
-  it('burns ahead on the drive alone', () => {
+  it('pushes ahead on the stern corners, and burns on the drive alone', () => {
+    // The thrusters ahead: the four stern corners lean a quarter aft and
+    // take it, nothing forward of the centre opens, and the drive stays cold
+    // — it is its own number, and a full burn opens no valve at all.
     const firing = fire(layout, vec3(0, 0, -1), Vec.ZERO)
-    expect(firing.every((v) => v === 0)).toBe(true)
-    expect(driveThrottle({ linear: vec3(0, 0, -1), angular: Vec.ZERO })).toBe(1)
+    for (const n of layout.nozzles.keys())
+      if ((layout.nozzles[n]?.position.z ?? 0) < 0) expect(firing[n]).toBe(0)
+    expect(firing[at(3.272, -3.163, 12.022)]).toBeGreaterThan(0.2)
+    expect(firing[at(-3.272, 3.163, 12.022)]).toBeGreaterThan(0.2)
+    const ahead = { linear: vec3(0, 0, -1), angular: Vec.ZERO, drive: 0 }
+    expect(driveThrottle(ahead)).toBe(0)
+    const burn = { linear: Vec.ZERO, angular: Vec.ZERO, drive: 1 }
+    expect(driveThrottle(burn)).toBe(1)
+    expect(fire(layout, Vec.ZERO, Vec.ZERO).every((v) => v === 0)).toBe(true)
   })
 })
 

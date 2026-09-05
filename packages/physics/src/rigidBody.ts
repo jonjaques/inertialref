@@ -115,47 +115,95 @@ export function dragAcceleration(
 /* Control                                                                    */
 /* ------------------------------------------------------------------------- */
 
-/** Per-axis thruster authority of a spacecraft, in body axes. */
+/*
+ * A ship has two kinds of engine, and they are not two sizes of one thing.
+ *
+ * The **thrusters** are a reaction-control system: small valves all over the
+ * hull that push it any of six ways and turn it about any of three axes, at
+ * an authority measured in single meters per second squared. The **main
+ * drive** is one engine on the axis, pointing aft, that pushes ahead and
+ * nowhere else, at an authority measured in g. A retro is not the drive run
+ * backwards — there is no such thing — it is the bow thrusters, or a flip and
+ * a burn, which is the whole discipline `docs/design/flight.md` is built on.
+ *
+ * So the control carries them separately. `translation` is what the
+ * thrusters are asked for, ahead and astern included; `throttle` is how hard
+ * the drive burns, a setting that stays where it is put rather than a key
+ * that is held. Folding the drive into the forward translation gave a ship
+ * that decelerated at three g on fourteen bow jets the size of a fist.
+ */
+
+/** Per-axis authority of a spacecraft's engines, in body axes. */
 export interface ThrusterProfile {
-  /** Main drive acceleration along −Z (forward), m/s². */
+  /** The main drive at full throttle, along −Z (ahead) and only that way, m/s². */
   readonly mainThrust: number
-  /** Translation authority on the other axes, m/s². */
+  /** The thrusters' authority on every axis, ahead and astern included, m/s². */
   readonly rcsThrust: number
   /** Angular authority about each body axis, rad/s². */
   readonly torque: number
 }
 
 export interface ControlInput {
-  /** −1..1 per body axis: right, up, forward(−Z is forward, so +1 is thrust ahead). */
+  /**
+   * −1..1 per body axis for the thrusters: right, up, ahead. Forward is −Z,
+   * so a +1 on the third asks for thrust ahead and a −1 for a retro.
+   */
   readonly translation: Vec3
   /** −1..1 per body axis: pitch (X), yaw (Y), roll (Z). */
   readonly rotation: Vec3
+  /** 0..1: how hard the main drive burns. Zero is a cold drive. */
+  readonly throttle: number
 }
 
 export const NEUTRAL_CONTROL: ControlInput = Object.freeze({
   translation: vec3(0, 0, 0),
   rotation: vec3(0, 0, 0),
+  throttle: 0,
 })
 
 const clamp1 = (v: number): number => Math.max(-1, Math.min(1, v))
+
+/** A throttle is a fraction; anything else — a NaN included — is a cold drive. */
+export const clampThrottle = (v: number): number => (v >= 1 ? 1 : v > 0 ? v : 0)
+
+/**
+ * What the engines produce for an input, in body axes.
+ *
+ * `linear` is the sum the integrator applies; `thrusters` and `drive` are its
+ * two parts kept apart, because a picture of the hull has to know which
+ * engine is firing and the sum cannot say. Both are accelerations in m/s²,
+ * and `drive` is unsigned: it only ever pushes ahead.
+ */
+export interface ResolvedThrust {
+  readonly linear: Vec3
+  readonly angular: Vec3
+  /** The thrusters' share of `linear`, signed along the body axes. */
+  readonly thrusters: Vec3
+  /** The drive's share, as a magnitude along −Z. */
+  readonly drive: number
+}
 
 /** Resolve control input into body-axes linear and angular acceleration. */
 export function resolveThrust(
   profile: ThrusterProfile,
   input: ControlInput,
-): { linear: Vec3; angular: Vec3 } {
+): ResolvedThrust {
+  const thrusters = vec3(
+    clamp1(input.translation.x) * profile.rcsThrust,
+    clamp1(input.translation.y) * profile.rcsThrust,
+    // Forward is −Z, matching the camera convention.
+    -clamp1(input.translation.z) * profile.rcsThrust,
+  )
+  const drive = clampThrottle(input.throttle) * profile.mainThrust
   return {
-    linear: vec3(
-      clamp1(input.translation.x) * profile.rcsThrust,
-      clamp1(input.translation.y) * profile.rcsThrust,
-      // Forward is −Z, matching the camera convention.
-      -clamp1(input.translation.z) * profile.mainThrust,
-    ),
+    linear: vec3(thrusters.x, thrusters.y, thrusters.z - drive),
     angular: vec3(
       clamp1(input.rotation.x) * profile.torque,
       clamp1(input.rotation.y) * profile.torque,
       clamp1(input.rotation.z) * profile.torque,
     ),
+    thrusters,
+    drive,
   }
 }
 

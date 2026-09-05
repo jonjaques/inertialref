@@ -51,7 +51,7 @@ import {
   walkBodies,
   planetCount,
 } from '@inertialref/universe'
-import { periapsis, visViva } from '@inertialref/physics'
+import { clampThrottle, periapsis, visViva } from '@inertialref/physics'
 import type { FrameBinding } from './binding.ts'
 import { SimulationClock, TICK_DURATION, timeOfTick } from './clock.ts'
 import {
@@ -474,7 +474,7 @@ export class World implements FlightWorld {
    * Control lives here rather than in the caller for the same reason `teleport`
    * does: the store's write half is not on `World.entities`, so the
    * interpolation, landed-set and rails bookkeeping a write needs cannot be
-   * skipped from outside. These three are the whole of what a player can
+   * skipped from outside. These four are the whole of what a player can
    * change.
    *
    * Each takes an entity off the rails when what it changes is a term the
@@ -484,11 +484,34 @@ export class World implements FlightWorld {
    * not re-anchor the conic on a different rounding.
    */
 
+  /** The thrusters and the attitude. The throttle stays where it was. */
   setControl(id: EntityId, translation: Vec3, rotation: Vec3): Entity {
     const neutral =
       Vec.lengthSquared(translation) === 0 && Vec.lengthSquared(rotation) === 0
     if (!neutral) this.#leaveRails(id)
-    return this.#entities.update(id, { control: { translation, rotation } })
+    const { throttle } = this.#entities.require(id).control
+    return this.#entities.update(id, {
+      control: { translation, rotation, throttle },
+    })
+  }
+
+  /**
+   * The main drive's throttle, 0..1, clamped there.
+   *
+   * A setting rather than a held key: it stays where it is put until
+   * something puts it elsewhere, which is what lets a burn outlast a hand on
+   * the keyboard, a mode change and a save. Its own verb rather than a fourth
+   * argument to `setControl` because the two are set by different acts — a
+   * key edge writes the thrusters forty times a burn and never means to touch
+   * the drive.
+   */
+  setThrottle(id: EntityId, throttle: number): Entity {
+    const clamped = clampThrottle(throttle)
+    if (clamped !== 0) this.#leaveRails(id)
+    const control = this.#entities.require(id).control
+    return this.#entities.update(id, {
+      control: { ...control, throttle: clamped },
+    })
   }
 
   setFlightAssist(id: EntityId, enabled: boolean): boolean {
@@ -971,6 +994,7 @@ export class World implements FlightWorld {
           `|${s.angularVelocity.x},${s.angularVelocity.y},${s.angularVelocity.z}` +
           `|${c.translation.x},${c.translation.y},${c.translation.z}` +
           `|${c.rotation.x},${c.rotation.y},${c.rotation.z}` +
+          `|${c.throttle}` +
           `|${entity.flightAssist ? 'assist' : 'manual'}` +
           `|${this.#landed.has(entity.id) ? 'landed' : 'free'}` +
           (r === null

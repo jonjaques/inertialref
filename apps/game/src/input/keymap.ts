@@ -297,10 +297,11 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('panel.perf', 'Perf', 'Panels', 'global', chord('KeyP')),
 
   /* ------------------------------- flight ------------------------------- */
-  press('flight.fore', 'Main Drive', 'Flight', 'flight', chord('KeyW'), {
+  press('flight.fore', 'Thrust Ahead', 'Flight', 'flight', chord('KeyW'), {
     held: true,
+    hint: 'the thrusters, not the drive — a nudge, for docking and station-keeping',
   }),
-  press('flight.aft', 'Retro', 'Flight', 'flight', chord('KeyS'), {
+  press('flight.aft', 'Thrust Astern', 'Flight', 'flight', chord('KeyS'), {
     held: true,
   }),
   press('flight.left', 'Translate Left', 'Flight', 'flight', chord('KeyA'), {
@@ -345,6 +346,41 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('flight.rollRight', 'Roll Right', 'Flight', 'flight', chord('KeyE'), {
     held: true,
   }),
+  /*
+   * The drive is a setting, not a held key, so its four acts are presses.
+   *
+   * The two that walk it repeat, on the argument the surface climb makes: a
+   * throttle is a quantity, and leaning on the key is how somebody asks for
+   * more of it. Two more slam it, because a pilot who wants the drive off
+   * wants it off now and not in twenty presses.
+   */
+  press('flight.throttleUp', 'Throttle Up', 'Flight', 'flight', chord('KeyT'), {
+    repeats: true,
+    hint: 'the main drive, a twentieth at a time; hold it to walk',
+  }),
+  press(
+    'flight.throttleDown',
+    'Throttle Down',
+    'Flight',
+    'flight',
+    chord('KeyG'),
+    { repeats: true },
+  ),
+  press(
+    'flight.throttleFull',
+    'Full Burn',
+    'Flight',
+    'flight',
+    chord('KeyT', { shift: true }),
+  ),
+  press(
+    'flight.throttleCut',
+    'Cut the Drive',
+    'Flight',
+    'flight',
+    chord('KeyG', { shift: true }),
+    { hint: 'the drive to nothing in one press, whatever the ship is doing' },
+  ),
   press('flight.assist', 'Flight Assist', 'Flight', 'flight', chord('KeyZ')),
   press('flight.kill', 'Kill Rotation', 'Flight', 'flight', chord('KeyX')),
   press('flight.view', 'Camera View', 'Flight', 'flight', chord('KeyV'), {
