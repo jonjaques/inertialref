@@ -29,7 +29,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
     // unresolved stars feed the sensor PSF with their physical flux instead.
     if (
       !engine.lensFlare ||
-      engine.galaxyView !== null ||
+      engine.galaxyInstrument ||
       scene == null ||
       star === undefined
     ) {

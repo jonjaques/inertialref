@@ -72,6 +72,8 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this as unknown as PassNode,
     this.#target.texture,
   )
+  #pose: ObserverPose | null = null
+  #lens: Lens | null = null
   #field: GalaxyField
   #disposed = false
   #active = false
@@ -112,6 +114,8 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   }
 
   configure(pose: ObserverPose | null, lens: Lens, field = this.#field): void {
+    this.#pose = pose
+    this.#lens = lens
     this.#active = pose !== null && !this.#disposed
     if (field !== this.#field) {
       this.#field = field
@@ -135,6 +139,14 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   }
   get diagnostics(): GalaxyRenderReport {
     return {
+      coordinateFrame: 'galactocentric',
+      orientation: this.#pose?.orientation ?? null,
+      lens: this.#lens,
+      sampling: 'observer',
+      exposure: null,
+      instrument: false,
+      journey: null,
+      survey: null,
       active: this.active,
       ready: this.ready,
       fieldVersions: GALAXY_FIELD_VERSIONS,
@@ -208,7 +220,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   }
 }
 
-/** Fixed outside views treat scene geometry as foreground, with full-resolution MSAA depth. */
+/** Scene geometry masks the background integral at full-resolution MSAA depth. */
 export function createGalaxyBackdrop(
   volume: GalaxyVolumeNode,
 ): Mesh<PlaneGeometry, MeshBasicNodeMaterial> {

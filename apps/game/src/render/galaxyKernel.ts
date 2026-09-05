@@ -3,6 +3,7 @@ import {
   array,
   atan,
   Break,
+  bool,
   float,
   Fn,
   If,
@@ -22,6 +23,9 @@ import {
   GALAXY_POPULATIONS,
   GALAXY_RADIUS_PARSECS,
   GALAXY_RADIANCE_FACTOR,
+  GALAXY_OBSERVER_MIN_STEP_PARSECS,
+  GALAXY_OBSERVER_STEP_GROWTH,
+  type GalaxyRaySampling,
   POPULATION_NAMES,
   type GalaxyArm,
   type GalaxyField,
@@ -30,7 +34,7 @@ import {
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@1'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@2'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
@@ -319,11 +323,20 @@ const sample = Fn(
 
 /** Midpoint intervals and the warped-plane step law are identical to integrateGalaxyRay. */
 const integrate = Fn(
-  ([origin, direction, distance, maxStep, seed, normalization]: [
+  ([
+    origin,
+    direction,
+    distance,
+    maxStep,
+    observerSampling,
+    seed,
+    normalization,
+  ]: [
     Node<'vec3'>,
     Node<'vec3'>,
     Node<'float'>,
     Node<'float'>,
+    Node<'bool'>,
     Node<'uint'>,
     Node<'float'>,
   ]) => {
@@ -365,6 +378,15 @@ const integrate = Fn(
         .min(maxStep)
         .min(far.sub(t))
         .toVar()
+      If(observerSampling, () => {
+        step.assign(
+          step.min(
+            t
+              .mul(GALAXY_OBSERVER_STEP_GROWTH)
+              .add(GALAXY_OBSERVER_MIN_STEP_PARSECS),
+          ),
+        )
+      })
       result.addAssign(
         sample(
           origin.add(d.mul(t.add(step.mul(0.5)))),
@@ -384,6 +406,7 @@ const integrate = Fn(
     { name: 'direction', type: 'vec3' },
     { name: 'distance', type: 'float' },
     { name: 'maxStep', type: 'float' },
+    { name: 'observerSampling', type: 'bool' },
     { name: 'seed', type: 'uint' },
     { name: 'normalization', type: 'float' },
   ],
@@ -414,12 +437,14 @@ export function createGalaxyKernel(field: GalaxyField) {
       origin: Node<'vec3'>,
       direction: Node<'vec3'>,
       distance: number | Node<'float'> = 100000,
+      sampling: GalaxyRaySampling = 'observer',
     ): Node<'vec4'> =>
       integrate(
         origin,
         direction,
         typeof distance === 'number' ? float(distance) : distance,
         float(GALAXY_MAX_STEP_PARSECS),
+        bool(sampling === 'observer'),
         seed,
         normalization,
       ),

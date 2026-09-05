@@ -1,4 +1,3 @@
-import { GALAXY_VIEWS } from '@inertialref/rendering'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
@@ -30,7 +29,15 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
     const held = { volume, mesh, field, world: engine.world }
     live.current = held
     scene.add(mesh)
-    const report = () => volume.diagnostics
+    const report = () => ({
+      ...volume.diagnostics,
+      exposure: engine.exposure,
+      survey: engine.starSurvey,
+      instrument: engine.galaxyInstrument,
+      journey: engine.galaxyInstrument
+        ? engine.harness.observatory.journey
+        : null,
+    })
     engine.galaxyRenderer = report
     warmAtMount({
       label: 'warming the galaxy',
@@ -70,8 +77,7 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
       current.world = engine.world
       current.field = createGalaxyField(engine.world.galaxySeed)
     }
-    const view = engine.galaxyView
-    const pose = view === null ? null : GALAXY_VIEWS[view].pose
+    const pose = engine.galaxyPose
     current.volume.configure(pose, engine.lens, current.field)
     current.mesh.visible = current.volume.active && current.volume.ready
   })

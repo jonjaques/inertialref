@@ -121,6 +121,15 @@ it('matches complete CPU rays, clipped paths, misses, and faint halo light', asy
     [0, 30000, 0, 0, 1, 0],
     [0, 30000, 0, 0.35, -1, -0.2],
     [-8178, 20.8, 0, 1, 0, -0.1],
+    [-8178, 20.8, 0, -1, 0, 0],
+    [-8178, 20.8, 0, 0, 1, 0],
+    [-8178, 20.8, 0, 0, -1, 0],
+    [-8178, 100, 0, 1, -0.2, 0.3],
+    [-8100, 300, 0, 1, -0.04, -0.3],
+    [-7900, 1000, 0, 1, -0.1, 0.1],
+    [-24000, 600, 3000, 0.5, -0.05, -1],
+    [3000, -20, 1000, -1, 0.01, 0.2],
+    [0, 1, 0, 1, 0, 0],
   ]
   const origins = uniformArray<'vec3'>(
     rays.map((r) => new Vector3(r[0], r[1], r[2])),
@@ -130,7 +139,7 @@ it('matches complete CPU rays, clipped paths, misses, and faint halo light', asy
     'vec3',
   )
   const index = int(uv().x.mul(rays.length))
-  for (const distance of [100000, 30500, 0]) {
+  for (const distance of [100000, 30500, 10, 0]) {
     const pixels = await gpu.drawGraph(
       kernel.integrate(
         origins.element(index),
@@ -144,7 +153,7 @@ it('matches complete CPU rays, clipped paths, misses, and faint halo light', asy
         field,
         UV.fromMeters(r[0]! * PARSEC, r[1]! * PARSEC, r[2]! * PARSEC),
         vec3(r[3]!, r[4]!, r[5]!),
-        { distanceParsecs: distance },
+        { distanceParsecs: distance, sampling: 'observer' },
       )
       const values = [...expected.rgbNanowatts, expected.starsPerSquareParsec]
       values.forEach((v, j) => within(pixels.at(i, 0)[j]!, v, 1e-5))

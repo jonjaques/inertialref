@@ -13,6 +13,9 @@ import {
   type GalaxyField,
   type GalaxyPopulation,
 } from '@inertialref/universe'
+import type { Lens, Exposure } from '@inertialref/rendering'
+import type { Quat } from '@inertialref/spatial'
+import type { GalaxyJourneyStatus } from './observatory.ts'
 import type { World } from '@inertialref/simulation'
 
 export type GalaxyPlateView = 'face-on' | 'edge-on' | 'observer'
@@ -40,6 +43,21 @@ export interface GalaxyPlate {
 }
 
 export interface GalaxyRenderReport {
+  readonly coordinateFrame: 'galactocentric'
+  readonly orientation: Quat | null
+  readonly lens: Lens | null
+  readonly sampling: 'observer'
+  readonly exposure: Exposure | null
+  readonly instrument: boolean
+  readonly journey: GalaxyJourneyStatus | null
+  readonly survey: {
+    readonly radiusCells: number
+    readonly cellCeiling: number
+    readonly spriteCount: number
+    readonly spriteCeiling: number
+    readonly pending: boolean
+    readonly center: UniverseVector | null
+  } | null
   readonly active: boolean
   readonly ready: boolean
   readonly fieldVersions: typeof GALAXY_FIELD_VERSIONS

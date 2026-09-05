@@ -23,7 +23,12 @@ export interface GalaxyRayIntegral {
   readonly starsPerSquareParsec: number
   readonly samples: number
 }
+export const GALAXY_OBSERVER_MIN_STEP_PARSECS = 1
+export const GALAXY_OBSERVER_STEP_GROWTH = 0.1
+export type GalaxyRaySampling = 'reference' | 'observer'
+
 export interface GalaxyRayOptions {
+  readonly sampling?: GalaxyRaySampling
   readonly population?: GalaxyPopulation
   readonly distanceParsecs?: number
   readonly maxStepParsecs?: number
@@ -50,6 +55,11 @@ export function integrateGalaxyRay(
   invariant(
     Number.isFinite(maxStep) && maxStep >= 0.25,
     'Galaxy ray step must be at least 0.25 pc',
+  )
+  const sampling = options.sampling ?? 'reference'
+  invariant(
+    sampling === 'reference' || sampling === 'observer',
+    'Unknown galaxy ray sampling profile',
   )
   const population = options.population
   invariant(
@@ -103,6 +113,9 @@ export function integrateGalaxyRay(
       maxStep,
       Math.max(4, height * 0.2) / (Math.abs(dy) + 0.1),
       far - t,
+      sampling === 'observer'
+        ? GALAXY_OBSERVER_MIN_STEP_PARSECS + GALAXY_OBSERVER_STEP_GROWTH * t
+        : Infinity,
     )
     const p = UV.translate(
       origin,
