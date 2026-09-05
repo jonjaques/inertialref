@@ -56,9 +56,10 @@ curve, MSAA on the pass and the canvas single-sampled, measured level with the
 frame it replaced at five operating points
 ([ADR-0029](../adr/0029-the-sensor-spine.md)). It is the spine
 [the sensor plan](../../design/plans/the-sensor.md) hangs exposure, glare and
-the rest from, and it carries one patch to three itself: the backend draws
-nothing for a pipeline the warm-up is still building, where r185 as shipped
-throws out of the whole frame.
+the rest from. It carries no patch to three: the renderer draws nothing for a
+pipeline the warm-up is still building, because `Pipelines.isReady` gates the
+backend's draw, and `warmup.gpu.test.ts` holds that gate
+([ADR-0030](../adr/0030-three-r185.md)).
 
 **What has not**: indirect draw and GPU-driven culling — capabilities in the
 table above that the table promised. The heightfield producer is the one
