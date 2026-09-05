@@ -490,7 +490,11 @@ async function evaluate(send, expression) {
  * Navigating away first also discards in-memory preferences from a warm page.
  * IndexedDB saves, asset caches and service workers are outside this reset. */
 async function clearStorage(send) {
-  const current = await evaluate(send, 'location.origin')
+  // Guarded like every probe in `boot`: a page mid-navigation, or one whose
+  // renderer died since the last invocation, answers `Runtime.evaluate` with
+  // "Cannot find context with specified id" — and the origin is only used to
+  // widen the clear beyond the one this call is about to boot.
+  const current = await evaluate(send, 'location.origin').catch(() => 'null')
   await send('Page.navigate', { url: 'about:blank' })
   // Page.navigate acknowledges the navigation before the new document is
   // necessarily committed. Wait until the old app can no longer write back.
