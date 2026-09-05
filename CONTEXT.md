@@ -7605,6 +7605,12 @@ and the distinction between lifecycle tests, actual GPU readback and browser
 host checks. The affected GPU run passed twenty-six tests; physical adapter
 access was required after sandbox initialization failed.
 
+One last driver check combined inspection steps with `--down` and printed only
+that Chrome had closed. `main()` handles `--down` before step processing, so
+the checks never ran. Shutdown belongs in its own invocation with the same
+port. The driving guide and shared drive skill now say so; successful process
+exit alone is not evidence that an inspection batch executed.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

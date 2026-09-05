@@ -80,6 +80,11 @@ and disarms the level itself.
 Steps run in the order written, in one process and one session. Prefer one command with
 five steps to five commands.
 
+**Shutdown is a separate invocation.** `--down` exits before any steps run,
+regardless of where it appears in the command. Appending it to `--js`, `--file`
+or `--shot` closes Chrome without performing those checks. Run the inspection
+batch first, then `node scripts/drive.mjs --port <port> --down` for that rig.
+
 | Step            | For                                                                     |
 | --------------- | ----------------------------------------------------------------------- |
 | `--js <expr>`   | a bare expression is returned, so `--js "ir.terrain()"` prints          |

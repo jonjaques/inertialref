@@ -114,6 +114,11 @@ invocations — boot is about five seconds and every call after the first attach
 to the booted page in well under one. Batch the steps rather than paying a
 process per question. `--help` lists them all.
 
+Run shutdown separately. `--down` exits before step processing, so a command
+containing both `--js` and `--down` closes Chrome without evaluating the script.
+The same applies to `--file` and `--shot`. Finish the inspection batch, then
+call `node scripts/drive.mjs --port <port> --down` for that rig.
+
 These are the browser, not bugs in the clock, and the driver handles the first
 three; they are here because they explain what it is doing:
 
