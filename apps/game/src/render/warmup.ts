@@ -1,7 +1,19 @@
 import { getLogger, getTimer } from '@inertialref/shared'
-import type { Camera, Object3D, Scene, WebGPURenderer } from 'three/webgpu'
+import {
+  ColorManagement,
+  NoToneMapping,
+  Scene,
+  type Camera,
+  type NodeMaterial,
+  type Object3D,
+  type QuadMesh,
+  type RenderPipeline,
+  type RenderTarget,
+  type WebGPURenderer,
+} from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
-import { warmTargetFor } from './sensor.ts'
+import { sceneTargetShape, warmTargetFor } from './sensor.ts'
+import { sensorMrt } from './sensorMrt.ts'
 
 /*
  * The compile-ahead recipe, and the census of what boot is warming.
@@ -109,13 +121,17 @@ export const warmRenderer = (gl: object): WarmRenderer => {
   return {
     compileAsync(object, camera, scene) {
       const previous = renderer.getRenderTarget()
+      const previousMrt = renderer.getMRT()
       renderer.setRenderTarget(warmTargetFor(renderer))
+      if (sceneTargetShape(renderer).optics === true)
+        renderer.setMRT(sensorMrt())
       const compiles: Promise<unknown>[] = []
       object.traverseVisible((node) => {
         if (isRenderable(node))
           compiles.push(renderer.compileAsync(node, camera, scene))
       })
       renderer.setRenderTarget(previous)
+      renderer.setMRT(previousMrt)
       return Promise.all(compiles)
     },
   }
@@ -467,6 +483,71 @@ export function warmAtMount(producer: WarmProducer): void {
         cause: String(cause),
       })
     })
+}
+
+/** r185 exposes no pipeline compile method; prepare its actual quad, at its actual output. */
+export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
+  const internal = pipeline as unknown as {
+    _update(): void
+    _quadMesh: QuadMesh
+  }
+  internal._update()
+  const renderer = pipeline.renderer
+  const target = renderer.getRenderTarget()
+  const tone = renderer.toneMapping
+  const color = renderer.outputColorSpace
+  renderer.setRenderTarget(null)
+  renderer.toneMapping = NoToneMapping
+  renderer.outputColorSpace = ColorManagement.workingColorSpace
+  try {
+    return warmCompile(renderer, {
+      object: internal._quadMesh,
+      camera: internal._quadMesh.camera,
+      scene: new Scene(),
+    })
+  } finally {
+    renderer.setRenderTarget(target)
+    renderer.toneMapping = tone
+    renderer.outputColorSpace = color
+  }
+}
+
+/** The sensor's internal quads use their own single-sample attachment shape. */
+export function warmSensorPass(
+  renderer: WebGPURenderer,
+  quad: QuadMesh,
+  materials: readonly NodeMaterial[],
+  targets: readonly RenderTarget[],
+): Promise<void> {
+  const previous = renderer.getRenderTarget()
+  const previousMrt = renderer.getMRT()
+  const tone = renderer.toneMapping
+  const color = renderer.outputColorSpace
+  const material = quad.material
+  const compiles: Promise<void>[] = []
+  renderer.toneMapping = NoToneMapping
+  renderer.outputColorSpace = ColorManagement.workingColorSpace
+  renderer.setMRT(null)
+  try {
+    for (let i = 0; i < materials.length; i += 1) {
+      quad.material = materials[i]!
+      renderer.setRenderTarget(targets[i]!)
+      compiles.push(
+        warmCompile(renderer, {
+          object: quad,
+          camera: quad.camera,
+          scene: new Scene(),
+        }),
+      )
+    }
+  } finally {
+    quad.material = material
+    renderer.setRenderTarget(previous)
+    renderer.setMRT(previousMrt)
+    renderer.toneMapping = tone
+    renderer.outputColorSpace = color
+  }
+  return Promise.all(compiles).then(() => undefined)
 }
 
 /** The no-op every ticket verb becomes once there is no boot to report to. */

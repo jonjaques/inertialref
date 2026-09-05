@@ -94,6 +94,12 @@ export function WaterPatches({
           water.sunDirection.value.set(local.x, local.y, local.z)
         }
         water.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
+        const light =
+          engine
+            .scene()
+            ?.bodies.find((body) => body.address === state.bodyAddress)
+            ?.sunlight ?? key.sunlight
+        water.sunIntensity.value = engine.calibratedLight ? 1 : light
       }
       water.time.value = engine.snapshot?.renderTime ?? 0
     }

@@ -1,3 +1,4 @@
+import { sensorRadiance, sceneRadianceGain } from './radiance.ts'
 import { Color, MeshBasicNodeMaterial, Vector2, Vector3 } from 'three/webgpu'
 import {
   attribute,
@@ -200,7 +201,7 @@ export function createWaterMaterial(
   const waterDepth = varying(float(), 'waterDeep')
   const noise = noiseSampler(noiseTexture())
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.transparent = true
   material.depthWrite = true
 
@@ -340,7 +341,7 @@ export function createWaterMaterial(
     )
     const liquid = asVector(liquidColour)
     const behind = build.refraction
-      ? asVector(viewportSharedTexture(shifted).rgb)
+      ? asVector(viewportSharedTexture(shifted).rgb.div(sceneRadianceGain))
       : liquid
     /*
      * The liquid's own colour, lit: what scatters back out of the body of

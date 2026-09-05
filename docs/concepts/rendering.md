@@ -777,7 +777,7 @@ media query and may not overrule the probe.
 
 ### One curve, two ranges
 
-The tone curve is three's `acesFilmicToneMapping` exactly, up to its final clamp,
+Natural's tone curve is three's `acesFilmicToneMapping` exactly, up to its final clamp,
 and the _only_ difference between the two paths is how far that clamp goes. At
 headroom 1 it is bit-identical to the stock tonemapper; above 1, values the sRGB
 path would have clipped are re-expanded and nothing below the shoulder moves.
@@ -795,10 +795,15 @@ React Three Fiber at priority 1 and hands it to `render/sensor.ts`: one
 with the house curve and the canvas's color space baked in, writing opaque
 alpha. The scene is multisampled where it has edges — on the pass target — and
 the canvas is single-sampled, because what reaches it is one full-screen quad.
-That is the spine [the sensor plan](../../design/plans/the-sensor.md) hangs
-exposure, glare and the rest from: the scene's radiance is a texture the chain
-can read before the curve sees it, which the renderer's own output pass could
-never give a meter or a point-spread function.
+The chain applies pre-exposure, near/far defocus, shutter motion, a threshold-free
+PSF halo, detector noise, white balance and the selected response. Natural keeps
+the production lighting calibration, ACES fit and integrated sky; Neutral
+meters the scene and preserves highlight hue,
+and Direct uses the lens's exposure and channel clip. P3 output requires matching
+canvas and encoder declarations. The live exposure and optical pass counts are
+available as `engine.exposure` and `engine.sensorDiagnostics`.
+[ADR-0031](../adr/0031-the-sensor-response.md) records the calibration,
+measurements and remaining work.
 
 Two things the chain has to do that a reader would not guess, both measured
 rather than argued in [ADR-0029](../adr/0029-the-sensor-spine.md). The pass is

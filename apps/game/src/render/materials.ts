@@ -1,3 +1,5 @@
+import { SURFACE_LUMINANCE } from '@inertialref/rendering'
+import { integratedSkyGain, sensorRadiance } from './radiance.ts'
 import {
   AddEquation,
   BackSide,
@@ -69,7 +71,7 @@ import type { AtmosphereRecipe } from '@inertialref/rendering'
  */
 
 /** Scene-linear radiance of a star's disk, in multiples of diffuse white. */
-const STAR_RADIANCE = 8
+const STAR_RADIANCE = 1
 
 /**
  * Solar limb darkening, visual band. 0.6 is a G star, which is what the default
@@ -149,7 +151,7 @@ export function createStarMaterial(): StarMaterial {
     pow(oneMinus(mu), 3).mul(0.55),
   )
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = color
     .mul(limb)
     .mul(granulation.add(mottling))
@@ -426,7 +428,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     return vec4(radiance, extinguished)
   })()
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = sky.rgb
   material.opacityNode = sky.a
   material.transparent = true
@@ -474,22 +476,13 @@ export interface StarfieldMaterial {
   readonly positions: InstancedBufferAttribute
   /** Linear sRGB per star, from its blackbody temperature. */
   readonly colours: InstancedBufferAttribute
-  /**
-   * How prominent each star should be, 0 to 1, computed by the host.
-   *
-   * Not flux. What a star looks like is its luminosity over the square of its
-   * distance, and a catalog drawn at uniform brightness looks like a
-   * screensaver rather than a sky — but *linear* flux is unusable directly: the
-   * apparent flux of the stars within 150 ly spans 20 magnitudes, a factor of
-   * 10^8, and normalizing against the brightest leaves the median star at 10^-5
-   * and the sky black. The host converts flux to apparent magnitude and maps
-   * that onto a perceptual ramp, which is what a magnitude scale is for. See
-   * `SceneView`; the distance it needs has been thrown away by the time the
-   * sprites reach the shell.
-   */
+  /** Integrated illuminance in lux, before the lens collects it. */
   readonly prominence: InstancedBufferAttribute
   /** Screen size of the brightest star, in logical pixels. */
   readonly size: { value: number }
+  readonly angularDensity: { value: number }
+  readonly integrated: { value: number }
+  readonly visibility: InstancedBufferAttribute
 }
 
 /**
@@ -516,7 +509,10 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
     3,
   )
   const prominence = new InstancedBufferAttribute(new Float32Array(capacity), 1)
-  const size = uniform(3.4)
+  const visibility = new InstancedBufferAttribute(new Float32Array(capacity), 1)
+  const integrated = uniform(0)
+  const size = uniform(1.8)
+  const angularDensity = uniform(1)
 
   // Round, with a soft edge. A star is a point source seen through an aperture,
   // and the corners of the quad fade to nothing rather than being discarded —
@@ -526,28 +522,23 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   // Typed explicitly for the reason `terrain.ts` gives: the literal widens.
   const scale = instancedBufferAttribute<'float'>(prominence, 'float')
 
-  const material = new PointsNodeMaterial()
+  const material = sensorRadiance(new PointsNodeMaterial())
   material.positionNode = instancedBufferAttribute(positions)
-  /*
-   * Prominence is spent on *size* as well as intensity, and both keep a floor.
-   *
-   * A real star is far smaller than a pixel; what makes Sirius look bigger than
-   * its neighbors is the eye's and the lens's response to a brighter point
-   * source, not its angular diameter. So size carries most of the range — but
-   * intensity has to carry some of it too, because a sprite that is only
-   * *smaller* stops reading as fainter once it is down to a pixel.
-   *
-   * Neither goes to zero. The faintest star in a 40 ly sweep is 20 magnitudes
-   * below the brightest; drawn to scale it would be invisible, and so would the
-   * three quarters of the sky that are M dwarfs. The floors are where a real
-   * sky's limiting magnitude is: past it, everything is drawn at the threshold
-   * of visibility rather than not drawn at all.
-   */
-  material.sizeNode = size.mul(scale.mul(0.55).add(0.45))
+  const visible = instancedBufferAttribute<'float'>(visibility, 'float')
+  material.sizeNode = integrated
+    .greaterThan(0.5)
+    .select(visible.mul(0.55).add(0.45).mul(3.4), size)
   material.sizeAttenuation = false
   material.colorNode = instancedBufferAttribute<'vec3'>(colours, 'vec3')
     .mul(profile.mul(profile))
-    .mul(scale.mul(1.15).add(0.45))
+    .mul(
+      integrated
+        .greaterThan(0.5)
+        .select(
+          visible.mul(1.15).add(0.45).mul(integratedSkyGain),
+          scale.mul(angularDensity).div(SURFACE_LUMINANCE),
+        ),
+    )
   material.opacityNode = profile
   material.transparent = true
   material.depthWrite = false
@@ -565,7 +556,16 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   material.blendEquationAlpha = AddEquation
   material.blendSrcAlpha = ZeroFactor
   material.blendDstAlpha = OneFactor
-  return { material, positions, colours, prominence, size }
+  return {
+    material,
+    positions,
+    colours,
+    prominence,
+    visibility,
+    integrated,
+    size,
+    angularDensity,
+  }
 }
 
 /*

@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   Color,
   DataTexture,
@@ -352,7 +353,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   const surfaceCover = varying(vec4(), 'terrainDeposit')
   const surfaceCover2 = varying(vec4(), 'terrainDeposit2')
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
 
   /*
    * The morph, and the three things that ride along with it.

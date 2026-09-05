@@ -98,6 +98,7 @@ export function CutsceneOverlay({
    * to poll the director every 100 ms and read `world.clock.paused` for itself.
    */
   const transport = useEngine((snapshot) => snapshot.playhead)
+  const chrome = useEngine((snapshot) => snapshot.presentation.chrome)
   // The pointer latch and the guarded seek, shared with the cinema player's
   // transport — see `useScrubber.ts` for what each of them is for.
   const { grab, seek } = useScrubber(engine)
@@ -382,7 +383,7 @@ export function CutsceneOverlay({
           cinema player has its own timecode and its own way out, and a second
           frame number in the corner of every capture is exactly the chrome a
           scene is supposed to be free of. */}
-          {showTransport && (
+          {showTransport && chrome && (
             <div
               ref={hint}
               className="type-micro absolute right-3 bottom-2 text-slate-400"
@@ -390,7 +391,7 @@ export function CutsceneOverlay({
             />
           )}
 
-          {showTransport && transport !== null && (
+          {showTransport && chrome && transport !== null && (
             <CutsceneTransport
               frame={transport.frame}
               durationFrames={transport.durationFrames}

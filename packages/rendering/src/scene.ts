@@ -28,6 +28,7 @@ import {
   starColor,
 } from './lod.ts'
 import { placeAt, type RenderPlacement } from './placement.ts'
+import { sunlightAt, stellarLuminance } from './photometry.ts'
 
 /*
  * The scene description.
@@ -39,6 +40,8 @@ import { placeAt, type RenderPlacement } from './placement.ts'
  */
 
 export interface RenderBody {
+  /** Incident stellar light relative to terrestrial sunlight, before albedo. */
+  readonly sunlight: number
   readonly address: string
   readonly name: string
   readonly kind: string
@@ -97,6 +100,8 @@ export interface RenderBody {
 }
 
 export interface RenderStar {
+  readonly luminance: number
+  readonly sunlight: number
   readonly system: string
   readonly name: string
   readonly placement: RenderPlacement
@@ -240,6 +245,15 @@ export function buildScene(
     const ringSpan =
       rings === null ? null : ringScales(body.radius, body.relief, rings)
     bodies.push({
+      sunlight: snapshot.stars.reduce(
+        (sum, star) =>
+          sum +
+          sunlightAt(
+            star.luminosity,
+            UV.distance(star.position, body.position),
+          ),
+        0,
+      ),
       address: body.address,
       name: body.name,
       kind: body.kind,
@@ -315,6 +329,8 @@ export function buildScene(
     .slice()
     .sort((a, b) => b.apparent - a.apparent)
     .map(({ star, placement, apparent }) => ({
+      luminance: stellarLuminance(star.luminosity, star.radius),
+      sunlight: sunlightAt(star.luminosity, placement.distance),
       system: star.system,
       name: star.name,
       placement,

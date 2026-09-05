@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
+import { ENTERPRISE_PORTRAITS } from '../../../packages/devtools/src/cutscenes/enterprisePortraits.ts'
 import { openSession, TNG_INTRO } from '@inertialref/devtools'
+import { loadStarCatalog } from './catalog.ts'
 import { type HullField, readHullField } from './hullField.ts'
 
 /*
@@ -141,6 +143,26 @@ describe('cutscene camera against the hero hull', () => {
       `f${worst.frame} puts the camera ${(-worst.depth).toFixed(1)} m from the ` +
         `hull's surface; a scene may not fly its camera through its own prop`,
     ).toBeLessThan(-CLEARANCE_MARGIN_M)
+  })
+
+  it('keeps every held Enterprise portrait outside the shipped hull', () => {
+    const session = openSession({ workers: null, catalog: loadStarCatalog() })
+    try {
+      const script = ENTERPRISE_PORTRAITS.prepare(session.world)
+      for (const frame of [0, 240, 480]) {
+        const sample = script.sample(frame)
+        const relative = Q.rotate(
+          Q.conjugate(sample.ship.orientation),
+          UV.difference(sample.camera.position, sample.ship.position),
+        )
+        expect(
+          hull().depthInside(relative),
+          `portrait at frame ${frame}`,
+        ).toBeLessThan(-CLEARANCE_MARGIN_M)
+      }
+    } finally {
+      session.dispose()
+    }
   })
 
   it('would notice the skim as it was authored before this test existed', () => {

@@ -154,6 +154,7 @@ export function dprCeiling(coarsePointer: boolean): number {
 
 /** What the renderer ended up as, for the HUD and for `ir.status()`. */
 export interface RendererDescription {
+  readonly gamut?: 'srgb' | 'display-p3'
   readonly backend: 'webgpu' | 'webgl'
   readonly mode: OutputMode
   readonly preference: OutputPreference
@@ -165,7 +166,7 @@ export interface RendererDescription {
 export function describeOutput(description: RendererDescription): string {
   const range =
     description.mode === 'extended'
-      ? `extended ${description.headroom}×`
+      ? `extended ${description.headroom}×${description.gamut === 'display-p3' ? ' P3' : ''}`
       : 'sRGB'
   return `${description.backend} · ${range} · ${description.preference}`
 }

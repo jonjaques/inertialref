@@ -18,7 +18,11 @@ import {
   SEA_DETAILS,
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
-import { lensForFov } from '@inertialref/rendering'
+import {
+  lensForFov,
+  SENSOR_RESPONSES,
+  RESPONSE_PRESETS,
+} from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
 
 /*
@@ -257,19 +261,20 @@ describe('the author’s instruments', () => {
     expect(graphics.match(/role="switch"/g)).toHaveLength(2)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
-    // Five radio groups: the anti-aliasing level, the extended-range override
-    // and the three surface levers. A radio group rather than a button that
+    // The output, surface and sensor choices are radio groups. A radio group rather than a button that
     // cycles, so the states you are not on have a representation in the tree.
-    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(5)
+    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(7)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
       AA_LEVELS.length +
         OUTPUT_PREFERENCES.length +
         TERRAIN_DETAILS.length +
         GROUND_DETAILS.length +
-        SEA_DETAILS.length,
+        SEA_DETAILS.length +
+        SENSOR_RESPONSES.length +
+        RESPONSE_PRESETS.length,
     )
     // One checked per group.
-    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(5)
+    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(7)
     expect(graphics).toMatch(/aria-checked="true"[^>]*>2x</)
     for (const level of AA_LEVELS) expect(graphics).toContain(`>${level}<`)
     // The extended-range override moved here from the transport strip. It is a

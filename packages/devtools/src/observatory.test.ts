@@ -20,6 +20,7 @@ import {
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import { openSession, type Session } from './session.ts'
+import { PICTURES } from './pictures.ts'
 import type { GameHarness } from './harness.ts'
 import type { ObserverPose } from './observatory.ts'
 
@@ -508,7 +509,7 @@ describe('a rise', () => {
 })
 
 describe('the pictures', () => {
-  it('every one resolves, and takes the frame it names', () => {
+  it('the fixture catalog’s pictures resolve and take the frame they name', () => {
     /*
      * The half of `presets:check` that needs a world. The script's job is the
      * plate on disk and the composition id; this is the claim neither a
@@ -522,7 +523,9 @@ describe('the pictures', () => {
      * to be a red test rather than a discovery on review day.
      */
     const { harness: ir, session } = harness()
-    for (const { id } of ir.presets()) {
+    for (const { id, address } of PICTURES) {
+      // The complete shipped catalog is exercised by the headless host.
+      if (!address.startsWith('s:SOL/')) continue
       const { status, fovDeg, picture } = ir.preset(id)
       expect(status.target, id).not.toBeNull()
       expect(status.target?.address, id).toContain(

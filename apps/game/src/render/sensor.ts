@@ -1,5 +1,12 @@
+import { PsfNode } from './psf.ts'
+import { sensorMrt } from './sensorMrt.ts'
+import { DefocusNode } from './defocus.ts'
+import { MotionNode } from './motion.ts'
+import { sensorSignature } from './signature.ts'
+import { DISPLAY_P3 } from './gamut.ts'
 import {
   type Camera,
+  type Node,
   DepthTexture,
   HalfFloatType,
   NodeUpdateType,
@@ -7,47 +14,32 @@ import {
   RenderTarget,
   type Scene,
   type WebGPURenderer,
+  Vector2,
 } from 'three/webgpu'
-import { pass, renderOutput, vec4 } from 'three/tsl'
+import { nodeObject, pass, renderOutput, texture, vec4 } from 'three/tsl'
+import {
+  defocusParameters,
+  ExposureMeter,
+  GLASS_PRESETS,
+  RESPONSE_SHOULDERS,
+  shutterFraction,
+  type Exposure,
+  type Lens,
+  type SensorSettings,
+} from '@inertialref/rendering'
+import { createHistogramMeter } from './meter.ts'
+import { setSceneExposure } from './radiance.ts'
+import { toneCurveFor } from './tonemap.ts'
+import { warmPipeline, warmSensorPass } from './warmup.ts'
 
-/*
- * The sensor: the chain every presented frame goes through.
+/* The sensor owns the only scene draw, then applies lens-side optics,
+ * detector response and the canvas encode. MSAA belongs to the scene target;
+ * the output triangle has no interior edge that needs multisampling.
  *
- * `docs/design/art.md` says the canopy is a sensor, and this file is where the
- * scene stops being drawn straight onto the canvas and becomes an image the
- * instrument produces. The spine is one `RenderPipeline` around one scene pass
- * and the house tone curve, and nothing else yet — the exposure, the glare and
- * the rest of `design/plans/the-sensor.md` hang passes off it. What the spine
- * settles is ownership: the frame is the sensor's to draw, and the scene's
- * radiance is a texture the chain can read before the curve sees it, which is
- * what a histogram meter or a point-spread function needs and the renderer's
- * own output pass cannot give them.
- *
- * **At headroom 1 it is pixel-identical to the renderer drawing the scene
- * itself, by construction.** The renderer's own path draws the scene into an
- * internal half-float target and blits it through
- * `texture(target).renderOutput(toneMapping, outputColorSpace)` on a
- * full-screen triangle. `RenderPipeline` with `outputColorTransform` left on
- * builds exactly that node over the pass's texture, and the curve's exposure
- * is the same `toneMappingExposure` reference in both. The clear, the depth
- * format and the sample count all agree, which the pipeline cache key
- * cares about and the picture does not. The gate in
- * `sensor.gpu.test.ts` reads both paths back from a float target and holds
- * them equal; the browser diff is in the ADR.
- *
- * **MSAA lives on the pass target, and the renderer is built without it.**
- * `RenderPipeline.render` switches the renderer's tone mapping off while the
- * quad draws, and `Renderer.currentSamples` then falls back to the sample
- * count the renderer was constructed with — so a renderer built with
- * `antialias: true` would give the *canvas* a four-sample color buffer and a
- * resolve, every frame, for a triangle that has no edge inside the frame.
- * With the renderer at zero samples and the pass asking for four, the scene
- * is multisampled where it has edges and the canvas is written once.
- *
- * That moves one obligation onto the warm-up: a pipeline is keyed on the
- * sample count and formats of the target it draws into, so a compile against
- * the renderer's own framebuffer builds a zero-sample variant the chain never
- * uses. `warmTargetFor` hands `warmup.ts` a target of the pass's shape.
+ * Every compile uses the pass's declared attachment shape. The two outputs
+ * are pre-exposed radiance and velocity.xy / reciprocal view-space meters.
+ * Internal optical quads read plain textures; the final dependency graph
+ * schedules each pass exactly once per render call. ADR-0031.
  */
 
 /**
@@ -62,6 +54,7 @@ import { pass, renderOutput, vec4 } from 'three/tsl'
 export interface SceneTargetShape {
   /** 4 or 0. WebGPU has no other count. */
   readonly samples: number
+  readonly optics?: boolean
 }
 
 /** The per-renderer record of the shape, and the stand-in built to it. */
@@ -129,11 +122,24 @@ function sceneTarget(
     type: HalfFloatType,
     samples: shape.samples,
     depthTexture,
+    count: shape.optics === true ? 2 : 1,
   })
+  target.textures[0]!.name = 'output'
+  if (shape.optics === true) target.textures[1]!.name = 'motion'
   return target
 }
 
+export interface SensorDiagnostics {
+  readonly maximumCircle: number
+  readonly defocusPasses: number
+  readonly motionPasses: number
+  readonly shutterFraction: number
+}
+
 export interface Sensor {
+  warm(): Promise<void>
+  readonly exposure: Exposure | null
+  readonly diagnostics: SensorDiagnostics
   /**
    * Draw one frame: the scene through the chain, presented to `target`.
    *
@@ -151,6 +157,16 @@ export interface Sensor {
   /** What the scene pass draws into — the radiance before the curve. */
   readonly sceneTarget: RenderTarget
   dispose(): void
+}
+
+export interface SensorFrame {
+  readonly lens: Lens
+  readonly settings: SensorSettings
+  readonly time: number
+  readonly pinned: number | null
+  readonly headroom: number
+  readonly motionBlur?: boolean
+  readonly noiseTick?: number
 }
 
 /**
@@ -171,9 +187,15 @@ export function createSensor(
   renderer: WebGPURenderer,
   scene: Scene,
   camera: Camera,
+  frame?: () => SensorFrame,
 ): Sensor {
+  const exposure = new ExposureMeter()
   const shape = sceneTargetShape(renderer)
   const scenePass = pass(scene, camera, { samples: shape.samples })
+  if (shape.optics === true) {
+    scenePass.setMRT(sensorMrt())
+    scenePass.getTextureNode('motion')
+  }
   /*
    * The pass draws the scene once per *render call*, not once per three
    * frame.
@@ -193,48 +215,155 @@ export function createSensor(
    * — once per presented frame in the app, once per call everywhere else.
    */
   scenePass.updateBeforeType = NodeUpdateType.RENDER
+  const motionTexture =
+    shape.optics === true ? scenePass.getTextureNode('motion') : null
+  const meter =
+    frame === undefined || !('isWebGPUBackend' in renderer.backend)
+      ? null
+      : createHistogramMeter(
+          scenePass.renderTarget.texture,
+          motionTexture?.value,
+        )
   const post = new RenderPipeline(renderer)
 
-  /*
-   * The chain ends in its own `renderOutput`, and `outputColorTransform` is
-   * off so that `RenderPipeline` does not add a second one.
-   *
-   * The default (`outputColorTransform = true`) wraps `outputNode` in a
-   * `renderOutput` whose color space it reads back **at draw time** — and
-   * `render()` sets `renderer.outputColorSpace` to the working (linear) space
-   * for the duration of the quad draw, so the transform bakes _linear_ and the
-   * sRGB OETF never runs. The frame reaches an 8-bit canvas as raw linear
-   * light: a lit hull at 0.04 linear encodes to 0.04 instead of the 0.22 the
-   * transfer function gives it, which reads as the whole picture nine stops
-   * too dark in the shadows. Owning the `renderOutput` here fixes the color
-   * space to the renderer's real one, taken once, before that swap.
-   *
-   * The response is chosen per mode anyway — Direct clips where Composite
-   * rolls off — which is the plan's reason for this being explicit rather than
-   * `RenderPipeline`'s to decide. `vec4(…, 1)` writes opaque alpha: the pass
-   * clears to opaque black and every additive material holds its own alpha
-   * writes to zero, but an alpha-0 pixel on the `rgba16float` canvas is the
-   * compositor artifact `flare.ts` documents, so the constant is the guarantee.
-   */
+  // Pin the encode before RenderPipeline temporarily swaps the renderer to
+  // linear output. The scene alpha is not the canvas alpha: present opaque.
   post.outputColorTransform = false
-  const sceneColor = vec4(scenePass.getTextureNode('output').rgb, 1)
+  const radiance = texture(scenePass.renderTarget.texture)
+  const defocus =
+    motionTexture === null || frame === undefined
+      ? null
+      : new DefocusNode(radiance, texture(motionTexture.value))
+  const motion =
+    defocus === null || motionTexture === null
+      ? null
+      : new MotionNode(defocus.outputTexture, texture(motionTexture.value))
+  const psf =
+    frame === undefined
+      ? null
+      : new PsfNode(motion?.outputTexture ?? defocus?.outputTexture ?? radiance)
+  const signature =
+    psf === null ? null : sensorSignature(texture(psf.result.texture))
+  const sceneColor =
+    signature?.linear ?? vec4(scenePass.getTextureNode('output').rgb, 1)
+  const size = new Vector2()
+  let previousTime: number | null = null
+  let previousFocus = ''
+  let maximumCircle = 40
   let builtToneMapping = renderer.toneMapping
   let builtColorSpace = renderer.outputColorSpace
   const buildOutput = (): void => {
     builtToneMapping = renderer.toneMapping
     builtColorSpace = renderer.outputColorSpace
-    post.outputNode = renderOutput(
-      sceneColor,
-      builtToneMapping,
-      builtColorSpace,
-    )
+    const encoded = renderOutput(sceneColor, builtToneMapping, builtColorSpace)
+    if (signature === null || psf === null) post.outputNode = encoded
+    else {
+      // Dependencies are enumerated here, once per presented frame. Internal
+      // quads read plain textures, so their draws cannot resubmit the scene or
+      // an earlier optical pass. Even a bypass updates its downstream texture.
+      let dependencies: Node<'vec4'> = vec4(
+        scenePass.getTextureNode().rgb.mul(0),
+        0,
+      )
+      if (defocus !== null)
+        dependencies = dependencies.add(nodeObject(defocus).mul(0))
+      if (motion !== null)
+        dependencies = dependencies.add(nodeObject(motion).mul(0))
+      dependencies = dependencies.add(nodeObject(psf).mul(0))
+      post.outputNode = dependencies.add(signature.encode(encoded))
+    }
     post.needsUpdate = true
   }
   buildOutput()
 
   return {
+    warm: async () => {
+      await warmPipeline(post)
+      for (const optical of [defocus, motion, psf]) {
+        if (optical !== null)
+          await warmSensorPass(
+            renderer,
+            optical.quad,
+            optical.materials,
+            'result' in optical
+              ? [...optical.targets, optical.result]
+              : optical.targets,
+          )
+      }
+    },
+    get exposure() {
+      return exposure.reading
+    },
+    get diagnostics() {
+      return {
+        maximumCircle,
+        defocusPasses: defocus?.passes ?? 0,
+        motionPasses: motion?.passes ?? 0,
+        shutterFraction: motion?.fraction.value ?? 0,
+      }
+    },
     sceneTarget: scenePass.renderTarget,
     render(target: RenderTarget | null = null) {
+      const state = frame?.()
+      if (state !== undefined) {
+        const reading = exposure.update(
+          state.lens,
+          state.settings,
+          state.time,
+          state.pinned,
+        )
+        setSceneExposure(renderer, reading.pre, reading.total)
+        renderer.getDrawingBufferSize(size)
+        renderer.toneMappingExposure = signature === null ? reading.residual : 1
+        const glass =
+          state.pinned === null ? GLASS_PRESETS.flight : GLASS_PRESETS.cinematic
+        signature?.update(
+          state.lens,
+          glass,
+          state.settings,
+          size.x,
+          size.y,
+          state.noiseTick === undefined ? state.time : state.noiseTick / 60,
+          reading.residual,
+          state.headroom <= 1,
+          renderer.outputColorSpace === DISPLAY_P3,
+        )
+        if (psf !== null) psf.scatter.value = glass.scatter
+        const parameters = defocusParameters(state.lens, {
+          width: size.x,
+          height: size.y,
+        })
+        const focusKey = parameters.join(':')
+        if (focusKey !== previousFocus) {
+          maximumCircle = 40
+          previousFocus = focusKey
+        }
+        if (defocus !== null) {
+          defocus.parameters.value.set(...parameters)
+          defocus.maximum.value = maximumCircle
+          defocus.enabled.value = maximumCircle > 0.5 ? 1 : 0
+          defocus.openness.value = Math.max(
+            0,
+            Math.min(1, (2.8 - state.lens.fStop) / 1.4),
+          )
+        }
+        if (meter !== null) meter.defocus.value.set(...parameters)
+        if (motion !== null)
+          motion.fraction.value = shutterFraction(
+            state.lens.shutter,
+            previousTime === null ? 0 : state.time - previousTime,
+            state.motionBlur ?? false,
+          )
+        previousTime = state.time
+        const tone = toneCurveFor(renderer)
+        if (tone !== undefined) {
+          tone.natural.value = state.settings.curve === 'natural' ? 1 : 0
+          tone.direct.value = state.settings.response === 'direct' ? 1 : 0
+          tone.wide.value = renderer.outputColorSpace === DISPLAY_P3 ? 1 : 0
+          tone.headroom.value = Math.min(state.headroom, state.settings.peak)
+          tone.shoulder.value = RESPONSE_SHOULDERS[state.settings.curve]
+        }
+      }
       // R3F sets `toneMapping` after the factory resolves and `commitToneCurve`
       // sets it back; a mode switch sets it again. The response is baked into
       // the output node, so a change is a rebuild, not a uniform write.
@@ -267,7 +396,25 @@ export function createSensor(
       const xrEnabled = renderer.xr.enabled
       try {
         post.render()
+        if (state !== undefined) {
+          const pre = exposure.reading!.pre
+          meter?.sample(
+            renderer,
+            scenePass.renderTarget.width,
+            scenePass.renderTarget.height,
+            (bins, circle) => {
+              if (
+                state.settings.response === 'composite' &&
+                state.pinned === null
+              )
+                exposure.measure(bins, pre, state.lens, state.settings)
+              if (focusKeyFor(state.lens, size.x, size.y) === previousFocus)
+                maximumCircle = circle
+            },
+          )
+        }
       } finally {
+        setSceneExposure(renderer, null)
         renderer.toneMapping = toneMapping
         renderer.outputColorSpace = outputColorSpace
         renderer.xr.enabled = xrEnabled
@@ -276,6 +423,13 @@ export function createSensor(
     dispose() {
       post.dispose()
       scenePass.dispose()
+      meter?.dispose()
+      psf?.dispose()
+      defocus?.dispose()
+      motion?.dispose()
     },
   }
 }
+
+const focusKeyFor = (lens: Lens, width: number, height: number) =>
+  defocusParameters(lens, { width, height }).join(':')

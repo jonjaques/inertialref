@@ -1,3 +1,4 @@
+import { SensorSection } from './SensorSection.tsx'
 import type { ReactNode } from 'react'
 import { effectiveFocalLength } from '@inertialref/rendering'
 import { DEFAULT_FOV_DEG, DEFAULT_LENS } from '../engine/GameEngine.ts'
@@ -40,56 +41,63 @@ export function LensSection({
   const [lens, setLens] = usePersistentState(CAMERA_LENS)
   const camera: CameraState = { lens, onLens: setLens }
   return (
-    <Section
-      id="camera.lens"
-      title="Lens"
-      // After zoom — what the picture is actually taken at, and what every
-      // reading in the Optics section is computed from. The glass alone reads
-      // 19 mm beside an 8.5° field, which is two lenses on one panel.
-      trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm`}
-    >
-      {/*
-       * Label and reading on one line, the travel on the next.
-       *
-       * Three columns on one line is the arrangement every settings page uses
-       * and it is the wrong one here. A 19 rem panel minus a 5 rem label and a
-       * 7 rem reading leaves the slider about 110 px — a hundred and ten
-       * positions for a logarithmic travel from 8.4 to 68 mm, where one pixel
-       * is most of a stop. These are the mode's precise controls; the travel is
-       * what wants the width, and a label and its reading are two short strings
-       * that read perfectly well at opposite ends of a line.
-       *
-       * It also lets both of them be as long as they need to be. "Focal length"
-       * fitted a 5 rem column with nothing to spare, and "31.3 mm · 42°" is
-       * within one character of overflowing a 7 rem one.
-       */}
-      {(['focal', 'zoom', 'aperture', 'focus'] as const).map((channel) => (
-        <div key={channel} className="flex flex-col">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="type-ui shrink-0 text-slate-400">
-              {LENS_CHANNELS[channel].label}
-            </span>
-            <span className="type-readout truncate text-right text-slate-300">
-              {LENS_CHANNELS[channel].format(camera.lens)}
-            </span>
+    <>
+      <Section
+        id="camera.lens"
+        title="Lens"
+        // After zoom — what the picture is actually taken at, and what every
+        // reading in the Optics section is computed from. The glass alone reads
+        // 19 mm beside an 8.5° field, which is two lenses on one panel.
+        trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm`}
+      >
+        {/*
+         * Label and reading on one line, the travel on the next.
+         *
+         * Three columns on one line is the arrangement every settings page uses
+         * and it is the wrong one here. A 19 rem panel minus a 5 rem label and a
+         * 7 rem reading leaves the slider about 110 px — a hundred and ten
+         * positions for a logarithmic travel from 8.4 to 68 mm, where one pixel
+         * is most of a stop. These are the mode's precise controls; the travel is
+         * what wants the width, and a label and its reading are two short strings
+         * that read perfectly well at opposite ends of a line.
+         *
+         * It also lets both of them be as long as they need to be. "Focal length"
+         * fitted a 5 rem column with nothing to spare, and "31.3 mm · 42°" is
+         * within one character of overflowing a 7 rem one.
+         */}
+        {(
+          ['focal', 'zoom', 'aperture', 'focus', 'shutter', 'iso'] as const
+        ).map((channel) => (
+          <div key={channel} className="flex flex-col">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="type-ui shrink-0 text-slate-400">
+                {LENS_CHANNELS[channel].label}
+              </span>
+              <span className="type-readout truncate text-right text-slate-300">
+                {LENS_CHANNELS[channel].format(camera.lens)}
+              </span>
+            </div>
+            <LensSlider channel={channel} camera={camera} />
           </div>
-          <LensSlider channel={channel} camera={camera} />
+        ))}
+        {children}
+        <div className="mt-1 flex items-center justify-end gap-2">
+          <Action
+            label="Reset lens"
+            title={`Back to the ${DEFAULT_FOV_DEG.toFixed(0)}° default — ${DEFAULT_LENS.focalLength.toFixed(1)} mm, no zoom, f/${DEFAULT_LENS.fStop.toFixed(1)}, focused at infinity`}
+            disabled={
+              camera.lens.focalLength === DEFAULT_LENS.focalLength &&
+              camera.lens.zoom === DEFAULT_LENS.zoom &&
+              camera.lens.fStop === DEFAULT_LENS.fStop &&
+              camera.lens.focus === DEFAULT_LENS.focus &&
+              camera.lens.shutter === DEFAULT_LENS.shutter &&
+              camera.lens.iso === DEFAULT_LENS.iso
+            }
+            onClick={() => camera.onLens(DEFAULT_LENS)}
+          />
         </div>
-      ))}
-      {children}
-      <div className="mt-1 flex items-center justify-end gap-2">
-        <Action
-          label="Reset lens"
-          title={`Back to the ${DEFAULT_FOV_DEG.toFixed(0)}° default — ${DEFAULT_LENS.focalLength.toFixed(1)} mm, no zoom, f/${DEFAULT_LENS.fStop.toFixed(1)}, focused at infinity`}
-          disabled={
-            camera.lens.focalLength === DEFAULT_LENS.focalLength &&
-            camera.lens.zoom === DEFAULT_LENS.zoom &&
-            camera.lens.fStop === DEFAULT_LENS.fStop &&
-            camera.lens.focus === DEFAULT_LENS.focus
-          }
-          onClick={() => camera.onLens(DEFAULT_LENS)}
-        />
-      </div>
-    </Section>
+      </Section>
+      <SensorSection />
+    </>
   )
 }

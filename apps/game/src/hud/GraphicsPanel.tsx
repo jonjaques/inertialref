@@ -1,3 +1,4 @@
+import { SensorSection } from './SensorSection.tsx'
 import { Mountain, Sparkles } from 'lucide-react'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
@@ -65,6 +66,7 @@ export function GraphicsPanel({
 
   return (
     <div className="flex flex-col gap-2">
+      <SensorSection />
       <Section id="graphics.features" title="Features">
         <SwitchRow
           bordered

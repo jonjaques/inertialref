@@ -1,3 +1,4 @@
+import { SURFACE_LUMINANCE } from '@inertialref/rendering'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -189,61 +190,15 @@ interface PlanetTuning {
   readonly flowRate: number
 }
 
-/**
- * How much to open up for a body too dark to expose the scene for.
- *
- * The star already does this in reverse: `visual.star.exposure` stops *down* as
- * a star fills the frame, because "a sun that fills the frame is exposed for its
- * surface, not for the scene it lights". This is the same decision at the other
- * end. Bennu reflects 4.4% of the light that reaches it and Halley's nucleus
- * 4% — darker than charcoal — and a camera or an eye that spends a minute
- * looking at one from five hundred meters away adapts to it. The renderer has
- * one exposure for the whole scene and cannot.
- *
- * So it is applied as an exposure and not as an albedo: it scales with how much
- * of the frame the body covers, it is 1 the moment the body is one object among
- * several, and it never fires at all above `ADAPTED_ALBEDO`. Every planet sees
- * exactly 1 — Mercury is 0.142 and the Moon 0.136, the two darkest.
- *
- * It is *not* only the small bodies below it. Fifteen moons already in
- * `bodies.ts` are darker than the threshold — Iapetus at 0.05, Thebe 0.047,
- * Himalia 0.057, Phoebe 0.081, Amalthea 0.09, Proteus 0.096 and the rest — and
- * every one of them opens up when it fills the frame. That is the intended
- * reading of the rule rather than an exception to it: a body too dark to expose
- * the scene for is a body too dark to expose the scene for, and Iapetus's
- * leading hemisphere is the canonical example. Saying otherwise here would be a
- * comment that reads as a guarantee and is not one.
- *
- * `docs/design/art.md` licenses this and draws the line it is on the right side
- * of: the *albedo* is the published one, the body is still the darkest thing in
- * the frame, and what is being adjusted is the sensor.
- */
-/**
- * The albedo the scene's own exposure already suits.
- *
- * One constant, read twice, because the two readings are only correct together:
- * it is both the cut-off and the target the lift aims at, so `lift` is exactly
- * 1 just below the threshold and the function is continuous there. Written out
- * as two literals — which it was — moving only the guard leaves it
- * discontinuous *and inverted*: at a guard of 0.15 a body at albedo 0.149 gets
- * `lift = 0.8`, so filling the frame would darken it.
- */
-const ADAPTED_ALBEDO = 0.12
-/** Angular radius at which adaptation starts, and the span over which it completes. */
-const ADAPT_FROM = 0.02
-const ADAPT_SPAN = 0.2
-
-function adaptationFor(body: RenderBody): number {
+/** Natural preserves the production lift for a dark body filling the picture. */
+function calibratedAlbedo(body: RenderBody): number {
   const albedo = body.appearance.geometricAlbedo
-  if (albedo >= ADAPTED_ALBEDO) return 1
-  // ADAPT_FROM is about a fifth of the frame; by ADAPT_FROM + ADAPT_SPAN the
-  // body is the scene.
+  if (albedo >= 0.12) return 1
   const filling = Math.min(
     1,
-    Math.max(0, (body.placement.angularRadius - ADAPT_FROM) / ADAPT_SPAN),
+    Math.max(0, (body.placement.angularRadius - 0.02) / 0.2),
   )
-  const lift = ADAPTED_ALBEDO / Math.max(albedo, 0.01)
-  return 1 + (lift - 1) * filling
+  return 1 + (0.12 / Math.max(albedo, 0.01) - 1) * filling
 }
 
 function tuningFor(body: RenderBody): PlanetTuning {
@@ -567,18 +522,12 @@ export function Bodies({
         // Presentation time, for the granulation churn — simulation seconds,
         // so time warp stirs the photosphere faster, which reads as intended.
         visual.star.time.value = engine.snapshot?.renderTime ?? 0
-        // Stop down as the disk grows: a sun that fills the frame is exposed
-        // for its surface, not for the scene it lights. From afar this is 1
-        // and the star stays the reference white the HDR path is built on.
-        // Fully stopped down by ~0.1 rad — the star-orbit arrival parks at
-        // 0.125 — where the ceiling of the tone curve finally lets the
-        // granulation through: at radiance 8 every lane clips to the same
-        // white and the surface work is invisible.
         const filling = Math.min(
           1,
           Math.max(0, (placement.angularRadius - 0.015) / 0.085),
         )
-        visual.star.exposure.value = 1 - filling * 0.9
+        visual.star.exposure.value =
+          body.sunlight * (engine.calibratedLight ? 1 - filling * 0.9 : 1)
       }
 
       const sun = scratch.sun
@@ -612,7 +561,11 @@ export function Bodies({
               },
         )
         planet.sunDirection.value.copy(sun)
-        planet.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+        planet.sunColour.value.setRGB(
+          keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+        )
         planet.spinAxis.value
           .set(0, 1, 0)
           .applyQuaternion(quaternion)
@@ -646,7 +599,9 @@ export function Bodies({
          */
         const liquid = appearance.liquid?.colour ?? OPEN_OCEAN
         planet.oceanColour.value.setRGB(liquid.r, liquid.g, liquid.b)
-        planet.albedoScale.value = adaptationFor(body)
+        planet.albedoScale.value = engine.calibratedLight
+          ? calibratedAlbedo(body)
+          : 1
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
         /*
@@ -744,7 +699,11 @@ export function Bodies({
             )
           else material.baseColour.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
-          material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+          material.sunColour.value.setRGB(
+            keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+          )
           // The deck's dusk color is the body's authored sunset, so clouds
           // and air agree about what the low sun does here.
           const deckHaze = appearance.haze
@@ -783,7 +742,11 @@ export function Bodies({
               : texturesFor(ring.texture, anisotropy).ring,
           )
           material.sunDirection.value.copy(sun)
-          material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+          material.sunColour.value.setRGB(
+            keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+          )
           material.innerFraction.value = ring.innerScale / ring.outerScale
           material.centre.value.copy(visual.mesh.position)
           // In render meters: the eclipse test runs on `positionWorld`, so a
@@ -847,7 +810,11 @@ export function Bodies({
               scattering.multiScatter,
             )
         }
-        air.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+        air.sunColour.value.setRGB(
+          keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+        )
         if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
     }
@@ -860,6 +827,9 @@ export function Bodies({
           address: `star:${star.system}`,
           name: star.name,
           kind: 'star',
+          sunlight: engine.calibratedLight
+            ? 8
+            : star.luminance / SURFACE_LUMINANCE,
           placement: star.placement,
           orientation: { x: 0, y: 0, z: 0, w: 1 },
           hasAtmosphere: false,

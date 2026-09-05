@@ -11,20 +11,27 @@ What this page is not: the atmosphere, the ground and the star population have
 their own plans, and the Milky Way is [the galaxy](the-galaxy.md), which depends
 on § 4 of this one for its brightness and on nothing else here.
 
-| Landed                                                           | The record                                                                                           |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| The lens as an instrument — focal, gauge, zoom, f, focus, t, ISO | [ADR-0017](../../docs/adr/0017-the-lens.md), `packages/rendering/src/lens.ts`                        |
-| Circle of confusion, hyperfocal, Airy disk, EV, all derived      | `lens.ts`, printed by `hud/OpticsSection.tsx`                                                        |
-| One tone curve, two ranges                                       | `render/tonemap.ts`, [rendering](../../docs/concepts/rendering.md#one-curve-two-ranges)              |
-| The output decision and the three-state override                 | `render/output.ts`, `render/capability.ts`, [spike 1](../../docs/spikes.md#1--hdr-display-detection) |
-| The lens flare: seven camera-space quads, analytic occlusion     | `render/flare.ts`, `render/flareMath.ts`                                                             |
-| The star field: 20,000 sprites on a shell, a magnitude ramp      | `scene/Starfield.tsx`, `render/materials.ts`                                                         |
+## Implementation status
 
-Not built: Direct and Composite, any exposure other than the constant
-`toneMappingExposure`, adaptation, the adaptation clamp
-[ux](../../docs/design/ux.md#accessibility) calls mandatory, a post pass of any
-kind, the depth-of-field blur the lens already predicts, motion blur, sensor
-noise, grading, wide-gamut output.
+[ADR-0031](../../docs/adr/0031-the-sensor-response.md) records the implemented
+chain and the deliberate changes to this proposal. Natural preserves the
+production lighting calibration, ACES fit and integrated sky; Neutral and the other Composite presets
+use the hue-preserving response and physical stellar flux. Direct uses the lens
+exposure. This preserves the default look while exposing photographic choices.
+
+Exposure, the histogram meter and clamps, the PSF halo, near/far defocus,
+tile-based motion, detector noise, vignetting, lateral color, SDR dither, P3
+output, white balance and response presets are implemented. The meter reduces
+on the CPU after an asynchronous GPU readback. The scene MRT packs velocity
+and reciprocal depth into one attachment. Three held Enterprise portraits
+exercise the camera and focus controls.
+
+Open work: the FFT diffraction tier, glass-specific iris sample rotation,
+spectral emission and narrowband filters, photo export and tether controls,
+and the complete per-pass performance matrix below. Browser headroom discovery
+remains unavailable in the measured Chrome configuration. The explicit peak
+cap remains necessary. The numbered sections below retain the proposed design
+and budgets for comparison; they are not a completion checklist.
 
 ---
 

@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   AddEquation,
   Color,
@@ -258,7 +259,7 @@ function warpMaterial(kind: WarpKind): WarpElement {
     }
   }
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = colour.mul(profile).mul(intensity).mul(tint)
   material.transparent = true
   material.blending = CustomBlending

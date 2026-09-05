@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   AddEquation,
   Color,
@@ -13,7 +14,6 @@ import {
   ZeroFactor,
 } from 'three/webgpu'
 import {
-  abs,
   clamp,
   dot,
   exp,
@@ -21,7 +21,6 @@ import {
   length,
   mix,
   oneMinus,
-  pow,
   smoothstep,
   uniform,
   uv,
@@ -71,7 +70,7 @@ function smoothFade(distance: number): number {
   return t * t * (3 - 2 * t)
 }
 
-type ElementKind = 'glow' | 'streak' | 'disc' | 'ring' | 'corona'
+type ElementKind = 'disc' | 'ring' | 'corona'
 
 interface ElementSpec {
   readonly kind: ElementKind
@@ -94,8 +93,6 @@ const ELEMENTS: readonly ElementSpec[] = [
   // Tuned on the extended-range path, where the tone curve's shoulder lifts
   // everything near white: what reads as restrained on an SDR capture was a
   // furnace on an EDR display, which is where these were re-metered.
-  { kind: 'glow', t: 0, size: 0.24, tint: [1, 1, 1], gain: 1.1 },
-  { kind: 'streak', t: 0, size: 1.0, tint: [1, 0.95, 0.9], gain: 0.16 },
   { kind: 'disc', t: 0.38, size: 0.05, tint: [0.5, 0.9, 0.85], gain: 0.22 },
   { kind: 'disc', t: 0.62, size: 0.034, tint: [0.95, 0.6, 0.85], gain: 0.18 },
   { kind: 'disc', t: 0.85, size: 0.08, tint: [0.55, 0.75, 0.95], gain: 0.12 },
@@ -145,25 +142,6 @@ function elementMaterial(kind: ElementKind): {
   let profile
   let colour
   switch (kind) {
-    case 'glow': {
-      // A point-spread function: a hot core inside a wide skirt, dying before
-      // the quad's edge so the square never shows. The skirt is kept lean —
-      // at 0.14 it swallowed the whole sunset composition in orange.
-      profile = exp(r.mul(-7))
-        .add(exp(r.mul(-2.6)).mul(0.05))
-        .mul(oneMinus(smoothstep(float(0.8), float(1), r)))
-      colour = tint
-      break
-    }
-    case 'streak': {
-      // A thin horizontal blade, brightest at the star and fading along its
-      // length: the anamorphic smear every sensor gives a bright point.
-      const across = abs(centred.y).mul(30)
-      const along = oneMinus(smoothstep(float(0), float(1), abs(centred.x)))
-      profile = exp(across.negate()).mul(pow(along, 3))
-      colour = tint
-      break
-    }
     case 'disc': {
       // An iris ghost: a soft disk whose rim runs warm — the chromatic
       // fringing real coatings leave on out-of-focus apertures.
@@ -245,7 +223,7 @@ function elementMaterial(kind: ElementKind): {
     }
   }
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = colour.mul(profile).mul(intensity)
   material.transparent = true
   /*
@@ -487,12 +465,7 @@ export function createLensFlare(): LensFlare {
         )
         const core = spec.t === 0
         const scale = spec.size * frameHeight * (core ? bloom : 1)
-        // The streak is a blade: wide, and a tenth as tall.
-        element.mesh.scale.set(
-          spec.kind === 'streak' ? scale * 2.2 : scale,
-          spec.kind === 'streak' ? scale * 0.1 : scale,
-          1,
-        )
+        element.mesh.scale.set(scale, scale, 1)
 
         /*
          * Grazing a limb reddens everything: the light arriving at the lens
@@ -517,11 +490,7 @@ export function createLensFlare(): LensFlare {
           : smoothFade(
               Math.hypot((at.x - projected.x) * aspect, at.y - projected.y),
             )
-        // The core glow is the star; everything else is the lens talking, and
-        // `artifacts` is how loudly this lens is allowed to talk. The streak
-        // counts as artifact even though it sits on the core — a blade across
-        // the frame is the single most obviously *photographic* element here.
-        const lens = spec.kind === 'glow' ? 1 : artifacts
+        const lens = artifacts
         element.intensity.value = spec.gain * strength * nearSun * lens
       }
     },

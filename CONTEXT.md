@@ -7442,6 +7442,39 @@ to that record before work in a governed area. Claude's rule extracts and
 Cursor's references retain their paths, so reducing startup text does not
 remove the reasoning or require maintaining a second set of constraints.
 
+## The sensor keeps its default sky, and half a pixel is not half resolution (4 Sep 2026)
+
+[ADR-0031](docs/adr/0031-the-sensor-response.md) records the lens-driven sensor.
+Production is the visual reference: Natural retains its calibrated lighting,
+fixed exposure, ACES fit and integrated sky, while Neutral and Direct expose the photographic alternatives. The GPU
+hue sweep measures less than 0.00002° drift under Neutral, and the two-meter
+blur measures 36.318 px against 35.834 px from the thin-lens equation.
+
+Two defocus bugs were visible in the recovered implementation. A 0.5625-pixel
+circle replaced a sharp signal with the half-resolution layer, reducing a 0/1
+stripe to 0.5; and a large maximum circle elsewhere reduced a uniform
+foreground's 0.25 to 0.00499. Coverage fades through the subpixel interval, and
+normalized color is separate from foreground edge opacity. Both GPU regressions
+failed before the fixes. Exposure clamps also failed with adaptation held, and
+P3 configuration threw when `getConfiguration` was absent; their regression
+tests reproduced both defects.
+
+The glare test's 3.55% skirt error was 0.053% of the whole half-float image.
+The isolated halo integrates to 396.143 for a 400-unit source, within the 2%
+kernel gate; the resolved image retains 399.787, within 0.1%. The P3 spike in
+Chrome 152 on this display reads P3 red as [1.09277, -0.22668, -0.15015] through
+an sRGB float readback. Its headroom report is absent, so the explicit cap stays.
+
+The framed Bennu check caught an automatic gain of EV 8.11 against the
+production calibration at EV 14.61: nearly white instead of a dark asteroid.
+Natural retains that calibration, including the dark-body lift and star
+stop-down, while the photographic Composite presets meter normally. Its
+regression test fails with automatic gain applied to Natural. The full WebGL 2
+chain also draws an opaque calibration plane with no GL error.
+
+The FFT tier, spectral filters and photo export remain open. The plan states
+that scope rather than describing every proposed phase as finished.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

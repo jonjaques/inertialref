@@ -88,6 +88,10 @@ export interface CinematicSpark {
 
 /** Screen-space effect drives, all 0..1. */
 export interface CinematicEffects {
+  /** EV offset from the calibrated surface exposure, pinned by the shot. */
+  readonly exposure: number
+  /** Unit sunlight for reference-matched staging; zero uses physical irradiance. */
+  readonly calibratedLight: number
   /** Full-frame black, over the scene and under the text. */
   readonly blackout: number
   /** The warp-flash wash: blue-white flooding the frame. */
@@ -124,6 +128,8 @@ export const NO_SPARK: CinematicSpark = Object.freeze({
 })
 
 export const NO_EFFECTS: CinematicEffects = Object.freeze({
+  exposure: 0,
+  calibratedLight: 0,
   blackout: 0,
   flash: 0,
   streaks: 0,

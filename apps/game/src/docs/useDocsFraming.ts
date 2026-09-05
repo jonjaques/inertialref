@@ -54,6 +54,7 @@ export function useDocsFraming(
    */
   useEffect(() => {
     const stance = engine.presentation.push({
+      motionBlur: false,
       showShip: false,
       showOrbits: false,
       flareArtifacts: FLARE_ARTIFACTS,

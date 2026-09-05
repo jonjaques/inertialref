@@ -1,3 +1,4 @@
+import { formatShutter } from './controls.ts'
 import { formatReading } from '@inertialref/shared'
 import { lensReadout } from '@inertialref/rendering'
 import { useEngine, useShallow } from '../state/engineStore.ts'
@@ -22,6 +23,7 @@ import { Section } from './Section.tsx'
  * is a decision that sticks.
  */
 export function OpticsSection() {
+  const exposure = useEngine((snapshot) => snapshot.exposure)
   const [lens] = usePersistentState(CAMERA_LENS)
   /*
    * The viewport the derived readouts are resolved against, and only it.
@@ -87,7 +89,11 @@ export function OpticsSection() {
       />
       <Row
         label="Exposure"
-        value={`EV ${view.exposureValue.toFixed(1)} · 1/${Math.round(1 / lens.shutter)} s · ISO ${lens.iso}`}
+        value={`EV ${view.exposureValue.toFixed(1)} set · ${exposure === null ? '—' : `${exposure.auto >= 0 ? '+' : ''}${exposure.auto.toFixed(1)} auto`}`}
+      />
+      <Row
+        label="Integration"
+        value={`${formatShutter(lens.shutter)} · ISO ${Math.round(lens.iso)}`}
       />
     </Section>
   )

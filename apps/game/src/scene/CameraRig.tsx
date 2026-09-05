@@ -214,6 +214,9 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     // Sunlight comes from the nearest star's rendered position, so shadows and
     // terminators line up with where the star actually is.
     const star = scene.stars[0]
+    if (light.current !== null)
+      light.current.intensity =
+        4 * (engine.calibratedLight ? 1 : (star?.sunlight ?? 0))
     if (star !== undefined && light.current !== null) {
       light.current.position.set(
         star.placement.position.x,

@@ -275,6 +275,13 @@ export const ACTIONS: readonly ActionDefinition[] = [
     chord('Slash', { shift: true }),
     { hint: 'this sheet, from any mode' },
   ),
+  press(
+    'sensor.response',
+    'Canopy Response',
+    'Screen',
+    'global',
+    chord('KeyV', { shift: true }),
+  ),
   press('chrome.settings', 'Settings', 'Screen', 'global', chord('Comma')),
 
   press('panel.1', 'First Panel', 'Panels', 'global', chord('Digit1')),

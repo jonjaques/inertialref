@@ -402,16 +402,26 @@ function planckianChromaticity(temperature: Kelvin): { x: number; y: number } {
  * tone mapper should own, not this function.
  */
 export function blackbodyColour(temperature: Kelvin): LinearRgb {
+  const { x: bigX, y: bigY, z: bigZ } = blackbodyXyz(temperature)
+
+  // CIE XYZ (D65) → linear sRGB; negative channels retain out-of-gamut light.
+  const r = 3.240_479 * bigX - 1.537_150 * bigY - 0.498_535 * bigZ
+  const g = -0.969_256 * bigX + 1.875_992 * bigY + 0.041_556 * bigZ
+  const b = 0.055_648 * bigX - 0.204_043 * bigY + 1.057_311 * bigZ
+  const peak = Math.max(r, g, b, 1e-6)
+  return { r: r / peak, g: g / peak, b: b / peak }
+}
+
+/** The temperature's tristimulus colour, independent of a display's primaries. */
+export function blackbodyXyz(temperature: Kelvin): {
+  readonly x: number
+  readonly y: number
+  readonly z: number
+} {
   const { x, y } = planckianChromaticity(temperature)
   const bigY = 1
   const bigX = (x / y) * bigY
   const bigZ = ((1 - x - y) / y) * bigY
 
-  // CIE XYZ (D65) → linear sRGB.
-  const r = 3.240_479 * bigX - 1.537_150 * bigY - 0.498_535 * bigZ
-  const g = -0.969_256 * bigX + 1.875_992 * bigY + 0.041_556 * bigZ
-  const b = 0.055_648 * bigX - 0.204_043 * bigY + 1.057_311 * bigZ
-
-  const peak = Math.max(r, g, b, 1e-6)
-  return { r: r / peak, g: g / peak, b: b / peak }
+  return { x: bigX, y: bigY, z: bigZ }
 }

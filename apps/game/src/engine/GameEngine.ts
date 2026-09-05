@@ -1,3 +1,10 @@
+import type { SensorDiagnostics } from '../render/sensor.ts'
+import {
+  DEFAULT_SENSOR_SETTINGS,
+  naturalResponse,
+  type SensorSettings,
+  type Exposure,
+} from '@inertialref/rendering'
 import {
   getLogger,
   getTimer,
@@ -538,6 +545,17 @@ export class GameEngine {
    * Pushed and released like `showShip`, through `presentation`.
    */
   flareArtifacts = 1
+
+  sensorSettings: SensorSettings = DEFAULT_SENSOR_SETTINGS
+  exposure: Exposure | null = null
+  sensorDiagnostics: SensorDiagnostics | null = null
+
+  get calibratedLight(): boolean {
+    return (
+      naturalResponse(this.sensorSettings) ||
+      (this.cinematic?.effects.calibratedLight ?? 0) > 0
+    )
+  }
 
   /**
    * Whether the interface is in the frame.

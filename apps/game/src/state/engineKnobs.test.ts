@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { LENS_PRESETS, lensForFov } from '@inertialref/rendering'
+import {
+  DEFAULT_SENSOR_SETTINGS,
+  LENS_PRESETS,
+  lensForFov,
+} from '@inertialref/rendering'
 import { aaDprFactor } from '../render/output.ts'
 import { DEFAULT_SURFACE_QUALITY } from '../render/quality.ts'
 import { bindEngineKnobs, type EngineKnobs } from './engineKnobs.ts'
@@ -7,6 +11,7 @@ import {
   CAMERA_LENS,
   read,
   RENDER_AA,
+  RENDER_SENSOR,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
   write,
@@ -21,10 +26,17 @@ import {
  * dependency list, which only a browser could exercise.
  */
 
-const KNOBS = [CAMERA_LENS, RENDER_LENS_FLARE, RENDER_SURFACE, RENDER_AA]
+const KNOBS = [
+  CAMERA_LENS,
+  RENDER_LENS_FLARE,
+  RENDER_SURFACE,
+  RENDER_AA,
+  RENDER_SENSOR,
+]
 
 function engine(): EngineKnobs {
   return {
+    sensorSettings: DEFAULT_SENSOR_SETTINGS,
     flightLens: LENS_PRESETS.flight,
     lensFlare: true,
     surfaceQuality: DEFAULT_SURFACE_QUALITY,
@@ -36,6 +48,23 @@ function engine(): EngineKnobs {
 describe('the engine knobs', () => {
   afterEach(() => {
     for (const knob of KNOBS) write(knob, knob.initial)
+  })
+
+  it('carries sensor changes through the registry without altering the lens', () => {
+    const bound = engine()
+    const release = bindEngineKnobs(bound)
+    const lens = bound.flightLens
+    const settings = {
+      ...DEFAULT_SENSOR_SETTINGS,
+      response: 'direct' as const,
+      peak: 1.2,
+    }
+    write(RENDER_SENSOR, settings)
+    expect(bound.sensorSettings).toEqual(settings)
+    expect(bound.flightLens).toBe(lens)
+    release()
+    write(RENDER_SENSOR, DEFAULT_SENSOR_SETTINGS)
+    expect(bound.sensorSettings).toEqual(settings)
   })
 
   it('applies what is stored on the way in', () => {

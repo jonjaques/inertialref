@@ -17,6 +17,9 @@ import {
   DEBUG_ON,
   RENDER_AA,
   RENDER_HDR,
+  RENDER_SENSOR,
+  read,
+  write,
   usePersistentState,
 } from './state/preferences.ts'
 import { useAction } from './input/useKeymap.ts'
@@ -575,6 +578,13 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     onWarp: commands.warp,
     onSave: commands.save,
     onLoad: commands.load,
+  })
+  useAction('sensor.response', () => {
+    const held = read(RENDER_SENSOR)
+    write(RENDER_SENSOR, {
+      ...held,
+      response: held.response === 'composite' ? 'direct' : 'composite',
+    })
   })
   useAction('time.normal', commands.realTime)
   useAction('chrome.instruments', () => setDebug(!debug))

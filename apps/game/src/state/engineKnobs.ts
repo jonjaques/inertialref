@@ -1,4 +1,4 @@
-import type { Lens } from '@inertialref/rendering'
+import type { Lens, SensorSettings } from '@inertialref/rendering'
 import { aaDprFactor } from '../render/output.ts'
 import type { SurfaceQuality } from '../render/quality.ts'
 import {
@@ -8,6 +8,7 @@ import {
   RENDER_AA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
+  RENDER_SENSOR,
   subscribe,
   write,
 } from './preferences.ts'
@@ -40,6 +41,7 @@ import {
 
 /** What the bindings write, and all an engine has to be to take them. */
 export interface EngineKnobs {
+  sensorSettings: SensorSettings
   flightLens: Lens
   lensFlare: boolean
   surfaceQuality: SurfaceQuality
@@ -59,6 +61,9 @@ const knob =
   }
 
 const KNOBS: readonly ((engine: EngineKnobs) => () => void)[] = [
+  knob(RENDER_SENSOR, (engine, settings) => {
+    engine.sensorSettings = settings
+  }),
   knob(CAMERA_LENS, (engine, lens) => {
     engine.flightLens = lens
   }),

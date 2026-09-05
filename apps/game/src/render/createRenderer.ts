@@ -9,6 +9,7 @@ import {
   resolveOutputMode,
 } from './output.ts'
 import { declareSceneTarget } from './sensor.ts'
+import { configureGamut, DISPLAY_P3 } from './gamut.ts'
 import {
   installToneCurve,
   selectToneCurve,
@@ -190,7 +191,7 @@ async function buildRenderer(
   })
 
   await renderer.init()
-  declareSceneTarget(renderer, { samples: antialias ? 4 : 0 })
+  declareSceneTarget(renderer, { samples: antialias ? 4 : 0, optics: true })
 
   /*
    * Clear to *opaque* black. The default clear alpha is 0, and on the
@@ -225,9 +226,12 @@ async function buildRenderer(
   const backend = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl'
   const mode: OutputMode = backend === 'webgpu' ? requested : 'standard'
   const headroom = headroomFor(mode)
+  const wide = configureGamut(renderer, mode === 'extended')
+  if (wide) renderer.outputColorSpace = DISPLAY_P3
 
   const tone = installToneCurve(renderer, headroom)
   const description: RendererDescription = {
+    gamut: wide ? 'display-p3' : 'srgb',
     backend,
     mode,
     preference,
@@ -267,6 +271,8 @@ async function buildRenderer(
  */
 export function commitToneCurve(handle: RendererHandle): void {
   selectToneCurve(handle.renderer)
+  if (handle.description.gamut === 'display-p3')
+    handle.renderer.outputColorSpace = DISPLAY_P3
 }
 
 /**
