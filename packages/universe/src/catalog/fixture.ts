@@ -1,5 +1,10 @@
 import { loadCatalog, type StarCatalog } from './starCatalog.ts'
-import { NO_INDEX, type PackedPlanet, type PackedStar } from './format.ts'
+import {
+  NO_INDEX,
+  type PackedCatalog,
+  type PackedPlanet,
+  type PackedStar,
+} from './format.ts'
 
 /*
  * A five-star catalog for tests.
@@ -170,7 +175,7 @@ const PLANETS: readonly PackedPlanet[] = [
  * test that generates a cell near Sol still gets stars to generate. The real
  * asset sets it to 25 and `apps/ingest` tests that side.
  */
-export const TEST_CATALOG: StarCatalog = loadCatalog({
+export const TEST_VOLUME: PackedCatalog = {
   metadata: {
     version: 'fixture-1',
     radiusLightYears: 10,
@@ -180,4 +185,73 @@ export const TEST_CATALOG: StarCatalog = loadCatalog({
   },
   stars: STARS,
   planets: PLANETS,
-})
+}
+
+export const TEST_CATALOG: StarCatalog = loadCatalog(TEST_VOLUME)
+
+/*
+ * Two of Orion's stars as the sky asset holds them: far beyond the volume,
+ * naked-eye bright, at their HYG v4.4 positions through the same projection
+ * as the five above. Betelgeuse is the brightest red supergiant in the sky
+ * and Rigel the brightest blue one, which is what makes the pair useful — a
+ * colour test needs both ends of the ramp.
+ */
+const SKY_STARS: readonly PackedStar[] = [
+  star({
+    id: 'HIP27989',
+    commonName: 'Betelgeuse',
+    proper: 'Betelgeuse',
+    hip: 27_989,
+    hd: 39_801,
+    hr: 2_061,
+    spectralType: 'M2Ib',
+    absoluteMagnitude: -5.469,
+    colourIndex: 1.5,
+    constellation: 59, // Ori
+    bayer: 0, // Alp
+    flamsteed: 58,
+    x: -462.8323 * LY,
+    y: -166.5133 * LY,
+    z: -77.541 * LY,
+  }),
+  star({
+    id: 'HIP24436',
+    commonName: 'Rigel',
+    proper: 'Rigel',
+    hip: 24_436,
+    hd: 34_085,
+    hr: 1_713,
+    spectralType: 'B8Ia',
+    absoluteMagnitude: -6.933,
+    colourIndex: -0.03,
+    constellation: 59, // Ori
+    bayer: 1, // Bet
+    flamsteed: 19,
+    x: -680.9868 * LY,
+    y: -381.2333 * LY,
+    z: -368.0005 * LY,
+  }),
+]
+
+/**
+ * The sky asset's shape: no volume, a stated selection, no planets. The
+ * selection begins where the fixture volume ends, as the real pair does.
+ */
+export const TEST_SKY: PackedCatalog = {
+  metadata: {
+    version: 'sky-fixture-1',
+    radiusLightYears: 0,
+    completeRadiusLightYears: 0,
+    attribution: [],
+    sources: [],
+    sky: { beyondLightYears: 10, apparentMagnitudeLimit: 6.5 },
+  },
+  stars: SKY_STARS,
+  planets: [],
+}
+
+/** The five-star volume and the two-star sky, indexed together as a host does. */
+export const TEST_CATALOG_WITH_SKY: StarCatalog = loadCatalog(
+  TEST_VOLUME,
+  TEST_SKY,
+)

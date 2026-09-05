@@ -201,10 +201,32 @@ export interface PackedPlanet {
   readonly circumbinary: boolean
 }
 
+/**
+ * How a sky asset chose its stars.
+ *
+ * The volume asset is a sphere: everything the source knows inside a radius.
+ * The sky asset is the naked-eye sky beyond it — Betelgeuse at 500 ly, Rigel at
+ * 860, Deneb at 1,400 — and no radius describes that set, because what it holds
+ * is a *magnitude*: every source bright enough to be seen from Earth, however
+ * far. The two numbers here are the whole rule, stated so a reader can check
+ * any star against it rather than trust the file.
+ */
+export interface SkySelection {
+  /** Sources at or inside this distance belong to the volume asset. */
+  readonly beyondLightYears: number
+  /** Apparent visual magnitude a source must be at or brighter than. */
+  readonly apparentMagnitudeLimit: number
+}
+
 export interface CatalogMetadata {
   /** The whole-catalog version, e.g. `hyg-4.4+nea-20260820`. */
   readonly version: string
-  /** Radius of the volume this file covers, light-years. */
+  /**
+   * Radius of the volume this file covers, light-years.
+   *
+   * Zero for a file that claims no volume — the sky asset, whose stars are
+   * chosen by brightness rather than by distance, and the one-star fallback.
+   */
   readonly radiusLightYears: number
   /**
    * Radius inside which this catalog is complete for main-sequence stars, so
@@ -220,6 +242,12 @@ export interface CatalogMetadata {
     readonly licence: string
     readonly retrieved: string
   }[]
+  /**
+   * Present on a sky asset, and on a catalog that loaded one: the selection
+   * its distant stars satisfy. Absent from a volume asset, which is defined by
+   * `radiusLightYears` alone.
+   */
+  readonly sky?: SkySelection
 }
 
 export interface PackedCatalog {
