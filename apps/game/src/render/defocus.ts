@@ -1,3 +1,4 @@
+import { warmSensorPass, type WarmPass } from './warmup.ts'
 import { GLASS_PRESETS, type Glass } from '@inertialref/rendering'
 import {
   HalfFloatType,
@@ -7,6 +8,7 @@ import {
   RenderTarget,
   TempNode,
   Vector2,
+  type WebGPURenderer,
   type Node,
   type NodeBuilder,
   type NodeFrame,
@@ -54,16 +56,16 @@ export class DefocusNode extends TempNode<'vec4'> {
   readonly enabled = uniform(0)
   readonly openness = uniform(0)
   readonly pixelStep = uniform(new Vector2(1, 1))
-  readonly targets = Array.from(
-    { length: 4 },
-    () => new RenderTarget(1, 1, { type: HalfFloatType, depthBuffer: false }),
-  )
-  readonly materials = Array.from({ length: 4 }, () => new NodeMaterial())
-  readonly quad = new QuadMesh()
-  readonly size = new Vector2()
+  readonly #stages: readonly WarmPass[] = Array.from({ length: 4 }, () => ({
+    target: new RenderTarget(1, 1, { type: HalfFloatType, depthBuffer: false }),
+    material: new NodeMaterial(),
+  }))
+  #disposed = false
+  readonly #quad = new QuadMesh()
+  readonly #size = new Vector2()
   readonly outputTexture = passTexture(
     this as unknown as PassNode,
-    this.targets[3]!.texture,
+    this.#stages[3]!.target.texture,
   )
   readonly inputNode: TextureNode
   readonly motionNode: TextureNode
@@ -85,11 +87,11 @@ export class DefocusNode extends TempNode<'vec4'> {
       .clamp(-40, 40)
     // Bounded at the half-float maximum for the reason `psf.ts` gives: the
     // gather multiplies by a coverage that can be zero, and Inf × 0 is NaN.
-    this.materials[0]!.fragmentNode = vec4(
+    this.#stages[0]!.material.fragmentNode = vec4(
       this.inputNode.sample(uv()).rgb.min(65_504),
       circle,
     ).context(context)
-    const source = texture(this.targets[0]!.texture)
+    const source = texture(this.#stages[0]!.target.texture)
     const pattern = irisPattern(GLASS_PRESETS.flight)
     for (const near of [false, true]) {
       const gather = Fn(() => {
@@ -120,10 +122,11 @@ export class DefocusNode extends TempNode<'vec4'> {
         }
         return sum.div(pattern.length)
       })()
-      this.materials[near ? 2 : 1]!.fragmentNode = gather.context(context)
+      this.#stages[near ? 2 : 1]!.material.fragmentNode =
+        gather.context(context)
     }
-    const near = texture(this.targets[2]!.texture)
-    const far = texture(this.targets[1]!.texture)
+    const near = texture(this.#stages[2]!.target.texture)
+    const far = texture(this.#stages[1]!.target.texture)
     const sharp = texture(this.inputNode.value)
     const coc = this.parameters.x.mul(
       this.parameters.y.sub(texture(this.motionNode.value).z),
@@ -141,8 +144,8 @@ export class DefocusNode extends TempNode<'vec4'> {
       near.a.greaterThan(0).select(1, 0),
     )
     const color = mix(base, near.rgb.div(max(near.a, float(1e-6))), nearOpacity)
-    this.materials[3]!.fragmentNode = vec4(color, 1).context(context)
-    this.materials.forEach((material, i) => {
+    this.#stages[3]!.material.fragmentNode = vec4(color, 1).context(context)
+    this.#stages.forEach(({ material }, i) => {
       material.name = `Sensor Defocus ${i}`
     })
     // Keeping the bypass in the graph avoids any pipeline rebuild as focus
@@ -150,24 +153,33 @@ export class DefocusNode extends TempNode<'vec4'> {
     return this.outputTexture
   }
 
+  warm(renderer: WebGPURenderer): Promise<void> {
+    return this.#disposed
+      ? Promise.resolve()
+      : warmSensorPass(renderer, this.#quad, this.#stages)
+  }
+
   override updateBefore({ renderer }: NodeFrame): undefined {
+    if (this.#disposed) return
     this.passes = 0
     this.outputTexture.value =
-      this.enabled.value < 0.5 ? this.inputNode.value : this.targets[3]!.texture
+      this.enabled.value < 0.5
+        ? this.inputNode.value
+        : this.#stages[3]!.target.texture
     if (renderer === null || this.enabled.value < 0.5) return
     const previous = renderer.getRenderTarget()
-    const size = renderer.getDrawingBufferSize(this.size)
+    const size = renderer.getDrawingBufferSize(this.#size)
     this.pixelStep.value.set(1 / size.x, 1 / size.y)
     try {
       for (let i = 0; i < 4; i += 1) {
-        const target = this.targets[i]!
+        const target = this.#stages[i]!.target
         target.setSize(
           i === 3 ? size.x : Math.max(1, Math.ceil(size.x / 2)),
           i === 3 ? size.y : Math.max(1, Math.ceil(size.y / 2)),
         )
         renderer.setRenderTarget(target)
-        this.quad.material = this.materials[i]!
-        this.quad.render(renderer)
+        this.#quad.material = this.#stages[i]!.material
+        this.#quad.render(renderer)
         this.passes += 1
       }
     } finally {
@@ -176,8 +188,12 @@ export class DefocusNode extends TempNode<'vec4'> {
   }
 
   override dispose(): void {
-    this.targets.forEach((target) => target.dispose())
-    this.materials.forEach((material) => material.dispose())
+    if (this.#disposed) return
+    this.#disposed = true
+    for (const { target, material } of this.#stages) {
+      target.dispose()
+      material.dispose()
+    }
     super.dispose()
   }
 }

@@ -58,11 +58,18 @@ stellar flux.**
 - The final output is opaque, with triangular dither on SDR. An extended
   WebGPU canvas uses P3 only when its configuration and the encoder can agree.
   Missing configuration reporting or a failed P3 configure retains sRGB.
+  `CanvasGamut` owns the negotiated color space, reapplies the agreement after
+  every canvas resize, and commits that live value after R3F configures output.
+  Renderer diagnostics read the same value. Disposal removes the resize listener.
   Display headroom remains an authored maximum of two, reduced by the peak cap.
 - Every optical pass and the output quad register through the warm-up. Internal
   quads read plain textures; one dependency graph schedules the scene and each
   optical pass once per render call. The chain restores renderer state on a
   throw. `engine.exposure` and `engine.sensorDiagnostics` expose the live result.
+  Each optical pass privately pairs its materials with their render targets;
+  warming, drawing, resizing and disposal use those same records. The sensor
+  calls `warm(renderer)` and reads `outputTexture`, without inspecting the
+  pass's internal stages. Each pass retires its resources once.
 
 ## Alternatives considered
 
@@ -111,9 +118,11 @@ An offscreen WebGL 2 draw of a gray calibration plane through the full chain
 at four samples reads opaque [163, 165, 164, 255] with no GL error; that is a
 one-off check during verification, not a test in the tree. P3 is confirmed in
 Chrome 152. three configures the canvas lazily and forgets the configuration
-on every resize, so the P3 declaration is re-applied from the canvas target's
-`resize` event; without that the first `setSize` after the renderer is built
-returns the canvas to sRGB while the encoder keeps writing P3 primaries.
+on every resize, so the canvas and encoder renegotiate from the canvas target's
+`resize` event. A failed P3 reconfiguration switches both to the restored sRGB
+declaration; a later successful resize can recover P3. Without that agreement,
+the first `setSize` after the renderer is built can return the canvas to sRGB
+while the encoder keeps writing P3 primaries.
 
 The FFT diffraction tier and spectral emission attachment are not implemented.
 Neither are narrowband filters, a photo export/tether workflow, a spectral

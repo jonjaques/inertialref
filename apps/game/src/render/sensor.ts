@@ -30,7 +30,7 @@ import {
 import { createHistogramMeter } from './meter.ts'
 import { setSceneExposure } from './radiance.ts'
 import { toneCurveFor } from './tonemap.ts'
-import { warmPipeline, warmSensorPass } from './warmup.ts'
+import { warmPipeline } from './warmup.ts'
 
 /* The sensor owns the only scene draw, then applies lens-side optics,
  * detector response and the canvas encode. MSAA belongs to the scene target;
@@ -243,7 +243,7 @@ export function createSensor(
       ? null
       : new PsfNode(motion?.outputTexture ?? defocus?.outputTexture ?? radiance)
   const signature =
-    psf === null ? null : sensorSignature(texture(psf.result.texture))
+    psf === null ? null : sensorSignature(texture(psf.outputTexture.value))
   const sceneColor =
     signature?.linear ?? vec4(scenePass.getTextureNode('output').rgb, 1)
   const size = new Vector2()
@@ -282,15 +282,7 @@ export function createSensor(
     warm: async () => {
       await warmPipeline(post)
       for (const optical of [defocus, motion, psf]) {
-        if (optical !== null)
-          await warmSensorPass(
-            renderer,
-            optical.quad,
-            optical.materials,
-            'result' in optical
-              ? [...optical.targets, optical.result]
-              : optical.targets,
-          )
+        await optical?.warm(renderer)
       }
     },
     get exposure() {

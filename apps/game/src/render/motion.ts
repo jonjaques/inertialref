@@ -1,3 +1,4 @@
+import { warmSensorPass, type WarmPass } from './warmup.ts'
 import {
   HalfFloatType,
   NearestFilter,
@@ -7,6 +8,7 @@ import {
   RenderTarget,
   TempNode,
   Vector2,
+  type WebGPURenderer,
   type Node,
   type NodeBuilder,
   type NodeFrame,
@@ -39,16 +41,16 @@ export class MotionNode extends TempNode<'vec4'> {
   readonly fraction = uniform(0)
   readonly dimensions = uniform(new Vector2(1, 1))
   readonly tileStep = uniform(new Vector2(1, 1))
-  readonly targets = Array.from(
-    { length: 3 },
-    () => new RenderTarget(1, 1, { type: HalfFloatType, depthBuffer: false }),
-  )
-  readonly materials = Array.from({ length: 3 }, () => new NodeMaterial())
-  readonly quad = new QuadMesh()
-  readonly size = new Vector2()
+  readonly #stages: readonly WarmPass[] = Array.from({ length: 3 }, () => ({
+    target: new RenderTarget(1, 1, { type: HalfFloatType, depthBuffer: false }),
+    material: new NodeMaterial(),
+  }))
+  #disposed = false
+  readonly #quad = new QuadMesh()
+  readonly #size = new Vector2()
   readonly outputTexture = passTexture(
     this as unknown as PassNode,
-    this.targets[2]!.texture,
+    this.#stages[2]!.target.texture,
   )
   readonly sourceNode: TextureNode
   readonly inputNode: TextureNode
@@ -64,7 +66,7 @@ export class MotionNode extends TempNode<'vec4'> {
     // A tile maximum is a per-tile fact. Fetched linearly between two tile
     // centres whose velocities oppose, it averages toward zero and the blur
     // cuts off in a band along the tile edge that moves with the tiling.
-    for (const target of this.targets.slice(0, 2)) {
+    for (const { target } of this.#stages.slice(0, 2)) {
       target.texture.minFilter = NearestFilter
       target.texture.magFilter = NearestFilter
     }
@@ -81,7 +83,7 @@ export class MotionNode extends TempNode<'vec4'> {
         .mul(this.fraction)
       return pixels.mul(float(TILE).div(pixels.length().max(TILE)))
     }
-    this.materials[0]!.fragmentNode = Fn(() => {
+    this.#stages[0]!.material.fragmentNode = Fn(() => {
       const start = ivec2(uv().div(this.tileStep).floor()).mul(int(TILE))
       const strongest = vec4(0).toVar()
       Loop(TILE * TILE, ({ i }) => {
@@ -101,8 +103,8 @@ export class MotionNode extends TempNode<'vec4'> {
       })
       return strongest
     })().context(context)
-    const tiles = texture(this.targets[0]!.texture)
-    this.materials[1]!.fragmentNode = Fn(() => {
+    const tiles = texture(this.#stages[0]!.target.texture)
+    this.#stages[1]!.material.fragmentNode = Fn(() => {
       const strongest = vec4(0).toVar()
       for (let y = -1; y <= 1; y += 1)
         for (let x = -1; x <= 1; x += 1) {
@@ -116,8 +118,8 @@ export class MotionNode extends TempNode<'vec4'> {
         }
       return strongest
     })().context(context)
-    const neighbors = texture(this.targets[1]!.texture)
-    this.materials[2]!.fragmentNode = Fn(() => {
+    const neighbors = texture(this.#stages[1]!.target.texture)
+    this.#stages[2]!.material.fragmentNode = Fn(() => {
       const center = this.motionNode.sample(uv())
       const velocity = neighbors.sample(uv()).xy
       // Bounded at the half-float maximum for the reason `psf.ts` gives.
@@ -141,31 +143,40 @@ export class MotionNode extends TempNode<'vec4'> {
       }
       return vec4(color.rgb.div(color.a), 1)
     })().context(context)
-    this.materials.forEach((material, i) => {
+    this.#stages.forEach(({ material }, i) => {
       material.name = `Sensor Motion ${i}`
     })
     return this.outputTexture
   }
 
+  warm(renderer: WebGPURenderer): Promise<void> {
+    return this.#disposed
+      ? Promise.resolve()
+      : warmSensorPass(renderer, this.#quad, this.#stages)
+  }
+
   override updateBefore({ renderer }: NodeFrame): undefined {
+    if (this.#disposed) return
     this.passes = 0
     this.inputNode.value = this.sourceNode.value
     this.outputTexture.value =
-      this.fraction.value > 0 ? this.targets[2]!.texture : this.sourceNode.value
+      this.fraction.value > 0
+        ? this.#stages[2]!.target.texture
+        : this.sourceNode.value
     if (renderer === null || this.fraction.value <= 0) return
     const previous = renderer.getRenderTarget()
-    const size = renderer.getDrawingBufferSize(this.size)
+    const size = renderer.getDrawingBufferSize(this.#size)
     this.dimensions.value.copy(size)
     const width = Math.ceil(size.x / TILE)
     const height = Math.ceil(size.y / TILE)
     this.tileStep.value.set(1 / width, 1 / height)
     try {
       for (let i = 0; i < 3; i += 1) {
-        const target = this.targets[i]!
+        const target = this.#stages[i]!.target
         target.setSize(i === 2 ? size.x : width, i === 2 ? size.y : height)
         renderer.setRenderTarget(target)
-        this.quad.material = this.materials[i]!
-        this.quad.render(renderer)
+        this.#quad.material = this.#stages[i]!.material
+        this.#quad.render(renderer)
         this.passes += 1
       }
     } finally {
@@ -174,8 +185,12 @@ export class MotionNode extends TempNode<'vec4'> {
   }
 
   override dispose(): void {
-    this.targets.forEach((target) => target.dispose())
-    this.materials.forEach((material) => material.dispose())
+    if (this.#disposed) return
+    this.#disposed = true
+    for (const { target, material } of this.#stages) {
+      target.dispose()
+      material.dispose()
+    }
     super.dispose()
   }
 }
