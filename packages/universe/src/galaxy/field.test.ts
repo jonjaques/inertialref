@@ -20,7 +20,7 @@ const position = fc
 describe('the preview stellar field', () => {
   it('normalizes the total solar density without activating a generator', () => {
     expect(field.sample(SUN_POSITION).totalPerCubicParsec).toBeCloseTo(0.1, 14)
-    expect(GALAXY_FIELD_VERSIONS).toEqual({ 'galaxy-field': 1 })
+    expect(GALAXY_FIELD_VERSIONS).toEqual({ 'galaxy-field': 2 })
     expect(GENERATION_VERSIONS).not.toHaveProperty('galaxy-field')
   })
   it('has finite nonnegative populations at every sampled position', () => {

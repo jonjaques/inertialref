@@ -16,7 +16,7 @@ longitudes, or change its brightness between inside and outside views.
 ## Decision
 
 **One seeded CPU field supplies preview samples, ray integrals, and plates;
-its `galaxy-field@1` manifest stays separate from active generation.**
+its `galaxy-field@2` manifest stays separate from active generation.**
 
 `createGalaxyField` accepts a galaxy seed and samples `UniverseVector`
 positions. Internally the field uses parsec offsets in the galactic-center
@@ -41,7 +41,12 @@ The parameter record distinguishes observations from preview assumptions:
 
 The young population has a 19 pc exponential height, with 20% old-star arm
 modulation. Every contributing arm adds smoothly; field values never come
-from the identity of the nearest arm. The disk tapers from 26 to 30 kpc.
+from the identity of the nearest arm. Width projection blends with smoothstep
+from 1° before to 1° after each pitch kink; selecting the two pitches with a
+hard branch made off-ridge density jump despite a continuous centerline. This
+regularization is an explicit profile choice and spends preview version 2.
+The measured centerlines and their tangencies stay intact. The disk tapers
+from 26 to 30 kpc.
 
 Each population carries a mean bolometric luminosity and blackbody color
 assumption. Density times mean luminosity gives L☉/pc³. The ray integrator

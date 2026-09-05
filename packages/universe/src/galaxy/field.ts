@@ -13,7 +13,7 @@ import { LOCAL_DENSITY } from '../galaxy.ts'
 import { armStrength } from './arms.ts'
 
 export const GALAXY_FIELD_ALGORITHM = Object.freeze(
-  algorithm('galaxy-field', 1),
+  algorithm('galaxy-field', 2),
 )
 /** Preview versions never enter GENERATION_VERSIONS until population activation. */
 export const GALAXY_FIELD_VERSIONS = Object.freeze(

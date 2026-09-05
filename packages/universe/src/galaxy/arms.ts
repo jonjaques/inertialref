@@ -132,10 +132,13 @@ export function armStrength(radius: number, beta: number): number {
       const degrees = angle / DEG
       if (degrees <= arm.startDegrees || degrees >= arm.endDegrees) continue
       const ridge = armRadius(arm, angle)
+      // The centerline may kink, but its transverse profile must not jump.
+      // Blend the width projection across ±1° without moving the measured curve.
+      const blend = smooth((degrees - arm.kinkDegrees + 1) / 2)
       const pitch =
-        (angle <= arm.kinkDegrees * DEG
-          ? arm.pitchBeforeDegrees
-          : arm.pitchAfterDegrees) * DEG
+        (arm.pitchBeforeDegrees +
+          blend * (arm.pitchAfterDegrees - arm.pitchBeforeDegrees)) *
+        DEG
       const distance = (radius - ridge) * Math.cos(pitch)
       const ends =
         smooth((degrees - arm.startDegrees) / 15) *

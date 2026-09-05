@@ -7775,6 +7775,21 @@ failed before these two API fixes. The plan’s command inventory now names the
 implemented exporter. Field samples, explicitly sized plates, and the field
 version are unchanged.
 
+## The arm curve kinked, and its density jumped (05 Sep 2026)
+
+Self-review of PR #63 found a discontinuity beyond the centerline: the
+Gaussian distance projected by the pitch on either side of a kink, so a hard
+pitch branch changed off-ridge density instantly. Four of six new boundary
+regressions failed; Sagittarius’s ridge sum jumped by 0.03514 at a 300 pc
+radial offset across a two-nanoradian step.
+
+Width projection now blends from 1° before to 1° after each kink. The measured
+centerlines and tangencies are untouched. This changes field values, so the
+preview spends `galaxy-field@2`; active generation stays unchanged. The fine
+reference count is 116,184,595,789.68 stars. The edge-on and observer numeric
+plates change and receive new versioned references. The local full gate and
+regenerated review plates follow this commit.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

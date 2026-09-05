@@ -36,17 +36,17 @@ it('makes repeatable CPU plates through a session without changing canonical sta
 
 it.each([
   ['face-on', 7467.533615960387, 30824.638347876065],
-  ['edge-on', 13467.419656853888, 62747.68476229579],
-  ['observer', 11347.89131893724, 144661.73536179238],
+  ['edge-on', 13467.419656853888, 62747.68437106824],
+  ['observer', 11347.873133070729, 144661.7075324133],
 ] as const)(
-  'pins galaxy-field@1 numeric plate values for %s',
+  'pins galaxy-field@2 numeric plate values for %s',
   (view, max, sum) => {
     const session = openSession()
     try {
       const plate = session.harness
         .galaxy()
         .plate({ view, width: 12, height: 8 })
-      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 1 })
+      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 2 })
       expect(plate.maxRadiance).toBeCloseTo(max, 6)
       expect([...plate.rgb].reduce((a, b) => a + b, 0)).toBeCloseTo(sum, 6)
     } finally {

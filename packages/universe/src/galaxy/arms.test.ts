@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { GALAXY_ARMS, armTangencies } from './arms.ts'
+import { GALAXY_ARMS, armTangencies, armRadius, armStrength } from './arms.ts'
 it.each([
   ['scutum-centaurus', 30.5],
   ['sagittarius-carina', 49.3],
@@ -23,3 +23,16 @@ it('keeps the wrapped field continuous across the azimuth seam', async () => {
       5,
     )
 })
+
+it.each(GALAXY_ARMS)(
+  'keeps $id ridge density continuous across its pitch kink',
+  (arm) => {
+    const beta = (arm.kinkDegrees * Math.PI) / 180
+    const radius = armRadius(arm, beta) + 300
+    expect(
+      Math.abs(
+        armStrength(radius, beta - 1e-9) - armStrength(radius, beta + 1e-9),
+      ),
+    ).toBeLessThan(1e-6)
+  },
+)
