@@ -18,7 +18,7 @@ The field has its own version and leaves active population generation
 unchanged. Its emission-only radiance and parameter assumptions are recorded
 in [ADR-0032](../adr/0032-the-stellar-field.md). The planetarium also renders
 fixed face-on and edge-on views through the existing sensor, with one live
-quarter-size volume target. Open Pictures → Milky Way, or call
+quarter-size volume target. Open Presets → Milky Way, or call
 `ir.galaxyView('face-on')`. Dust, continuous travel and photometric calibration
 remain separate milestones.
 

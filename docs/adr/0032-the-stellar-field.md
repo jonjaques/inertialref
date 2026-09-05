@@ -80,7 +80,7 @@ rays are held within 1% of the CPU reference, with absolute tolerances near zero
 Explicit axial azimuths avoid Metal's fast `atan2` sign reversal at an exact
 zero denominator; the warp and arms otherwise disagree at +Z.
 
-The planetarium's Pictures panel offers face-on and edge-on instruments.
+The planetarium's Presets panel offers face-on and edge-on instruments.
 `ir.galaxyView(view)` sets the existing observatory and requests its lens through
 the existing host port. The camera remains cinematic → observatory → ship;
 no canonical position or clock changes. Face-on is 30 kpc above the plane at

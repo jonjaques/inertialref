@@ -105,7 +105,7 @@ does not advance or mutate the world. Plates contain emission only. See
 
 In the browser's planetarium, `ir.galaxyView('face-on')` and
 `ir.galaxyView('edge-on')` select the fixed external instruments also available
-under Pictures → Milky Way. They change the observatory and lens, leaving the
+under Presets → Milky Way. They change the observatory and lens, leaving the
 world unchanged. `ir.look('s:SOL/b:2')` returns to an Earth view.
 
 `ir.galaxy().render()` returns the live target's dimensions and bytes, field
