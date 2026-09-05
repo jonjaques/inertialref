@@ -49,7 +49,7 @@ import {
 } from '@inertialref/rendering'
 import {
   encodeSurface,
-  type HeightfieldSource,
+  Heightfields,
   type JobHandle,
   poolHeightfieldSource,
   surfaceDetailFloorTask,
@@ -451,24 +451,7 @@ export interface TerrainState {
 
 export class TerrainStreamer {
   readonly #pool: WorkerPool | null
-  /** The pool as a heightfield source: the canonical field, on a worker. */
-  readonly #poolSource: HeightfieldSource | null
-  /**
-   * A producer that outranks the pool for heightfields while it can answer.
-   *
-   * The GPU tile producer, when the renderer is WebGPU and its kernel built.
-   * A presentation input like `lensView`, written by the host once the
-   * renderer exists, which is after this streamer does. Only the heightfields
-   * go through it: the level floor is `surfaceDetailFloorTask` on the pool
-   * whichever source draws the ground, because it is the canonical field's
-   * own measurement and a producer's port is held to a tolerance of it.
-   *
-   * Checked per request rather than once, because a producer can stop mid
-   * session — a lost device — and `available` is how it says so. The pool is
-   * what the next request goes to; the ones in flight reject with
-   * `producer unavailable` and are re-asked on the following frame.
-   */
-  source: HeightfieldSource | null = null
+  readonly heightfields: Heightfields
   readonly #scatter = new ScatterField()
   /*
    * Keyed by `regionKey` — packed arithmetic, no body in it — because the
@@ -674,20 +657,9 @@ export class TerrainStreamer {
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
-    this.#poolSource = pool === null ? null : poolHeightfieldSource(pool)
-  }
-
-  /**
-   * Where the next heightfield request goes, or nowhere.
-   *
-   * Public because the orbital bake asks the same source for the same tiles
-   * a patch is made of, and a second producer of "which source" would
-   * disagree with this one the frame the GPU one stood down.
-   */
-  heightfields(): HeightfieldSource | null {
-    const source = this.source
-    if (source !== null && source.available) return source
-    return this.#poolSource
+    this.heightfields = new Heightfields(
+      pool === null ? null : poolHeightfieldSource(pool),
+    )
   }
 
   /**
@@ -757,7 +729,7 @@ export class TerrainStreamer {
       // What the *next* request would go to, which is the only honest answer
       // once a producer has stopped: the fields already held came from
       // wherever they came from.
-      producer: this.heightfields()?.kind ?? 'none',
+      producer: this.heightfields.kind ?? 'none',
       scatter: this.#scatter.summary(),
     }
   }
@@ -1413,8 +1385,7 @@ export class TerrainStreamer {
    * dissolve exactly that grouping, so this only filters and takes.
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
-    const source = this.heightfields()
-    if (source === null) return
+    if (this.heightfields.kind === null) return
     /*
      * The budget before the filter, and the early exit is the point.
      *
@@ -1446,28 +1417,18 @@ export class TerrainStreamer {
       // rather than cached, because the key alone cannot tell a new seed's
       // s:SOL/b:2 from the old one's.
       const epoch = this.#epoch
-      // A source names the deepest level it produces — the kernel's tile
-      // frame is exact through 23 — and a deeper tile goes to the pool. Not
-      // to a refusal: a refused region is re-asked next frame of the same
-      // source, every frame, and is never produced. With no pool to send it
-      // to, nobody produces it and asking is that same loop, so it is not
-      // asked: the parent stays drawn, and counted as starved.
-      const pool = this.#poolSource
-      const deeper =
-        region.level > (source.maxLevel ?? Number.POSITIVE_INFINITY)
-      if (deeper && pool === null) continue
-      const to = deeper && pool !== null ? pool : source
-      const handle = to.submit(body.surface, {
+      const handle = this.heightfields.submit(body.surface, {
         region,
         resolution: HEIGHTFIELD_RESOLUTION,
         border: HEIGHTFIELD_BORDER,
         // The seabed only where `buildPatch` is handed a sheet to lay over it.
         seabed: seaSheetDatum(body) !== null,
       })
+      if (handle === null) continue
       this.#inFlight.set(key, handle)
       void handle.result
         .then((result) => {
-          if (epoch !== this.#epoch) return
+          if (epoch !== this.#epoch || result === null) return
           // The answer invalidates the held selection: `#build` has ground
           // it can now turn into geometry, so the next frame walks.
           this.#cacheEpoch += 1
@@ -1479,18 +1440,7 @@ export class TerrainStreamer {
           })
         })
         .catch((cause: unknown) => {
-          // A cancellation is this streamer's own decision arriving back at
-          // it, not a failure: `clear()` cancels the whole window on a
-          // retarget, so a warning here would be a hundred and twenty lines of
-          // log for one keystroke. A producer that stopped has already said
-          // why, once, and its window is re-asked of the pool next frame.
-          if (
-            cause instanceof Error &&
-            (cause.message === 'cancelled' ||
-              cause.message === 'producer unavailable')
-          ) {
-            return
-          }
+          if (cause instanceof Error && cause.message === 'cancelled') return
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {

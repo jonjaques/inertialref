@@ -303,7 +303,7 @@ describe('the terrain streamer', () => {
         return { id: asked, result: Promise.resolve(field), cancel() {} }
       },
     }
-    streamer.source = source
+    streamer.heightfields.preferred = source
 
     const frames = await walkOnce(streamer, session, view)
     expect(frames).toBeGreaterThan(0)
@@ -385,7 +385,7 @@ describe('the terrain streamer', () => {
         throw new Error('a deeper tile reached the source')
       },
     }
-    streamer.source = source
+    streamer.heightfields.preferred = source
 
     const frames = await walkOnce(streamer, session, view)
     expect(frames).toBeGreaterThan(0)
@@ -421,7 +421,7 @@ describe('the terrain streamer', () => {
         throw new Error('a deeper tile reached the source')
       },
     }
-    streamer.source = source
+    streamer.heightfields.preferred = source
 
     const frames = await walkOnce(streamer, session, view)
     expect(frames).toBeGreaterThan(0)

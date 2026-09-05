@@ -55,6 +55,7 @@ import {
 } from '@inertialref/rendering'
 import {
   type HeightfieldSource,
+  type Heightfields,
   surveyRegionTask,
   type WorkerFactory,
   WorkerPool,
@@ -873,7 +874,7 @@ export class GameEngine {
    * `null` puts the pool back.
    */
   setHeightfieldSource(source: HeightfieldSource | null): void {
-    this.#terrain.source = source
+    this.#terrain.heightfields.preferred = source
   }
 
   get starField(): StarField {
@@ -884,9 +885,9 @@ export class GameEngine {
     return this.#terrain.state()
   }
 
-  /** Where a heightfield request goes this frame — the streamer's answer. */
-  heightfieldSource(): HeightfieldSource | null {
-    return this.#terrain.heightfields()
+  /** Streaming and orbital baking share one heightfield routing policy. */
+  get heightfields(): Heightfields {
+    return this.#terrain.heightfields
   }
 
   /**
@@ -1590,7 +1591,7 @@ export class GameEngine {
     // host's to dispose, but the reference is this engine's, and so is the
     // window in flight on it: a job that lands after the pool is gone is an
     // answer into a cache nothing reads.
-    this.#terrain.source = null
+    this.#terrain.heightfields.preferred = null
     this.#terrain.clear()
     this.session.dispose()
   }

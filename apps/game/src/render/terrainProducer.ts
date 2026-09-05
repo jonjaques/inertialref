@@ -14,9 +14,10 @@ import {
   TILE_STRIDE,
   writeTileFrame,
 } from '@inertialref/universe'
-import type {
-  HeightfieldResponse,
-  HeightfieldSource,
+import {
+  HeightfieldUnavailable,
+  type HeightfieldResponse,
+  type HeightfieldSource,
 } from '@inertialref/workers'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { QUERY } from '../pages/paths.ts'
@@ -53,8 +54,8 @@ import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
  *
  * **The pool stays canonical and stays the fallback.** A kernel that will not
  * build, a device the browser loses: `available` goes false, everything
- * queued or in flight rejects with `producer unavailable`, and the streamer
- * routes the next request to the pool. Nothing here is the field the contact
+ * queued or in flight rejects with `HeightfieldUnavailable`, and `Heightfields`
+ * retries those requests on the pool. Nothing here is the field the contact
  * test integrates — that is `elevationAt` on the CPU, always — and nothing
  * here is versioned, because the divergence from the CPU tile is a measured
  * bound (`terrainKernel.gpu.test.ts`) rather than a change to the ground.
@@ -193,7 +194,7 @@ export function createTileProducer(
       cause: String(cause),
     })
     for (const job of queue.splice(0)) {
-      job.reject(new Error('producer unavailable'))
+      job.reject(new HeightfieldUnavailable())
     }
   }
 
@@ -288,7 +289,7 @@ export function createTileProducer(
       })
     } catch (cause) {
       fail(cause)
-      for (const job of taken) job.reject(new Error('producer unavailable'))
+      for (const job of taken) job.reject(new HeightfieldUnavailable())
     } finally {
       inFlight = 0
     }
@@ -342,6 +343,9 @@ export function createTileProducer(
     get available() {
       return available
     },
+    supports: (request) =>
+      request.resolution === kernel.layout.resolution &&
+      (request.border ?? HEIGHTFIELD_BORDER) === kernel.layout.border,
     submit(surface, request) {
       const id = nextId++
       let resolve!: (response: HeightfieldResponse) => void
@@ -358,16 +362,19 @@ export function createTileProducer(
         cancelled: false,
       }
       // A refused request is this request's alone: it never reaches `pump`,
-      // whose failure path retires the producer for the session. The level
-      // refusal is belt and braces — the streamer routes on `maxLevel` and a
-      // deeper tile should not arrive here at all.
+      // whose failure path retires the producer for the session. Heightfields
+      // checks maxLevel and supports before submitting; this also guards
+      // callers using the adapter directly.
       if (
-        !available ||
         request.resolution !== kernel.layout.resolution ||
         (request.border ?? HEIGHTFIELD_BORDER) !== kernel.layout.border ||
         request.region.level > MAX_TILE_LEVEL
       ) {
-        reject(new Error('producer unavailable'))
+        reject(new RangeError('unsupported heightfield request'))
+        return { id, result, cancel() {} }
+      }
+      if (!available) {
+        reject(new HeightfieldUnavailable())
         return { id, result, cancel() {} }
       }
       queue.push(job)
@@ -461,7 +468,7 @@ export function createTileProducer(
       available = false
       uploaded = null
       for (const job of queue.splice(0)) {
-        job.reject(new Error('producer unavailable'))
+        job.reject(new HeightfieldUnavailable())
       }
       kernel.dispose()
     },

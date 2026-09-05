@@ -213,7 +213,7 @@ describe('the tile producer', () => {
     const [region] = regions(8, 1) as [RegionAddress]
     const request = { ...requestFor(region), resolution: 33 }
     await expect(producer.submit(luna.surface, request).result).rejects.toThrow(
-      /producer unavailable/,
+      /unsupported heightfield request/,
     )
     expect(producer.available).toBe(true)
   })

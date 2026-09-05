@@ -296,9 +296,10 @@ along the orbit rather than along the camera's track over the ground.
 
 ### Where the heightfields come from
 
-The streamer asks a `HeightfieldSource` and gets back the same
-`HeightfieldResponse` either way — the bordered elevations, the cover, the
-extremes — and there are two. The worker pool runs `generateHeightfield`
+The streamer and orbital baker ask `Heightfields` in `packages/workers`.
+It selects a supporting `HeightfieldSource` and returns the same
+`HeightfieldResponse` from either adapter: bordered elevations, cover and
+extremes. The worker pool runs `generateHeightfield`
 itself, which is the canonical field: 24 to 69 ms a patch across the zoo on one
 core, and a pool of eight does not divide a landing's nine hundred patches far
 enough. The GPU tile producer (`apps/game/src/render/terrainProducer.ts`) runs
@@ -313,9 +314,12 @@ thread. [ADR-0023](../adr/0023-the-gpu-producer.md) is the record.
 The producer outranks the pool while it can answer, and only for the
 heightfields: the level floor is `surfaceDetailFloorTask` on the pool whichever
 draws the ground, because it is the canonical field's own measurement. A
-producer that stops — a kernel Tint refused at boot, a lost device — reports
-itself unavailable, its window rejects with `producer unavailable`, and the next
-request goes to the pool; `ir.terrain().producer` names where the next one goes.
+producer that stops reports itself unavailable and rejects pending jobs with
+`HeightfieldUnavailable`. `Heightfields` retries those jobs on the pool while
+keeping one cancellation handle for the caller. Level and request-shape limits
+are checked before submission. If no adapter can finish, the result is null;
+ordinary request failures propagate. `ir.terrain().producer` names the currently
+preferred available adapter, though a request beyond its limits uses the pool.
 The GPU tile is held to the CPU tile by `terrainKernel.gpu.test.ts`: within
 3 × 10⁻⁵ of the budget plus eight sample offsets, which is under 4 cm on Earth
 from level 12 down and 1.21 m at level 0, where a sample's own position is held
