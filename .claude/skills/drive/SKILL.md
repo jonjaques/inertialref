@@ -277,12 +277,25 @@ handles the first three — they are here because they explain what it is doing.
     no `Input.dispatchKeyEvent`. Reach a keyboard affordance through the preference it
     toggles or the harness verb behind it — never by faking the event and believing the
     silence.
+11. **`--shot` cannot carry a colour space.** `Page.captureScreenshot` writes an 8-bit PNG
+    with no `iCCP`, `cHRM`, `sRGB` or `cICP` chunk, so every viewer reads it as sRGB and an
+    extended-range frame arrives already converted with nothing in the file saying so.
+    `--force-color-profile=display-p3` does not fix it and costs the extended path outright:
+    the forced profile takes `(dynamic-range: high)` with it, `chooseMode` resolves to
+    `standard`, and the plate is sRGB for a second reason. A plate that has to carry its
+    primaries is copied out of the canvas **inside `requestAnimationFrame`** into a 2D
+    context declaring `engine.gl.description.gamut` — the space the canvas is drawing in and
+    never a fixed one, or a standard-output frame is re-tagged as P3 — and Chrome writes the
+    profile on export. `render.hdr` in `localStorage` (`ir.hud.render.hdr`, JSON) is what
+    forces the other mode, and it is per Chrome profile, so it is per `--port`.
 
 Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds earlier,
-so a probe on it screenshots an unlit canvas. And a canvas readback is always transparent
-black: the renderer is WebGPU and the swap-chain texture is invalidated at the end of the
-task that drew it, which is why the driver uses `Page.captureScreenshot`. That composited
-image is also the only one carrying the DOM HUD.
+so a probe on it screenshots an unlit canvas. A canvas readback _after_ the frame is
+transparent black: the renderer is WebGPU and the swap-chain texture is invalidated at
+the end of the task that drew it, which is why the driver uses `Page.captureScreenshot`.
+That composited image is also the only one carrying the DOM HUD. Inside the animation
+frame the canvas still holds its image, so `drawImage` into a 2D context reads it — the
+one route out that carries a colour profile, and the one that leaves the HUD behind.
 
 ## The author's instruments
 

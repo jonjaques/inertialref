@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# pnpm's content-addressable package store. Nothing here configures it —
+# `pnpm store path` names the one under the home directory — but a run that
+# cannot reach that one drops a store beside the project instead, and it then
+# survives every later command that finds it. A cache either way: deleting it
+# costs one slower `pnpm install`.
+.pnpm-store/
+
 # Build-time environment. `apps/game/.env.production` carries the GA measurement
 # id for a deploy run from a developer's machine; in Workers Builds the same
 # variable is set as a build variable in Cloudflare. Neither is a secret — the id
