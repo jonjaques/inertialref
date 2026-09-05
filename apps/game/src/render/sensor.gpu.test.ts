@@ -46,15 +46,6 @@ let camera: Camera
 
 beforeAll(async () => {
   gpu = await openGpu(SIZE, SIZE)
-  /*
-   * Opaque black, the way `createRenderer` clears. `renderOutput`
-   * unpremultiplies before the curve and premultiplies after it, so a pixel
-   * the renderer's own path leaves at alpha 0 — the harness default, under
-   * every additive sprite — comes out black however bright its rgb was. The
-   * chain writes alpha 1 and never sees that; the claim is about the frame
-   * the renderer draws for itself with the production clear.
-   */
-  gpu.renderer.setClearColor(0x000000, 1)
   camera = new PerspectiveCamera(60, 1, 0.1, 100)
   camera.position.set(0, 0, 4)
   camera.updateMatrixWorld()
@@ -123,9 +114,27 @@ describe('the spine', () => {
     renderer.setOutputRenderTarget(null)
     const theirs = await gpu.read(own)
 
+    /*
+     * The chain's frame under a clear of alpha 0, and the renderer's own
+     * above under the production clear it is measured against. The chain
+     * writes alpha 1 by construction, whatever the clear was, and the count
+     * below is about that construction — which the opaque clear cannot see:
+     * with the pass's own alpha written through instead of the constant, the
+     * pass clears to 1, every pixel still reads 1, and the count still holds.
+     * Under a clear of 0 the same swap puts 0 under every sky pixel and,
+     * because `renderOutput` unpremultiplies before the curve, black where
+     * the renderer's own path has stars. Measured with the constant swapped
+     * for the pass's alpha: 2,412 of 9,216 at alpha 1, worst channel 0.934.
+     */
     const chain = floatTarget()
     const sensor = createSensor(renderer, scene, camera)
-    sensor.render(chain)
+    const clearAlpha = renderer.getClearAlpha()
+    renderer.setClearAlpha(0)
+    try {
+      sensor.render(chain)
+    } finally {
+      renderer.setClearAlpha(clearAlpha)
+    }
     const ours = await gpu.read(chain)
 
     let worst = 0
@@ -148,7 +157,7 @@ describe('the spine', () => {
     // frame proves nothing.
     expect(lit).toBeGreaterThan(SIZE * SIZE * 0.1)
     // Alpha is asserted on the chain alone: it writes 1 everywhere, by
-    // construction, whatever the clear was.
+    // construction, whatever the clear was — and the clear was 0.
     expect(alphaOne).toBe(SIZE * SIZE)
 
     sensor.dispose()
@@ -164,12 +173,14 @@ describe('the spine', () => {
 
     /*
      * The scene renders inside `RenderPipeline.render`'s swap of the renderer
-     * to no curve and the working space, and the swap is undone by two plain
-     * assignments after the quad. A throw from the scene — an `onBeforeRender`
-     * here, in the app a draw against a pipeline the warm-up is still
-     * building — leaves the swapped values on the renderer, where the chain's
-     * own rebuild check reads them as a mode change. The chain restores them;
-     * this is the frame that throws, and the frame after it.
+     * to no curve, the working space and no XR, and the swap is undone by
+     * three plain assignments after the quad. A throw from the scene — an
+     * `onBeforeRender` here, in the app a draw against a pipeline the warm-up
+     * is still building — leaves the swapped values on the renderer, where
+     * the chain's own rebuild check reads them as a mode change. The chain
+     * restores them; this is the frame that throws, and the frame after it.
+     * `xr.enabled` is set on so the restore of it is falsifiable: with no
+     * session presenting the flag changes nothing about the frame.
      */
     const scene = new Scene()
     const flat = new MeshBasicNodeMaterial()
@@ -184,9 +195,15 @@ describe('the spine', () => {
 
     const target = floatTarget()
     const sensor = createSensor(renderer, scene, camera)
-    expect(() => sensor.render(target)).toThrow('a frame that throws')
-    expect(renderer.toneMapping).toBe(CustomToneMapping)
-    expect(renderer.outputColorSpace).toBe(SRGBColorSpace)
+    renderer.xr.enabled = true
+    try {
+      expect(() => sensor.render(target)).toThrow('a frame that throws')
+      expect(renderer.toneMapping).toBe(CustomToneMapping)
+      expect(renderer.outputColorSpace).toBe(SRGBColorSpace)
+      expect(renderer.xr.enabled).toBe(true)
+    } finally {
+      renderer.xr.enabled = false
+    }
 
     // And the next frame is the curve's. Held to the renderer's own output
     // rather than to a number, the way the first gate is: the poisoned
@@ -303,16 +320,31 @@ describe('the spine', () => {
     declareSceneTarget(renderer, { samples: 4 })
 
     /*
-     * A material of its own per arm, so the pipeline it needs cannot have been
-     * built by anything earlier in the file: the cache is keyed on the program
-     * and the target's shape, and a constant in the graph is a program of its
-     * own.
+     * Two meshes per arm, each with a material of its own, so the pipelines
+     * they need cannot have been built by anything earlier in the file: the
+     * cache is keyed on the program and the target's shape, and a constant in
+     * the graph is a program of its own.
+     *
+     * Two rather than one because the second is the one that can go wrong.
+     * `compileAsync` builds its queue one object per turn, and the material's
+     * setup reads the *live* render target to decide whether the program
+     * writes depth — so a group handed over whole compiles its first mesh
+     * inside the call, with the warm target bound, and its second after the
+     * yield, against the depthless float target the last `present` left
+     * bound: one program with `frag_depth` and one without, and the chain's
+     * frame building the pipeline the warm-up owed. The seam hands each
+     * renderable to its own call; measured with the group handed over whole,
+     * the frame builds two.
      */
     const arm = (shade: number): Scene => {
       const scene = new Scene()
-      const material = new MeshBasicNodeMaterial()
-      material.colorNode = vec3(shade, shade * 0.5, shade * 0.25)
-      scene.add(new Mesh(new SphereGeometry(1, 12, 8), material))
+      for (const [i, offset] of [-1.1, 1.1].entries()) {
+        const material = new MeshBasicNodeMaterial()
+        material.colorNode = vec3(shade, shade * (0.5 + i * 0.1), shade * 0.25)
+        const mesh = new Mesh(new SphereGeometry(0.9, 12, 8), material)
+        mesh.position.x = offset
+        scene.add(mesh)
+      }
       scene.updateMatrixWorld(true)
       return scene
     }

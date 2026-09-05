@@ -1,10 +1,4 @@
-import {
-  Color,
-  MeshBasicNodeMaterial,
-  type Node,
-  Vector2,
-  Vector3,
-} from 'three/webgpu'
+import { Color, MeshBasicNodeMaterial, Vector2, Vector3 } from 'three/webgpu'
 import {
   attribute,
   dFdx,
@@ -39,6 +33,7 @@ import {
   asVector,
   bumped,
   fbmFetch,
+  mixPerChannel,
   noiseSampler,
   type Vector,
 } from './noiseNodes.ts'
@@ -159,17 +154,6 @@ export interface WaterBuild {
   readonly refraction: boolean
 }
 
-/**
- * `mix` with one weight per channel. The typings admit only a scalar `t`;
- * WGSL's `mix(vec3, vec3, vec3)` is the operation a transmittance needs, one
- * weight per wavelength, and the node built is the same either way.
- */
-const blend = (
-  a: Node<'vec3'>,
-  b: Node<'vec3'>,
-  t: Node<'vec3'>,
-): Node<'vec3'> => mix(a, b, t as unknown as Node<'float'>)
-
 export function createWaterMaterial(
   build: WaterBuild = { refraction: true },
 ): WaterMaterial {
@@ -221,6 +205,7 @@ export function createWaterMaterial(
   material.depthWrite = true
 
   material.positionNode = Fn(() => {
+    // Typed explicitly for the reason `terrain.ts` gives: the literal widens.
     const target = attribute<'vec3'>('terrainMorph', 'vec3')
     const depth = attribute<'float'>('waterDepth', 'float')
     const targetDepth = attribute<'float'>('waterMorphDepth', 'float')
@@ -353,9 +338,10 @@ export function createWaterMaterial(
       saturate(screenUV.x.add(shift.x)),
       saturate(screenUV.y.add(shift.y)),
     )
+    const liquid = asVector(liquidColour)
     const behind = build.refraction
       ? asVector(viewportSharedTexture(shifted).rgb)
-      : asVector(liquidColour)
+      : liquid
     /*
      * The liquid's own colour, lit: what scatters back out of the body of
      * the water where the seabed's light has been absorbed. Lambert on the
@@ -363,7 +349,7 @@ export function createWaterMaterial(
      * and the shore agree about how bright the day is.
      */
     const skyView = float(1)
-    const bodyLight = asVector(liquidColour)
+    const bodyLight = liquid
       .mul(
         max(incidence, float(0))
           .mul(daylight)
@@ -372,7 +358,7 @@ export function createWaterMaterial(
           .add(skyView.mul(float(AMBIENT))),
       )
       .mul(sunlight)
-    const subsurface = blend(
+    const subsurface = mixPerChannel(
       bodyLight,
       mix(bodyLight, behind, refraction),
       transmittance,

@@ -363,6 +363,8 @@ export function createTerrainMaterial(): TerrainMaterial {
    * for all three: a fully morphed child *is* its parent.
    */
   material.positionNode = Fn(() => {
+    // The type argument is not a restatement: `attribute`'s type parameter is
+    // unconstrained, so the literal widens to `string` without it.
     const target = attribute<'vec3'>('terrainMorph', 'vec3')
     const targetNormal = attribute<'vec3'>('terrainMorphNormal', 'vec3')
     const cover = attribute<'vec4'>('terrainCover', 'vec4')

@@ -69,13 +69,6 @@ const ACES_OUTPUT = /*@__PURE__*/ mat3(
 )
 
 /**
- * `mat3 × vec3`. The typings hand `Node<'mat3'>.mul` a matrix back whatever
- * it is given; the operator node it builds is the vector.
- */
-const transform = (m: Node<'mat3'>, v: Node<'vec3'>): Node<'vec3'> =>
-  (m as unknown as Node<'vec3'>).mul(v)
-
-/**
  * Live handles on the curve.
  *
  * Structural rather than the TSL uniform type: all this module needs to promise
@@ -98,6 +91,9 @@ export interface ToneCurveControls {
  */
 const DEFAULT_SHOULDER = 0.72
 
+/** The controls of each renderer's curve, for the second install. */
+const installed = new WeakMap<Renderer, ToneCurveControls>()
+
 /**
  * Register the curve as `CustomToneMapping` and select it.
  *
@@ -105,18 +101,31 @@ const DEFAULT_SHOULDER = 0.72
  * three looks up a tone mapping constant, and a renderer that has not been told
  * about `CustomToneMapping` logs "Unsupported Tone Mapping configuration" and
  * renders untonemapped.
+ *
+ * And once per renderer, because the library is: `addType` refuses a second
+ * registration of a constant — it warns "Redefinition of node" and keeps the
+ * first — so the graph a renderer draws with is the one installed first, for
+ * the renderer's life. A second call hands back the controls of that graph
+ * with `headroom` set to what it asked for, rather than uniforms attached to
+ * a curve nothing draws.
  */
 export function installToneCurve(
   renderer: Renderer,
   headroom: number,
 ): ToneCurveControls {
+  const existing = installed.get(renderer)
+  if (existing !== undefined) {
+    existing.headroom.value = headroom
+    selectToneCurve(renderer)
+    return existing
+  }
+
   const headroomUniform = uniform(headroom)
   const shoulderUniform = uniform(DEFAULT_SHOULDER)
 
   const toneCurve = Fn(([color, exposure]: [Node<'vec3'>, Node<'float'>]) => {
-    const graded = transform(
-      ACES_OUTPUT,
-      rrtAndOdtFit(transform(ACES_INPUT, color.mul(exposure).div(0.6))),
+    const graded = ACES_OUTPUT.mul(
+      rrtAndOdtFit(ACES_INPUT.mul(color.mul(exposure).div(0.6))),
     )
 
     // Lift by luminance, not per channel: scaling the channels independently
@@ -138,23 +147,23 @@ export function installToneCurve(
 
   // `@types/three` declares `NodeLibrary` as an empty class; the method is
   // there at runtime, in `renderers/common/nodes/NodeLibrary.js`.
-  const library = renderer.library as unknown as {
-    addToneMapping(node: unknown, toneMapping: ToneMapping): void
+  const library = renderer.library as {
+    addToneMapping(curve: typeof toneCurve, toneMapping: ToneMapping): void
   }
   library.addToneMapping(toneCurve, CustomToneMapping)
   selectToneCurve(renderer)
 
-  return { headroom: headroomUniform, shoulder: shoulderUniform }
+  const controls = { headroom: headroomUniform, shoulder: shoulderUniform }
+  installed.set(renderer, controls)
+  return controls
 }
 
 /**
  * Re-select the curve on a renderer that already has it registered.
  *
  * Separate from installation because something else sets `toneMapping` after
- * the renderer is built and has to be undone without building a second curve —
- * see `commitToneCurve` in `createRenderer.ts` for who and why. Installing twice
- * would work and would leave the caller holding uniforms attached to a graph
- * that is no longer the one being drawn.
+ * the renderer is built and has to be undone without touching the
+ * registration — see `commitToneCurve` in `createRenderer.ts` for who and why.
  */
 export function selectToneCurve(renderer: Renderer): void {
   renderer.toneMapping = CustomToneMapping

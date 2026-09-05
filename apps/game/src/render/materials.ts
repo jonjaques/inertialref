@@ -523,6 +523,7 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   // the blend is cheaper than the branch at this instance count.
   const radius = length(uv().sub(0.5)).mul(2)
   const profile = oneMinus(smoothstep(0.15, 1, radius))
+  // Typed explicitly for the reason `terrain.ts` gives: the literal widens.
   const scale = instancedBufferAttribute<'float'>(prominence, 'float')
 
   const material = new PointsNodeMaterial()

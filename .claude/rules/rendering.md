@@ -125,8 +125,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
 
 - **Never call `geometry.dispose()` on a mesh holding the shared index.** Use
   `render/groundWear.ts`'s `disposeKeepingSharedIndex`. Every patch geometry references
-  the one session-wide index, and three r182 destroys each referenced attribute's GPU
-  buffer with no refcount — so one eviction takes the 98 KB index down under every patch
+  the one session-wide index, and three destroys each referenced attribute's GPU buffer
+  with no refcount — so one eviction takes the 98 KB index down under every patch
   still drawn, and it re-uploads next frame. The ground, the sea sheet and the orbital
   bake all evict through that one function; a hand-rolled `setIndex(null)` beside a
   `dispose()` is the same two lines until somebody writes only the second. ADR-0021.

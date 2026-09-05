@@ -37,6 +37,7 @@ import {
   wgslFn,
 } from 'three/tsl'
 import { DEFAULT_FBM } from '@inertialref/procedural'
+import { maxInt } from './noiseNodes.ts'
 import {
   ARC_MARGIN,
   ARC_SHAPE,
@@ -745,23 +746,27 @@ const biotaWindowCode = wgslFn(
 /* ------------------------------------------------------------------------- */
 
 /*
- * One node type, six names. Every chaining method and swizzle is declared on
- * `Node` itself in these typings, so the aliases are documentation of what a
- * value *is* rather than a distinction the compiler can hold; the casts below
- * are the re-narrowings `terrain.ts` makes, for the reason it gives.
+ * Six node types, named, and the compiler holds each one: the typings declare
+ * every operator on `Node<'float'>` and its kin rather than on `Node`, so a
+ * float handed where an int belongs is an error here rather than a Tint
+ * rejection off-console. What comes back untyped is a `wgslFn` call and a
+ * lane of a packed word — those are `Node`, and the value *is* what the
+ * alias says — so the casts below are the re-narrowings `noiseNodes.ts`
+ * makes, for the reason it gives.
  */
 type F = Node<'float'>
 type U = Node<'uint'>
 type I = Node<'int'>
 type V3 = Node<'vec3'>
 type V4 = Node<'vec4'>
-type Bool = Node
+type Bool = Node<'bool'>
 
 const asF = (node: unknown): F => node as F
 const asU = (node: unknown): U => node as U
 const asI = (node: unknown): I => node as I
 const asV3 = (node: unknown): V3 => node as V3
 const asV4 = (node: unknown): V4 => node as V4
+const asBool = (node: unknown): Bool => node as Bool
 
 /**
  * `Loop` with the variable named, which the typings do not admit and the
@@ -1287,15 +1292,13 @@ export function createTerrainKernel(
                 .greaterThan(0)
                 .select(c, c.add(1).lessThan(0).select(c.add(1), int(0))),
             )
-          const farCorner = (c: I): I =>
-            // `max` is typed for floats alone; the int operator is the same node.
-            asI(max(asF(c.abs()), asF(c.add(1).abs())))
+          const farCorner = (c: I): I => maxInt(c.abs(), c.add(1).abs())
           const squared = (m: I): Node => square48Code({ m })
           const summed = (a: Node, b: Node): Node => add64Code({ a, b })
           const beyond = (sum: Node, limit: Node): Bool =>
-            gt64Code({ a: sum, b: limit })
+            asBool(gt64Code({ a: sum, b: limit }))
           const within = (sum: Node, limit: Node): Bool =>
-            lt64Code({ a: sum, b: limit })
+            asBool(lt64Code({ a: sum, b: limit }))
 
           loop(
             'lx',

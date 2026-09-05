@@ -185,7 +185,7 @@ async function buildRenderer(
     // format (`rgba16float`) and `context.configure({ toneMapping: { mode:
     // 'extended' } })`. Spike 1 verified that setting `outputColorSpace`
     // instead does nothing whatever: the backend derives the mode from
-    // `outputType` alone, in r182 where that was measured and in r185.
+    // `outputType` alone.
     ...(requested === 'extended' ? { outputType: HalfFloatType } : {}),
   })
 

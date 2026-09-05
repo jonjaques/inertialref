@@ -30,6 +30,3 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - miniflare@5.20260820.0-alpha
   - wrangler@4.125.0
-
-patchedDependencies:
-  three@0.185.1: patches/three@0.185.1.patch

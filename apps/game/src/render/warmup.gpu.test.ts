@@ -8,7 +8,8 @@ import {
   SphereGeometry,
 } from 'three/webgpu'
 import { vec3 } from 'three/tsl'
-import { type GpuSession, openGpu } from './gpuHarness.ts'
+import { type GpuSession, openGpu, type Pixels } from './gpuHarness.ts'
+import { groundDummy } from './groundWear.ts'
 import { createStarMaterial } from './materials.ts'
 import { warmCompile } from './warmup.ts'
 
@@ -32,6 +33,14 @@ let gpu: GpuSession
  * path, so the session owns the one cast and hands the number over.
  */
 const created = (): number => gpu.pipelinesBuilt()
+
+/**
+ * Whether anything reached the target: a color channel above zero. The
+ * session clears opaque, so alpha is 255 on every pixel of an empty frame and
+ * a test over the whole buffer would call that a picture.
+ */
+const lit = (pixels: Pixels): boolean =>
+  pixels.data.some((value, i) => i % 4 !== 3 && value !== 0)
 
 beforeAll(async () => {
   gpu = await openGpu()
@@ -89,7 +98,7 @@ describe('warmCompile', () => {
      * frame. The star fills the middle of a 16×16 target; asking whether
      * anything reached it is what makes that assertion falsifiable.
      */
-    expect(pixels.data.some((value) => value !== 0)).toBe(true)
+    expect(lit(pixels)).toBe(true)
     target.dispose()
   })
 
@@ -98,16 +107,17 @@ describe('warmCompile', () => {
      * `compileAsync` walks the tree, then builds what it queued one object at
      * a time: each pipeline is registered in the cache when the device is
      * asked for it, and the GPU object arrives when `createRenderPipelineAsync`
-     * resolves. A frame in between finds the entry and, in r185 as shipped,
-     * hands `setPipeline` an undefined — a TypeError out of the whole render,
-     * which is one lost frame on every body the build-ahead materialises and,
-     * inside the sensor chain, the throw `sensor.gpu.test.ts` guards the
-     * renderer against. `patches/three@0.185.1.patch` has the backend skip
-     * the draw instead, the way it already skips a pipeline that failed to
-     * build. This holds the patch: the frame before the promise is quiet,
-     * empty and builds no second pipeline, and the frame after it has the
-     * object. The window is microseconds wide, so the harness holds the
-     * promise open and the frame is drawn inside it on purpose.
+     * resolves. A frame in between finds the entry without the object, and
+     * `Renderer._renderObjectDirect` draws nothing for it — `Pipelines.isReady`
+     * gates the backend's draw. Without that gate the backend hands
+     * `setPipeline` an undefined and throws out of the whole render: one lost
+     * frame on every body the build-ahead materialises and, inside the sensor
+     * chain, the throw `sensor.gpu.test.ts` guards the renderer against.
+     * This holds the gate, because an upgrade could lose it: the frame before
+     * the promise is quiet, empty and builds no second pipeline, and the
+     * frame after it has the object. The window is microseconds wide, so the
+     * harness holds the promise open and the frame is drawn inside it on
+     * purpose.
      */
     const { scene, mesh, camera } = staged()
     // A program of its own — a constant in the graph is one — so the pipeline
@@ -124,23 +134,62 @@ describe('warmCompile', () => {
     const before = created()
     const gate = gpu.holdNextPipeline()
     const compiled = warmCompile(renderer, { object: mesh, camera, scene })
-    await gate.requested
-    const walked = created()
-    expect(walked).toBeGreaterThan(before)
+    try {
+      await gate.requested
+      const walked = created()
+      expect(walked).toBeGreaterThan(before)
 
-    mesh.visible = true
-    expect(() => renderer.render(scene, camera)).not.toThrow()
-    expect(created()).toBe(walked)
-    const early = await gpu.read(target)
-    expect(early.data.every((value) => value === 0)).toBe(true)
-
-    gate.release()
+      mesh.visible = true
+      expect(() => renderer.render(scene, camera)).not.toThrow()
+      expect(created()).toBe(walked)
+      const early = await gpu.read(target)
+      expect(lit(early)).toBe(false)
+    } finally {
+      // A hold left armed by a failed assertion would catch the next test's
+      // first pipeline and hang it for its whole timeout.
+      gate.release()
+    }
     await compiled
+    const walked = created()
     renderer.render(scene, camera)
     expect(created()).toBe(walked)
     const landed = await gpu.read(target)
-    expect(landed.data.some((value) => value !== 0)).toBe(true)
+    expect(lit(landed)).toBe(true)
     target.dispose()
+  })
+
+  it('and a dummy the camera cannot see still compiles', async () => {
+    /*
+     * `compileAsync` culls against the camera's frustum exactly as a render
+     * does, and resolves the same whether the object was built or culled. A
+     * warm-up dummy is a triangle at the origin, and the render origin is a
+     * snapped grid point the camera lags — so a mount-time warm-up with the
+     * origin out of view would compile nothing and say nothing, and the
+     * first real patch would pay the build in the frame it lands. The
+     * dresser's dummies opt out of culling; the plain mesh beside it is the
+     * control that shows the cull is real.
+     */
+    const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+    camera.position.set(0, 0, 4)
+    camera.lookAt(0, 0, 8)
+    camera.updateMatrixWorld()
+    const scene = new Scene()
+    scene.updateMatrixWorld(true)
+    const own = (): MeshBasicNodeMaterial => {
+      const material = new MeshBasicNodeMaterial()
+      material.colorNode = vec3(Math.random(), 0.2, 0.4)
+      return material
+    }
+
+    const culled = new Mesh(new SphereGeometry(1, 8, 8), own())
+    const before = created()
+    await warmCompile(gpu.renderer, { object: culled, camera, scene })
+    expect(created()).toBe(before)
+
+    const dummy = groundDummy(own())
+    await warmCompile(gpu.renderer, { object: dummy, camera, scene })
+    expect(created()).toBeGreaterThan(before)
+    dummy.geometry.dispose()
   })
 
   it('and the count can see a warm-up that missed', async () => {

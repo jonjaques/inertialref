@@ -375,7 +375,7 @@ error`, with the real message on a channel the page console does not carry
   [ADR-0021](docs/adr/0021-the-ground.md).
 - **Never call `geometry.dispose()` on anything holding the shared index.**
   Go through `render/groundWear.ts`'s `disposeKeepingSharedIndex`. Every patch
-  geometry references the one session-wide index attribute, and three r182's
+  geometry references the one session-wide index attribute, and three's
   dispose path destroys each referenced attribute's GPU buffer with no
   refcount — so disposing one evicted mesh kills the 98 KB index under every
   patch still drawn and re-uploads it next frame. It is the churn the shared
