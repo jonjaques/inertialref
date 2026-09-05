@@ -9,6 +9,7 @@ import {
 import { UV, Vec } from '@inertialref/spatial'
 import { placePathInto } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { sensorRadiance } from '../render/radiance.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /*
@@ -32,7 +33,10 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const lines = useRef(new Map<string, Line>())
   const material = useMemo(() => {
-    const line = new LineBasicNodeMaterial()
+    // Pre-exposed with the rest of the scene: a trace left at unit gain sits
+    // 53× below its neighbours under Direct and follows the meter under
+    // Neutral, so it vanishes exactly when the picture is exposed for a body.
+    const line = sensorRadiance(new LineBasicNodeMaterial())
     line.transparent = true
     // Additive would bloom into a bright wash where the inner planets' orbits
     // overlap; a low-alpha normal blend keeps ten traces readable as ten.

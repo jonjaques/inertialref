@@ -83,16 +83,20 @@ export class PsfNode extends TempNode<'vec4'> {
       const source =
         i === 0 ? this.inputNode : texture(this.targets[i - 1]!.texture)
       let filtered: Node<'vec4'> = vec4(0)
-      for (const [x, y, weight] of TAPS)
-        filtered = filtered.add(
-          source.sample(uv().add(this.steps[i]!.mul(vec2(x, y)))).mul(weight),
-        )
+      for (const [x, y, weight] of TAPS) {
+        const tap = source.sample(uv().add(this.steps[i]!.mul(vec2(x, y))))
+        // Each draw is clamped to the half-float maximum, but the blend is
+        // not: a clamped disk under a clamped sprite rounds to +Inf in the
+        // target, and six octaves of positive weights turn that one texel
+        // into a frame-sized non-finite halo. Bound the first read instead.
+        filtered = filtered.add((i === 0 ? tap.min(65_504) : tap).mul(weight))
+      }
       this.materials[i]!.fragmentNode = filtered.context(context)
       this.materials[i]!.name = `Sensor PSF Down ${i}`
     }
     // The scene dependency belongs to the first reduction. Reading its plain
     // texture here avoids asking PassNode for a second scene in this render.
-    const direct = this.directNode.rgb.mul(this.scatter.oneMinus())
+    const direct = this.directNode.rgb.min(65_504).mul(this.scatter.oneMinus())
     const weights = psfWeights(LEVELS)
     const tent = (source: TextureNode, step: Node<'vec2'>): Node<'vec4'> => {
       let sum: Node<'vec4'> = vec4(0)

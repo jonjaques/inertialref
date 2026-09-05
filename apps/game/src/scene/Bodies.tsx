@@ -190,15 +190,37 @@ interface PlanetTuning {
   readonly flowRate: number
 }
 
-/** Natural preserves the production lift for a dark body filling the picture. */
+/**
+ * The albedo the calibrated exposure already suits.
+ *
+ * One constant, read twice, because the two readings are only correct together:
+ * it is both the cut-off and the target the lift aims at, so `lift` is exactly
+ * 1 just below the threshold and the function is continuous there. Written as
+ * two literals, moving only the guard leaves it discontinuous *and inverted*:
+ * at a guard of 0.15 a body at albedo 0.149 gets `lift = 0.8`, so filling the
+ * frame would darken it.
+ */
+const ADAPTED_ALBEDO = 0.12
+/** Angular radius at which the lift starts, and the span over which it completes. */
+const ADAPT_FROM = 0.02
+const ADAPT_SPAN = 0.2
+
+/**
+ * The calibrated star disk, in multiples of diffuse white: the radiance the
+ * tone curve's ceiling and the granulation are tuned against. `materials.ts`
+ * draws the disk at unit radiance and takes this through `exposure`.
+ */
+const CALIBRATED_STAR_RADIANCE = 8
+
+/** The calibrated look opens up for a dark body filling the picture. */
 function calibratedAlbedo(body: RenderBody): number {
   const albedo = body.appearance.geometricAlbedo
-  if (albedo >= 0.12) return 1
+  if (albedo >= ADAPTED_ALBEDO) return 1
   const filling = Math.min(
     1,
-    Math.max(0, (body.placement.angularRadius - 0.02) / 0.2),
+    Math.max(0, (body.placement.angularRadius - ADAPT_FROM) / ADAPT_SPAN),
   )
-  return 1 + (0.12 / Math.max(albedo, 0.01) - 1) * filling
+  return 1 + (ADAPTED_ALBEDO / Math.max(albedo, 0.01) - 1) * filling
 }
 
 function tuningFor(body: RenderBody): PlanetTuning {
@@ -828,7 +850,7 @@ export function Bodies({
           name: star.name,
           kind: 'star',
           sunlight: engine.calibratedLight
-            ? 8
+            ? CALIBRATED_STAR_RADIANCE
             : star.luminance / SURFACE_LUMINANCE,
           placement: star.placement,
           orientation: { x: 0, y: 0, z: 0, w: 1 },

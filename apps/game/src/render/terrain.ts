@@ -32,6 +32,7 @@ import {
   oneMinus,
   min,
   positionLocal,
+  positionPrevious,
   pow,
   saturate,
   smoothstep,
@@ -382,6 +383,10 @@ export function createTerrainMaterial(): TerrainMaterial {
         .div(max(morphBand.y.sub(morphBand.x), float(1))),
     )
     const moved = mix(positionLocal, target, k)
+    // The sensor's velocity compares this against the previous position, and
+    // that defaults to the raw attribute: a morphed vertex would then report
+    // its whole snap as motion every frame and blur the band while parked.
+    positionPrevious.assign(moved)
     shadedNormal.assign(normalize(mix(normalLocal, targetNormal, k)))
     localPosition.assign(moved)
     surfaceCover.assign(mix(cover, targetCover, k))

@@ -107,9 +107,13 @@ homepage's automatic phase sweep is sampled inside the observatory at render
 time, so pausing the simulation holds the camera too. Its keyboard context
 leaves game controls to the browser while keeping Settings and the keys sheet.
 
-An offscreen WebGL 2 smoke test draws a gray calibration plane through the
-full chain at four samples, reads opaque [163, 165, 164, 255], and reports
-no GL error. P3 is reconfirmed in Chrome 152 after restarting the machine.
+An offscreen WebGL 2 draw of a gray calibration plane through the full chain
+at four samples reads opaque [163, 165, 164, 255] with no GL error; that is a
+one-off check during verification, not a test in the tree. P3 is confirmed in
+Chrome 152. three configures the canvas lazily and forgets the configuration
+on every resize, so the P3 declaration is re-applied from the canvas target's
+`resize` event; without that the first `setSize` after the renderer is built
+returns the canvas to sRGB while the encoder keeps writing P3 primaries.
 
 The FFT diffraction tier and spectral emission attachment are not implemented.
 Neither are narrowband filters, a photo export/tether workflow, a spectral

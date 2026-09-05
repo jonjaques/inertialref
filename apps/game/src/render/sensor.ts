@@ -261,15 +261,17 @@ export function createSensor(
       // Dependencies are enumerated here, once per presented frame. Internal
       // quads read plain textures, so their draws cannot resubmit the scene or
       // an earlier optical pass. Even a bypass updates its downstream texture.
+      // Each term is bounded before the zero: the scene target can hold +Inf
+      // where two clamped draws blend, and Inf × 0 is NaN in the canvas.
       let dependencies: Node<'vec4'> = vec4(
-        scenePass.getTextureNode().rgb.mul(0),
+        scenePass.getTextureNode().rgb.min(65_504).mul(0),
         0,
       )
       if (defocus !== null)
-        dependencies = dependencies.add(nodeObject(defocus).mul(0))
+        dependencies = dependencies.add(nodeObject(defocus).min(65_504).mul(0))
       if (motion !== null)
-        dependencies = dependencies.add(nodeObject(motion).mul(0))
-      dependencies = dependencies.add(nodeObject(psf).mul(0))
+        dependencies = dependencies.add(nodeObject(motion).min(65_504).mul(0))
+      dependencies = dependencies.add(nodeObject(psf).min(65_504).mul(0))
       post.outputNode = dependencies.add(signature.encode(encoded))
     }
     post.needsUpdate = true
@@ -323,7 +325,7 @@ export function createSensor(
           state.settings,
           size.x,
           size.y,
-          state.noiseTick === undefined ? state.time : state.noiseTick / 60,
+          state.noiseTick ?? Math.floor(state.time * 60),
           reading.residual,
           state.headroom <= 1,
           renderer.outputColorSpace === DISPLAY_P3,
@@ -398,6 +400,10 @@ export function createSensor(
         post.render()
         if (state !== undefined) {
           const pre = exposure.reading!.pre
+          // The key this frame was submitted under. The readback lands frames
+          // later, and `size` has moved on by then: a circle measured at the
+          // old viewport is half the pixel value at the new one.
+          const submitted = previousFocus
           meter?.sample(
             renderer,
             scenePass.renderTarget.width,
@@ -408,8 +414,7 @@ export function createSensor(
                 state.pinned === null
               )
                 exposure.measure(bins, pre, state.lens, state.settings)
-              if (focusKeyFor(state.lens, size.x, size.y) === previousFocus)
-                maximumCircle = circle
+              if (submitted === previousFocus) maximumCircle = circle
             },
           )
         }
@@ -430,6 +435,3 @@ export function createSensor(
     },
   }
 }
-
-const focusKeyFor = (lens: Lens, width: number, height: number) =>
-  defocusParameters(lens, { width, height }).join(':')

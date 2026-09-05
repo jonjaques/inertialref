@@ -1,6 +1,5 @@
 import { useThree } from '@react-three/fiber'
 import { useMemo } from 'react'
-import { naturalResponse } from '@inertialref/rendering'
 import type { PerspectiveCamera } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createLensFlare } from '../render/flare.ts'
@@ -66,7 +65,10 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // script's lens outranks the flight one and `engine.lens` has already
       // resolved that; reading `camera.fov` here would be a second opinion.
       engine.lens,
-      naturalResponse(engine.sensorSettings),
+      // The same decision the bodies and the key light make: Natural, or a
+      // script that opted into calibrated staging — the intro's eclipse beats
+      // are staged around this glow whatever response the player chose.
+      engine.calibratedLight,
     )
   })
 

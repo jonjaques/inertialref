@@ -1,5 +1,6 @@
 import {
   HalfFloatType,
+  NearestFilter,
   NodeMaterial,
   NodeUpdateType,
   QuadMesh,
@@ -60,6 +61,13 @@ export class MotionNode extends TempNode<'vec4'> {
     this.inputNode = texture(input.value)
     this.motionNode = texture(motion.value)
     this.updateBeforeType = NodeUpdateType.RENDER
+    // A tile maximum is a per-tile fact. Fetched linearly between two tile
+    // centres whose velocities oppose, it averages toward zero and the blur
+    // cuts off in a band along the tile edge that moves with the tiling.
+    for (const target of this.targets.slice(0, 2)) {
+      target.texture.minFilter = NearestFilter
+      target.texture.magFilter = NearestFilter
+    }
   }
 
   override setup(builder: NodeBuilder): Node {
@@ -112,7 +120,8 @@ export class MotionNode extends TempNode<'vec4'> {
     this.materials[2]!.fragmentNode = Fn(() => {
       const center = this.motionNode.sample(uv())
       const velocity = neighbors.sample(uv()).xy
-      const color = vec4(this.inputNode.sample(uv()).rgb, 1).toVar()
+      // Bounded at the half-float maximum for the reason `psf.ts` gives.
+      const color = vec4(this.inputNode.sample(uv()).rgb.min(65_504), 1).toVar()
       const centerReach = pixelVelocity(center.xy).length()
       for (let i = 0; i < 12; i += 1) {
         const t = (i + 0.5) / 12 - 0.5
@@ -124,7 +133,10 @@ export class MotionNode extends TempNode<'vec4'> {
           .select(pixelVelocity(data.xy).length(), centerReach)
         const weight = reach.mul(0.5).sub(distance).add(1).clamp()
         color.addAssign(
-          vec4(this.inputNode.sample(sampleUv).rgb.mul(weight), weight),
+          vec4(
+            this.inputNode.sample(sampleUv).rgb.min(65_504).mul(weight),
+            weight,
+          ),
         )
       }
       return vec4(color.rgb.div(color.a), 1)

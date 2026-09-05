@@ -83,8 +83,10 @@ export class DefocusNode extends TempNode<'vec4'> {
     const circle = this.parameters.x
       .mul(this.parameters.y.sub(this.motionNode.sample(uv()).z))
       .clamp(-40, 40)
+    // Bounded at the half-float maximum for the reason `psf.ts` gives: the
+    // gather multiplies by a coverage that can be zero, and Inf × 0 is NaN.
     this.materials[0]!.fragmentNode = vec4(
-      this.inputNode.sample(uv()).rgb,
+      this.inputNode.sample(uv()).rgb.min(65_504),
       circle,
     ).context(context)
     const source = texture(this.targets[0]!.texture)
@@ -106,7 +108,7 @@ export class DefocusNode extends TempNode<'vec4'> {
             uv().add(offset.mul(radius).mul(this.pixelStep)),
           )
           const reach = near ? sample.a.negate() : sample.a
-          // Circle coverage is premultiplied into the colour. A sharp near
+          // Circle coverage is premultiplied into the color. A sharp near
           // surface contributes nothing to the soft far layer behind it.
           const coverage = reach
             .mul(0.5)
@@ -128,7 +130,11 @@ export class DefocusNode extends TempNode<'vec4'> {
     )
     const farMix = coc.sub(0.5).clamp().mul(far.a.mul(48).clamp())
     const nearMix = coc.negate().sub(0.5).clamp()
-    const base = mix(sharp.rgb, far.rgb.div(max(far.a, float(1e-6))), farMix)
+    const base = mix(
+      sharp.rgb.min(65_504),
+      far.rgb.div(max(far.a, float(1e-6))),
+      farMix,
+    )
     // A wider circle elsewhere in frame reduces the gather's coverage, not
     // this surface's radiance. Normalize inside it; use coverage at its edge.
     const nearOpacity = max(near.a, nearMix).mul(

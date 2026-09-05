@@ -139,5 +139,18 @@ export function selectLod(
  * two things a reader coming from the streamer will look for in an LOD file.
  */
 
-/** The catalog and the resolved disk use the same linear-light temperature. */
-export const starColor = blackbodyColour
+/**
+ * The catalog and the resolved disk use the same linear-light temperature.
+ *
+ * The catalog keeps negative channels so out-of-gamut light survives to the
+ * encoder; a key light cannot go negative, or a cool primary lights its
+ * planets with less than no blue.
+ */
+export function starColor(temperature: number): {
+  r: number
+  g: number
+  b: number
+} {
+  const { r, g, b } = blackbodyColour(temperature)
+  return { r: Math.max(0, r), g: Math.max(0, g), b: Math.max(0, b) }
+}

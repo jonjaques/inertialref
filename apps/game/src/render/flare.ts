@@ -241,7 +241,9 @@ function elementMaterial(kind: ElementKind): {
     }
   }
 
-  const material = sensorRadiance(new MeshBasicNodeMaterial())
+  // An overlay: the quads hang twenty metres in front of the lens, and the
+  // sensor must not take that for the distance of the sky behind the Sun.
+  const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.colorNode = colour.mul(profile).mul(intensity)
   material.transparent = true
   /*

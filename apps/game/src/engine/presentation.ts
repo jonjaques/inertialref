@@ -203,6 +203,7 @@ export function createPresentationStack(
   const settle = (): void => {
     const next = resolveStances(layers.map((one) => one.stance))
     if (
+      next.motionBlur === last.motionBlur &&
       next.showShip === last.showShip &&
       next.showOrbits === last.showOrbits &&
       next.labels === last.labels &&

@@ -62,7 +62,8 @@ it('measures a star at its instance position instead of the sprite quad', async 
     const moved = await gpu.drawGraph(motion, { float: true })
     expect(moved.at(64, 64)[2]).toBeGreaterThan(0)
     expect(Math.abs(moved.at(64, 64)[0])).toBeLessThan(0.001)
-    // Both channels carry the sprite alpha, which cancels in their ratio.
+    // The sprite writes the motion attachment opaquely over the cleared sky,
+    // so the ratio of the two channels is the projection's alone.
     expect(
       Math.abs(
         moved.at(64, 64)[0] / moved.at(64, 64)[2] +
@@ -72,6 +73,43 @@ it('measures a star at its instance position instead of the sprite quad', async 
   } finally {
     scenePass.dispose()
     field.material.dispose()
+  }
+})
+
+it('keeps a surface’s depth in the motion attachment under an overlay quad', async () => {
+  // A flare quad hangs in camera space over what is really there. Without the
+  // overlay blend it would replace the motion attachment's inverse depth with
+  // its own — twenty metres in front of the lens — over its whole footprint,
+  // and the meter would read a near circle and enable defocus over the Sun.
+  const camera = new PerspectiveCamera(65, 1, 0.01, 100)
+  camera.position.z = 2
+  const scene = new Scene()
+  const surface = new Mesh(new PlaneGeometry(4, 4), new MeshBasicNodeMaterial())
+  scene.add(surface) // At z = 0, two metres away: inverse depth 0.5.
+  const overlay = new Mesh(
+    new PlaneGeometry(1, 1),
+    sensorRadiance(new MeshBasicNodeMaterial(), true),
+  )
+  overlay.position.z = 1 // One metre away: inverse depth 1, were it believed.
+  overlay.material.transparent = true
+  overlay.material.depthWrite = false
+  overlay.renderOrder = 1
+  scene.add(overlay)
+  const scenePass = pass(scene, camera)
+  scenePass.setMRT(sensorMrt())
+  const motion = scenePass.getTextureNode('motion')
+  try {
+    const drawn = await gpu.drawGraph(motion, { float: true })
+    // The centre is under the overlay; the edge is the bare surface. Both read
+    // the surface's 0.5, not the overlay's 1.0.
+    expect(drawn.at(64, 64)[2]).toBeCloseTo(0.5, 2)
+    expect(drawn.at(8, 8)[2]).toBeCloseTo(0.5, 2)
+  } finally {
+    scenePass.dispose()
+    surface.geometry.dispose()
+    surface.material.dispose()
+    overlay.geometry.dispose()
+    overlay.material.dispose()
   }
 })
 
@@ -271,7 +309,7 @@ it('submits no defocus draws for a sharp frame and keeps the input texture', asy
   }
 })
 
-it('draws the thin-lens blur diameter of a two-metre calibration plane', async () => {
+it('draws the thin-lens blur diameter of a two-meter calibration plane', async () => {
   const size = 128
   const lens = { ...lensForFov(10), fStop: 1.4 }
   const viewport = { width: size, height: size }

@@ -7503,6 +7503,48 @@ but not origins. A request for production at the same path can reuse localhost.
 Force a fresh navigation across hosts and verify `location.href` before calling
 a capture a production reference.
 
+## The canvas forgets its gamut, and a morphed vertex is not a moving one (5 Sep 2026)
+
+Review of the sensor branch, with the defects that must not come back.
+
+three configures the WebGPU canvas lazily and drops that configuration on
+every resize: `updateSize` deletes the canvas target's record, and the next
+`context` read runs `configure()` again with no color space. R3F's `setSize`
+after the renderer factory resolves is the first such resize, so a P3 canvas
+declared at build was sRGB again by the first frame while the encoder kept
+writing P3 primaries and `ir.status()` kept saying P3. The declaration is
+re-applied from the canvas target's `resize` event, after three's own listener.
+
+The velocity attachment compares `positionLocal`, which a `positionNode`
+assigns, against `positionPrevious`, which is the raw attribute unless
+something assigns it. The terrain and water morphs displace a vertex by up to a
+child cell and reported the displacement as motion every frame. Both morphs
+now assign `positionPrevious` as the star sprites do. The symptom is bounded,
+not observed: parked at Earth's `summit` site at 2 m, 1600×900 at DPR 1,
+blur forced on through the presentation stack and the shutter at 0.25 s so the
+blur fraction is 1, the plate with blur differs from the one without by 812
+pixels above 8/255 before the fix and 928 after, on 877 converged patches.
+Whatever the morph fed the attachment at that window was under the blur's
+reach; a moving camera and a retina buffer are not measured.
+
+The scene target can hold +Inf: each draw clamps at 65,504 but the blend does
+not, and beyond about 4.4 AU the Sun is a clamped disk under a clamped sprite.
+Six octaves of PSF weights spread one such texel across the frame, and the
+`× 0` dependency terms in the output turned it into NaN. Every optical pass
+bounds its first read; the Sun's sprite is skipped where its disk is drawn but
+still anchors the integrated ramp, which had re-normalized the whole sky on
+Sirius the frame the disk resolved.
+
+The motion attachment had no blend mode, so the flare's quads at twenty
+metres replaced the depth of the sky behind the Sun over their footprint; at
+1.5× zoom or f/1.4 on a retina window that was enough to enable defocus and
+smear the pixels under the glow. Overlays now write a zero motion vector under
+an alpha blend on that attachment, through `sensorRadiance(material, true)`.
+
+The homepage sweep ran on the simulated clock, which is warp × wall time, and
+the menu mutes every key that would reset the warp. It runs on presented
+seconds, held while the clock is paused.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

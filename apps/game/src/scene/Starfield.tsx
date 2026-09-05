@@ -19,6 +19,18 @@ const MAX_STARS = 20_000
 const WHITE: readonly [number, number, number] = [1, 1, 1]
 
 /**
+ * Magnitudes below the brightest star at which the integrated ramp reaches
+ * its floor.
+ *
+ * Measured, not chosen: a 40 ly sweep from Alpha Centauri spans 20.7
+ * magnitudes with a median at 13.2. At 17 the median star lands around a fifth
+ * of the ramp and the top percentile is clearly separated, which is what makes
+ * the sky read as a sky rather than as noise. Larger flattens it; smaller loses
+ * everything below the median into the floor.
+ */
+const MAGNITUDE_RANGE = 17
+
+/**
  * How far the origin may travel, as a fraction of the nearest star's distance,
  * before the shell is rewritten.
  *
@@ -32,11 +44,13 @@ const WHITE: readonly [number, number, number] = [1, 1, 1]
  *
  * 1e-5 radians is a quarter of a pixel across a 900-line viewport at a ~2°
  * field, which is past the zoom slider's narrow end — and the star it binds on
- * is never a distant one. It is the system's own sun, which the survey
- * includes and which sits ~1 AU away, so the budget in orbit is ~1,500 km:
- * about a minute of travel at 27.6 km/s instead of nine frames. The tolerance
- * is recomputed at every rewrite, so approaching the sun tightens it faster
- * than the approach can spend it.
+ * is the nearest one *drawn as a sprite*. In orbit the system's own sun is a
+ * resolved disk that `Bodies` draws, so it leaves the buffer and the budget is
+ * the next star's — light-years, and a shell that never rewrites for parallax
+ * inside a system. Once the sun shrinks to a point it re-enters through the
+ * `disks` key and is the nearest again, ~5 AU out, where the budget is a few
+ * million kilometres. The tolerance is recomputed at every rewrite, so
+ * approaching a star tightens it faster than the approach can spend it.
  */
 const SHELL_PARALLAX_TOLERANCE = 1e-5
 
@@ -84,20 +98,22 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     if (scene === null) return
     const view = engine.lensView()
     const ppr = view === null ? 848 : pixelsPerRadian(view.lens, view.viewport)
-    // Integral of the soft core, including its alpha, in square pixels.
+    // Integral of the soft core, including its alpha, in square pixels. `size`
+    // is logical pixels and three scales a point by the pixel ratio, while
+    // `ppr` counts display pixels: the footprint has to be in the same pixel
+    // as the density, or a retina sky collects the ratio squared too much light.
     field.angularDensity.value =
-      (ppr * ppr) / (0.14661573215518503 * field.size.value ** 2)
+      (ppr * ppr) /
+      (0.14661573215518503 * (field.size.value * engine.displayRatio) ** 2)
     const resolved = new Set(
       scene.stars
         .filter((star) => star.placement.angularRadius * ppr > 0.75)
         .map((star) => star.name),
     )
     const disks = [...resolved].join('|')
-    field.integrated.value =
-      engine.sensorSettings.response === 'composite' &&
-      engine.sensorSettings.curve === 'natural'
-        ? 1
-        : 0
+    // The integrated ramp belongs to the calibrated look — Natural, or a script
+    // staging against it — the same decision the bodies and the Sun glow make.
+    field.integrated.value = engine.calibratedLight ? 1 : 0
     const origin = scene.origin
     const held = written.current
     /*
@@ -141,10 +157,23 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     let nearest = Number.POSITIVE_INFINITY
     for (let i = 0; i < stars.positions.length; i += 1) {
       if (count >= MAX_STARS) break
-      if (resolved.has(stars.names[i] ?? '')) continue
       const position = stars.positions[i] as UniverseVector
       const point = placeOnStarShell(origin, position)
       if (point === null) continue
+      const metres = UV.distance(position, origin.position)
+      // The one-light-year floor keeps a star the camera is inside from
+      // dividing by nothing.
+      const light = Math.max(metres, LIGHT_YEAR)
+      const value = (stars.luminosities[i] ?? 1) / (light * light)
+      // The ramp anchors on the brightest star in the survey whether or not
+      // `Bodies` draws its disk. Dropping a resolved sun from the reference
+      // re-normalizes every other star against the next one — a magnitude in
+      // Sol, most of the ramp beside a luminous primary — and steps the whole
+      // sky the frame the disk crosses the sprite threshold.
+      brightest = Math.max(brightest, value)
+      // A resolved disk carries its own light. A sprite under it would add a
+      // second, and under a metered exposure the two overflow the target.
+      if (resolved.has(stars.names[i] ?? '')) continue
       array[count * 3] = point.x
       array[count * 3 + 1] = point.y
       array[count * 3 + 2] = point.z
@@ -153,23 +182,21 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       colours[count * 3 + 1] = colour[1]
       colours[count * 3 + 2] = colour[2]
 
-      const metres = UV.distance(position, origin.position)
-      // The nearest distance bounds the next shell rewrite's parallax.
+      // The nearest *drawn* star bounds the next shell rewrite's parallax: a
+      // resolved sun is a disk, and rewriting the shell for its parallax would
+      // move nothing that is in the buffer.
       if (metres < nearest) nearest = metres
       prominence[count] = stellarIlluminance(stars.luminosities[i] ?? 1, metres)
-      const light = Math.max(metres, LIGHT_YEAR)
-      const value = (stars.luminosities[i] ?? 1) / (light * light)
       flux.push(value)
-      brightest = Math.max(brightest, value)
       count += 1
     }
 
-    // Natural is an integrated sky: its seventeen-magnitude survey retains the
-    // production visibility ramp. The other responses collect physical flux.
+    // The calibrated look is an integrated sky: a visibility ramp over the
+    // survey's magnitudes. The other responses collect physical flux.
     for (let i = 0; i < count; i += 1) {
       const magnitude =
         brightest === 0 ? 0 : -2.5 * Math.log10(flux[i]! / brightest)
-      visibility[i] = Math.max(0, Math.min(1, 1 - magnitude / 17))
+      visibility[i] = Math.max(0, Math.min(1, 1 - magnitude / MAGNITUDE_RANGE))
     }
     field.visibility.needsUpdate = true
     field.colours.needsUpdate = true

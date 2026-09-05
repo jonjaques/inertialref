@@ -227,7 +227,23 @@ async function buildRenderer(
   const mode: OutputMode = backend === 'webgpu' ? requested : 'standard'
   const headroom = headroomFor(mode)
   const wide = configureGamut(renderer, mode === 'extended')
-  if (wide) renderer.outputColorSpace = DISPLAY_P3
+  if (wide) {
+    renderer.outputColorSpace = DISPLAY_P3
+    /*
+     * three configures the canvas lazily and forgets that configuration on
+     * every resize: `updateSize` drops the canvas target's record, and the
+     * next frame's `context` getter runs `configure()` again with no color
+     * space, so the canvas is sRGB again while the encoder keeps writing P3
+     * primaries. R3F's own `setSize` after this factory resolves is the first
+     * such resize, so without this the picture is desaturated from its first
+     * frame. three registered its listener in the renderer's constructor and
+     * listeners fire in registration order, which is what makes re-declaring
+     * here land after the reconfigure rather than before it.
+     */
+    renderer.getCanvasTarget().addEventListener('resize', () => {
+      configureGamut(renderer, true)
+    })
+  }
 
   const tone = installToneCurve(renderer, headroom)
   const description: RendererDescription = {

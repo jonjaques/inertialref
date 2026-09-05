@@ -78,7 +78,7 @@ export function sensorSignature(input: TextureNode) {
       )
       .max(vec3(0))
     // A twelve-uniform normal approximation has mean 0 and variance 1.
-    // Independent channels retain photon colour statistics without a costly log.
+    // Independent channels retain photon color statistics without a costly log.
     const gaussian = vec3(0).toVar()
     for (let i = 0; i < 12; i += 1) {
       gaussian.addAssign(
@@ -117,13 +117,14 @@ export function sensorSignature(input: TextureNode) {
       settings: SensorSettings,
       width: number,
       height: number,
-      time: number,
+      /** The frame's integer tick; two frames with one tick draw one noise field. */
+      noiseTick: number,
       gain: number,
       sdr: boolean,
       p3 = false,
     ): void {
       size.value.set(width, height)
-      tick.value = Math.floor(time * 60) >>> 0
+      tick.value = Math.max(0, Math.floor(noiseTick)) >>> 0
       residual.value = gain
       well.value = (glass.fullWell * 100) / Math.max(1, lens.iso)
       read.value = glass.readNoise

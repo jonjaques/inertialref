@@ -230,7 +230,9 @@ export class ExposureMeter {
     this.reading = {
       response: settings.response,
       set,
-      auto: target - set,
+      // The gain actually applied over the lens setting, not the meter's goal:
+      // Direct ignores the goal and Natural holds the calibration.
+      auto: this.#ev - set,
       adapted: this.#ev,
       ...split,
       metered:

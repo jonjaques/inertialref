@@ -16,6 +16,7 @@ import {
   normalize,
   oneMinus,
   positionLocal,
+  positionPrevious,
   pow,
   saturate,
   screenUV,
@@ -217,6 +218,8 @@ export function createWaterMaterial(
         .div(max(morphBand.y.sub(morphBand.x), float(1))),
     )
     const moved = mix(positionLocal, target, k)
+    // Both sides of the velocity, for the reason `terrain.ts` gives.
+    positionPrevious.assign(moved)
     localPosition.assign(moved)
     waterDepth.assign(mix(depth, targetDepth, k))
     return moved

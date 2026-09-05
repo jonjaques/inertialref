@@ -49,11 +49,14 @@ export function Sensor({ engine }: { engine: GameEngine }) {
       }),
     )
     chain.current = built
+    // The producer is registered once per label, so under StrictMode's
+    // mount–unmount–mount it belongs to the first chain, which is disposed by
+    // the time boot runs it. Warm whichever chain is live instead.
     warmAtMount({
       label: 'warming the sensor',
       units: 1,
       run: async (done) => {
-        await built.warm()
+        await chain.current?.warm()
         done()
       },
     })

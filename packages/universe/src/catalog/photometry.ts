@@ -412,7 +412,7 @@ export function blackbodyColour(temperature: Kelvin): LinearRgb {
   return { r: r / peak, g: g / peak, b: b / peak }
 }
 
-/** The temperature's tristimulus colour, independent of a display's primaries. */
+/** The temperature's tristimulus color, independent of a display's primaries. */
 export function blackbodyXyz(temperature: Kelvin): {
   readonly x: number
   readonly y: number
