@@ -212,6 +212,26 @@ on a 20 Mbit connection. If it needs shortening, this is the only line worth an
 hour: upload the loaded system's maps first and let the rest trail the reveal,
 or move the set to a GPU-compressed container so the decode disappears.
 
+### The galaxy volume is warmed and allocated on every boot, unmeasured
+
+`SceneView` mounts `GalaxyVolume` unconditionally, so `warmAtMount` registers
+two units and `warm()` compiles the 16,384-step ray-march pipeline and allocates
+a quarter-resolution `rgba16f` target — 480×270×8 B, about 1 MiB at 1080p — in
+every session. Flight, the front door and every capture rig pay it for a feature
+reachable only from the planetarium's Presets panel. Raised by reading the code
+during the review of PR 65, not by a profile: the census already reports its two
+units, so the cost is a subtraction from `preload` away, and `warming surface
+maps` at 1,569 ms says in advance which line still dominates. Mounting the
+volume with the first `galaxyView` would move both, at the price of a compile
+inside the first galaxy frame.
+
+Two smaller things in the same file, worth taking whenever that one is. The
+draw sets `renderer.autoClear = true` before a quad that covers every texel and
+writes alpha 1, so the clear of the attachment on each sensor submission is a
+load-op bought for nothing across the 40-frame batches M3 measures. And the
+volume updates every submission whether or not the instrument or the field has
+moved, which for a fixed external view is the same frame recomputed.
+
 ## Memory and the resident world
 
 ### The tour ends at 906 MB of JS heap, and the steady state does not leak
