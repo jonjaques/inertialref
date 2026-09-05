@@ -41,6 +41,7 @@ import {
 import {
   GALAXY_VIEWS,
   type GalaxyView,
+  isGalaxyView,
   anglesForPhase,
   angularRadius,
   applyDrag,
@@ -230,8 +231,7 @@ export class Observatory {
   }
 
   viewGalaxy(view: GalaxyView): ObserverStatus {
-    if (view !== 'face-on' && view !== 'edge-on')
-      throw new Error('Unknown galaxy view')
+    if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
     this.clear()
     this.#galaxyView = view
     return this.status()

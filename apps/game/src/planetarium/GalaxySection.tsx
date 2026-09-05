@@ -1,20 +1,24 @@
-import { GALAXY_VIEWS } from '@inertialref/rendering'
+import { GALAXY_VIEWS, type GalaxyView } from '@inertialref/rendering'
 import { formatShutter } from '../hud/controls.ts'
 import { Action } from '../hud/Action.tsx'
 import { Section } from '../hud/Section.tsx'
 import { useEngine } from '../state/engineStore.ts'
 import type { PlanetariumContext } from './context.ts'
 
+// The record, not a written list: a third instrument is a line in
+// `GALAXY_VIEWS` and nothing here.
+const VIEWS = Object.keys(GALAXY_VIEWS) as GalaxyView[]
+
 export function GalaxySection({ engine, onNotice }: PlanetariumContext) {
-  const view = useEngine((s) => s.observer?.galaxyView ?? null)
+  const selected = useEngine((s) => s.observer?.galaxyView ?? null)
   return (
     <Section id="planetarium.presets.galaxy" title="Milky Way">
       <div className="grid grid-cols-2 gap-1.5">
-        {(['face-on', 'edge-on'] as const).map((id) => (
+        {VIEWS.map((id) => (
           <Action
             key={id}
             label={GALAXY_VIEWS[id].label}
-            tone={view === id ? 'primary' : 'normal'}
+            tone={selected === id ? 'primary' : 'normal'}
             onClick={() => {
               const view = GALAXY_VIEWS[id]
               engine.harness.galaxyView(id)

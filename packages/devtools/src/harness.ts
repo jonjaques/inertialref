@@ -1,4 +1,8 @@
-import { GALAXY_VIEWS, type GalaxyView } from '@inertialref/rendering'
+import {
+  GALAXY_VIEWS,
+  type GalaxyView,
+  isGalaxyView,
+} from '@inertialref/rendering'
 import { GalaxyInspector, type GalaxyRenderReport } from './galaxy.ts'
 import {
   AU,
@@ -1628,8 +1632,7 @@ export class GameHarness {
 
   /** Select a fixed external instrument without moving anything in the world. */
   galaxyView(view: GalaxyView): ObserverStatus {
-    if (view !== 'face-on' && view !== 'edge-on')
-      throw new Error('Unknown galaxy view')
+    if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
     this.stopCutscene()
     this.#host.render.setFlightLens(GALAXY_VIEWS[view].lens)
     return this.#observatory.viewGalaxy(view)
