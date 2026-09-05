@@ -7744,8 +7744,11 @@ The focused M2 checks pass 22 tests: finite nonnegative samples, solar
 normalization, order independence, tangent locations, azimuth wrap, converged
 counts and rays, additive population emission, unchanged session state and
 fixed numeric references for three plates. PR 62's five Copilot comments and
-the companion-order bug are addressed in the preceding checkpoint. Full gate
-verification follows the final documentation and display changes.
+the companion-order bug are addressed in the preceding checkpoint. The full
+`pnpm check` passes at `3936e35`: 118 files, 1,704 regular tests, four slow
+tests, documentation build and production build. `pnpm sim --self-test` passes
+12/12. A final catalog rebuild produces no diff. The branch remains local,
+based on PR 62 at `76cef98`; no M2 PR is opened.
 
 ## Known gaps
 
