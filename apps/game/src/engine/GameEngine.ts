@@ -78,6 +78,12 @@ import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
 import {
+  EMPTY_STAR_FIELD,
+  selectStars,
+  type StarCandidate,
+  type StarField,
+} from './starSelection.ts'
+import {
   browserTimingPort,
   onTimingLevel,
   timingDetailed,
@@ -155,15 +161,23 @@ export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
 /** The same lens as an angle, for the two places Three.js wants degrees. */
 export const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 
-const EMPTY_STAR_FIELD: StarField = {
-  positions: [],
-  names: [],
-  colours: [],
-  luminosities: [],
-}
+export type { StarField }
 
 /** How far the player must move before the starfield is surveyed again. */
 const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
+
+/** A catalog star as the star field's selection sees it. */
+const asCandidate = (star: CatalogStar): StarCandidate => ({
+  id: star.id,
+  name: star.name,
+  position: star.position,
+  colour: [
+    star.physical.colour.r,
+    star.physical.colour.g,
+    star.physical.colour.b,
+  ],
+  solarLuminosities: star.physical.solarLuminosities,
+})
 
 /**
  * A cutscene frame, converted to render space for the scene components.
@@ -200,25 +214,6 @@ export interface ObserverView {
 
 export { NO_EFFECTS }
 export type { CinematicEffects, CinematicTextState }
-
-export interface StarField {
-  readonly positions: readonly UniverseVector[]
-  readonly names: readonly string[]
-  /**
-   * Linear sRGB per star, from the blackbody color of its temperature.
-   *
-   * Carried per star rather than picked in the shader because the temperature
-   * comes from a published color index for the cataloged half of the sky and
-   * from a mass for the rest, and neither is available to a vertex program.
-   */
-  readonly colours: readonly [number, number, number][]
-  /**
-   * Bolometric luminosity in solar units. The renderer turns this and the
-   * distance into an apparent brightness; a star's size on screen is not a
-   * constant.
-   */
-  readonly luminosities: readonly number[]
-}
 
 export interface GameEngineOptions {
   readonly seed?: string
@@ -1452,25 +1447,22 @@ export class GameEngine {
       completeRadius: catalog.completeRadius,
     }
 
+    /*
+     * The three selections, in the order they are trusted: the survey's
+     * catalog stars, the worker's fill, and the sky asset's distant bright
+     * stars. The sky is the same list every time — it is the catalog's, not
+     * the survey's — and it rides with every field because no survey reaches
+     * it: Betelgeuse is 500 ly out and the survey is a 100 ly cube.
+     */
+    const surveyed: StarCandidate[] = catalogStars.map(asCandidate)
+    const sky: StarCandidate[] = catalog.sky.map(asCandidate)
+
     // The cataloged half goes up *now*, not when the worker answers — that
     // is the header's promise about the real sky being on screen on the first
     // frame after a jump. Gated on the survey it waited behind a busy pool,
     // and a single failed survey dropped it entirely, with the hysteresis
     // then blocking any retry until the player had moved another 8 ly.
-    {
-      const positions: UniverseVector[] = []
-      const names: string[] = []
-      const colours: [number, number, number][] = []
-      const luminosities: number[] = []
-      for (const star of catalogStars) {
-        positions.push(star.position)
-        names.push(star.name)
-        const c = star.physical.colour
-        colours.push([c.r, c.g, c.b])
-        luminosities.push(star.physical.solarLuminosities)
-      }
-      this.#starField = { positions, names, colours, luminosities }
-    }
+    this.#starField = selectStars(centre, [surveyed, sky])
 
     const run =
       this.pool() === null
@@ -1500,32 +1492,26 @@ export class GameEngine {
          * an entry means the field was actually rebuilt.
          */
         const applying = timer.span('survey.apply', ENGINE_PHASE)
-        const positions: UniverseVector[] = []
-        const names: string[] = []
-        const colours: [number, number, number][] = []
-        const luminosities: number[] = []
-
-        for (const star of catalogStars) {
-          positions.push(star.position)
-          names.push(star.name)
-          const c = star.physical.colour
-          colours.push([c.r, c.g, c.b])
-          luminosities.push(star.physical.solarLuminosities)
-        }
+        const fill: StarCandidate[] = []
         for (const entry of cells) {
           for (const star of entry.stars) {
             const [sx, sy, sz, ox, oy, oz] = star.position
-            positions.push(UV.universeVector(sx, sy, sz, ox, oy, oz))
-            names.push(star.name)
-            colours.push([...star.colour] as [number, number, number])
-            luminosities.push(star.solarLuminosities)
+            fill.push({
+              id: star.id,
+              name: star.name,
+              position: UV.universeVector(sx, sy, sz, ox, oy, oz),
+              colour: star.colour,
+              solarLuminosities: star.solarLuminosities,
+            })
           }
         }
-        this.#starField = { positions, names, colours, luminosities }
+        this.#starField = selectStars(centre, [surveyed, fill, sky])
         applying.end()
         log.info('starfield surveyed', {
-          stars: positions.length,
+          stars: this.#starField.positions.length,
           catalogued: catalogStars.length,
+          fill: fill.length,
+          sky: sky.length,
         })
       })
       .catch((cause: unknown) =>

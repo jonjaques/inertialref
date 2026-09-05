@@ -8,12 +8,18 @@ import {
   pixelsPerRadian,
   stellarIlluminance,
 } from '@inertialref/rendering'
-import type { GameEngine, StarField } from '../engine/GameEngine.ts'
+import type { GameEngine } from '../engine/GameEngine.ts'
+import { STAR_SPRITE_CEILING, type StarField } from '../engine/starSelection.ts'
 import { createStarfieldMaterial } from '../render/materials.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
-/** How many stars the instanced sprite buffer has room for. */
-const MAX_STARS = 20_000
+/**
+ * The buffer's size, and the engine's ceiling on what it hands over. One
+ * constant, because a field longer than the buffer would be truncated here in
+ * whatever order it arrived, and the engine is where the choice of *which*
+ * stars to keep is made.
+ */
+const MAX_STARS = STAR_SPRITE_CEILING
 
 /** Fallback color for a star whose survey predates the color column. */
 const WHITE: readonly [number, number, number] = [1, 1, 1]
