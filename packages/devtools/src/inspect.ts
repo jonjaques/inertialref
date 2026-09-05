@@ -1,8 +1,23 @@
-import { formatDuration, formatReading, type Meters } from '@inertialref/shared'
+import {
+  formatDuration,
+  formatReading,
+  type Meters,
+  type Seconds,
+} from '@inertialref/shared'
+import { conicOf } from '@inertialref/physics'
 import { formatSeed } from '@inertialref/procedural'
 import { UV, Vec } from '@inertialref/spatial'
-import type { World } from '@inertialref/simulation'
-import { entitySnapshot } from '@inertialref/simulation'
+import type {
+  EntitySnapshot,
+  FrameBinding,
+  World,
+} from '@inertialref/simulation'
+import {
+  airVelocity,
+  entitySnapshot,
+  thrustDemand,
+  TICK_DURATION,
+} from '@inertialref/simulation'
 import {
   type EntityId,
   formatAddress,
@@ -57,6 +72,34 @@ export interface EntityInspection {
   /** On rails: propagated from an epoch rather than integrated (ADR-0025). */
   readonly coasting: boolean
   readonly partition: string
+  /** The main drive's throttle, 0..1. */
+  readonly throttle: number
+  readonly flightAssist: boolean
+  /** Whether any thruster valve is open this tick, the assist's included. */
+  readonly thrusting: boolean
+  /**
+   * Speed against the ground and the air under the ship, m/s — the body's
+   * spin taken out of the frame speed. Null with no body to measure against.
+   */
+  readonly surfaceSpeed: number | null
+  /** Rate of climb, m/s, positive away from the body. Null in deep space. */
+  readonly verticalSpeed: number | null
+  /** The conic about the frame's body, or null with nothing to be on one about. */
+  readonly orbit: OrbitInspection | null
+}
+
+/**
+ * The orbit a ship is on, as the numbers a pilot reads: how high it goes and
+ * how low, above the datum rather than from the centre, and how long a lap is.
+ */
+export interface OrbitInspection {
+  /** Lowest altitude above the datum, meters. Below zero is a ground track. */
+  readonly periapsis: Meters
+  /** Highest altitude above the datum, or null for an orbit that does not come back. */
+  readonly apoapsis: Meters | null
+  readonly eccentricity: number
+  /** Seconds per revolution, or null for an escape. */
+  readonly period: Seconds | null
 }
 
 export interface WorldInspection {
@@ -143,6 +186,77 @@ export function inspectEntity(
     coasting: entity.rails !== null,
     // Derived by `universe`, not open-coded here — see partitionForFrames.
     partition: partitionForFrames(world.galaxy, view.frameChain, view.position),
+    throttle: entity.control.throttle,
+    flightAssist: entity.flightAssist,
+    thrusting: isThrusting(thrustDemand(entity, TICK_DURATION)),
+    ...againstTheBody(world, view),
+  }
+}
+
+/**
+ * The readings that exist only about a body: the ground-relative speed, the
+ * rate of climb, and the conic.
+ *
+ * All three are measured in the body's own inertial frame, so they are
+ * null when the entity is somewhere else — a surface frame, where the local
+ * velocity is already the ground-relative one and is read directly; a
+ * system frame, where the star is the attractor but there is no ground to
+ * be above; deep space, where there is nothing at all.
+ */
+function againstTheBody(
+  world: World,
+  view: EntitySnapshot,
+): Pick<EntityInspection, 'surfaceSpeed' | 'verticalSpeed' | 'orbit'> {
+  if (view.landed) {
+    // A surface frame's velocity is against the ground by construction, and
+    // its +Y is up.
+    return {
+      surfaceSpeed: Vec.length(view.localVelocity),
+      verticalSpeed: view.localVelocity.y,
+      orbit: null,
+    }
+  }
+  const binding = world.binding(view.frame)
+  const nothing = { surfaceSpeed: null, verticalSpeed: null, orbit: null }
+  if (binding === undefined || binding.body === null || binding.radius <= 0)
+    return nothing
+  const radius = view.localPosition
+  const distance = Vec.length(radius)
+  if (distance <= 0) return nothing
+  const up = Vec.scale(radius, 1 / distance)
+  const ground = airVelocity(world, binding, radius, world.clock.time)
+  return {
+    surfaceSpeed: Vec.length(Vec.sub(view.localVelocity, ground)),
+    verticalSpeed: Vec.dot(view.localVelocity, up),
+    orbit: binding.mu > 0 ? orbitOf(view, binding) : null,
+  }
+}
+
+/** Any valve open: the demand the tick fired, not the hand on the keys. */
+const isThrusting = (demand: ReturnType<typeof thrustDemand>): boolean =>
+  demand !== null &&
+  (Vec.lengthSquared(demand.linear) > 0 ||
+    Vec.lengthSquared(demand.angular) > 0)
+
+function orbitOf(view: EntitySnapshot, binding: FrameBinding): OrbitInspection {
+  const conic = conicOf(
+    { position: view.localPosition, velocity: view.localVelocity },
+    binding.mu,
+  )
+  const e = conic.eccentricity
+  // Bound below one; a parabola's apoapsis is at infinity and a hyperbola's
+  // is behind it, and neither is a number a readout can print.
+  const semiMajor = e < 1 ? conic.periapsis / (1 - e) : null
+  return {
+    periapsis: conic.periapsis - binding.radius,
+    apoapsis: semiMajor === null ? null : semiMajor * (1 + e) - binding.radius,
+    eccentricity: e,
+    period:
+      semiMajor === null
+        ? null
+        : 2 *
+          Math.PI *
+          Math.sqrt((semiMajor * semiMajor * semiMajor) / binding.mu),
   }
 }
 

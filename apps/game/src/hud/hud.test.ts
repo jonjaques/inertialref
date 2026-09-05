@@ -16,6 +16,8 @@ import { GraphicsPanel } from './GraphicsPanel.tsx'
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { devPanels } from './registry.tsx'
 import { TargetRow } from './TargetRow.tsx'
+import { NavCluster } from './NavCluster.tsx'
+import { formatSpeed } from './navCluster.ts'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
 import { SHIP_IDS } from '../render/ships.ts'
@@ -464,5 +466,50 @@ describe('the author’s instruments', () => {
       ErrorBoundary.getDerivedStateFromError(new RangeError('out')).error
         .message,
     ).toBe('out')
+  })
+})
+
+describe('the navigation cluster', () => {
+  afterEach(() => engineStore.setState({ status: null }))
+
+  it('renders the ship’s figures from a real status', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const ir = session.harness
+    const status = ir.status()
+    engineStore.setState({ status })
+    // The ball reads the scene in an animation frame, which static markup
+    // never runs; what this proves is that the readouts around it come from
+    // the same status the strip reads, and that nothing throws on the way.
+    const markup = renderToStaticMarkup(
+      createElement(
+        KeymapProvider,
+        null,
+        createElement(NavCluster, {
+          engine: { harness: ir, scene: () => null } as never,
+          onNotice: () => {},
+        }),
+      ),
+    )
+    expect(markup).toContain('Attitude indicator')
+    expect(markup).toContain(formatSpeed(status.player?.localSpeed ?? null))
+    expect(markup).toContain('Thrusters')
+    expect(markup).toContain('Cut')
+    session.dispose()
+  })
+
+  it('draws nothing before the first sample lands', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const markup = renderToStaticMarkup(
+      createElement(
+        KeymapProvider,
+        null,
+        createElement(NavCluster, {
+          engine: { harness: session.harness, scene: () => null } as never,
+          onNotice: () => {},
+        }),
+      ),
+    )
+    expect(markup).toBe('')
+    session.dispose()
   })
 })

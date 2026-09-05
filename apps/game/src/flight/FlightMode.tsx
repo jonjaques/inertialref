@@ -6,6 +6,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { useChromeHidden } from '../hud/chrome.ts'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FlightStrip } from '../hud/FlightStrip.tsx'
+import { NavCluster } from '../hud/NavCluster.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
 import { useFlightContext } from '../hud/useShipControls.ts'
 import { useKeyLabel } from '../input/useKeymap.ts'
@@ -115,12 +116,22 @@ export function FlightMode({
 
           {/* Standing off to look at the hull, and how to get back: the one
               hint the orbit view has to give, because a drag that orbits is
-              discoverable by trying it and the key that returns is not. */}
+              discoverable by trying it and the key that returns is not. At
+              the top edge, because the bottom belongs to the cluster. */}
           {view === 'orbit' && (
-            <p className="type-ui pointer-events-none absolute bottom-20 left-1/2 -translate-x-1/2 text-balance text-slate-400">
+            <p className="type-ui pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 text-balance text-slate-400">
               drag to orbit · wheel to dolly · {viewKey ?? '?'} for the chase
             </p>
           )}
+
+          {/* The instrument the ship is flown by: the horizon, the speed,
+              the altitude, the drive, the orbit. */}
+          <ErrorBoundary
+            what="the navigation cluster"
+            className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2"
+          >
+            <NavCluster engine={engine} onNotice={onNotice} />
+          </ErrorBoundary>
 
           {/* The aiming reticle. Center of frame, and the only permanent piece
               of cockpit chrome this build has — `docs/design/ux.md` specifies
