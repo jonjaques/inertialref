@@ -5,7 +5,7 @@ import {
 } from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
 import { RENDER_SENSOR, usePersistentState } from '../state/preferences.ts'
-import { useEngine } from '../state/engineStore.ts'
+import { useEngine, useShallow } from '../state/engineStore.ts'
 import { Action } from './Action.tsx'
 import { releaseFocus } from './focus.ts'
 import { Row } from './Row.tsx'
@@ -15,7 +15,18 @@ import { SurfaceRow } from './SurfaceRow.tsx'
 /** The declared processing and the comfort controls of the canopy. */
 export function SensorSection() {
   const [settings, set] = usePersistentState(RENDER_SENSOR)
-  const exposure = useEngine((snapshot) => snapshot.exposure)
+  // The reading is a fresh object every sample; select the two fields drawn
+  // so an unchanged exposure does not re-render five sliders at sample rate.
+  const exposure = useEngine(
+    useShallow((snapshot) =>
+      snapshot.exposure === null
+        ? null
+        : {
+            adapted: snapshot.exposure.adapted,
+            metered: snapshot.exposure.metered,
+          },
+    ),
+  )
   return (
     <Section id="camera.sensor" title="Canopy" trailing={settings.response}>
       <SurfaceRow

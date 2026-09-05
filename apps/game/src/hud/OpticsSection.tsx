@@ -23,7 +23,15 @@ import { Section } from './Section.tsx'
  * is a decision that sticks.
  */
 export function OpticsSection() {
-  const exposure = useEngine((snapshot) => snapshot.exposure)
+  // The two fields drawn, shallow-compared: the reading is a new object every
+  // sample and would otherwise re-render this section at sample rate.
+  const exposure = useEngine(
+    useShallow((snapshot) =>
+      snapshot.exposure === null
+        ? null
+        : { auto: snapshot.exposure.auto, metered: snapshot.exposure.metered },
+    ),
+  )
   const [lens] = usePersistentState(CAMERA_LENS)
   /*
    * The viewport the derived readouts are resolved against, and only it.
@@ -89,7 +97,7 @@ export function OpticsSection() {
       />
       <Row
         label="Exposure"
-        value={`EV ${view.exposureValue.toFixed(1)} set · ${exposure === null ? '—' : `${exposure.auto >= 0 ? '+' : ''}${exposure.auto.toFixed(1)} auto`}`}
+        value={`EV ${view.exposureValue.toFixed(1)} set · ${exposure === null ? '—' : `${exposure.auto >= 0 ? '+' : ''}${exposure.auto.toFixed(1)} ${exposure.metered ? 'auto' : 'fixed'}`}`}
       />
       <Row
         label="Integration"

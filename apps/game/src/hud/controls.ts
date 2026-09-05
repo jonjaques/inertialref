@@ -119,8 +119,16 @@ export interface LensChannel {
  * is the part worth testing anyway, and none of it can be tested through a
  * component.
  */
-export const formatShutter = (seconds: number): string =>
-  seconds >= 1 ? `${seconds.toFixed(1)} s` : `1/${Math.round(1 / seconds)} s`
+export const formatShutter = (seconds: number): string => {
+  if (seconds >= 1) return `${seconds.toFixed(1)} s`
+  const denominator = Math.round(1 / seconds)
+  // The slider is continuous, so 0.4 s is reachable, and "1/3 s" for it is a
+  // quarter of a stop wrong. A reciprocal is printed only when it is within
+  // a twentieth of a stop of the value; otherwise the decimal is the truth.
+  return Math.abs(1 / denominator / seconds - 1) < 0.035
+    ? `1/${denominator} s`
+    : `${seconds.toFixed(2)} s`
+}
 
 export const LENS_CHANNELS = {
   shutter: {
