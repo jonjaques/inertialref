@@ -1,5 +1,6 @@
 import { useThree } from '@react-three/fiber'
 import { useMemo } from 'react'
+import { naturalResponse } from '@inertialref/rendering'
 import type { PerspectiveCamera } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createLensFlare } from '../render/flare.ts'
@@ -65,6 +66,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // script's lens outranks the flight one and `engine.lens` has already
       // resolved that; reading `camera.fov` here would be a second opinion.
       engine.lens,
+      naturalResponse(engine.sensorSettings),
     )
   })
 

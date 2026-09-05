@@ -91,6 +91,37 @@ function originOf(session: Session, frame: string): UniverseVector {
 }
 
 describe('the observatory', () => {
+  it('holds an automatic orbit when simulation time is paused and releases it with its target', () => {
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2', { ease: false })
+    const before = session.world.stateHash()
+    ir.observatory.orbitPhase(-112, -1.8, 16)
+    const opening = posed(ir.observerSample(0))
+    expect(session.world.stateHash()).toBe(before)
+    for (let i = 0; i < 60; i += 1) {
+      session.world.advance(1 / 60)
+      ir.observerSample(1 / 60)
+    }
+    expect(posed(ir.observerSample(0))).not.toEqual(opening)
+    ir.pause()
+    // Let the clock publish its held render instant before comparing poses.
+    session.world.advance(0)
+    const held = posed(ir.observerSample(0))
+    for (let i = 0; i < 120; i += 1) {
+      session.world.advance(1 / 60)
+      expect(posed(ir.observerSample(1 / 60))).toEqual(held)
+    }
+    ir.resume()
+    session.world.advance(1 / 60)
+    expect(posed(ir.observerSample(1 / 60))).not.toEqual(held)
+    ir.observatory.clear()
+    ir.look('s:SOL/b:2', { ease: false })
+    const state = ir.observatory.state
+    session.world.advance(1 / 60)
+    ir.observerSample(1 / 60)
+    expect(ir.observatory.state).toEqual(state)
+  })
+
   it('moves the camera without moving the ship', () => {
     // The claim the whole planetarium rests on: it is a *view* of the same
     // universe, not a mode with its own rules. If this ever fails, a save

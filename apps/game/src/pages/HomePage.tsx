@@ -8,6 +8,8 @@ import { ModeLink } from './ModeLink.tsx'
 import { ModeRow } from './ModeRow.tsx'
 import { ENTERABLE, WITHHELD } from './modes.ts'
 import { ABOUT, DOCS, SETTINGS } from './paths.ts'
+import { MENU_KEYS } from '../input/keymap.ts'
+import { useKeyContext } from '../input/useKeymap.ts'
 
 /*
  * The front door.
@@ -120,6 +122,7 @@ const SPEC: readonly (readonly [string, string])[] = [
 ]
 
 export function HomePage({ engine }: { engine: GameEngine }) {
+  useKeyContext(MENU_KEYS)
   /*
    * Frame Earth, and carry the sun across it.
    *
@@ -127,18 +130,9 @@ export function HomePage({ engine }: { engine: GameEngine }) {
    * change canonical state, so that arriving here from a flight session and
    * leaving again puts you back exactly where you were.
    *
-   * `setPhase` every frame rather than an accumulated drag, and the difference
-   * is that this one is *solved against where the star actually is* on the
-   * frame it is drawn. An accumulated drag drifts open-loop; a phase ramp
-   * cannot, which is what makes "the star enters the frame seventeen seconds
-   * in" a fact rather than a hope. It is also self-correcting across a tab that
-   * was backgrounded — real elapsed time drives it, so a page that was hidden
-   * for a minute comes back where the orbit should be rather than a minute
-   * behind it.
-   *
-   * The observatory eases toward what it is told, so at 1.8°/s the camera
-   * trails its own target by about a degree. That is the filter doing its job:
-   * the picture is smooth and nothing here has to know the frame rate.
+   * The observatory solves the phase at render time, before the engine builds
+   * the scene. Its automatic orbit follows the simulated clock, so pausing
+   * through the harness holds the camera and the sky at the same instant.
    */
   useEffect(() => {
     const observatory = engine.harness.observatory
@@ -155,23 +149,13 @@ export function HomePage({ engine }: { engine: GameEngine }) {
     })
     try {
       observatory.focus('s:SOL/b:2', { fill: FILL, ease: false })
-      observatory.setPhase(PHASE_OPEN, SWING_TILT)
+      observatory.orbitPhase(PHASE_OPEN, PHASE_RATE, SWING_TILT)
     } catch {
       // A world without Sol is not a world this build makes, but a menu that
       // throws is a black page — and the scene behind it is decoration.
     }
 
-    let handle = 0
-    const opened = performance.now()
-    const drift = (): void => {
-      handle = window.requestAnimationFrame(drift)
-      const elapsed = (performance.now() - opened) / 1000
-      observatory.setPhase(PHASE_OPEN + elapsed * PHASE_RATE, SWING_TILT)
-    }
-    handle = window.requestAnimationFrame(drift)
-
     return () => {
-      window.cancelAnimationFrame(handle)
       // Releasing the stance is what drops the observatory's target, so the
       // camera goes back to whatever the next layer is holding.
       stance.release()

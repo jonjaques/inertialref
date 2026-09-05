@@ -7475,6 +7475,34 @@ chain also draws an opaque calibration plane with no GL error.
 The FFT tier, spectral filters and photo export remain open. The plan states
 that scope rather than describing every proposed phase as finished.
 
+## The stars were moving from their sprite quads, and Titan lost its Sun (4 Sep 2026)
+
+The sensor's velocity node read a star's instance for its current position but
+the unit sprite quad for its previous one. A one-meter camera translation past
+a star at ten kilometers read 0.02525 NDC in the blended motion target, where
+the star's projected motion is below 0.001. Feeding the same instance into the
+previous-position varying removes the invented velocity; the GPU regression
+also checks the motion/depth ratio against the projection, so zeroing velocity
+does not pass. The homepage keeps motion blur enabled.
+
+The homepage's phase sweep runs inside the observatory against `renderTime`.
+A wall-clock animation outside the engine kept rotating the camera after
+pause. The paused rig holds its time and both orbit angles for 120 frames, and
+90 composited frames at 60.7 fps differ by zero pixels. Its keyboard context
+mutes game controls, including pause, warp, save/load and sensor response,
+while preserving Settings and the keys sheet.
+
+Natural retains the calibrated glow and horizontal streak around the Sun.
+Removing them left Titan's haze with a ghost chain around an almost invisible
+point: the sampled point's energy cannot reproduce that authored production
+halo. Neutral and the other photographic responses retain the sensor PSF core.
+The 1600×900 DPR 1 Titan plate is compared with the live production preset.
+
+The browser driver compares paths and requested query keys when attaching,
+but not origins. A request for production at the same path can reuse localhost.
+Force a fresh navigation across hosts and verify `location.href` before calling
+a capture a production reference.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

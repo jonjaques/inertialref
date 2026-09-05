@@ -49,7 +49,10 @@ stellar flux.**
   twenty pixels. The planetarium and documentation disable motion through
   their presentation stances.
 - Glare redistributes 1.5% of the image through six downsample/upsample octaves,
-  without a threshold. Analytic ghosts and the scripted corona remain. The
+  without a threshold. Natural also retains the calibrated analytic Sun glow
+  and horizontal streak: the faint solar point beside Titan cannot fund that
+  broad production halo from its sampled image alone. The other responses use
+  the sensor PSF alone for the core. Analytic ghosts and the scripted corona remain. The
   detector adds tick-indexed shot/read noise, lens-derived lateral color and
   Direct vignetting. White balance defaults to the unchanged D65 calibration.
 - The final output is opaque, with triangular dither on SDR. An extended
@@ -96,6 +99,13 @@ The three Enterprise portraits exercise held composition and close focus;
 each camera clears the shipped hull by the existing fifteen-meter test margin.
 Their thumbnails are vendored captures. Clearing chrome also hides the debug
 cinematic transport, so those captures contain only the picture.
+
+Star sprites supply their instance position to both sides of the velocity
+calculation. The unit quad only describes the pixel footprint; using it as the
+previous position invents motion between a star and the render origin. The
+homepage's automatic phase sweep is sampled inside the observatory at render
+time, so pausing the simulation holds the camera too. Its keyboard context
+leaves game controls to the browser while keeping Settings and the keys sheet.
 
 An offscreen WebGL 2 smoke test draws a gray calibration plane through the
 full chain at four samples, reads opaque [163, 165, 164, 255], and reports

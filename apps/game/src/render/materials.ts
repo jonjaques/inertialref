@@ -37,6 +37,7 @@ import {
   normalWorld,
   oneMinus,
   positionLocal,
+  positionPrevious,
   positionWorld,
   pow,
   saturate,
@@ -523,7 +524,13 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   const scale = instancedBufferAttribute<'float'>(prominence, 'float')
 
   const material = sensorRadiance(new PointsNodeMaterial())
-  material.positionNode = instancedBufferAttribute(positions)
+  material.positionNode = Fn(() => {
+    const point = instancedBufferAttribute(positions)
+    // The instance is the star. The quad's geometry is only its pixel footprint;
+    // using it as the previous position invents motion across the whole sky.
+    positionPrevious.assign(point)
+    return point
+  })()
   const visible = instancedBufferAttribute<'float'>(visibility, 'float')
   material.sizeNode = integrated
     .greaterThan(0.5)

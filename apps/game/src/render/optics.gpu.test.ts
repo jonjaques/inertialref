@@ -19,6 +19,7 @@ import {
   RenderTarget,
   RGBAFormat,
   Scene,
+  Sprite,
 } from 'three/webgpu'
 import { nodeObject, pass, texture, uv, vec4 } from 'three/tsl'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
@@ -28,12 +29,51 @@ import { sensorSignature } from './signature.ts'
 import { installToneCurve } from './tonemap.ts'
 import { sensorMrt } from './sensorMrt.ts'
 import { DefocusNode } from './defocus.ts'
+import { createStarfieldMaterial } from './materials.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
   gpu = await openGpu(128, 128)
 })
 afterAll(() => gpu.dispose())
+
+it('measures a star at its instance position instead of the sprite quad', async () => {
+  const camera = new PerspectiveCamera(65, 1, 0.01, 20000)
+  camera.position.z = 2
+  const field = createStarfieldMaterial(1)
+  field.positions.setXYZ(0, 0, 0, -10000)
+  field.positions.needsUpdate = true
+  field.size.value = 16
+  const star = new Sprite(field.material)
+  star.count = 1
+  star.frustumCulled = false
+  const scene = new Scene()
+  scene.add(star)
+  const scenePass = pass(scene, camera)
+  scenePass.setMRT(sensorMrt())
+  const motion = scenePass.getTextureNode('motion')
+  const history = (
+    gpu.renderer as unknown as { _nodes: { nodeFrame: { frameId: number } } }
+  )._nodes.nodeFrame
+  try {
+    await gpu.drawGraph(motion, { float: true })
+    history.frameId += 1
+    camera.position.x = 1
+    const moved = await gpu.drawGraph(motion, { float: true })
+    expect(moved.at(64, 64)[2]).toBeGreaterThan(0)
+    expect(Math.abs(moved.at(64, 64)[0])).toBeLessThan(0.001)
+    // Both channels carry the sprite alpha, which cancels in their ratio.
+    expect(
+      Math.abs(
+        moved.at(64, 64)[0] / moved.at(64, 64)[2] +
+          1 / Math.tan((65 * Math.PI) / 360),
+      ),
+    ).toBeLessThan(0.01)
+  } finally {
+    scenePass.dispose()
+    field.material.dispose()
+  }
+})
 
 it('draws one scene per full sensor frame, warms every pass, and holds a paused photograph', async () => {
   const renderer = gpu.renderer

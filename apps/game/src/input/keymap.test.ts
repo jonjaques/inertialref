@@ -15,6 +15,7 @@ import {
   collisions,
   findAction,
   LIVE_SETS,
+  MENU_KEYS,
   resolveBindings,
 } from './keymap.ts'
 import { KeymapStore } from './keymapStore.ts'
@@ -325,6 +326,36 @@ describe('which action a chord means', () => {
 })
 
 describe('the store', () => {
+  it('leaves game shortcuts to the browser on the homepage and restores them on exit', () => {
+    const store = new KeymapStore()
+    const release = store.claim(MENU_KEYS)
+    for (const code of [
+      'Space',
+      'BracketLeft',
+      'BracketRight',
+      'Backslash',
+      'F5',
+      'F9',
+      'KeyH',
+      'Backquote',
+      'KeyP',
+      'Digit1',
+      'KeyW',
+    ]) {
+      expect(store.resolve(chord(code))).toBeNull()
+    }
+    expect(store.resolve(chord('KeyV', { shift: true }))).toBeNull()
+    expect(store.resolve(chord('Comma'))?.id).toBe('chrome.settings')
+    expect(store.resolve(chord('Slash', { shift: true }))?.id).toBe(
+      'chrome.keys',
+    )
+    const dialog = store.claim({ context: 'dialog' })
+    expect(store.resolve(chord('Space'))).toBeNull()
+    dialog()
+    release()
+    expect(store.resolve(chord('Space'))?.id).toBe('time.pause')
+  })
+
   it('mutes a global action for a context that has the better claim', () => {
     /*
      * The reading room. `docs` is the one mode that is a scrolling document,

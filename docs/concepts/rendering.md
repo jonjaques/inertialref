@@ -797,7 +797,8 @@ alpha. The scene is multisampled where it has edges — on the pass target — a
 the canvas is single-sampled, because what reaches it is one full-screen quad.
 The chain applies pre-exposure, near/far defocus, shutter motion, a threshold-free
 PSF halo, detector noise, white balance and the selected response. Natural keeps
-the production lighting calibration, ACES fit and integrated sky; Neutral
+the production lighting calibration, ACES fit, integrated sky, and analytic
+Sun glow and streak; Neutral
 meters the scene and preserves highlight hue,
 and Direct uses the lens's exposure and channel clip. P3 output requires matching
 canvas and encoder declarations. The live exposure and optical pass counts are

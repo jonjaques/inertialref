@@ -15,7 +15,8 @@ on § 4 of this one for its brightness and on nothing else here.
 
 [ADR-0031](../../docs/adr/0031-the-sensor-response.md) records the implemented
 chain and the deliberate changes to this proposal. Natural preserves the
-production lighting calibration, ACES fit and integrated sky; Neutral and the other Composite presets
+production lighting calibration, ACES fit, integrated sky, and analytic Sun glow
+and streak; Neutral and the other Composite presets
 use the hue-preserving response and physical stellar flux. Direct uses the lens
 exposure. This preserves the default look while exposing photographic choices.
 
