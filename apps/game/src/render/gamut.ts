@@ -105,6 +105,11 @@ function negotiateGamut(
     extended && matchMedia('(color-gamut: p3)').matches
       ? DISPLAY_P3
       : SRGBColorSpace
+  // `configure` replaces the configuration and destroys the canvas's current
+  // texture, so it is not free to call for an answer already on the canvas —
+  // which is every resize of a standard-output session, where `wanted` can
+  // only ever be the sRGB three just re-declared.
+  if (original.colorSpace === wanted) return wanted
   try {
     context.configure({ ...original, colorSpace: wanted })
     if (context.getConfiguration()?.colorSpace === wanted) return wanted
