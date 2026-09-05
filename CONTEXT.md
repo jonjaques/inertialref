@@ -7787,8 +7787,10 @@ Width projection now blends from 1° before to 1° after each kink. The measured
 centerlines and tangencies are untouched. This changes field values, so the
 preview spends `galaxy-field@2`; active generation stays unchanged. The fine
 reference count is 116,184,595,789.68 stars. The edge-on and observer numeric
-plates change and receive new versioned references. The local full gate and
-regenerated review plates follow this commit.
+plates change and receive new versioned references. `VITEST_MAX_WORKERS=2 pnpm check` passes at `33f50fb`: 1,717 regular
+tests, five slow tests, documentation and production builds. The headless
+self-test passes 12/12. All six 384-wide v2 plates were regenerated and
+visually checked in `.scratch/galaxy-m2/plates-v2`.
 
 ## Known gaps
 
