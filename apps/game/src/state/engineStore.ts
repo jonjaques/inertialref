@@ -1,3 +1,4 @@
+import type { Exposure } from '@inertialref/rendering'
 import { useSyncExternalStore } from 'react'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import type { HarnessStatus, ObserverStatus } from '@inertialref/devtools'
@@ -73,6 +74,7 @@ export interface PresentationSnapshot {
  * `useShallow`. A wide snapshot read widely is worse than the props it replaced.
  */
 export interface EngineSnapshot {
+  readonly exposure: Exposure | null
   /** `null` until the first sample lands, which is one interval after mount. */
   readonly status: HarnessStatus | null
   /** Whether a cutscene is running. Chrome unmounts while it is. */
@@ -95,6 +97,7 @@ export interface EngineSnapshot {
  * grow a dependency on the renderer by accident.
  */
 export interface EngineSource {
+  readonly exposure?: Exposure | null
   readonly harness: {
     status(): HarnessStatus
     observerStatus(): ObserverStatus | null
@@ -127,6 +130,7 @@ const NOTHING_DRAWN: PresentationSnapshot = {
 }
 
 const IDLE: EngineSnapshot = {
+  exposure: null,
   status: null,
   cinema: false,
   observer: null,
@@ -143,6 +147,7 @@ export function createEngineStore(): EngineStore {
 /** Republish the engine's current description. The only writer. */
 export function sampleOnce(store: EngineStore, source: EngineSource): void {
   store.setState({
+    exposure: source.exposure ?? null,
     status: source.harness.status(),
     cinema: source.cinematic !== null,
     observer: source.harness.observerStatus(),

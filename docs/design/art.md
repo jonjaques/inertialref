@@ -300,8 +300,8 @@ lens rather than an angle — focal length on a 24 mm gauge, zoom, f-number, foc
 distance, shutter and gain — and the camera panel already drives all of it and
 prints what it implies: the sharp band, the blur circle against the pixel it has
 to hide inside, the Airy disk against the f-number where it stops fitting, and
-the exposure in stops. What photo mode adds is the tether, the filters, the
-export, and the _blur_ the depth of field already predicts.
+the exposure in stops. What photo mode adds is the tether, spectral filters and export. The lens-derived blur and the sensor response
+are implemented by [ADR-0031](../adr/0031-the-sensor-response.md).
 
 The numbers are why that split is safe rather than a deferral. At the flight
 lens the hyperfocal distance is 5.37 m over a 1520 px buffer — it is a claim
@@ -310,7 +310,7 @@ with the zoom racked out — and at planetary range everything is past it and
 sharp: defocus is a near-field effect, the hull, the cockpit, a rock two meters
 away, and no lens the game is flown behind reaches a planet with it. Diffraction
 and exposure are not like that. They act at every scale, which is why the parameters
-ship now and the blur pass ships with the rest of the art milestone.
+and the optical passes share one sensor chain.
 
 **The address in the metadata is the good part.** A screenshot carries the
 address of where it was taken, and because the universe is a deterministic pure

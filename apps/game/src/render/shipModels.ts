@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   Box3,
   Group,
@@ -84,7 +85,7 @@ function rebuildMaterial(
   source: MeshPhysicalMaterial,
   anisotropy: number,
 ): MeshStandardNodeMaterial {
-  const material = new MeshStandardNodeMaterial()
+  const material = sensorRadiance(new MeshStandardNodeMaterial())
   material.name = source.name
   material.map = source.map
   material.normalMap = source.normalMap

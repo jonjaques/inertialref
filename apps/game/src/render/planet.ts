@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   Color,
   type CubeTexture,
@@ -565,7 +566,7 @@ export function createPlanetMaterial(): PlanetMaterial {
     // And one under a hundred kilometers of slant air is dimmed by it.
     .mul(oneMinus(veil.mul(0.6)))
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = shadedSurface.add(night)
 
   const handle: PlanetMaterial = {
@@ -684,7 +685,7 @@ export function createCloudMaterial(): CloudMaterial {
     smoothstep(float(0.3), float(0.0), incidence),
   )
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = cover.rgb
     .mul(baseColour)
     .mul(sunColour)
@@ -862,7 +863,7 @@ export function createRingMaterial(): RingMaterial {
   )
   const sunlit = oneMinus(eclipsed)
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = mix(transmitted, backscatter, sameSide)
     .mul(baseColour)
     .mul(sunColour)

@@ -1,3 +1,4 @@
+import { sensorRadiance } from '../render/radiance.ts'
 import { MeshStandardNodeMaterial } from 'three/webgpu'
 
 /**
@@ -24,3 +25,5 @@ export const debugMaterials = {
   foot: new MeshStandardNodeMaterial({ color: 0x60c0a0, roughness: 0.8 }),
   inch: new MeshStandardNodeMaterial({ color: 0xe06060, roughness: 0.8 }),
 }
+
+for (const material of Object.values(debugMaterials)) sensorRadiance(material)

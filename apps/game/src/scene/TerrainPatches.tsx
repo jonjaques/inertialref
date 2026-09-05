@@ -165,6 +165,12 @@ export function TerrainPatches({
           terrain.sunDirection.value.set(local.x, local.y, local.z)
         }
         terrain.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
+        const light =
+          engine
+            .scene()
+            ?.bodies.find((body) => body.address === state.bodyAddress)
+            ?.sunlight ?? key.sunlight
+        terrain.sunIntensity.value = engine.calibratedLight ? 1 : light
       }
     }
     const seen = new Set<string>()

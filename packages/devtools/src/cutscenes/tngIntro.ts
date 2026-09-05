@@ -2786,6 +2786,8 @@ function effectsAt(frame: number): CinematicEffects {
      * a depth that runs 0 at first contact to 1 at totality, so this switch says
      * *whether there is an eclipse in this shot*, not how deep it is.
      */
+    exposure: 0,
+    calibratedLight: 1,
     corona: coronaAt(frame),
     spark,
   }

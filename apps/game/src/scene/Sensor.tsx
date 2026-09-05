@@ -4,6 +4,7 @@ import type { WebGPURenderer } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
+import { warmAtMount } from '../render/warmup.ts'
 
 /**
  * The sensor owns the frame.
@@ -31,13 +32,45 @@ export function Sensor({ engine }: { engine: GameEngine }) {
     // The one cast, for the reason `warmRenderer` gives: R3F types `gl` as
     // its own renderer union, and the web `<Canvas>` here is always handed a
     // `WebGPURenderer` by `createRenderer`.
-    const built = createSensor(gl as unknown as WebGPURenderer, scene, camera)
+    const built = createSensor(
+      gl as unknown as WebGPURenderer,
+      scene,
+      camera,
+      () => ({
+        lens: engine.lens,
+        settings: engine.sensorSettings,
+        time: engine.snapshot?.renderTime ?? 0,
+        pinned: engine.cinematic?.effects.exposure ?? null,
+        headroom: engine.gl?.description.headroom ?? 1,
+        motionBlur: engine.presentation.resolved().motionBlur,
+        noiseTick: Math.floor(
+          engine.cinematic?.frame ?? (engine.snapshot?.renderTime ?? 0) * 60,
+        ),
+      }),
+    )
     chain.current = built
+    // The producer is registered once per label, so under StrictMode's
+    // mount–unmount–mount it belongs to the first chain, which is disposed by
+    // the time boot runs it. Warm whichever chain is live instead.
+    warmAtMount({
+      label: 'warming the sensor',
+      units: 1,
+      run: async (done) => {
+        await chain.current?.warm()
+        done()
+      },
+    })
     // The measurement rig submits frames through the same chain the loop
     // does, or its figure is about a path nothing presents.
-    engine.present = () => built.render()
+    engine.present = () => {
+      built.render()
+      engine.exposure = built.exposure
+      engine.sensorDiagnostics = built.diagnostics
+    }
     return () => {
       if (engine.present !== null) engine.present = null
+      engine.exposure = null
+      engine.sensorDiagnostics = null
       chain.current = null
       built.dispose()
     }
@@ -47,6 +80,8 @@ export function Sensor({ engine }: { engine: GameEngine }) {
     'sensor',
     () => {
       chain.current?.render()
+      engine.exposure = chain.current?.exposure ?? null
+      engine.sensorDiagnostics = chain.current?.diagnostics ?? null
     },
     1,
   )

@@ -5,6 +5,8 @@ import {
   lensForFov,
   FOV_MAX,
   FOV_MIN,
+  DEFAULT_SENSOR_SETTINGS,
+  isSensorSettings,
 } from '@inertialref/rendering'
 import {
   type Accept,
@@ -227,6 +229,14 @@ export const RENDER_HDR = define<OutputPreference>({
   what: 'the extended-range override',
   initial: 'auto',
   accept: oneOf(OUTPUT_PREFERENCES),
+})
+
+export const RENDER_SENSOR = define({
+  key: 'render.sensor',
+  group: 'display',
+  what: 'canopy response, exposure comfort clamps, peak luminance and white balance',
+  initial: DEFAULT_SENSOR_SETTINGS,
+  accept: isSensorSettings,
 })
 
 export const RENDER_AA = define<AaLevel>({
@@ -501,6 +511,7 @@ export const DOCK_PANES = family<PaneState>({
  */
 export const REGISTRY: readonly AnyPreference[] = [
   RENDER_HDR,
+  RENDER_SENSOR,
   RENDER_AA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,

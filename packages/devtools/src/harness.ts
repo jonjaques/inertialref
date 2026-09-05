@@ -117,6 +117,7 @@ import {
 } from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
 import { TNG_INTRO } from './cutscenes/tngIntro.ts'
+import { ENTERPRISE_PORTRAITS } from './cutscenes/enterprisePortraits.ts'
 import type { CinematicSample } from '@inertialref/rendering'
 
 /*
@@ -361,7 +362,10 @@ export class GameHarness {
 
   constructor(host: Host) {
     this.#host = host
-    this.#cutscenes = new CutsceneDirector(host, [TNG_INTRO])
+    this.#cutscenes = new CutsceneDirector(host, [
+      TNG_INTRO,
+      ENTERPRISE_PORTRAITS,
+    ])
     this.#observatory = new Observatory(host)
     logHub.addSink(this.#logSink)
   }
@@ -1327,7 +1331,18 @@ export class GameHarness {
     picture: Picture
   } {
     const picture = findPicture(id)
+    this.stopCutscene()
     this.#observatory.focus(picture.address, { ease: false })
+    if (picture.framing.kind === 'cinematic') {
+      this.play(picture.framing.script)
+      this.pause()
+      this.seekCutscene(picture.framing.frame)
+      return {
+        status: this.#observatory.status(),
+        fovDeg: picture.fovDeg ?? FLIGHT_FOV,
+        picture,
+      }
+    }
     if (picture.framing.kind === 'rise') {
       /*
        * The rise solves its own lens from the geometry, so the stance comes

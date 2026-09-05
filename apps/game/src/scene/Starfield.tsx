@@ -3,7 +3,11 @@ import { Sprite } from 'three/webgpu'
 import { LIGHT_YEAR, type Meters } from '@inertialref/shared'
 import type { FrameId, Quat } from '@inertialref/spatial'
 import { UV, type UniverseVector } from '@inertialref/spatial'
-import { placeOnStarShell } from '@inertialref/rendering'
+import {
+  placeOnStarShell,
+  pixelsPerRadian,
+  stellarIlluminance,
+} from '@inertialref/rendering'
 import type { GameEngine, StarField } from '../engine/GameEngine.ts'
 import { createStarfieldMaterial } from '../render/materials.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -15,13 +19,14 @@ const MAX_STARS = 20_000
 const WHITE: readonly [number, number, number] = [1, 1, 1]
 
 /**
- * Magnitudes below the brightest star at which a star reaches the floor.
+ * Magnitudes below the brightest star at which the integrated ramp reaches
+ * its floor.
  *
- * Measured, not chosen: a 40 ly sweep from Alpha Centauri spans 20.7 magnitudes
- * with a median at 13.2. At 17 the median star lands around a fifth of the ramp
- * and the top percentile is clearly separated, which is what makes the sky read
- * as a sky rather than as noise. Larger flattens it; smaller loses everything
- * below the median into the floor.
+ * Measured, not chosen: a 40 ly sweep from Alpha Centauri spans 20.7
+ * magnitudes with a median at 13.2. At 17 the median star lands around a fifth
+ * of the ramp and the top percentile is clearly separated, which is what makes
+ * the sky read as a sky rather than as noise. Larger flattens it; smaller loses
+ * everything below the median into the floor.
  */
 const MAGNITUDE_RANGE = 17
 
@@ -39,11 +44,13 @@ const MAGNITUDE_RANGE = 17
  *
  * 1e-5 radians is a quarter of a pixel across a 900-line viewport at a ~2°
  * field, which is past the zoom slider's narrow end — and the star it binds on
- * is never a distant one. It is the system's own sun, which the survey
- * includes and which sits ~1 AU away, so the budget in orbit is ~1,500 km:
- * about a minute of travel at 27.6 km/s instead of nine frames. The tolerance
- * is recomputed at every rewrite, so approaching the sun tightens it faster
- * than the approach can spend it.
+ * is the nearest one *drawn as a sprite*. In orbit the system's own sun is a
+ * resolved disk that `Bodies` draws, so it leaves the buffer and the budget is
+ * the next star's — light-years, and a shell that never rewrites for parallax
+ * inside a system. Once the sun shrinks to a point it re-enters through the
+ * `disks` key and is the nearest again, ~5 AU out, where the budget is a few
+ * million kilometres. The tolerance is recomputed at every rewrite, so
+ * approaching a star tightens it faster than the approach can spend it.
  */
 const SHELL_PARALLAX_TOLERANCE = 1e-5
 
@@ -56,6 +63,7 @@ interface WrittenShell {
   readonly anchorFrame: FrameId
   /** `SHELL_PARALLAX_TOLERANCE` times the nearest star's distance. */
   readonly budget: Meters
+  readonly disks: string
 }
 
 /**
@@ -88,6 +96,24 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     const scene = engine.scene()
     const stars = engine.starField
     if (scene === null) return
+    const view = engine.lensView()
+    const ppr = view === null ? 848 : pixelsPerRadian(view.lens, view.viewport)
+    // Integral of the soft core, including its alpha, in square pixels. `size`
+    // is logical pixels and three scales a point by the pixel ratio, while
+    // `ppr` counts display pixels: the footprint has to be in the same pixel
+    // as the density, or a retina sky collects the ratio squared too much light.
+    field.angularDensity.value =
+      (ppr * ppr) /
+      (0.14661573215518503 * (field.size.value * engine.displayRatio) ** 2)
+    const resolved = new Set(
+      scene.stars
+        .filter((star) => star.placement.angularRadius * ppr > 0.75)
+        .map((star) => star.name),
+    )
+    const disks = [...resolved].join('|')
+    // The integrated ramp belongs to the calibrated look — Natural, or a script
+    // staging against it — the same decision the bodies and the Sun glow make.
+    field.integrated.value = engine.calibratedLight ? 1 : 0
     const origin = scene.origin
     const held = written.current
     /*
@@ -102,6 +128,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     if (
       held !== null &&
       held.field === stars &&
+      held.disks === disks &&
       held.anchorFrame === origin.anchorFrame &&
       held.orientation.x === origin.orientation.x &&
       held.orientation.y === origin.orientation.y &&
@@ -114,6 +141,9 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     const array = field.positions.array as Float32Array
     const colours = field.colours.array as Float32Array
     const prominence = field.prominence.array as Float32Array
+    const visibility = field.visibility.array as Float32Array
+    const flux: number[] = []
+    let brightest = 0
 
     // Stars sit far outside the depth range, so they are drawn on a fixed
     // sphere around the camera: direction is what matters, distance is not
@@ -124,14 +154,26 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     // Distance is not observable *in the geometry*, which is why how bright each
     // star looks has to be computed here, before it is discarded.
     let count = 0
-    let brightest = 0
     let nearest = Number.POSITIVE_INFINITY
-    const flux: number[] = []
     for (let i = 0; i < stars.positions.length; i += 1) {
       if (count >= MAX_STARS) break
       const position = stars.positions[i] as UniverseVector
       const point = placeOnStarShell(origin, position)
       if (point === null) continue
+      const metres = UV.distance(position, origin.position)
+      // The one-light-year floor keeps a star the camera is inside from
+      // dividing by nothing.
+      const light = Math.max(metres, LIGHT_YEAR)
+      const value = (stars.luminosities[i] ?? 1) / (light * light)
+      // The ramp anchors on the brightest star in the survey whether or not
+      // `Bodies` draws its disk. Dropping a resolved sun from the reference
+      // re-normalizes every other star against the next one — a magnitude in
+      // Sol, most of the ramp beside a luminous primary — and steps the whole
+      // sky the frame the disk crosses the sprite threshold.
+      brightest = Math.max(brightest, value)
+      // A resolved disk carries its own light. A sprite under it would add a
+      // second, and under a metered exposure the two overflow the target.
+      if (resolved.has(stars.names[i] ?? '')) continue
       array[count * 3] = point.x
       array[count * 3 + 1] = point.y
       array[count * 3 + 2] = point.z
@@ -140,48 +182,30 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       colours[count * 3 + 1] = colour[1]
       colours[count * 3 + 2] = colour[2]
 
-      const metres = UV.distance(position, origin.position)
-      // The raw distance, before the flux floor below rounds it up: this is
-      // the one that sets how far the origin may drift before this star's
-      // *direction* is wrong, and the nearest star is always the sun.
+      // The nearest *drawn* star bounds the next shell rewrite's parallax: a
+      // resolved sun is a disk, and rewriting the shell for its parallax would
+      // move nothing that is in the buffer.
       if (metres < nearest) nearest = metres
-      // The one-light-year floor keeps a star the camera is inside from
-      // dividing by nothing. Nothing is that close except the system's own sun,
-      // which is drawn as a body rather than a point.
-      const light = Math.max(metres, LIGHT_YEAR)
-      const value = (stars.luminosities[i] ?? 1) / (light * light)
+      prominence[count] = stellarIlluminance(stars.luminosities[i] ?? 1, metres)
       flux.push(value)
-      if (value > brightest) brightest = value
       count += 1
     }
 
-    /*
-     * Flux to a magnitude, then a magnitude to a ramp.
-     *
-     * Magnitudes because the range is otherwise unusable: within a 40 ly sweep
-     * the apparent flux spans 20 magnitudes — a factor of 10^8 — so a linear
-     * normalization leaves the median star at 10^-5 of the brightest and the sky
-     * comes out black. That was the first attempt and it is what a photometer
-     * would see; a magnitude scale is the logarithmic one astronomy uses for
-     * exactly this reason, and it is also roughly how the eye responds.
-     *
-     * Relative to the brightest star currently in view rather than an absolute
-     * zero point, because that is what adaptation does. An absolute scale would
-     * darken the whole sky on the way out of the neighborhood, when what really
-     * happens is that your eyes adjust.
-     */
+    // The calibrated look is an integrated sky: a visibility ramp over the
+    // survey's magnitudes. The other responses collect physical flux.
     for (let i = 0; i < count; i += 1) {
       const magnitude =
-        brightest === 0 ? 0 : -2.5 * Math.log10((flux[i] as number) / brightest)
-      prominence[i] = Math.max(0, Math.min(1, 1 - magnitude / MAGNITUDE_RANGE))
+        brightest === 0 ? 0 : -2.5 * Math.log10(flux[i]! / brightest)
+      visibility[i] = Math.max(0, Math.min(1, 1 - magnitude / MAGNITUDE_RANGE))
     }
-
+    field.visibility.needsUpdate = true
     field.colours.needsUpdate = true
     field.prominence.needsUpdate = true
     field.positions.needsUpdate = true
     sprite.count = count
     written.current = {
       field: stars,
+      disks,
       from: origin.position,
       orientation: origin.orientation,
       anchorFrame: origin.anchorFrame,

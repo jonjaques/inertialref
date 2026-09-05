@@ -67,6 +67,8 @@ export type OrbitScope = 'context' | 'all'
 
 /** What a layer asks to be drawn. Anything omitted is left to the layer below. */
 export interface Stance {
+  /** Integrate image motion over the lens's shutter. */
+  readonly motionBlur?: boolean
   /** The debug ship and the meter-scale reference props. */
   readonly showShip?: boolean
   /** Orbit traces. */
@@ -121,6 +123,7 @@ export interface Stance {
 
 /** What is actually drawn, once every layer has had its say. */
 export interface Presentation {
+  readonly motionBlur: boolean
   readonly showShip: boolean
   readonly showOrbits: boolean
   readonly labels: boolean
@@ -132,6 +135,7 @@ export interface Presentation {
 
 /** The stance with nothing pushed: a flight camera on a visible ship. */
 export const GROUND_STANCE: Presentation = {
+  motionBlur: true,
   showShip: true,
   showOrbits: false,
   labels: true,
@@ -169,6 +173,7 @@ export function resolveStances(layers: readonly Stance[]): Presentation {
   let resolved = GROUND_STANCE
   for (const layer of layers) {
     resolved = {
+      motionBlur: layer.motionBlur ?? resolved.motionBlur,
       showShip: layer.showShip ?? resolved.showShip,
       showOrbits: layer.showOrbits ?? resolved.showOrbits,
       labels: layer.labels ?? resolved.labels,
@@ -198,6 +203,7 @@ export function createPresentationStack(
   const settle = (): void => {
     const next = resolveStances(layers.map((one) => one.stance))
     if (
+      next.motionBlur === last.motionBlur &&
       next.showShip === last.showShip &&
       next.showOrbits === last.showOrbits &&
       next.labels === last.labels &&

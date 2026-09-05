@@ -1,3 +1,4 @@
+import { blackbodyColour } from '@inertialref/universe'
 import type { Meters, Radians } from '@inertialref/shared'
 import {
   BASELINE_VIEWPORT,
@@ -138,24 +139,18 @@ export function selectLod(
  * two things a reader coming from the streamer will look for in an LOD file.
  */
 
-/** Blackbody color of a star, approximate but monotonic in temperature. */
+/**
+ * The catalog and the resolved disk use the same linear-light temperature.
+ *
+ * The catalog keeps negative channels so out-of-gamut light survives to the
+ * encoder; a key light cannot go negative, or a cool primary lights its
+ * planets with less than no blue.
+ */
 export function starColor(temperature: number): {
   r: number
   g: number
   b: number
 } {
-  const t = Math.min(40_000, Math.max(1_000, temperature)) / 100
-  const clamp = (v: number): number => Math.min(1, Math.max(0, v))
-  const r = t <= 66 ? 1 : clamp((329.7 * (t - 60) ** -0.1332) / 255)
-  const g =
-    t <= 66
-      ? clamp((99.47 * Math.log(t) - 161.12) / 255)
-      : clamp((288.12 * (t - 60) ** -0.0755) / 255)
-  const b =
-    t >= 66
-      ? 1
-      : t <= 19
-        ? 0
-        : clamp((138.52 * Math.log(t - 10) - 305.04) / 255)
-  return { r, g, b }
+  const { r, g, b } = blackbodyColour(temperature)
+  return { r: Math.max(0, r), g: Math.max(0, g), b: Math.max(0, b) }
 }

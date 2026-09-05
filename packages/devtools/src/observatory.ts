@@ -222,6 +222,11 @@ export class Observatory {
   #target: ObserverTarget | null = null
   #state: ObserverState = { azimuth: 0.6, elevation: 0.25, distance: 1e9 }
   #desired: ObserverState = this.#state
+  #phaseOrbit: {
+    phase: number
+    rate: number
+    tilt: number
+  } | null = null
   /**
    * The surface arm's whole state: non-null exactly while standing.
    *
@@ -331,6 +336,7 @@ export class Observatory {
     const target = this.#resolve(destination)
     const previous = this.#target
     this.#target = target
+    this.#phaseOrbit = null
     // Focusing something else is leaving the ground. A stance names a latitude
     // and a longitude on one particular body, so carrying it across a change of
     // target would put the camera at those coordinates on a different world.
@@ -400,6 +406,7 @@ export class Observatory {
    */
   clear(): void {
     this.#target = null
+    this.#phaseOrbit = null
     this.#stance = null
     this.#site = null
     this.#look = NO_LOOK
@@ -610,7 +617,7 @@ export class Observatory {
    * solved once against a stale sun line is right in one season and wrong in
    * the other three.
    */
-  setPhase(phaseDeg: number, elevationDeg = 10): void {
+  setPhase(phaseDeg: number, elevationDeg = 10, ease = true): void {
     const toStar = this.#starDirection()
     if (toStar === null) return
     const { azimuth, elevation } = anglesForPhase(
@@ -618,7 +625,21 @@ export class Observatory {
       phaseDeg,
       elevationDeg,
     )
-    this.setAngles(azimuth, elevation)
+    this.setAngles(azimuth, elevation, ease)
+  }
+
+  /**
+   * An automatic phase sweep, in degrees per presented second, held while the
+   * clock is paused.
+   *
+   * Presented rather than simulated seconds: the simulated clock runs at
+   * whatever time warp a flight session left behind, and the front door,
+   * which is the caller, is forbidden from changing that warp to fix it.
+   */
+  orbitPhase(phase: number, rate: number, tilt = 10): void {
+    if (this.#target === null || this.#stance !== null) return
+    this.#phaseOrbit = { phase, rate, tilt }
+    this.setPhase(phase, tilt, false)
   }
 
   /** The band the current target permits. Panels draw sliders against it. */
@@ -1092,6 +1113,15 @@ export class Observatory {
     if (target === null) return null
     // The surface arm short-circuits the ease entirely. See `stand`.
     if (this.#stance !== null) return this.#surfacePose()
+
+    const orbit = this.#phaseOrbit
+    if (orbit !== null) {
+      if (!this.#host.world.clock.paused)
+        orbit.phase += orbit.rate * Math.max(0, dt)
+      // A solved sweep has no trailing ease: a held simulated instant must
+      // hold the whole picture, including the camera, on its first frame.
+      this.setPhase(orbit.phase, orbit.tilt, false)
+    }
 
     if (!this.#arrived()) {
       this.#state = approachState(this.#state, this.#desired, dt, TRAVEL_TAU)

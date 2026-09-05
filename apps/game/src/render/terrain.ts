@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   Color,
   DataTexture,
@@ -31,6 +32,7 @@ import {
   oneMinus,
   min,
   positionLocal,
+  positionPrevious,
   pow,
   saturate,
   smoothstep,
@@ -352,7 +354,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   const surfaceCover = varying(vec4(), 'terrainDeposit')
   const surfaceCover2 = varying(vec4(), 'terrainDeposit2')
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
 
   /*
    * The morph, and the three things that ride along with it.
@@ -381,6 +383,10 @@ export function createTerrainMaterial(): TerrainMaterial {
         .div(max(morphBand.y.sub(morphBand.x), float(1))),
     )
     const moved = mix(positionLocal, target, k)
+    // The sensor's velocity compares this against the previous position, and
+    // that defaults to the raw attribute: a morphed vertex would then report
+    // its whole snap as motion every frame and blur the band while parked.
+    positionPrevious.assign(moved)
     shadedNormal.assign(normalize(mix(normalLocal, targetNormal, k)))
     localPosition.assign(moved)
     surfaceCover.assign(mix(cover, targetCover, k))

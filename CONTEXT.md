@@ -7442,6 +7442,109 @@ to that record before work in a governed area. Claude's rule extracts and
 Cursor's references retain their paths, so reducing startup text does not
 remove the reasoning or require maintaining a second set of constraints.
 
+## The sensor keeps its default sky, and half a pixel is not half resolution (4 Sep 2026)
+
+[ADR-0031](docs/adr/0031-the-sensor-response.md) records the lens-driven sensor.
+Production is the visual reference: Natural retains its calibrated lighting,
+fixed exposure, ACES fit and integrated sky, while Neutral and Direct expose the photographic alternatives. The GPU
+hue sweep measures less than 0.00002° drift under Neutral, and the two-meter
+blur measures 36.318 px against 35.834 px from the thin-lens equation.
+
+Two defocus bugs were visible in the recovered implementation. A 0.5625-pixel
+circle replaced a sharp signal with the half-resolution layer, reducing a 0/1
+stripe to 0.5; and a large maximum circle elsewhere reduced a uniform
+foreground's 0.25 to 0.00499. Coverage fades through the subpixel interval, and
+normalized color is separate from foreground edge opacity. Both GPU regressions
+failed before the fixes. Exposure clamps also failed with adaptation held, and
+P3 configuration threw when `getConfiguration` was absent; their regression
+tests reproduced both defects.
+
+The glare test's 3.55% skirt error was 0.053% of the whole half-float image.
+The isolated halo integrates to 396.143 for a 400-unit source, within the 2%
+kernel gate; the resolved image retains 399.787, within 0.1%. The P3 spike in
+Chrome 152 on this display reads P3 red as [1.09277, -0.22668, -0.15015] through
+an sRGB float readback. Its headroom report is absent, so the explicit cap stays.
+
+The framed Bennu check caught an automatic gain of EV 8.11 against the
+production calibration at EV 14.61: nearly white instead of a dark asteroid.
+Natural retains that calibration, including the dark-body lift and star
+stop-down, while the photographic Composite presets meter normally. Its
+regression test fails with automatic gain applied to Natural. The full WebGL 2
+chain also draws an opaque calibration plane with no GL error.
+
+The FFT tier, spectral filters and photo export remain open. The plan states
+that scope rather than describing every proposed phase as finished.
+
+## The stars were moving from their sprite quads, and Titan lost its Sun (4 Sep 2026)
+
+The sensor's velocity node read a star's instance for its current position but
+the unit sprite quad for its previous one. A one-meter camera translation past
+a star at ten kilometers read 0.02525 NDC in the blended motion target, where
+the star's projected motion is below 0.001. Feeding the same instance into the
+previous-position varying removes the invented velocity; the GPU regression
+also checks the motion/depth ratio against the projection, so zeroing velocity
+does not pass. The homepage keeps motion blur enabled.
+
+The homepage's phase sweep runs inside the observatory against `renderTime`.
+A wall-clock animation outside the engine kept rotating the camera after
+pause. The paused rig holds its time and both orbit angles for 120 frames, and
+90 composited frames at 60.7 fps differ by zero pixels. Its keyboard context
+mutes game controls, including pause, warp, save/load and sensor response,
+while preserving Settings and the keys sheet.
+
+Natural retains the calibrated glow and horizontal streak around the Sun.
+Removing them left Titan's haze with a ghost chain around an almost invisible
+point: the sampled point's energy cannot reproduce that authored production
+halo. Neutral and the other photographic responses retain the sensor PSF core.
+The 1600×900 DPR 1 Titan plate is compared with the live production preset.
+
+The browser driver compares paths and requested query keys when attaching,
+but not origins. A request for production at the same path can reuse localhost.
+Force a fresh navigation across hosts and verify `location.href` before calling
+a capture a production reference.
+
+## The canvas forgets its gamut, and a morphed vertex is not a moving one (5 Sep 2026)
+
+Review of the sensor branch, with the defects that must not come back.
+
+three configures the WebGPU canvas lazily and drops that configuration on
+every resize: `updateSize` deletes the canvas target's record, and the next
+`context` read runs `configure()` again with no color space. R3F's `setSize`
+after the renderer factory resolves is the first such resize, so a P3 canvas
+declared at build was sRGB again by the first frame while the encoder kept
+writing P3 primaries and `ir.status()` kept saying P3. The declaration is
+re-applied from the canvas target's `resize` event, after three's own listener.
+
+The velocity attachment compares `positionLocal`, which a `positionNode`
+assigns, against `positionPrevious`, which is the raw attribute unless
+something assigns it. The terrain and water morphs displace a vertex by up to a
+child cell and reported the displacement as motion every frame. Both morphs
+now assign `positionPrevious` as the star sprites do. The symptom is bounded,
+not observed: parked at Earth's `summit` site at 2 m, 1600×900 at DPR 1,
+blur forced on through the presentation stack and the shutter at 0.25 s so the
+blur fraction is 1, the plate with blur differs from the one without by 812
+pixels above 8/255 before the fix and 928 after, on 877 converged patches.
+Whatever the morph fed the attachment at that window was under the blur's
+reach; a moving camera and a retina buffer are not measured.
+
+The scene target can hold +Inf: each draw clamps at 65,504 but the blend does
+not, and beyond about 4.4 AU the Sun is a clamped disk under a clamped sprite.
+Six octaves of PSF weights spread one such texel across the frame, and the
+`× 0` dependency terms in the output turned it into NaN. Every optical pass
+bounds its first read; the Sun's sprite is skipped where its disk is drawn but
+still anchors the integrated ramp, which had re-normalized the whole sky on
+Sirius the frame the disk resolved.
+
+The motion attachment had no blend mode, so the flare's quads at twenty
+metres replaced the depth of the sky behind the Sun over their footprint; at
+1.5× zoom or f/1.4 on a retina window that was enough to enable defocus and
+smear the pixels under the glow. Overlays now write a zero motion vector under
+an alpha blend on that attachment, through `sensorRadiance(material, true)`.
+
+The homepage sweep ran on the simulated clock, which is warp × wall time, and
+the menu mutes every key that would reset the warp. It runs on presented
+seconds, held while the clock is paused.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

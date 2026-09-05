@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   AddEquation,
   Color,
@@ -258,7 +259,9 @@ function warpMaterial(kind: WarpKind): WarpElement {
     }
   }
 
-  const material = new MeshBasicNodeMaterial()
+  // An overlay, for the reason `flare.ts` gives: the streaks live in camera
+  // space and carry no depth the sensor should believe.
+  const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.colorNode = colour.mul(profile).mul(intensity).mul(tint)
   material.transparent = true
   material.blending = CustomBlending

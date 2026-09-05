@@ -48,6 +48,11 @@ export const plateName = (id: string): string => `${id}.jpg`
 
 /** What a picture asks the camera to do. */
 export type PictureFraming =
+  | {
+      readonly kind: 'cinematic'
+      readonly script: string
+      readonly frame: number
+    }
   | { readonly kind: 'compose'; readonly composition: string }
   /**
    * A rise: stand on this body with its parent over the horizon.
@@ -80,6 +85,30 @@ export interface Picture {
 }
 
 export const PICTURES: readonly Picture[] = [
+  {
+    id: 'enterprise-three-quarter',
+    label: 'The Enterprise at Tau Ceti',
+    why: 'the saucer, neck and nacelles in a held three-quarter portrait',
+    address: 's:HIP8102/b:1',
+    fovDeg: 40,
+    framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 0 },
+  },
+  {
+    id: 'enterprise-nacelle',
+    label: 'Blue Hour',
+    why: 'close along a nacelle, with the lens focused on its luminous grille',
+    address: 's:HIP8102/b:1',
+    fovDeg: 8,
+    framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 240 },
+  },
+  {
+    id: 'enterprise-saucer',
+    label: 'Along the Saucer',
+    why: 'grazing light across the hull, the focus held on a narrow band of plating',
+    address: 's:HIP8102/b:1',
+    fovDeg: 12,
+    framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 480 },
+  },
   {
     id: 'earthrise',
     label: 'Earthrise',

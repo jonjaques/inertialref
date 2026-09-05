@@ -1,3 +1,4 @@
+import { sensorRadiance, sceneRadianceGain } from './radiance.ts'
 import { Color, MeshBasicNodeMaterial, Vector2, Vector3 } from 'three/webgpu'
 import {
   attribute,
@@ -15,6 +16,7 @@ import {
   normalize,
   oneMinus,
   positionLocal,
+  positionPrevious,
   pow,
   saturate,
   screenUV,
@@ -200,7 +202,7 @@ export function createWaterMaterial(
   const waterDepth = varying(float(), 'waterDeep')
   const noise = noiseSampler(noiseTexture())
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.transparent = true
   material.depthWrite = true
 
@@ -216,6 +218,8 @@ export function createWaterMaterial(
         .div(max(morphBand.y.sub(morphBand.x), float(1))),
     )
     const moved = mix(positionLocal, target, k)
+    // Both sides of the velocity, for the reason `terrain.ts` gives.
+    positionPrevious.assign(moved)
     localPosition.assign(moved)
     waterDepth.assign(mix(depth, targetDepth, k))
     return moved
@@ -340,7 +344,7 @@ export function createWaterMaterial(
     )
     const liquid = asVector(liquidColour)
     const behind = build.refraction
-      ? asVector(viewportSharedTexture(shifted).rgb)
+      ? asVector(viewportSharedTexture(shifted).rgb.div(sceneRadianceGain))
       : liquid
     /*
      * The liquid's own colour, lit: what scatters back out of the body of

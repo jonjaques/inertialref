@@ -30,6 +30,7 @@ import { type Chord, chord, chordEquals, parseChord } from './chord.ts'
 
 export type KeyContext =
   | 'global'
+  | 'menu'
   | 'flight'
   | 'planetarium'
   | 'standing'
@@ -51,6 +52,7 @@ export type KeyContext =
  * claim than any pairwise rule about which contexts are disjoint.
  */
 const MODE_SETS: readonly (readonly KeyContext[])[] = [
+  ['global', 'menu'],
   ['global', 'flight'],
   ['global', 'planetarium'],
   ['global', 'planetarium', 'standing'],
@@ -99,6 +101,7 @@ export const LIVE_SETS: readonly (readonly KeyContext[])[] = MODE_SETS.flatMap(
  */
 const SPECIFICITY: Readonly<Record<KeyContext, number>> = {
   global: 0,
+  menu: 1,
   docs: 1,
   cinema: 1,
   flight: 1,
@@ -274,6 +277,13 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'global',
     chord('Slash', { shift: true }),
     { hint: 'this sheet, from any mode' },
+  ),
+  press(
+    'sensor.response',
+    'Canopy Response',
+    'Screen',
+    'global',
+    chord('KeyV', { shift: true }),
   ),
   press('chrome.settings', 'Settings', 'Screen', 'global', chord('Comma')),
 
@@ -470,6 +480,16 @@ export const ACTIONS: readonly ActionDefinition[] = [
 ]
 
 export type ActionId = string
+
+/** The front door offers navigation, while the scene remains decoration. */
+export const MENU_KEYS = {
+  context: 'menu' as const,
+  mutes: ACTIONS.filter(
+    (action) =>
+      action.context === 'global' &&
+      !['chrome.settings', 'chrome.keys'].includes(action.id),
+  ).map((action) => action.id),
+}
 
 const BY_ID = new Map(ACTIONS.map((action) => [action.id, action]))
 

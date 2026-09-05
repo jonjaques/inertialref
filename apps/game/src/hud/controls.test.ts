@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { type Lens, LENS_PRESETS } from '@inertialref/rendering'
 import {
   FOCUS_MAX,
+  formatShutter,
   isLens,
   LENS_CHANNELS,
   LENS_SLIDER_STEPS,
@@ -116,6 +117,28 @@ describe('the lens channels', () => {
     const finite = LENS_CHANNELS.focus.at(LENS_PRESETS.flight, (top - 1) / top)
     expect(Number.isFinite(finite.focus)).toBe(true)
     expect(finite.focus).toBeCloseTo(FOCUS_MAX, 6)
+  })
+
+  it('reads a shutter back as the value set, not a coarse reciprocal', () => {
+    // The slider is continuous, so a value between two neat reciprocals is
+    // reachable and must not be rounded to one of them. 0.4 s as "1/3 s" is a
+    // quarter of a stop wrong; the readout falls back to the decimal instead.
+    expect(formatShutter(1 / 60)).toBe('1/60 s')
+    expect(formatShutter(1 / 48)).toBe('1/48 s')
+    expect(formatShutter(1)).toBe('1.0 s')
+    expect(formatShutter(0.4)).toBe('0.40 s')
+    expect(formatShutter(0.9)).not.toBe('1/1 s')
+    // Whatever the channel produces, the reading is within the formatter's own
+    // reciprocal tolerance — 3.5%, log2(1.035) ≈ 0.05 stop — of the value it
+    // claims: a neat reciprocal when one is that close, the decimal otherwise.
+    for (const scrub of [0, 0.2, 0.37, 0.5, 0.62, 0.8, 1]) {
+      const { shutter } = LENS_CHANNELS.shutter.at(LENS_PRESETS.flight, scrub)
+      const text = formatShutter(shutter)
+      const shown = text.startsWith('1/')
+        ? 1 / Number(text.slice(2, -2))
+        : Number(text.slice(0, -2))
+      expect(Math.abs(Math.log2(shown / shutter)), text).toBeLessThan(0.05)
+    }
   })
 
   it('produces a lens the storage guard believes', () => {

@@ -20,6 +20,7 @@ import {
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import { openSession, type Session } from './session.ts'
+import { PICTURES } from './pictures.ts'
 import type { GameHarness } from './harness.ts'
 import type { ObserverPose } from './observatory.ts'
 
@@ -90,6 +91,53 @@ function originOf(session: Session, frame: string): UniverseVector {
 }
 
 describe('the observatory', () => {
+  it('holds an automatic orbit when simulation time is paused and releases it with its target', () => {
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2', { ease: false })
+    const before = session.world.stateHash()
+    ir.observatory.orbitPhase(-112, -1.8, 16)
+    const opening = posed(ir.observerSample(0))
+    expect(session.world.stateHash()).toBe(before)
+    for (let i = 0; i < 60; i += 1) {
+      session.world.advance(1 / 60)
+      ir.observerSample(1 / 60)
+    }
+    expect(posed(ir.observerSample(0))).not.toEqual(opening)
+    ir.pause()
+    // Let the clock publish its held render instant before comparing poses.
+    session.world.advance(0)
+    const held = posed(ir.observerSample(0))
+    for (let i = 0; i < 120; i += 1) {
+      session.world.advance(1 / 60)
+      expect(posed(ir.observerSample(1 / 60))).toEqual(held)
+    }
+    ir.resume()
+    session.world.advance(1 / 60)
+    expect(posed(ir.observerSample(1 / 60))).not.toEqual(held)
+    ir.observatory.clear()
+    ir.look('s:SOL/b:2', { ease: false })
+    const state = ir.observatory.state
+    session.world.advance(1 / 60)
+    ir.observerSample(1 / 60)
+    expect(ir.observatory.state).toEqual(state)
+  })
+
+  it('sweeps with the presented frame, not the time warp the session left', () => {
+    // The front door is forbidden from changing the warp, and it mutes the
+    // keys that would; a sweep on the simulated clock would spin it at warp
+    // rate with no way back. Two sessions at the same instant, one at 1000×:
+    // never advancing the world holds both bodies fixed, so only warp differs.
+    const run = (warp: number) => {
+      const { harness: ir } = harness()
+      ir.look('s:SOL/b:2', { ease: false })
+      ir.timeWarp(warp)
+      ir.observatory.orbitPhase(-112, -1.8, 16)
+      ir.observerSample(0)
+      return posed(ir.observerSample(1 / 60))
+    }
+    expect(run(1000)).toEqual(run(1))
+  })
+
   it('moves the camera without moving the ship', () => {
     // The claim the whole planetarium rests on: it is a *view* of the same
     // universe, not a mode with its own rules. If this ever fails, a save
@@ -508,7 +556,7 @@ describe('a rise', () => {
 })
 
 describe('the pictures', () => {
-  it('every one resolves, and takes the frame it names', () => {
+  it('the fixture catalog’s pictures resolve and take the frame they name', () => {
     /*
      * The half of `presets:check` that needs a world. The script's job is the
      * plate on disk and the composition id; this is the claim neither a
@@ -522,7 +570,9 @@ describe('the pictures', () => {
      * to be a red test rather than a discovery on review day.
      */
     const { harness: ir, session } = harness()
-    for (const { id } of ir.presets()) {
+    for (const { id, address } of PICTURES) {
+      // The complete shipped catalog is exercised by the headless host.
+      if (!address.startsWith('s:SOL/')) continue
       const { status, fovDeg, picture } = ir.preset(id)
       expect(status.target, id).not.toBeNull()
       expect(status.target?.address, id).toContain(

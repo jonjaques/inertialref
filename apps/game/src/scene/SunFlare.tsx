@@ -65,6 +65,10 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // script's lens outranks the flight one and `engine.lens` has already
       // resolved that; reading `camera.fov` here would be a second opinion.
       engine.lens,
+      // The same decision the bodies and the key light make: Natural, or a
+      // script that opted into calibrated staging — the intro's eclipse beats
+      // are staged around this glow whatever response the player chose.
+      engine.calibratedLight,
     )
   })
 

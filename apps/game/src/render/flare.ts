@@ -1,3 +1,4 @@
+import { sensorRadiance } from './radiance.ts'
 import {
   AddEquation,
   Color,
@@ -146,9 +147,6 @@ function elementMaterial(kind: ElementKind): {
   let colour
   switch (kind) {
     case 'glow': {
-      // A point-spread function: a hot core inside a wide skirt, dying before
-      // the quad's edge so the square never shows. The skirt is kept lean —
-      // at 0.14 it swallowed the whole sunset composition in orange.
       profile = exp(r.mul(-7))
         .add(exp(r.mul(-2.6)).mul(0.05))
         .mul(oneMinus(smoothstep(float(0.8), float(1), r)))
@@ -156,8 +154,6 @@ function elementMaterial(kind: ElementKind): {
       break
     }
     case 'streak': {
-      // A thin horizontal blade, brightest at the star and fading along its
-      // length: the anamorphic smear every sensor gives a bright point.
       const across = abs(centred.y).mul(30)
       const along = oneMinus(smoothstep(float(0), float(1), abs(centred.x)))
       profile = exp(across.negate()).mul(pow(along, 3))
@@ -245,7 +241,9 @@ function elementMaterial(kind: ElementKind): {
     }
   }
 
-  const material = new MeshBasicNodeMaterial()
+  // An overlay: the quads hang twenty metres in front of the lens, and the
+  // sensor must not take that for the distance of the sky behind the Sun.
+  const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.colorNode = colour.mul(profile).mul(intensity)
   material.transparent = true
   /*
@@ -318,6 +316,8 @@ export interface LensFlare {
      * picture any fixed angle describes.
      */
     lens: Lens,
+    /** Natural retains its calibrated core; other responses use the sensor PSF. */
+    natural?: boolean,
   ): void
   dispose(): void
 }
@@ -361,6 +361,7 @@ export function createLensFlare(): LensFlare {
       artifacts,
       coronaDrive,
       lens,
+      natural = true,
     ) {
       // Behind test in view space; NDC alone cannot tell front from back.
       view
@@ -487,7 +488,6 @@ export function createLensFlare(): LensFlare {
         )
         const core = spec.t === 0
         const scale = spec.size * frameHeight * (core ? bloom : 1)
-        // The streak is a blade: wide, and a tenth as tall.
         element.mesh.scale.set(
           spec.kind === 'streak' ? scale * 2.2 : scale,
           spec.kind === 'streak' ? scale * 0.1 : scale,
@@ -517,12 +517,9 @@ export function createLensFlare(): LensFlare {
           : smoothFade(
               Math.hypot((at.x - projected.x) * aspect, at.y - projected.y),
             )
-        // The core glow is the star; everything else is the lens talking, and
-        // `artifacts` is how loudly this lens is allowed to talk. The streak
-        // counts as artifact even though it sits on the core — a blade across
-        // the frame is the single most obviously *photographic* element here.
         const lens = spec.kind === 'glow' ? 1 : artifacts
-        element.intensity.value = spec.gain * strength * nearSun * lens
+        element.intensity.value =
+          spec.gain * strength * nearSun * lens * (core && !natural ? 0 : 1)
       }
     },
     dispose() {

@@ -1,6 +1,7 @@
 export * from './capabilities.ts'
 export * from './cutscene.ts'
 export * from './cutscenes/tngIntro.ts'
+export * from './cutscenes/enterprisePortraits.ts'
 export * from './descent.ts'
 export * from './dossier.ts'
 export * from './pictures.ts'
