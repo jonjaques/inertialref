@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/agents/codex-hook.mjs\"",
+            "timeout": 300
+          }
+        ],
+        "matcher": "startup|resume"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/agents/codex-hook.mjs\"",
+            "timeout": 60
+          }
+        ],
+        "matcher": "apply_patch|Edit|Write"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/agents/codex-hook.mjs\"",
+            "timeout": 900
+          }
+        ]
+      }
+    ]
+  }
+}

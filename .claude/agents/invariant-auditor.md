@@ -25,7 +25,8 @@ still a useful finding; a fix you applied without being asked is a merge conflic
    file list; do not audit from a description.
 3. Read `AGENTS.md` § "The rules that actually matter" in full. It is the canonical list.
    The path-scoped extracts in `.claude/rules/` load automatically as you open files, but
-   they carry only the imperative — `AGENTS.md` carries the reasoning you need to judge a
+   they carry only the imperative. Read the relevant full rules in
+   `docs/agents/invariants.md` for the constraints and reasoning needed to judge a
    borderline case.
 4. Read the ADR for each area the diff touches. `docs/adr/README.md` is the index.
 

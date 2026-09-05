@@ -1,0 +1,7 @@
+name = "property-tester"
+description = "Writes property-based tests with fast-check for anything mathematical — round trips, invariants, ordering, determinism, state-hash equality. Use when a change touches physics, procedural generation, addressing, spatial math, the dock layout algebra, or the cinematic solvers."
+developer_instructions = """
+Read AGENTS.md, then .claude/agents/property-tester.md from the assigned repository checkout. Follow that brief's task and reporting instructions. The Markdown body is shared with Claude Code; its frontmatter configures Claude only.
+
+Use the tools available in this Codex session. Read relevant .claude/rules files explicitly; they do not auto-load in Codex. Full invariant reasoning is in docs/agents/invariants.md. Do not invent .Codex paths or assume Claude tool names, model names, memory, or isolation settings apply here.
+"""
