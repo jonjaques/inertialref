@@ -2,9 +2,20 @@ import { createHash } from 'node:crypto'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { encodeCatalog, isUnstableId, readCatalog } from '@inertialref/universe'
+import {
+  type CatalogMetadata,
+  encodeCatalog,
+  isUnstableId,
+  readCatalog,
+} from '@inertialref/universe'
 import { fetchSource, SOURCES } from './sources.ts'
-import { buildCatalog, type BuildReport } from './build.ts'
+import {
+  buildCatalog,
+  type BuildReport,
+  buildSkyCatalog,
+  readHyg,
+  type SkyBuildReport,
+} from './build.ts'
 import { buildTextures } from './textures.ts'
 import { buildSolarReference } from './solarReference.ts'
 import { buildShapes } from './shapes.ts'
@@ -32,11 +43,32 @@ const RADIUS_LIGHT_YEARS = 150
  * gap is real, so that is where the fill has to start.
  */
 const COMPLETE_RADIUS_LIGHT_YEARS = 25
+/*
+ * The sky asset: every source beyond the volume bright enough to be seen from
+ * Earth with no instrument. 6.5 is the naked-eye limit under a dark sky and
+ * the limit every constellation figure is drawn to; HYG holds 7,519 such
+ * systems beyond 150 ly, the farthest at 3,198 ly. The next stop, V ≤ 8, is
+ * 37,271 systems and a decision about download cost that has not been taken.
+ */
+const SKY_MAGNITUDE_LIMIT = 6.5
 const OUTPUT_DIRECTORY = 'data/catalog'
 const TEXTURE_DIRECTORY = 'data/textures'
 const REFERENCE_DIRECTORY = 'data/reference'
 const SHAPE_DIRECTORY = 'data/shapes'
 const OUTPUT_FILE = 'stars-150ly.irsc'
+const SKY_FILE = 'stars-sky.irsc'
+
+/** The metadata a version digest sees: nothing that is not the data. */
+const BLANK_METADATA: CatalogMetadata = {
+  version: '',
+  radiusLightYears: 0,
+  completeRadiusLightYears: 0,
+  attribution: [],
+  sources: [],
+}
+
+const digest = (bytes: Uint8Array): string =>
+  createHash('sha256').update(bytes).digest('hex').slice(0, 8)
 
 const root = new URL('../../../', import.meta.url).pathname
 
@@ -88,13 +120,38 @@ function printReport(report: BuildReport): void {
                                    e.g. ${report.unmatchedHosts.slice(0, 6).join(', ')}`)
 }
 
+function printSkyReport(report: SkyBuildReport): void {
+  const s = report.systems
+  const bins = Object.entries(report.apparentMagnitudes).sort(
+    (a, b) => Number(a[0]) - Number(b[0]),
+  )
+  console.log(`
+  sky systems             ${pad(s)}   from ${report.starsConsidered} rows beyond ${RADIUS_LIGHT_YEARS} ly at V ≤ ${SKY_MAGNITUDE_LIMIT}
+  farthest                ${pad(report.farthestLightYears.toFixed(0))}   ly
+  multiple-star systems   ${pad(report.multiples)}   ${percent(report.multiples, s)}
+  with a proper name      ${pad(report.withProperName)}   ${percent(report.withProperName, s)}
+  with a spectral type    ${pad(report.withSpectralType)}   ${percent(report.withSpectralType, s)}
+  with a color index      ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
+  unparsed spectral types ${pad(report.spectralUnparsed)}
+  ids only HYG can supply ${pad(report.unstableIds)}   ${percent(report.unstableIds, s)}
+  duplicate ids dropped   ${pad(report.duplicateIds.length)}   ${report.duplicateIds.slice(0, 6).join(', ')}
+  already in the volume   ${pad(report.inVolume.length)}   ${report.inVolume.slice(0, 6).join(', ')}
+
+  apparent magnitude, systems per whole magnitude — the completeness rule's input:
+${bins.map(([bin, count]) => `    V ${bin.padStart(2)}  ${pad(count, 6)}  ${'▇'.repeat(Math.max(1, Math.round(count / 50)))}`).join('\n')}
+
+  brightest:
+${report.brightest.map((star) => `    ${star.name.padEnd(18)} ${star.id.padEnd(10)} V ${star.apparentMagnitude.toFixed(2).padStart(5)}  ${pad(star.lightYears.toFixed(0), 5)} ly`).join('\n')}`)
+}
+
 async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   console.log('sources')
   const [hyg, exoplanets] = await load(refresh)
   if (hyg === undefined || exoplanets === undefined)
     throw new Error('missing a source')
 
-  const { catalog, report } = buildCatalog(hyg.text, exoplanets.text, {
+  const table = readHyg(hyg.text)
+  const { catalog, report } = buildCatalog(table, exoplanets.text, {
     radiusLightYears: RADIUS_LIGHT_YEARS,
     completeRadiusLightYears: COMPLETE_RADIUS_LIGHT_YEARS,
     version: 'pending',
@@ -114,59 +171,93 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
    * the stars, so retuning it must change the version or the universe shifts
    * under existing saves with no way to notice.
    */
-  const version = `hyg-4.4+nea-${createHash('sha256')
-    .update(
-      encodeCatalog({
-        metadata: {
-          version: '',
-          radiusLightYears: 0,
-          completeRadiusLightYears: COMPLETE_RADIUS_LIGHT_YEARS,
-          attribution: [],
-          sources: [],
-        },
-        stars: catalog.stars,
-        planets: catalog.planets,
-      }),
-    )
-    .digest('hex')
-    .slice(0, 8)}`
+  const version = `hyg-4.4+nea-${digest(
+    encodeCatalog({
+      metadata: {
+        ...BLANK_METADATA,
+        completeRadiusLightYears: COMPLETE_RADIUS_LIGHT_YEARS,
+      },
+      stars: catalog.stars,
+      planets: catalog.planets,
+    }),
+  )}`
+  const sources = SOURCES.map((source, i) => ({
+    name: source.name,
+    url: source.url,
+    licence: source.licence,
+    // The digest of what was actually read, so a changed artifact can always
+    // be traced to the input that changed it.
+    retrieved: [hyg, exoplanets][i]?.sha256.slice(0, 16) ?? '',
+  }))
   const withSources = {
     ...catalog,
-    metadata: {
-      ...catalog.metadata,
-      version,
-      sources: SOURCES.map((source, i) => ({
-        name: source.name,
-        url: source.url,
-        licence: source.licence,
-        // The digest of what was actually read, so a changed artifact can always
-        // be traced to the input that changed it.
-        retrieved: [hyg, exoplanets][i]?.sha256.slice(0, 16) ?? '',
-      })),
-    },
+    metadata: { ...catalog.metadata, version, sources },
   }
 
   printReport(report)
 
-  const bytes = encodeCatalog(withSources)
-  const compressed = brotliCompressSync(bytes, {
-    params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11 },
+  /*
+   * The sky, cut from the same table and versioned the same way — its own
+   * digest of its own packed bytes, so a rebuild that changes one file and not
+   * the other says so. The selection is not in the digest input because it is
+   * already in the output: change the limit and the stars change.
+   */
+  const { catalog: sky, report: skyReport } = buildSkyCatalog(table, {
+    beyondLightYears: RADIUS_LIGHT_YEARS,
+    apparentMagnitudeLimit: SKY_MAGNITUDE_LIMIT,
+    version: 'pending',
+    volumeIds: new Set(catalog.stars.map((star) => star.id)),
   })
-  console.log(`
-  packed                  ${pad((bytes.length / 1024).toFixed(1))} KB
-  brotli                  ${pad((compressed.length / 1024).toFixed(1))} KB   what it costs over the wire
-  per system              ${pad((compressed.length / report.systems).toFixed(1))} B`)
+  const skyVersion = `sky-${digest(
+    encodeCatalog({ metadata: BLANK_METADATA, stars: sky.stars, planets: [] }),
+  )}`
+  const skyWithSources = {
+    ...sky,
+    metadata: {
+      ...sky.metadata,
+      version: skyVersion,
+      // HYG alone: the archive's planets stop at the volume's radius.
+      sources: sources.filter((source) => source.name === hyg.source.name),
+    },
+  }
 
-  // Decode what was just encoded, every time. The codec's two halves live in one
-  // file precisely so they cannot drift, and this is the assertion that says so.
-  const reread = readCatalog(bytes)
-  if (reread.stars.length !== catalog.stars.length)
+  printSkyReport(skyReport)
+
+  const brotli = (data: Uint8Array): Uint8Array =>
+    brotliCompressSync(data, {
+      params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11 },
+    })
+  const bytes = encodeCatalog(withSources)
+  const compressed = brotli(bytes)
+  const skyBytes = encodeCatalog(skyWithSources)
+  const skyCompressed = brotli(skyBytes)
+  const kb = (n: number): string => pad((n / 1024).toFixed(1))
+  console.log(`
+                              ${OUTPUT_FILE.padStart(18)} ${SKY_FILE.padStart(16)}            both
+  packed                  ${kb(bytes.length)} KB ${kb(skyBytes.length)} KB ${kb(bytes.length + skyBytes.length)} KB
+  brotli                  ${kb(compressed.length)} KB ${kb(skyCompressed.length)} KB ${kb(compressed.length + skyCompressed.length)} KB   what it costs over the wire
+  per system              ${pad((compressed.length / report.systems).toFixed(1))} B  ${pad((skyCompressed.length / skyReport.systems).toFixed(1))} B`)
+
+  // Decode what was just encoded, every time, and the two files together, the
+  // way a host reads them. The codec's two halves live in one file precisely
+  // so they cannot drift, and this is the assertion that says so — and the
+  // reader's own checks on the pair (no shared id, nothing inside the volume)
+  // run here, at build time, before either file is written.
+  const reread = readCatalog(bytes, skyBytes)
+  if (reread.stars.length !== catalog.stars.length + sky.stars.length)
     throw new Error(
-      `round trip lost stars: wrote ${catalog.stars.length}, read ${reread.stars.length}`,
+      `round trip lost stars: wrote ${catalog.stars.length} + ${sky.stars.length}, read ${reread.stars.length}`,
     )
-  const unstable = reread.stars.filter((s) => isUnstableId(s.id)).length
+  if (reread.sky.length !== sky.stars.length)
+    throw new Error(
+      `round trip lost sky stars: wrote ${sky.stars.length}, read ${reread.sky.length}`,
+    )
+  const unstable = reread.stars.filter(
+    (s) => !reread.sky.includes(s) && isUnstableId(s.id),
+  ).length
+  const skyUnstable = reread.sky.filter((s) => isUnstableId(s.id)).length
   console.log(
-    `  round trip              ${pad('ok')}   ${reread.stars.length} systems, ${reread.metadata.version}`,
+    `  round trip              ${pad('ok')}   ${reread.stars.length} systems, ${reread.sky.length} of them the sky, ${reread.metadata.version}`,
   )
 
   console.log('\n  a sample of what came back:')
@@ -178,6 +269,10 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
     '61 Cygni',
     "Barnard's Star",
     'Trappist-1',
+    'Betelgeuse',
+    'Rigel',
+    'Deneb',
+    'Polaris',
   ]) {
     const star = reread.find(name)
     if (star === undefined) {
@@ -200,20 +295,49 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   const directory = join(root, OUTPUT_DIRECTORY)
   mkdirSync(directory, { recursive: true })
   writeFileSync(join(directory, OUTPUT_FILE), bytes)
+  writeFileSync(join(directory, SKY_FILE), skyBytes)
+  /*
+   * One manifest for the pair. `version` is the catalog's — the string a save
+   * records and a peer states, which `readCatalog` composes from the two
+   * files' own — and each file keeps its own block beneath, so the server can
+   * state the universe it serves by reading 2 KB of JSON rather than 850 KB of
+   * binary. `apps/headless/src/catalog.test.ts` holds the three versions
+   * together.
+   */
   writeFileSync(
     join(directory, 'manifest.json'),
     `${JSON.stringify(
       {
-        version,
-        radiusLightYears: RADIUS_LIGHT_YEARS,
-        completeRadiusLightYears: COMPLETE_RADIUS_LIGHT_YEARS,
-        file: OUTPUT_FILE,
-        bytes: bytes.length,
-        brotliBytes: compressed.length,
-        systems: report.systems,
-        planets: report.planetsMatched,
-        hostSystems: report.hostSystems,
-        unstableIds: unstable,
+        version: reread.version,
+        volume: {
+          file: OUTPUT_FILE,
+          version,
+          radiusLightYears: RADIUS_LIGHT_YEARS,
+          completeRadiusLightYears: COMPLETE_RADIUS_LIGHT_YEARS,
+          bytes: bytes.length,
+          brotliBytes: compressed.length,
+          systems: report.systems,
+          planets: report.planetsMatched,
+          hostSystems: report.hostSystems,
+          unstableIds: unstable,
+        },
+        sky: {
+          file: SKY_FILE,
+          version: skyVersion,
+          beyondLightYears: RADIUS_LIGHT_YEARS,
+          apparentMagnitudeLimit: SKY_MAGNITUDE_LIMIT,
+          bytes: skyBytes.length,
+          brotliBytes: skyCompressed.length,
+          systems: skyReport.systems,
+          unstableIds: skyUnstable,
+          inVolume: skyReport.inVolume.length,
+          farthestLightYears: Math.round(skyReport.farthestLightYears),
+          apparentMagnitudes: Object.fromEntries(
+            Object.entries(skyReport.apparentMagnitudes).sort(
+              (a, b) => Number(a[0]) - Number(b[0]),
+            ),
+          ),
+        },
         sources: withSources.metadata.sources,
       },
       null,
@@ -222,7 +346,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   )
   writeFileSync(
     join(directory, 'LICENSE.md'),
-    licenceText(withSources.metadata.attribution, version),
+    licenceText(reread.metadata.attribution, reread.version),
   )
   console.log(`\n  written to ${OUTPUT_DIRECTORY}/`)
 }
@@ -247,10 +371,12 @@ code that reads it, and it carries different terms.
 
 ## Terms
 
-The packed catalog (\`${OUTPUT_FILE}\`) is a database derived substantially from
-the HYG Database and is therefore Adapted Material under CC BY-SA 4.0 § 4(b).
-**It is licensed CC BY-SA 4.0.** The share-alike obligation attaches to this
-database, not to its individual contents and not to the software that reads it.
+The packed catalog — \`${OUTPUT_FILE}\`, every system within ${RADIUS_LIGHT_YEARS}
+light-years, and \`${SKY_FILE}\`, the naked-eye sky beyond it — is a database
+derived substantially from the HYG Database and is therefore Adapted Material
+under CC BY-SA 4.0 § 4(b). **It is licensed CC BY-SA 4.0.** The share-alike
+obligation attaches to this database, not to its individual contents and not
+to the software that reads it.
 
 ${attribution.map((line) => `- ${line}`).join('\n\n')}
 
