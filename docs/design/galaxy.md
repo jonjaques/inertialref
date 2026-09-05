@@ -89,7 +89,7 @@ planets**, 178 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
 Exoplanet Archive and committed. It replaced 18 hand-entered stars, which is the
 swap that file's comment promised would change nothing downstream — it changed
 three signatures and no architecture. Beside it, `stars-sky.irsc` holds the
-**naked-eye sky beyond 150 ly**: 7,515 systems at apparent V ≤ 6.5, 188 KB
+**naked-eye sky beyond 150 ly**: 7,514 systems at apparent V ≤ 6.5, 188 KB
 brotli, the farthest at 3,198 ly. The two load as one catalog; the sky's stars
 resolve by id and are drawn from anywhere in the volume, and they stay out of
 the cell index so the procedural fill is the same galaxy with or without them.

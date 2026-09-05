@@ -7688,6 +7688,25 @@ as rounding noise — scale to the star's own distance. And `search('rig')`
 returns Rigil Kentaurus first, at 4 ly, above Rigel at 860; that is the
 ranking rule working, and the test now asks for `rigel`.
 
+## The sky keeps the volume and shares its system identities (5 Sep 2026)
+
+PR 62's review exposes two independent failure paths. Both host loaders treat
+an unreadable optional sky as a reason to discard a valid volume. They now
+retry the volume alone. Fixtures prove corrupt and incompatible skies preserve
+all 7,123 local systems, while a missing sky exercises the same result.
+
+HYG companions on opposite sides of 150 ly can carry different HIP ids.
+Excluding by packed id misses that they share `comp_primary`. Group exclusion
+removes one duplicate from the real asset: 7,514 sky systems, version
+`sky-0414d660`; the volume bytes stay identical. The sky digest includes both
+selection bounds even when changing a bound selects the same rows. Source-id
+ties also settle equal component numbers so reversing CSV rows cannot change
+the selected primary. Regression tests fail before each fix. The sprite
+selection property identifies generated stars by unique id-derived names.
+
+Baseline `pnpm check` passes at PR 62's `76cef98`. The review fixes pass 74
+focused tests and all five TypeScript projects; the full gate follows M2.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

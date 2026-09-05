@@ -47,7 +47,7 @@ a production build. What follows is depth, not foundations.
 | Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                                        |
 | Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                                         |
 | Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                                          |
-| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly, and the 7,515 naked-eye stars beyond; 129 Solar System bodies; [guide](guides/catalogue.md)                          |
+| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly, and the 7,514 naked-eye stars beyond; 129 Solar System bodies; [guide](guides/catalogue.md)                          |
 | Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                                        |
 | Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                                             |
 | Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                                         |

@@ -1,3 +1,4 @@
+import { skyVersion as versionSky } from './skyVersion.ts'
 import { createHash } from 'node:crypto'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -199,8 +200,8 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   /*
    * The sky, cut from the same table and versioned the same way — its own
    * digest of its own packed bytes, so a rebuild that changes one file and not
-   * the other says so. The selection is not in the digest input because it is
-   * already in the output: change the limit and the stars change.
+   * the other says so. The selection is part of the digest even if a
+   * revised bound admits the same rows.
    */
   const { catalog: sky, report: skyReport } = buildSkyCatalog(table, {
     beyondLightYears: RADIUS_LIGHT_YEARS,
@@ -208,9 +209,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
     version: 'pending',
     volumeIds: new Set(catalog.stars.map((star) => star.id)),
   })
-  const skyVersion = `sky-${digest(
-    encodeCatalog({ metadata: BLANK_METADATA, stars: sky.stars, planets: [] }),
-  )}`
+  const skyVersion = versionSky(sky)
   const skyWithSources = {
     ...sky,
     metadata: {
