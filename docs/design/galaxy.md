@@ -16,8 +16,11 @@ bar/bulge and halo. Its CPU integrator produces headless outside and
 observer-centered plates through the [harness](../guides/harness.md#measuring-the-stellar-field).
 The field has its own version and leaves active population generation
 unchanged. Its emission-only radiance and parameter assumptions are recorded
-in [ADR-0032](../adr/0032-the-stellar-field.md). Dust, live volume rendering and
-photometric calibration remain separate milestones.
+in [ADR-0032](../adr/0032-the-stellar-field.md). The planetarium also renders
+fixed face-on and edge-on views through the existing sensor, with one live
+quarter-size volume target. Open Pictures → Milky Way, or call
+`ir.galaxyView('face-on')`. Dust, continuous travel and photometric calibration
+remain separate milestones.
 
 ## The three-layer body model
 

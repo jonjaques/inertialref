@@ -103,6 +103,26 @@ a different `UniverseVector` for the observer view. Calling these functions
 does not advance or mutate the world. Plates contain emission only. See
 [ADR-0032](../adr/0032-the-stellar-field.md) for parameters and calibration limits.
 
+In the browser's planetarium, `ir.galaxyView('face-on')` and
+`ir.galaxyView('edge-on')` select the fixed external instruments also available
+under Pictures → Milky Way. They change the observatory and lens, leaving the
+world unchanged. `ir.look('s:SOL/b:2')` returns to an Earth view.
+
+`ir.galaxy().render()` returns the live target's dimensions and bytes, field
+and kernel versions, normalization, galactic-center origin in parsecs, step
+bounds, readiness and cumulative volume submissions. It returns `null` without
+a renderer. `ir.lens()` gives the actual instrument exposure. The face-on view
+uses f/2, 2,400 s, ISO 400; edge-on uses f/2, 600 s, ISO 400. Both contain
+stellar emission without dust, with an illustrative visible efficacy pending
+photometric calibration.
+
+```sh
+node scripts/drive.mjs --url http://localhost:5173/planetarium \
+  --width 1920 --height 1080 --dpr 1 \
+  --js "ir.galaxyView('face-on')" --js "ir.chrome(false)" \
+  --wait 1500 --js "ir.galaxy().render()" --shot galaxy-face-on.jpg
+```
+
 ---
 
 ## Finding and loading destinations

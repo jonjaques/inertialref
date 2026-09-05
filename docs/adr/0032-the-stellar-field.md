@@ -15,8 +15,8 @@ longitudes, or change its brightness between inside and outside views.
 
 ## Decision
 
-**One seeded CPU field supplies preview samples, ray integrals, and plates;
-its `galaxy-field@2` manifest stays separate from active generation.**
+**One seeded field supplies CPU references and a GPU preview; its
+`galaxy-field@2` manifest stays separate from active generation.**
 
 `createGalaxyField` accepts a galaxy seed and samples `UniverseVector`
 positions. Internally the field uses parsec offsets in the galactic-center
@@ -53,8 +53,9 @@ assumption. Density times mean luminosity gives L☉/pc³. The ray integrator
 returns bolometric nW m⁻² sr⁻¹ using
 `3.828e26 / (4π PARSEC²) × 1e9` per L☉/pc². Its RGB channels partition that
 power according to normalized blackbody RGB. They are illustrative color
-channels, not measured bandpasses or a luminance calibration. There is no dust,
-resolved-star subtraction, sensor response, or claim of M6 photometric accuracy.
+channels, not measured bandpasses or a luminance calibration. There is no dust or
+resolved-star subtraction, and no claim of M6 photometric accuracy. The live
+preview below feeds these illustrative channels through the existing sensor.
 
 `ir.galaxy()` derives an inspector from the current session. Samples expose
 both manifests and the normalization. Count quadrature covers the cylinder of
@@ -68,6 +69,46 @@ float64 RGB arrays, and a JSON report. Every PNG uses the same declared asinh
 stretch and sRGB encoding; raw files precede that display transform. Repeated
 fixed-seed plates agree exactly. Small numeric plate references also detect
 unversioned changes between revisions.
+
+## The live external instrument (M3)
+
+`apps/game/src/render/galaxyKernel.ts` ports the same field and midpoint ray
+integral to TSL. It imports the population and arm parameter records, uses the
+CPU field's normalization, and derives the same young-arm seed. Its independent
+`galaxy-tsl@1` revision identifies the port. Nonzero GPU field samples and whole
+rays are held within 1% of the CPU reference, with absolute tolerances near zero.
+Explicit axial azimuths avoid Metal's fast `atan2` sign reversal at an exact
+zero denominator; the warp and arms otherwise disagree at +Z.
+
+The planetarium's Pictures panel offers face-on and edge-on instruments.
+`ir.galaxyView(view)` sets the existing observatory and requests its lens through
+the existing host port. The camera remains cinematic → observatory → ship;
+no canonical position or clock changes. Face-on is 30 kpc above the plane at
+90° vertical FOV, f/2, 2,400 s, ISO 400. Edge-on is at +Z 40 kpc, 55°, f/2,
+600 s, ISO 400. Exposure is pinned to the instrument, independent of automatic
+metering. These are instantaneous previews at a declared exposure, not a
+simulation accumulating photons over those durations.
+
+The live target has one quarter of the drawing buffer's width and height,
+rounded up. Each rgba16f texel stores RGB in units of 1,000 bolometric
+nW m⁻² sr⁻¹. A declared preview efficacy of 100 lm/W converts these channels
+at the scene boundary; it is an assumption pending M6, not a measured bandpass.
+The target feeds a background-depth surface through the scene's pre-exposure,
+optics and response. Foreground geometry occludes it at full scene resolution.
+This composition is scoped to the fixed outside views: it does not yet stop
+integration partway through a ray at an object inside the stellar volume.
+
+The render node updates once per scene submission, including repeated sensor
+submissions without an animation tick. There is no history. Its effect owns
+the target, material, backdrop and warm-up registration; resize changes the
+same target, cleanup retires the same instance, and a late warm-up cannot
+revive it. Diagnostics report dimensions, bytes, versions and submission count.
+
+The external instrument uses physical resolved-star flux and the sensor PSF.
+Natural's relative-brightness star ramp and analytic solar glare are bypassed
+while this camera owns the frame: their local-scene normalization otherwise
+puts a bright Sun over the disk even from 30 kpc away. Ordinary views and
+cinematic staging keep their existing behavior.
 
 ## Alternatives considered
 
@@ -96,4 +137,9 @@ Population plates reveal faint structures without changing their physical
 amplitudes to make a composite attractive. They also make the missing dust
 plain: the observer plate has no dark lanes. The preview's RGB and population
 weights require calibration before a physical sensor or population generator
-can adopt them. Live volume rendering belongs to the next milestone.
+can adopt them as calibrated quantities. The live volume now exposes those
+limitations through the actual sensor; continuous travel, dust and temporal
+reuse remain later milestones. The initial quarter-size volume costs more than
+the 2 ms target on the measured rig; `CONTEXT.md` records the batch conditions
+and results. Three.js r185 also rebuilds one first-use integral pipeline as
+its cached function ordering changes, then reuses it on subsequent submissions.
