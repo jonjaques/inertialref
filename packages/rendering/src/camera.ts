@@ -11,6 +11,7 @@ import {
   clampElevation,
   type LookOffset,
   NO_LOOK,
+  observerOffset,
   type ObserverState,
   turn,
 } from './observer.ts'
@@ -173,18 +174,29 @@ export const DEFAULT_FLIGHT_CAMERA: FlightCameraState = Object.freeze({
 })
 
 /**
- * The horizontal frame the orbit's azimuth is measured in, about `up`.
+ * The frame the orbit is measured in, about `up`: the planetarium's own axes,
+ * with the local up standing in for the world's +Y.
  *
  * `east` is the world's +Y turned about the up direction, which is the one
  * reference the scene carries everywhere; where up *is* +Y — deep space, or
  * a body's pole — any perpendicular is as good as any other and +X stands in.
  * The frame is a function of `up` alone, so a camera that has stopped moving
  * stays still while the ship underneath it does anything at all.
+ *
+ * The third axis is `east × up`, which on a body is *south*, and the name is
+ * kept honest rather than flipped: the azimuth swings from east toward it
+ * because that is the sense the planetarium's swings in — `observerOffset`
+ * runs from +X toward +Z about +Y, and +X × +Y is +Z. A drag's sign is a
+ * fact about the gesture, settled once in `applyDrag`, so the two cameras
+ * have to turn the same way under the same hand; the geographic basis
+ * (east, north, up) is right-handed the other way about the pole, and an
+ * orbit measured in it moves the hull's near side against the pointer
+ * while the planetarium moves a globe's with it.
  */
 export function orbitFrame(up: Vec3): {
   readonly east: Vec3
-  readonly north: Vec3
   readonly up: Vec3
+  readonly south: Vec3
 } {
   const pole = Vec.normalize(up)
   const across = Vec.cross(vec3(0, 1, 0), pole)
@@ -196,24 +208,29 @@ export function orbitFrame(up: Vec3): {
   const east = Vec.normalize(
     Vec.sub(seed, Vec.scale(pole, Vec.dot(seed, pole))),
   )
-  return { east, north: Vec.cross(pole, east), up: pole }
+  return { east, up: pole, south: Vec.cross(east, pole) }
 }
 
-/** The camera's displacement from the ship for an orbit, in render axes. */
+/**
+ * The camera's displacement from the ship for an orbit, in render axes.
+ *
+ * `observerOffset` itself, carried into the local frame — one arithmetic for
+ * both orbiting cameras, so a wheel notch, a pinch and a drag produce the
+ * same picture beside the hull that they produce beside a planet.
+ */
 export function orbitOffset(
   up: Vec3,
   orbit: ObserverState,
   hullLength: Meters,
 ): Vec3 {
   const frame = orbitFrame(up)
-  const distance = orbit.distance * hullLength
-  const level = distance * Math.cos(orbit.elevation)
+  const local = observerOffset({
+    ...orbit,
+    distance: orbit.distance * hullLength,
+  })
   return Vec.add(
-    Vec.add(
-      Vec.scale(frame.east, level * Math.cos(orbit.azimuth)),
-      Vec.scale(frame.north, level * Math.sin(orbit.azimuth)),
-    ),
-    Vec.scale(frame.up, distance * Math.sin(orbit.elevation)),
+    Vec.add(Vec.scale(frame.east, local.x), Vec.scale(frame.up, local.y)),
+    Vec.scale(frame.south, local.z),
   )
 }
 
@@ -233,7 +250,7 @@ export function orbitToward(
   const d = Vec.normalize(direction)
   const height = Math.max(-1, Math.min(1, Vec.dot(d, frame.up)))
   return {
-    azimuth: Math.atan2(Vec.dot(d, frame.north), Vec.dot(d, frame.east)),
+    azimuth: Math.atan2(Vec.dot(d, frame.south), Vec.dot(d, frame.east)),
     elevation: clampElevation(Math.asin(height)),
     distance: clampOrbitDistance(distance),
   }

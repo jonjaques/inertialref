@@ -21,7 +21,7 @@ import {
   orbitOffset,
   orbitToward,
 } from './camera.ts'
-import { NO_LOOK } from './observer.ts'
+import { applyDrag, NO_LOOK, observerOffset } from './observer.ts'
 import type { RenderScene } from './scene.ts'
 
 /** A scene with a ship in it and nothing else: what the flight camera reads. */
@@ -40,6 +40,7 @@ function sceneWith(
       up,
       altitude,
     },
+    horizon: null,
     bodies: [],
     stars: [],
     entities: [],
@@ -78,10 +79,51 @@ describe('the orbit frame', () => {
       fc.property(direction, (up) => {
         const frame = orbitFrame(up)
         expect(Vec.length(frame.east)).toBeCloseTo(1, 9)
-        expect(Vec.length(frame.north)).toBeCloseTo(1, 9)
+        expect(Vec.length(frame.south)).toBeCloseTo(1, 9)
         expect(Vec.dot(frame.east, frame.up)).toBeCloseTo(0, 9)
-        expect(Vec.dot(frame.north, frame.up)).toBeCloseTo(0, 9)
-        expect(Vec.dot(frame.east, frame.north)).toBeCloseTo(0, 9)
+        expect(Vec.dot(frame.south, frame.up)).toBeCloseTo(0, 9)
+        expect(Vec.dot(frame.east, frame.south)).toBeCloseTo(0, 9)
+      }),
+    )
+  })
+
+  it("is the planetarium's offset carried into the local frame (property)", () => {
+    // With the pole on the world's own +Y the local frame *is* the
+    // planetarium's, and the two arithmetics have to agree to the bit: the
+    // same three numbers stand a camera in the same place beside a hull as
+    // beside a planet.
+    fc.assert(
+      fc.property(orbit, hull, (state, length) => {
+        const flight = orbitOffset(vec3(0, 1, 0), state, length)
+        const planetarium = observerOffset({
+          ...state,
+          distance: state.distance * length,
+        })
+        expect(flight.x).toBeCloseTo(planetarium.x, 6)
+        expect(flight.y).toBeCloseTo(planetarium.y, 6)
+        expect(flight.z).toBeCloseTo(planetarium.z, 6)
+      }),
+    )
+  })
+
+  it('turns the same way as the planetarium under one drag, about any up (property)', () => {
+    // The sign of the swing about the pole is the whole claim: a rightward
+    // drag that moves the planetarium's camera one way round its subject has
+    // to move the flight camera the same way round the hull, or the two
+    // surfaces feel inverted against each other. A basis mirrored through the
+    // east–up plane passes every other test here and fails this one.
+    fc.assert(
+      fc.property(direction, orbit, hull, (up, state, length) => {
+        const dragged = applyDrag(state, 40, 0)
+        const swing = (offset: (s: typeof state) => Vec3, pole: Vec3) =>
+          Vec.dot(Vec.cross(offset(state), offset(dragged)), pole)
+        const beside = swing(
+          (s) => orbitOffset(up, s, length),
+          Vec.normalize(up),
+        )
+        const planetarium = swing(observerOffset, vec3(0, 1, 0))
+        fc.pre(Math.abs(planetarium) > 1e-9)
+        expect(Math.sign(beside)).toBe(Math.sign(planetarium))
       }),
     )
   })
