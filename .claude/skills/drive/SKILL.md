@@ -56,11 +56,15 @@ node scripts/drive.mjs --help
 
 It starts `pnpm dev` if nothing is serving, boots the renderer, and then **leaves Chrome
 running**. Boot is the expensive part — about five seconds of shader warm and body build
-on top of the dev server's own start — and every call after the first attaches to the
-booted page in well under a second. That is what makes a batch worth writing:
+on top of the dev server's own start. **Each invocation clears local storage and
+cookies before booting the requested page.** Pass `--keep-storage` to retain them
+and attach to an already booted page. Batch setup and measurements in one call
+when they must share state; `--reload` steps within that call keep its storage.
+IndexedDB saves, asset caches and service workers are retained. That is what makes
+a batch worth writing:
 
 ```bash
-node scripts/drive.mjs --js "ir.summary()"                     # ~0.1 s, page still hot
+node scripts/drive.mjs --keep-storage --js "ir.summary()"                     # ~0.1 s, page still hot
 node scripts/drive.mjs --url http://localhost:5173/planetarium \
     --js "ir.look('g:milky-way/s:SOL/b:5')" --wait 3000 --shot saturn.jpg
 node scripts/drive.mjs --js "ir.play('tng-intro')" --js "ir.pause()" \
@@ -102,8 +106,8 @@ set up.** Every call re-asserts `--url`, `--width`, `--height` and `--dpr`; a se
 call that omits them is a call at the defaults, and the driver re-navigates because
 the attached page is not showing what the URL asks for. That silently discards the
 observatory — `ir.preset('earthrise')` in one invocation and `ir.terrain()` in the
-next reports the menu. Either repeat the whole session line every time, or put the
-setup and the measurement in one invocation. The second is cheaper and always right.
+next reports the menu. Either repeat the whole session line with `--keep-storage` every time, or put
+the setup and the measurement in one invocation. The second is cheaper and always right.
 
 **The failure is silent and it answers plausibly**, which is what makes it expensive:
 you land back on the home page and every probe after it returns a real value about the
@@ -114,7 +118,7 @@ is empty when it should not be, check the page before checking the code.
 Session flags worth knowing: `--url` (the mode is a function of the path and the query,
 and the driver re-boots unless the attached page is already showing everything the URL
 asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
-profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--fresh`,
+profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--keep-storage`, `--fresh`,
 `--json`, `--down`, `--status`.
 
 A `--shot` is downscaled to 1568 px on its long edge, because that is where the reader

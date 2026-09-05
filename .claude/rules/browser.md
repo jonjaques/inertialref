@@ -18,7 +18,9 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
 
 - **One invocation carries the setup and the measurement.** Steps run in the order
   written — `--js … --wait … --cast …` in one call, not one call each. Boot is paid
-  once, but `--url`/`--width`/`--height`/`--dpr` are _per invocation_: omit them on a
+  once. Every invocation clears local storage and cookies; `--keep-storage`
+  retains them and permits a warm attach. `--url`/`--width`/`--height`/`--dpr`
+  are _per invocation_: omit them on a
   second call and the driver re-navigates at the defaults, discarding the observatory
   you set up. `--down` at the end.
 

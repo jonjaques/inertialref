@@ -33,15 +33,16 @@
  *
  * The expensive thing here is boot — about five seconds of shader warm and body
  * build, on top of the dev server's own start. So Chrome is left running
- * between invocations and a second call attaches to the booted page instead of
- * reloading it: measured, 6 s cold against 80 ms warm. Most of that cold figure
+ * between invocations. Each call starts with clean local storage and cookies;
+ * --keep-storage opts into attaching to the booted page instead of reloading
+ * it: measured, 6 s cold against 80 ms warm. Most of that cold figure
  * is the dev server and Chrome rather than the page — `?presentation=occluded`
  * below is what keeps the page's own boot to one warm-up census. That is what
  * makes a batch of steps worth writing on one command line:
  *
  *     node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:2')" \
  *                            --wait 2000 --shot earth.jpg
- *     node scripts/drive.mjs --js "ir.terrain()"        # 70 ms, page still hot
+ *     node scripts/drive.mjs --keep-storage --js "ir.terrain()" # page still hot
  *     node scripts/drive.mjs --down                     # when finished
  *
  * Steps run in the order they are written, so one process does a whole
@@ -81,6 +82,8 @@ const OPTIONS = {
   dpr: { type: 'string', default: '1' },
   /** Reload and re-boot even when the attached page is already rendering. */
   fresh: { type: 'boolean', default: false },
+  /** Preserve local storage and cookies, and permit a warm attach. */
+  'keep-storage': { type: 'boolean', default: false },
   /** Start `pnpm dev` when nothing answers `--url`; `--no-serve` to fail
    *  instead, which `allowNegative` gives for free. */
   serve: { type: 'boolean', default: true },
@@ -164,6 +167,8 @@ Session flags:
   --width/--height   viewport, default 1600x900
   --dpr <n>          device scale factor, default 1
   --fresh            re-boot even if the attached page is already rendering
+  --keep-storage     retain local storage/cookies and allow a warm attach;
+                     default clears both before booting the requested page
   --no-serve         fail instead of starting \`pnpm dev\` when nothing answers
   --max-px <n>       longest edge of a written shot, default 1568; 0 for native
   --quality <n>      JPEG quality, default 88
@@ -175,8 +180,8 @@ Lifecycle:
   --status           what this rig has running
   --down             close the Chrome and the dev server this rig started
 
-Chrome stays up between invocations and the next call attaches to the booted
-page: 6 s cold, 80 ms warm. --down when you are finished.`
+Chrome stays up between invocations. Each call clears local storage and cookies
+and reboots the page unless --keep-storage is given. --down when finished.`
 
 const { values, tokens } = parseArgs({
   options: OPTIONS,
@@ -479,6 +484,33 @@ async function evaluate(send, expression) {
     )
   }
   return result.result.value
+}
+
+/** Clear this rig's cookies and local storage before the app can read them.
+ * Navigating away first also discards in-memory preferences from a warm page.
+ * IndexedDB saves, asset caches and service workers are outside this reset. */
+async function clearStorage(send) {
+  const current = await evaluate(send, 'location.origin')
+  await send('Page.navigate', { url: 'about:blank' })
+  // Page.navigate acknowledges the navigation before the new document is
+  // necessarily committed. Wait until the old app can no longer write back.
+  for (let i = 0; ; i++) {
+    const blank = await evaluate(send, "location.href === 'about:blank'").catch(
+      () => false,
+    )
+    if (blank) break
+    if (i === 100) throw new Error('page did not leave before clearing storage')
+    await sleep(50)
+  }
+  await send('Network.clearBrowserCookies')
+  for (const origin of new Set([current, new URL(URL_).origin])) {
+    if (origin === 'null') continue
+    await send('Storage.clearDataForOrigin', {
+      origin,
+      storageTypes: 'local_storage',
+    })
+  }
+  note('cleared local storage and cookies')
 }
 
 const READY = 'return Boolean(window.ir && window.engine && window.engine.gl)'
@@ -868,6 +900,7 @@ async function main() {
     mobile: false,
   })
   await send('Page.bringToFront')
+  if (values['keep-storage'] !== true) await clearStorage(send)
   await boot(send, { force: values.fresh === true })
 
   const results = []
