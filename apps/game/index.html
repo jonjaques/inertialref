@@ -237,8 +237,9 @@
     <!--
       What is on screen before the first React commit.
 
-      `main.tsx` awaits the packed catalog — 460 KB, a generation input rather
-      than a decoration, so the world cannot be built without it — and until
+      `main.tsx` awaits the packed catalog — 900 KB across two files, a
+      generation input rather than a decoration, so the world cannot be built
+      without it — and until
       that resolves there is no canvas, no HUD and nothing in `#root`. On a fast
       connection that is a flash; on a slow one, or behind a service worker
       serving a bundle that never parses, it is an indefinitely black page that

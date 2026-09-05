@@ -37,7 +37,7 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                                                                         |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
-| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                                                                                |
+| `universe`      | 3     | done — addressing, star catalog with its naked-eye sky, generation, terrain, frames                                                                                                                         |
 | `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                                                                        |
 | `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                                    |
@@ -7610,6 +7610,83 @@ that Chrome had closed. `main()` handles `--down` before step processing, so
 the checks never ran. Shutdown belongs in its own invocation with the same
 port. The driving guide and shared drive skill now say so; successful process
 exit alone is not evidence that an inspection batch executed.
+
+## The naked-eye sky is a second catalog file (5 Sep 2026)
+
+M1 of `design/plans/the-galaxy.md`. The star field is a survey of the cells
+around the player — a 100 ly cube — and the constellations are not in it:
+Betelgeuse is 500 ly out, Rigel 860, Deneb 1,400. `data/catalog/stars-sky.irsc`
+is every HYG v4.4 source beyond 150 ly at apparent V ≤ 6.5: 7,515 systems from
+7,519 rows, the farthest at 3,198 ly, every one with a Hipparcos number, none
+already in the volume. `readCatalog(volume, sky)` reads the pair as one catalog
+under one version, `<volume>+<sky>`, and the manifest states that version at
+the top with each file's own beneath.
+
+**The plan's estimate against the measurement.** The plan put the file at
+about 9,000 stars and 60 KB brotli at a 16-byte record. The record the game
+ships carries the id, the common name and the spectral string, and costs
+25.6 B per system after brotli — the same as the volume — so the sky is 449 KB
+packed and 188 KB brotli, and the pair 907 KB and 366 KB. Decoding both under
+Node is 43 ms against 21 ms for the volume alone; six searches over the
+doubled key set take 8.2 ms against 1.9. In Chrome on the dev server under
+`?timing=full`, `catalog.decode` is 57–62 ms over three reloads against 30 ms
+for the volume, and `catalog.fetch` is 8–9 ms either way — localhost, so the
+download cost is the 366 KB brotli figure and not that span. The apparent-magnitude histogram is
+in the manifest — 1, 5, 18, 74, 203, 862, 2,899, 3,453 systems at V −1
+through 6 — because it is the input the completeness rule is fitted against
+and the reader that fits it should not re-derive it from rounded magnitudes.
+
+**The sky stays out of the cell index.** The obvious merge counts a sky star
+in `inCell`, and `proceduralCount` subtracts that count from the density
+model, so a cell 500 ly out would generate one fewer star for each member
+that happens to be naked-eye from Earth, and the cells straddling the 150 ly
+edge would lose procedural stars inside the volume the survey reads. 190 sky
+stars sit in the 161 cells the sphere touches. A sky star therefore answers
+`get`, `find`, `search` and `resolveSystem` and is drawn from anywhere, and is
+absent from `inCell`, `within`, `systemsWithin` and the travel panel; the
+ingest test asserts every one of the 4,096 cells in the sphere's bounding box
+answers the same with the sky loaded, and that a 40 ly `systemsWithin` from
+Sol returns the same ids. Generation learns about bright far stars through a
+magnitude limit carried like `completeRadius`, which is M9's job, not a count.
+
+**The volume's version string had drifted from its formula.** The rebuild
+moved it from `2b24daf0` to `01c631cc` on byte-identical stars and planets:
+re-encoding the committed file reproduces its bytes exactly, and the current
+digest formula over the committed data gives `01c631cc`. The committed string
+came from an earlier formula in `apps/ingest/src/main.ts`, changed after the
+asset was built and never refreshed by a rebuild. The version exists to change
+exactly when the data changes; a formula change without a rebuild makes it say
+"unchanged" about a file a rebuild would rename. `apps/headless/src/catalog.test.ts`
+now holds the three versions together.
+
+**Orion is the assertion.** Its seven brightest are held to published J2000
+coordinates within 0.02°, and Betelgeuse to Rigel within 0.1° of 18.62° — a
+separation no rotation of the frame can change, so it checks the rotation
+itself where the per-star test checks the transcription. HYG agrees with the
+published positions to arcseconds. The plate is the planetarium 64,000 km
+above Earth at a 29.7° vertical field, aimed at Alnilam with Earth's limb at
+the bottom edge, and a drawn star sits under each of the seven marks the
+catalog directions project to. `.scratch/orion-aim.mjs` is the aim: it
+samples `ir.observatory.eye` at four angle pairs to recover the target's
+axes, because the observer offset is built in the target's own frame and no
+verb states that frame.
+
+**From Earth orbit, Natural draws every star at the ramp's floor.** The
+integrated ramp anchors on the brightest star in the survey whether or not
+its disk is drawn, and inside the Solar System that is Sol, 25 magnitudes
+above Sirius; every sprite lands at visibility zero and the seven are drawn
+but not distinguished from a V 6 star. The anchor is deliberate — dropping a
+resolved sun from it steps the whole sky the frame the disk crosses the
+sprite threshold — and the consequence is the operating point M4's exposure
+work has to measure: the faint sky beside a sunlit body, through each
+response.
+
+**Two test mistakes worth not repeating.** A published direction scaled to
+one metre: a universe position is 2.5 × 10²⁰ m from the origin, a double
+resolves about 3 × 10⁴ m there, and the expected direction came out 65° off
+as rounding noise — scale to the star's own distance. And `search('rig')`
+returns Rigil Kentaurus first, at 4 ly, above Rigel at 860; that is the
+ranking rule working, and the test now asks for `rigel`.
 
 ## Known gaps
 
