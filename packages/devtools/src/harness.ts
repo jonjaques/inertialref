@@ -1,5 +1,7 @@
 import {
   GALAXY_VIEWS,
+  GALAXY_JOURNEY_LENS,
+  validateGalaxyJourney,
   type GalaxyView,
   isGalaxyView,
 } from '@inertialref/rendering'
@@ -1638,6 +1640,15 @@ export class GameHarness {
     return this.#observatory.viewGalaxy(view)
   }
 
+  /** Seek or travel along the Earth-to-disk instrument using presentation time. */
+  galaxyJourney(progress = 0, seconds = 0): ObserverStatus {
+    validateGalaxyJourney(progress, seconds)
+    this.stopCutscene()
+    if (this.#observatory.journey === null)
+      this.#host.render.setFlightLens(GALAXY_JOURNEY_LENS)
+    return this.#observatory.travelGalaxy(progress, seconds)
+  }
+
   /** Preview field diagnostics read the current session without activating generation. */
   galaxy(): GalaxyInspector {
     return new GalaxyInspector(this.world, () =>
@@ -1804,6 +1815,7 @@ export class GameHarness {
       '  ir.terrain()                  the live streamer, and the rocks on it',
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
+      '  ir.galaxyJourney(p, seconds)  Earth orbit to 30 kpc above the disk, progress 0–1',
       '  ir.galaxyView(view)           fixed face-on or edge-on planetarium instrument',
       '  ir.galaxy()                   stellar field samples, counts, and CPU plates',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',

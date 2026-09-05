@@ -132,15 +132,13 @@ export const MIN_DISTANCE_RADII = 1.5
  * The furthest the camera may retreat from *any* target, meters.
  *
  * Absolute rather than a multiple of the target's radius, and that is the
- * whole point. A radius-relative ceiling puts Luna's at 0.003 ly and a star's
- * at 0.3 ly, so "zoom out from a moon until the neighboring stars appear" —
- * the single most planetarium-shaped gesture there is — would work at a star
- * and refuse at a moon, for a reason no user could ever infer. 120 ly is the
- * catalog's complete sphere with room around it, and it is four orders
- * inside `UNIVERSE_HALF_EXTENT`, so the offset arithmetic below cannot leave
- * the addressable universe from any target the catalog names.
+ * whole point. A radius-relative ceiling prevents a moon's camera from reaching
+ * the neighboring stars. Earth to 30 kpc above the galactic center is 101,400 ly,
+ * so 110,000 ly admits that route with margin inside the coordinate domain for
+ * the shipped catalog. A distant projected target still obeys UniverseVector's
+ * sector bounds.
  */
-export const MAX_OBSERVER_DISTANCE: Meters = 120 * LIGHT_YEAR
+export const MAX_OBSERVER_DISTANCE: Meters = 110_000 * LIGHT_YEAR
 
 /** Radians of orbit per pixel of drag at the reference sensitivity. */
 export const DRAG_RADIANS_PER_PIXEL = 0.005

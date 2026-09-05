@@ -22,3 +22,4 @@ export * from './terrainSelect.ts'
 export * from './shape.ts'
 
 export * from './galaxyView.ts'
+export * from './galaxyJourney.ts'
