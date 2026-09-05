@@ -59,9 +59,10 @@ adapter.**
    function's `'exact'` chord path adopts the same integer slab test — a
    presentational change, unversioned, because the tail is not canon.
 3. **A source is a port over the pool.** `HeightfieldSource` in
-   `packages/workers/src/tasks.ts` — `kind`, `available`,
-   `submit(surface, request)`, the arguments `generateHeightfield` takes — is
-   what `TerrainStreamer` asks for heightfields. `poolHeightfieldSource`
+   `packages/workers/src/tasks.ts` carries `kind`, `available`, capability
+   limits and `submit(surface, request)`, the arguments `generateHeightfield`
+   takes. `Heightfields` selects a supporting source for the streamer and the
+   orbital baker. `poolHeightfieldSource`
    wraps the pool and is where the seed becomes a string for the wire;
    `createTileProducer(renderer)` in
    `apps/game/src/render/terrainProducer.ts` is the GPU one, installed by `App`
@@ -69,8 +70,12 @@ adapter.**
    cover. One batch in flight, one body a batch, uploads keyed on the surface
    object's identity and the seabed flag — the identity `surfaceKernel`
    memoizes its packed record on, handed through the seam rather than rebuilt
-   behind it. `?producer=cpu` refuses it; a failure sets `available = false`
-   and the streamer falls back to the pool for the rest of the session.
+   behind it. `?producer=cpu` refuses it. A producer failure sets
+   `available = false` and rejects pending jobs with `HeightfieldUnavailable`;
+   `Heightfields` retries them on the pool under the same cancellation handle.
+   Later requests use the pool for the rest of the session. Ordinary request
+   failures propagate without retry; exhausting the adapters resolves the job
+   to null.
    WebGL 2 never sees it.
 4. **Tolerance is measured where the arithmetic runs.** Under `pnpm test:gpu`
    on the physical adapter: `terrainKernel.gpu.test.ts` holds every zoo body
@@ -129,9 +134,10 @@ adapter.**
   from `?producer=cpu` differ at the sub-meter tail, and a figure about the
   drawn ground names its producer (`ir.terrain().producer`).
 - A tile frame is exact through level 23 and `writeTileFrame` refuses deeper.
-  The producer says so through `HeightfieldSource.maxLevel`, and the streamer
-  sends a deeper region to the pool — not to a refusal, which it would re-ask
-  of the same source every frame. The drawn floor is well below in any case.
+  The producer says so through `HeightfieldSource.maxLevel`, and `Heightfields`
+  sends a deeper region to the pool. Its `supports(request)` check also keeps
+  unsupported resolution and border shapes out of the GPU queue. The drawn
+  floor is well below the level limit in any case.
 - The producer's `warm()` is a pipeline compile registered as one census unit
   behind the boot cover — registered from the effect that opens the warm-up
   session, because a registration from the renderer's `onReady` precedes the

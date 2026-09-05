@@ -1,3 +1,4 @@
+export * from './heightfields.ts'
 export * from './host.ts'
 export * from './inline.ts'
 export * from './pool.ts'

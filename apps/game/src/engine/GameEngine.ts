@@ -55,6 +55,7 @@ import {
 } from '@inertialref/rendering'
 import {
   type HeightfieldSource,
+  type Heightfields,
   surveyRegionTask,
   type WorkerFactory,
   WorkerPool,
@@ -873,7 +874,7 @@ export class GameEngine {
    * `null` puts the pool back.
    */
   setHeightfieldSource(source: HeightfieldSource | null): void {
-    this.#terrain.source = source
+    this.#terrain.heightfields.preferred = source
   }
 
   get starField(): StarField {
@@ -884,9 +885,9 @@ export class GameEngine {
     return this.#terrain.state()
   }
 
-  /** Where a heightfield request goes this frame — the streamer's answer. */
-  heightfieldSource(): HeightfieldSource | null {
-    return this.#terrain.heightfields()
+  /** Streaming and orbital baking share one heightfield routing policy. */
+  get heightfields(): Heightfields {
+    return this.#terrain.heightfields
   }
 
   /**
@@ -896,11 +897,22 @@ export class GameEngine {
    * carries the address and the appearance and not the surface — that needs
    * the body itself: the orbital bake wants `surface`, and the scene is
    * right not to carry a surface grammar per drawn body per frame.
+   *
+   * `world.system` rather than `loadSystem`, because the bake also asks about
+   * addresses it is *holding* rather than drawing, and those outlive their
+   * system: `updateInterest` unloads anything past 7.5 ly, and a replaced
+   * world keeps none of the previous galaxy's ids. `loadSystem` answers a
+   * question about a system that is gone by regenerating it — installing its
+   * frames and recording a `system-loaded` inside a cache eviction — or by
+   * tripping its own `Unknown system` invariant out into the frame loop. An
+   * address nothing has loaded has no body, which is what this already says.
    */
   bodyFor(address: string): Body | null {
     const parsed = parseAddress(address)
     if (parsed.kind !== 'body') return null
-    return findBody(this.world.loadSystem(parsed.system), parsed.body) ?? null
+    const system = this.world.system(parsed.system)
+    if (system === undefined) return null
+    return findBody(system, parsed.body) ?? null
   }
 
   /**
@@ -1590,7 +1602,7 @@ export class GameEngine {
     // host's to dispose, but the reference is this engine's, and so is the
     // window in flight on it: a job that lands after the pool is gone is an
     // answer into a cache nothing reads.
-    this.#terrain.source = null
+    this.#terrain.heightfields.preferred = null
     this.#terrain.clear()
     this.session.dispose()
   }

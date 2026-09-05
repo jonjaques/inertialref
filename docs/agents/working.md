@@ -159,9 +159,19 @@ runs in CI. `IR_SKIP_GATE=1` disables the hook when you must.
 
 ## Committing
 
-**Commit without being asked.** A commit is reversible and costs nothing; a
-session that ends with forty files in one lump is neither reviewable nor
-bisectable. Commit each coherent piece once the Stop gate is green.
+**Commit each reversible step, then verify it.** Do this without being asked,
+before beginning the next large phase or a lengthy verification run. A commit
+makes a coherent change recoverable and reviewable; it does not claim every
+check has passed. State which verification remains instead of withholding the
+commit until the full gate finishes. Focused regression checks still guide
+implementation, and all required checks still pass before the work is done.
+
+Keep independent changes in separate commits. Put a shared interface and the
+callers that require it in the same step so the history can be understood and
+reverted without reconstructing an intermediate refactor. If verification
+finds a defect, fix it in a follow-up commit. Preserve those checkpoints unless
+the user asks to rewrite them. A long test run is a reason to checkpoint the
+code first, not a reason to leave several completed modules uncommitted.
 
 Every commit gets a subject that is a declarative claim behind a conventional
 prefix, and an extended body saying **why** — specifically why the obvious

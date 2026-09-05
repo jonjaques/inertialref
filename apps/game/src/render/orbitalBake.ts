@@ -13,7 +13,7 @@ import {
 import { getLogger } from '@inertialref/shared'
 import type {
   HeightfieldResponse,
-  HeightfieldSource,
+  Heightfields,
   JobHandle,
 } from '@inertialref/workers'
 import {
@@ -52,8 +52,8 @@ import {
  *
  * **The picture is taken by the ground material, not by a copy of it.** The
  * ninety-six level-2 regions of a body are asked of the same
- * `HeightfieldSource` a patch is — the GPU kernel or the pool, whichever the
- * streamer would use — built with the same `buildPatch`, and drawn with the
+ * `Heightfields` module a patch is, with the same adapter selection and
+ * recovery, built with the same `buildPatch`, and drawn with the
  * same `render/terrain.ts` graph in its bake mode into a cube target from a
  * camera at the body's centre. What the sphere then samples by direction is
  * the deposit stack, the mineral tint and the rivers the ground draws, by
@@ -120,10 +120,12 @@ export interface OrbitalBakeMaps {
 
 /** One bake's state: the targets it renders into, and whether it has. */
 interface Bake {
+  readonly address: string
+  readonly body: Body
   readonly target: CubeRenderTarget
   readonly reliefTarget: CubeRenderTarget
   /** The tile jobs in flight, cancelled if the bake is evicted under them. */
-  readonly jobs: JobHandle<HeightfieldResponse>[]
+  readonly jobs: JobHandle<HeightfieldResponse | null>[]
   /** When the body last asked, in `performance.now()` ms. */
   asked: number
   ready: boolean
@@ -155,11 +157,12 @@ export interface OrbitalBakeHost {
   readonly renderer: WebGPURenderer
   readonly terrain: TerrainMaterial
   bodyFor(address: string): Body | null
-  heightfieldSource(): HeightfieldSource | null
+  readonly heightfields: Heightfields
 }
 
 export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   const bakes = new Map<string, Bake>()
+  let disposed = false
   /*
    * The patch's triangle list with every triangle turned over. The camera
    * is at the body's centre and looks at the ground from *inside* the shell,
@@ -174,18 +177,12 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     1,
   )
 
-  /**
-   * Bodies with no relief: nothing to bake, and a body's relief does not
-   * change, so the verdict is kept rather than re-derived — `bodyFor` is an
-   * address parse and a system walk, and the ask comes every frame.
-   */
-  const flat = new Set<string>()
-
   function textureFor(address: string): OrbitalBakeMaps | null {
+    if (disposed) return null
     const now = performance.now()
+    const body = host.bodyFor(address)
     const held = bakes.get(address)
-    if (held !== undefined) {
-      // Touch, so the least-recently-asked is the one evicted.
+    if (held !== undefined && held.body === body) {
       held.asked = now
       bakes.delete(address)
       bakes.set(address, held)
@@ -193,14 +190,9 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
         ? { albedo: held.target.texture, relief: held.reliefTarget.texture }
         : null
     }
-    if (flat.has(address)) return null
-    const body = host.bodyFor(address)
-    const source = host.heightfieldSource()
-    if (body === null || source === null) return null
-    if (body.surface.maxElevation <= 0) {
-      flat.add(address)
-      return null
-    }
+    if (held !== undefined) drop(address, held)
+    if (body === null || body.surface.maxElevation <= 0) return null
+    if (host.heightfields.kind === null) return null
     if (bakes.size >= KEPT && !evictOne(now)) return null
     const target = new CubeRenderTarget(FACE_SIZE, {
       type: HalfFloatType,
@@ -217,6 +209,8 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       depthBuffer: true,
     })
     const bake: Bake = {
+      address,
+      body,
       target,
       reliefTarget,
       jobs: [],
@@ -225,7 +219,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       failed: false,
     }
     bakes.set(address, bake)
-    void run(body, source, bake)
+    void run(body, bake)
       .then(() => {
         if (bake.ready) {
           log.info('orbital bake ready', {
@@ -237,16 +231,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       .catch((error: unknown) => {
         // Evicted under its tiles: the cancellation is the rejection.
         if (!stillHeld(bake)) return
-        /*
-         * The source's own stand-down — the GPU producer retiring rejects
-         * everything it holds with this — is not the bake's failure: the
-         * next `heightfieldSource()` is the pool, and the next ask should
-         * reach it. A failure of anything else would repeat, and is kept.
-         */
-        if (String(error).includes('producer unavailable')) {
-          drop(address, bake)
-          return
-        }
+        cancelJobs(bake)
         bake.failed = true
         log.warn('orbital bake failed', { address, error: String(error) })
       })
@@ -259,7 +244,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
    */
   function evictOne(now: number): boolean {
     for (const [address, bake] of bakes) {
-      if (now - bake.asked < RESIDENCY_MS) continue
+      if (stillHeld(bake) && now - bake.asked < RESIDENCY_MS) continue
       drop(address, bake)
       return true
     }
@@ -269,29 +254,30 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   function drop(address: string, bake: Bake): void {
     if (bakes.get(address) !== bake) return
     bakes.delete(address)
-    for (const job of bake.jobs) job.cancel()
-    bake.jobs.length = 0
+    cancelJobs(bake)
     bake.target.dispose()
     bake.reliefTarget.dispose()
   }
 
-  async function run(
-    body: Body,
-    source: HeightfieldSource,
-    bake: Bake,
-  ): Promise<void> {
+  function cancelJobs(bake: Bake): void {
+    for (const job of bake.jobs) job.cancel()
+    bake.jobs.length = 0
+  }
+
+  async function run(body: Body, bake: Bake): Promise<void> {
     const regions = bakeRegions()
     // The sheet's datum, where one is drawn — the same answer the streamer
     // gives `buildPatch`, and the same flag it sends the producer.
     const sheet = seaSheetDatum(body)
     const fields = await Promise.all(
       regions.map((region) => {
-        const job = source.submit(body.surface, {
+        const job = host.heightfields.submit(body.surface, {
           region,
           resolution: HEIGHTFIELD_RESOLUTION,
           border: HEIGHTFIELD_BORDER,
           seabed: sheet !== null,
         })
+        if (job === null) return null
         bake.jobs.push(job)
         return job.result
       }),
@@ -299,7 +285,12 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     bake.jobs.length = 0
     // Evicted while the tiles were in flight: nothing to draw into.
     if (!stillHeld(bake)) return
-    const patches = fields.map((field, i) =>
+    const completed = fields.filter((field) => field !== null)
+    if (completed.length !== regions.length) {
+      drop(bake.address, bake)
+      return
+    }
+    const patches = completed.map((field, i) =>
       buildPatch({
         region: regions[i] as RegionAddress,
         resolution: HEIGHTFIELD_RESOLUTION,
@@ -314,7 +305,10 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   }
 
   function stillHeld(bake: Bake): boolean {
-    for (const held of bakes.values()) if (held === bake) return true
+    if (bakes.get(bake.address) !== bake) return false
+    // A world can replace a surface without replacing its address or renderer.
+    if (host.bodyFor(bake.address) === bake.body) return true
+    drop(bake.address, bake)
     return false
   }
 
@@ -374,23 +368,20 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   return {
     textureFor,
     report: () =>
-      [...bakes.entries()].map(([address, bake]) => ({
-        address,
+      [...bakes.values()].filter(stillHeld).map((bake) => ({
+        address: bake.address,
         ready: bake.ready,
         failed: bake.failed,
       })),
     targetFor: (address) => {
       const bake = bakes.get(address)
-      return bake === undefined
+      return bake === undefined || !stillHeld(bake)
         ? null
         : { albedo: bake.target, relief: bake.reliefTarget }
     },
     dispose() {
-      for (const bake of bakes.values()) {
-        bake.target.dispose()
-        bake.reliefTarget.dispose()
-      }
-      bakes.clear()
+      disposed = true
+      for (const [address, bake] of bakes) drop(address, bake)
     },
   }
 }

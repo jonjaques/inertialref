@@ -21,9 +21,9 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
   bare topic, in the declarative voice `git log --oneline -20` shows — a claim about
   the work, not a ticket number.
 
-- **Commit without asking.** A commit is reversible and costs nothing; a session that
-  ends with forty files in one lump is not. Commit each coherent piece once the Stop
-  gate is green, and write the extended body every time
+- **Commit each reversible step, then verify it.** Do not wait for the full gate or
+  the end of a large refactor to commit. Commit fixes as follow-up steps, state
+  which checks remain, and write the extended body every time
   ([`STYLE.md`](../../STYLE.md) § "Commit messages").
 
 - **Rebase onto the target before pushing, never merge.** `main` enforces

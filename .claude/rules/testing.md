@@ -37,3 +37,8 @@ Reasoning: `docs/guides/testing.md`.
 - Run one file with `pnpm vitest run <substring>` — and one GPU file with
   `pnpm vitest run --config apps/game/vitest.gpu.config.ts <substring>`, because the root
   config excludes the suffix and the plain form answers "No test files found".
+- **Investigate contention before changing a timeout.** Close your own browser rig,
+  rerun the failing files with `--maxWorkers 2`, then use `VITEST_MAX_WORKERS=2 pnpm check`
+  for the full gate if needed. A focused pass does not replace that gate.
+- **Preserve concurrent work when verifying.** If unrelated files block the gate,
+  verify the committed change in an isolated worktree and report both outcomes.

@@ -116,7 +116,7 @@ and above the eight-pixel gate the distance is hundreds of scale heights, so
 the seam with the disk is untouched.
 
 **The sphere wears the ground's own picture.** `render/orbitalBake.ts` asks
-the streamer's `HeightfieldSource` for a body's ninety-six level-2 regions,
+the shared `Heightfields` module for a body's ninety-six level-2 regions,
 builds them with `buildPatch`, and draws them through the ground material in
 its bake mode from a `CubeCamera` at the body's center — the reflectance
 into one cube target and a relief record into another, because an opaque node

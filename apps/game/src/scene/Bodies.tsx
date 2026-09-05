@@ -333,28 +333,25 @@ export function Bodies({
     [],
   )
   const rings = useMemo(ringGeometry, [])
-  /*
-   * The orbital bake, made against the renderer and the ground material and
-   * kept for the component's life. `gl` is the renderer R3F holds, which is
-   * the one the ground's pipeline was warmed on.
-   */
-  const baker = useMemo(
-    () =>
-      createOrbitalBaker({
-        renderer: gl as unknown as WebGPURenderer,
-        terrain,
-        bodyFor: (address) => engine.bodyFor(address),
-        heightfieldSource: () => engine.heightfieldSource(),
-      }),
-    [gl, terrain, engine],
-  )
+  const baker = useRef<OrbitalBaker | null>(null)
   useEffect(() => {
-    // Reachable from a driving script as `window.orbitalBaker`, beside
-    // `window.engine`: a bake is a picture, and the only way to ask what is
-    // in one is to read a face back.
-    ;(window as unknown as { orbitalBaker?: OrbitalBaker }).orbitalBaker = baker
-    return () => baker.dispose()
-  }, [baker])
+    // StrictMode retires the first effect before starting another. Each setup
+    // owns its baker so the live frame never reuses a disposed cache.
+    const built = createOrbitalBaker({
+      renderer: gl as unknown as WebGPURenderer,
+      terrain,
+      bodyFor: (address) => engine.bodyFor(address),
+      heightfields: engine.heightfields,
+    })
+    baker.current = built
+    const debug = window as unknown as { orbitalBaker?: OrbitalBaker }
+    debug.orbitalBaker = built
+    return () => {
+      if (debug.orbitalBaker === built) delete debug.orbitalBaker
+      baker.current = null
+      built.dispose()
+    }
+  }, [gl, terrain, engine])
 
   const scratch = useMemo(
     () => ({ axis: new Vector3(), sun: new Vector3(), centre: new Vector3() }),
@@ -609,7 +606,7 @@ export function Bodies({
           appearance.texture === null &&
           !giantKind(body.kind) &&
           placement.angularRadius > BAKE_ANGLE
-            ? baker.textureFor(body.address)
+            ? (baker.current?.textureFor(body.address) ?? null)
             : null
         planet.setBake(bake)
         /*

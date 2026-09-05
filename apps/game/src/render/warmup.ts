@@ -512,12 +512,17 @@ export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
   }
 }
 
+/** A material paired with the attachment it draws into. */
+export interface WarmPass {
+  readonly material: NodeMaterial
+  readonly target: RenderTarget
+}
+
 /** The sensor's internal quads use their own single-sample attachment shape. */
 export function warmSensorPass(
   renderer: WebGPURenderer,
   quad: QuadMesh,
-  materials: readonly NodeMaterial[],
-  targets: readonly RenderTarget[],
+  passes: readonly WarmPass[],
 ): Promise<void> {
   const previous = renderer.getRenderTarget()
   const previousMrt = renderer.getMRT()
@@ -529,9 +534,9 @@ export function warmSensorPass(
   renderer.outputColorSpace = ColorManagement.workingColorSpace
   renderer.setMRT(null)
   try {
-    for (let i = 0; i < materials.length; i += 1) {
-      quad.material = materials[i]!
-      renderer.setRenderTarget(targets[i]!)
+    for (const pass of passes) {
+      quad.material = pass.material
+      renderer.setRenderTarget(pass.target)
       compiles.push(
         warmCompile(renderer, {
           object: quad,

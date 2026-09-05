@@ -123,8 +123,11 @@ Correctness, layer boundaries, determinism, passing tests, and `pnpm check`
 are the definition of done. Use the checks the change warrants; prose-only
 work needs formatting and documentation-link validation, not a renderer.
 Update ADRs for architectural decisions and use `context-log` for findings
-worth carrying forward. Commit coherent verified work with a conventional
-subject and an extended body explaining why. Pushing and opening a PR use
+worth carrying forward. Commit each coherent, reversible step before lengthy
+verification or the next large phase; then verify it and commit any fixes.
+Do not collect a whole refactor into an uncommitted batch while waiting for the
+full gate. Use a conventional subject and an extended body explaining why.
+Pushing and opening a PR use
 `ship` when requested. State what changed, what was verified, and limitations.
 
 ## Cloud environments

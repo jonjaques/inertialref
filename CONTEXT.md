@@ -7545,6 +7545,72 @@ The homepage sweep ran on the simulated clock, which is warp × wall time, and
 the menu mutes every key that would reset the warp. It runs on presented
 seconds, held while the clock is paused.
 
+## An address outlives its bake, and a resize can change its answer (5 Sep 2026)
+
+A seed change can replace a body at the same address without replacing the
+renderer. The orbital baker's address-only cache then returned the old world's
+maps; its separate set of flat addresses could suppress a new world's bake
+entirely. Loaded body identity is now the validity check, including when a tile
+batch completes without another frame asking for that body. Jobs and both cube
+targets retire together. The baker is constructed in its owning effect because
+StrictMode's setup, cleanup, setup sequence must create a fresh lifetime after
+disposal. A failed tile also cancels the rest of its batch instead of spending
+their work on a bake that cannot finish.
+
+Choosing a source and recovering from its retirement were separate decisions
+in the streamer and baker. The shared `Heightfields` module keeps a request's
+cancellation handle valid when its preferred adapter retires and the fallback
+takes over. The source advertises shape and level limits; the caller keeps
+ordering, cache validity and geometry assembly. [ADR-0023](docs/adr/0023-the-gpu-producer.md)
+records the adapter contract.
+
+Reapplying P3 after resize was not enough: the callback discarded the result,
+so a failed P3 configure left the encoder and diagnostics claiming P3 over an
+sRGB canvas. `CanvasGamut` keeps the current agreement and owns its listener.
+The sensor's optical passes similarly own the material/target pairs that are
+warmed, drawn and disposed; the sensor no longer reconstructs a pass's warm-up
+list from parallel arrays. [ADR-0031](docs/adr/0031-the-sensor-response.md)
+records those lifetimes.
+
+The regression checks fail when stale-bake reuse, ignored gamut renegotiation,
+missing fallback or repeated optical disposal is restored. The affected GPU
+suites pass, including a real orbital bake and readback. In Chrome at 1280×800
+and DPR 2, two resizes retain agreement between P3 canvas, encoder and reported
+gamut; a standard-output remount replaces both renderer and baker and reports
+sRGB in all three places. Both Earthrise captures render through the optical
+chain after the change.
+
+## Checkpoint before the long gate (5 Sep 2026)
+
+This four-module refactor stayed uncommitted through focused tests, browser
+checks and most of the full gate. That made recovery depend on one large
+working-tree diff. The user's instruction is explicit: commit each reversible
+step, then verify it. The working card and shared branching rule now require
+checkpoints before lengthy verification or the next large phase. A commit can
+say which checks remain; a failed check becomes a follow-up fix commit rather
+than a reason to withhold every completed step.
+
+The shared checkout's full gate stopped at formatting in sixteen unrelated,
+untracked WebGPU skill files that appeared during the run. Those files were
+preserved. A detached verification worktree held byte-identical copies of all
+twenty-eight changed files and its own frozen-lockfile install.
+
+The first isolated run timed out in the crater-field continuity property and
+the terrain streamer's arrival test at 20 s, with the browser already closed.
+Those two files passed all twenty-eight tests with two workers in 10.67 s.
+`VITEST_MAX_WORKERS=2 pnpm check` then passed all 1,650 regular tests, the slow
+terrain suite, documentation validation and the production build. No timeout
+or assertion was weakened. The testing guide records the worker-limit command
+and the distinction between lifecycle tests, actual GPU readback and browser
+host checks. The affected GPU run passed twenty-six tests; physical adapter
+access was required after sandbox initialization failed.
+
+One last driver check combined inspection steps with `--down` and printed only
+that Chrome had closed. `main()` handles `--down` before step processing, so
+the checks never ran. Shutdown belongs in its own invocation with the same
+port. The driving guide and shared drive skill now say so; successful process
+exit alone is not evidence that an inspection batch executed.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

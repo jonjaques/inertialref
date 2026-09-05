@@ -297,17 +297,17 @@ export const generateHeightfieldTask = defineTask<
  * Something that turns a heightfield request into a heightfield.
  *
  * The pool is one — `poolHeightfieldSource` below — and a GPU tile producer
- * is another, and the streamer asks whichever it holds without knowing which.
+ * is another. `Heightfields` selects an adapter for each supported request.
  * The response is the same shape either way: the bordered elevations, the
  * cover, the extremes. What differs is where the arithmetic ran and whether
  * it is the canonical field — the pool's is `generateHeightfield` itself,
  * and a producer's is a port of it held to a stated tolerance.
  *
  * `available` is how a producer says it can no longer answer — a kernel that
- * would not build, a device that was lost — so the streamer routes the next
- * request to the pool rather than queueing behind something that will reject
- * it. A source that is unavailable rejects with `producer unavailable`, which
- * the streamer treats like a cancellation: the producer has already said why.
+ * would not build, a device that was lost. It rejects pending requests with
+ * `HeightfieldUnavailable`, which lets `Heightfields` retry them on the
+ * fallback while preserving the caller's cancellation handle. Ordinary
+ * request failures propagate; unsupported shapes never reach the adapter.
  *
  * `submit` takes what `generateHeightfield` takes — the surface, and the
  * request — so a caller hands over the object it holds rather than a
@@ -326,6 +326,8 @@ export interface HeightfieldSource {
    * answer, and the default for a source that does not say.
    */
   readonly maxLevel?: number
+  /** Additional request-shape limits, checked before submitting to this adapter. */
+  supports?(request: HeightfieldRequest): boolean
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,

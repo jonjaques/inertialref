@@ -420,6 +420,13 @@ stored in, because at forty kilometers a texel the real slope is a few
 hundredths: a byte resolves that to five steps and the relief exaggeration draws
 every step as a facet.
 
+The baker owns the jobs and both cube targets for each held body. An address
+locates the entry; the loaded body's object identity validates it. Replacing
+the body at the same address retires its old bake, and a late tile completion
+checks that identity before drawing. Eviction and disposal use the same
+retirement path. Flat bodies are checked from the current body rather than
+remembered by address. An unchanged body keeps its ready maps across frames.
+
 ### Two shapes, and which one is not a rendering choice
 
 A body is drawn as an **oblate spheroid** or as a **measured figure**, and what
