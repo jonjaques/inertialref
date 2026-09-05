@@ -32,6 +32,8 @@ const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
 export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@1'
 export const GALAXY_MAX_STEPS = 16384
+/** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
+export const GALAXY_MAX_STEP_PARSECS = 100
 
 const smooth = (t: Node<'float'>) => {
   const x = t.clamp()
@@ -417,7 +419,7 @@ export function createGalaxyKernel(field: GalaxyField) {
         origin,
         direction,
         typeof distance === 'number' ? float(distance) : distance,
-        float(100),
+        float(GALAXY_MAX_STEP_PARSECS),
         seed,
         normalization,
       ),

@@ -40,6 +40,7 @@ import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
 import {
   createGalaxyKernel,
   GALAXY_KERNEL_VERSION,
+  GALAXY_MAX_STEP_PARSECS,
   GALAXY_MAX_STEPS,
 } from './galaxyKernel.ts'
 import { sensorRadiance } from './radiance.ts'
@@ -87,10 +88,18 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#target.texture.name = 'Galaxy radiance'
     this.#target.texture.minFilter = LinearFilter
     this.#target.texture.magFilter = LinearFilter
+    // `uv()` is the drawing quad's own attribute and it is *not* the axis the
+    // backdrop reads the result back on. A `QuadMesh` carries v = 0 at the top
+    // of its attachment, so writing at v puts the ray for `screen.y` in the
+    // texel a sampler reaches at 1 − v — and `createGalaxyBackdrop` samples a
+    // `PlaneGeometry`, whose v runs the other way. The two conventions cancel
+    // only with `up` added here: subtracted, the composed frame is the whole
+    // volume mirrored about the horizon, which two near-symmetric fixed views
+    // hide. `galaxyOrientation.gpu.test.ts` holds the composed rows to the CPU ray.
     const screen = uv().mul(2).sub(1)
     const direction = this.#forward
       .add(this.#right.mul(screen.x.mul(this.#plane.x)))
-      .sub(this.#up.mul(screen.y.mul(this.#plane.y)))
+      .add(this.#up.mul(screen.y.mul(this.#plane.y)))
     this.#material.fragmentNode = vec4(
       this.#kernel.integrate(this.#origin, direction).rgb.div(RADIANCE_UNIT),
       1,
@@ -137,7 +146,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
         ? 0
         : this.#target.width * this.#target.height * 8,
       resolutionDivisor: GALAXY_RESOLUTION_DIVISOR,
-      maxStepParsecs: 100,
+      maxStepParsecs: GALAXY_MAX_STEP_PARSECS,
       maxSteps: GALAXY_MAX_STEPS,
       submissions: this.#submissions,
       emissionOnly: true,
