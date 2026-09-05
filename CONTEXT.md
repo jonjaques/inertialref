@@ -7810,7 +7810,8 @@ visually checked in `.scratch/galaxy-m2/plates-v2`.
 ## The disk reaches the sensor, and the rig starts clean (05 Sep 2026)
 
 M3 starts from PR #63 at `bdbfd93450dd38726e77478256a82ba12c074e18` on
-`codex/galaxy-the-disk-is-visible`. The CPU reference remains
+`codex/galaxy-the-disk-is-visible`, open in [PR #65](https://github.com/jonjaques/inertialref/pull/65)
+against PR #63’s branch. The CPU reference remains
 `galaxy-field@2`; the port is `galaxy-tsl@1`. The live external instrument and
 its depth/ownership limits are recorded in [ADR-0032](docs/adr/0032-the-stellar-field.md).
 
