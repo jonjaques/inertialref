@@ -2,7 +2,7 @@ import { getLogger, getTimer } from '@inertialref/shared'
 import {
   ColorManagement,
   NoToneMapping,
-  Scene,
+  type Scene,
   type Camera,
   type NodeMaterial,
   type Object3D,
@@ -68,7 +68,11 @@ const timer = getTimer('game.warmup')
  * `preload.ts` passes `handle.renderer` with no cast at all.
  */
 export interface WarmRenderer {
-  compileAsync(object: Object3D, camera: Camera, scene: Scene): Promise<unknown>
+  compileAsync(
+    object: Object3D,
+    camera: Camera,
+    scene?: Scene,
+  ): Promise<unknown>
 }
 
 export interface WarmTarget {
@@ -78,9 +82,10 @@ export interface WarmTarget {
   /**
    * The target scene, which carries the lights — and the light set is part of
    * a standard material's generated shader. Compiled against an empty scene,
-   * every pipeline here would be a variant nothing ever draws with.
+   * every pipeline here would be a variant nothing ever draws with. Standalone
+   * quads omit it to share the renderer's implicit scene with their draw.
    */
-  readonly scene: Scene
+  readonly scene?: Scene
 }
 
 /**
@@ -503,7 +508,6 @@ export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
     return warmCompile(renderer, {
       object: internal._quadMesh,
       camera: internal._quadMesh.camera,
-      scene: new Scene(),
     })
   } finally {
     renderer.setRenderTarget(target)
@@ -529,6 +533,8 @@ export function warmSensorPass(
   const tone = renderer.toneMapping
   const color = renderer.outputColorSpace
   const material = quad.material
+  const depth = renderer.depth
+  const stencil = renderer.stencil
   const compiles: Promise<void>[] = []
   renderer.toneMapping = NoToneMapping
   renderer.outputColorSpace = ColorManagement.workingColorSpace
@@ -537,15 +543,20 @@ export function warmSensorPass(
     for (const pass of passes) {
       quad.material = pass.material
       renderer.setRenderTarget(pass.target)
+      // r185 compileAsync reads the renderer flags even for an offscreen
+      // target. A depth attachment here compiles a variant the quad never draws.
+      renderer.depth = pass.target.depthBuffer
+      renderer.stencil = pass.target.stencilBuffer
       compiles.push(
         warmCompile(renderer, {
           object: quad,
           camera: quad.camera,
-          scene: new Scene(),
         }),
       )
     }
   } finally {
+    renderer.depth = depth
+    renderer.stencil = stencil
     quad.material = material
     renderer.setRenderTarget(previous)
     renderer.setMRT(previousMrt)

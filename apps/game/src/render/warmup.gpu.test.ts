@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  ColorManagement,
+  NoToneMapping,
+  NodeMaterial,
+  QuadMesh,
   Mesh,
   MeshBasicNodeMaterial,
   PerspectiveCamera,
@@ -7,11 +11,11 @@ import {
   Scene,
   SphereGeometry,
 } from 'three/webgpu'
-import { vec3 } from 'three/tsl'
+import { vec3, vec4 } from 'three/tsl'
 import { type GpuSession, openGpu, type Pixels } from './gpuHarness.ts'
 import { groundDummy } from './groundWear.ts'
 import { createStarMaterial } from './materials.ts'
-import { warmCompile } from './warmup.ts'
+import { warmCompile, warmSensorPass } from './warmup.ts'
 
 /*
  * The half of `warmup.test.ts` that file says it cannot cover: whether the
@@ -73,11 +77,7 @@ describe('warmCompile', () => {
      * is keyed on its attachments as well as on the material, so a warm-up
      * against the swap chain and a draw into an `rgba8unorm` target would be
      * two pipelines for a reason that has nothing to do with the recipe. The
-     * depth buffer is the subtler half of that: `compileAsync` builds against
-     * a render context that assumes a depth attachment, so warming against a
-     * depthless target produces a `depth24plus` pipeline the depthless draw
-     * then cannot use — measured here as one extra pipeline, and not a
-     * production case, because the canvas always has depth.
+     * depthless case is covered separately by warmSensorPass below.
      */
     const target = new RenderTarget(16, 16)
     gpu.renderer.setRenderTarget(target)
@@ -212,4 +212,36 @@ describe('warmCompile', () => {
     expect(created()).toBeGreaterThan(before)
     target.dispose()
   })
+})
+
+it('warms depthless sensor attachments without rebuilding their first draw', async () => {
+  const { renderer } = gpu
+  const material = new NodeMaterial()
+  material.fragmentNode = vec4(0.2, 0.4, 0.6, 1)
+  const quad = new QuadMesh(material)
+  const target = new RenderTarget(16, 16, { depthBuffer: false })
+  const depth = renderer.depth,
+    stencil = renderer.stencil
+  const tone = renderer.toneMapping,
+    color = renderer.outputColorSpace
+  const previous = renderer.getRenderTarget()
+  try {
+    await warmSensorPass(renderer, quad, [{ target, material }])
+    expect(renderer.depth).toBe(depth)
+    expect(renderer.stencil).toBe(stencil)
+    const warmed = created()
+    renderer.toneMapping = NoToneMapping
+    renderer.outputColorSpace = ColorManagement.workingColorSpace
+    renderer.setRenderTarget(target)
+    quad.render(renderer)
+    const pixels = await gpu.read(target)
+    expect(lit(pixels)).toBe(true)
+    expect(created()).toBe(warmed)
+  } finally {
+    renderer.toneMapping = tone
+    renderer.outputColorSpace = color
+    renderer.setRenderTarget(previous)
+    target.dispose()
+    material.dispose()
+  }
 })
