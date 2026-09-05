@@ -12,8 +12,18 @@ import { BUILD_ID } from './build.ts'
 import { loadStarCatalog } from './engine/catalogAsset.ts'
 import { isTimingLevel, setTimingLevel } from './engine/browserTiming.ts'
 import { QUERY } from './pages/paths.ts'
+import { installSchedulerYield } from './render/schedulerYield.ts'
 import { read, TIMING_LEVEL } from './state/preferences.ts'
 import './index.css'
+
+/*
+ * `scheduler.yield`, before anything compiles. three's `compileAsync` yields
+ * through it between the objects it builds, and falls back to an animation
+ * frame where it is missing — which a hidden tab never gets, and boot is
+ * designed to finish in one. `render/schedulerYield.ts` has the browsers and
+ * the argument; wired here because a global is the process's to install.
+ */
+installSchedulerYield()
 
 /*
  * Logging is wired here rather than in the engine's constructor.
