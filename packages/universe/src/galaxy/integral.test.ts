@@ -4,7 +4,11 @@ import { PARSEC } from '@inertialref/shared'
 import { rootSeed } from '@inertialref/procedural'
 import { UV, vec3 } from '@inertialref/spatial'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
-import { createGalaxyField, type GalaxyField } from './field.ts'
+import {
+  createGalaxyField,
+  type GalaxyField,
+  type GalaxyPopulation,
+} from './field.ts'
 import { GALAXY_RADIANCE_FACTOR, integrateGalaxyRay } from './integral.ts'
 const field = createGalaxyField(rootSeed('inertialref'))
 it('integrates a homogeneous emitter with the analytic path length and 4π conversion', () => {
@@ -103,3 +107,17 @@ it('adds the diagnostic population rays back to the complete radiance', () => {
     }).radianceNanowatts
   expect(sum).toBeCloseTo(total.radianceNanowatts, 8)
 })
+
+it.each(['youngArm', 'constructor', '__proto__', null])(
+  'rejects an unknown runtime population %s even when the ray misses the field',
+  (population) => {
+    expect(() =>
+      integrateGalaxyRay(
+        field,
+        UV.fromMeters(0, 30000 * PARSEC, 0),
+        vec3(1, 0, 0),
+        { population: population as unknown as GalaxyPopulation },
+      ),
+    ).toThrow('Unknown galaxy population')
+  },
+)

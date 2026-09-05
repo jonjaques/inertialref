@@ -7760,6 +7760,21 @@ budget. Both grids and every assertion stay intact; `pnpm check` still runs
 it. Moving the expensive integration out of the regular suite also removes
 that cost from the per-turn hook.
 
+## A diagnostic must name the population it integrates (05 Sep 2026)
+
+Copilot’s review of PR #63 found that a runtime population typo fell through
+to composite emission and returned a plate labeled with the typo. The ray
+integrator now validates membership in `POPULATION_NAMES` before lookup,
+even for a ray outside the field. Tests also reject inherited property names
+and `null`. The ADR-0032 index row is back inside its Markdown table.
+
+Self-review found that a width-only plate request kept the fixed default
+height, stretching the projection. The omitted height now follows the width:
+square face-on, half-height edge-on and observer views. Eight regression cases
+failed before these two API fixes. The plan’s command inventory now names the
+implemented exporter. Field samples, explicitly sized plates, and the field
+version are unchanged.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

@@ -52,6 +52,10 @@ export function integrateGalaxyRay(
     'Galaxy ray step must be at least 0.25 pc',
   )
   const population = options.population
+  invariant(
+    population === undefined || POPULATION_NAMES.includes(population),
+    'Unknown galaxy population',
+  )
   const properties =
     population === undefined ? undefined : GALAXY_POPULATIONS[population]
   const colour =

@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest'
 import { PARSEC } from '@inertialref/shared'
 import { UV } from '@inertialref/spatial'
+import type { GalaxyPopulation } from '@inertialref/universe'
 import { openSession } from './session.ts'
 it('makes repeatable CPU plates through a session without changing canonical state', () => {
   const session = openSession({ seed: 'galaxy-plate' })
@@ -48,6 +49,41 @@ it.each([
       expect(plate.fieldVersions).toEqual({ 'galaxy-field': 1 })
       expect(plate.maxRadiance).toBeCloseTo(max, 6)
       expect([...plate.rgb].reduce((a, b) => a + b, 0)).toBeCloseTo(sum, 6)
+    } finally {
+      session.dispose()
+    }
+  },
+)
+
+it('rejects a runtime population typo instead of returning a mislabeled composite', () => {
+  const session = openSession()
+  try {
+    expect(() =>
+      session.harness.galaxy().plate({
+        width: 1,
+        height: 1,
+        population: 'youngArm' as GalaxyPopulation,
+      }),
+    ).toThrow('Unknown galaxy population')
+  } finally {
+    session.dispose()
+  }
+})
+it.each([
+  ['face-on', 12],
+  ['edge-on', 6],
+  ['observer', 6],
+] as const)(
+  'derives the %s default height from the requested width',
+  (view, height) => {
+    const session = openSession()
+    try {
+      const inspector = session.harness.galaxy()
+      const plate = inspector.plate({ view, width: 12 })
+      expect(plate.height).toBe(height)
+      expect(plate.rgb).toEqual(
+        inspector.plate({ view, width: 12, height }).rgb,
+      )
     } finally {
       session.dispose()
     }

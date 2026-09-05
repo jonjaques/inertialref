@@ -809,10 +809,11 @@ node scripts/drive.mjs --url 'http://localhost:5173/?timing=full' \
   --js "await ir.gpu(60)" --down
 ```
 
-M2 adds `pnpm sim --sky --out sky.png` and explicit external-view options. M3
-adds the galaxy GPU suite; M7 adds bake/live identity tests. These are milestone
-deliverables, not commands available at the planning baseline. Use the existing
-headless session constructor and browser driver instead of a second runner.
+M2 provides `pnpm sim --galaxy-plates <directory> --galaxy-width 384` for
+composite and isolated-population plates, raw radiance, and the reference report.
+M3 adds the galaxy GPU suite; M7 adds bake/live identity tests. Those suites
+remain planned. Use the existing headless session constructor and browser
+driver instead of a second runner.
 
 Put scratch plates, traces and recordings in `.scratch/`, publish review media
 through the existing media workflow when opening its PR, and link the durable

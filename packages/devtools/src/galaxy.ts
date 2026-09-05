@@ -68,7 +68,8 @@ export class GalaxyInspector {
   plate(options: GalaxyPlateOptions = {}): GalaxyPlate {
     const view = options.view ?? 'face-on',
       width = options.width ?? 192,
-      height = options.height ?? (view === 'face-on' ? 192 : 96)
+      height =
+        options.height ?? (view === 'face-on' ? width : Math.round(width / 2))
     invariant(
       ['face-on', 'edge-on', 'observer'].includes(view),
       'Unknown galaxy plate view',
