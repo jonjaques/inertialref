@@ -19,13 +19,13 @@ What this page is not: the sensor's exposure, glare and response are
 coordinates record has been naming as complementary since
 [ADR-0003](../../docs/adr/0003-render-coordinates.md).
 
-| Landed                                                    | The record                                                                                              |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| three r185.1, the draw guard re-cut, the harness yielding | phase 0 below, `patches/three@0.185.1.patch`, `render/gpuSetup.ts`, `render/gpuHarness.ts`              |
-| The sensor spine the upscaler sits inside                 | [ADR-0029](../../docs/adr/0029-the-sensor-spine.md), `render/sensor.ts`                                 |
-| The anti-aliasing preference the picture record replaces  | `render/output.ts` (`AaLevel`), `state/preferences.ts` (`RENDER_AA`), `hud/GraphicsPanel.tsx`           |
-| The lens and the display-referred terrain predicate       | [ADR-0017](../../docs/adr/0017-the-lens.md), [ADR-0015](../../docs/adr/0015-terrain-level-of-detail.md) |
-| The measurement rig every figure below is taken with      | `render/measure.ts`, `ir.gpu()`, the plate protocol in ADR-0029                                         |
+| Landed                                                   | The record                                                                                              |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| three r185.1, without a patch, the harness yielding      | [ADR-0030](../../docs/adr/0030-three-r185.md), `render/gpuSetup.ts`, `render/schedulerYield.ts`         |
+| The sensor spine the upscaler sits inside                | [ADR-0029](../../docs/adr/0029-the-sensor-spine.md), `render/sensor.ts`                                 |
+| The anti-aliasing preference the picture record replaces | `render/output.ts` (`AaLevel`), `state/preferences.ts` (`RENDER_AA`), `hud/GraphicsPanel.tsx`           |
+| The lens and the display-referred terrain predicate      | [ADR-0017](../../docs/adr/0017-the-lens.md), [ADR-0015](../../docs/adr/0015-terrain-level-of-detail.md) |
+| The measurement rig every figure below is taken with     | `render/measure.ts`, `ir.gpu()`, the plate protocol in ADR-0029                                         |
 
 Not built: the reversed-Z depth buffer, the picture record, the spatial path,
 the temporal path, the reactive mask, the cut declaration, the URL knob, the
@@ -493,29 +493,9 @@ without it is what decides.
 Each phase lands on its own, is gated by a measurement, and ends with the
 decision it settled written into an ADR and the section above it deleted.
 
-**Phase 0 — three r185.1** has landed with this page. What it took, for the
-record the ADR will carry: the draw guard re-cut as
-`patches/three@0.185.1.patch` (r185's `WebGPUBackend.draw` still skips a
-pipeline that failed and not one that is pending); `PostProcessing` renamed to
-`RenderPipeline` in the sensor and the documents (r183 deprecated the old
-name with a warning on every build); `WebGLCubeRenderTarget` replaced by
-`CubeRenderTarget` in the bake, the planet's stand-ins and their test (r183
-dropped the old class from the WebGPU renderer); the node type aliases in the
-terrain kernel, the tone curve, the terrain, the sea, the flare and the star
-materials given their node types, because `@types/three` 0.185 puts every
-operator on `Node<'float'>` and none on `Node`; the GPU harness given a
-`scheduler.yield`, because r185's `compileAsync` builds what it queued one
-object at a time and yields between them through an animation frame the
-harness never fires; the harness told to wait out r185's two late reports of a
-refused shader; and the sensor gate cleared to opaque black, because r185's
-`renderOutput` premultiplies and an alpha-0 pixel through the renderer's own
-path is now black. Gate, measured: `pnpm check` and `pnpm test:gpu` green, and
-the plate gate against `origin/main` in its own worktree at the five points —
-15 pixels at Earth from 14,402 km, 0 at the cutscene's frame 800, and at the
-two summits and the Proxima look every differing pixel is a rock's sunlit face
-by at most 29/255, because r185's `transformNormal` is the inverse-transpose
-normal matrix where r182 approximated it; the ground is identical. Cost level
-within the spread at three points. The build log has the tables.
+**Phase 0 — three r185.1** has landed:
+[ADR-0030](../../docs/adr/0030-three-r185.md) records what it took, what it
+measured and what the review of it corrected.
 
 **Phase 1 — reversed-Z.** `reversedDepthBuffer: true` on the WebGPU backend,
 the pass's `DepthTexture` at `FloatType`, `declareSceneTarget` carrying the

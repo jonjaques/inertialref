@@ -137,6 +137,7 @@ export const WINGS = [
           ['docs/adr/0027-the-rings.md', 'The Rings'],
           ['docs/adr/0028-client-tasks.md', 'Client Tasks'],
           ['docs/adr/0029-the-sensor-spine.md', 'The Sensor Spine'],
+          ['docs/adr/0030-three-r185.md', 'three r185'],
         ],
       },
     ],
