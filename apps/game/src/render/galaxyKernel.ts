@@ -394,6 +394,10 @@ export function createGalaxyKernel(field: GalaxyField) {
   )
   const normalization = uniform(field.normalization)
   return {
+    setField(next: GalaxyField) {
+      seed.value = deriveSeed(next.seed, 'galaxy-field:young-arms').a
+      normalization.value = next.normalization
+    },
     structure: (p: Node<'vec3'>): Node<'vec4'> =>
       Fn(() => {
         const radius = p.xz.length().toVar(),

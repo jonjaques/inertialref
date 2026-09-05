@@ -246,3 +246,23 @@ describe('the game engine, headless', () => {
     game.dispose()
   })
 })
+
+it('the external instrument uses physical starlight only while its camera owns the frame', () => {
+  const game = headlessEngine()
+  try {
+    game.frame(1 / 60)
+    expect(game.calibratedLight).toBe(true)
+    game.harness.galaxyView('face-on')
+    game.frame(1 / 60)
+    expect(game.calibratedLight).toBe(false)
+    game.harness.play('tng-intro')
+    game.frame(1 / 60)
+    expect(game.calibratedLight).toBe(true)
+    game.harness.stopCutscene()
+    game.harness.look('s:SOL/b:2', { ease: false })
+    game.frame(1 / 60)
+    expect(game.calibratedLight).toBe(true)
+  } finally {
+    game.dispose()
+  }
+})
