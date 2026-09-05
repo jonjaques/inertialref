@@ -11,11 +11,13 @@ import {
   SUN_POSITION,
   type GalaxyCountOptions,
   type GalaxyField,
+  type GalaxyPopulation,
 } from '@inertialref/universe'
 import type { World } from '@inertialref/simulation'
 
 export type GalaxyPlateView = 'face-on' | 'edge-on' | 'observer'
 export interface GalaxyPlateOptions {
+  readonly population?: GalaxyPopulation
   readonly view?: GalaxyPlateView
   readonly width?: number
   readonly height?: number
@@ -23,6 +25,7 @@ export interface GalaxyPlateOptions {
   readonly observer?: UniverseVector
 }
 export interface GalaxyPlate {
+  readonly population: GalaxyPopulation | null
   readonly view: GalaxyPlateView
   readonly width: number
   readonly height: number
@@ -113,6 +116,9 @@ export class GalaxyInspector {
           direction = vec3(0, 0, -1)
         }
         const ray = integrateGalaxyRay(this.field, origin, direction, {
+          ...(options.population === undefined
+            ? {}
+            : { population: options.population }),
           distanceParsecs:
             view === 'face-on' ? 24000 : view === 'edge-on' ? 64000 : 60000,
           ...(options.maxStepParsecs === undefined
@@ -127,6 +133,7 @@ export class GalaxyInspector {
         samples += ray.samples
       }
     return {
+      population: options.population ?? null,
       view,
       width,
       height,

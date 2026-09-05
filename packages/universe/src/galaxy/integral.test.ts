@@ -86,3 +86,20 @@ it('rejects parameters that cannot describe a finite integral', () => {
     }),
   ).toThrow()
 })
+it('adds the diagnostic population rays back to the complete radiance', () => {
+  const origin = UV.fromMeters(-3000 * PARSEC, 12000 * PARSEC, -1000 * PARSEC),
+    direction = vec3(0, -1, 0)
+  const total = integrateGalaxyRay(field, origin, direction)
+  let sum = 0
+  for (const population of [
+    'thinDisk',
+    'thickDisk',
+    'youngArms',
+    'barBulge',
+    'halo',
+  ] as const)
+    sum += integrateGalaxyRay(field, origin, direction, {
+      population,
+    }).radianceNanowatts
+  expect(sum).toBeCloseTo(total.radianceNanowatts, 8)
+})

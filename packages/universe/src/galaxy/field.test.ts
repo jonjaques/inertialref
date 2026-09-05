@@ -32,6 +32,17 @@ describe('the preview stellar field', () => {
           expect(Number.isFinite(value)).toBe(true)
           expect(value).toBeGreaterThanOrEqual(0)
         }
+        for (const value of [
+          s.emissionSolarPerCubicParsec,
+          ...Object.values(s.emissionRgb),
+        ]) {
+          expect(Number.isFinite(value)).toBe(true)
+          expect(value).toBeGreaterThanOrEqual(0)
+        }
+        expect(s.emissionRgb.r + s.emissionRgb.g + s.emissionRgb.b).toBeCloseTo(
+          s.emissionSolarPerCubicParsec,
+          12,
+        )
         expect(s.totalPerCubicParsec).toBe(
           Object.values(s.populations).reduce((a, b) => a + b, 0),
         )
@@ -69,6 +80,7 @@ describe('the preview stellar field', () => {
     const fine = integrateGalaxyCount(field, {
       radialSteps: 240,
       azimuthSteps: 192,
+      verticalSteps: 96,
     })
     expect(fine.totalStars).toBeGreaterThan(1e11)
     expect(fine.totalStars).toBeLessThan(4e11)

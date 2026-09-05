@@ -243,6 +243,9 @@ importers:
       '@inertialref/workers':
         specifier: workspace:*
         version: link:../../packages/workers
+      sharp:
+        specifier: ^0.35.3
+        version: 0.35.3(@types/node@24.13.3)
 
   apps/ingest:
     dependencies:

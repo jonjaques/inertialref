@@ -12,30 +12,32 @@ import { blackbodyColour, type LinearRgb } from '../catalog/photometry.ts'
 import { LOCAL_DENSITY } from '../galaxy.ts'
 import { armStrength } from './arms.ts'
 
-export const GALAXY_FIELD_ALGORITHM = algorithm('galaxy-field', 1)
+export const GALAXY_FIELD_ALGORITHM = Object.freeze(
+  algorithm('galaxy-field', 1),
+)
 /** Preview versions never enter GENERATION_VERSIONS until population activation. */
 export const GALAXY_FIELD_VERSIONS = Object.freeze(
   manifest([GALAXY_FIELD_ALGORITHM]),
 )
 export const GALAXY_RADIUS_PARSECS = 30000
 export const GALAXY_HEIGHT_PARSECS = 10000
-export const POPULATION_NAMES = [
+export const POPULATION_NAMES = Object.freeze([
   'thinDisk',
   'thickDisk',
   'youngArms',
   'barBulge',
   'halo',
-] as const
+] as const)
 export type GalaxyPopulation = (typeof POPULATION_NAMES)[number]
 export type PopulationDensities = Readonly<Record<GalaxyPopulation, number>>
 
 /** Mean bolometric luminosities are explicit preview assumptions, pending M6 calibration. */
 export const GALAXY_POPULATIONS = Object.freeze({
-  thinDisk: { meanSolarLuminosities: 0.5, temperature: 5000 },
-  thickDisk: { meanSolarLuminosities: 0.35, temperature: 4600 },
-  youngArms: { meanSolarLuminosities: 80, temperature: 12000 },
-  barBulge: { meanSolarLuminosities: 0.6, temperature: 4300 },
-  halo: { meanSolarLuminosities: 0.3, temperature: 4800 },
+  thinDisk: Object.freeze({ meanSolarLuminosities: 0.5, temperature: 5000 }),
+  thickDisk: Object.freeze({ meanSolarLuminosities: 0.35, temperature: 4600 }),
+  youngArms: Object.freeze({ meanSolarLuminosities: 80, temperature: 12000 }),
+  barBulge: Object.freeze({ meanSolarLuminosities: 0.6, temperature: 4300 }),
+  halo: Object.freeze({ meanSolarLuminosities: 0.3, temperature: 4800 }),
 })
 const COLOURS = POPULATION_NAMES.map((name) =>
   blackbodyColour(GALAXY_POPULATIONS[name].temperature),

@@ -76,6 +76,35 @@ circle of confusion is a claim about a display, and there is no display.
 
 ---
 
+## Measuring the stellar field
+
+`ir.galaxy()` returns a read-only inspector for the current world's galaxy
+seed. `sample(position?)` accepts a `UniverseVector`, defaults to the Sun, and
+reports population densities, bolometric emission, normalization, and both
+preview and active generation versions. `count(options?)` integrates the
+reference cylinder; `tangencies()` reports the arm curve's tangent longitudes.
+
+```sh
+pnpm sim --galaxy-plates .scratch/galaxy --galaxy-width 384 --quiet
+```
+
+The command writes `face-on`, `edge-on`, `observer`, `young-arms`, `bar-bulge`,
+and `halo` PNGs, paired `.f64` arrays, and `report.json`. The report declares
+units, dimensions, sample counts, timings, hashes and the shared display
+stretch. The raw arrays contain interleaved RGB float64 little-endian values in
+bolometric nW m⁻² sr⁻¹. Their channel sum is total radiance. The observer plate
+is an equirectangular sky with the galactic center in the middle and longitude
+increasing to the left.
+
+In a script, `openSession().harness.galaxy().plate({ view: 'face-on', width:
+192, height: 192 })` returns the raw image. The `population` option selects
+`thinDisk`, `thickDisk`, `youngArms`, `barBulge`, or `halo`; `observer` supplies
+a different `UniverseVector` for the observer view. Calling these functions
+does not advance or mutate the world. Plates contain emission only. See
+[ADR-0032](../adr/0032-the-stellar-field.md) for parameters and calibration limits.
+
+---
+
 ## Finding and loading destinations
 
 | Call                | Effect                                                        |

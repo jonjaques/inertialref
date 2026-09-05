@@ -1622,6 +1622,11 @@ export class GameHarness {
     return terrainZoo(this.world)
   }
 
+  /** Preview field diagnostics read the current session without activating generation. */
+  galaxy(): GalaxyInspector {
+    return new GalaxyInspector(this.world)
+  }
+
   /**
    * The Phase 0 baseline: the zoo, a descent over each member, and the measured
    * cost of generating the patches those descents ask for.
@@ -1629,10 +1634,6 @@ export class GameHarness {
    * The CPU half only. Frame cost, draw calls and the worker queue's real depth
    * need a browser, and the summary says so rather than inventing them.
    */
-  galaxy(): GalaxyInspector {
-    return new GalaxyInspector(this.world)
-  }
-
   terrainBaseline(
     options: BaselineOptions = {},
   ): TerrainBaseline & { readonly text: string } {

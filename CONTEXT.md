@@ -7707,6 +7707,46 @@ selection property identifies generated stars by unique id-derived names.
 Baseline `pnpm check` passes at PR 62's `76cef98`. The review fixes pass 74
 focused tests and all five TypeScript projects; the full gate follows M2.
 
+## The galaxy can be measured from outside (5 Sep 2026)
+
+M2's `galaxy-field@1` is a CPU preview beside active `galaxy@2`.
+[ADR-0032](docs/adr/0032-the-stellar-field.md) records the version boundary,
+sources and calibration assumptions. `ir.galaxy()` exposes samples, count
+quadrature, tangent longitudes and six plate selections through `openSession`.
+The session hash is identical before and after making the plates.
+
+For the default session seed, the normalization is 0.09487290001358409 and
+solar density is 0.1 star/pc³. The 30 kpc-radius, ±10 kpc-height cylinder holds
+116.107 billion stars on a 120 × 96 × 96 grid and 116.185 billion on a
+240 × 192 × 192 grid, a 0.067% difference. The finer population totals are
+58.642 billion thin-disk stars, 10.242 billion thick-disk stars, 2.394 million
+young-arm stars, 46.145 billion bar/bulge stars and 1.153 billion halo stars.
+The halo above the reference cylinder remains outside this count.
+
+The six tangent longitudes are Scutum 32.70°, Sagittarius 47.26°, Carina
+283.23°, Centaurus 308.79°, Norma 327.79° and near-3kpc 25.54°. All are within
+3° of Hou & Han's medians. Reid's unadjusted Scutum and Sagittarius
+quadrant-IV pitches miss that bound; calibration moves each by one published
+standard deviation. Chen's power-law warp begins at 7.72 kpc, not the plan's
+20 kpc, and displaces the model's solar mid-plane by −6.39 pc. The Sun's
+catalog position stays unchanged.
+
+`pnpm sim --galaxy-plates .scratch/galaxy-m2/plates --galaxy-width 384 --quiet`
+writes six PNGs, raw float64 radiance and a report. Node 26.5.0 on this Apple
+Silicon host takes 20.5 s for face-on, 26.5 s for edge-on, and 10.4 s for the
+observer plate. These are CPU wall times, not GPU budgets. The display's
+asinh stretch reveals the faint arm modulation; isolated population plates
+show the arms, bar and halo without retuning their densities. Every view uses
+the same display parameters. There is no dust, resolved-star masking or
+physical sensor calibration. The PNGs cannot establish visible-band brightness.
+
+The focused M2 checks pass 22 tests: finite nonnegative samples, solar
+normalization, order independence, tangent locations, azimuth wrap, converged
+counts and rays, additive population emission, unchanged session state and
+fixed numeric references for three plates. PR 62's five Copilot comments and
+the companion-order bug are addressed in the preceding checkpoint. Full gate
+verification follows the final documentation and display changes.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

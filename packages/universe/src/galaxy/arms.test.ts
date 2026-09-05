@@ -14,3 +14,12 @@ it.each([
   )
   expect(Math.min(...errors)).toBeLessThan(3)
 })
+
+it('keeps the wrapped field continuous across the azimuth seam', async () => {
+  const { armStrength } = await import('./arms.ts')
+  for (const radius of [3000, 5000, 8000, 12000, 18000])
+    expect(armStrength(radius, Math.PI - 1e-8)).toBeCloseTo(
+      armStrength(radius, -Math.PI + 1e-8),
+      5,
+    )
+})

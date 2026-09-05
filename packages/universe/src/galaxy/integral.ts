@@ -1,3 +1,5 @@
+import { blackbodyColour } from '../catalog/photometry.ts'
+import { GALAXY_POPULATIONS } from './field.ts'
 import { invariant, PARSEC } from '@inertialref/shared'
 import { UV, vec3, type UniverseVector, type Vec3 } from '@inertialref/spatial'
 import {
@@ -22,6 +24,7 @@ export interface GalaxyRayIntegral {
   readonly samples: number
 }
 export interface GalaxyRayOptions {
+  readonly population?: GalaxyPopulation
   readonly distanceParsecs?: number
   readonly maxStepParsecs?: number
 }
@@ -48,6 +51,14 @@ export function integrateGalaxyRay(
     Number.isFinite(maxStep) && maxStep >= 0.25,
     'Galaxy ray step must be at least 0.25 pc',
   )
+  const population = options.population
+  const properties =
+    population === undefined ? undefined : GALAXY_POPULATIONS[population]
+  const colour =
+    properties === undefined
+      ? undefined
+      : blackbodyColour(properties.temperature)
+  const colourSum = colour === undefined ? 1 : colour.r + colour.g + colour.b
   const dx = direction.x / length,
     dy = direction.y / length,
     dz = direction.z / length
@@ -98,10 +109,24 @@ export function integrateGalaxyRay(
       ),
     )
     const s = field.sample(p)
-    r += s.emissionRgb.r * step
-    g += s.emissionRgb.g * step
-    b += s.emissionRgb.b * step
-    column += s.totalPerCubicParsec * step
+    if (
+      population !== undefined &&
+      properties !== undefined &&
+      colour !== undefined
+    ) {
+      const density = s.populations[population]
+      const light =
+        (density * properties.meanSolarLuminosities * step) / colourSum
+      r += light * colour.r
+      g += light * colour.g
+      b += light * colour.b
+      column += density * step
+    } else {
+      r += s.emissionRgb.r * step
+      g += s.emissionRgb.g * step
+      b += s.emissionRgb.b * step
+      column += s.totalPerCubicParsec * step
+    }
     samples++
     t += step
   }

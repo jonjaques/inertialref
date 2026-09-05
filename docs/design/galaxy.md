@@ -9,6 +9,16 @@ lets published data change underneath a running game without breaking it.
 
 ---
 
+## The preview stellar field
+
+`packages/universe/src/galaxy/` contains a seeded field for the disk, arms,
+bar/bulge and halo. Its CPU integrator produces headless outside and
+observer-centered plates through the [harness](../guides/harness.md#measuring-the-stellar-field).
+The field has its own version and leaves active population generation
+unchanged. Its emission-only radiance and parameter assumptions are recorded
+in [ADR-0032](../adr/0032-the-stellar-field.md). Dust, live volume rendering and
+photometric calibration remain separate milestones.
+
 ## The three-layer body model
 
 Every object in the galaxy is exactly one of three things, and the player can

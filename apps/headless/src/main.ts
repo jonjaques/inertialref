@@ -1,4 +1,3 @@
-import { writeGalaxyPlates } from './galaxyPlates.ts'
 /*
  * Headless runner.
  *
@@ -135,6 +134,7 @@ const { harness, system, target } = session
 
 if (values['galaxy-plates'] !== undefined) {
   try {
+    const { writeGalaxyPlates } = await import('./galaxyPlates.ts')
     await writeGalaxyPlates(
       harness.galaxy(),
       values['galaxy-plates'],
