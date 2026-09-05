@@ -15,6 +15,7 @@ import {
   UnsignedByteType,
   WebGPURenderer,
 } from 'three/webgpu'
+import { breathe } from './warmup.ts'
 
 /*
  * A `WebGPURenderer` on the real GPU, in Node — `pnpm test:gpu`.
@@ -63,6 +64,16 @@ import {
  *    turns culling off for the walk. A pipeline count cannot stand in for
  *    either, because three caches a pipeline across material instances: the
  *    second identical compile in a file legitimately builds none.
+ *  - **The clear is the production clear, opaque black.** three's default
+ *    clear alpha is 0, and r185's `renderOutput` premultiplies — so through
+ *    the renderer's own output path an alpha-0 pixel comes out black however
+ *    bright its rgb was, and a gate holding the chain to the renderer's own
+ *    frame compared black sprites to lit ones until the two clears matched.
+ *    `createRenderer` clears opaque, and so does the session. Two things
+ *    follow: an empty pixel reads back as `(0, 0, 0, 255)` in an 8-bit
+ *    target, so a claim that a frame drew nothing is a claim about the color
+ *    channels; and a test about what a chain does with alpha sets its own
+ *    clear and puts this one back.
  */
 
 /** One line three routed through its console sink while a verb ran. */
@@ -156,13 +167,23 @@ export interface GpuSession {
    * Hold the next render pipeline the device is asked to build asynchronously.
    *
    * `compileAsync` registers a pipeline in the backend's cache when it asks
-   * the device for it and fills in the GPU object when the promise resolves,
-   * and a frame drawn in between is the case the draw guard in
-   * `patches/three@0.185.1.patch` exists for. The window is real and it is
-   * microseconds wide, so a test that wants to draw inside it holds the
-   * promise open: `requested` resolves once the constructor has been called
-   * — the cache entry exists, the object does not — and `release()` lets the
-   * pipeline land. One pipeline per hold, the next one asked for.
+   * the device for it and fills in the GPU object when the promise resolves.
+   * A frame drawn in between finds the entry without the object, and
+   * `Renderer._renderObjectDirect` draws nothing for it — `Pipelines.isReady`
+   * gates the backend's draw. The window is real and microseconds wide, so a
+   * test that wants to draw inside it holds the promise open: `requested`
+   * resolves once the constructor has been called — the cache entry exists,
+   * the object does not — and `release()` lets the pipeline land.
+   *
+   * One hold at a time, and it is the session's. A second call while one is
+   * armed throws rather than replacing it, and `release()` disarms a hold
+   * nothing consumed: a compile that walked nothing, or hit the cache, asks
+   * the device for no pipeline, and a hold left armed catches the next test's
+   * first async build and holds it for that test's whole timeout — measured
+   * as a 3,001 ms hang against a 3 ms control. So `release()` belongs in a
+   * `finally`. After it, await the compile before the next verb: three pops
+   * its own error scope around the pipeline over the next few microtasks, and
+   * a verb's scope pushed inside that window nests under it.
    */
   holdNextPipeline(): { readonly requested: Promise<void>; release(): void }
   dispose(): void
@@ -330,6 +351,8 @@ export async function openGpu(
   })
   renderer.setSize(width, height, false)
   await renderer.init()
+  // Opaque black, the way `createRenderer` clears — see the file comment.
+  renderer.setClearColor(0x000000, 1)
   const backend = renderer.backend as {
     isWebGPUBackend?: boolean
     device?: GPUDevice
@@ -411,24 +434,48 @@ export async function openGpu(
    * the sink has been quiet for three turns and discards what came in since
    * it began. Its own warnings go with them, which a test about a failure
    * has no use for.
+   *
+   * Three quiet turns is two more than the worst measured: the last report
+   * lands on the turn after the pop, or the one after that. The fifty-turn
+   * cap is for a sink that never goes quiet, which nothing here produces;
+   * past it the verb stops waiting, silently, and whatever is still coming
+   * lands in the next verb — the failure this reduces rather than removes.
+   * Asking the device for the compilation info here, to await it instead of
+   * waiting it out, does not work: the device answers in order, so the
+   * harness's request resolves ahead of three's and says nothing about when
+   * three's report lands. On the async `compile` path the wait is pure cost
+   * — `compileAsync` awaits the diagnostics before it resolves — and it is
+   * paid rather than special-cased, because a verb is not told which path
+   * failed. The splice assumes verbs run one at a time, which every test
+   * here does.
    */
   async function settleLateReports(from: number): Promise<void> {
     let quiet = 0
     for (let turn = 0; turn < 50 && quiet < 3; turn += 1) {
       const seen = messages.length
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await breathe()
       quiet = messages.length === seen ? quiet + 1 : 0
     }
     messages.splice(from)
   }
 
+  /** The one exit every failing path takes: the late reports land, then the throw. */
+  async function fail(from: number, failure: unknown): Promise<never> {
+    await settleLateReports(from)
+    throw failure
+  }
+
   /**
    * Run a verb with the sink watched, and throw the first error it reported.
    *
-   * The backend reports a broken pipeline from a `.then` on `popErrorScope`,
-   * which lands on a later turn of the event loop than the call that built it.
-   * Every verb here awaits GPU work — a readback, a compile — that resolves
-   * later still, so by the time `work` settles the report has landed.
+   * What the sink holds when `work` settles is the shader module's refusal
+   * and the pipeline's: the backend reports the pipeline from a `.then` on
+   * `popErrorScope`, a turn after the call that built it, and every verb here
+   * awaits GPU work — a readback, a compile — that resolves later still. What
+   * it does not yet hold is the compiler's diagnostics, which follow
+   * `getCompilationInfo()` later again; `settleLateReports` is for those.
+   * Measured at the outer pop, seventeen times of seventeen: the pipeline
+   * report is in the sink and none of the diagnostics are.
    */
   async function watched<T>(work: () => Promise<T>): Promise<T> {
     const from = messages.length
@@ -452,13 +499,14 @@ export async function openGpu(
       result = await work()
     } catch (failure) {
       await device.popErrorScope().catch(() => null)
-      await settleLateReports(from)
-      throw failure
+      return fail(from, failure)
     }
     const scoped = await device.popErrorScope()
     if (scoped !== null) {
-      await settleLateReports(from)
-      throw new Error(`gpuHarness: the device reported: ${scoped.message}`)
+      return fail(
+        from,
+        new Error(`gpuHarness: the device reported: ${scoped.message}`),
+      )
     }
     /*
      * Since this verb began, and not since the last one looked. A refused
@@ -640,6 +688,11 @@ export async function openGpu(
     },
 
     holdNextPipeline() {
+      if (hold !== null) {
+        throw new Error(
+          'gpuHarness: a pipeline hold is already armed — release it before arming another',
+        )
+      }
       let requested: () => void = () => {}
       let release: () => void = () => {}
       const called = new Promise<void>((resolve) => {
@@ -648,11 +701,22 @@ export async function openGpu(
       const released = new Promise<void>((resolve) => {
         release = resolve
       })
-      hold = { requested, released }
-      return { requested: called, release }
+      const armed = { requested, released }
+      hold = armed
+      return {
+        requested: called,
+        release() {
+          // Still armed means nothing asked for a pipeline: disarm it, so
+          // the next build is not the one held.
+          if (hold === armed) hold = null
+          release()
+        },
+      }
     },
 
     dispose() {
+      // A hold a test left armed must not outlive the session that armed it.
+      hold = null
       // The quad is the session's, so the session ends it: `renderer.dispose`
       // releases the backend and nothing else, and a geometry left undisposed
       // is a device buffer the fork carries to exit.

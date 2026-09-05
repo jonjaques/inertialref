@@ -87,10 +87,22 @@ export interface WarmTarget {
  * nothing draws with, and every warmed pipeline is then compiled again on the
  * first presented frame, which is the hitch the census exists to hide.
  *
- * Bound synchronously on both sides of the call. `compileAsync` walks the tree
- * before its first `await` — the same fact `warmCompile`'s visibility toggle
- * stands on — so the target can be put back on the next line, and a frame
- * drawn while the pipelines are still building goes to the canvas.
+ * **One `compileAsync` per renderable, all issued before the target is put
+ * back.** `compileAsync` walks its tree synchronously and then builds what it
+ * queued one object at a time, yielding to the main thread between them — and
+ * `NodeMaterial.setup` reads the renderer's *live* render target when it runs,
+ * to decide whether the program writes depth. Only the first object's setup
+ * runs inside the call; the rest run after a yield, against whatever target
+ * is bound by then. A group handed over whole compiles its first mesh against
+ * the pass's shape and the others against the target the frame loop last
+ * left, measured in `sensor.gpu.test.ts`: two meshes, a depthless target
+ * bound, one program with `frag_depth` and one without, and the chain's first
+ * frame building the pipeline the warm-up owed. One call per renderable puts
+ * every setup inside a synchronous half, with the warm target bound, and the
+ * target goes back on the next line; a frame drawn while the pipelines are
+ * still building goes to the canvas. Visibility is honored the way the walk
+ * honors it — an invisible subtree compiles nothing — and `warmCompile` has
+ * made the root visible before this runs.
  */
 export const warmRenderer = (gl: object): WarmRenderer => {
   const renderer = gl as WebGPURenderer
@@ -98,12 +110,20 @@ export const warmRenderer = (gl: object): WarmRenderer => {
     compileAsync(object, camera, scene) {
       const previous = renderer.getRenderTarget()
       renderer.setRenderTarget(warmTargetFor(renderer))
-      const compiled = renderer.compileAsync(object, camera, scene)
+      const compiles: Promise<unknown>[] = []
+      object.traverseVisible((node) => {
+        if (isRenderable(node))
+          compiles.push(renderer.compileAsync(node, camera, scene))
+      })
       renderer.setRenderTarget(previous)
-      return compiled
+      return Promise.all(compiles)
     },
   }
 }
+
+/** What the render list would draw: an object that carries a material. */
+const isRenderable = (node: Object3D): boolean =>
+  (node as { material?: unknown }).material !== undefined
 
 /**
  * Compile one object's pipelines now, so no frame has to.
@@ -111,18 +131,18 @@ export const warmRenderer = (gl: object): WarmRenderer => {
  * **The visibility toggle is the load-bearing part.** `compileAsync` walks the
  * tree exactly as a render would and skips invisible objects, so a warm-up of
  * something dormant — the warp effects, a body visual built ahead of need —
- * compiles nothing at all unless it is made visible first. Its traversal is
- * *synchronous*, though: the walk that decides what to build runs before the
- * first `await`, so restoring visibility on the very next line happens in the
- * same task and no unit sphere at the origin can reach a drawn frame. The
- * build itself is queued and runs after the call returns, one object at a
- * time with a yield between — the material is read *then*, not now — so two
- * variants of one material are two calls each awaited before the flag flips,
- * never two calls in a row. That is also why this is not an `async` function:
- * the synchronous half has to stay synchronous.
+ * compiles nothing at all unless it is made visible first. The walk is
+ * *synchronous*: what to build is decided before the first `await`, so
+ * restoring visibility on the very next line happens in the same task and no
+ * unit sphere at the origin can reach a drawn frame. The build itself is
+ * queued and runs after the call returns, one object per turn of the event
+ * loop, which is why this is not an `async` function: the synchronous half
+ * has to stay synchronous. What that half reads of the renderer's state is
+ * `warmRenderer`'s concern, and the reason it hands over one renderable at a
+ * time.
  *
- * The previous visibility is restored rather than set to false, because two of
- * the three callers warm objects that are already on screen.
+ * The previous visibility is restored rather than set to false, because the
+ * build-ahead in `Bodies.tsx` warms parts that are already on screen.
  *
  * A rejection is swallowed: a pipeline that will not build resurfaces on first
  * draw with a better error than anything worth catching here, and a failed

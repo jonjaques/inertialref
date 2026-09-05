@@ -249,24 +249,28 @@ export function createSensor(
       renderer.setRenderTarget(target)
       /*
        * `RenderPipeline.render` swaps the renderer to `NoToneMapping` and the
-       * working color space while the quad draws and puts both back with two
-       * assignments after it — no `finally`. The scene renders *inside* that
-       * swap, through the pass, so a throw from anywhere in the scene leaves
-       * the renderer holding the swapped values for good, and the check above
-       * then reads them as a mode change and rebuilds the output with no curve
-       * and no transfer. Every frame after that presents raw linear radiance
-       * clamped to one: the pixel the curve puts at 59/255 on a lit hull
-       * reaches the canvas at 15, on every scene, uniformly, and nothing in
-       * the picture says why. Restoring here makes an exception cost the one
-       * frame it was thrown in. `sensor.gpu.test.ts` throws one to hold it.
+       * working color space, and switches `xr` off, while the quad draws, and
+       * puts all three back with plain assignments after it — no `finally`.
+       * The scene renders *inside* that swap, through the pass, so a throw
+       * from anywhere in the scene leaves the renderer holding the swapped
+       * values for good, and the check above then reads them as a mode change
+       * and rebuilds the output with no curve and no transfer. Every frame
+       * after that presents raw linear radiance clamped to one: the pixel the
+       * curve puts at 59/255 on a lit hull reaches the canvas at 15, on every
+       * scene, uniformly, and nothing in the picture says why. Restoring here
+       * makes an exception cost the one frame it was thrown in.
+       * `sensor.gpu.test.ts` throws one to hold it. XR is never on here; it is
+       * restored because the swap is three's to enumerate, not this file's.
        */
       const toneMapping = renderer.toneMapping
       const outputColorSpace = renderer.outputColorSpace
+      const xrEnabled = renderer.xr.enabled
       try {
         post.render()
       } finally {
         renderer.toneMapping = toneMapping
         renderer.outputColorSpace = outputColorSpace
+        renderer.xr.enabled = xrEnabled
       }
     },
     dispose() {

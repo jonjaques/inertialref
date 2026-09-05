@@ -163,6 +163,9 @@ describe('a mesh that wears the ground', () => {
       for (const name of GROUND_ATTRIBUTES)
         expect(dummy.geometry.hasAttribute(name)).toBe(true)
       expect(groundWearOf(dummy)).not.toBe(UNDRESSED_GROUND)
+      // A dummy the compile could cull is a warm-up that silently built
+      // nothing; `warmup.gpu.test.ts` holds the mechanism on the device.
+      expect(dummy.frustumCulled).toBe(false)
     }
   })
 

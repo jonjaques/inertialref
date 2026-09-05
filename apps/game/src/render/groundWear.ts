@@ -372,6 +372,7 @@ export function groundDummy(
     mesh.setMatrixAt(0, new Matrix4())
     dummy = mesh
   }
+  neverCulled(dummy)
   wearGround(dummy, { x: 0, y: 0, z: 1 }, 0)
   return dummy
 }
@@ -386,6 +387,20 @@ export function seaDummy(material: Mesh['material']): Mesh {
   geometry.setAttribute('waterMorphDepth', new BufferAttribute(depths, 1))
   geometry.setIndex([0, 1, 2])
   const dummy = new Mesh(geometry, material)
+  neverCulled(dummy)
   wearSea(dummy, { x: 0, y: 0, z: 1 })
   return dummy
+}
+
+/**
+ * A dummy exists to be compiled, and `compileAsync` culls against the
+ * camera's frustum exactly as a render does. A triangle at the origin is in
+ * view only when the camera is near the render origin and facing it — the
+ * origin is a snapped grid point the camera lags — and a warm-up whose dummy
+ * is culled resolves exactly as one that built the pipeline, so the first
+ * real patch pays the build in the frame it lands. The harness's `compile`
+ * verb turns culling off for the same reason; `warmup.gpu.test.ts` holds it.
+ */
+function neverCulled(dummy: Mesh): void {
+  dummy.frustumCulled = false
 }
