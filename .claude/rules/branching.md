@@ -9,6 +9,9 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
   ahead of `origin/main` the branch is. Offer the choices — continue on this branch,
   stash it, commit it as it stands — and do not pick one unprompted.
 
+- **Follow an explicit user-selected base.** The `origin/main` default below applies
+  when the user has not specified a branch or checkout. Preserve other agents' worktrees.
+
 - **Never commit to `main`.** Cut the branch **at the first commit**, not at session
   start: by then the work has been described and the branch can be named after it.
   `git switch -c <name> origin/main`, from `origin/main` rather than from whatever

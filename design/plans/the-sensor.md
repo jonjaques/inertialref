@@ -40,14 +40,14 @@ the output pass and read 14.6 ms for a 7.27 ms frame, so every GPU figure a phas
 records comes from `render/measure.ts` — wall clock across a drained queue — or a
 raw timestamp query.
 
-Three facts about three r182, read from the installed source rather than the
+Three facts about three r185, read from the installed source rather than the
 docs, shape the architecture and are stated here so nobody re-derives them:
 
 - **The renderer already tone-maps once, at the end.** Materials never apply the
   curve; `Renderer._getFrameBufferTarget` draws the scene into an internal
   `HalfFloatType` target whenever a tone mapping is selected and `_renderOutput`
   blits it through `renderOutput(toneMapping, outputColorSpace)`. Additive stars
-  already sum in linear radiance. `PostProcessing` uses the same node, honors a
+  already sum in linear radiance. `RenderPipeline` uses the same node, honors a
   `CustomToneMapping` registered on `renderer.library`, and clamps nothing — the
   sRGB OETF encodes 2.0 as 1.353 and the quad draws straight into the
   `rgba16float` canvas.
@@ -100,7 +100,7 @@ apart if there is one.
 
 ## 2. The chain
 
-Built in `render/sensor.ts` around one `PostProcessing`, driven by
+Built in `render/sensor.ts` around one `RenderPipeline`, driven by
 `scene/Sensor.tsx` from a `useTimedFrame('sensor', …, 1)` so it lands on the
 Render track beside the other ten. `postProcessing.outputColorTransform = false`,
 and the chain ends in its own `renderOutput`, because the response has to be
@@ -142,7 +142,7 @@ so the model-view product is unchanged across one and the velocity of a body at
 rest is zero on a rebase frame. That is a property, and `sensor.gpu.test.ts`
 asserts it rather than trusting the argument.
 
-What three ships and what this chain writes itself, from the r182 source:
+What three ships and what this chain writes itself, from the r185 source:
 
 | Effect         | `three/addons/tsl/display`                                                                                 | Here                                                                                         |
 | -------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -158,7 +158,7 @@ What three ships and what this chain writes itself, from the r182 source:
 Boot learns the chain's target and not yet the chain. `warmRenderer` binds a
 target of the pass's shape around every compile, so the scene's pipelines are
 built for the pass rather than for a framebuffer nothing draws into
-([ADR-0029](../../docs/adr/0029-the-sensor-spine.md)). `PostProcessing` still
+([ADR-0029](../../docs/adr/0029-the-sensor-spine.md)). `RenderPipeline` still
 builds its quad material on the first `render()`, and a pipeline compiled on the
 first presented frame is exactly the hitch the warm-up census exists to hide, so
 phase 1 gives `render/warmup.ts` a producer for the chain's own materials,

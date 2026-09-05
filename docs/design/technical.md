@@ -14,7 +14,7 @@ every visual decision in [art](art.md).
 |                       |                                                                                                                        |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Simulation core       | 12 layered TypeScript packages, framework-free below `apps/`                                                           |
-| Renderer              | Three.js 0.182 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback            |
+| Renderer              | Three.js 0.185 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback            |
 | Build                 | Vite 8 with the Oxc transform; React Compiler on                                                                       |
 | Runtime               | Node 26, pnpm 11; Node runs the TypeScript sources directly                                                            |
 | Bundle                | 2.49 MB, **736.0 KB gzip / 555.7 KB brotli**, dominated by Three.js, **no code splitting**                             |
@@ -51,14 +51,15 @@ retained as `WebGPURenderer`'s own fallback backend rather than a second rendere
 so there is one set of node graphs and no second material path to keep in sync.
 
 The frame is drawn by a chain rather than by the renderer, since 2026-09-04:
-`render/sensor.ts` is one `PostProcessing` around the scene pass and the tone
+`render/sensor.ts` is one `RenderPipeline` around the scene pass and the tone
 curve, MSAA on the pass and the canvas single-sampled, measured level with the
 frame it replaced at five operating points
 ([ADR-0029](../adr/0029-the-sensor-spine.md)). It is the spine
 [the sensor plan](../../design/plans/the-sensor.md) hangs exposure, glare and
-the rest from, and it carries one patch to three itself: the backend draws
-nothing for a pipeline the warm-up is still building, where r182 as shipped
-throws out of the whole frame.
+the rest from. It carries no patch to three: the renderer draws nothing for a
+pipeline the warm-up is still building, because `Pipelines.isReady` gates the
+backend's draw, and `warmup.gpu.test.ts` holds that gate
+([ADR-0030](../adr/0030-three-r185.md)).
 
 **What has not**: indirect draw and GPU-driven culling — capabilities in the
 table above that the table promised. The heightfield producer is the one

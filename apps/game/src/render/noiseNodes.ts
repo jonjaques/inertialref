@@ -1,5 +1,14 @@
-import type { Data3DTexture } from 'three/webgpu'
-import { dot, float, normalize, texture3D, vec3, vec4 } from 'three/tsl'
+import type { Data3DTexture, Node } from 'three/webgpu'
+import {
+  dot,
+  float,
+  max,
+  mix,
+  normalize,
+  texture3D,
+  vec3,
+  vec4,
+} from 'three/tsl'
 import { NOISE_CELLS, NOISE_GRADIENT_SCALE } from './noiseTexture.ts'
 
 /*
@@ -31,6 +40,32 @@ export type Vector = ReturnType<typeof vec3>
 export type Field = ReturnType<typeof vec4>
 export const asVector = (node: unknown): Vector => node as Vector
 export const asField = (node: unknown): Field => node as Field
+
+/*
+ * Where the typings are narrower than WGSL, and the two operations the
+ * materials need from the gap. Each builds the same node the typed call
+ * would; the cast is the whole of the difference. Augmenting the typings is
+ * not an option — `Mix` and `MinMax` are interfaces the module does not
+ * export — so the re-narrowing lives here, once, beside the others.
+ */
+
+/**
+ * `mix` with one weight per channel. The typings admit only a scalar `t`;
+ * WGSL's `mix(vec3, vec3, vec3)` is the operation a transmittance needs, one
+ * weight per wavelength.
+ */
+export const mixPerChannel = (
+  a: Node<'vec3'>,
+  b: Node<'vec3'>,
+  t: Node<'vec3'>,
+): Node<'vec3'> => mix(a, b, t as unknown as Node<'float'>)
+
+/** `max` on two ints. The typings admit floats and vectors alone; the int operator is the same node. */
+export const maxInt = (a: Node<'int'>, b: Node<'int'>): Node<'int'> =>
+  max(
+    a as unknown as Node<'float'>,
+    b as unknown as Node<'float'>,
+  ) as unknown as Node<'int'>
 
 /**
  * The baked noise as a node: one `texture3D` over `noiseTexture()`, made per

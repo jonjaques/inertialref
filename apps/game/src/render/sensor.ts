@@ -3,7 +3,7 @@ import {
   DepthTexture,
   HalfFloatType,
   NodeUpdateType,
-  PostProcessing,
+  RenderPipeline,
   RenderTarget,
   type Scene,
   type WebGPURenderer,
@@ -15,7 +15,7 @@ import { pass, renderOutput, vec4 } from 'three/tsl'
  *
  * `docs/design/art.md` says the canopy is a sensor, and this file is where the
  * scene stops being drawn straight onto the canvas and becomes an image the
- * instrument produces. The spine is one `PostProcessing` around one scene pass
+ * instrument produces. The spine is one `RenderPipeline` around one scene pass
  * and the house tone curve, and nothing else yet — the exposure, the glare and
  * the rest of `design/plans/the-sensor.md` hang passes off it. What the spine
  * settles is ownership: the frame is the sensor's to draw, and the scene's
@@ -27,7 +27,7 @@ import { pass, renderOutput, vec4 } from 'three/tsl'
  * itself, by construction.** The renderer's own path draws the scene into an
  * internal half-float target and blits it through
  * `texture(target).renderOutput(toneMapping, outputColorSpace)` on a
- * full-screen triangle. `PostProcessing` with `outputColorTransform` left on
+ * full-screen triangle. `RenderPipeline` with `outputColorTransform` left on
  * builds exactly that node over the pass's texture, and the curve's exposure
  * is the same `toneMappingExposure` reference in both. The clear, the depth
  * format and the sample count all agree, which the pipeline cache key
@@ -36,7 +36,7 @@ import { pass, renderOutput, vec4 } from 'three/tsl'
  * them equal; the browser diff is in the ADR.
  *
  * **MSAA lives on the pass target, and the renderer is built without it.**
- * `PostProcessing.render` switches the renderer's tone mapping off while the
+ * `RenderPipeline.render` switches the renderer's tone mapping off while the
  * quad draws, and `Renderer.currentSamples` then falls back to the sample
  * count the renderer was constructed with — so a renderer built with
  * `antialias: true` would give the *canvas* a four-sample color buffer and a
@@ -193,11 +193,11 @@ export function createSensor(
    * — once per presented frame in the app, once per call everywhere else.
    */
   scenePass.updateBeforeType = NodeUpdateType.RENDER
-  const post = new PostProcessing(renderer)
+  const post = new RenderPipeline(renderer)
 
   /*
    * The chain ends in its own `renderOutput`, and `outputColorTransform` is
-   * off so that `PostProcessing` does not add a second one.
+   * off so that `RenderPipeline` does not add a second one.
    *
    * The default (`outputColorTransform = true`) wraps `outputNode` in a
    * `renderOutput` whose color space it reads back **at draw time** — and
@@ -211,7 +211,7 @@ export function createSensor(
    *
    * The response is chosen per mode anyway — Direct clips where Composite
    * rolls off — which is the plan's reason for this being explicit rather than
-   * `PostProcessing`'s to decide. `vec4(…, 1)` writes opaque alpha: the pass
+   * `RenderPipeline`'s to decide. `vec4(…, 1)` writes opaque alpha: the pass
    * clears to opaque black and every additive material holds its own alpha
    * writes to zero, but an alpha-0 pixel on the `rgba16float` canvas is the
    * compositor artifact `flare.ts` documents, so the constant is the guarantee.
@@ -248,25 +248,29 @@ export function createSensor(
       // restores this around the scene render, so the quad draws to it.
       renderer.setRenderTarget(target)
       /*
-       * `PostProcessing.render` swaps the renderer to `NoToneMapping` and the
-       * working color space while the quad draws and puts both back with two
-       * assignments after it — no `finally`. The scene renders *inside* that
-       * swap, through the pass, so a throw from anywhere in the scene leaves
-       * the renderer holding the swapped values for good, and the check above
-       * then reads them as a mode change and rebuilds the output with no curve
-       * and no transfer. Every frame after that presents raw linear radiance
-       * clamped to one: the pixel the curve puts at 59/255 on a lit hull
-       * reaches the canvas at 15, on every scene, uniformly, and nothing in
-       * the picture says why. Restoring here makes an exception cost the one
-       * frame it was thrown in. `sensor.gpu.test.ts` throws one to hold it.
+       * `RenderPipeline.render` swaps the renderer to `NoToneMapping` and the
+       * working color space, and switches `xr` off, while the quad draws, and
+       * puts all three back with plain assignments after it — no `finally`.
+       * The scene renders *inside* that swap, through the pass, so a throw
+       * from anywhere in the scene leaves the renderer holding the swapped
+       * values for good, and the check above then reads them as a mode change
+       * and rebuilds the output with no curve and no transfer. Every frame
+       * after that presents raw linear radiance clamped to one: the pixel the
+       * curve puts at 59/255 on a lit hull reaches the canvas at 15, on every
+       * scene, uniformly, and nothing in the picture says why. Restoring here
+       * makes an exception cost the one frame it was thrown in.
+       * `sensor.gpu.test.ts` throws one to hold it. XR is never on here; it is
+       * restored because the swap is three's to enumerate, not this file's.
        */
       const toneMapping = renderer.toneMapping
       const outputColorSpace = renderer.outputColorSpace
+      const xrEnabled = renderer.xr.enabled
       try {
         post.render()
       } finally {
         renderer.toneMapping = toneMapping
         renderer.outputColorSpace = outputColorSpace
+        renderer.xr.enabled = xrEnabled
       }
     },
     dispose() {

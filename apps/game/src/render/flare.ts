@@ -28,6 +28,7 @@ import {
   vec3,
 } from 'three/tsl'
 import { type Lens, verticalFov } from '@inertialref/rendering'
+import { asVector } from './noiseNodes.ts'
 import { edgeFade, type FlareVisibility, ghostPosition } from './flareMath.ts'
 
 /*
@@ -139,6 +140,7 @@ function elementMaterial(kind: ElementKind): {
 
   const centred = uv().sub(0.5).mul(2)
   const r = length(centred)
+  const tinted = asVector(tint)
 
   let profile
   let colour
@@ -166,7 +168,7 @@ function elementMaterial(kind: ElementKind): {
       // An iris ghost: a soft disk whose rim runs warm — the chromatic
       // fringing real coatings leave on out-of-focus apertures.
       profile = oneMinus(smoothstep(float(0.3), float(0.95), r))
-      colour = tint.mul(
+      colour = tinted.mul(
         mix(
           vec3(1),
           vec3(1.3, 0.75, 0.6),
@@ -182,7 +184,7 @@ function elementMaterial(kind: ElementKind): {
       profile = smoothstep(float(0.3), float(0.8), r).mul(
         oneMinus(smoothstep(float(0.8), float(1), r)),
       )
-      colour = tint.mul(
+      colour = tinted.mul(
         mix(
           vec3(0.6, 0.75, 1.3),
           vec3(1.4, 0.6, 0.5),

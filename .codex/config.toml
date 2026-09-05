@@ -1,0 +1,6 @@
+# Keep the shared working card whole, including instructions from parent directories.
+project_doc_max_bytes = 65536
+
+[features]
+hooks = true
+multi_agent = true

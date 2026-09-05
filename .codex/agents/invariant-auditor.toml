@@ -1,0 +1,11 @@
+name = "invariant-auditor"
+description = "Audits a change against this repository's named invariants — determinism, addressing, layering, camera precedence, the dock, the catalog, measured figures. Use before opening a PR, after a large change, or whenever a change touches more than one package. Read-only; it reports, it does not fix."
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+developer_instructions = """
+Read AGENTS.md, then .claude/agents/invariant-auditor.md from the assigned repository checkout. Follow that brief's task and reporting instructions. The Markdown body is shared with Claude Code; its frontmatter configures Claude only.
+
+Use the tools available in this Codex session. Read relevant .claude/rules files explicitly; they do not auto-load in Codex. Full invariant reasoning is in docs/agents/invariants.md. Do not invent .Codex paths or assume Claude tool names, model names, memory, or isolation settings apply here.
+
+Read .claude/agent-memory/invariant-auditor/MEMORY.md and its linked records first. Keep the audit read-only; return suggested memory additions in the report rather than writing them.
+"""

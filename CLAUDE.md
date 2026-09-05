@@ -38,7 +38,9 @@ Most of `.claude/` runs without being asked.
 - **Rules load themselves.** Each file has `paths:` globs and enters context
   only when a matching file does. They exist because `AGENTS.md` holds the
   invariants but Claude Code does not auto-load it. `AGENTS.md` stays canonical
-  and carries the reasoning; the rules carry only the imperative. The contract is
+  and links to the full constraints and reasoning in
+  [`docs/agents/invariants.md`](docs/agents/invariants.md); the rules carry only
+  the imperative. The contract is
   [`.claude/rules/README.md`](.claude/rules/README.md).
   Three rules carry no `paths:` and are therefore in context from the first
   turn: `branching.md`, because the first commit happens before any directory

@@ -8,7 +8,7 @@ Status: accepted · 4 Sep 2026
 [the sensor plan](../../design/plans/the-sensor.md) hangs everything a camera
 does to light — exposure, glare, defocus, the shutter, the response — off one
 chain that reads the scene's radiance before the curve sees it. Phase 0 is the
-spine of that chain and nothing else: a `PostProcessing` around
+spine of that chain and nothing else: a `RenderPipeline` around
 `pass(scene, camera)` and the house tone curve, driven from a priority-1
 `useFrame` that takes the draw away from React Three Fiber. Its gate is that
 it changes nothing a viewer can see — a plate through the chain equal to the
@@ -24,7 +24,7 @@ chain into an 8-bit target read the same value as the shipped plate. What was
 wrong was found by reading the canvas from inside the page rather than through
 a screenshot, and it was three facts about three r182 stacked on each other.
 
-**A throw escapes `PostProcessing.render` with the renderer swapped.** The
+**A throw escapes `RenderPipeline.render` with the renderer swapped.** The
 quad draws with the renderer set to `NoToneMapping` and the working color
 space, and the two are put back by plain assignments after it — no `finally`.
 The scene renders _inside_ that swap, through the pass, so an exception from
@@ -80,13 +80,15 @@ to draw nothing for a pipeline still building.**
   never see is the swap. A frame that throws costs the frame it was thrown in,
   and the gate throws one from an `onBeforeRender` to hold the renderer to
   its state and the next frame to the curve.
-- **`patches/three@0.182.0.patch` adds one hunk to `WebGPUBackend.draw`:** a
-  pipeline whose GPU object is not yet there is skipped, the way one that
-  failed is. The hunk is in the bundle `three/webgpu` resolves to, the nodes
-  bundle and the source, so the three agree; pnpm applies it on install.
-  `warmup.gpu.test.ts` holds it — the frame before the promise is quiet,
-  empty and builds no second pipeline, and the frame after it has the object —
-  and fails with the guard stripped.
+- **A frame drawn against a pipeline still building draws nothing for it.**
+  On r182 that is one hunk patched into `WebGPUBackend.draw`, skipping a
+  pipeline whose GPU object is not yet there the way one that failed is
+  skipped; pnpm applies it on install. `warmup.gpu.test.ts` holds the
+  behavior — the frame before the promise is quiet, empty and builds no
+  second pipeline, and the frame after it has the object. _Superseded in this
+  one respect by [ADR-0030](0030-three-r185.md): from r185 the renderer's own
+  `_renderObjectDirect` gates the draw on `Pipelines.isReady`, the hunk is
+  dead code under it, and there is no patch._
 - **`ir.gpu(frames?)` measures through the chain.** `GameEngine.measureGpu`
   hands `measureGpuFrameMs` the chain when one is mounted and
   `renderer.render` otherwise, so the figure is about the path the loop
@@ -100,7 +102,7 @@ to draw nothing for a pipeline still building.**
   agreeing once per rAF, which they do by coincidence rather than by
   contract. Keyed on the render call, the chain's behaviour is a function of
   its own calls.
-- **Patch `PostProcessing.render` with a `finally` rather than restore in the
+- **Patch `RenderPipeline.render` with a `finally` rather than restore in the
   app.** Declined: the app is the only caller, the restore is testable here
   against a real throw, and a hunk is a thing to carry across upgrades. The
   draw guard is patched because the app cannot reach it — the draw is inside
@@ -164,11 +166,12 @@ to draw nothing for a pipeline still building.**
   `FRAME`-typed node a gate drives twice through one chain reads stale — the
   velocity ping-pong the motion-blur phase will add inherits the pass's
   `RENDER` key or is tested against a fresh chain per frame.
-- The patch is a thing to carry. It is pinned to `three@0.182.0`; an upgrade
-  has to re-apply it or drop it deliberately, and if it is dropped the frame
-  drawn against a pending pipeline throws again and the gate says so.
+- The patch is a thing to carry, pinned to the three version it was cut
+  against; an upgrade has to re-apply it or drop it deliberately, and the gate
+  says which. [ADR-0030](0030-three-r185.md) drops it: r185 gates the draw
+  upstream, and `warmup.gpu.test.ts` holds that gate instead.
 - The quad's own pipeline is the one compile the first presented frame still
-  pays. `PostProcessing` builds its material on the first `render()`, and the
+  pays. `RenderPipeline` builds its material on the first `render()`, and the
   chain has no warm-up producer yet; the plan's next phase registers the
   chain's materials with the census like every other.
 - `antialias` still remounts the canvas, because the pass is built once per

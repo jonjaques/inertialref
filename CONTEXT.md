@@ -458,6 +458,36 @@ again in a neighboring system.
   read it black. The sensor's pass is `NodeUpdateType.RENDER`;
   `sensor.gpu.test.ts` draws three frames in one task and counts six scene
   renders with the picture changing between them.
+- **A group warmed whole compiles its second mesh against the wrong target.**
+  r185's `compileAsync` builds its queue one object per turn, and
+  `NodeMaterial.setup` reads the live render target to decide whether the
+  program writes depth — so with the pass-shaped target bound around the
+  call and put back on the next line, the first mesh compiles with
+  `frag_depth` and every later one against whatever the frame loop left
+  bound. Two meshes and a depthless target: two programs, and the chain's
+  first frame building the pipeline the warm-up owed. `warmRenderer` hands
+  one renderable at a time to `compileAsync`, all before the target goes
+  back; `sensor.gpu.test.ts` warms two meshes with a depthless target bound.
+- **An assertion that every chain pixel has alpha 1 was vacuous under an
+  opaque clear.** With the pass's own alpha written through instead of the
+  constant, the pass clears to 1, every pixel still reads 1, and the count
+  holds. Under a clear of 0 the swap puts 0 under every sky pixel and, because
+  `renderOutput` unpremultiplies first, black where the renderer's own path
+  has stars: 2,412 of 9,216 at alpha 1, worst channel 0.934. The gate clears
+  to 0 around the chain's frame alone.
+- **A pipeline hold nothing consumed caught the next test's first pipeline.**
+  `holdNextPipeline` was session state with no scope: a compile that walked
+  nothing or hit the cache asked for no pipeline, the hold stayed armed, and
+  the next test's first async build hung for its whole timeout — 3,001 ms
+  against a 3 ms control. `release()` disarms an unconsumed hold, a second
+  arm throws, `dispose()` clears it, and `release()` sits in a `finally`.
+- **A warm-up dummy at the origin is culled like anything else.**
+  `compileAsync` culls against the camera's frustum and resolves the same
+  whether it built or culled, and the render origin is a snapped grid point
+  the camera lags — so a mount-time dummy compiles only when the camera
+  happens to be near the origin and facing it. The dresser's dummies set
+  `frustumCulled = false`; `warmup.gpu.test.ts` compiles one behind the
+  camera beside a plain mesh that builds nothing.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -7240,6 +7270,177 @@ scene once per forty submissions.
 
 The one piece of phase 0 still open is the chain's own warm-up producer: the
 quad's pipeline is the one compile the first presented frame pays.
+
+## three r185, and what moving the renderer three releases costs (4 Sep 2026)
+
+The renderer is on three r185.1, from r182, because
+[the upscaler plan](design/plans/the-upscaler.md) needs
+`@pmndrs/upscaler`, whose peer range starts at r184. The bump itself is two
+lines; what it took to get the gate green again is worth the record, because
+each item is a fact about three that nothing here would have predicted.
+
+- **`compileAsync` no longer builds pipelines during its walk.** r185 queues one
+  work item per object and processes the queue after the walk, one object at a
+  time, yielding between them through `yieldToMain()` — `scheduler.yield()`
+  where it exists and `requestAnimationFrame` otherwise. The GPU harness's
+  frame stub returns 0 and never fires, so every compile that walked anything
+  hung after its first object, and the warm-up test that counted pipelines
+  synchronously after `warmCompile` counted none. `gpuSetup.ts` installs
+  Node's own `timers/promises` scheduler, which keeps the frame stub honest —
+  still no frame, still one `nodeFrame` — and the harness grew
+  `holdNextPipeline()`, which holds the next async pipeline's promise open so
+  the "frame drawn before the compile lands" window can be drawn inside on
+  purpose rather than raced. The draw guard is not needed, and the review
+  below found the re-cut hunk dead: r185's `Renderer._renderObjectDirect`
+  draws only when `Pipelines.isReady` says the GPU object has arrived.
+- **A refused shader is reported three times, on three turns.** The module
+  error lands in the verb's own validation scope at once; r185 then reports the
+  pipeline from the `.then` on its inner scope a turn later, and the compiler's
+  diagnostics after `getCompilationInfo()` later still — into whatever verb is
+  running by then. The harness's compute test failed for a shader the
+  refused-shader test had asked for. A verb that fails now waits until the sink
+  has been quiet for three turns and drops what arrived since it began.
+- **`renderOutput` premultiplies.** r185's output node clamps alpha,
+  unpremultiplies, tone-maps and premultiplies again, so a pixel the renderer's
+  own path leaves at alpha 0 comes out black however bright its rgb was. The
+  harness clears to alpha 0 by default and the sensor gate's "the frame the
+  renderer draws for itself" compared black sprites against the chain's lit
+  ones, worst pixel 0.93. Production clears opaque (`createRenderer` has since
+  the flare's compositor artifact) and the gate now clears the same way. The
+  chain writes alpha 1 and never sees any of this.
+- **`@types/three` 0.185 puts every operator on `Node<'float'>` and none on
+  `Node`.** Three hundred errors, almost all in the terrain kernel's five
+  aliases, which were `type F = Node`; typed, the residue was a color uniform
+  multiplied by a vector (the typings allow a scalar), a `mix` with a
+  per-channel weight (the typings allow a scalar `t`), `mat3 × vec3` typed as a
+  matrix, `attribute()` widening its type argument to `string`, and
+  `NodeLibrary` declared as an empty class with `addToneMapping` gone from the
+  types and present at runtime. Each got a cast with the reason beside it.
+- **Two renames and a removal.** `PostProcessing` is `RenderPipeline` since
+  r183 and the old name warns on every build; `WebGLCubeRenderTarget` cannot be
+  used with the WebGPU renderer since r183 and `CubeRenderTarget` is its
+  replacement — the bake, the planet's four-texel stand-ins and their test.
+  R3F 9.7 still constructs a `THREE.Clock`, which r185 deprecates with one
+  console warning per boot; not ours.
+
+**The plate gate.** Baseline `origin/main` in its own worktree on port 5174,
+this branch on 5175, one driven Chrome at a time, 1600×900 at DPR 1, the world
+pinned by one save at tick 1158 (hash `108f8f67`) loaded and paused in one
+task after the look, plates at `--max-px 0`, differences counted above 1/255:
+
+| Operating point                            | Pixels differing | Peak   |
+| ------------------------------------------ | ---------------- | ------ |
+| Earth from 14,402 km, planetarium          | 15               | 15/255 |
+| Earth summit, converged (877 patches)      | 1,205            | 29/255 |
+| Proxima Centauri d from orbit, planetarium | 623              | 28/255 |
+| Proxima Centauri d summit (838 patches)    | 16,607           | 11/255 |
+| `tng-intro` at frame 800, parked           | 0                | 0      |
+
+The cutscene plate was taken from `/cinema/tng-intro?t=800` parked on the
+frame, and two boots of either build differ there in zero pixels — the
+`ir.play` → `ir.pause` → `ir.seekCutscene(800)` protocol read the playhead at
+799.67 on one boot and 800.00 on the next, and that third of a frame was 141,208
+pixels of difference that had nothing to do with the upgrade. Every pixel that
+differs at the summits is a rock. The ground is black in the amplified
+difference and each instance of the scatter lights up on its sunlit face, in
+place, by up to 11/255: r185's `transformNormal` is the inverse-transpose
+normal matrix, normalized, where r182 divided the normal by the squared column
+lengths and multiplied by the matrix — right for a rotation with a uniform
+scale and wrong by a little for the scatter's per-instance scales. The rocks
+are now lit by their true normals. Nothing else in the frame moved.
+
+**Cost**, `ir.gpu(60)` through the chain, the smallest of three at each point,
+both builds under the same conditions:
+
+| Operating point                      | r182, ms | r185, ms |
+| ------------------------------------ | -------- | -------- |
+| Earth summit, converged              | 6.02     | 5.72     |
+| Proxima Centauri d from orbit        | 0.66     | 0.72     |
+| Proxima Centauri d summit, converged | 4.45     | 4.74     |
+
+Level within the spread of the runs; the first baseline pass read 12–16 ms at
+the Earth summit with something else on the GPU, which is the reminder that a
+figure taken beside anything is a figure about that thing.
+
+One flake surfaced in `pnpm check` and is not the upgrade's:
+`packages/physics/src/universal.test.ts`'s "agrees with the element form on
+every ellipse" missed its tolerance by 0.05 % at eccentricity 0.9888 on seed
+1192846684, and the package has no dependency on three and no diff on this
+branch. It passes on the next seed; the bound wants a look near the parabolic
+end.
+
+## The review of r185: the patch was dead, the second mesh compiled wrong, and boot is level (4 Sep 2026)
+
+A review of the bump above against the three sources rather than against the
+entry, before it shipped. [ADR-0030](docs/adr/0030-three-r185.md) carries the
+decisions; the mechanisms that must not come back are in "Bugs the tests
+found" above. What it turned up, in the order it matters:
+
+- **The re-cut draw guard was dead code.** r185's `Renderer._renderObjectDirect`
+  calls the backend's draw only when `Pipelines.isReady` says the GPU object
+  has arrived, so the hunk sat under a gate that never let its case through.
+  Measured: hunk stripped, `warmup.gpu.test.ts` green; hunk stripped and the
+  gate disabled as well, `no overload matched for setPipeline`. Every
+  sentence saying r185 as shipped throws was written from the r182 fact. The
+  patch is gone and the test holds the gate.
+- **A group warmed whole compiled its second mesh against the wrong target,
+  a warm-up dummy at the origin was culled, a pipeline hold leaked into the
+  next test, the sensor gate's alpha count was vacuous, the tone curve
+  installed once and said twice, and the sensor restored two of the three
+  fields `RenderPipeline.render` swaps.** Each is in "Bugs the tests found"
+  or in the commit that fixed it, with the number that settled it.
+- **A browser without `scheduler.yield` pays a frame per yield, and a hidden
+  one never boots.** three's `yieldToMain` falls back to an animation frame;
+  Safari 26 has no `scheduler` and Chrome before 129 no `yield`; boot is
+  designed to finish hidden. `render/schedulerYield.ts` installs a
+  `MessageChannel` yield at the entry point. Not measured in a browser that
+  needs it — the rig's Chrome is 152 and has the native one.
+- **One finding was wrong.** The type argument on `attribute<'vec3'>(name,
+'vec3')` is not a restatement: the parameter is unconstrained, so the
+  literal widens to `string` and `.mul` disappears — three type errors and
+  one silent `Node<string>` on a `colorNode`. It stays, with the reason
+  beside it.
+
+**Boot wall time**, which the entry above did not measure. The `preload`
+measure under `?timing=full` — the same two clock reads as the `scene
+warmed` log line's `ms` — at the home poster, occluded rig at 1600×900, DPR
+1, one Chrome on the GPU at a time, `origin/main` on r182 served from its own
+worktree on port 5174 and this branch on 5175, six boots per build on a wiped
+Chrome profile, the first cold and the five after it warm:
+
+| Build | Cold, ms | Warm, median of five, ms | Warm spread, ms |
+| ----- | -------- | ------------------------ | --------------- |
+| r182  | 1,481    | 1,425                    | 1,404–1,472     |
+| r185  | 1,508    | 1,430                    | 1,422–1,449     |
+
+Level: the median moves 5 ms, inside either spread, and the driver's own
+"renderer ready" is 5.3–5.4 s cold and 2.9 s warm on both. A cold profile
+costs the driver's first light two seconds and the preload almost nothing, so
+Chrome's shader cache is not where boot's time goes; the textures and the
+bakes are.
+
+Two rig traps, for the next comparison. A dev server started in a background
+task behind `| head` dies of SIGPIPE after that many lines, mid-run, and the
+boot whose fetches then fail reads a _third_ of the real preload — 433 ms —
+because a texture that fails to decode is one fewer unit; redirect to a file.
+And the profile wipe for a cold boot races the Chrome `--down` just closed,
+which is still releasing files; wipe it in a separate call.
+
+## One set of rules for three hosts (04 Sep 2026)
+
+The shared agent machinery stays in `.claude/`. Codex discovers the same skills
+through relative directory symlinks, reads the same agent briefs through TOML
+adapters, and translates its lifecycle payloads before calling the existing
+hooks. Copying the bodies produced nonexistent `.Codex/rules/` references and
+checkout-specific hook paths; neither belongs in a worktree-portable setup.
+The adapter normalizes the Git root, marks source deletions, and retains a
+failed Stop gate's retry budget across Codex continuation turns.
+
+`AGENTS.md` carries all 64 imperative rules; their full explanations and
+exceptions live in `docs/agents/invariants.md`. The shorter startup card points
+to that record before work in a governed area. Claude's rule extracts and
+Cursor's references retain their paths, so reducing startup text does not
+remove the reasoning or require maintaining a second set of constraints.
 
 ## Known gaps
 

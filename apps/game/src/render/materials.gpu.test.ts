@@ -16,7 +16,7 @@ import {
   Scene,
   SphereGeometry,
   Sprite,
-  WebGLCubeRenderTarget,
+  CubeRenderTarget,
 } from 'three/webgpu'
 import { openSession, type Session } from '@inertialref/devtools'
 import { buildPatch, terrainPalette } from '@inertialref/rendering'
@@ -589,8 +589,8 @@ function filledCube(
   red: number,
   green: number,
   blue: number,
-): WebGLCubeRenderTarget {
-  const target = new WebGLCubeRenderTarget(4, {
+): CubeRenderTarget {
+  const target = new CubeRenderTarget(4, {
     type: HalfFloatType,
     magFilter: LinearFilter,
     minFilter: LinearFilter,

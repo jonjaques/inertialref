@@ -39,8 +39,8 @@ afterAll(() => {
 describe('the device', () => {
   it('is the physical GPU, not a software adapter', async () => {
     /*
-     * `renderer.backend.adapter` is not a public path and is undefined on
-     * r182, so the proof comes from the API the setup file installed. A
+     * `renderer.backend.adapter` is not a public path and r185 sets none,
+     * so the proof comes from the API the setup file installed. A
      * software adapter is not the thing under test: a graph that compiles on
      * SwiftShader and not on Metal is exactly the class of failure this suite
      * exists to catch.

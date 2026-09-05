@@ -77,3 +77,12 @@ every touch of its directory, and the thing it is competing with for attention i
 | `site.md`        | the document head, `public/`, the brand pipeline, analytics           |
 | `documents.md`   | markdown under `docs/` or `design/`, `STYLE.md`, the docs build       |
 | `timing.md`      | the timing seam, the sink, the budgets or the profile report          |
+
+## Shared reasoning and Codex
+
+`AGENTS.md` is the canonical list of imperatives. Their full constraints,
+exceptions, and reasoning are in
+[`docs/agents/invariants.md`](../../docs/agents/invariants.md); read the relevant
+entry for the area being changed. Codex reads these extracts explicitly and
+uses native [adapters](../../.codex/README.md) for the shared skills, agent briefs,
+and hooks. Keep the Claude paths and formats intact.
