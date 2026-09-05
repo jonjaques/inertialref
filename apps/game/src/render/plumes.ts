@@ -1,4 +1,5 @@
 import {
+  type UniformNode,
   AddEquation,
   BufferAttribute,
   BufferGeometry,
@@ -218,16 +219,19 @@ function shellMaterial(
   axis: InstancedBufferAttribute,
   size: InstancedBufferAttribute,
   fire: InstancedBufferAttribute,
-  clock: ReturnType<typeof uniform>,
+  clock: UniformNode<'float', number>,
 ): MeshBasicNodeMaterial {
   const vFacing = varying(float(), 'vPlumeFacing')
   const vFire = varying(float(), 'vPlumeFire')
 
   const material = new MeshBasicNodeMaterial()
   material.positionNode = Fn(() => {
-    const mouth = instancedBufferAttribute(origin)
-    const along = normalize(instancedBufferAttribute(axis))
-    const extent = instancedBufferAttribute(size)
+    // The type argument is load-bearing, and it has to be the explicit
+    // generic: inferred from the string it widens to `string`, and a node
+    // typed as nothing in particular has no components to read.
+    const mouth = instancedBufferAttribute<'vec3'>(origin, 'vec3')
+    const along = normalize(instancedBufferAttribute<'vec3'>(axis, 'vec3'))
+    const extent = instancedBufferAttribute<'vec2'>(size, 'vec2')
     // A basis about the exhaust axis. The helper is whichever world axis
     // the exhaust is least aligned with, so the cross product never
     // degenerates; which one is chosen only rotates the shell about its
@@ -250,7 +254,7 @@ function shellMaterial(
     const normalView = normalize(modelNormalMatrix.mul(normal))
     const view = normalize(modelViewMatrix.mul(vec4(local, 1)).xyz)
     vFacing.assign(abs(dot(normalView, view)))
-    vFire.assign(instancedBufferAttribute(fire))
+    vFire.assign(instancedBufferAttribute<'float'>(fire, 'float'))
     return local
   })()
 
@@ -361,8 +365,8 @@ function shellMaterial(
  * the skirt's wall.
  */
 function diskMaterial(
-  throttle: ReturnType<typeof uniform>,
-  clock: ReturnType<typeof uniform>,
+  throttle: UniformNode<'float', number>,
+  clock: UniformNode<'float', number>,
 ): MeshBasicNodeMaterial {
   const noise = noiseSampler(noiseTexture())
   const material = new MeshBasicNodeMaterial()
