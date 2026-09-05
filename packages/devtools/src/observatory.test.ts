@@ -122,6 +122,22 @@ describe('the observatory', () => {
     expect(ir.observatory.state).toEqual(state)
   })
 
+  it('sweeps with the presented frame, not the time warp the session left', () => {
+    // The front door is forbidden from changing the warp, and it mutes the
+    // keys that would; a sweep on the simulated clock would spin it at warp
+    // rate with no way back. Two sessions at the same instant, one at 1000×:
+    // never advancing the world holds both bodies fixed, so only warp differs.
+    const run = (warp: number) => {
+      const { harness: ir } = harness()
+      ir.look('s:SOL/b:2', { ease: false })
+      ir.timeWarp(warp)
+      ir.observatory.orbitPhase(-112, -1.8, 16)
+      ir.observerSample(0)
+      return posed(ir.observerSample(1 / 60))
+    }
+    expect(run(1000)).toEqual(run(1))
+  })
+
   it('moves the camera without moving the ship', () => {
     // The claim the whole planetarium rests on: it is a *view* of the same
     // universe, not a mode with its own rules. If this ever fails, a save

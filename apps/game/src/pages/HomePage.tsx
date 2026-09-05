@@ -131,8 +131,10 @@ export function HomePage({ engine }: { engine: GameEngine }) {
    * leaving again puts you back exactly where you were.
    *
    * The observatory solves the phase at render time, before the engine builds
-   * the scene. Its automatic orbit follows the simulated clock, so pausing
-   * through the harness holds the camera and the sky at the same instant.
+   * the scene. Its automatic orbit advances with the presented frame and holds
+   * while the clock is paused, so pausing through the harness holds the camera
+   * and the sky at the same instant — and a time warp a flight session left
+   * behind does not spin the front door, which may not touch that warp.
    */
   useEffect(() => {
     const observatory = engine.harness.observatory

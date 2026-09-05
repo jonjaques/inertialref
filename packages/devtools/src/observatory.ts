@@ -226,7 +226,6 @@ export class Observatory {
     phase: number
     rate: number
     tilt: number
-    opened: Seconds
   } | null = null
   /**
    * The surface arm's whole state: non-null exactly while standing.
@@ -629,15 +628,17 @@ export class Observatory {
     this.setAngles(azimuth, elevation, ease)
   }
 
-  /** An automatic phase sweep, in degrees per simulated second. */
+  /**
+   * An automatic phase sweep, in degrees per presented second, held while the
+   * clock is paused.
+   *
+   * Presented rather than simulated seconds: the simulated clock runs at
+   * whatever time warp a flight session left behind, and the front door,
+   * which is the caller, is forbidden from changing that warp to fix it.
+   */
   orbitPhase(phase: number, rate: number, tilt = 10): void {
     if (this.#target === null || this.#stance !== null) return
-    this.#phaseOrbit = {
-      phase,
-      rate,
-      tilt,
-      opened: this.#host.world.clock.renderTime,
-    }
+    this.#phaseOrbit = { phase, rate, tilt }
     this.setPhase(phase, tilt, false)
   }
 
@@ -1115,10 +1116,11 @@ export class Observatory {
 
     const orbit = this.#phaseOrbit
     if (orbit !== null) {
-      const elapsed = this.#host.world.clock.renderTime - orbit.opened
+      if (!this.#host.world.clock.paused)
+        orbit.phase += orbit.rate * Math.max(0, dt)
       // A solved sweep has no trailing ease: a held simulated instant must
       // hold the whole picture, including the camera, on its first frame.
-      this.setPhase(orbit.phase + elapsed * orbit.rate, orbit.tilt, false)
+      this.setPhase(orbit.phase, orbit.tilt, false)
     }
 
     if (!this.#arrived()) {

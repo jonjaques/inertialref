@@ -2,8 +2,12 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
-import { ENTERPRISE_PORTRAITS } from '../../../packages/devtools/src/cutscenes/enterprisePortraits.ts'
-import { openSession, TNG_INTRO } from '@inertialref/devtools'
+import {
+  ENTERPRISE_PORTRAITS,
+  openSession,
+  PICTURES,
+  TNG_INTRO,
+} from '@inertialref/devtools'
 import { loadStarCatalog } from './catalog.ts'
 import { type HullField, readHullField } from './hullField.ts'
 
@@ -149,7 +153,16 @@ describe('cutscene camera against the hero hull', () => {
     const session = openSession({ workers: null, catalog: loadStarCatalog() })
     try {
       const script = ENTERPRISE_PORTRAITS.prepare(session.world)
-      for (const frame of [0, 240, 480]) {
+      // The frames the pictures actually ask for, so a re-timed portrait is
+      // measured where it is shown rather than where it used to be.
+      const frames = PICTURES.flatMap((picture) =>
+        picture.framing.kind === 'cinematic' &&
+        picture.framing.script === ENTERPRISE_PORTRAITS.id
+          ? [picture.framing.frame]
+          : [],
+      )
+      expect(frames.length).toBeGreaterThan(0)
+      for (const frame of frames) {
         const sample = script.sample(frame)
         const relative = Q.rotate(
           Q.conjugate(sample.ship.orientation),
