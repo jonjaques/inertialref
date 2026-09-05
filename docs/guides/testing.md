@@ -17,6 +17,27 @@ means something.
 
 ---
 
+## Verify the committed change
+
+Commit each coherent step before lengthy verification, as described in
+[the working guide](../agents/working.md#committing). When another task's
+untracked files make a repository-wide check fail, preserve them. Verify the
+committed change in a temporary worktree instead of formatting, hiding or
+deleting someone else's work:
+
+```bash
+git worktree add --detach /tmp/inertialref-verify HEAD
+cd /tmp/inertialref-verify
+pnpm install --frozen-lockfile --prefer-offline
+pnpm check
+```
+
+Use an unused temporary path and remove only your own verification worktree
+when finished. Report the shared checkout's failure and the isolated result
+separately. The isolated tree must contain the same changes being claimed as
+verified. Fresh worktrees still need the locked install; `--prefer-offline`
+can require network access when the local store lacks a package.
+
 ## Choosing a style
 
 ```mermaid
@@ -193,6 +214,19 @@ passing clean the moment `pnpm drive --down` had run. Neither was a regression
 and both looked exactly like one. `--down` before the gate, and treat a single
 timeout that moves between runs as a machine reading rather than a code one.
 
+If contention remains after closing your own rig, rerun the failing files with
+fewer workers before changing a test or its timeout:
+
+```bash
+pnpm vitest run packages/universe/src/geology.test.ts apps/game/src/engine/terrainStreamer.test.ts --maxWorkers 2
+VITEST_MAX_WORKERS=2 pnpm check
+```
+
+Vitest reads `VITEST_MAX_WORKERS` for both test projects, so the second command
+keeps the full gate and every assertion while limiting concurrency. A green
+focused rerun supports a contention diagnosis; it does not replace the full
+run. Keep performance measurements separate from a contended gate.
+
 **A test that needs more says so at the call site, with the same reasoning one
 order of magnitude up.** `gameEngine.descent.slow.test.ts` streams a landing — a whole-disk
 selection's worth of heightfields through an _inline_ worker, which is to say
@@ -310,6 +344,19 @@ different portability claim: the rest of the suite runs on any Node, and this
 needs a Metal, Vulkan or D3D adapter. It is not in `pnpm check` for the same
 reason. Run it during shader work, and before shipping any change under
 `render/`.
+
+A sandbox can prevent Dawn from finding the physical adapter even when this
+host has one. An adapter-initialization failure is not shader evidence. Run
+the same focused command with adapter access before changing rendering code;
+an unavailable or skipped GPU does not count as a passing shader check.
+
+Lifecycle and pixel behavior need different observations. Deferred source
+jobs expose replacement, cancellation and recovery without drawing. A
+recording renderer exposes warm targets, state restoration and disposal.
+Keep a real GPU integration test alongside those checks to compile the actual
+graph and read its output; a fake renderer cannot detect a black bake or an
+invalid pipeline. Browser checks cover the host boundary, including R3F
+remounts and agreement between the actual canvas and output encoder.
 
 **Do not write a scalar mirror of a shader and test that instead.** That rule
 matters more now, not less: the mirror can pass while the graph it claims to

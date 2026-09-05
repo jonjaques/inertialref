@@ -7580,6 +7580,31 @@ gamut; a standard-output remount replaces both renderer and baker and reports
 sRGB in all three places. Both Earthrise captures render through the optical
 chain after the change.
 
+## Checkpoint before the long gate (5 Sep 2026)
+
+This four-module refactor stayed uncommitted through focused tests, browser
+checks and most of the full gate. That made recovery depend on one large
+working-tree diff. The user's instruction is explicit: commit each reversible
+step, then verify it. The working card and shared branching rule now require
+checkpoints before lengthy verification or the next large phase. A commit can
+say which checks remain; a failed check becomes a follow-up fix commit rather
+than a reason to withhold every completed step.
+
+The shared checkout's full gate stopped at formatting in sixteen unrelated,
+untracked WebGPU skill files that appeared during the run. Those files were
+preserved. A detached verification worktree held byte-identical copies of all
+twenty-eight changed files and its own frozen-lockfile install.
+
+The first isolated run timed out in the crater-field continuity property and
+the terrain streamer's arrival test at 20 s, with the browser already closed.
+Those two files passed all twenty-eight tests with two workers in 10.67 s.
+`VITEST_MAX_WORKERS=2 pnpm check` then passed all 1,650 regular tests, the slow
+terrain suite, documentation validation and the production build. No timeout
+or assertion was weakened. The testing guide records the worker-limit command
+and the distinction between lifecycle tests, actual GPU readback and browser
+host checks. The affected GPU run passed twenty-six tests; physical adapter
+access was required after sandbox initialization failed.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
