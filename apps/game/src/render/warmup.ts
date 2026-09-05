@@ -71,7 +71,7 @@ export interface WarmRenderer {
   compileAsync(
     object: Object3D,
     camera: Camera,
-    scene?: Scene,
+    scene: Scene | null,
   ): Promise<unknown>
 }
 
@@ -82,10 +82,52 @@ export interface WarmTarget {
   /**
    * The target scene, which carries the lights — and the light set is part of
    * a standard material's generated shader. Compiled against an empty scene,
-   * every pipeline here would be a variant nothing ever draws with. Standalone
-   * quads omit it to share the renderer's implicit scene with their draw.
+   * every pipeline here would be a variant nothing ever draws with.
+   *
+   * `null`, not absent, for a standalone quad, which shares the renderer's
+   * implicit scene with its own draw. Required-and-nullable rather than
+   * optional so that a caller states which of the two it means: the whole
+   * value of this field is that forgetting it is the defect above, and an
+   * optional one is forgotten silently.
    */
-  readonly scene?: Scene
+  readonly scene: Scene | null
+}
+
+/**
+ * Bind a target for a compile, and tell the renderer what it is.
+ *
+ * r185 takes the compile's depth and stencil off the *renderer* —
+ * `renderContext.depth = this.depth` in `Renderer.compileAsync` — where a draw
+ * takes them off the target it is bound to. So a warm-up against a depthless
+ * attachment builds a `depth24plus` variant the draw cannot use, and the
+ * pipeline the census already paid for is built a second time on the first
+ * frame. Both flags travel with the target here rather than at the one call
+ * site that first hit it, because the mismatch is a property of binding a
+ * target at all: the sensor's own quads are depthless, and so is the galaxy
+ * volume's, and the next one will be too.
+ *
+ * `null` is the canvas, where `this.depth` is already the right answer, so the
+ * flags are left alone. Returns the restore, which the caller runs as soon as
+ * every `compileAsync` has been *issued* — each one reads the flags inside its
+ * own synchronous half.
+ */
+function bindWarmTarget(
+  renderer: WebGPURenderer,
+  target: RenderTarget | null,
+): () => void {
+  const previous = renderer.getRenderTarget()
+  const depth = renderer.depth
+  const stencil = renderer.stencil
+  renderer.setRenderTarget(target)
+  if (target !== null) {
+    renderer.depth = target.depthBuffer
+    renderer.stencil = target.stencilBuffer
+  }
+  return () => {
+    renderer.depth = depth
+    renderer.stencil = stencil
+    renderer.setRenderTarget(previous)
+  }
 }
 
 /**
@@ -125,9 +167,8 @@ export const warmRenderer = (gl: object): WarmRenderer => {
   const renderer = gl as WebGPURenderer
   return {
     compileAsync(object, camera, scene) {
-      const previous = renderer.getRenderTarget()
       const previousMrt = renderer.getMRT()
-      renderer.setRenderTarget(warmTargetFor(renderer))
+      const unbind = bindWarmTarget(renderer, warmTargetFor(renderer))
       if (sceneTargetShape(renderer).optics === true)
         renderer.setMRT(sensorMrt())
       const compiles: Promise<unknown>[] = []
@@ -135,7 +176,7 @@ export const warmRenderer = (gl: object): WarmRenderer => {
         if (isRenderable(node))
           compiles.push(renderer.compileAsync(node, camera, scene))
       })
-      renderer.setRenderTarget(previous)
+      unbind()
       renderer.setMRT(previousMrt)
       return Promise.all(compiles)
     },
@@ -508,6 +549,7 @@ export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
     return warmCompile(renderer, {
       object: internal._quadMesh,
       camera: internal._quadMesh.camera,
+      scene: null,
     })
   } finally {
     renderer.setRenderTarget(target)
@@ -528,13 +570,11 @@ export function warmSensorPass(
   quad: QuadMesh,
   passes: readonly WarmPass[],
 ): Promise<void> {
-  const previous = renderer.getRenderTarget()
   const previousMrt = renderer.getMRT()
   const tone = renderer.toneMapping
   const color = renderer.outputColorSpace
   const material = quad.material
-  const depth = renderer.depth
-  const stencil = renderer.stencil
+  const unbinds: (() => void)[] = []
   const compiles: Promise<void>[] = []
   renderer.toneMapping = NoToneMapping
   renderer.outputColorSpace = ColorManagement.workingColorSpace
@@ -542,23 +582,21 @@ export function warmSensorPass(
   try {
     for (const pass of passes) {
       quad.material = pass.material
-      renderer.setRenderTarget(pass.target)
-      // r185 compileAsync reads the renderer flags even for an offscreen
-      // target. A depth attachment here compiles a variant the quad never draws.
-      renderer.depth = pass.target.depthBuffer
-      renderer.stencil = pass.target.stencilBuffer
+      unbinds.push(bindWarmTarget(renderer, pass.target))
       compiles.push(
         warmCompile(renderer, {
           object: quad,
           camera: quad.camera,
+          scene: null,
         }),
       )
     }
   } finally {
-    renderer.depth = depth
-    renderer.stencil = stencil
+    // Last in, first out: each bind captured the state the one before it left,
+    // so unwinding in order would put an inner pass's target back rather than
+    // the caller's.
+    for (const unbind of unbinds.reverse()) unbind()
     quad.material = material
-    renderer.setRenderTarget(previous)
     renderer.setMRT(previousMrt)
     renderer.toneMapping = tone
     renderer.outputColorSpace = color
