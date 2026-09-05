@@ -6,7 +6,6 @@ import { UV } from '@inertialref/spatial'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
 import { GENERATION_VERSIONS } from '../system.ts'
 import { createGalaxyField, GALAXY_FIELD_VERSIONS } from './field.ts'
-import { integrateGalaxyCount } from './integral.ts'
 
 const field = createGalaxyField(rootSeed('inertialref'))
 const position = fc
@@ -71,19 +70,5 @@ describe('the preview stellar field', () => {
     expect(createGalaxyField(rootSeed('another')).sample(p)).not.toEqual(
       field.sample(p),
     )
-  })
-  it('integrates to the reference count and converges with a finer quadrature', () => {
-    const coarse = integrateGalaxyCount(field, {
-      radialSteps: 120,
-      azimuthSteps: 96,
-    })
-    const fine = integrateGalaxyCount(field, {
-      radialSteps: 240,
-      azimuthSteps: 192,
-      verticalSteps: 96,
-    })
-    expect(fine.totalStars).toBeGreaterThan(1e11)
-    expect(fine.totalStars).toBeLessThan(4e11)
-    expect(Math.abs(coarse.totalStars / fine.totalStars - 1)).toBeLessThan(0.01)
   })
 })

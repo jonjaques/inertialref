@@ -7750,6 +7750,16 @@ tests, documentation build and production build. `pnpm sim --self-test` passes
 12/12. A final catalog rebuild produces no diff. The branch remains local,
 based on PR 62 at `76cef98`; no M2 PR is opened.
 
+## Counting the galaxy belongs in the slow suite (05 Sep 2026)
+
+PR #63’s first completed CI gate passed 1,703 tests and timed out on the
+count-convergence test at 20 s. The same four-test file passed in 8.55 s
+locally with two workers. Its two quadratures evaluate 9,953,280 field
+positions, so the test now uses `.slow.test.ts` and a two-minute call-site
+budget. Both grids and every assertion stay intact; `pnpm check` still runs
+it. Moving the expensive integration out of the regular suite also removes
+that cost from the per-turn hook.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

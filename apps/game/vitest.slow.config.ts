@@ -9,6 +9,8 @@ import { defineConfig } from 'vitest/config'
  * selection's worth of bordered 65×65 heightfields generated serially through
  * an inline worker at 22 to 50 ms apiece — about a hundred seconds in one
  * `beforeAll`, against ten for everything else in the root suite together.
+ * The galaxy count convergence test also belongs here: its two quadratures
+ * sample almost ten million positions and exceed the root timeout on CI.
  * The root suite is what the Stop hook runs after every turn, so that hook
  * proves the rest of the engine in ten seconds, and this project proves the
  * landing once per pull request, from `pnpm check` and CI.

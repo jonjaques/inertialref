@@ -240,7 +240,7 @@ four landings is nearly seven minutes where one is a hundred — and because an
 before it. What brings the number down is the GPU tile producer or a pool with
 real worker threads in it, not a shorter landing.
 
-**That descent is the slow suite.** `*.slow.test.ts` is a second vitest
+**The descent and galaxy count use the slow suite.** `*.slow.test.ts` is a second vitest
 project — `apps/game/vitest.slow.config.ts`, behind `pnpm test:slow` — selected
 by suffix the way the GPU suite is and excluded from the root config for the
 opposite reason: it makes the same plain-Node claim the root suite does, and it
@@ -253,6 +253,11 @@ that streams a landing takes the suffix. A change under
 rather than by the gate, and `pnpm test:slow` by hand is how to prove it
 sooner. [Test speed](../../design/plans/test-speed.md) carries the
 measurements and what would make the landing itself cheaper.
+
+`galaxy/field.slow.test.ts` also takes the suffix. Its count-convergence check
+samples 9,953,280 positions across two quadratures: 8.4 s in isolation locally,
+but beyond the regular suite’s 20 s timeout on CI. It keeps both grids and
+all count assertions, with a two-minute timeout at the call site.
 
 **The figure moves with the field, which is why it is not a budget.** A bordered
 65×65 patch costs 24 to 69 ms across the zoo, and every level the detail floor
