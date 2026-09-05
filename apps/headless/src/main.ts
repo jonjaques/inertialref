@@ -1,3 +1,4 @@
+import { writeGalaxyPlates } from './galaxyPlates.ts'
 /*
  * Headless runner.
  *
@@ -43,6 +44,8 @@ const OPTIONS = {
   /** Print the travel listing, which is also the answer to "what exists?". */
   targets: { type: 'boolean', default: false },
   'self-test': { type: 'boolean', default: false },
+  'galaxy-plates': { type: 'string' },
+  'galaxy-width': { type: 'string', default: '192' },
   /**
    * Walk the terrain zoo and print what a descent costs. See docs/guides/harness.md.
    *
@@ -129,6 +132,20 @@ const session = openSession({
 // Note `session.world` rather than a destructured `world`: loading a save
 // replaces it, and a captured reference is the exact bug the getter exists for.
 const { harness, system, target } = session
+
+if (values['galaxy-plates'] !== undefined) {
+  try {
+    await writeGalaxyPlates(
+      harness.galaxy(),
+      values['galaxy-plates'],
+      Number(values['galaxy-width']),
+    )
+  } finally {
+    session.dispose()
+    releaseTiming?.()
+  }
+  process.exit(0)
+}
 
 console.log(
   `InertialRef headless — seed "${session.world.seedText}", ${system.name}, target ${target.name}`,

@@ -20,3 +20,7 @@ export * from './surveySites.ts'
 export * from './system.ts'
 export * from './terrain.ts'
 export * from './terrainKernel.ts'
+
+export * from './galaxy/arms.ts'
+export * from './galaxy/field.ts'
+export * from './galaxy/integral.ts'

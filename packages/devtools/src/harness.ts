@@ -1,3 +1,4 @@
+import { GalaxyInspector } from './galaxy.ts'
 import {
   AU,
   getLogger,
@@ -1628,6 +1629,10 @@ export class GameHarness {
    * The CPU half only. Frame cost, draw calls and the worker queue's real depth
    * need a browser, and the summary says so rather than inventing them.
    */
+  galaxy(): GalaxyInspector {
+    return new GalaxyInspector(this.world)
+  }
+
   terrainBaseline(
     options: BaselineOptions = {},
   ): TerrainBaseline & { readonly text: string } {
@@ -1777,6 +1782,7 @@ export class GameHarness {
       '  ir.terrain()                  the live streamer, and the rocks on it',
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
+      '  ir.galaxy()                   stellar field samples, counts, and CPU plates',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.timing(level?)             off | trace | full — what reaches the timeline',
       '  ir.timing.tracks() / .mark(name) / .drain()',
