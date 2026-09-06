@@ -9,11 +9,7 @@ import {
   type GalaxyField,
   type GalaxyPopulation,
 } from './field.ts'
-import {
-  GALAXY_DUST_SETTLED_STEP_PARSECS,
-  GALAXY_RADIANCE_FACTOR,
-  integrateGalaxyRay,
-} from './integral.ts'
+import { GALAXY_RADIANCE_FACTOR, integrateGalaxyRay } from './integral.ts'
 const field = createGalaxyField(rootSeed('inertialref'))
 const clearField = createGalaxyField(rootSeed('inertialref'), { dustScale: 0 })
 it('integrates a homogeneous emitter with the analytic path length and 4π conversion', () => {
@@ -325,6 +321,11 @@ it('reduces transmittance along successively longer portions of a ray', () => {
 
 it.each([
   ['interior', -8178, 20.8, 0, 1, 0, 0],
+  ['anticenter', -8178, 20.8, 0, -1, 0, 0],
+  ['north', -8178, 20.8, 0, 0, 1, 0],
+  ['south', -8178, 20.8, 0, 0, -1, 0],
+  ['oblique', -8178, 20.8, 0, 1, 0, -1],
+  ['rim', -24000, 600, 3000, 0.5, -0.05, -1],
   ['crossing', -7900, 1000, 0, 1, -0.1, 0.1],
   ['dense', 3000, -20, 1000, -1, 0.01, 0.2],
   ['face-on', 0, 30000, 0, 0.2, -1, 0.1],
@@ -337,12 +338,12 @@ it.each([
     const run = (maxStepParsecs: number) =>
       integrateGalaxyRay(field, origin, direction, {
         distanceParsecs: 100000,
-        sampling: 'observer',
+        sampling: 'settled',
         maxStepParsecs,
       })
     const reference = run(0.25),
       fine = run(0.5),
-      settled = run(GALAXY_DUST_SETTLED_STEP_PARSECS)
+      settled = run(100)
     expect(settled.samples).toBeLessThan(16384)
     for (let i = 0; i < 3; i++) {
       expect(
@@ -384,3 +385,23 @@ it.each([0, 1e-12, 1e-7, 0.009999, 0.01, 1, 100])(
     }
   },
 )
+
+it('widens settled intervals through the transparent halo without truncating the path', () => {
+  const origin = UV.fromMeters(0, 5000 * PARSEC, 30000 * PARSEC)
+  const direction = vec3(0, 0, -1)
+  const sample = clearField.sample(origin)
+  const homogeneous: GalaxyField = {
+    ...clearField,
+    sample: () => ({ ...sample, totalPerCubicParsec: 1 }),
+  }
+  const settled = integrateGalaxyRay(homogeneous, origin, direction, {
+    sampling: 'settled',
+  })
+  const fine = integrateGalaxyRay(homogeneous, origin, direction, {
+    sampling: 'observer',
+    maxStepParsecs: 10,
+  })
+  expect(settled.samples).toBeLessThan(fine.samples / 5)
+  expect(settled.starsPerSquareParsec).toBeCloseTo(60000, 8)
+  expect(fine.starsPerSquareParsec).toBeCloseTo(60000, 8)
+})
