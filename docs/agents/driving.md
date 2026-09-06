@@ -117,6 +117,50 @@ caches and service workers are retained. Batch setup and measurements in one
 invocation when they must share state. `--reload` steps keep that invocation's
 storage.
 
+### A saved shot as the setup
+
+The driver can open a bundled preset or a single-shot JSON export through the
+same URL the planetarium shares. This exercises time, orbit anchor, tracking,
+surface stance and lens restoration together.
+
+```bash
+node scripts/drive.mjs --preset earthrise --wait 2000 --shot earthrise.jpg
+node scripts/drive.mjs --picture .scratch/shoreline.json \
+  --query 'lens.zoom=2' --query 'label=Sea + sky' --shot shoreline.jpg
+node scripts/drive.mjs --picture .scratch/shoreline.json \
+  --query 'save=1' --logs
+```
+
+`--preset` expands the named bundled shot into a complete URL. `--picture`
+accepts the public JSON envelope containing exactly one shot; the two flags are
+mutually exclusive. Both select `/planetarium` on the host given by `--url`,
+which also supports a copied share link directly. To exercise a built-in's
+short alias, use `--url 'http://localhost:5173/planetarium?preset=earthrise'`.
+
+Repeat `--query 'key=value'` to override individual fields after selecting the
+shot. Values are raw text, with shell quotes around the argument; the driver
+handles URL escaping. Repeating a key keeps its last value. These are session
+flags, applied before all steps, and must be repeated for a matching warm attach.
+The driver always sets `presentation=occluded`.
+Add `--print-url` to print the resolved link without starting Chrome or a server.
+
+The URL uses `shot=1` plus dotted picture keys such as `time`,
+`framing.state.distance`, and `lens.zoom`. Numbers retain full precision.
+Time is seconds from J2000, camera angles are radians, and camera distances
+are meters. Lens focal length and gauge are millimeters.
+`lens.focus=null` means infinity; `framing.surface=null` means an orbit camera.
+`save=1` restores the view and opens its save prompt at `/planetarium/presets`
+without writing to the library. See the
+[preset format](../adr/0033-presets-hold-a-photographic-instant.md).
+
+Invalid query overrides reach the page for error-path tests. Invalid JSON
+fixtures fail before Chrome starts. Run `pnpm vitest run presetUrl.test
+driveUrl.test` for the codec and driver tests without a browser. In the browser,
+verify URL restoration and field edits, preservation of the pose across dialog
+navigation, and removal of shot fields when focusing another body.
+
+### Session lifetime
+
 Run shutdown separately. `--down` exits before step processing, so a command
 containing both `--js` and `--down` closes Chrome without evaluating the script.
 The same applies to `--file` and `--shot`. Finish the inspection batch, then

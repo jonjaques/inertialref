@@ -8197,6 +8197,12 @@ time field restores the shot; entering the preset dialog, changing its name
 query, or reordering parameters preserves the current pose. Focusing a body
 clears all picture fields while keeping the universe seed and diagnostics.
 
+The browser driver opens those same URLs with `--preset <id>` or
+`--picture <single-shot.json>`. Repeatable `--query key=value` overrides make
+field changes and invalid-link fixtures explicit; `--print-url` resolves them
+without Chrome. The drive skill and driving guide carry the setup and regression
+checks. The driver does not maintain a separate camera restoration path.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
