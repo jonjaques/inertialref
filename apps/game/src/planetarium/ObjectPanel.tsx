@@ -40,7 +40,7 @@ export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
     return (
       <p className="type-ui px-1 py-2 text-pretty text-slate-400">
         Nothing selected. Click something in the sky, or pick a row in the
-        catalog.
+        navigator.
       </p>
     )
   }

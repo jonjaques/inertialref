@@ -87,7 +87,11 @@ import {
 import {
   currentSystemOf,
   resolveDestination,
+  type SearchEntry,
+  searchEntries,
+  searchIndexVersion,
   searchTargets,
+  targetsFor,
   type TravelTarget,
   type TravelTargetOptions,
   travelTargets,
@@ -520,6 +524,48 @@ export class GameHarness {
       (options.origin === 'observer' ? this.observatory.eye : null) ??
       this.#here()
     return searchTargets(this.world, from, text)
+  }
+
+  /**
+   * Rows for addresses the caller already holds, nearest first not implied —
+   * the order is the caller's.
+   *
+   * The third question, after `targets` and `search`: a fuzzy index in the
+   * navigator answers with addresses, and this turns them back into the rows
+   * the survey draws, measured from the same eye. `b:2` and friends resolve
+   * against the system the player is in, exactly as `goTo` reads them; an
+   * address that names nothing is dropped rather than thrown, so one stale
+   * entry cannot empty the list.
+   */
+  rowsFor(
+    addresses: readonly string[],
+    options: TravelTargetOptions = {},
+  ): readonly TravelTarget[] {
+    const from =
+      (options.origin === 'observer' ? this.observatory.eye : null) ??
+      this.#here()
+    return targetsFor(
+      this.world,
+      from,
+      addresses,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+  }
+
+  /**
+   * Every string a place can be found by, paired with its address.
+   *
+   * What a fuzzy matcher indexes. The matcher itself lives in the client — it
+   * is a third-party dependency, which `packages/*` may not carry — so the
+   * boundary is this list: names out, addresses back in through `rowsFor`.
+   * `searchIndexVersion` says when the list has changed.
+   */
+  searchEntries(): readonly SearchEntry[] {
+    return searchEntries(this.world)
+  }
+
+  searchIndexVersion(): string {
+    return searchIndexVersion(this.world)
   }
 
   /**
@@ -1845,6 +1891,7 @@ export class GameHarness {
       '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
+      '  ir.rowsFor([address, …])      those places, as listing rows',
       '  ir.goTo(target)               a system id or a body address; does the right thing',
       '  ir.loadSystem(id)             generate a system without traveling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',

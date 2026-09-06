@@ -2,16 +2,17 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { TravelTarget } from '@inertialref/devtools'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { iconForKind, starColour } from './kinds.ts'
+import { Marked } from './Marked.tsx'
+import type { Highlight } from './navigator.ts'
 
 /**
- * One row of the catalog: what it is, what it is called, where it sits.
+ * One row of the navigator: what it is, what it is called, where it sits.
  *
  * Three facts share this row and none of them is the same fact.
  *
- * **The glyph is the class.** It used to be the address's *depth* — a star, a
- * circle for anything two levels down and a globe for everything else — so
- * Ganymede and Pluto drew identically and Bennu drew as Earth. `kinds.ts` owns
- * that mapping now and there are nine shapes.
+ * **The glyph is the class.** `kinds.ts` owns that mapping and there are nine
+ * shapes; a glyph chosen by the address's *depth* drew Ganymede and Pluto
+ * identically and Bennu as Earth.
  *
  * **The tint is the sky.** A star carries its own colour, computed from its
  * effective temperature, because `docs/design/art.md` puts that on the list of
@@ -25,26 +26,35 @@ import { iconForKind, starColour } from './kinds.ts'
  * the camera under a heading sorted by orbit is two orders in one list, and the
  * reader has to work out which one they are looking at.
  *
- * **The row is a tree item, and the list has one tab stop.** The panel that
+ * **The row is a tree item, and the list has one tab stop.** The tree that
  * renders these owns the keyboard: `Tab` lands on the current row and leaves
  * from it, the arrows move between rows and fold a system open or closed. So
  * exactly one row carries `tabIndex` 0 — `tabbable` — and the rest are
  * reachable by arrow and by pointer only. The hierarchy is stated with
  * `aria-level` rather than nested groups, which ARIA allows for a tree whose
- * DOM is flat, and it is flat here because each row is its own `<li>`.
+ * DOM is flat — and it is flat here because the list is windowed, and a window
+ * can only be cut from a flat array.
+ *
+ * The `<li>` is the tree's, not this component's: the window measures and
+ * positions it, so the row is the contents of a slot rather than the slot.
  */
-export function CatalogueRow({
+export function NavigatorRow({
   row,
+  index,
   selected,
   indent,
   measure,
   tabbable,
   parent,
   expanded,
+  folded = 0,
+  highlight,
   onExpand,
   onFocus,
 }: {
   row: TravelTarget
+  /** Where this row sits in the flat list, for the keyboard to read back. */
+  index: number
   selected: boolean
   /** 0 for a system, 1 for a planet, 2 for a moon. Drawn, not derived. */
   indent: number
@@ -56,6 +66,10 @@ export function CatalogueRow({
   parent?: string
   /** Present only on a system that has bodies to fold. */
   expanded?: boolean
+  /** How many bodies a closed fold is hiding. */
+  folded?: number
+  /** The matched designation and where it matched, in a search. */
+  highlight?: Highlight
   onExpand?: () => void
   onFocus: () => void
 }) {
@@ -63,9 +77,15 @@ export function CatalogueRow({
   const tint = starColour(row.colour)
   const foldable = expanded !== undefined && onExpand !== undefined
   const Chevron = expanded === true ? ChevronDown : ChevronRight
+  // The match lit inside the name when the name is what matched; when a
+  // designation did — `HIP 71683` finding Alpha Centauri — the name stays and
+  // the designation is drawn beside it, so the reader can see why this row
+  // answered.
+  const litName = highlight !== undefined && highlight.text === row.name
+  const alias = highlight !== undefined && !litName ? highlight : null
 
   return (
-    <li role="none" className="flex items-stretch">
+    <div className="flex items-stretch">
       {/*
        * The disclosure is its own button, beside the row rather than inside it.
        *
@@ -109,7 +129,8 @@ export function CatalogueRow({
         aria-selected={selected}
         aria-expanded={foldable ? expanded : undefined}
         tabIndex={tabbable ? 0 : -1}
-        data-catalog-row=""
+        data-navigator-row=""
+        data-index={index}
         data-address={row.address}
         data-parent={parent}
         title={row.detail}
@@ -124,9 +145,12 @@ export function CatalogueRow({
          * bodies, and at 44 px this list is five and a half thousand pixels
          * tall. It clears WCAG 2.2's 24 px target minimum, the row is the full
          * width of the panel, and the disclosure beside it is what keeps the
-         * list short enough to be scanned rather than scrolled.
+         * list short enough to be scanned rather than scrolled. `h-7` rather
+         * than `min-h-7`, because the window estimates every row at this
+         * height before it has measured one, and a row that could grow would
+         * make every estimate below it wrong.
          */
-        className={`group flex min-h-7 min-w-0 flex-1 items-center gap-2 rounded pr-1.5 text-left transition-colors ${FOCUS_RING} ${
+        className={`group flex h-7 min-w-0 flex-1 items-center gap-2 rounded pr-1.5 text-left transition-colors ${FOCUS_RING} ${
           selected
             ? 'bg-sky-500/15 text-sky-100'
             : 'text-slate-300 hover:bg-slate-800/60 hover:text-sky-100'
@@ -153,7 +177,23 @@ export function CatalogueRow({
               : { color: tint, opacity: row.loaded ? 1 : 0.55 }
           }
         />
-        <span className="type-ui min-w-0 flex-1 truncate">{row.name}</span>
+        <span className="type-ui min-w-0 flex-1 truncate">
+          {litName ? <Marked {...highlight} /> : row.name}
+          {alias !== null && (
+            <span className="type-micro ml-1.5 text-slate-400">
+              <Marked {...alias} />
+            </span>
+          )}
+        </span>
+        {/* What a closed fold is hiding, on the row itself rather than on a
+            line under it: the window wants one row per system, and a caption
+            row of its own would be a second height for every estimate to be
+            wrong by. */}
+        {folded > 0 && (
+          <span className="type-micro shrink-0 text-slate-400 tabular-nums">
+            {folded}
+          </span>
+        )}
         {/* The epistemic fact, stated rather than implied — the one claim
             PRODUCT.md says the interface always makes. It is a claim about the
             *record*, not about the place: a projected world is out there, it
@@ -175,6 +215,6 @@ export function CatalogueRow({
           {measure}
         </span>
       </button>
-    </li>
+    </div>
   )
 }

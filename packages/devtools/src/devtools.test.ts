@@ -508,6 +508,76 @@ describe('travel targets', () => {
     expect(ir.search('')).toEqual([])
   })
 
+  it('turns addresses back into the rows the survey draws', () => {
+    /*
+     * The third question. A fuzzy index in the client answers with addresses,
+     * and these have to come back as the same rows the survey would have
+     * produced — a star from the catalog, a star that is loaded, a body of a
+     * loaded system — measured from the same eye.
+     */
+    const { harness: ir } = harness()
+    const rows = ir.rowsFor(['s:SOL/b:2', 'SOL', 'HIP32349'])
+    expect(rows.map((row) => row.name)).toEqual(['Earth', 'Sol', 'Sirius'])
+    expect(rows[0]).toMatchObject({
+      kind: 'body',
+      bodyKind: 'rocky',
+      loaded: true,
+      parent: 'g:milky-way/s:SOL',
+    })
+    expect(rows[1]).toMatchObject({ kind: 'system', loaded: true })
+    expect(rows[1]?.detail).toContain('planets')
+    expect(rows[2]).toMatchObject({ kind: 'system', loaded: false })
+    expect(rows[2]?.distance).toBeGreaterThan(0)
+  })
+
+  it('drops an address that names nothing rather than throwing', () => {
+    const { harness: ir } = harness()
+    // A typo, a body of a system nobody has generated, and a galaxy: none of
+    // them is a row, and none of them may empty the list around it.
+    const rows = ir.rowsFor([
+      'not a place',
+      'nonsense/with/slashes',
+      's:HIP32349/b:0',
+      'g:milky-way',
+      'SOL',
+    ])
+    expect(rows.map((row) => row.name)).toEqual(['Sol'])
+  })
+
+  it('lists every name a place can be found by, paired with its address', () => {
+    const { harness: ir } = harness()
+    const entries = ir.searchEntries()
+    const sirius = entries.filter(
+      (entry) => entry.address === 'g:milky-way/s:HIP32349',
+    )
+    // The proper name and the designations, deduplicated, never the id twice.
+    expect(sirius.map((entry) => entry.text)).toContain('Sirius')
+    expect(sirius.map((entry) => entry.text)).toContain('HIP 32349')
+    expect(new Set(sirius.map((entry) => entry.text)).size).toBe(sirius.length)
+    // Bodies of a loaded system, by their own names.
+    expect(entries).toContainEqual({
+      address: 'g:milky-way/s:SOL/b:2',
+      text: 'Earth',
+    })
+    // And nothing for a body of a system that is not generated: it has no name.
+    expect(
+      entries.some((entry) =>
+        entry.address.startsWith('g:milky-way/s:HIP32349/'),
+      ),
+    ).toBe(false)
+  })
+
+  it('changes the index version exactly when the loaded set changes', () => {
+    const { harness: ir } = harness()
+    const before = ir.searchIndexVersion()
+    expect(ir.searchIndexVersion()).toBe(before)
+    ir.loadSystem('HIP71683')
+    expect(ir.searchIndexVersion()).not.toBe(before)
+    expect(ir.searchEntries()).toContainEqual(
+      expect.objectContaining({ address: 'g:milky-way/s:HIP71683/b:0' }),
+    )
+  })
+
   it('calls everything outside Sol a projection in a Sol-only session', () => {
     // The catalog is a generation input, so a session without one is a
     // different universe — one containing Sol and nothing else that is real.

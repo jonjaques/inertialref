@@ -7,24 +7,24 @@ import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { attempt } from '../hud/notice.ts'
 import { useAction } from '../input/useKeymap.ts'
 import {
-  CATALOGUE_CLASSES,
-  CATALOGUE_FILTERING,
-  CATALOGUE_RADIUS,
+  NAVIGATOR_CLASSES,
+  NAVIGATOR_FILTERING,
+  NAVIGATOR_RADIUS,
   usePersistentState,
 } from '../state/preferences.ts'
-import { CatalogueRow } from './CatalogueRow.tsx'
+import { NavigatorTree } from './NavigatorTree.tsx'
 import { NeighbourhoodRail } from './NeighbourhoodRail.tsx'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { TargetActions } from '../hud/TargetActions.tsx'
 import {
+  flattenGroups,
   groupBySystem,
-  indentOf,
-  measureOf,
-  moveInList,
   neighbours,
+  searchRows,
   systemOfAddress,
-} from './catalogue.ts'
+} from './navigator.ts'
 import { ALL_CLASSES, OBJECT_CLASSES, RADII } from './kinds.ts'
+import { useNavigatorSearch } from './useNavigatorSearch.ts'
 
 /*
  * Everything within reach, and a way through it.
@@ -49,25 +49,13 @@ import { ALL_CLASSES, OBJECT_CLASSES, RADII } from './kinds.ts'
  *   the radius    how far the survey sweeps, because "what is near me" and
  *                 "what is within fifty light years" are different questions
  *
- * The grouping and the ordering are pure functions in `catalogue.ts` and are
- * tested there. This file is the controls and the layout.
+ * The grouping and the ordering are pure functions in `navigator.ts` and are
+ * tested there. The list is windowed in `NavigatorTree.tsx`, so a fifty
+ * light-year sweep costs the rows on screen and not the fourteen hundred
+ * behind them. This file is the controls and the layout.
  */
 
-/**
- * How many systems the list will draw at once.
- *
- * Measured against the shipped catalog: 5 ly is 4 systems, 10 ly is 17, 25 ly
- * is about 130, and 50 ly is **1,378** — the sweep's volume goes as r³ and the
- * count goes with it. Two hundred covers every radius but the last one whole
- * and holds the last one to a size React reconciles without being noticed.
- * See the comment at the `slice`.
- */
-const MAX_SYSTEMS = 200
-
-/** One allocation for every collapsed group, rather than one per group. */
-const NOTHING_VISIBLE: ReadonlySet<string> = new Set()
-
-export function CataloguePanel({
+export function NavigatorPanel({
   engine,
   target,
   focus,
@@ -85,12 +73,11 @@ export function CataloguePanel({
    *
    * In the planetarium a row *looks*: the observatory holds the camera, so
    * "go to" would teleport a ship nobody can see and the panel would appear to
-   * do nothing — which is exactly what the deleted Navigate panel did there.
-   * In flight a row offers Orbit and Land, with Face and Burn beside them,
-   * because they are the only way to point a hull at a thing.
+   * do nothing. In flight a row offers Orbit and Land, with Face and Burn
+   * beside them, because they are the only way to point a hull at a thing.
    *
-   * One navigator, two verbs. The alternative — a smaller author's Travel panel
-   * — keeps two navigators, which is the ambiguity this replaces.
+   * One navigator, two verbs. A second, smaller navigator for the author is
+   * the ambiguity ADR-0018 removed.
    */
   readonly verbs?: 'look' | 'travel'
 }) {
@@ -99,9 +86,10 @@ export function CataloguePanel({
   const [selected, setSelected] = useState<string | null>(null)
   /** The search field, for the `nav.goTo` binding to put focus into. */
   const field = useRef<HTMLInputElement>(null)
-  const [radius, setRadius] = usePersistentState(CATALOGUE_RADIUS)
-  const [classes, setClasses] = usePersistentState(CATALOGUE_CLASSES)
-  const [filtering, setFiltering] = usePersistentState(CATALOGUE_FILTERING)
+  const root = useRef<HTMLDivElement>(null)
+  const [radius, setRadius] = usePersistentState(NAVIGATOR_RADIUS)
+  const [classes, setClasses] = usePersistentState(NAVIGATOR_CLASSES)
+  const [filtering, setFiltering] = usePersistentState(NAVIGATOR_FILTERING)
   /*
    * The systems the reader has decided about, and what they decided.
    *
@@ -121,40 +109,32 @@ export function CataloguePanel({
     new Map(),
   )
 
-  /*
-   * Two questions, one hook (`hud/useTravelTargets.ts`).
-   *
-   * Empty: the survey, centered on the camera, not on the ship. `look` moves a
-   * camera and nothing else, which is the planetarium's whole verb — so "you"
-   * in this mode is the eye, and it can be four light years from the hull.
-   * Centered on the player, this list opened at Alpha Centauri still ordered by
-   * distance from Earth: Sol's moons at the top, and the star filling the frame
-   * reported as 4.4 ly away, twenty rows down.
-   *
-   * Typed: the catalog's own index, over all 150 light years. Filtering the
-   * survey's result with `.includes()` made the search box a search of a
-   * sixteen-light-year bubble, so a star ninety light years out was not merely
-   * hard to find, it was unreachable by name.
-   */
   const lightYears = Number(radius)
-  const { rows, ready, failure } = useTravelTargets(engine, {
-    lightYears,
-    origin: 'observer',
-    query,
-    refreshMs: 500,
-  })
-
   const searching = query.trim() !== ''
   /*
-   * The chips filter the survey and never the search.
+   * Two questions, two hooks.
    *
-   * `searchTargets` answers with star rows and nothing else — there are no body
-   * rows to keep a group alive — so with "Stars" off `groupBySystem` dropped
-   * every hit and the panel stated "no charted star is called that" about a
-   * star it had just been handed. The copy under the chips already promises
-   * this ("a search reaches the whole catalog whatever this says"); the code
-   * now agrees with it.
+   * Empty: the survey (`hud/useTravelTargets.ts`), centered on the camera, not
+   * on the ship. `look` moves a camera and nothing else, which is the
+   * planetarium's whole verb — so "you" in this mode is the eye, and it can be
+   * four light years from the hull. The poll pauses while a query is typed:
+   * the sweep is a cost and nothing on screen is reading it.
+   *
+   * Typed: the fuzzy index (`useNavigatorSearch.ts`), over every designation
+   * in the catalog and every body the world has generated, on the keystroke.
+   * Filtering the survey's result with `.includes()` made the search box a
+   * search of a sixteen-light-year bubble, so a star ninety light years out
+   * was not merely hard to find, it was unreachable by name.
    */
+  const survey = useTravelTargets(engine, {
+    lightYears,
+    origin: 'observer',
+    query: '',
+    refreshMs: 500,
+    paused: searching,
+  })
+  const found = useNavigatorSearch(engine, query, { origin: 'observer' })
+
   /**
    * What pressing a row does, which is the mode's answer rather than this
    * panel's. Looking moves a camera; traveling picks a destination and offers
@@ -168,9 +148,10 @@ export function CataloguePanel({
     setSelected(address)
   }
 
-  const groups = groupBySystem(rows, searching ? ALL_CLASSES : classes)
+  const rows = searching ? found.rows : survey.rows
+  const groups = groupBySystem(survey.rows, classes)
   const chosen = rows.find((row) => row.address === selected) ?? null
-  const near = neighbours(rows, lightYears)
+  const near = neighbours(survey.rows, lightYears)
   /*
    * What the filter took, counted against the survey rather than against what
    * survived it: a system whose star *and* whose every body were filtered out
@@ -180,7 +161,7 @@ export function CataloguePanel({
     (total, group) => total + 1 + group.bodies.length,
     0,
   )
-  const hidden = rows.length - kept
+  const hidden = survey.rows.length - kept
   const narrowed = classes.length > 0 && classes.length < OBJECT_CLASSES.length
 
   /*
@@ -204,61 +185,22 @@ export function CataloguePanel({
    * cannot disagree. Counting bodies inside a collapsed group as "shown" is
    * what the fold exists to prevent, and it read "137 shown" over nine rows.
    */
+  const folded = groups.map((group) => ({
+    group,
+    open:
+      group.bodies.length > 0 &&
+      (decided.get(group.system.address) ??
+        group.system.address === opensByDefault),
+  }))
   /*
-   * The nearest systems, and a line saying what that left out.
-   *
-   * At 50 ly the real catalog answers with 1,507 rows, 1,378 of them stars —
-   * every one a button with an SVG in it, reconciled against a fresh array
-   * twice a second, beside the render loop. The derivations are not the cost
-   * (0.19 ms at that size); React is.
-   *
-   * A cap rather than windowing, because the far end of this list is the least
-   * useful part of it: the survey is sorted nearest-first, nobody finds a star
-   * a thousand rows down by scrolling, and anything past the cap is still
-   * reachable by name through the search, which reads the whole 150 ly index.
-   * **The count below says how many were dropped** — a silent truncation reads
-   * as "this is everything within fifty light years", which is the one thing
-   * the panel would then be lying about.
+   * Search results are their own list: flat, in the matcher's order, every
+   * hit a top-level row. Folding them by system would bury the next result
+   * under a hundred and twenty-nine bodies, and a body found by name may
+   * arrive without its star.
    */
-  const capped = groups.slice(0, MAX_SYSTEMS)
-  const beyondCap = groups.length - capped.length
-
-  const folded = capped.map((group) => {
-    /*
-     * Open by default only where the camera is, and never during a search: a
-     * search matched the *star*, and expanding every hit would bury the next
-     * result under a hundred and twenty-nine bodies.
-     */
-    const byDefault = !searching && group.system.address === opensByDefault
-    return {
-      group,
-      open:
-        group.bodies.length > 0 &&
-        (decided.get(group.system.address) ?? byDefault),
-    }
-  })
-  const shown = folded.reduce(
-    (total, one) => total + 1 + (one.open ? one.group.bodies.length : 0),
-    0,
-  )
-
-  /*
-   * The list has one tab stop, and this is which row it is.
-   *
-   * The current row where it is drawn, else the first system: `Tab` should
-   * land where the reader is rather than at the top of a hundred rows, and a
-   * row inside a closed fold is not drawn, so it cannot be the stop.
-   */
+  const listed = searching ? searchRows(found.rows) : flattenGroups(folded)
+  const shown = listed.length
   const current = verbs === 'travel' ? selected : target
-  const drawn = new Set<string>()
-  for (const { group, open } of folded) {
-    drawn.add(group.system.address)
-    if (open) for (const body of group.bodies) drawn.add(body.address)
-  }
-  const tabbable =
-    current !== null && drawn.has(current)
-      ? current
-      : (folded[0]?.group.system.address ?? null)
 
   const setOpen = (address: string, open: boolean): void =>
     setDecided((held) => {
@@ -271,48 +213,24 @@ export function CataloguePanel({
     })
 
   /*
-   * The tree's keyboard. Arrows and Home/End move between the drawn rows, `→`
-   * opens a folded system, `←` closes an open one or climbs from a body to its
-   * system; Enter and Space stay the button's own. The camera's arrow bindings
-   * already yield here — every one of them is `yieldsToFocus`, and a focused
-   * row is a control inside `.hud-layer` — so nothing has to be stopped from
-   * propagating, and `preventDefault` only keeps the pane from scrolling under
-   * the focus it just moved.
+   * The field is the top of the list, for a keyboard. Enter takes the first
+   * row — the matcher's best answer, which is what a typeahead promises — and
+   * `↓` walks into the tree at its one stop, so a reader who typed three
+   * letters never has to find the list with Tab.
    */
-  const onKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
-    const rows = [
-      ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
-        '[data-catalog-row]',
-      ),
-    ]
-    const index = rows.indexOf(event.target as HTMLButtonElement)
-    const row = rows[index]
-    if (row === undefined) return
-    const next = moveInList(event.key, index, rows.length)
-    if (next !== null) {
+  const onFieldKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Enter') {
+      const first = listed[0]
+      if (first === undefined) return
       event.preventDefault()
-      rows[next]?.focus()
-      return
-    }
-    const address = row.dataset['address']
-    const expanded = row.getAttribute('aria-expanded')
-    if (event.key === 'ArrowRight') {
-      if (expanded === 'false' && address !== undefined) {
-        event.preventDefault()
-        setOpen(address, true)
-      }
-    } else if (event.key === 'ArrowLeft') {
-      if (expanded === 'true' && address !== undefined) {
-        event.preventDefault()
-        setOpen(address, false)
-        return
-      }
-      const parent = row.dataset['parent']
-      const up = rows.find((one) => one.dataset['address'] === parent)
-      if (up !== undefined) {
-        event.preventDefault()
-        up.focus()
-      }
+      act(first.row.address)
+    } else if (event.key === 'ArrowDown') {
+      const stop = root.current?.querySelector<HTMLButtonElement>(
+        '[data-navigator-row][tabindex="0"]',
+      )
+      if (stop === null || stop === undefined) return
+      event.preventDefault()
+      stop.focus()
     }
   }
 
@@ -320,16 +238,19 @@ export function CataloguePanel({
    * `/` focuses the search, which is what the table has always claimed it does.
    *
    * Registered here because this is the panel that owns the field. The binding
-   * is global rather than per-mode: the catalog is in the flight workspace as
+   * is global rather than per-mode: the navigator is in the flight workspace as
    * well as the planetarium's, and "go to" means the same thing in both. It is
    * live only while the panel is drawn, which is the honest scope — the
    * dispatcher declines a chord no handler claims, so `/` stays the browser's
-   * in a mode with no catalog on screen.
+   * in a mode with no navigator on screen.
    */
   useAction('nav.goTo', () => field.current?.focus())
 
+  const ready = searching ? found.ready : survey.ready
+  const failure = searching ? null : survey.failure
+
   return (
-    <div className="flex min-h-0 flex-col gap-2">
+    <div ref={root} className="flex min-h-0 flex-col gap-2">
       <div className="flex items-center gap-1.5">
         <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-slate-700/60 bg-slate-900/60 px-2 transition-colors focus-within:border-sky-500/60">
           <Search aria-hidden className="size-3 shrink-0 text-slate-400" />
@@ -337,8 +258,11 @@ export function CataloguePanel({
             ref={field}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={onFieldKeyDown}
             placeholder="Name or address"
-            aria-label="Search the catalog"
+            aria-label="Search the navigator"
+            autoComplete="off"
+            spellCheck={false}
             // `md:type-readout` beside the bare step: the Input base carries
             // `md:text-sm`, which only merges against an equally modified
             // class. `lib/utils.ts` has the whole story.
@@ -472,8 +396,8 @@ export function CataloguePanel({
       )}
 
       {/* The rail is context for the survey, so it is absent from a search:
-          those results are ranked by name across a hundred and fifty light
-          years, and a scale bar under them would be measuring the wrong thing. */}
+          those results are ranked by how well they match, and a scale bar
+          under them would be measuring the wrong thing. */}
       {!searching && (
         <NeighbourhoodRail
           stars={near}
@@ -483,84 +407,38 @@ export function CataloguePanel({
         />
       )}
 
-      {/* A tree with one tab stop — see `CatalogueRow` and `onKeyDown`. The
-          `<li>`s and inner `<ul>`s are `role="none"`: the tree items are the
-          row buttons, and the hierarchy is `aria-level` on each of them,
-          which is what ARIA prescribes for a tree whose DOM is flat. */}
-      <ul
-        role="tree"
-        aria-label="Catalog"
-        onKeyDown={onKeyDown}
-        className="flex min-h-0 flex-col"
-      >
-        {folded.map(({ group, open }) => {
-          const visible = open
-            ? new Set(group.bodies.map((body) => body.address))
-            : NOTHING_VISIBLE
-          return (
-            <li key={group.system.address} role="none">
-              <ul role="none" className="flex flex-col">
-                <CatalogueRow
-                  row={group.system}
-                  selected={group.system.address === current}
-                  indent={0}
-                  measure={measureOf(group.system)}
-                  tabbable={group.system.address === tabbable}
-                  {...(group.bodies.length > 0
-                    ? {
-                        expanded: open,
-                        onExpand: () => setOpen(group.system.address, !open),
-                      }
-                    : {})}
-                  onFocus={() => act(group.system.address)}
-                />
-                {open &&
-                  group.bodies.map((body) => (
-                    <CatalogueRow
-                      key={body.address}
-                      row={body}
-                      selected={body.address === current}
-                      indent={indentOf(body, visible)}
-                      measure={measureOf(body)}
-                      tabbable={body.address === tabbable}
-                      parent={group.system.address}
-                      onFocus={() => act(body.address)}
-                    />
-                  ))}
-                {!open && group.bodies.length > 0 && (
-                  <li role="none" className="type-micro pl-12 text-slate-400">
-                    {group.bodies.length} bodies
-                  </li>
-                )}
-              </ul>
-            </li>
-          )
-        })}
-
-        {groups.length === 0 && (
-          /*
-           * Four different answers, not one, because each has a different next
-           * step. A failed read is the one that must not read as "surveying…":
-           * `ready` stays false while the sweep keeps throwing, so without this
-           * branch a broken survey says "surveying…" every 500 ms forever with
-           * the message sitting unread in the hook's return value. The typed
-           * case reaches the whole catalog, so "no star is called that" is a
-           * fact rather than a statement about how far the survey got.
-           */
-          <li
-            role="none"
-            className="type-ui px-1 py-2 text-pretty text-slate-400"
-          >
-            {failure !== null
-              ? `The survey did not answer: ${failure}`
-              : !ready
-                ? 'Surveying…'
-                : searching
-                  ? 'Nothing in the catalog is called that.'
-                  : `Nothing within ${lightYears} ly.`}
-          </li>
-        )}
-      </ul>
+      {listed.length > 0 ? (
+        <NavigatorTree
+          rows={listed}
+          current={current}
+          tabbable={current}
+          highlights={searching ? found.highlights : undefined}
+          label="Navigator"
+          onAct={act}
+          onFold={setOpen}
+        />
+      ) : (
+        /*
+         * Four different answers, not one, because each has a different next
+         * step. A failed read is the one that must not read as "surveying…":
+         * `ready` stays false while the sweep keeps throwing, so without this
+         * branch a broken survey says "surveying…" every 500 ms forever with
+         * the message sitting unread in the hook's return value. The typed
+         * case reaches the whole catalog, so "nothing is called that" is a
+         * fact rather than a statement about how far the survey got.
+         */
+        <p className="type-ui px-1 py-2 text-pretty text-slate-400">
+          {failure !== null
+            ? `The survey did not answer: ${failure}`
+            : !ready
+              ? searching
+                ? 'Searching…'
+                : 'Surveying…'
+              : searching
+                ? 'Nothing in the catalog is called that.'
+                : `Nothing within ${lightYears} ly.`}
+        </p>
+      )}
 
       {/*
        * The verbs, under the list, for the mode that has any.
@@ -600,11 +478,11 @@ export function CataloguePanel({
       {/* One line, and it only appears when it has something to say: how much
           of the survey is on screen, and how much the chips are holding back.
           A count that was always there would be furniture. */}
-      {groups.length > 0 && (
+      {listed.length > 0 && (
         <p className="type-micro shrink-0 text-slate-400 tabular-nums">
-          {shown} shown
-          {hidden > 0 && ` · ${hidden} hidden by filters`}
-          {beyondCap > 0 && ` · ${beyondCap} further out — search by name`}
+          {searching
+            ? `${shown} ${shown === 1 ? 'match' : 'matches'}`
+            : `${shown} shown${hidden > 0 ? ` · ${hidden} hidden by filters` : ''}`}
         </p>
       )}
     </div>
