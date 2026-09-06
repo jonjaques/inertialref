@@ -139,8 +139,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   that is at `renderTime`, returns a pose. `observatory.test.ts` compares `world.stateHash()`
   across a session of flying around — that test is the design promise.
 - **Presentation asks at the snapshot’s instant, never `clock.time`.** Live time is
-  `clock.renderTime`; photographic time is the observatory’s held instant (ADR-0033). The latter is the tick
-  and moves in 1/64 s steps; the scene draws at the former. A camera placed against the
+  `clock.renderTime`; photographic time is the observatory’s held instant (ADR-0033).
+  `clock.time` advances in 1/64 s steps. A camera placed against the
   tick aims at where the body was, by its velocity times up to 15.6 ms, sawtoothing as
   alpha resets — 11 and 19 pixels of vibration on Phobos and Deimos at 1×, nothing
   measurable on anything larger.
