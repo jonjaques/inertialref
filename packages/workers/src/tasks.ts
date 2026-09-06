@@ -501,25 +501,24 @@ export interface FindWorldsResponse {
  * which is exactly why it is here rather than on the main thread, and why the
  * caller is expected to submit several of these at once.
  */
-export const findWorldsTask = defineTask<
-  FindWorldsRequest,
-  FindWorldsResponse
->({
-  name: 'universe.findWorlds',
-  version: 1,
-  run({ seed, galaxy, stubs, query, from }, context) {
-    const decoded = stubs.map(decodeStub)
-    const matches = findWorlds(
-      parseSeed(seed),
-      galaxyId(galaxy),
-      decoded,
-      query,
-      UV.universeVector(from[0], from[1], from[2], from[3], from[4], from[5]),
-      context.cancelled,
-    )
-    return { matches, generated: decoded.length }
+export const findWorldsTask = defineTask<FindWorldsRequest, FindWorldsResponse>(
+  {
+    name: 'universe.findWorlds',
+    version: 1,
+    run({ seed, galaxy, stubs, query, from }, context) {
+      const decoded = stubs.map(decodeStub)
+      const matches = findWorlds(
+        parseSeed(seed),
+        galaxyId(galaxy),
+        decoded,
+        query,
+        UV.universeVector(from[0], from[1], from[2], from[3], from[4], from[5]),
+        context.cancelled,
+      )
+      return { matches, generated: decoded.length }
+    },
   },
-})
+)
 
 /** Everything the worker entry point serves. */
 export function createTaskRegistry(): TaskRegistry {
