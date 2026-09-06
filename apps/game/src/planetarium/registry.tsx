@@ -41,7 +41,9 @@ export function planetariumPanels(
       icon: Neighbourhood,
       zone: 'left',
       hint: 'Everything within reach — fold it, filter it, look at it',
-      render: () => <NavigatorPanel {...context} />,
+      render: () => (
+        <NavigatorPanel {...context} onCatalog={context.openCatalog} />
+      ),
     },
     {
       id: 'object',

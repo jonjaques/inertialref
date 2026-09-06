@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useRef, useState } from 'react'
-import { Search, SlidersHorizontal, X } from 'lucide-react'
+import { Search, SlidersHorizontal, Telescope, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useTravelTargets } from '../hud/useTravelTargets.ts'
@@ -60,6 +60,7 @@ export function NavigatorPanel({
   target,
   focus,
   onNotice,
+  onCatalog,
   verbs = 'look',
 }: {
   readonly engine: GameEngine
@@ -68,6 +69,14 @@ export function NavigatorPanel({
   /** What a row does in `look` mode: move the camera, and write the URL. */
   readonly focus: (address: string) => void
   readonly onNotice: (message: string) => void
+  /**
+   * Open the deep catalog, where present.
+   *
+   * Absent in flight, and that is the mode's answer rather than this panel's:
+   * the dialog is a child of the planetarium's route, so there is nowhere for
+   * it to open over from a cockpit.
+   */
+  readonly onCatalog?: () => void
   /**
    * What a row offers, which depends on the mode rather than on the panel.
    *
@@ -291,6 +300,26 @@ export function NavigatorPanel({
          * here, it is the only thing standing between a reader and "why is
          * Europa missing".
          */}
+        {/*
+         * The way into the deep catalog, beside the filters rather than under
+         * them. The two controls answer the same shape of question at two
+         * scales — "narrow this list" and "search a volume nothing has listed"
+         * — and a reader who has just failed to find something in the survey
+         * is looking exactly here.
+         */}
+        <button
+          type="button"
+          aria-label="Search the whole volume"
+          title="Search the volume for worlds by what they are, not by name"
+          onClick={(event) => {
+            releaseFocus(event)
+            onCatalog?.()
+          }}
+          hidden={onCatalog === undefined}
+          className={`flex size-7 shrink-0 items-center justify-center rounded border border-slate-700 bg-slate-800/60 text-slate-400 transition-colors hover:border-sky-500/60 hover:text-sky-200 ${FOCUS_RING}`}
+        >
+          <Telescope aria-hidden className="size-3.5" />
+        </button>
         <button
           type="button"
           aria-expanded={filtering}

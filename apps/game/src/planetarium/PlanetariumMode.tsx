@@ -29,7 +29,7 @@ import {
 import { useChromeHidden } from '../hud/chrome.ts'
 import { useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
-import { QUERY, PRESETS } from '../pages/paths.ts'
+import { QUERY, CATALOG, PRESETS } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
@@ -244,11 +244,16 @@ export function PlanetariumMode({
     }
   }, [engine, saveRequested, params, navigate])
 
+  const openCatalog = () => {
+    void navigate({ pathname: CATALOG, search: params.toString() })
+  }
+
   const panels = planetariumPanels({
     engine,
     target,
     focus,
     managePresets,
+    openCatalog,
     takePicture: (picture, builtin = false) => {
       try {
         engine.harness.takePicture(picture)

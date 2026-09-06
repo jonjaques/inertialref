@@ -266,6 +266,18 @@ export const DEFAULT_SEARCH_LIGHT_YEARS = 25
  */
 export const SEARCH_BATCH = 32
 
+/**
+ * How many of the nearest matches a search keeps.
+ *
+ * A thousand, and the number is about reading rather than about memory. The
+ * far end of a sweep's answer is the part nobody reaches: results come back
+ * nearest first, and a reader looking for somewhere to go stops long before
+ * the thousandth. What the cap buys is a bounded sort — the accumulated array
+ * is re-ordered as batches land, and unbounded that is the main thread's whole
+ * budget on a wide sweep.
+ */
+export const DEFAULT_SEARCH_LIMIT = 1_000
+
 export function travelTargets(
   world: World,
   from: UniverseVector,

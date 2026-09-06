@@ -101,6 +101,7 @@ import {
 } from './inspect.ts'
 import {
   DEFAULT_SEARCH_LIGHT_YEARS,
+  DEFAULT_SEARCH_LIMIT,
   SEARCH_BATCH,
   currentSystemOf,
   resolveDestination,
@@ -614,8 +615,29 @@ export class GameHarness {
     query: WorldQuery,
     options: {
       lightYears?: number
-      /** Called as each batch answers, with everything found so far. */
-      onBatch?: (found: readonly WorldMatch[], progress: number) => void
+      /**
+       * How many of the nearest matches to keep.
+       *
+       * A sweep is bounded by the volume, and the volume is not bounded by
+       * anything a reader will read: "rocky, within 150 light years" answers
+       * with over a hundred thousand bodies. Keeping them all is twenty
+       * megabytes of records nobody scrolls to, and re-sorting them on every
+       * batch is the main thread's whole budget — measured, it dropped the
+       * simulation clock to a fifth of real time while the sweep ran. So the
+       * nearest are kept and the rest are counted.
+       */
+      limit?: number
+      /**
+       * Called as each batch answers: the nearest matches so far, how far
+       * through the sweep it is, and how many were found in total — which is
+       * not `found.length` once the cap has bitten, and saying so is the
+       * difference between a list that is short and a search that found little.
+       */
+      onBatch?: (
+        found: readonly WorldMatch[],
+        progress: number,
+        total: number,
+      ) => void
     } = {},
   ): {
     /** How many systems the sweep will walk. Zero means there is nothing to do. */
@@ -644,8 +666,10 @@ export class GameHarness {
       readonly result: Promise<{ readonly matches: readonly WorldMatch[] }>
       readonly cancel: () => void
     }[] = []
+    const limit = Math.max(1, options.limit ?? DEFAULT_SEARCH_LIMIT)
     let stopped = false
-    const found: WorldMatch[] = []
+    let total = 0
+    let found: WorldMatch[] = []
     const wire = encodeUniverseVector(from)
     const seed = formatSeed(this.world.rootSeed)
 
@@ -679,9 +703,19 @@ export class GameHarness {
         void Promise.resolve(job.result)
           .then((answer) => {
             if (stopped) return
+            total += answer.matches.length
             found.push(...answer.matches)
+            /*
+             * Trimmed at twice the cap rather than at the cap, so the sort is
+             * amortized: cutting on every batch would sort a nearly-full array
+             * every time, and cutting at twice it sorts once per capful.
+             */
+            if (found.length > limit * 2) {
+              found.sort((a, b) => a.lightYears - b.lightYears)
+              found = found.slice(0, limit)
+            }
             answered += 1
-            options.onBatch?.(found, answered / batches.length)
+            options.onBatch?.(found, answered / batches.length, total)
           })
           .catch(() => {
             // A batch that failed is a gap in an answer, not a failed search.
@@ -690,7 +724,8 @@ export class GameHarness {
           })
       }
       await Promise.allSettled(jobs.map((job) => job.result))
-      return found
+      found.sort((a, b) => a.lightYears - b.lightYears)
+      return found.slice(0, limit)
     }
 
     return {

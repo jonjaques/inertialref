@@ -39,6 +39,16 @@ export const PLANETARIUM = '/planetarium'
 /** Preset library, over the current planetarium view. */
 export const PRESETS = `${PLANETARIUM}/presets`
 
+/**
+ * The deep catalog, over the current planetarium view.
+ *
+ * A child of the mode for the reason the preset library is one: the search is
+ * a way of *getting somewhere*, and the camera, the clock and the pose have to
+ * still be there when a result is pressed. A global dialog route would unmount
+ * the planetarium behind it.
+ */
+export const CATALOG = `${PLANETARIUM}/catalog`
+
 /** The scene library. */
 export const CINEMA = '/cinema'
 
@@ -141,6 +151,7 @@ export function modeForPath(pathname: string): AppMode {
 export function isOverlayPath(pathname: string): boolean {
   return (
     pathname === PRESETS ||
+    pathname === CATALOG ||
     pathname === SETTINGS ||
     pathname.startsWith(`${SETTINGS}/`) ||
     pathname === ABOUT ||

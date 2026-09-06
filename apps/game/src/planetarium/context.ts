@@ -21,6 +21,8 @@ export interface PlanetariumContext {
   readonly focus: (address: string) => void
   readonly takePicture: (picture: Picture, builtin?: boolean) => void
   readonly managePresets: (save?: boolean) => void
+  /** Open the deep catalog over the mode, keeping the camera mounted. */
+  readonly openCatalog: () => void
   readonly labels: boolean
   readonly onLabels: (on: boolean) => void
   /** How many names the sky carries at once. */

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useLocation, useNavigate, type Location } from 'react-router'
 import {
+  CATALOG,
   HOME,
   PLANETARIUM,
   PRESETS,
@@ -52,6 +53,16 @@ export function useOverlay(): Overlay {
   const background = overlayBackground(location)
 
   const close = useCallback(() => {
+    if (location.pathname === CATALOG) {
+      // Back to the mode, keeping whatever the mode's query already said. The
+      // dialog adds nothing to it — a result is opened by navigating, not by
+      // closing — so there is nothing to strip.
+      void navigate(
+        { pathname: PLANETARIUM, search: location.search },
+        { replace: true },
+      )
+      return
+    }
     if (location.pathname === PRESETS) {
       const query = new URLSearchParams(location.search)
       for (const key of ['capture', 'name', QUERY.save]) query.delete(key)
