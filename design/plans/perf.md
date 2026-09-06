@@ -225,12 +225,83 @@ maps` at 1,569 ms says in advance which line still dominates. Mounting the
 volume with the first `galaxyView` would move both, at the price of a compile
 inside the first galaxy frame.
 
-Two smaller things in the same file, worth taking whenever that one is. The
+One smaller thing in the same file, worth taking whenever that one is. The
 draw sets `renderer.autoClear = true` before a quad that covers every texel and
-writes alpha 1, so the clear of the attachment on each sensor submission is a
-load-op bought for nothing across the 40-frame batches M3 measures. And the
-volume updates every submission whether or not the instrument or the field has
-moved, which for a fixed external view is the same frame recomputed.
+writes alpha 1, so the clear of the attachment is a load-op bought for nothing
+on every draw. The other half of this entry — the volume updating every
+submission whether or not anything moved — is the galaxy section below.
+
+## The galaxy
+
+Every figure here is from the 5 September 2026 run, on an Apple M5, through
+two rigs: a headless one that draws the production volume node on the real
+GPU across a drained queue (`.scratch/galaxy-perf/`, a scratch vitest config
+over `openGpu`), and the driver at 960×540, DPR 1, occluded, so a draw is a
+240×135 target. Per-sample cost is flat across target sizes, so the headless
+rig answers kernel questions at any size the machine can spare.
+
+### A draw was the whole integral, every frame, and at rest it was the saturation
+
+Before the hold, at a 480×270 target: 113 ms a draw face-on, 246 edge-on,
+165 and 237 at two interior points — 5 ns a sample over 21 to 47 million
+samples a frame, redrawn on every scene submission whether or not the view
+had moved. A stationary edge-on view was a GPU at four frames a second on a
+picture that was not changing, which is the OS stall the M5 handoff records.
+
+Closed. The node draws when the view, field or size changes and once more to
+settle, then holds the target (`galaxyVolume.ts`). In the browser the held
+backdrop adds 0.17 ms to a 4.7 ms frame; the last third of the journey, where
+the observer crosses 0.01 pc a frame, is one draw a frame with the period at
+vsync (mean 16.7 ms, 2 of 120 frames over 25 ms, at 240×135).
+
+### The dust noise was 87% of a draw, and a texel from outside resolves none of it
+
+Attribution on the real GPU at 240×135 edge-on, parts of the integrand
+switched off: 58.5 ms whole, 7.4 ms without the four dust-noise bands, 33.8 ms
+without the arms, 2.4 ms with neither. The transport loop itself is 4%. From
+40 kpc a texel spans 140 pc, so the 64, 16, 4 and 1 pc bands are all
+sub-texel there; inside the disk the 1 pc band is sub-texel past 90 pc and the
+64 pc one past 5.5 kpc.
+
+Closed. The ray carries the pixel's angle and each band is weighted by what
+the footprint resolves, the rest replaced by its lattice mean
+([ADR-0032](../../docs/adr/0032-the-stellar-field.md#dust-transport-m5)).
+Through the production kernel at 240×135: edge-on 53 → 10.8 ms moving and
+64 → 9.6 ms settled; interior toward the center 51 → 15.9 and 80 → 17.2.
+
+### An eighth-size travel target is not a lever, and it was measured before it was built
+
+At 120×68 the filtered edge-on moving draw is 16.4 ms against 10.8 ms at
+240×135, four times the rays. A small draw is bound by the latency of its
+longest rays — the in-plane edge-on ones run to 1,500 intervals at the
+crossing law's 40 pc — not by throughput, so shrinking the target during
+travel buys nothing at the view where travel is expensive. Declined.
+
+### What is left, in order
+
+- **The arms as a table.** With the noise filtered, the five arms' four
+  windings of log-spiral, exponential and trigonometry at every sample are the
+  cost: 33.8 ms of 58.5 before the filter, and most of what remains after it.
+  The arm sum is a smooth function of radius and azimuth — the narrowest lane
+  is 140 pc wide — so a 1024² two-channel texture over the disk, baked once
+  from the same `structureAt`, would replace it with a bilinear fetch. The
+  young-arm population reads the same sum. Not built: the GPU/CPU ray tests
+  would need a tolerance for the interpolation, and the win is unmeasured.
+- **The meter counts orbit traces.** They now present at one brightness at
+  every exposure (`render/orbitTrace.ts`), but the histogram samples every
+  fourth pixel of the scene target and a trace is a one-pixel line, so a
+  frame of nothing but traces under a metered response is metered on them. A
+  mask channel is the fix; no plate has needed it.
+- **The settled draw is one submission.** 40–70 ms at 480×270 with the
+  filter, once per view change. Splitting it over rows with a scissor would
+  bound the longest submission; nothing has asked for it since the hold.
+- **Early termination at the transmittance floor.** The handoff's third
+  starting point. Not taken: the loop body is 4% of a draw, so the tail it
+  would cut is a fraction of that.
+- **The 2 ms budget at 1080p.** The plan's live-volume target is still an
+  order away for a moving frame at 480×270 (43–63 ms a draw, projected from
+  the 240×135 figures). What reaches it is M7's cached sky or the 3D slab the
+  plan names, not more of the above.
 
 ## Memory and the resident world
 

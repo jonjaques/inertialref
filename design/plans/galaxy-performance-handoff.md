@@ -1,9 +1,50 @@
 # Galaxy performance handoff
 
-Prepared 5 September 2026. Start a fresh performance investigation from this
-checkpoint. The user observed full GPU saturation and OS UI stalls during the
-M5 rendering runs. Correct pictures and passing arithmetic tests do not make
-this implementation operationally acceptable.
+Prepared 5 September 2026 as the checkpoint for a fresh performance
+investigation, after the user observed full GPU saturation and OS UI stalls
+during the M5 rendering runs. The run that followed the same day is recorded
+first; the checkpoint it started from follows, kept as the account of what
+the run had to establish.
+
+## The performance run
+
+Three commits on `codex/galaxy-light-through-dust` after `7725bfd`, each with
+its figures in the commit body; the standing record is
+[perf § The galaxy](perf.md#the-galaxy) and
+[ADR-0032](../../docs/adr/0032-the-stellar-field.md#the-live-galaxy-instruments).
+
+- **The measurement is trustworthy now.** `ir.gpu()` holds the frame loop
+  while it measures (`engine/frameHold.ts`): every consumer reads the hold
+  for itself, so ten frames asked for are ten submissions and a hidden
+  backdrop is none. The invalid M5 counters were animation frames presenting
+  under the queue drain; R3F's `frameloop` is written back by the canvas on
+  any shell render and is not a hold. `ir.galaxy().render()` reports `draws`
+  and `held` beside `submissions`, `--sample` shows the cadence per frame, and
+  each draw is an entry on the Render track.
+- **The saturation was the redraw, and it is gone.** The volume held still
+  was redrawn every submission at 113–357 ms a draw (480×270, headless). It
+  now draws on a change of view, field or size and once more to settle, then
+  holds the target: 0.17 ms a frame at rest in the browser.
+- **The dust noise was 87% of a draw and is filtered to what a texel
+  resolves.** Edge-on 53 → 10.8 ms moving and 64 → 9.6 ms settled at 240×135;
+  interior toward the center 51 → 15.9 and 80 → 17.2. The field stays
+  `galaxy-field@3`; the port is `galaxy-tsl@4`. The GPU/CPU tests hold under
+  the filter within the existing 1%.
+- **Orbit traces no longer bloom under the instrument.** They were
+  pre-exposed with the scene; they now present at one brightness at every
+  exposure. The meter still counts them, which is named in the plan.
+- **Not taken, measured:** an eighth-size travel target (latency-bound by the
+  longest rays, no gain), early termination at the transmittance floor (the
+  loop body is 4% of a draw).
+- **Still open:** the arms as a baked table, a meter mask for traces, a
+  row-split settled draw, and the plan's 2 ms budget at 1080p, which needs
+  M7's cache rather than more of this. Every browser figure here is from a
+  960×540 rig by the user's request; the 1080p figures are headless.
+
+## The checkpoint, as prepared
+
+Correct pictures and passing arithmetic tests do not make an implementation
+operationally acceptable; that was the state of M5 at `7725bfd`.
 
 ## User direction
 
@@ -57,10 +98,12 @@ Moving rays use the observer step law, with a 100 pc maximum. After eight
 stable scene submissions, the live view also caps intervals at
 `max(10 pc, 0.1 × absolute warped height)`. Pose changes beyond 0.01 pc,
 0.0001 rad rotation, or 0.0001 rad vertical FOV reset the moving profile.
-Small pose changes accumulate against the last reset pose. There is no temporal
-reuse, progressive image cache, adaptive resolution, or queue backpressure.
-The entire quarter-width/quarter-height volume is redrawn on every scene
-submission, including every settled submission.
+Small pose changes accumulate against the last reset pose. There is no
+progressive image cache, adaptive resolution, or queue backpressure. The
+checkpoint redrew the entire quarter-width/quarter-height volume on every
+scene submission, including every settled submission; the run above replaced
+that with the hold, and the live intervals and dust texture now follow the
+texel's angle.
 
 The GPU discards further RGB after all transmission channels fall below
 `1e-12`, but continues the ray to preserve intrinsic star columns. It still

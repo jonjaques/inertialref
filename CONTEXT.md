@@ -8043,6 +8043,56 @@ preview server on 4173 are stopped. The
 arithmetic/capture evidence from invalid timing, records the workload and
 numerical limitations, and leaves the performance design open.
 
+## The galaxy holds its picture and filters its dust (05 Sep 2026)
+
+The M5 handoff's invalid timing had one cause and it was not the shader:
+`measureGpuFrameMs` drains the queue with an `await`, animation frames keep
+presenting under it, and every one goes through the same chain — so a batch
+of one frame recorded five to ten volume draws, and a batch with the backdrop
+hidden recorded eight to ten more, because the frame callback that shows it
+outran the line that hid it. R3F's `setFrameloop('never')` is not a hold:
+`<Canvas>` writes the `frameloop` prop back through `configure` on any render
+of the shell, and a probe here held `never` for 1.5 s with nothing submitted,
+so neither outcome is a property of the flag. `engine/frameHold.ts` is the
+hold every frame consumer reads for itself; `ir.gpu()` takes it before its
+first await. Ten frames asked for are ten submissions, and the hidden
+backdrop is none. **Do not measure through R3F's frameloop again.**
+
+The saturation was the redraw. Measured headlessly on the Apple M5 at a
+480×270 target, a draw was 113 ms face-on, 246 edge-on, 165 and 237 at two
+interior points — 5 ns a sample over 21–47 million samples — and it happened
+on every scene submission whether or not the view had moved. The volume now
+draws on a change of view, field or size, once more to settle after eight
+unchanged submissions, and holds the target between: 0.17 ms a frame at rest
+at 960×540 against 60–80 ms a draw, one observer draw and one settled draw
+per view switch, and one draw a frame through the journey's last third with
+the period at vsync. `ir.galaxy().render()` reports `draws` and `held`.
+
+Attribution through a kernel copy with parts switched off, at 240×135
+edge-on: 58.5 ms whole, 7.4 without the four dust-noise bands, 33.8 without
+the arms, 2.4 with neither. A texel from 40 kpc spans 140 pc and none of the
+64, 16, 4 and 1 pc bands resolves there. The ray now carries the pixel's
+angle; unresolved bands are replaced by their lattice mean `exp(a²σ²/2)`,
+σ² measured at 0.0729 and matching the exact mean to five decimals, and the
+live intervals are floored at half the footprint under the observer and
+settled laws only — never the plane-crossing law, or the young disk renders
+as noise. Edge-on 53 → 10.8 ms moving, 64 → 9.6 settled; interior toward the
+center 51 → 15.9 and 80 → 17.2. Over seventeen edge-on texels the filtered
+sum is 0.994 of the exact one in the plane; the GPU/CPU tests hold within
+the existing 1%; the edge-on plate differs from M5's by an RMSE of 0.86%.
+The field stays `galaxy-field@3`; the port is `galaxy-tsl@4`.
+
+Two measured non-wins, so nobody builds them: an eighth-size travel target
+(16.4 ms at 120×68 against 10.8 at 240×135 — a small draw is bound by its
+longest in-plane rays, not by throughput) and early termination at the
+transmittance floor (the loop body is 4% of a draw). Orbit traces were
+pre-exposed with the scene and bloomed white under the 2,400 s instrument;
+they now carry `integratedSkyGain` and present at one brightness at every
+exposure, held by `orbitTrace.gpu.test.ts` across 10⁶ of pre-exposure. The
+meter still counts them. The rigs are `.scratch/galaxy-perf/` and the record
+is [perf § The galaxy](design/plans/perf.md#the-galaxy). Every browser figure
+is from a 960×540 rig at the user's request.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
