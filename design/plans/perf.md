@@ -233,12 +233,41 @@ submission whether or not anything moved — is the galaxy section below.
 
 ## The galaxy
 
-Every figure here is from the 5 September 2026 run, on an Apple M5, through
+Unless dated separately, figures here are from the 5 September 2026 run, on an Apple M5, through
 two rigs: a headless one that draws the production volume node on the real
 GPU across a drained queue (`.scratch/galaxy-perf/`, a scratch vitest config
 over `openGpu`), and the driver at 960×540, DPR 1, occluded, so a draw is a
 240×135 target. Per-sample cost is flat across target sizes, so the headless
 rig answers kernel questions at any size the machine can spare.
+
+### Ordinary Earth orbit pays for a galaxy below its daylight response
+
+6 September 2026, production build, Apple M5, occluded 1920×1080 at DPR 1:
+Earth-orbit rotation averages 62.47 ms per frame, free look 55.69 ms, and a
+stationary view 16.67 ms. The simulation averages 0.29 ms during the orbit
+rotation and terrain visits zero nodes. The galaxy draws on all 35 moving
+frames in the 2.2-second window. Repeating the movement with the volume
+disabled restores 16.67 ms per frame. At 960×540 the same rotation averages
+18.37 ms, so the smaller rig hides most of the defect.
+
+Natural's default daylight calibration does not display the diffuse sky.
+`GameEngine.galaxyPose` omits that work when the current lens and range resolve
+to daylight or darker. It preserves brighter Natural settings, metered
+responses, Direct and staged galaxy instruments. The eligibility test reads
+the current settings rather than the previous frame's exposure, so a setting
+change reveals the volume immediately. Physical-GPU comparisons retain a lit
+foreground, fixed noise and the sensor PSF; the tested daylight differences
+remain below one display code with and without dust, while the long-exposure
+control differs visibly. This does not reduce the cost of a visible integral.
+
+The rebuilt production view averages 16.67 ms during both orbit and free-look
+movement at 1920×1080, with no volume submissions. At a 1440×900 CSS viewport,
+DPR 2, the confirmed 2880×1800 buffer also holds 16.67 ms for both movements.
+Orbit's simulation-to-wall-time ratio is 0.9955 and free look's is 1.0016 over
+the 2.2-second windows, within one 64 Hz tick of real time. No movement frame
+exceeds 17.8 ms in those Retina windows.
+
+The reproducible profiles are in `.scratch/orbit-perf/`.
 
 ### A draw was the whole integral, every frame, and at rest it was the saturation
 

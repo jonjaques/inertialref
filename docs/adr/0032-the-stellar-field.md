@@ -161,6 +161,19 @@ Geometry masks the background integral; transport does not stop partway
 through a ray at an object inside the stellar volume. Diffuse light between
 the eye and that object is therefore omitted at its silhouette.
 
+Ordinary Natural views omit the diffuse volume when the resolved exposure is
+terrestrial daylight or darker. Natural clamps the surface calibration to the
+lens's exposure range, so this holds exactly when the lens EV plus the bright
+range reaches the surface-calibration EV. The engine reads the current lens
+and settings; the sensor's published exposure describes the preceding frame
+and cannot decide whether a changed setting reveals the sky. Brighter Natural
+exposures, metered responses, Direct, and explicitly staged galaxy instruments
+retain the volume. This is a presentation policy for light below the daylight
+response, not a change to the field or its radiance. The physical-GPU daylight
+comparison includes foreground PSF mixing and fixed sensor noise, stays below
+one 8-bit display code at the tested solar viewpoints with and without dust,
+and keeps a visible long-exposure control.
+
 The render node draws when the view, the field or the target's size changes —
 at once, with the observer profile — and once more with the settled profile
 after eight unchanged scene submissions, then holds its target. The same pose,
@@ -203,9 +216,10 @@ orbit or distance gestures stop automatic travel.
 The ordinary camera ceiling is 110,000 ly. The centered endpoint is about
 101,400 ly from Earth, so a literal 100,000 ly cap clips the journey. Positions
 remain sector coordinates, and target positions resolve at `renderTime`.
-The engine publishes its sampled universe pose for the volume; a component
-never advances the observatory a second time. The planetarium requests the
-volume through its presentation stance. The homepage's decorative observatory
+The engine publishes its sampled universe pose for eligible volume draws; a
+component never advances the observatory a second time. The planetarium requests
+the volume through its presentation stance and the Natural daylight policy
+decides whether it contributes. The homepage's decorative observatory
 does not request it. Named galaxy instruments also enable it explicitly.
 
 The live quadrature uses the CPU integrator's `observer` sampling profile.

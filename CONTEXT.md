@@ -50,7 +50,8 @@ planetarium at 0.37 ms of engine (ADR-0025).
 
 The galaxy preview has fixed face-on and edge-on instruments and a reversible
 Earth-to-disk journey. Its live volume follows the planetarium observer through
-the scene and sensor. Shared seeded dust dims and reddens the diffuse light,
+the scene and sensor when the response admits diffuse light; ordinary Natural
+views at daylight calibration omit the volume. Shared seeded dust dims and reddens the diffuse light,
 with finer sampling after the camera settles. The field stays separate from
 active generation; local clouds, photometric calibration, resolved-star
 extinction, and temporal optimization remain open. The live dust rendering
@@ -8092,6 +8093,51 @@ exposure, held by `orbitTrace.gpu.test.ts` across 10⁶ of pre-exposure. The
 meter still counts them. The rigs are `.scratch/galaxy-perf/` and the record
 is [perf § The galaxy](design/plans/perf.md#the-galaxy). Every browser figure
 is from a 960×540 rig at the user's request.
+
+## Orbit dragging was spending the frame on an invisible sky (06 Sep 2026)
+
+The report was a camera drag that slowed the game until the mouse stopped.
+On the production build at 1920×1080, DPR 1, Apple M5, the occluded rig
+reproduced 62.47 ms mean orbit frames and 55.69 ms free-look frames against
+16.67 ms at rest. The simulation took 0.29 ms during orbit rotation and
+terrain visited zero nodes. Every one of the 35 frames in a 2.2-second drag
+window redrew the galaxy integral. The same motion with the volume hidden
+returned to 16.67 ms. At 960×540, rotation averaged 18.37 ms, which is why the
+smaller rig did not reveal the full regression.
+
+The held-target fix only helped a camera that stopped moving. Ordinary
+Natural views now omit the diffuse volume when the lens and exposure range
+resolve to terrestrial daylight or darker. The test is the lens EV plus the
+bright range reaching the calibration EV, exactly the condition under which
+Natural's clamp admits that calibration. It reads current settings because
+the published exposure is one frame old. Brighter Natural settings, metered
+responses, Direct and named galaxy instruments still render the volume.
+
+Two regressions failed before the change. They cover repeated orbit movement,
+unchanged canonical state, and immediate transitions into and out of an
+eligible exposure. The physical-GPU comparison includes foreground PSF mixing
+and a fixed noise tick; three solar viewpoints differ by less than one 8-bit
+display code with and without dust. A long-exposure control remains visibly
+different when the sky is omitted. This bounds the tested scenes, not every
+possible sensor setting or field. The field and kernel versions are unchanged.
+
+The rebuilt production view holds 16.67 ms during orbit and free-look movement
+at 1920×1080 and at a confirmed 2880×1800 drawing buffer, the latter a
+1440×900 CSS viewport at DPR 2. There are zero volume submissions in all four
+windows. The Retina simulation-to-wall-time ratios are 0.9955 during orbit and
+1.0016 during free look, within one fixed tick of real time across each
+2.2-second window; their largest frame is 17.8 ms. The full `pnpm check`
+passes 1,793 regular tests, five slow tests, layering, formatting, lint, types,
+documentation validation and the production build. Both new physical-GPU
+daylight comparisons pass separately.
+
+The browser's face-on instrument remains active at 640×360, with the pinned
+2,000× exposure multiplier, one observer draw and one settled draw. The Earth
+and galaxy captures are retained beside the profiles.
+
+The profiles and comparison script are in `.scratch/orbit-perf/`. Visible
+galaxy draws retain their measured cost; angular caching and the other
+remaining work stay in [the performance plan](design/plans/perf.md#the-galaxy).
 
 ## Known gaps
 
