@@ -9,8 +9,13 @@ import {
   type GalaxyField,
   type GalaxyPopulation,
 } from './field.ts'
-import { GALAXY_RADIANCE_FACTOR, integrateGalaxyRay } from './integral.ts'
+import {
+  GALAXY_DUST_SETTLED_STEP_PARSECS,
+  GALAXY_RADIANCE_FACTOR,
+  integrateGalaxyRay,
+} from './integral.ts'
 const field = createGalaxyField(rootSeed('inertialref'))
+const clearField = createGalaxyField(rootSeed('inertialref'), { dustScale: 0 })
 it('integrates a homogeneous emitter with the analytic path length and 4π conversion', () => {
   const homogeneous: GalaxyField = {
     ...field,
@@ -154,15 +159,15 @@ it.each([
   [3000, -20, 1000, -1, 0.01, 0.2],
   [0, 30000, 0, 0.2, -1, 0.1],
 ])(
-  'converges from observer (%s, %s, %s) within the live iteration budget',
+  'converges without dust from observer (%s, %s, %s) within the live iteration budget',
   (x, y, z, dx, dy, dz) => {
     const origin = UV.fromMeters(x * PARSEC, y * PARSEC, z * PARSEC)
     const direction = vec3(dx, dy, dz)
-    const live = integrateGalaxyRay(field, origin, direction, {
+    const live = integrateGalaxyRay(clearField, origin, direction, {
       distanceParsecs: 100000,
       sampling: 'observer',
     })
-    const fine = integrateGalaxyRay(field, origin, direction, {
+    const fine = integrateGalaxyRay(clearField, origin, direction, {
       distanceParsecs: 100000,
       sampling: 'observer',
       maxStepParsecs: 10,
@@ -200,3 +205,182 @@ it('integrates a homogeneous absorbing emitter within each interval analytically
     )
   expect(result.starsPerSquareParsec).toBeCloseTo(200, 10)
 })
+
+it('attenuates a rear source through foreground dust while preserving foreground emission', () => {
+  const sample = field.sample(UV.fromMeters(0, 0, 0))
+  const layered = (dustFirst: boolean): GalaxyField => ({
+    ...field,
+    sample: (position) => {
+      const dust = UV.approxMeters(position).x / PARSEC < 100 === dustFirst
+      return {
+        ...sample,
+        totalPerCubicParsec: dust ? 0 : 2,
+        emissionRgb: dust ? { r: 0, g: 0, b: 0 } : { r: 1, g: 1, b: 1 },
+        extinctionPerParsec: dust
+          ? { r: 0.01, g: 0.02, b: 0.03 }
+          : { r: 0, g: 0, b: 0 },
+      }
+    },
+  })
+  const ray = (dustFirst: boolean) =>
+    integrateGalaxyRay(
+      layered(dustFirst),
+      UV.fromMeters(0, 0, 0),
+      vec3(1, 0, 0),
+      { distanceParsecs: 200, maxStepParsecs: 25 },
+    )
+  const obscured = ray(true),
+    foreground = ray(false)
+  for (const [i, q] of [1, 2, 3].entries()) {
+    expect(obscured.rgbNanowatts[i]).toBeCloseTo(
+      100 * Math.exp(-q) * GALAXY_RADIANCE_FACTOR,
+      8,
+    )
+    expect(foreground.rgbNanowatts[i]).toBeCloseTo(
+      100 * GALAXY_RADIANCE_FACTOR,
+      8,
+    )
+    expect(obscured.transmittanceRgb[i]).toBeCloseTo(Math.exp(-q), 12)
+    expect(foreground.transmittanceRgb[i]).toBeCloseTo(Math.exp(-q), 12)
+  }
+  expect(obscured.starsPerSquareParsec).toBe(foreground.starsPerSquareParsec)
+})
+
+it('keeps zero-dust transport exactly equal to emission-only midpoint quadrature', () => {
+  const points: ReturnType<typeof clearField.sample>[] = []
+  const recording: GalaxyField = {
+    ...clearField,
+    sample: (p) => {
+      const sample = clearField.sample(p)
+      points.push(sample)
+      return sample
+    },
+  }
+  const ray = integrateGalaxyRay(recording, SUN_POSITION, vec3(1, 0, 0), {
+    distanceParsecs: 100,
+    maxStepParsecs: 5,
+  })
+  const expected = [0, 0, 0]
+  for (const sample of points) {
+    expected[0]! += sample.emissionRgb.r * 5
+    expected[1]! += sample.emissionRgb.g * 5
+    expected[2]! += sample.emissionRgb.b * 5
+  }
+  expect(ray.rgbNanowatts).toEqual(
+    expected.map((v) => v * GALAXY_RADIANCE_FACTOR),
+  )
+  expect(ray.transmittanceRgb).toEqual([1, 1, 1])
+  expect(ray.opticalDepthRgb).toEqual([0, 0, 0])
+})
+
+it('bounds transmission and increases attenuation when a fixed column gains dust', () => {
+  fc.assert(
+    fc.property(
+      fc.double({ min: 0, max: 4, noNaN: true }),
+      fc.double({ min: 0, max: 4, noNaN: true }),
+      fc.double({ min: -1, max: 1, noNaN: true }),
+      (a, b, dy) => {
+        const run = (scale: number) =>
+          integrateGalaxyRay(
+            createGalaxyField(field.seed, { dustScale: scale }),
+            SUN_POSITION,
+            vec3(1, dy, 0.2),
+            { distanceParsecs: 1000, maxStepParsecs: 10 },
+          )
+        const less = run(Math.min(a, b)),
+          more = run(Math.max(a, b))
+        for (let i = 0; i < 3; i++) {
+          expect(more.transmittanceRgb[i]).toBeGreaterThanOrEqual(0)
+          expect(less.transmittanceRgb[i]).toBeLessThanOrEqual(1)
+          expect(more.transmittanceRgb[i]!).toBeLessThanOrEqual(
+            less.transmittanceRgb[i]! + 1e-14,
+          )
+          expect(more.rgbNanowatts[i]!).toBeLessThanOrEqual(
+            less.rgbNanowatts[i]! + 1e-9,
+          )
+          expect(more.transmittanceRgb[i]).toBeCloseTo(
+            Math.exp(-more.opticalDepthRgb[i]!),
+            12,
+          )
+        }
+        expect(more.starsPerSquareParsec).toBe(less.starsPerSquareParsec)
+      },
+    ),
+    { numRuns: 30 },
+  )
+})
+
+it('reduces transmittance along successively longer portions of a ray', () => {
+  let previous = [1, 1, 1]
+  for (const distanceParsecs of [0, 100, 200, 500, 1000, 5000]) {
+    const ray = integrateGalaxyRay(field, SUN_POSITION, vec3(1, 0, -0.2), {
+      distanceParsecs,
+      maxStepParsecs: 5,
+    })
+    for (let i = 0; i < 3; i++)
+      expect(ray.transmittanceRgb[i]!).toBeLessThanOrEqual(previous[i]!)
+    previous = [...ray.transmittanceRgb]
+  }
+})
+
+it.each([
+  ['interior', -8178, 20.8, 0, 1, 0, 0],
+  ['crossing', -7900, 1000, 0, 1, -0.1, 0.1],
+  ['dense', 3000, -20, 1000, -1, 0.01, 0.2],
+  ['face-on', 0, 30000, 0, 0.2, -1, 0.1],
+  ['edge-on', 0, 0, 40000, 0, 0, -1],
+] as const)(
+  'converges the textured %s ray against a quarter-parsec reference',
+  (_name, x, y, z, dx, dy, dz) => {
+    const origin = UV.fromMeters(x * PARSEC, y * PARSEC, z * PARSEC),
+      direction = vec3(dx, dy, dz)
+    const run = (maxStepParsecs: number) =>
+      integrateGalaxyRay(field, origin, direction, {
+        distanceParsecs: 100000,
+        sampling: 'observer',
+        maxStepParsecs,
+      })
+    const reference = run(0.25),
+      fine = run(0.5),
+      settled = run(GALAXY_DUST_SETTLED_STEP_PARSECS)
+    expect(settled.samples).toBeLessThan(16384)
+    for (let i = 0; i < 3; i++) {
+      expect(
+        Math.abs(settled.rgbNanowatts[i]! / reference.rgbNanowatts[i]! - 1),
+      ).toBeLessThan(0.01)
+      expect(
+        Math.abs(fine.rgbNanowatts[i]! / reference.rgbNanowatts[i]! - 1),
+      ).toBeLessThan(0.0001)
+      expect(
+        Math.abs(fine.opticalDepthRgb[i]! / reference.opticalDepthRgb[i]! - 1),
+      ).toBeLessThan(0.0001)
+    }
+  },
+)
+
+it.each([0, 1e-12, 1e-7, 0.009999, 0.01, 1, 100])(
+  'retains the homogeneous source term at optical depth %s',
+  (q) => {
+    const sample = clearField.sample(SUN_POSITION)
+    const uniform: GalaxyField = {
+      ...clearField,
+      sample: () => ({
+        ...sample,
+        emissionRgb: { r: 1, g: 1, b: 1 },
+        extinctionPerParsec: { r: q, g: q, b: q },
+      }),
+    }
+    const result = integrateGalaxyRay(uniform, SUN_POSITION, vec3(1, 0, 0), {
+      distanceParsecs: 1,
+    })
+    const expected = q === 0 ? 1 : -Math.expm1(-q) / q
+    for (let i = 0; i < 3; i++) {
+      expect(result.rgbNanowatts[i]! / GALAXY_RADIANCE_FACTOR).toBeCloseTo(
+        expected,
+        9,
+      )
+      expect(result.transmittanceRgb[i]).toBeCloseTo(Math.exp(-q), 14)
+      expect(result.opticalDepthRgb[i]).toBe(q)
+    }
+  },
+)

@@ -25,6 +25,8 @@ export interface GalaxyRayIntegral {
   readonly transmittanceRgb: readonly [number, number, number]
   readonly opticalDepthRgb: readonly [number, number, number]
 }
+/** Settled preview rays stay within 1% RGB of the 0.25 pc reference probes. */
+export const GALAXY_DUST_SETTLED_STEP_PARSECS = 10
 export const GALAXY_OBSERVER_MIN_STEP_PARSECS = 1
 export const GALAXY_OBSERVER_STEP_GROWTH = 0.1
 export type GalaxyRaySampling = 'reference' | 'observer'
