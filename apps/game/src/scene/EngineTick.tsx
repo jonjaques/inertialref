@@ -1,4 +1,5 @@
 import { useFrame } from '@react-three/fiber'
+import { framesHeld } from '../engine/frameHold.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 
 /**
@@ -14,6 +15,9 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  */
 export function EngineTick({ engine }: { engine: GameEngine }) {
   useFrame((_, delta) => {
+    // A held frame steps nothing. The wall time it took reaches the next
+    // step's `delta`, where the clock books it — see `engine/frameHold.ts`.
+    if (framesHeld()) return
     // The one place the wall clock enters the game, and it is handed over raw.
     // It used to be clamped to 0.25 s here, which changed nothing about the
     // spiral of death — `clock.plan` already caps a frame's integration at

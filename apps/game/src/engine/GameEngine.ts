@@ -74,6 +74,7 @@ import {
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
 import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
+import { holdFrames } from './frameHold.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
@@ -311,6 +312,12 @@ export class GameEngine {
   /**
    * Submit `frames` frames and time them across a drained queue, or null when
    * there is nothing to submit or no device to drain — see `measureGpuFrameMs`.
+   *
+   * The loop is held for the whole measurement, and taken synchronously here
+   * rather than inside the awaited helper: a caller that hides a mesh and
+   * asks for the figure on the next line has to know no frame ran between
+   * the two. `engine/frameHold.ts` says why the hold is not R3F's
+   * `frameloop`.
    */
   measureGpu(frames?: number): Promise<number> | null {
     const gl = this.gl
@@ -321,7 +328,8 @@ export class GameEngine {
       present ??
       (view === null ? null : () => gl.renderer.render(view.scene, view.camera))
     if (draw === null) return null
-    return measureGpuFrameMs(gl.renderer, draw, frames)
+    const release = holdFrames()
+    return measureGpuFrameMs(gl.renderer, draw, frames).finally(release)
   }
 
   origin: RenderOrigin | null = null

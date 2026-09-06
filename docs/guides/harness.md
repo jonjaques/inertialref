@@ -129,10 +129,15 @@ sampling profile, and bounded local survey.
 
 `ir.galaxy().render()` returns the live target's dimensions and bytes, field
 and kernel versions, normalization, galactic-center origin in parsecs, step
-bounds, dust scale, sampling profile, settled state, readiness and cumulative
-volume submissions. The settled profile refines intervals near the dust plane
-after eight unchanged submissions; movement resets the observer profile. It returns `null` without
-a renderer. `ir.lens()` gives the actual instrument exposure. The face-on view
+bounds, dust scale, sampling profile, settled state, readiness, and three
+counters: `submissions`, the scene submissions the volume was asked in;
+`draws`, the times it drew; and `held`, whether the last submission reused
+the target. The volume draws when the view, field or size changes and once
+more, with the settled profile, after eight unchanged submissions; between
+those the target is held and a submission costs the backdrop's composite.
+`--sample 12 --sample-js "ir.galaxy().render()"` shows that cadence one frame
+at a time, and `ir.gpu()` holds the loop while it measures, so its frame
+count and these counters agree. It returns `null` without a renderer. `ir.lens()` gives the actual instrument exposure. The face-on view
 uses f/2, 2,400 s, ISO 400; edge-on uses f/2, 600 s, ISO 400. Both contain
 stellar emission transported through the shared dust field, with an illustrative
 visible efficacy pending photometric calibration. `resolvedStarExtinction: false`

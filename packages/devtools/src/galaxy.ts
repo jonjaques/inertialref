@@ -76,7 +76,12 @@ export interface GalaxyRenderReport {
   readonly settled: boolean
   readonly dustStepParsecs: number | null
   readonly maxSteps: number
+  /** Scene submissions the volume was asked in, drawn or not. */
   readonly submissions: number
+  /** Volume draws. Less than `submissions` once the target is being reused. */
+  readonly draws: number
+  /** Whether the last submission reused the target rather than drawing. */
+  readonly held: boolean
   readonly emissionOnly: boolean
   readonly dustScale: number
   readonly dustNormalization: number
