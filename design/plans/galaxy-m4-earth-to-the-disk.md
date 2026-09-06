@@ -1,6 +1,6 @@
 # M4: Earth to the galaxy through the sensor
 
-Status: implemented and verified locally, with the lighting and capture limits below, 5 Sep 2026.
+Status: implemented and verified; [PR #66](https://github.com/jonjaques/inertialref/pull/66) is open for review with the lighting and capture limits below, 5 Sep 2026.
 
 This is the execution plan for M4 of [the galaxy plan](the-galaxy.md). The
 requested result is a new branch containing the implemented and verified
@@ -90,9 +90,14 @@ work must subtract. The images' dark lanes therefore remain absent in M4.
   absence of every one-frame artifact; do not describe it as artifact-free.
 - `7542f64` commits the implementation account and measurements. Final evidence
   documentation passes formatting and documentation-link validation.
-- No remote branch, PR, review, or media upload is part of the current
-  authorization. Make local commits as the repository requires. Shipping is a
-  separate user request.
+- The user invoked `ship` after implementation. [PR #66](https://github.com/jonjaques/inertialref/pull/66)
+  is open ready for review against M3's `codex/galaxy-the-disk-is-visible` at
+  `d980228`. Rebasing onto current `origin/main` and that predecessor changes
+  no commits. The verified implementation remains `7b612a1`, with its complete
+  evidence ledger at `8235d85`.
+- The [journey recording](https://agentic-media-dumpster.jonjaques.com/2026/09/qxvm25qiw7/journey.mp4)
+  and response comparisons are attached to the public PR. Review remains the
+  user's next command; no review agents or merge are part of shipping.
 
 ## Existing mechanisms to retain
 

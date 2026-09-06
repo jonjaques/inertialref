@@ -7866,8 +7866,8 @@ Three.js Clock deprecation.
 
 ## Earth can leave the picture without moving the world (05 Sep 2026)
 
-M4 is implemented locally on `codex/galaxy-earth-to-the-disk`, based on M3's
-`d980228`. The [execution plan](design/plans/galaxy-m4-earth-to-the-disk.md)
+M4 is open in [PR #66](https://github.com/jonjaques/inertialref/pull/66) on
+`codex/galaxy-earth-to-the-disk`, targeting M3's branch at `d980228`. The [execution plan](design/plans/galaxy-m4-earth-to-the-disk.md)
 records scope and verification; [ADR-0032](docs/adr/0032-the-stellar-field.md)
 records the camera and sensor contracts. The route's target, 30 kpc above the
 center, is about 101,400 ly from Earth: a literal 100,000 ly ceiling clips it.
