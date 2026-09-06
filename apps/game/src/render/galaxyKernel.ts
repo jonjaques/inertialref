@@ -12,6 +12,7 @@ import {
   mix,
   uint,
   uniform,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl'
@@ -19,6 +20,9 @@ import { deriveSeed } from '@inertialref/procedural'
 import {
   blackbodyColour,
   GALAXY_ARMS,
+  GALAXY_DUST,
+  GALAXY_DUST_SETTLED_STEP_PARSECS,
+  GALAXY_DUST_SETTLED_HEIGHT_FACTOR,
   GALAXY_HEIGHT_PARSECS,
   GALAXY_POPULATIONS,
   GALAXY_RADIUS_PARSECS,
@@ -34,10 +38,12 @@ import {
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@2'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@3'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
+/** The omitted light is bounded by this fraction of the ray's unextinguished source. */
+export const GALAXY_TRANSMITTANCE_FLOOR = 1e-12
 
 const smooth = (t: Node<'float'>) => {
   const x = t.clamp()
@@ -167,13 +173,15 @@ function logSpiral(
 }
 function armKernel(arm: GalaxyArm, index: number) {
   return Fn(([radius, beta]: [Node<'float'>, Node<'float'>]) => {
-    const sum = float(0).toVar()
+    const sum = vec2(0).toVar()
     const width =
       arm.id === 'local'
         ? float(310)
         : radius.div(1000).sub(8.15).mul(36).add(336).max(140)
-    Loop({ start: -2, end: 2, type: 'int' }, ({ i }) => {
-      const angle = beta.add(float(i).mul(TAU)).toVar()
+    // Stars and dust share each centerline evaluation; only the lane offset
+    // and transverse width differ.
+    for (let turn = -2; turn < 2; turn++) {
+      const angle = beta.add(turn * TAU).toVar()
       const degrees = angle.div(DEG).toVar()
       If(
         degrees
@@ -230,28 +238,45 @@ function armKernel(arm: GalaxyArm, index: number) {
             .mul(arm.pitchAfterDegrees - arm.pitchBeforeDegrees)
             .add(arm.pitchBeforeDegrees)
             .mul(DEG)
-          const distance = radius
-            .sub(logRadius.exp())
-            .mul(pitch.cos())
-            .div(width)
+          const displacement = radius.sub(logRadius.exp()).toVar()
+          const projection = pitch.cos().div(width).toVar()
+          const distance = vec2(
+            displacement,
+            displacement
+              .sub(GALAXY_DUST.armOffsetParsecs)
+              .div(GALAXY_DUST.armWidthScale),
+          )
+            .mul(projection)
+            .toVar()
           const ends = smooth(degrees.sub(arm.startDegrees).div(15)).mul(
             smooth(float(arm.endDegrees).sub(degrees).div(15)),
           )
           sum.addAssign(ends.mul(distance.mul(distance).mul(-0.5).exp()))
         },
       )
-    })
+    }
     return sum
   }).setLayout({
     name: `galaxyArm${index}`,
-    type: 'float',
+    type: 'vec2',
     inputs: [
       { name: 'radius', type: 'float' },
       { name: 'beta', type: 'float' },
     ],
   })
 }
-const arms = GALAXY_ARMS.map(armKernel)
+const arms = GALAXY_ARMS.map((arm, index) => armKernel(arm, index))
+const structureAt = Fn(([p]: [Node<'vec3'>]) => {
+  const radius = p.xz.length().toVar(),
+    beta = betaAt(p).toVar()
+  const strength = vec2(0).toVar()
+  for (const arm of arms) strength.addAssign(arm(radius, beta))
+  return vec3(strength, p.y.sub(warp(radius, beta)).abs())
+}).setLayout({
+  name: 'galaxyStructure',
+  type: 'vec3',
+  inputs: [{ name: 'p', type: 'vec3' }],
+})
 const emissionColors = POPULATION_NAMES.map((name) => {
   const population = GALAXY_POPULATIONS[name]
   const c = blackbodyColour(population.temperature)
@@ -261,12 +286,15 @@ const emissionColors = POPULATION_NAMES.map((name) => {
 
 /** Galactic-center offsets in parsecs, packed from UniverseVector only at the host boundary. */
 const sample = Fn(
-  ([p, seed, normalization]: [Node<'vec3'>, Node<'uint'>, Node<'float'>]) => {
+  ([p, seed, normalization, structure]: [
+    Node<'vec3'>,
+    Node<'uint'>,
+    Node<'float'>,
+    Node<'vec3'>,
+  ]) => {
     const radius = p.xz.length().toVar()
-    const beta = betaAt(p).toVar()
-    const height = p.y.sub(warp(radius, beta)).abs().toVar()
-    const strength = float(0).toVar()
-    for (const arm of arms) strength.addAssign(arm(radius, beta))
+    const height = structure.z,
+      strength = structure.x
     const edge = smooth(
       float(GALAXY_RADIUS_PARSECS).sub(radius).div(4000),
     ).toVar()
@@ -318,27 +346,96 @@ const sample = Fn(
     { name: 'p', type: 'vec3' },
     { name: 'seed', type: 'uint' },
     { name: 'normalization', type: 'float' },
+    { name: 'structure', type: 'vec3' },
   ],
 })
 
-/** Midpoint intervals and the warped-plane step law are identical to integrateGalaxyRay. */
+const extinction = Fn(
+  ([p, seed, normalization, structure]: [
+    Node<'vec3'>,
+    Node<'uint'>,
+    Node<'float'>,
+    Node<'vec3'>,
+  ]) => {
+    const radius = p.xz.length().toVar()
+    const height = structure.z,
+      strength = structure.y
+    const logModulation = float(0).toVar()
+    for (const octave of GALAXY_DUST.octaves)
+      logModulation.addAssign(
+        noise(seed, p.div(octave.scaleParsecs)).mul(octave.logAmplitude),
+      )
+    const vertical = height
+      .div(-GALAXY_DUST.thinHeightParsecs)
+      .exp()
+      .mul(GALAXY_DUST.thinFraction)
+      .add(
+        height
+          .div(-GALAXY_DUST.thickHeightParsecs)
+          .exp()
+          .mul(GALAXY_DUST.thickFraction),
+      )
+    const coefficient = float(8178)
+      .sub(radius)
+      .div(GALAXY_DUST.radialScaleParsecs)
+      .exp()
+      .mul(vertical)
+      .mul(smooth(float(GALAXY_RADIUS_PARSECS).sub(radius).div(4000)))
+      .mul(strength.mul(GALAXY_DUST.armContrast).add(1))
+      .mul(logModulation.exp())
+      .mul(normalization)
+    const rgb = GALAXY_DUST.extinctionRgb
+    return vec3(rgb.r, rgb.g, rgb.b).mul(coefficient)
+  },
+).setLayout({
+  name: 'galaxyExtinction',
+  type: 'vec3',
+  inputs: [
+    { name: 'p', type: 'vec3' },
+    { name: 'seed', type: 'uint' },
+    { name: 'normalization', type: 'float' },
+    { name: 'structure', type: 'vec3' },
+  ],
+})
+
+/** Exact homogeneous-segment source integral, with a cancellation-free thin limit. */
+const segmentTransmission = Fn(([q]: [Node<'vec3'>]) =>
+  q
+    .lessThan(0.01)
+    .select(
+      vec3(1).sub(q.mul(0.5)).add(q.mul(q).div(6)).sub(q.mul(q).mul(q).div(24)),
+      vec3(1).sub(q.negate().exp()).div(q.max(1e-20)),
+    ),
+).setLayout({
+  name: 'galaxySegmentTransmission',
+  type: 'vec3',
+  inputs: [{ name: 'q', type: 'vec3' }],
+})
+
+/** Midpoint coefficients and front-to-back transport match integrateGalaxyRay. */
 const integrate = Fn(
   ([
     origin,
     direction,
     distance,
     maxStep,
-    observerSampling,
+    sampling,
     seed,
     normalization,
+    dustSeed,
+    dustNormalization,
+    transmissionOnly,
   ]: [
     Node<'vec3'>,
     Node<'vec3'>,
     Node<'float'>,
     Node<'float'>,
-    Node<'bool'>,
+    Node<'uint'>,
     Node<'uint'>,
     Node<'float'>,
+    Node<'uint'>,
+    Node<'float'>,
+    Node<'bool'>,
   ]) => {
     const d = direction.normalize().toVar()
     const near = float(0).toVar(),
@@ -364,6 +461,7 @@ const integrate = Fn(
       })
     }
     const result = vec4(0).toVar()
+    const transmission = vec3(1).toVar()
     const t = near.toVar()
     Loop(GALAXY_MAX_STEPS, () => {
       If(t.greaterThanEqual(far), () => {
@@ -378,7 +476,7 @@ const integrate = Fn(
         .min(maxStep)
         .min(far.sub(t))
         .toVar()
-      If(observerSampling, () => {
+      If(sampling.greaterThan(0), () => {
         step.assign(
           step.min(
             t
@@ -387,16 +485,49 @@ const integrate = Fn(
           ),
         )
       })
+      If(sampling.equal(2), () => {
+        step.assign(
+          step.min(
+            height
+              .mul(GALAXY_DUST_SETTLED_HEIGHT_FACTOR)
+              .max(GALAXY_DUST_SETTLED_STEP_PARSECS),
+          ),
+        )
+      })
+      const midpoint = origin.add(d.mul(t.add(step.mul(0.5)))).toVar()
+      const structure = structureAt(midpoint).toVar()
+      const emitted = sample(midpoint, seed, normalization, structure).toVar()
+      const q = vec3(0).toVar()
+      const illuminated = transmission.r
+        .max(transmission.g)
+        .max(transmission.b)
+        .greaterThan(GALAXY_TRANSMITTANCE_FLOOR)
+      If(
+        dustNormalization.greaterThan(0).and(transmissionOnly.or(illuminated)),
+        () => {
+          q.assign(
+            extinction(midpoint, dustSeed, dustNormalization, structure).mul(
+              step,
+            ),
+          )
+        },
+      )
+      If(transmissionOnly.not().and(illuminated.not()), () => {
+        transmission.assign(0)
+      })
       result.addAssign(
-        sample(
-          origin.add(d.mul(t.add(step.mul(0.5)))),
-          seed,
-          normalization,
+        vec4(
+          emitted.rgb.mul(transmission).mul(segmentTransmission(q)),
+          emitted.a,
         ).mul(step),
       )
+      transmission.mulAssign(q.negate().exp())
       t.addAssign(step)
     })
-    return vec4(result.rgb.mul(GALAXY_RADIANCE_FACTOR), result.a)
+    return transmissionOnly.select(
+      vec4(transmission, 1),
+      vec4(result.rgb.mul(GALAXY_RADIANCE_FACTOR), result.a),
+    )
   },
 ).setLayout({
   name: 'galaxyIntegral',
@@ -406,9 +537,12 @@ const integrate = Fn(
     { name: 'direction', type: 'vec3' },
     { name: 'distance', type: 'float' },
     { name: 'maxStep', type: 'float' },
-    { name: 'observerSampling', type: 'bool' },
+    { name: 'sampling', type: 'uint' },
     { name: 'seed', type: 'uint' },
     { name: 'normalization', type: 'float' },
+    { name: 'dustSeed', type: 'uint' },
+    { name: 'dustNormalization', type: 'float' },
+    { name: 'transmissionOnly', type: 'bool' },
   ],
 })
 
@@ -418,35 +552,67 @@ export function createGalaxyKernel(field: GalaxyField) {
     'uint',
   )
   const normalization = uniform(field.normalization)
+  const dustSeed = uniform(
+    deriveSeed(field.seed, 'galaxy-field:dust').a,
+    'uint',
+  )
+  const dustNormalization = uniform(field.dustNormalization * field.dustScale)
+  const ray = (
+    origin: Node<'vec3'>,
+    direction: Node<'vec3'>,
+    distance: number | Node<'float'>,
+    sampling: GalaxyRaySampling | Node<'uint'>,
+    maxStep: number | Node<'float'>,
+    transmissionOnly: boolean,
+  ) =>
+    integrate(
+      origin,
+      direction,
+      typeof distance === 'number' ? float(distance) : distance,
+      typeof maxStep === 'number' ? float(maxStep) : maxStep,
+      typeof sampling === 'string'
+        ? uint(sampling === 'reference' ? 0 : sampling === 'observer' ? 1 : 2)
+        : sampling,
+      seed,
+      normalization,
+      dustSeed,
+      dustNormalization,
+      bool(transmissionOnly),
+    )
   return {
     setField(next: GalaxyField) {
       seed.value = deriveSeed(next.seed, 'galaxy-field:young-arms').a
       normalization.value = next.normalization
+      dustSeed.value = deriveSeed(next.seed, 'galaxy-field:dust').a
+      dustNormalization.value = next.dustNormalization * next.dustScale
     },
     structure: (p: Node<'vec3'>): Node<'vec4'> =>
       Fn(() => {
         const radius = p.xz.length().toVar(),
           beta = betaAt(p).toVar()
         const total = float(0).toVar()
-        for (const arm of arms) total.addAssign(arm(radius, beta))
+        for (const arm of arms) total.addAssign(arm(radius, beta).x)
         return vec4(total, warp(radius, beta), 0, 1)
       })(),
     sample: (position: Node<'vec3'>): Node<'vec4'> =>
-      sample(position, seed, normalization),
+      sample(position, seed, normalization, structureAt(position)),
+    extinction: (position: Node<'vec3'>): Node<'vec3'> =>
+      extinction(position, dustSeed, dustNormalization, structureAt(position)),
     integrate: (
       origin: Node<'vec3'>,
       direction: Node<'vec3'>,
       distance: number | Node<'float'> = 100000,
-      sampling: GalaxyRaySampling = 'observer',
+      sampling: GalaxyRaySampling | Node<'uint'> = 'observer',
+      maxStep: number | Node<'float'> = GALAXY_MAX_STEP_PARSECS,
     ): Node<'vec4'> =>
-      integrate(
-        origin,
-        direction,
-        typeof distance === 'number' ? float(distance) : distance,
-        float(GALAXY_MAX_STEP_PARSECS),
-        bool(sampling === 'observer'),
-        seed,
-        normalization,
-      ),
+      ray(origin, direction, distance, sampling, maxStep, false),
+    transmittance: (
+      origin: Node<'vec3'>,
+      direction: Node<'vec3'>,
+      distance: number | Node<'float'> = 100000,
+      sampling: GalaxyRaySampling | Node<'uint'> = 'observer',
+      maxStep: number | Node<'float'> = GALAXY_MAX_STEP_PARSECS,
+    ): Node<'vec3'> =>
+      ray(origin, direction, distance, sampling, maxStep, true).rgb,
   }
 }

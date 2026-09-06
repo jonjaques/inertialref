@@ -1,8 +1,9 @@
 import { invariant, PARSEC } from '@inertialref/shared'
-import { UV, vec3, type UniverseVector } from '@inertialref/spatial'
+import { UV, vec3, type UniverseVector, type Vec3 } from '@inertialref/spatial'
 import {
   createGalaxyField,
   GALAXY_FIELD_VERSIONS,
+  GALAXY_DUST_SETTLED_STEP_PARSECS,
   GENERATION_VERSIONS,
   integrateGalaxyCount,
   integrateGalaxyRay,
@@ -12,6 +13,7 @@ import {
   type GalaxyCountOptions,
   type GalaxyField,
   type GalaxyPopulation,
+  type GalaxyRayOptions,
 } from '@inertialref/universe'
 import type { Lens, Exposure } from '@inertialref/rendering'
 import type { Quat } from '@inertialref/spatial'
@@ -26,6 +28,7 @@ export interface GalaxyPlateOptions {
   readonly height?: number
   readonly maxStepParsecs?: number
   readonly observer?: UniverseVector
+  readonly dustScale?: number
 }
 export interface GalaxyPlate {
   readonly population: GalaxyPopulation | null
@@ -35,7 +38,9 @@ export interface GalaxyPlate {
   readonly fieldVersions: typeof GALAXY_FIELD_VERSIONS
   readonly seed: string
   readonly units: 'bolometric nW m^-2 sr^-1'
-  readonly emissionOnly: true
+  readonly emissionOnly: boolean
+  readonly dustScale: number
+  readonly maxStepParsecs: number
   /** Interleaved linear RGB. Its sum is the pixel's bolometric radiance. */
   readonly rgb: Float64Array
   readonly maxRadiance: number
@@ -46,7 +51,7 @@ export interface GalaxyRenderReport {
   readonly coordinateFrame: 'galactocentric'
   readonly orientation: Quat | null
   readonly lens: Lens | null
-  readonly sampling: 'observer'
+  readonly sampling: 'observer' | 'settled'
   readonly exposure: Exposure | null
   readonly instrument: boolean
   readonly journey: GalaxyJourneyStatus | null
@@ -68,9 +73,14 @@ export interface GalaxyRenderReport {
   readonly targetBytes: number
   readonly resolutionDivisor: number
   readonly maxStepParsecs: number
+  readonly settled: boolean
+  readonly dustStepParsecs: number | null
   readonly maxSteps: number
   readonly submissions: number
-  readonly emissionOnly: true
+  readonly emissionOnly: boolean
+  readonly dustScale: number
+  readonly dustNormalization: number
+  readonly resolvedStarExtinction: false
   readonly originParsecs: readonly number[]
 }
 
@@ -99,6 +109,9 @@ export class GalaxyInspector {
   count(options: GalaxyCountOptions = {}) {
     return integrateGalaxyCount(this.field, options)
   }
+  ray(direction: Vec3, options: GalaxyRayOptions = {}, origin = SUN_POSITION) {
+    return integrateGalaxyRay(this.field, origin, direction, options)
+  }
   tangencies() {
     return GALAXY_ARMS.map((arm) => ({
       arm: arm.id,
@@ -123,6 +136,13 @@ export class GalaxyInspector {
         height <= 2048,
       'Galaxy plate dimensions must be integers from 1 through 2048',
     )
+    const field =
+      options.dustScale === undefined
+        ? this.field
+        : createGalaxyField(this.field.seed, { dustScale: options.dustScale })
+    const maxStepParsecs =
+      options.maxStepParsecs ??
+      (field.dustScale === 0 ? 100 : GALAXY_DUST_SETTLED_STEP_PARSECS)
     const rgb = new Float64Array(width * height * 3)
     let maxRadiance = 0,
       samples = 0
@@ -156,15 +176,13 @@ export class GalaxyInspector {
           )
           direction = vec3(0, 0, -1)
         }
-        const ray = integrateGalaxyRay(this.field, origin, direction, {
+        const ray = integrateGalaxyRay(field, origin, direction, {
           ...(options.population === undefined
             ? {}
             : { population: options.population }),
           distanceParsecs:
             view === 'face-on' ? 24000 : view === 'edge-on' ? 64000 : 60000,
-          ...(options.maxStepParsecs === undefined
-            ? {}
-            : { maxStepParsecs: options.maxStepParsecs }),
+          maxStepParsecs,
         })
         const index = 3 * (y * width + x)
         rgb[index] = ray.rgbNanowatts[0]
@@ -181,7 +199,9 @@ export class GalaxyInspector {
       fieldVersions: GALAXY_FIELD_VERSIONS,
       seed: this.#seed,
       units: 'bolometric nW m^-2 sr^-1',
-      emissionOnly: true,
+      emissionOnly: field.dustScale === 0,
+      dustScale: field.dustScale,
+      maxStepParsecs,
       rgb,
       maxRadiance,
       samples,

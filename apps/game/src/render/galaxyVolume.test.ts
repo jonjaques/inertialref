@@ -10,8 +10,10 @@ import {
 } from 'three/webgpu'
 import { createGalaxyField } from '@inertialref/universe'
 import { rootSeed } from '@inertialref/procedural'
+import { PARSEC } from '@inertialref/shared'
+import { UV, vec3 } from '@inertialref/spatial'
 import { GALAXY_VIEWS } from '@inertialref/rendering'
-import { GalaxyVolumeNode } from './galaxyVolume.ts'
+import { GalaxyVolumeNode, GALAXY_SETTLE_SUBMISSIONS } from './galaxyVolume.ts'
 
 function recorder() {
   const initial = new RenderTarget()
@@ -44,6 +46,58 @@ function recorder() {
 }
 const field = createGalaxyField(rootSeed('inertialref'))
 const view = GALAXY_VIEWS['face-on']
+
+it('settles to fine transport, tolerates local drift, and resets after accumulated travel', async () => {
+  const volume = new GalaxyVolumeNode(field)
+  const { renderer, initial } = recorder()
+  const frame = { renderer } as unknown as NodeFrame
+  await volume.warm(renderer as unknown as WebGPURenderer)
+  for (let i = 0; i <= GALAXY_SETTLE_SUBMISSIONS; i++) {
+    volume.configure(
+      {
+        ...view.pose,
+        position: UV.translate(view.pose.position, vec3(i * 1000, 0, 0)),
+      },
+      view.lens,
+    )
+    volume.updateBefore(frame)
+  }
+  expect(volume.diagnostics).toMatchObject({
+    maxStepParsecs: 100,
+    dustStepParsecs: 10,
+    settled: true,
+    emissionOnly: false,
+    dustScale: 1,
+    resolvedStarExtinction: false,
+  })
+  const pose = {
+    ...view.pose,
+    position: UV.translate(view.pose.position, vec3(0.02 * PARSEC, 0, 0)),
+  }
+  volume.configure(pose, view.lens)
+  volume.updateBefore(frame)
+  expect(volume.diagnostics).toMatchObject({
+    maxStepParsecs: 100,
+    settled: false,
+  })
+  for (let i = 0; i < GALAXY_SETTLE_SUBMISSIONS; i++) {
+    volume.configure(pose, view.lens)
+    volume.updateBefore(frame)
+  }
+  expect(volume.diagnostics.settled).toBe(true)
+  volume.configure(
+    pose,
+    view.lens,
+    createGalaxyField(field.seed, { dustScale: 0 }),
+  )
+  expect(volume.diagnostics).toMatchObject({
+    settled: false,
+    emissionOnly: true,
+    dustScale: 0,
+  })
+  volume.dispose()
+  initial.dispose()
+})
 
 it('owns the same target for warming, quarter-size updates, resize, and retirement', async () => {
   const volume = new GalaxyVolumeNode(field)

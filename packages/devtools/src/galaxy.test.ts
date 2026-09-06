@@ -39,16 +39,42 @@ it.each([
   ['edge-on', 13467.419656853888, 62747.68437106824],
   ['observer', 11347.873133070729, 144661.7075324133],
 ] as const)(
-  'pins galaxy-field@2 numeric plate values for %s',
+  'retains the dust-free numeric plate reference for %s',
   (view, max, sum) => {
     const session = openSession()
     try {
       const plate = session.harness
         .galaxy()
-        .plate({ view, width: 12, height: 8 })
-      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 2 })
+        .plate({ view, width: 12, height: 8, dustScale: 0 })
+      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 3 })
+      expect(plate.emissionOnly).toBe(true)
       expect(plate.maxRadiance).toBeCloseTo(max, 6)
       expect([...plate.rgb].reduce((a, b) => a + b, 0)).toBeCloseTo(sum, 6)
+    } finally {
+      session.dispose()
+    }
+  },
+)
+
+it.each([
+  ['face-on', 6012.956429804703, 26060.112987154007],
+  ['edge-on', 13223.456827898237, 61539.64948305343],
+  ['observer', 7620.979884300879, 115131.37029264722],
+] as const)(
+  'pins galaxy-field@3 dust transport plates for %s',
+  (view, max, sum) => {
+    const session = openSession()
+    try {
+      const inspector = session.harness.galaxy()
+      const plate = inspector.plate({ view, width: 12, height: 8 })
+      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 3 })
+      expect(plate.emissionOnly).toBe(false)
+      expect(plate.maxStepParsecs).toBe(10)
+      expect(plate.maxRadiance).toBeCloseTo(max, 6)
+      expect([...plate.rgb].reduce((a, b) => a + b, 0)).toBeCloseTo(sum, 6)
+      const ray = inspector.ray({ x: 1, y: 0, z: 0 }, { distanceParsecs: 100 })
+      expect(ray.transmittanceRgb[0]).toBeLessThan(1)
+      expect(ray.transmittanceRgb[2]).toBeLessThan(ray.transmittanceRgb[0])
     } finally {
       session.dispose()
     }
