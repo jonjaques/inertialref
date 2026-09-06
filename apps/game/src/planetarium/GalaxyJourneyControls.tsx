@@ -31,12 +31,11 @@ export function GalaxyJourneyControls({
         <Action
           label="Travel Out"
           tone="primary"
-          disabled={progress === 1 && remaining === 0}
           onClick={() => travel(1, GALAXY_JOURNEY_SECONDS)}
         />
         <Action
           label="Return"
-          disabled={progress === null || (progress === 0 && remaining === 0)}
+          disabled={progress === null}
           onClick={() => travel(0, GALAXY_JOURNEY_SECONDS)}
         />
         <Action

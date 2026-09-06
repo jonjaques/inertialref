@@ -7954,6 +7954,22 @@ raster coverage at the extreme exposure, not a diagnosis proved by this test.
 The 37 fps capture also cannot rule out every one-frame artifact. Keep both
 limits beside the clip; it is not an artifact-free claim.
 
+## An endpoint distance is not an endpoint pose (05 Sep 2026)
+
+PR #66's review found two gaps after manual camera gestures. Seeking Earth
+Orbit retained free look: with a half-turn offset, the camera's forward
+direction dotted with the direction to Earth was −1. Immediate journey seeks
+now clear that offset; timed travel and Hold preserve it.
+
+At progress one, an orbit drag moved the eye 8,244 pc from the destination
+without changing its distance from Earth. The distance-only progress kept
+Travel Out disabled. Both destination buttons now allow reasserting their
+endpoint while a journey exists; Travel Out also starts a new journey.
+Five regression cases failed before these fixes, covering three seek
+positions and the actual rendered buttons after orbiting at either endpoint.
+The control tests render in Node. Browser tests are omitted at the user's
+request.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
