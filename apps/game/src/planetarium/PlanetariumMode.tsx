@@ -5,6 +5,8 @@ import {
   pictureLink,
   presetLink,
   readPictureLink,
+  pictureQueryKey,
+  withoutPictureLink,
   withPictureLink,
 } from './presetUrl.ts'
 import type { PerspectiveCamera } from 'three/webgpu'
@@ -63,8 +65,7 @@ export function PlanetariumMode({
 }) {
   const [params, setParams] = useSearchParams()
   const requested = params.get(QUERY.at)
-  const document = params.get(QUERY.shot)
-  const preset = params.get(QUERY.preset)
+  const document = pictureQueryKey(params)
   const saveRequested = params.get(QUERY.save) === '1'
   const navigate = useNavigate()
   const target = useEngine(
@@ -176,9 +177,7 @@ export function PlanetariumMode({
           // through every one of them would be useless for leaving the mode.
           setParams(
             (current) => {
-              const next = new URLSearchParams(current)
-              for (const key of [QUERY.preset, QUERY.shot, QUERY.save])
-                next.delete(key)
+              const next = withoutPictureLink(current)
               next.set(QUERY.at, status.target?.address ?? '')
               return next
             },
@@ -205,10 +204,7 @@ export function PlanetariumMode({
   // Only view parameters replace the camera. A child dialog keeps the same document.
   useEffect(() => {
     try {
-      const query = new URLSearchParams()
-      if (document !== null) query.set(QUERY.shot, document)
-      if (preset !== null) query.set(QUERY.preset, preset)
-      const { picture } = readPictureLink(query)
+      const { picture } = readPictureLink(new URLSearchParams(document))
       if (picture !== null) engine.harness.takePicture(picture)
       else if (
         engine.harness.observatory.target?.address !==
@@ -224,7 +220,7 @@ export function PlanetariumMode({
       if (engine.harness.observatory.target === null)
         engine.harness.look(DEFAULT_TARGET)
     }
-  }, [engine, requested, document, preset])
+  }, [engine, requested, document])
 
   useEffect(() => {
     if (!saveRequested) return

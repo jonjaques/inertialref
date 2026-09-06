@@ -250,6 +250,7 @@ export const QUERY = {
   /** Planetarium: the address the observatory opens on. */
   at: 'at',
   preset: 'preset',
+  /** Planetarium: URL format version; picture fields use dotted query keys. */
   shot: 'shot',
   save: 'save',
   /** Every mode: the world seed, which `GameEngine` already reads. */

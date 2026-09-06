@@ -44,10 +44,18 @@ shots, with undo for deletion. It exports one shot, personal shots or the
 combined library. Its parent keeps the camera and clock mounted. The global
 dialog routes do not own this feature.
 
-A built-in is addressed by `?preset=earthrise`. A custom view uses `?shot=`
-with the complete JSON envelope and `seed=` with its universe seed. `save=1`
-opens a save prompt after restoring the shot; it never writes the library
-without a save action. JSON files, pasted JSON and URLs share validation.
+A built-in is addressed by `?preset=earthrise`. A custom view uses `?shot=1`
+and the picture's scalar fields as dotted query keys: `seed`, `time`,
+`address`, `framing.state.distance`, `lens.zoom`, and so on. The marker versions
+the URL format. `URLSearchParams` escapes text; numeric values retain their
+precision, and `null` represents infinite focus or an absent surface stance.
+The decoder assigns types by field path, rejects duplicate or unknown picture
+fields, and passes the reconstructed picture through the JSON validator.
+The seed is also the engine's ordinary boot parameter.
+
+`save=1` opens a save prompt after restoring the shot; it never writes the
+library without a save action. Dialog and diagnostic parameters do not restore
+the camera. Changing a picture field does, independent of query order.
 
 The orbit anchor and tracking target are distinct bodies in one system.
 Their separation and relative velocity define a rotating frame. Camera

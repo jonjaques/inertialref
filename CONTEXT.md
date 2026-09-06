@@ -8183,6 +8183,20 @@ nested route. Its dock is a quick selector. A global `/presets` route would
 put a planetarium feature outside its mode and require a separate background
 location to preserve the camera. The nested parent supplies that lifetime.
 
+## Shared shots have readable query fields (6 Sep 2026)
+
+Custom links use `shot=1` with dotted picture keys through `URLSearchParams`,
+including the ordinary `seed` boot parameter. They replace URL-encoded JSON;
+the JSON file envelope stays unchanged. Field paths determine value types so
+numeric-looking seeds remain strings and `lens.focus=null` means infinity.
+Unknown paths, duplicate fields, conflicting paths and invalid numbers are
+rejected before the camera reads the reconstructed picture.
+
+The parent route compares only sorted picture parameters. Changing a lens or
+time field restores the shot; entering the preset dialog, changing its name
+query, or reordering parameters preserves the current pose. Focusing a body
+clears all picture fields while keeping the universe seed and diagnostics.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

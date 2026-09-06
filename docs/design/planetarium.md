@@ -296,9 +296,11 @@ file or pasted JSON and exports saved shots or the combined library.
 
 Included shots use the same validated JSON format as personal shots. Each
 has a thumbnail captured through the renderer. Selecting a built-in writes
-`/planetarium?preset=earthrise`, with that shot's ID. A custom link carries
-the complete file envelope in `shot`, plus its universe `seed`. Adding
-`save=1` opens the restored view with the save dialog and a suggested name.
+`/planetarium?preset=earthrise`, with that shot's ID. A custom link starts with
+`shot=1` and flattens the picture into named query parameters: `seed`, `label`,
+`address`, `time`, `framing.state.azimuth`, `lens.zoom`, and the remaining
+fields. Text is ordinary URL-escaped text; numbers keep their full precision.
+Adding `save=1` opens the restored view with the save dialog and a suggested name.
 Opening a link never saves to the library automatically.
 
 Presets contain no cinematic scripts. Enterprise portraits belong to Cinema.
