@@ -10,7 +10,7 @@ import {
 } from './pictureFormat.ts'
 import { PICTURES } from './pictures.ts'
 import { snapshot } from '@inertialref/simulation'
-import { UV } from '@inertialref/spatial'
+import { UV, Vec, Quaternion as Q } from '@inertialref/spatial'
 
 function rig() {
   let lens = LENS_PRESETS.flight
@@ -49,6 +49,70 @@ describe('portable pictures', () => {
         }
       }
       expect(session.world.stateHash()).toBe(hash)
+    } finally {
+      session.dispose()
+    }
+  })
+  it('holds Earth and Luna in the same eye directions through a year of time warp', () => {
+    const session = rig()
+    try {
+      const observer = session.harness.observatory
+      observer.setTime(842011200)
+      observer.focus('s:SOL/b:2', { ease: false })
+      observer.setDistance(5e8, false)
+      const initial = observer.sample(0)!
+      observer.track('s:SOL/b:2.0')
+      expect(observer.sample(0)).toEqual(initial)
+      const hash = session.world.stateHash()
+      const directions = () => {
+        const pose = observer.sample(0)!
+        const shot = snapshot(session.world, undefined, observer.time)
+        return ['g:milky-way/s:SOL/b:2', 'g:milky-way/s:SOL/b:2.0'].map(
+          (address) => {
+            const body = shot.bodies.find((one) => one.address === address)!
+            return Vec.normalize(
+              Q.rotateInverse(
+                pose.orientation,
+                UV.difference(body.position, pose.position),
+              ),
+            )
+          },
+        )
+      }
+      const original = directions()
+      for (const day of [1, 7, 14, 28, 91, 182, 365, -365]) {
+        observer.setTime(842011200 + day * 86400)
+        directions().forEach((direction, i) =>
+          expect(Vec.length(Vec.sub(direction, original[i]!))).toBeLessThan(
+            1e-7,
+          ),
+        )
+      }
+      const saved = session.harness.capturePicture('pair', 'Earth and Luna')
+      const pose = observer.sample(0)!
+      observer.track(null)
+      expect(
+        UV.distance(observer.sample(0)!.position, pose.position),
+      ).toBeLessThan(0.001)
+      session.harness.look('s:SOL/b:3')
+      session.harness.takePicture(
+        decodePictures(JSON.parse(encodePictures([saved])))[0]!,
+      )
+      const restoredPose = observer.sample(0)!
+      expect(UV.distance(restoredPose.position, pose.position)).toBeLessThan(
+        0.001,
+      )
+      expect(
+        Vec.length(
+          Vec.sub(
+            Q.rotate(restoredPose.orientation, { x: 0, y: 0, z: -1 }),
+            Q.rotate(pose.orientation, { x: 0, y: 0, z: -1 }),
+          ),
+        ),
+      ).toBeLessThan(1e-12)
+      expect(session.world.stateHash()).toBe(hash)
+      observer.focus('s:SOL/b:2.0')
+      expect(observer.status().tracking).toBeNull()
     } finally {
       session.dispose()
     }

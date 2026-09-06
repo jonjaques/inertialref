@@ -71,11 +71,14 @@ export function useDossier(
 
   const bucket = useEngine((snapshot) => {
     const world = snapshot.status?.world
+    const observer = snapshot.observer
     const width = Math.max(
       RESOLUTION,
-      (world?.timeScale ?? 1) * MIN_SECONDS_PER_REBUILD,
+      (observer?.heldTime != null
+        ? observer.timeScale
+        : (world?.timeScale ?? 1)) * MIN_SECONDS_PER_REBUILD,
     )
-    return Math.floor((world?.time ?? 0) / width)
+    return Math.floor((observer?.time ?? world?.time ?? 0) / width)
   })
   /*
    * The record, and the address it is the record *of*.

@@ -1,3 +1,4 @@
+import type { Quat } from '@inertialref/spatial'
 import bundledPictures from './pictures.json' with { type: 'json' }
 import { decodePictures } from './pictureFormat.ts'
 import type {
@@ -44,6 +45,13 @@ export type PictureFraming =
   | { readonly kind: 'rise' }
   | {
       readonly kind: 'camera'
+      /** Orientation of the orbit controls relative to universe axes. */
+      readonly basis?: Quat
+      /** A second body holds the composition as the pair moves. */
+      readonly tracking?: {
+        readonly address: string
+        readonly referenceTime: number
+      }
       readonly state: ObserverState
       readonly look: LookOffset
       readonly surface: SurfaceStance | null

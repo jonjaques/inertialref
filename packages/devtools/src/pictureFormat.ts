@@ -89,6 +89,39 @@ export function isPicture(value: unknown): value is Picture {
         !pitch(f.look.pitch)
       )
         return false
+      if (f.basis !== undefined) {
+        const q = f.basis
+        if (
+          !record(q) ||
+          !['x', 'y', 'z', 'w'].every((key) => number(q[key], -1, 1)) ||
+          Math.abs(
+            Math.hypot(
+              q.x as number,
+              q.y as number,
+              q.z as number,
+              q.w as number,
+            ) - 1,
+          ) > 1e-6
+        )
+          return false
+      }
+      if (f.tracking !== undefined) {
+        const t = f.tracking
+        if (
+          !record(t) ||
+          !text(t.address, 256) ||
+          !number(t.referenceTime, -3.15576e12, 3.15576e12) ||
+          f.surface !== null
+        )
+          return false
+        try {
+          parseAddress(
+            t.address.startsWith('g:') ? t.address : `g:milky-way/${t.address}`,
+          )
+        } catch {
+          return false
+        }
+      }
       if (f.surface === null) return true
       const s = f.surface
       return (

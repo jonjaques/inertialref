@@ -530,7 +530,13 @@ export class GameHarness {
    * and the question "what is Europa" has no answer in the entity store.
    */
   dossier(address: string): Dossier | null {
-    return dossier(this.#host, address)
+    return dossier(
+      this.#host,
+      address,
+      this.#observatory.target === null
+        ? this.world.clock.renderTime
+        : this.#observatory.time,
+    )
   }
 
   /**
@@ -1346,6 +1352,11 @@ export class GameHarness {
     return this.takePicture(findPicture(id))
   }
 
+  /** Keep a companion in the composition while orbiting the current body. */
+  target(address: string | null): ObserverStatus {
+    return this.#observatory.track(address)
+  }
+
   capturePicture(id: string, label: string, why = ''): Picture {
     if (this.cutsceneStatus() !== null)
       throw new Error('Stop the cinematic before saving a camera shot.')
@@ -1831,6 +1842,7 @@ export class GameHarness {
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation}) / ir.hold()',
+      '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
       '  ir.goTo(target)               a system id or a body address; does the right thing',

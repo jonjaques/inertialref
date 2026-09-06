@@ -188,7 +188,11 @@ const noData = (label: string, why: string, note?: string): Fact => ({
  * the same resolver: this is fed the address the observatory is already holding,
  * and a second parser would be a second addressing scheme.
  */
-export function dossier(host: Host, address: string): Dossier | null {
+export function dossier(
+  host: Host,
+  address: string,
+  time = host.world.clock.renderTime,
+): Dossier | null {
   const world = host.world
   /*
    * `loadSystem` is inside the guard, not after it.
@@ -214,7 +218,7 @@ export function dossier(host: Host, address: string): Dossier | null {
 
   if (resolved.kind === 'system') return starDossier(world, system)
   const body = findBody(system, resolved.address)
-  return body === undefined ? null : bodyDossier(world, system, body)
+  return body === undefined ? null : bodyDossier(world, system, body, time)
 }
 
 /** Fields still waiting on an observation, across the whole page. */
@@ -491,12 +495,17 @@ function starDossier(world: World, system: StarSystem): Dossier {
 /* A body                                                                     */
 /* ------------------------------------------------------------------------- */
 
-function bodyDossier(world: World, system: StarSystem, body: Body): Dossier {
+function bodyDossier(
+  world: World,
+  system: StarSystem,
+  body: Body,
+  time: Seconds,
+): Dossier {
   const star = system.star
   const primary = primaryOf(system, body)
   const groups: FactGroup[] = [
     physicalGroup(body),
-    orbitGroup(world, body, primary),
+    orbitGroup(body, primary, time),
     // The period about the *star*, through the primary where there is one:
     // what moves the Sun across a moon's sky is its planet's year. See
     // `synodicDay`, where getting this wrong gives Luna an infinite day.
@@ -638,7 +647,11 @@ function physicalGroup(body: Body): FactGroup {
   return { id: 'body.physical', title: 'Physical', facts }
 }
 
-function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
+function orbitGroup(
+  body: Body,
+  primary: Body | null,
+  time: Seconds,
+): FactGroup {
   const elements = body.elements
   const facts: Fact[] = []
   const moonScale = body.address.kind === 'body' && body.address.body.length > 1
@@ -718,8 +731,7 @@ function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
    */
   const rate = (2 * Math.PI) / body.orbitalPeriod
   const anomaly = normalizeAngle(
-    elements.meanAnomalyAtEpoch +
-      rate * (world.clock.renderTime - elements.epoch),
+    elements.meanAnomalyAtEpoch + rate * (time - elements.epoch),
   )
   facts.push({
     label: 'Next periapsis',
