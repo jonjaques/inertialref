@@ -91,10 +91,19 @@ it('matches transported radiance and transmittance on complete, clipped, empty a
     'vec3',
   )
   const index = int(uv().x.mul(rays.length))
+  // The last case is the live volume's texel angle at a 240×135 target
+  // under the edge-on lens, which filters the dust texture and floors the
+  // settled intervals; the port has to agree with the CPU there too.
+  const cases: [number, number][] = [
+    [0, 0],
+    [100, 0],
+    [100000, 0],
+    [100000, 0.0071],
+  ]
   for (const dustScale of [0, 1, 2]) {
     const field = createGalaxyField(rootSeed('inertialref'), { dustScale })
     const kernel = createGalaxyKernel(field)
-    for (const distance of [0, 100, 100000]) {
+    for (const [distance, pixelAngle] of cases) {
       const light = await gpu.drawGraph(
         kernel.integrate(
           origins.element(index),
@@ -102,6 +111,7 @@ it('matches transported radiance and transmittance on complete, clipped, empty a
           distance,
           'settled',
           100,
+          pixelAngle,
         ),
         { width: rays.length, height: 1, float: true },
       )
@@ -113,6 +123,7 @@ it('matches transported radiance and transmittance on complete, clipped, empty a
             distance,
             'settled',
             100,
+            pixelAngle,
           ),
           1,
         ),
@@ -127,13 +138,14 @@ it('matches transported radiance and transmittance on complete, clipped, empty a
             distanceParsecs: distance,
             sampling: 'settled',
             maxStepParsecs: 100,
+            pixelAngle,
           },
         )
         expect(cpu.samples).toBeLessThan(16384)
         if (cpu.rgbNanowatts[0] > 0)
           expect(
             light.at(i, 0)[0],
-            `dust=${dustScale}, distance=${distance}, ray=${i}`,
+            `dust=${dustScale}, distance=${distance}, pixel=${pixelAngle}, ray=${i}`,
           ).toBeGreaterThan(0)
         ;[...cpu.rgbNanowatts, cpu.starsPerSquareParsec].forEach((v, c) =>
           within(light.at(i, 0)[c]!, v, 1e-5),

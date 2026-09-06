@@ -73,7 +73,12 @@ export interface GalaxyField {
   readonly normalization: number
   readonly dustScale: number
   readonly dustNormalization: number
-  sample(position: UniverseVector): GalaxySample
+  /**
+   * The field at a point. `footprintParsecs` is the width of the pixel
+   * asking, and zero — the default, and every canonical caller — is the
+   * exact field; see `galaxyDustModulation`.
+   */
+  sample(position: UniverseVector, footprintParsecs?: number): GalaxySample
 }
 
 export interface GalaxyFieldOptions {
@@ -148,7 +153,7 @@ export function createGalaxyField(
     normalization,
     dustScale,
     dustNormalization,
-    sample(position: UniverseVector): GalaxySample {
+    sample(position: UniverseVector, footprintParsecs = 0): GalaxySample {
       const {
         populations: rawPopulations,
         warp,
@@ -163,7 +168,9 @@ export function createGalaxyField(
       } = raw(position)
       const dust = galaxyDustProfile(radius, beta, height, edge)
       const dustModulation =
-        dustScale === 0 ? 1 : galaxyDustModulation(dustSeed, x, y, z)
+        dustScale === 0
+          ? 1
+          : galaxyDustModulation(dustSeed, x, y, z, footprintParsecs)
       const extinction =
         dustScale * dustNormalization * dust.density * dustModulation
       const populations = {} as Record<GalaxyPopulation, number>

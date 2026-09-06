@@ -82,6 +82,8 @@ export interface GalaxyRenderReport {
   readonly draws: number
   /** Whether the last submission reused the target rather than drawing. */
   readonly held: boolean
+  /** The angle one target texel subtends, radians; what the dust filter and the interval floor are keyed to. */
+  readonly pixelAngle: number
   readonly emissionOnly: boolean
   readonly dustScale: number
   readonly dustNormalization: number

@@ -30,6 +30,18 @@ export const GALAXY_DUST_SETTLED_STEP_PARSECS = 10
 export const GALAXY_DUST_SETTLED_HEIGHT_FACTOR = 0.1
 export const GALAXY_OBSERVER_MIN_STEP_PARSECS = 1
 export const GALAXY_OBSERVER_STEP_GROWTH = 0.1
+/**
+ * A live interval is no shorter than this fraction of the pixel's footprint.
+ *
+ * The floor sits under the observer and settled laws only, never under the
+ * plane-crossing law: a ray through the 19 pc young disk at a steep angle
+ * still needs the crossing resolved, or where its one midpoint lands in the
+ * sheet decides the pixel and the disk renders as noise. Along the plane
+ * the crossing law already allows 40 pc, so the floor is what widens the
+ * settled 10 pc there — 71 pc from an outside view at 40 kpc, where a texel
+ * is 140 pc wide and 10 pc intervals resolve nothing the pixel can show.
+ */
+export const GALAXY_FOOTPRINT_STEP_FRACTION = 0.5
 export type GalaxyRaySampling = 'reference' | 'observer' | 'settled'
 
 export interface GalaxyRayOptions {
@@ -37,6 +49,14 @@ export interface GalaxyRayOptions {
   readonly population?: GalaxyPopulation
   readonly distanceParsecs?: number
   readonly maxStepParsecs?: number
+  /**
+   * The angle one pixel of the asking image subtends, radians. Zero, the
+   * default, integrates the exact field along the pixel's center; a real
+   * angle filters the dust texture to what the pixel can resolve at each
+   * distance and floors the live intervals — see `galaxyDustModulation` and
+   * `GALAXY_FOOTPRINT_STEP_FRACTION`. Every canonical caller passes zero.
+   */
+  readonly pixelAngle?: number
 }
 
 // A direct 1-exp(-q) loses the source term near zero, especially in float32.
@@ -71,6 +91,11 @@ export function integrateGalaxyRay(
       sampling === 'observer' ||
       sampling === 'settled',
     'Unknown galaxy ray sampling profile',
+  )
+  const pixelAngle = options.pixelAngle ?? 0
+  invariant(
+    Number.isFinite(pixelAngle) && pixelAngle >= 0,
+    'Galaxy ray pixel angle must be a finite nonnegative angle',
   )
   const population = options.population
   invariant(
@@ -126,17 +151,22 @@ export function integrateGalaxyRay(
     )
     // Resolve the 19 pc young population near its warped plane. Far from it,
     // the smooth thick disk and halo permit longer intervals.
+    const floor = pixelAngle * t * GALAXY_FOOTPRINT_STEP_FRACTION
     const step = Math.min(
       maxStep,
       Math.max(4, height * 0.2) / (Math.abs(dy) + 0.1),
       far - t,
       sampling !== 'reference'
-        ? GALAXY_OBSERVER_MIN_STEP_PARSECS + GALAXY_OBSERVER_STEP_GROWTH * t
+        ? Math.max(
+            GALAXY_OBSERVER_MIN_STEP_PARSECS + GALAXY_OBSERVER_STEP_GROWTH * t,
+            floor,
+          )
         : Infinity,
       sampling === 'settled'
         ? Math.max(
             GALAXY_DUST_SETTLED_STEP_PARSECS,
             height * GALAXY_DUST_SETTLED_HEIGHT_FACTOR,
+            floor,
           )
         : Infinity,
     )
@@ -148,7 +178,7 @@ export function integrateGalaxyRay(
         dz * (t + step / 2) * PARSEC,
       ),
     )
-    const s = field.sample(p)
+    const s = field.sample(p, pixelAngle * (t + step / 2))
     const qr = s.extinctionPerParsec.r * step,
       qg = s.extinctionPerParsec.g * step,
       qb = s.extinctionPerParsec.b * step

@@ -405,3 +405,116 @@ it('widens settled intervals through the transparent halo without truncating the
   expect(settled.starsPerSquareParsec).toBeCloseTo(60000, 8)
   expect(fine.starsPerSquareParsec).toBeCloseTo(60000, 8)
 })
+
+/** The edge-on instrument at 40 kpc, and the angle one texel of a 240×135 target subtends under its 55° lens. */
+const EDGE_ON = UV.fromMeters(0, 0, 40000 * PARSEC)
+const EDGE_ON_TEXEL = (55 * Math.PI) / 180 / 135
+const edgeOnRay = (across: number, up: number) => vec3(across, up, -1)
+
+it('integrates the exact field along the pixel center unless a pixel angle is given', () => {
+  fc.assert(
+    fc.property(
+      fc.double({ min: -0.4, max: 0.4, noNaN: true }),
+      fc.double({ min: -0.02, max: 0.02, noNaN: true }),
+      fc.constantFrom('reference', 'observer', 'settled' as const),
+      (across, up, sampling) => {
+        const options = { sampling, maxStepParsecs: 100 }
+        expect(
+          integrateGalaxyRay(field, EDGE_ON, edgeOnRay(across, up), {
+            ...options,
+            pixelAngle: 0,
+          }),
+        ).toEqual(
+          integrateGalaxyRay(field, EDGE_ON, edgeOnRay(across, up), options),
+        )
+      },
+    ),
+    { numRuns: 12 },
+  )
+  for (const pixelAngle of [-1e-3, Number.NaN, Number.POSITIVE_INFINITY])
+    expect(() =>
+      integrateGalaxyRay(field, EDGE_ON, edgeOnRay(0, 0), { pixelAngle }),
+    ).toThrow('pixel angle')
+})
+
+it('keeps the strip mean while filtering the dust a texel cannot resolve', () => {
+  /*
+   * Seventeen texels along the plane and seventeen at 300 pc above it, the
+   * exact center rays against the filtered ones. Filtering the density to
+   * its mean under a convex transport is a slight underestimate of the mean
+   * transmission — Jensen the other way — and it is measured: the filtered
+   * sum is 0.994 of the exact one in the plane and 0.997 above it, settled;
+   * 0.993 and 0.998 at the observer profile. The floor under the settled
+   * intervals is what cuts the sample count: 40,988 to 12,760 in the plane
+   * and 22,635 to 8,689 above it. The observer law already exceeds the
+   * floor from 40 kpc, so that profile's count is unchanged and only its
+   * texture is filtered.
+   */
+  for (const sampling of ['settled', 'observer'] as const)
+    for (const up of [0, 300 / 40000]) {
+      const exact = [0, 0, 0],
+        filtered = [0, 0, 0]
+      let exactSamples = 0,
+        filteredSamples = 0
+      for (let i = -8; i <= 8; i++) {
+        const direction = edgeOnRay(i * EDGE_ON_TEXEL, up)
+        const a = integrateGalaxyRay(field, EDGE_ON, direction, {
+          sampling,
+          maxStepParsecs: 100,
+        })
+        const b = integrateGalaxyRay(field, EDGE_ON, direction, {
+          sampling,
+          maxStepParsecs: 100,
+          pixelAngle: EDGE_ON_TEXEL,
+        })
+        a.rgbNanowatts.forEach((v, c) => (exact[c]! += v))
+        b.rgbNanowatts.forEach((v, c) => (filtered[c]! += v))
+        exactSamples += a.samples
+        filteredSamples += b.samples
+      }
+      for (let c = 0; c < 3; c++) {
+        expect(filtered[c]! / exact[c]!).toBeGreaterThan(0.99)
+        expect(filtered[c]! / exact[c]!).toBeLessThan(1.005)
+      }
+      if (sampling === 'settled')
+        expect(filteredSamples).toBeLessThan(exactSamples / 2.5)
+      else expect(filteredSamples).toBe(exactSamples)
+    }
+})
+
+it('is closer to a supersampled texel than the center ray where the profile is smooth', () => {
+  // 600 pc above the plane, where a texel spans no scale height and what
+  // varies inside it is the dust texture alone: the filtered ray is 5.6%
+  // from the 5×5 mean and the center ray 6.3%, settled. In the plane both
+  // are 14–20% from it — a 140 pc texel spans several scale heights of a
+  // profile neither filters — and that is the image's aliasing, not the
+  // filter's; the strip test above is the claim made there.
+  const up = 600 / 40000
+  const mean = [0, 0, 0]
+  for (let i = 0; i < 5; i++)
+    for (let j = 0; j < 5; j++) {
+      const across = ((i + 0.5) / 5 - 0.5) * EDGE_ON_TEXEL
+      const rise = ((j + 0.5) / 5 - 0.5) * EDGE_ON_TEXEL
+      integrateGalaxyRay(field, EDGE_ON, edgeOnRay(across, up + rise), {
+        sampling: 'settled',
+        maxStepParsecs: 100,
+      }).rgbNanowatts.forEach((v, c) => (mean[c]! += v / 25))
+    }
+  const error = (rgb: readonly number[]) =>
+    Math.max(...rgb.map((v, c) => Math.abs(v / mean[c]! - 1)))
+  const center = error(
+    integrateGalaxyRay(field, EDGE_ON, edgeOnRay(0, up), {
+      sampling: 'settled',
+      maxStepParsecs: 100,
+    }).rgbNanowatts,
+  )
+  const filtered = error(
+    integrateGalaxyRay(field, EDGE_ON, edgeOnRay(0, up), {
+      sampling: 'settled',
+      maxStepParsecs: 100,
+      pixelAngle: EDGE_ON_TEXEL,
+    }).rgbNanowatts,
+  )
+  expect(filtered).toBeLessThan(center)
+  expect(filtered).toBeLessThan(0.07)
+})

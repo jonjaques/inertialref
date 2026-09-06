@@ -180,6 +180,8 @@ it('owns the same target for warming, quarter-size updates, resize, and retireme
     submissions: 1,
     draws: 1,
     held: false,
+    // The face-on lens's 90° over 270 texel rows.
+    pixelAngle: Math.PI / 2 / 270,
   })
   size.set(953, 617)
   volume.updateBefore(frame)

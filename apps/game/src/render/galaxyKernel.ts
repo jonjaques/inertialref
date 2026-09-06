@@ -23,6 +23,8 @@ import {
   GALAXY_DUST,
   GALAXY_DUST_SETTLED_STEP_PARSECS,
   GALAXY_DUST_SETTLED_HEIGHT_FACTOR,
+  GALAXY_FOOTPRINT_STEP_FRACTION,
+  galaxyDustOctaveMean,
   GALAXY_HEIGHT_PARSECS,
   GALAXY_POPULATIONS,
   GALAXY_RADIUS_PARSECS,
@@ -38,7 +40,7 @@ import {
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@3'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@4'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
@@ -351,20 +353,42 @@ const sample = Fn(
 })
 
 const extinction = Fn(
-  ([p, seed, normalization, structure]: [
+  ([p, seed, normalization, structure, footprint]: [
     Node<'vec3'>,
     Node<'uint'>,
     Node<'float'>,
     Node<'vec3'>,
+    Node<'float'>,
   ]) => {
     const radius = p.xz.length().toVar()
     const height = structure.z,
       strength = structure.y
     const logModulation = float(0).toVar()
-    for (const octave of GALAXY_DUST.octaves)
+    // `galaxyDustModulation`, octave by octave: an octave the footprint
+    // cannot resolve is its lattice mean, not a noise evaluation. The
+    // branch is what the volume's speed rests on — the four evaluations
+    // are 87% of a draw, and from outside the disk none of them resolves.
+    for (const octave of GALAXY_DUST.octaves) {
+      const weight = footprint
+        .div(octave.scaleParsecs)
+        .negate()
+        .add(2)
+        .clamp()
+        .toVar()
+      If(weight.greaterThan(0), () => {
+        logModulation.addAssign(
+          noise(seed, p.div(octave.scaleParsecs))
+            .mul(octave.logAmplitude)
+            .mul(weight),
+        )
+      })
       logModulation.addAssign(
-        noise(seed, p.div(octave.scaleParsecs)).mul(octave.logAmplitude),
+        weight
+          .mul(weight)
+          .oneMinus()
+          .mul(Math.log(galaxyDustOctaveMean(octave.logAmplitude))),
       )
+    }
     const vertical = height
       .div(-GALAXY_DUST.thinHeightParsecs)
       .exp()
@@ -395,6 +419,7 @@ const extinction = Fn(
     { name: 'seed', type: 'uint' },
     { name: 'normalization', type: 'float' },
     { name: 'structure', type: 'vec3' },
+    { name: 'footprint', type: 'float' },
   ],
 })
 
@@ -425,6 +450,7 @@ const integrate = Fn(
     dustSeed,
     dustNormalization,
     transmissionOnly,
+    pixelAngle,
   ]: [
     Node<'vec3'>,
     Node<'vec3'>,
@@ -436,6 +462,7 @@ const integrate = Fn(
     Node<'uint'>,
     Node<'float'>,
     Node<'bool'>,
+    Node<'float'>,
   ]) => {
     const d = direction.normalize().toVar()
     const near = float(0).toVar(),
@@ -476,12 +503,16 @@ const integrate = Fn(
         .min(maxStep)
         .min(far.sub(t))
         .toVar()
+      // The floor sits under the two live laws and never under the
+      // plane-crossing law above — `GALAXY_FOOTPRINT_STEP_FRACTION`.
+      const floor = pixelAngle.mul(t).mul(GALAXY_FOOTPRINT_STEP_FRACTION)
       If(sampling.greaterThan(0), () => {
         step.assign(
           step.min(
             t
               .mul(GALAXY_OBSERVER_STEP_GROWTH)
-              .add(GALAXY_OBSERVER_MIN_STEP_PARSECS),
+              .add(GALAXY_OBSERVER_MIN_STEP_PARSECS)
+              .max(floor),
           ),
         )
       })
@@ -490,7 +521,8 @@ const integrate = Fn(
           step.min(
             height
               .mul(GALAXY_DUST_SETTLED_HEIGHT_FACTOR)
-              .max(GALAXY_DUST_SETTLED_STEP_PARSECS),
+              .max(GALAXY_DUST_SETTLED_STEP_PARSECS)
+              .max(floor),
           ),
         )
       })
@@ -506,9 +538,13 @@ const integrate = Fn(
         dustNormalization.greaterThan(0).and(transmissionOnly.or(illuminated)),
         () => {
           q.assign(
-            extinction(midpoint, dustSeed, dustNormalization, structure).mul(
-              step,
-            ),
+            extinction(
+              midpoint,
+              dustSeed,
+              dustNormalization,
+              structure,
+              pixelAngle.mul(t.add(step.mul(0.5))),
+            ).mul(step),
           )
         },
       )
@@ -543,6 +579,7 @@ const integrate = Fn(
     { name: 'dustSeed', type: 'uint' },
     { name: 'dustNormalization', type: 'float' },
     { name: 'transmissionOnly', type: 'bool' },
+    { name: 'pixelAngle', type: 'float' },
   ],
 })
 
@@ -564,6 +601,7 @@ export function createGalaxyKernel(field: GalaxyField) {
     sampling: GalaxyRaySampling | Node<'uint'>,
     maxStep: number | Node<'float'>,
     transmissionOnly: boolean,
+    pixelAngle: number | Node<'float'>,
   ) =>
     integrate(
       origin,
@@ -578,6 +616,7 @@ export function createGalaxyKernel(field: GalaxyField) {
       dustSeed,
       dustNormalization,
       bool(transmissionOnly),
+      typeof pixelAngle === 'number' ? float(pixelAngle) : pixelAngle,
     )
   return {
     setField(next: GalaxyField) {
@@ -597,22 +636,31 @@ export function createGalaxyKernel(field: GalaxyField) {
     sample: (position: Node<'vec3'>): Node<'vec4'> =>
       sample(position, seed, normalization, structureAt(position)),
     extinction: (position: Node<'vec3'>): Node<'vec3'> =>
-      extinction(position, dustSeed, dustNormalization, structureAt(position)),
+      extinction(
+        position,
+        dustSeed,
+        dustNormalization,
+        structureAt(position),
+        float(0),
+      ),
+    /** `pixelAngle` is `GalaxyRayOptions.pixelAngle`: zero is the exact field along the pixel's center. */
     integrate: (
       origin: Node<'vec3'>,
       direction: Node<'vec3'>,
       distance: number | Node<'float'> = 100000,
       sampling: GalaxyRaySampling | Node<'uint'> = 'observer',
       maxStep: number | Node<'float'> = GALAXY_MAX_STEP_PARSECS,
+      pixelAngle: number | Node<'float'> = 0,
     ): Node<'vec4'> =>
-      ray(origin, direction, distance, sampling, maxStep, false),
+      ray(origin, direction, distance, sampling, maxStep, false, pixelAngle),
     transmittance: (
       origin: Node<'vec3'>,
       direction: Node<'vec3'>,
       distance: number | Node<'float'> = 100000,
       sampling: GalaxyRaySampling | Node<'uint'> = 'observer',
       maxStep: number | Node<'float'> = GALAXY_MAX_STEP_PARSECS,
+      pixelAngle: number | Node<'float'> = 0,
     ): Node<'vec3'> =>
-      ray(origin, direction, distance, sampling, maxStep, true).rgb,
+      ray(origin, direction, distance, sampling, maxStep, true, pixelAngle).rgb,
   }
 }

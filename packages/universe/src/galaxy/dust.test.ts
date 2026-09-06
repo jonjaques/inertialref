@@ -1,11 +1,17 @@
 import fc from 'fast-check'
 import { expect, it } from 'vitest'
-import { deriveSeed, rootSeed } from '@inertialref/procedural'
+import { deriveSeed, noise3, rootSeed } from '@inertialref/procedural'
 import { PARSEC } from '@inertialref/shared'
 import { UV } from '@inertialref/spatial'
 import { createGalaxyField } from './field.ts'
 import { GALAXY_ARMS, armRadius, armStrength } from './arms.ts'
-import { GALAXY_DUST, galaxyDustModulation, galaxyDustProfile } from './dust.ts'
+import {
+  GALAXY_DUST,
+  galaxyDustModulation,
+  galaxyDustOctaveMean,
+  galaxyDustOctaveWeight,
+  galaxyDustProfile,
+} from './dust.ts'
 
 const seed = rootSeed('inertialref')
 const field = createGalaxyField(seed)
@@ -85,6 +91,68 @@ it('derives dust texture from its own stateless seed label', () => {
       field.sample(UV.fromMeters(x * PARSEC, y * PARSEC, z * PARSEC))
         .dustModulation,
     ).toBeCloseTo(expected[i]!, 8)
+})
+
+it('filters an unresolved octave to its lattice mean and leaves the exact field alone', () => {
+  const dustSeed = deriveSeed(seed, 'galaxy-field:dust')
+  const footprint = fc.double({ min: 0, max: 1000, noNaN: true })
+  const unresolved = GALAXY_DUST.octaves.reduce(
+    (product, octave) => product * galaxyDustOctaveMean(octave.logAmplitude),
+    1,
+  )
+  fc.assert(
+    fc.property(coordinate, coordinate, coordinate, footprint, (x, y, z, f) => {
+      const exact = galaxyDustModulation(dustSeed, x, y, z)
+      expect(galaxyDustModulation(dustSeed, x, y, z, 0)).toBe(exact)
+      const filtered = galaxyDustModulation(dustSeed, x, y, z, f)
+      expect(Number.isFinite(filtered)).toBe(true)
+      expect(filtered).toBeGreaterThan(0)
+      // Beyond two cells of the coarsest octave nothing is resolved, and the
+      // modulation is the same constant at every point.
+      if (f >= 2 * GALAXY_DUST.octaves[0]!.scaleParsecs)
+        expect(filtered).toBeCloseTo(unresolved, 12)
+      // Within one cell of the finest octave everything is.
+      if (f <= GALAXY_DUST.octaves[3]!.scaleParsecs)
+        expect(filtered).toBe(exact)
+    }),
+  )
+  expect(galaxyDustOctaveWeight(64, 64)).toBe(1)
+  expect(galaxyDustOctaveWeight(64, 96)).toBeCloseTo(0.5, 12)
+  expect(galaxyDustOctaveWeight(64, 128)).toBe(0)
+  expect(field.sample(UV.fromMeters(-8178 * PARSEC, 0, 0), 0)).toEqual(
+    field.sample(UV.fromMeters(-8178 * PARSEC, 0, 0)),
+  )
+})
+
+it('measures the noise variance the octave means are derived from', () => {
+  // The variance behind `galaxyDustOctaveMean`, re-derived over a lattice of
+  // points at irrational spacing, and the derived means held to the mean of
+  // exp(a·n) over the same points. 0.0729 was measured over 96³ points; 24³
+  // here reproduce it within the tolerance the smaller lattice allows.
+  const dustSeed = deriveSeed(seed, 'galaxy-field:dust')
+  const amplitudes = GALAXY_DUST.octaves.map((octave) => octave.logAmplitude)
+  let count = 0,
+    squares = 0
+  const sums = amplitudes.map(() => 0)
+  for (let i = 0; i < 24; i++)
+    for (let j = 0; j < 24; j++)
+      for (let k = 0; k < 24; k++) {
+        const n = noise3(
+          dustSeed,
+          i * 0.6180339887 + 0.13,
+          j * 0.7548776662 + 0.29,
+          k * 0.569840291 + 0.41,
+        )
+        count += 1
+        squares += n * n
+        amplitudes.forEach((a, m) => {
+          sums[m]! += Math.exp(a * n)
+        })
+      }
+  expect(squares / count).toBeCloseTo(GALAXY_DUST.noiseVariance, 2)
+  amplitudes.forEach((a, m) =>
+    expect(sums[m]! / count).toBeCloseTo(galaxyDustOctaveMean(a), 3),
+  )
 })
 
 it('places a narrower dust lane inward of the stellar ridge', () => {

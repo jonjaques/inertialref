@@ -86,6 +86,8 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   readonly #forward = uniform(new Vector3(0, 0, -1))
   readonly #plane = uniform(new Vector2(1, 1))
   readonly #sampling = uniform(1, 'uint')
+  /** The angle one target texel subtends, so the kernel filters dust to what the texel can show. */
+  readonly #pixelAngle = uniform(0)
   readonly #kernel: ReturnType<typeof createGalaxyKernel>
   readonly outputTexture = passTexture(
     this as unknown as PassNode,
@@ -132,7 +134,14 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       .add(this.#up.mul(screen.y.mul(this.#plane.y)))
     this.#material.fragmentNode = vec4(
       this.#kernel
-        .integrate(this.#origin, direction, 100000, this.#sampling)
+        .integrate(
+          this.#origin,
+          direction,
+          100000,
+          this.#sampling,
+          GALAXY_MAX_STEP_PARSECS,
+          this.#pixelAngle,
+        )
         .rgb.div(RADIANCE_UNIT),
       1,
     )
@@ -224,6 +233,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       submissions: this.#submissions,
       draws: this.#draws,
       held: this.#held,
+      pixelAngle: this.#pixelAngle.value,
       emissionOnly: this.#field.dustScale === 0,
       dustScale: this.#field.dustScale,
       dustNormalization: this.#field.dustNormalization,
@@ -276,6 +286,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#sampling.value = sampling
     const half = Math.tan(this.#fov / 2)
     this.#plane.value.set((half * size.x) / Math.max(1, size.y), half)
+    this.#pixelAngle.value = this.#fov / height
     const started = timer.on ? performance.now() : 0
     const previous = renderer.getRenderTarget(),
       mrt = renderer.getMRT()
