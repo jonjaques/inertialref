@@ -16,7 +16,7 @@ longitudes, or change its brightness between inside and outside views.
 ## Decision
 
 **One seeded field supplies CPU references and a GPU preview; its
-`galaxy-field@2` manifest stays separate from active generation.**
+`galaxy-field@3` manifest stays separate from active generation.**
 
 `createGalaxyField` accepts a galaxy seed and samples `UniverseVector`
 positions. Internally the field uses parsec offsets in the galactic-center
@@ -53,8 +53,9 @@ assumption. Density times mean luminosity gives L☉/pc³. The ray integrator
 returns bolometric nW m⁻² sr⁻¹ using
 `3.828e26 / (4π PARSEC²) × 1e9` per L☉/pc². Its RGB channels partition that
 power according to normalized blackbody RGB. They are illustrative color
-channels, not measured bandpasses or a luminance calibration. There is no dust or
-resolved-star subtraction, and no claim of M6 photometric accuracy. The live
+channels, not measured bandpasses or a luminance calibration. Dust attenuates
+these channels before sensor conversion. Resolved-star subtraction and M6
+photometric accuracy remain open. The live
 preview below feeds these illustrative channels through the existing sensor.
 
 `ir.galaxy()` derives an inspector from the current session. Samples expose
@@ -70,12 +71,52 @@ stretch and sRGB encoding; raw files precede that display transform. Repeated
 fixed-seed plates agree exactly. Small numeric plate references also detect
 unversioned changes between revisions.
 
+## Dust transport (M5)
+
+The same field supplies emission and extinction at every viewpoint. Dust has
+81 and 152 pc exponential heights, using the mean values from
+[Guo et al. 2025](https://arxiv.org/abs/2509.14669) over the measured 6–12 kpc
+radial bins. The 2.26 kpc radial length comes from Drimmel & Spergel 2001,
+as identified in [Guo's introduction](https://academic.oup.com/mnras/article/543/2/1574/8258955).
+Combining these profiles across the whole disk is a preview model choice.
+
+The immutable `GALAXY_DUST` record declares the remaining assumptions. The
+vertical weights are 0.65 and 0.35. Dust lanes lie 200 pc inward of each stellar
+ridge, use half its width, and add with contrast two. They share the stellar
+warp, arc tapers, and 26–30 kpc rim. The untextured, lane-modulated solar
+midplane is normalized to one V magnitude per kiloparsec, or
+`ln(10)/2500` optical depth per parsec. Four seeded noise bands at 64, 16,
+4, and 1 pc modulate log density with amplitudes 0.8, 0.4, 0.2, and 0.1.
+Their seed derives from `galaxy-field:dust`, independently of young-star texture.
+Effective wavelengths of 650, 550, and 450 nm give extinction ratios
+`550/650`, one, and `550/450`. These illustrative RGB coefficients are not
+measured sensor bandpasses. Named clouds and the Local Bubble belong to M6.
+
+For each interval, the integrator samples emission `j` and extinction `k` at
+its midpoint. With length `h`, optical depth `q = k h`, and incoming
+transmittance `T`, it adds `T j h (1-exp(-q))/q` and then multiplies `T` by
+`exp(-q)`, independently in each channel. A cubic Taylor expansion below
+`q = 0.01` preserves the zero-dust limit in float32. This solves a homogeneous
+emitting and absorbing interval exactly; using the final transmittance to
+attenuate the whole ray also dims foreground emitters and is incorrect.
+Population rays remain additive under common dust. Intrinsic stellar columns
+remain unattenuated diagnostics.
+
+`createGalaxyField(seed, { dustScale: 0 })` supplies the dust-free control.
+CPU rays return optical depth and transmittance as well as emergent radiance.
+The GPU shares the stellar and dust arm centerline calculations. It may discard
+further RGB contributions once all channels transmit less than `1e-12`.
+The omitted light is bounded by that fraction of the unextinguished source;
+stellar columns and the separate GPU transmittance diagnostic retain the full
+path. Extinction of resolved star sprites remains M10, so the current sprites
+can appear too bright against a dark diffuse lane.
+
 ## The live galaxy instruments
 
 `apps/game/src/render/galaxyKernel.ts` ports the same field and midpoint ray
 integral to TSL. It imports the population and arm parameter records, uses the
 CPU field's normalization, and derives the same young-arm seed. Its independent
-`galaxy-tsl@2` revision identifies the port. Nonzero GPU field samples and whole
+`galaxy-tsl@3` revision identifies the port. Nonzero GPU field samples and whole
 rays are held within 1% of the CPU reference, with absolute tolerances near zero.
 Explicit axial azimuths avoid Metal's fast `atan2` sign reversal at an exact
 zero denominator; the warp and arms otherwise disagree at +Z.
@@ -134,8 +175,18 @@ The live quadrature uses the CPU integrator's `observer` sampling profile.
 Its steps are bounded by the warped-plane rule, 100 pc, and `1 pc + 0.1 t`,
 where `t` is distance from the observer. An interior ray resolves nearby light;
 a ray entering the volume after an empty approach already permits coarse
-intervals. The CPU `reference` profile retains its plate quadrature. The field
-and active population versions stay unchanged because only integration changes.
+intervals. The CPU `reference` profile retains its explicit midpoint quadrature. The
+live `settled` profile additionally caps intervals at
+`max(10 pc, 0.1 × absolute warped height)`, retaining the 100 pc maximum and
+observer-neighborhood rule. It reaches the finer profile after eight unchanged
+scene submissions. Translation beyond 0.01 pc, rotation beyond 0.0001 rad,
+or an equivalent FOV change resets travel quality. Motion is measured against
+the last reset pose, so small movements accumulate; ordinary local orbital
+drift does not prevent a settled frame. This changes sampling, never the dust
+field. Uniform ten-parsec marching through long halo paths can produce zero
+GPU output on the measured rig, so fine intervals are concentrated around the
+dust plane. CPU convergence checks retain the complete quarter-parsec reference. Sampling profiles describe quadrature; the field manifest identifies the
+stellar and dust coefficients independently of active population generation.
 
 The journey enters with the face-on lens and keeps exposure pinned to the
 resolved lens in Direct, Neutral, and Natural. The shared shutter control and
@@ -178,12 +229,12 @@ stars, 0.067% above the default grid. This is a count inside the declared
 reference cylinder; the small halo tail above its vertical bounds is omitted.
 
 Population plates reveal faint structures without changing their physical
-amplitudes to make a composite attractive. They also make the missing dust
-plain: the observer plate has no dark lanes. The preview's RGB and population
+amplitudes to make a composite attractive. The same dust attenuates every
+population and produces dark lanes in inside and outside views. The preview's RGB and population
 weights require calibration before a physical sensor or population generator
 can adopt them as calibrated quantities. The live volume now exposes those
-limitations through the actual sensor; dust and temporal reuse remain later
-milestones. The initial quarter-size volume costs more than
+limitations through the actual sensor. Photometric calibration, resolved-star
+extinction, and temporal reuse remain later milestones. The initial quarter-size volume costs more than
 the 2 ms target on the measured rig; `CONTEXT.md` records the batch conditions
 and results. Three.js r185 also rebuilds one first-use integral pipeline as
 its cached function ordering changes, then reuses it on subsequent submissions.

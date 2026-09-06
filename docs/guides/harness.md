@@ -80,9 +80,14 @@ circle of confusion is a claim about a display, and there is no display.
 
 `ir.galaxy()` returns a read-only inspector for the current world's galaxy
 seed. `sample(position?)` accepts a `UniverseVector`, defaults to the Sun, and
-reports population densities, bolometric emission, normalization, and both
+reports population densities, bolometric emission, RGB extinction per parsec,
+dust modulation, normalization, and both
 preview and active generation versions. `count(options?)` integrates the
 reference cylinder; `tangencies()` reports the arm curve's tangent longitudes.
+`ray(direction, options?, origin?)` returns emergent RGB radiance, optical depth,
+and transmittance. Direction is a displacement in simulation axes; origin
+defaults to the Sun. Options include `distanceParsecs`, `maxStepParsecs`, and
+`sampling`, which accepts `reference`, `observer`, or `settled`.
 
 ```sh
 pnpm sim --galaxy-plates .scratch/galaxy --galaxy-width 384 --quiet
@@ -100,7 +105,10 @@ In a script, `openSession().harness.galaxy().plate({ view: 'face-on', width:
 192, height: 192 })` returns the raw image. The `population` option selects
 `thinDisk`, `thickDisk`, `youngArms`, `barBulge`, or `halo`; `observer` supplies
 a different `UniverseVector` for the observer view. Calling these functions
-does not advance or mutate the world. Plates contain emission only. See
+does not advance or mutate the world. Plates use dust transport with a 10 pc
+step maximum by default. `dustScale: 0` selects the emission-only control and
+its 100 pc default; `maxStepParsecs` overrides either. Metadata records these
+settings. See
 [ADR-0032](../adr/0032-the-stellar-field.md) for parameters and calibration limits.
 
 In the browser's planetarium, `ir.galaxyView('face-on')` and
@@ -121,11 +129,14 @@ sampling profile, and bounded local survey.
 
 `ir.galaxy().render()` returns the live target's dimensions and bytes, field
 and kernel versions, normalization, galactic-center origin in parsecs, step
-bounds, readiness and cumulative volume submissions. It returns `null` without
+bounds, dust scale, sampling profile, settled state, readiness and cumulative
+volume submissions. The settled profile refines intervals near the dust plane
+after eight unchanged submissions; movement resets the observer profile. It returns `null` without
 a renderer. `ir.lens()` gives the actual instrument exposure. The face-on view
 uses f/2, 2,400 s, ISO 400; edge-on uses f/2, 600 s, ISO 400. Both contain
-stellar emission without dust, with an illustrative visible efficacy pending
-photometric calibration.
+stellar emission transported through the shared dust field, with an illustrative
+visible efficacy pending photometric calibration. `resolvedStarExtinction: false`
+records the temporary mismatch between attenuated diffuse light and star sprites.
 
 ```sh
 node scripts/drive.mjs --url http://localhost:5173/planetarium \

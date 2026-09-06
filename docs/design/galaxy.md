@@ -15,15 +15,17 @@ lets published data change underneath a running game without breaking it.
 bar/bulge and halo. Its CPU integrator produces headless outside and
 observer-centered plates through the [harness](../guides/harness.md#measuring-the-stellar-field).
 The field has its own version and leaves active population generation
-unchanged. Its emission-only radiance and parameter assumptions are recorded
+unchanged. Its dust-attenuated radiance and parameter assumptions are recorded
 in [ADR-0032](../adr/0032-the-stellar-field.md). The planetarium also renders
 fixed face-on and edge-on views through the existing sensor, with one live
 quarter-size volume target. Open Presets → Milky Way, or call
 `ir.galaxyView('face-on')`. Earth Orbit and Travel Out trace a reversible journey
 to 30 kpc above the galactic center. `ir.galaxyJourney(1, 36)` makes that trip
 through the existing camera and lens; progress zero returns to Earth orbit.
-The live field also follows ordinary planetarium navigation. Dust and
-photometric calibration remain separate milestones.
+The live field also follows ordinary planetarium navigation. Seeded dust lanes
+dim and redden the diffuse light, with finer sampling after travel settles.
+Local clouds, photometric calibration, and extinction of resolved star sprites
+remain separate milestones.
 
 ## The three-layer body model
 

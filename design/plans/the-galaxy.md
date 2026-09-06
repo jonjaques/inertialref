@@ -98,7 +98,7 @@ All rows start **planned**. Fill the evidence columns as work completes.
 | M2        | The stellar field has a measurable shape from outside.             | M1                | Open in [PR #63](https://github.com/jonjaques/inertialref/pull/63) on `codex/galaxy-the-stellar-field`, based on PR #62 at `76cef98`. `galaxy-field@2`; 0.1 star/pc³ at the Sun; 116.185 billion stars in the reference cylinder; six tangencies within 3°. CPU plates and report through `pnpm sim --galaxy-plates .scratch/galaxy-m2/plates-v2 --galaxy-width 384`. Initial v1 gate at `3936e35` passed; PR review adds runtime input guards, width-derived plate heights, and continuous width projection at arm kinks. The full count runs in the slow suite. `VITEST_MAX_WORKERS=2 pnpm check` passes at `33f50fb`: 1,717 regular tests, five slow tests, docs and production builds. Headless self-test passes 12/12. Targets PR #62’s branch. |
 | M3        | The planetarium renders the whole stellar disk.                    | M2                | Open [PR #65](https://github.com/jonjaques/inertialref/pull/65) on `codex/galaxy-the-disk-is-visible`, targeting PR #63’s branch at `bdbfd93`; verified implementation `dfe75a2`. Fixed face-on/edge-on instruments, `galaxy-tsl@1`, full scene-depth composition and an owned rgba16f quarter-size target. CPU/GPU fields and 33 rays stay within 1%; all 69 GPU tests pass. At 1920×1080 on Apple M5: 0.989 MiB target, 10.58–10.61 ms added face-on and 23.14–23.31 ms edge-on. The 2 ms target, dust, continuous travel and temporal reuse remain open. Full gate: 1,723 regular tests and five slow tests; headless self-test 12/12. Captures are attached to PR #65; measurements and lifecycle evidence are in `CONTEXT.md`.                  |
 | M4        | The camera travels from Earth to the disk through the sensor.      | M3                | Open in [PR #66](https://github.com/jonjaques/inertialref/pull/66), `codex/galaxy-earth-to-the-disk` → PR #65’s branch at `d980228`; verified implementation `7b612a1`, complete evidence ledger `8235d85`. [Execution plan](galaxy-m4-earth-to-the-disk.md); full outward/return capture and matched response plates in `.scratch/galaxy-m4/`. `pnpm check`: 1,742 regular tests, five slow tests, docs and build; physical GPU: 71 tests; headless: 12/12. Exposure clipping and 11–38 ms added volume cost remain explicit limits. [Journey recording](https://agentic-media-dumpster.jonjaques.com/2026/09/qxvm25qiw7/journey.mp4) and response plates are attached to PR #66.                                                                   |
-| M5        | Shared dust transport dims and reddens the volume.                 | M4                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| M5        | Shared dust transport dims and reddens the volume.                 | M4                | Feature implementation verified locally at `1d12369` on `codex/galaxy-light-through-dust`, from PR #66 at `837be56`. `galaxy-field@3`, `galaxy-tsl@3`; 1,784 regular tests, five slow tests, 74 GPU tests, headless 12/12. Inside/outside captures in `.scratch/galaxy-m5/`. **Performance acceptance open:** GPU saturation affected OS responsiveness; no valid added-frame-cost result. [Fresh-agent handoff](galaxy-performance-handoff.md). No new PR opened.                                                                                                                                                                                                                                                                                   |
 | M6        | Local clouds and photometric checks constrain the sky.             | M5                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | M7        | A progressive cached sky replaces the local live march.            | M6                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | M8        | Observer motion projects the star shell on the GPU.                | M7                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -227,6 +227,31 @@ increasing attenuation with column depth, and seed/order independence. Hold GPU
 rays to the CPU and test numerical convergence with increased sample counts.
 Capture a dusty edge-on disk and an interior band at the same field version.
 Measure the extra frame cost.
+
+**Local implementation.** `codex/galaxy-light-through-dust` is based on PR #66
+at `837be56`. The shared CPU field is `galaxy-field@3` and the port is
+`galaxy-tsl@3`; active generation is unchanged. The transport and parameter
+record are in [ADR-0032](../../docs/adr/0032-the-stellar-field.md#dust-transport-m5).
+The moving view uses the observer profile; after eight settled submissions,
+fine intervals concentrate near the dust plane. Across ten rays, this costs
+139–2,524 samples and stays within 0.781% RGB of a 0.25 pc reference.
+Optical-depth error is measured separately, up to 1.537%. Uniform 0.5 pc CPU
+rays agree with 0.25 pc within 0.000776% RGB. The GPU suite includes complete
+rays, zero dust, strong dust, transmittance, and lattice/seed agreement.
+
+The @3 edge-on capture is `.scratch/galaxy-m5/edge-on-dust.jpg`; the final
+interior capture is `interior-dust-small.jpg` at 640×360. The latter was
+completed without timing batches, and the browser was shut down immediately.
+GPU saturation affected OS responsiveness in earlier full-resolution runs.
+Their submission counters failed, so no added-frame-cost figure is accepted.
+M5 feature work is verified; performance acceptance stays open for the
+[fresh-agent performance run](galaxy-performance-handoff.md).
+
+The integration checklist retains two explicit gaps: M6 supplies named local
+clouds and photometric acceptance; M10 applies the same extinction to resolved
+star sprites, which currently remain bright over diffuse dark lanes. The
+supplied Galaxium screenshots guide cloud structure and transmitted color.
+No generated image or painted panorama supplies the field.
 
 **PR.** `codex/galaxy-light-through-dust` → `codex/galaxy`. Include matched
 inside/outside plates, transport checks and cost. Resolved-star extinction
@@ -525,11 +550,12 @@ R_w)^b sin(φ − φ_w)`, line of nodes 17.5° from the Sun–center line (Chen 
 does.
 
 **Dust.** An exponential disk with two vertical components; scale heights **81
-and 152 pc**, scale length 2.26 kpc (the 2025 two-component fit; Drimmel &
-Spergel's single 134 pc disk is the alternative); normalized to about 1 V
+and 152 pc**, scale length 2.26 kpc. The heights are Guo et al. 2025's means over 6–12 kpc;
+the radial length is Drimmel & Spergel 2001's. Their combination is an explicit
+preview assumption, recorded in [ADR-0032](../../docs/adr/0032-the-stellar-field.md#dust-transport-m5); normalized to about 1 V
 magnitude of extinction per kiloparsec in the plane, with the arm lanes offset
 inward of the stellar ridges, and a log-normal multiplicative noise term of four
-octaves down to about 1 pc (the GAMER recipe, Groeneboom & Dahle 2014).
+bands down to about 1 pc (following the noise approach in GAMER, Groeneboom & Dahle 2014).
 Reddening is `τ ∝ λ⁻¹`, three coefficients, so the band goes brown behind the
 rift and the bulge reads warm through its foreground. On top of the field, a
 table of **local clouds** as ellipsoids with published centers, extents and

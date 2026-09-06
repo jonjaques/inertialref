@@ -50,8 +50,11 @@ planetarium at 0.37 ms of engine (ADR-0025).
 
 The galaxy preview has fixed face-on and edge-on instruments and a reversible
 Earth-to-disk journey. Its live volume follows the planetarium observer through
-the scene and sensor. The field stays separate from active generation; dust,
-photometric calibration, and temporal optimization remain open
+the scene and sensor. Shared seeded dust dims and reddens the diffuse light,
+with finer sampling after the camera settles. The field stays separate from
+active generation; local clouds, photometric calibration, resolved-star
+extinction, and temporal optimization remain open. The live dust rendering
+saturates the GPU in the full-resolution rig; performance acceptance is open
 ([ADR-0032](docs/adr/0032-the-stellar-field.md)).
 
 ## Decisions that are expensive to reverse
@@ -7969,6 +7972,76 @@ Five regression cases failed before these fixes, covering three seek
 positions and the actual rendered buttons after orbiting at either endpoint.
 The control tests render in Node. Browser tests are omitted at the user's
 request.
+
+## Light passes through the same dust from either side (05 Sep 2026)
+
+M5 is based on PR #66 at `837be56`, on `codex/galaxy-light-through-dust`.
+The CPU model spends `galaxy-field@3`; the TSL port spends `galaxy-tsl@3`.
+Active population generation stays unchanged. [ADR-0032](docs/adr/0032-the-stellar-field.md#dust-transport-m5)
+records the profile, source distinction, preview assumptions, and transport.
+
+The homogeneous-absorber regression initially returned 3,199.34 instead of
+2,022.37 in the red channel. Front-to-back analytic interval transport passes
+that test and the two-layer ordering check, zero-dust identity, channel bounds,
+column monotonicity, seed/order properties, and population additivity.
+
+Ten rays against a 0.25 pc CPU reference show why sampling quality and field
+identity are separate. Moving 100 pc sampling reaches 2.512% RGB error.
+Uniform 10 pc sampling reaches 0.663%, but long GPU paths with both stellar and
+dust evaluation can return all-zero RGBA without a validation error. Short
+paths and the independent transmittance graph agree with the CPU. Expanding
+fixed arm windings alone does not cure every ray. Sharing stellar and dust
+centerlines, concentrating fine intervals near the plane, and discarding
+further RGB when all transmittance channels fall below `1e-12` passes the
+complete matrix. The actual driver/compiler cause remains unproven.
+
+The settled profile caps intervals at `max(10 pc, 0.1 × warped height)` as well
+as the 100 pc maximum and observer step law. It uses 139–2,524 samples across
+the ten rays, with maximum RGB error 0.7806925%; optical-depth error peaks
+separately at 1.5373267%. Uniform 0.5 pc CPU rays agree with 0.25 pc within
+0.000776% RGB. The input cases and residuals are retained in
+`.scratch/galaxy-m5/convergence-uniform.jsonl` and `convergence-settled.jsonl`.
+The live view refines after eight stable submissions, using accumulated motion
+thresholds so ordinary local drift does not keep it at travel quality.
+
+The full physical GPU suite passes 74 tests in 19 files, including seeded dust
+points, 108 transported ray cases, separate transmittance, short-ray
+convergence, foreground-depth composition, orientation, and resource lifetime.
+The headless self-test passes 12/12. The first full gate finds a pre-existing
+orbital property failure at eccentricity 0.9874839879822216 and
+49.999961414866746 periods. Relative velocity error is
+`2.5500372384223466e-7` against a `2.5499980707433374e-7` bound. The physics,
+spatial, and shared sources are identical to PR #66; direct evaluation of the
+saved counterexample reproduces it there. Position passes. The dust work does
+not change that bound or the solver. The repeated full `pnpm check` passes:
+1,784 regular tests, five slow tests, formatting, lint, types, layering,
+documentation validation, and production build.
+
+The @3 edge-on capture has a dark lane through the warm bulge. The final
+interior capture uses a 640×360 drawing buffer, 160×90 volume and 115,200 target
+bytes, with settled sampling and the same field/kernel versions. Its 2,400 s
+exposure is still a preview, and resolved sprites remain unextinct. The
+captures and reports are in `.scratch/galaxy-m5/`; the inside and outside
+images have different resolutions.
+
+The user observed GPU saturation and OS UI stalls during the larger runs.
+No M5 frame-cost result is accepted. The @2 edge-on control passed submission
+counters at 1920×1080: 29.27–29.37 ms full, 4.335–4.385 ms without volume,
+24.93–24.99 ms added. The @3 40-frame batches timed out or lost their CDP
+connection. Even requests for a single frame recorded 5–10 volume updates,
+and the supposedly disabled volume still recorded 8–10. Those differences
+cannot measure the shader. The cause of the extra submissions remains open.
+A detached browser also returned to display ratio two despite an attached
+`--dpr 1` request; `supersample` was one, so this was not 4× AA. Actual canvas
+and target dimensions must accompany any subsequent measurement.
+
+At the user's request, feature work ends here and performance goes to a fresh
+agent. The reduced-resolution capture had no timing batches, a 45-second
+outer limit, and automatic Chrome shutdown. The test Chrome on port 9335 and
+preview server on 4173 are stopped. The
+[handoff](design/plans/galaxy-performance-handoff.md) distinguishes valid
+arithmetic/capture evidence from invalid timing, records the workload and
+numerical limitations, and leaves the performance design open.
 
 ## Known gaps
 
