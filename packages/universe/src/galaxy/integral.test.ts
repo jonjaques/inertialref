@@ -25,6 +25,9 @@ it('integrates a homogeneous emitter with the analytic path length and 4π conve
       totalPerCubicParsec: 2,
       emissionSolarPerCubicParsec: 3,
       emissionRgb: { r: 1, g: 1, b: 1 },
+      extinctionPerParsec: { r: 0, g: 0, b: 0 },
+      dustArmStrength: 0,
+      dustModulation: 1,
       warpParsecs: 0,
       armStrength: 0,
     }),
@@ -172,3 +175,28 @@ it.each([
       ).toBeLessThan(0.01)
   },
 )
+
+it('integrates a homogeneous absorbing emitter within each interval analytically', () => {
+  const absorbing: GalaxyField = {
+    ...field,
+    sample: (position) => ({
+      ...field.sample(position),
+      totalPerCubicParsec: 2,
+      emissionSolarPerCubicParsec: 3,
+      emissionRgb: { r: 1, g: 1, b: 1 },
+      extinctionPerParsec: { r: 0.01, g: 0.02, b: 0.03 },
+    }),
+  }
+  const result = integrateGalaxyRay(
+    absorbing,
+    UV.fromMeters(0, 0, 0),
+    vec3(1, 0, 0),
+    { distanceParsecs: 100 },
+  )
+  for (const [i, k] of [0.01, 0.02, 0.03].entries())
+    expect(result.rgbNanowatts[i]).toBeCloseTo(
+      ((1 - Math.exp(-k * 100)) / k) * GALAXY_RADIANCE_FACTOR,
+      6,
+    )
+  expect(result.starsPerSquareParsec).toBeCloseTo(200, 10)
+})

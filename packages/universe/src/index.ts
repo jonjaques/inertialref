@@ -23,4 +23,5 @@ export * from './terrainKernel.ts'
 
 export * from './galaxy/arms.ts'
 export * from './galaxy/field.ts'
+export * from './galaxy/dust.ts'
 export * from './galaxy/integral.ts'

@@ -22,6 +22,8 @@ export interface GalaxyRayIntegral {
   readonly rgbNanowatts: readonly [number, number, number]
   readonly starsPerSquareParsec: number
   readonly samples: number
+  readonly transmittanceRgb: readonly [number, number, number]
+  readonly opticalDepthRgb: readonly [number, number, number]
 }
 export const GALAXY_OBSERVER_MIN_STEP_PARSECS = 1
 export const GALAXY_OBSERVER_STEP_GROWTH = 0.1
@@ -34,7 +36,11 @@ export interface GalaxyRayOptions {
   readonly maxStepParsecs?: number
 }
 
-/** Emission only, midpoint quadrature; direction is a displacement in simulation axes. */
+// A direct 1-exp(-q) loses the source term near zero, especially in float32.
+const transportFactor = (q: number): number =>
+  q < 0.01 ? 1 - q / 2 + (q * q) / 6 - (q * q * q) / 24 : (1 - Math.exp(-q)) / q
+
+/** Front-to-back transport; each midpoint defines a homogeneous interval. */
 export function integrateGalaxyRay(
   field: GalaxyField,
   origin: UniverseVector,
@@ -80,6 +86,12 @@ export function integrateGalaxyRay(
     g = 0,
     b = 0,
     column = 0,
+    tr = 1,
+    tg = 1,
+    tb = 1,
+    tauR = 0,
+    tauG = 0,
+    tauB = 0,
     samples = 0
   // Bound the integration to the finite reference volume. Slab clipping also
   // keeps an outside observer from paying for the empty approach to the disk.
@@ -126,6 +138,12 @@ export function integrateGalaxyRay(
       ),
     )
     const s = field.sample(p)
+    const qr = s.extinctionPerParsec.r * step,
+      qg = s.extinctionPerParsec.g * step,
+      qb = s.extinctionPerParsec.b * step
+    const wr = tr * transportFactor(qr),
+      wg = tg * transportFactor(qg),
+      wb = tb * transportFactor(qb)
     if (
       population !== undefined &&
       properties !== undefined &&
@@ -134,16 +152,22 @@ export function integrateGalaxyRay(
       const density = s.populations[population]
       const light =
         (density * properties.meanSolarLuminosities * step) / colourSum
-      r += light * colour.r
-      g += light * colour.g
-      b += light * colour.b
+      r += wr * light * colour.r
+      g += wg * light * colour.g
+      b += wb * light * colour.b
       column += density * step
     } else {
-      r += s.emissionRgb.r * step
-      g += s.emissionRgb.g * step
-      b += s.emissionRgb.b * step
+      r += wr * s.emissionRgb.r * step
+      g += wg * s.emissionRgb.g * step
+      b += wb * s.emissionRgb.b * step
       column += s.totalPerCubicParsec * step
     }
+    tr *= Math.exp(-qr)
+    tg *= Math.exp(-qg)
+    tb *= Math.exp(-qb)
+    tauR += qr
+    tauG += qg
+    tauB += qb
     samples++
     t += step
   }
@@ -156,6 +180,8 @@ export function integrateGalaxyRay(
     ],
     starsPerSquareParsec: column,
     samples,
+    transmittanceRgb: [tr, tg, tb],
+    opticalDepthRgb: [tauR, tauG, tauB],
   }
 }
 
