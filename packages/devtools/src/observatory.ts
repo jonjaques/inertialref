@@ -289,6 +289,7 @@ export class Observatory {
     if (held.motion === null) {
       held.progress = progress
       this.#state = this.#desired = galaxyJourneyState(held.route, progress)
+      this.#look = NO_LOOK
     }
     return this.status()
   }

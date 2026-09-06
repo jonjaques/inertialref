@@ -75,6 +75,32 @@ it('rejects invalid travel before changing the camera or lens', () => {
   }
 })
 
+it.each([0, 0.75, 1])(
+  'recenters free look when seeking progress %s',
+  (progress) => {
+    const session = openSession({ workers: null })
+    try {
+      const ir = session.harness
+      ir.galaxyJourney(0.5)
+      ir.observatory.setLook(Math.PI, 0)
+      ir.galaxyJourney(progress)
+      const pose = ir.observerSample(0)!
+      const earth = session.world.frames.pose(
+        ir.observatory.target!.frame,
+        session.world.clock.renderTime,
+      ).position
+      expect(
+        Vec.dot(
+          Q.basis(pose.orientation).forward,
+          Vec.normalize(UV.difference(earth, pose.position)),
+        ),
+      ).toBeCloseTo(1, 12)
+    } finally {
+      session.dispose()
+    }
+  },
+)
+
 it('partitions presentation time equally and reverses from the current position', () => {
   const a = openSession({ workers: null }),
     b = openSession({ workers: null })
@@ -118,11 +144,13 @@ it('resumes from a manually orbited pose and holds without snapping back to the 
   try {
     const ir = session.harness
     ir.galaxyJourney(0.6)
+    ir.observatory.setLook(0.3, -0.1)
     ir.observatory.drag(45, -20)
     const start = ir.observerSample(0)!
     ir.galaxyJourney(1, 12)
     const resumed = ir.observerSample(0)!
     expect(UV.distance(resumed.position, start.position)).toBeLessThan(0.001)
+    expect(resumed.orientation).toEqual(start.orientation)
     ir.observerSample(4)
     const holding = ir.observerSample(0)!
     ir.observatory.holdGalaxyJourney()
