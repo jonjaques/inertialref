@@ -1,6 +1,6 @@
 # M4: Earth to the galaxy through the sensor
 
-Status: implementation and required gates complete; captured-frame analysis finishing, 5 Sep 2026.
+Status: implemented and verified locally, with the lighting and capture limits below, 5 Sep 2026.
 
 This is the execution plan for M4 of [the galaxy plan](the-galaxy.md). The
 requested result is a new branch containing the implemented and verified
@@ -77,10 +77,19 @@ work must subtract. The images' dark lanes therefore remain absent in M4.
   change, maximum adjacent log-distance change 0.038790, and no more than
   10,155 selected sprites. The frozen world hash stays `bd75d6b3`.
   `black-frames.json` finds no black frame; the darkest mean is 8.2663/255.
-  The complete driver difference analysis and clip encoding are finishing.
-- Remaining acceptance work: collect the driver's frame analysis and clip,
-  record its capture rate and limits, validate the final documentation, and
-  commit the evidence ledger.
+  The recording and complete driver analysis are in `journey.json`; the original
+  5,000 frames and full clip are retained in `journey/frames/`. The 85-second
+  `journey.mp4` excerpt includes both directions and endpoint holds, removing
+  the initial setup frame and most of the surplus final hold.
+- The capture exports at 37 fps. Seven isolated brightness excursions affect
+  203–396 pixels each in the 480 × 270 comparison. Visual inspection and
+  `point-flicker.json` localize every threshold-crossing pixel to the bright
+  foreground point; none occur outside its central 71 × 76 comparison region.
+  These lighting flickers remain visible limits. The camera and diffuse field
+  show no corresponding discontinuity. This capture rate does not establish
+  absence of every one-frame artifact; do not describe it as artifact-free.
+- `7542f64` commits the implementation account and measurements. Final evidence
+  documentation passes formatting and documentation-link validation.
 - No remote branch, PR, review, or media upload is part of the current
   authorization. Make local commits as the repository requires. Shipping is a
   separate user request.

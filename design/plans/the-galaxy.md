@@ -202,7 +202,9 @@ captured at identical poses and lenses. The shared shutter preference reaches
 3,600 s so its controls describe the actual instrument. The local survey stays
 at 125 cells and no more than 20,000 selected sprites. The recording reaches
 both endpoints with a frozen world hash and no nonfinite camera/lens values;
-all 5,000 captured frames are nonblack. Measured production costs, renderer
+all 5,000 captured frames are nonblack. The 37 fps export contains seven small
+brightness flickers localized to a bright foreground point; it does not
+establish absence of every one-frame artifact. Measured production costs, renderer
 retirement, and remaining composition limits are in `CONTEXT.md` (5 Sep 2026)
 and the [execution plan](galaxy-m4-earth-to-the-disk.md). Lighting is still a
 preview; M5/M6 retain dust and photometric acceptance.

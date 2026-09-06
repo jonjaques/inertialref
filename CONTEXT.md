@@ -7942,6 +7942,18 @@ before the initial instrument seek; timed travel starts after the endpoint
 hold. The evidence script now waits for the initial seek to present before
 starting a recording.
 
+The full export is 5,000 frames at 37 fps, 135.135 s; the retained 85-second
+`journey.mp4` excerpt includes both directions and endpoint holds. The driver
+finds seven isolated brightness excursions, 203–396 pixels each at its
+480×270 comparison size. Inspection of the neighboring frames and difference
+map localizes them to the bright foreground point. Clearing the central
+71×76 comparison region leaves zero threshold-crossing pixels in all seven
+pairs (`point-flicker.json`). There is no corresponding camera or diffuse-field
+jump. This is a lighting limitation, consistent with an unresolved point's
+raster coverage at the extreme exposure, not a diagnosis proved by this test.
+The 37 fps capture also cannot rule out every one-frame artifact. Keep both
+limits beside the clip; it is not an artifact-free claim.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
