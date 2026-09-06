@@ -12,6 +12,7 @@ import {
   Quaternion as Q,
   UV,
   type UniverseVector,
+  vec3,
   Vec,
   type Vec3,
 } from '@inertialref/spatial'
@@ -76,6 +77,7 @@ import {
   heightForScrub,
   horizonPitch,
   isCentred,
+  localTriad,
   type LookOffset,
   NO_LOOK,
   MIN_STANCE_HEIGHT,
@@ -283,6 +285,51 @@ export const DEFAULT_FILL = 0.55
  * has to make a picture on Phobos (710 m up) and on Ganymede (166 km).
  */
 export const RISE_HEIGHT_RADII = 0.063
+
+/**
+ * How much of the frame the drop ring covers, radians of half-angle.
+ *
+ * Two degrees. A mark that says "here" has to be findable against a cratered
+ * surface without claiming ground the camera is not landing on, and the only
+ * size that holds across the six decades this gesture spans is an angular one.
+ */
+const RING_ANGLE = 0.035
+
+/** Segments in either ring. Enough that a couple of degrees reads as a circle. */
+const RING_SEGMENTS = 48
+
+/**
+ * How much of the frame the held figure's ring covers, radians of half-angle.
+ *
+ * Smaller than the ground ring's: this one sits near the eye and is the thing
+ * the hand is moving, so it wants to be a cursor rather than a target. At 0.9°
+ * it is about 25 px on a 900-line frame, which is a mark a pointer can be
+ * inside without covering what it is aiming at.
+ */
+const HOLD_ANGLE = 0.016
+
+/**
+ * How far above the ground the figure hangs, as a share of the eye's altitude.
+ *
+ * A fifth. It has to be a share rather than a distance because the gesture is
+ * used from a hundred body-radii out and from just above the orbit floor, and
+ * the one thing the mark may not do is leave the frame at either end.
+ */
+const HOLD_ALTITUDE_SHARE = 0.2
+
+/**
+ * How far the ring floats over the ground it follows, as a share of its own
+ * radius.
+ *
+ * Proportional, and it has to be. A fixed lift is a metre-scale number, and the
+ * vertex buffer holding it is float32 at a planetary radius — where one step is
+ * half a metre — so a two-metre lift is a handful of bits and the loop z-fights
+ * with the patch drawing the same height. Worse at a limb, where the ground is
+ * edge-on and any lift is foreshortened to nothing. A twelfth of the ring's own
+ * radius is clear at every distance the gesture spans and still reads as lying
+ * on the ground rather than hovering over it.
+ */
+const RING_LIFT_SHARE = 0.08
 
 export class Observatory {
   #time: number | null = null
@@ -653,6 +700,9 @@ export class Observatory {
    * the first frame. Cleared by whatever replaces the stance, and by landing.
    */
   #descent: Descent | null = null
+  /** The point a drop is being aimed at. Presentation only; see `aim`. */
+  #aim: { readonly latitude: Radians; readonly longitude: Radians } | null =
+    null
   /**
    * Where the head is turned, relative to whatever the pose aims at.
    *
@@ -779,6 +829,7 @@ export class Observatory {
     // and a longitude on one particular body, so carrying it across a change of
     // target would put the camera at those coordinates on a different world.
     this.#descent = null
+    this.#aim = null
     this.#stance = null
     this.#site = null
     // A focus is a new picture, so the head goes back to center. The other
@@ -852,6 +903,7 @@ export class Observatory {
     this.#basis = Q.IDENTITY
     this.#phaseOrbit = null
     this.#descent = null
+    this.#aim = null
     this.#stance = null
     this.#site = null
     this.#look = NO_LOOK
@@ -1386,6 +1438,7 @@ export class Observatory {
     this.track(null)
     this.#basis = Q.IDENTITY
     this.#descent = null
+    this.#aim = null
     this.#stance = {
       latitude,
       longitude,
@@ -1413,6 +1466,7 @@ export class Observatory {
     // A drop in flight is abandoned, not finished: the orbit state underneath
     // is the one the camera left, so this is also how a drop is cancelled.
     this.#descent = null
+    this.#aim = null
     this.#stance = null
     this.#site = null
     return this.status()
@@ -1512,6 +1566,7 @@ export class Observatory {
       elapsed: 0,
       blend: 0,
     }
+    this.#aim = null
     this.#stance = this.#descentStance(0)
     log.info('observatory dropping', {
       address: this.#target?.address,
@@ -1559,8 +1614,19 @@ export class Observatory {
     const b = Vec.dot(relative, along)
     const c = Vec.dot(relative, relative) - body.radius * body.radius
     const discriminant = b * b - c
-    if (discriminant < 0) return null
-    const t = -b - Math.sqrt(discriminant)
+    /*
+     * A ray that misses answers with the limb rather than with nothing.
+     *
+     * Aiming *past* a world is how anybody reaches its edge: the near limb is
+     * the one part of a sphere a pointer cannot land on from outside, because
+     * the ray grazes it at a tangent and a pixel either way is the difference
+     * between a hit and the sky. Refusing there makes the last few degrees of
+     * every drop unreachable — and it is exactly where a person aims when they
+     * want a horizon in the frame. So a miss is answered with the point on the
+     * surface nearest the ray, which is continuous across the limb: the mark
+     * slides onto the edge and stays there rather than blinking out.
+     */
+    const t = discriminant >= 0 ? -b - Math.sqrt(discriminant) : -b
     if (!(t > 0)) return null
     const hit = Vec.add(relative, Vec.scale(along, t))
     const { latitude, longitude } = directionToGeodetic(
@@ -1570,22 +1636,66 @@ export class Observatory {
   }
 
   /**
-   * The entry a drop would fly to a point, as positions an aid can draw.
+   * The point a drop is being aimed at, or null when nothing is being aimed.
    *
-   * `arc` is the path from the eye to the touchdown; `through` is the rest of
-   * the conic, under the ground and out the far side, which is what says the
-   * path is an entry and not an orbit. Universe positions, because the aid
-   * projects them through the camera itself and a render position would tie
-   * the aid to the origin the renderer happens to be snapped to.
+   * Presentation state, set by whatever is holding the gesture and read by
+   * whatever draws the aid — a hover, in the same sense the look offset is a
+   * hover. It writes nothing canonical, it does not move the camera, and it is
+   * cleared by everything that replaces the pose, so an aim cannot survive the
+   * body it was taken over.
+   */
+  get aim(): {
+    readonly latitude: Radians
+    readonly longitude: Radians
+  } | null {
+    return this.#aim
+  }
+
+  previewDrop(
+    point: { readonly latitude: Radians; readonly longitude: Radians } | null,
+  ): void {
+    this.#aim =
+      point === null
+        ? null
+        : {
+            latitude: clampLatitude(point.latitude),
+            longitude: point.longitude,
+          }
+  }
+
+  /**
+   * The entry the aim would fly, as positions something can draw.
+   *
+   * Universe positions, because the aid is drawn *in the scene* and the scene
+   * places a universe point through the same radial compression it places the
+   * body with. Handing back render coordinates would tie this to the origin
+   * the renderer happens to be snapped to, which lags the camera and jumps.
+   *
+   * Four pieces, because they are four claims:
+   *
+   *   `from`    where the figure is held — a little way down the arc from the
+   *             eye, so it reads as a thing in space at the cursor rather than
+   *             as something emitted by the viewer's own face.
+   *   `arc`     the path it would fall, from there to the ground.
+   *   `through` the rest of the conic, under the ground and out the far side.
+   *             It is what says the trajectory is an *entry* and not a capture,
+   *             and it is the only part drawn against the body's own inside.
+   *   `ring`    a closed loop lying on the drawn ground around the touchdown,
+   *             which is the part that has to follow terrain — a flat disc
+   *             would sink into a slope and float over a basin.
    */
   entryArcPreview(
     destination: string | undefined,
     point: { readonly latitude: Radians; readonly longitude: Radians },
     samples = 48,
   ): {
-    readonly arc: readonly UniverseVector[]
-    readonly through: readonly UniverseVector[]
-    readonly touchdown: UniverseVector
+    /** Every field below is body radii, in the body's own rotating axes. */
+    readonly from: Vec3
+    readonly hold: readonly Vec3[]
+    readonly arc: readonly Vec3[]
+    readonly through: readonly Vec3[]
+    readonly ring: readonly Vec3[]
+    readonly touchdown: Vec3
   } | null {
     const target = this.#targetFor(destination)
     const body = this.#bodyOf(target)
@@ -1597,18 +1707,178 @@ export class Observatory {
       clampLatitude(point.latitude),
       point.longitude,
     )
+    // The eye in the body's rotating axes, which is the frame the whole
+    // preview is solved in — so the aim stays on the ground it was taken over
+    // while the body turns under it.
+    const local = Q.rotateInverse(
+      spin.orientation,
+      UV.difference(eye, spin.position),
+    )
+    /*
+     * The figure is held in the viewer's own orbit, above the point aimed at.
+     *
+     * Not at the eye, which is the version this replaces and the one that
+     * cannot be drawn: an arc leaving from the camera starts behind the near
+     * plane and spends most of its length off the sides of the frame, so what
+     * a viewer sees of it is a few dashes arriving from nowhere. Held at the
+     * eye's own radius it is a thing *in* the picture, at the altitude the
+     * viewer is already at — which is what "in orbit" means here — and the
+     * fall from it is a line with two visible ends.
+     *
+     * Directly above the aim, so the mark and the ground it names share a
+     * vertical. The consequence is honest and worth stating: aim at the middle
+     * of the disk and that vertical points at the camera, so the fall
+     * foreshortens to almost nothing. Aim anywhere near a limb — which is
+     * where a horizon comes from, and where anybody composing a picture aims —
+     * and it is the full drop, drawn side-on.
+     */
+    const groundRadius = drawnSurfaceRadius(body, ground)
+    /*
+     * How high the figure is held: a share of the viewer's own altitude, not
+     * the viewer's own radius.
+     *
+     * Held at the full orbital radius the mark is 3.3 body-radii out at Earth,
+     * which is off the side of a 65° frame — the figure leaves the picture
+     * exactly when the aim reaches the limb, which is where the aim is most
+     * often pointed. A fifth of the altitude puts it a half-radius clear of
+     * the ground: outside the disk when the aim is near a limb, so the fall is
+     * drawn side-on, and still in frame.
+     */
+    const altitude = Math.max(
+      body.radius * 0.02,
+      (Vec.length(local) - body.radius) * HOLD_ALTITUDE_SHARE,
+    )
     const arc = entryArc(
-      Q.rotateInverse(spin.orientation, UV.difference(eye, spin.position)),
-      Vec.scale(ground, drawnSurfaceRadius(body, ground) + MIN_STANCE_HEIGHT),
+      Vec.scale(ground, groundRadius + altitude),
+      Vec.scale(ground, groundRadius + MIN_STANCE_HEIGHT),
     )
     if (arc === null) return null
-    const lift = (offset: Vec3): UniverseVector =>
-      UV.translate(spin.position, Q.rotate(spin.orientation, offset))
+    /*
+     * Body radii, in the body's own rotating axes — not universe positions.
+     *
+     * The aid hugs a body, and a body is not drawn where its metric position
+     * says: render compression pulls it nearer and shrinks it so its angular
+     * size survives, and `placement.scale` is the radius it comes out at. A
+     * point placed by its *own* compression therefore lands at a different
+     * depth from the sphere it is supposed to be lying on — which is why a
+     * ring built that way sank inside the planet and vanished. Handed back
+     * normalized, the drawer can put it through the body's own placement, the
+     * way a terrain patch already is, and one unit is exactly the drawn
+     * surface.
+     */
+    const unit = (offset: Vec3): Vec3 => Vec.scale(offset, 1 / body.radius)
+    const whole = arcSamples(arc, samples)
+    const touchdown = arcPoint(arc, arc.sweep, arc.touchdown)
+    const from = whole[0] ?? touchdown
     return {
-      arc: arcSamples(arc, samples).map(lift),
-      through: arcContinuation(arc, samples).map(lift),
-      touchdown: lift(arcPoint(arc, arc.sweep, arc.touchdown)),
+      from: unit(from),
+      hold: this.#holdRing(from, local).map(unit),
+      arc: whole.map(unit),
+      through: arcContinuation(arc, samples).map(unit),
+      ring: this.#groundRing(body, ground, arc.touchdown, eye).map(unit),
+      touchdown: unit(touchdown),
     }
+  }
+
+  /**
+   * The loop drawn around the held figure, facing the eye.
+   *
+   * A ring on a plane perpendicular to the line of sight, so it reads as a
+   * circle from where the viewer is standing rather than as an ellipse edge-on
+   * — this one is a marker rather than a place, and a marker that foreshortens
+   * to a line has stopped marking anything. The ground ring is the opposite
+   * case and is deliberately laid flat: it *is* a place.
+   *
+   * Angular, like the ground ring, and for the same reason: the gesture spans
+   * six decades of distance and no fixed size survives that.
+   */
+  #holdRing(at: Vec3, eye: Vec3): readonly Vec3[] {
+    const toEye = Vec.sub(eye, at)
+    const range = Vec.length(toEye)
+    if (!(range > 0)) return []
+    const forward = Vec.scale(toEye, 1 / range)
+    const seed = Math.abs(forward.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)
+    const right = Vec.normalize(Vec.cross(seed, forward))
+    const up = Vec.cross(forward, right)
+    const across = range * HOLD_ANGLE
+    const out: Vec3[] = []
+    for (let index = 0; index <= RING_SEGMENTS; index += 1) {
+      const angle = (index / RING_SEGMENTS) * Math.PI * 2
+      out.push(
+        Vec.add(
+          at,
+          Vec.add(
+            Vec.scale(right, Math.cos(angle) * across),
+            Vec.scale(up, Math.sin(angle) * across),
+          ),
+        ),
+      )
+    }
+    return out
+  }
+
+  /**
+   * A loop on the ground around a direction, following the terrain under it.
+   *
+   * Its radius is **angular from the eye, not fixed in meters**, and that is
+   * the whole of its legibility: a ring sized in meters is a few pixels across
+   * from orbit and swallows the horizon from two meters up, and the gesture
+   * that draws it spans exactly that range. Two degrees of the frame, capped
+   * at a share of the body so it cannot wrap a small moon.
+   *
+   * Every point is sampled against `drawnSurfaceRadius`, so the loop lies on
+   * the ground rather than on the datum — on a slope the two are a kilometre
+   * apart, and a ring that floated over a crater rim would be pointing at
+   * somewhere the camera does not land.
+   */
+  #groundRing(
+    body: Body,
+    centre: Vec3,
+    touchdownRadius: Meters,
+    eye: UniverseVector,
+  ): readonly Vec3[] {
+    const spin = this.#spinOf(body)
+    if (spin === null) return []
+    const local = Q.rotateInverse(
+      spin.orientation,
+      UV.difference(eye, spin.position),
+    )
+    const range = Math.max(
+      1,
+      Vec.length(Vec.sub(local, Vec.scale(centre, touchdownRadius))),
+    )
+    const across = Math.min(body.radius * 0.22, range * RING_ANGLE)
+    // The angle the ring subtends at the body's centre, which is what turns a
+    // distance across the ground into a rotation of the direction.
+    const sweep = Math.min(Math.PI / 3, across / body.radius)
+    const triad = localTriad(centre)
+    const out: Vec3[] = []
+    for (let index = 0; index <= RING_SEGMENTS; index += 1) {
+      const angle = (index / RING_SEGMENTS) * Math.PI * 2
+      const offset = Vec.add(
+        Vec.scale(triad.east, Math.cos(angle)),
+        Vec.scale(triad.north, Math.sin(angle)),
+      )
+      /*
+       * Back through a latitude, which is what carries the `body-fixed` brand
+       * the terrain sampler demands. The round trip agrees to a float and is
+       * the only spelling that proves the direction is in the axes the
+       * mountains are in — see `#descentStance`, which pays the same toll.
+       */
+      const turned = Vec.add(
+        Vec.scale(centre, Math.cos(sweep)),
+        Vec.scale(offset, Math.sin(sweep)),
+      )
+      const { latitude, longitude } = directionToGeodetic(turned)
+      const direction = geodeticDirection(latitude, longitude)
+      out.push(
+        Vec.scale(
+          direction,
+          drawnSurfaceRadius(body, direction) + across * RING_LIFT_SHARE,
+        ),
+      )
+    }
+    return out
   }
 
   /** The target a verb names, or the one held; null rather than a throw. */

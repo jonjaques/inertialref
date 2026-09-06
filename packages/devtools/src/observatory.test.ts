@@ -911,38 +911,92 @@ describe('a drop', () => {
     const expected = directionToGeodetic(under)
     expect(hit?.latitude).toBeCloseTo(expected.latitude, 6)
     expect(hit?.longitude).toBeCloseTo(expected.longitude, 6)
-    // A ray across the sky hits nothing at all.
+    /*
+     * A ray that misses answers with the limb rather than with nothing, and
+     * that is the deliberate half: the near limb is the one part of a sphere a
+     * pointer cannot land on from outside, because the ray grazes it at a
+     * tangent. So a ray at right angles to the body still names a point, and
+     * that point is on the surface.
+     */
     const across = Vec.normalize(
       Vec.cross(down, Math.abs(down.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)),
     )
-    expect(ir.observatory.groundUnderRay(undefined, across)).toBeNull()
+    const grazed = ir.observatory.groundUnderRay(undefined, across)
+    expect(grazed).not.toBeNull()
+    expect(Math.abs(grazed?.latitude ?? 9)).toBeLessThanOrEqual(Math.PI / 2)
+    // What still answers with nothing is a ray pointing away from the body:
+    // there is no surface behind the viewer to land on.
+    expect(
+      ir.observatory.groundUnderRay(undefined, Vec.negate(down)),
+    ).toBeNull()
   })
 
-  it('previews an arc that starts at the eye and passes under the ground', () => {
-    const { harness: ir, session } = harness()
+  it('previews a fall from over the aim down to the ground under it', () => {
+    /*
+     * In body radii, in the body's own axes — the frame the drawer needs, and
+     * a frame the assertions can be written in without a world: one unit is
+     * the drawn surface, so "lands on the ground" is a number near 1 rather
+     * than a distance that has to be compared against a radius fetched from
+     * somewhere else.
+     */
+    const { harness: ir } = harness()
     ir.look('s:SOL/b:2')
-    const preview = ir.observatory.entryArcPreview(undefined, {
+    const aim = {
       latitude: (40 * Math.PI) / 180,
       longitude: (-70 * Math.PI) / 180,
-    })
-    const eye = ir.observatory.eye
-    const centre = originOf(
-      session,
-      bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2')),
-    )
-    const first = preview?.arc[0]
-    const last = preview?.arc[preview.arc.length - 1]
-    expect(UV.distance(first ?? centre, eye ?? centre)).toBeLessThan(1)
+    }
+    const preview = ir.observatory.entryArcPreview(undefined, aim)
+    const radii = (point: Vec3): number => Vec.length(point)
+    const arc = preview?.arc ?? []
+    const first = arc[0] as Vec3
+    const last = arc[arc.length - 1] as Vec3
+
+    // It starts above the ground and ends on it. Earth's relief is 9.9 km on
+    // 6,378, so the surface is within a part in 500 of one radius.
+    expect(radii(first)).toBeGreaterThan(1.05)
+    expect(radii(last)).toBeCloseTo(1, 2)
+    // Straight down: the fall is a drop from rest, so every sample of it lies
+    // along the one direction the aim names.
+    const down = Vec.normalize(first)
+    for (const point of arc)
+      expect(Vec.dot(Vec.normalize(point), down)).toBeCloseTo(1, 6)
+    // And the aim is where it lands, not merely near it.
+    const { latitude, longitude } = directionToGeodetic(last)
+    expect(latitude).toBeCloseTo(aim.latitude, 9)
+    expect(longitude).toBeCloseTo(aim.longitude, 9)
+
+    // The continuation passes under the ground and out the far side, which is
+    // what makes the trajectory an entry rather than a capture.
+    const through = preview?.through ?? []
+    // Near the centre rather than at it: the continuation is sampled evenly in
+    // angle over 48 points, and none of them lands exactly on the midpoint —
+    // the nearest is 1/47 of the sweep away, which is 2.1% of a radius.
+    expect(Math.min(...through.map(radii))).toBeLessThan(0.05)
     expect(
-      UV.distance(last ?? centre, preview?.touchdown ?? centre),
-    ).toBeLessThan(1)
-    // The continuation goes under the ground, which is what makes it an entry
-    // rather than an orbit: no sample of it may sit above the surface.
-    const deepest = Math.min(
-      ...(preview?.through ?? []).map((point) => UV.distance(point, centre)),
-    )
-    expect(deepest).toBeLessThan(
-      UV.distance(preview?.touchdown ?? centre, centre),
-    )
+      Vec.dot(Vec.normalize(through[through.length - 1] as Vec3), down),
+    ).toBeCloseTo(-1, 6)
+
+    // Both rings close, and the ground one lies on the ground it follows.
+    const ring = preview?.ring ?? []
+    expect(
+      Vec.distance(ring[0] as Vec3, ring[ring.length - 1] as Vec3),
+    ).toBeLessThan(1e-9)
+    for (const point of ring) expect(radii(point)).toBeCloseTo(1, 1)
+    const hold = preview?.hold ?? []
+    expect(
+      Vec.distance(hold[0] as Vec3, hold[hold.length - 1] as Vec3),
+    ).toBeLessThan(1e-9)
+  })
+
+  it('has no preview to draw once there is no aim', () => {
+    const { harness: ir } = harness()
+    ir.look('s:SOL/b:2')
+    expect(ir.observatory.aim).toBeNull()
+    ir.observatory.previewDrop({ latitude: 0.2, longitude: 0.3 })
+    expect(ir.observatory.aim?.latitude).toBeCloseTo(0.2, 9)
+    // Anything that replaces the pose takes the aim with it: an arc left over
+    // a body the camera is no longer at is a curve pointing at nothing.
+    ir.look('s:SOL/b:5')
+    expect(ir.observatory.aim).toBeNull()
   })
 })
