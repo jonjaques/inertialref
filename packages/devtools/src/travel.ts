@@ -243,6 +243,29 @@ export interface TravelTargetOptions {
 /** Default survey radius. Wide enough to hold the nearest half-dozen stars. */
 const DEFAULT_SURVEY_LIGHT_YEARS = 8
 
+/**
+ * How far a world search sweeps when it is not told.
+ *
+ * Twenty-five light years, which is the catalog's own complete radius — inside
+ * it every star is a real one and the answers are about places that exist,
+ * which is the sweep worth defaulting to. Wider is a deliberate act, and the
+ * panel offers it.
+ */
+export const DEFAULT_SEARCH_LIGHT_YEARS = 25
+
+/**
+ * How many systems one search job walks.
+ *
+ * The number decides how often the list grows, and both ends of the range are
+ * bad. Too large and a fifty-light-year sweep is a handful of jobs, so rows
+ * arrive in three lumps and the last worker holds the whole answer; too small
+ * and the queue is thousands of jobs whose per-job overhead — a structured
+ * clone of the batch each way — is a real share of the work. Thirty-two
+ * systems is about a quarter-second of generating, which is close enough to a
+ * frame's worth of new rows to read as filling in.
+ */
+export const SEARCH_BATCH = 32
+
 export function travelTargets(
   world: World,
   from: UniverseVector,

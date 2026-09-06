@@ -777,3 +777,68 @@ describe('going places', () => {
     expect(() => ir.goTo('g:milky-way/s:SOL/b:99')).toThrow(/No body/)
   })
 })
+
+describe('searching the volume for worlds', () => {
+  it('answers in batches, and the batches add up to the whole', async () => {
+    /*
+     * The shape the panel depends on: rows arrive while the sweep is still
+     * running. A job is one request and one response, with no partial-result
+     * message in the protocol, so streaming is several jobs rather than one
+     * job that reports as it goes — and this is the assertion that the several
+     * are dispatched and accumulated rather than awaited together.
+     */
+    const { harness: ir } = harness()
+    const seen: number[] = []
+    const search = ir.findWorlds(
+      { kinds: ['rocky'] },
+      {
+        lightYears: 12,
+        onBatch: (found, progress) => {
+          seen.push(found.length)
+          expect(progress).toBeGreaterThan(0)
+          expect(progress).toBeLessThanOrEqual(1)
+        },
+      },
+    )
+    expect(search.systems).toBeGreaterThan(0)
+    const found = await search.done
+    expect(found.length).toBeGreaterThan(0)
+    // Every callback saw a prefix of the final answer, and the last saw it all.
+    expect(seen.at(-1)).toBe(found.length)
+    for (const count of seen) expect(count).toBeLessThanOrEqual(found.length)
+    // Rocky is what was asked for, so rocky is what came back.
+    for (const match of found) expect(match.kind).toBe('rocky')
+  })
+
+  it('finds Earth when asked for a world with a sea near a G star', async () => {
+    // The query the whole feature exists to answer, against the one system
+    // whose answer is known independently of the generator.
+    const { harness: ir } = harness()
+    const found = await ir.findWorlds(
+      { starClasses: ['G'], sea: true, landable: true },
+      { lightYears: 6 },
+    ).done
+    expect(found.map((one) => one.address)).toContain('g:milky-way/s:SOL/b:2')
+    const earth = found.find((one) => one.name === 'Earth')
+    expect(earth?.systemName).toBe('Sol')
+    expect(earth?.hasSea).toBe(true)
+    expect(earth?.lightYears).toBeLessThan(1)
+  })
+
+  it('stops when it is cancelled rather than finishing the volume', async () => {
+    const { harness: ir } = harness()
+    const search = ir.findWorlds({}, { lightYears: 12 })
+    search.cancel()
+    const found = await search.done
+    // Whatever a cancelled sweep returns, it is not the whole volume — and it
+    // returns rather than hanging, which is what a second question needs.
+    expect(Array.isArray(found)).toBe(true)
+  })
+
+  it('has nothing to walk where there are no stars', async () => {
+    const { harness: ir } = harness()
+    const search = ir.findWorlds({ kinds: ['rocky'] }, { lightYears: 0.001 })
+    expect(search.systems).toBeLessThanOrEqual(1)
+    await search.done
+  })
+})

@@ -1,4 +1,8 @@
-import { GENERATION_VERSIONS } from '@inertialref/universe'
+import {
+  GENERATION_VERSIONS,
+  type WorldMatch,
+  type WorldQuery,
+} from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
 import {
   GALAXY_VIEWS,
@@ -18,6 +22,7 @@ import {
   RingBufferSink,
 } from '@inertialref/shared'
 import { circularSpeed } from '@inertialref/physics'
+import { formatSeed } from '@inertialref/procedural'
 import {
   type FrameId,
   Quaternion as Q,
@@ -45,6 +50,7 @@ import {
   systemFrameId,
   systemId,
   type SystemId,
+  type SystemStub,
   surveySites,
   systemsWithin,
   walkBodies,
@@ -67,9 +73,18 @@ import {
   type RenderScene,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import type { PoolStats, WorkerPool } from '@inertialref/workers'
+import {
+  encodeStub,
+  findWorldsTask,
+  type PoolStats,
+  type WorkerPool,
+} from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
-import { describeDrift, type VersionDrift } from '@inertialref/protocol'
+import {
+  describeDrift,
+  encodeUniverseVector,
+  type VersionDrift,
+} from '@inertialref/protocol'
 import {
   runCapabilityChecks,
   summarizeCapabilities,
@@ -85,6 +100,8 @@ import {
   type WorldInspection,
 } from './inspect.ts'
 import {
+  DEFAULT_SEARCH_LIGHT_YEARS,
+  SEARCH_BATCH,
   currentSystemOf,
   resolveDestination,
   type SearchEntry,
@@ -566,6 +583,124 @@ export class GameHarness {
 
   searchIndexVersion(): string {
     return searchIndexVersion(this.world)
+  }
+
+  /**
+   * Search the volume for bodies that answer a query, in batches.
+   *
+   * The other question a catalog can be asked. `search` answers "what is
+   * called this" from an index; this answers "what is out there *like* this",
+   * and it cannot come from an index because the bodies do not exist until
+   * they are generated. So it is a sweep, and the sweep is the cost: a system
+   * is milliseconds to build and a body is microseconds to test.
+   *
+   * **It answers in batches rather than once.** The volume is cut into jobs
+   * and each is submitted separately, so rows arrive while the search is still
+   * running and a fifty-light-year question is not a blank panel for two
+   * seconds. That shape is forced as well as chosen: a job is one request and
+   * one response, with no partial-result message in the protocol, so streaming
+   * has to be several jobs rather than one job that reports as it goes.
+   *
+   * `cancel` stops it — the queued jobs are dropped and the running ones are
+   * told through `TaskContext.cancelled`, which `findWorlds` polls once per
+   * system. A second question therefore does not wait behind the first one's
+   * whole volume.
+   *
+   * With no pool the batches run inline, on this thread, in order. That is the
+   * headless runner and it is slow rather than wrong, which is the same
+   * bargain every other task here makes.
+   */
+  findWorlds(
+    query: WorldQuery,
+    options: {
+      lightYears?: number
+      /** Called as each batch answers, with everything found so far. */
+      onBatch?: (found: readonly WorldMatch[], progress: number) => void
+    } = {},
+  ): {
+    /** How many systems the sweep will walk. Zero means there is nothing to do. */
+    readonly systems: number
+    readonly cancel: () => void
+    readonly done: Promise<readonly WorldMatch[]>
+  } {
+    const from = this.observatory.eye ?? this.#here()
+    const stubs = systemsWithin(
+      this.world.galaxySeed,
+      this.world.catalog,
+      from,
+      (options.lightYears ?? DEFAULT_SEARCH_LIGHT_YEARS) * LIGHT_YEAR,
+    )
+    /*
+     * Nearest first, so the batches that answer first are the ones a reader
+     * cares about most. `systemsWithin` sorts by id to stay a pure function of
+     * its query; the ordering that matters *here* is a display decision and is
+     * made here, which is the same split `orbitalOrder` makes.
+     */
+    const ordered = [...stubs].sort(
+      (a, b) => UV.distance(a.position, from) - UV.distance(b.position, from),
+    )
+    const pool = this.#host.pool()
+    const jobs: {
+      readonly result: Promise<{ readonly matches: readonly WorldMatch[] }>
+      readonly cancel: () => void
+    }[] = []
+    let stopped = false
+    const found: WorldMatch[] = []
+    const wire = encodeUniverseVector(from)
+    const seed = formatSeed(this.world.rootSeed)
+
+    const batches: (readonly SystemStub[])[] = []
+    for (let at = 0; at < ordered.length; at += SEARCH_BATCH)
+      batches.push(ordered.slice(at, at + SEARCH_BATCH))
+
+    let answered = 0
+    const run = async (): Promise<readonly WorldMatch[]> => {
+      for (const batch of batches) {
+        if (stopped) break
+        const payload = {
+          seed,
+          galaxy: this.world.galaxy as string,
+          stubs: batch.map(encodeStub),
+          query,
+          from: wire,
+        }
+        const job =
+          pool === null
+            ? {
+                result: Promise.resolve(
+                  findWorldsTask.run(payload, {
+                    cancelled: () => stopped,
+                  }),
+                ),
+                cancel: () => {},
+              }
+            : pool.submit(findWorldsTask, payload)
+        jobs.push(job)
+        void Promise.resolve(job.result)
+          .then((answer) => {
+            if (stopped) return
+            found.push(...answer.matches)
+            answered += 1
+            options.onBatch?.(found, answered / batches.length)
+          })
+          .catch(() => {
+            // A batch that failed is a gap in an answer, not a failed search.
+            // Counting it keeps the progress honest about being finished.
+            answered += 1
+          })
+      }
+      await Promise.allSettled(jobs.map((job) => job.result))
+      return found
+    }
+
+    return {
+      systems: ordered.length,
+      cancel: () => {
+        stopped = true
+        for (const job of jobs) job.cancel()
+      },
+      done: run(),
+    }
   }
 
   /**
