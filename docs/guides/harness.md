@@ -158,12 +158,36 @@ node scripts/drive.mjs --url http://localhost:5173/planetarium \
 | ------------------- | ------------------------------------------------------------- |
 | `ir.targets()`      | destinations near the player, with addresses — start here     |
 | `ir.search(text)`   | everywhere matching a name, nearest first — the whole catalog |
+| `ir.rowsFor([…])`   | those addresses, as listing rows measured from here           |
+| `ir.findWorlds(q)`  | bodies matching what a world _is_, swept in worker batches    |
 | `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
 | `ir.loadSystem(id)` | generate a system without moving the ship                     |
 
 `goTo` is the only verb that accepts all the forms a person types: `SOL`,
 `s:SOL/b:2`, or `b:2` relative to the current system. Everywhere else,
 `parseAddress` remains strict.
+
+**`findWorlds` is a third question and the expensive one.** `targets` and
+`search` read what is already there; this generates every system inside the
+radius to test it, because a body does not exist until its seed is expanded and
+so cannot be indexed. It answers in batches on the worker pool:
+
+```js
+const sweep = ir.findWorlds(
+  { starClasses: ['M'], sea: true, landable: true },
+  {
+    lightYears: 25,
+    onBatch: (found, progress) => console.log(found.length, progress),
+  },
+)
+sweep.systems // how many systems it will walk
+await sweep.done // the nearest matches, sorted
+sweep.cancel() // stop; queued jobs are dropped and running ones are told
+```
+
+The nearest thousand are kept and the rest counted — "rocky, within 150 light
+years" is 37,929 systems and over a hundred thousand bodies.
+[ADR-0035](../adr/0035-searching-the-volume.md).
 
 **`targets` and `search` are not the same list narrowed.** `targets` is a star
 sweep with a radius and answers "what is near me"; `search` is an index lookup
@@ -316,11 +340,19 @@ framing it left; both are camera moves, so `world.stateHash()` is untouched —
 
 ```js
 ir.sites(address?)                       // the named places on a body
-ir.visit(address?, { site, height })     // stand there. Degrees and meters
+ir.visit(address?, { site, height })     // stand there, now. Degrees and meters
 ir.visit(address?, { latitude, longitude, heading, pitch })
+ir.drop(lat, lon, { address, seconds })  // fly down there, facing the star
 ir.observatory.setStanceScrub(0.5)       // the height slider, logarithmic
-ir.ascend()
+ir.ascend()                              // and this abandons a drop in flight
 ```
+
+**`visit` cuts and `drop` flies**, and the difference is the intent rather than
+the destination. `visit` is what a plate is captured through, so the frame after
+it returns is the frame asked for; `drop` is eight seconds of ballistic entry
+that ends level with the horizon facing the star, which is a thing to watch and
+useless to photograph the start of. `ir.ascend()` abandons one part-way at the
+framing it left. [ADR-0034](../adr/0034-the-drop.md).
 
 Sites are derived from the body's own terrain rather than authored, so
 "the highest ground on this world" survives regeneration and is still the

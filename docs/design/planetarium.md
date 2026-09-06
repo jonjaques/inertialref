@@ -196,11 +196,14 @@ Three of its rules are decisions rather than details:
   is 19.79° _below_ level, so a camera held level at the top of a descent is a
   picture of empty sky. The small-angle `√(2h/r)` is 2.6% wrong there and grows.
 
-**Entering is a cut, not a fly-to**, which is the one place this arm disagrees
-with the one above it. The orbit arm eases because a move across fourteen decades
-has to read as a move. This arm is the instrument a plate is captured through,
-and an ease means every capture waits an unspecified number of frames for a
-filter to settle before the picture is the picture.
+**Entering is a cut or a drop, and which one is the caller's.** The site
+buttons cut: this arm is the instrument a plate is captured through, and an ease
+means every capture waits an unspecified number of frames for a filter to settle
+before the picture is the picture. **The drop is the other intent** — a figure
+dragged onto the world, and eight seconds of ballistic entry down to where it
+lands, ending level with the horizon and facing the star. Two verbs, because
+arriving somewhere and photographing it are two acts.
+[ADR-0034](../adr/0034-the-drop.md).
 
 **Where you can stand is found, not authored.** A seeded world has no place
 names, and typing coordinates into a sphere lands on the same undifferentiated
@@ -213,6 +216,14 @@ Because they are derived, "the highest ground on this world" is still the
 interesting place after the generator changes, and a latitude written down last
 month is not.
 
+**And where you can stand is also pointed at.** Six derived sites is a good
+answer to "somewhere interesting" and no answer to "there, that spot, the one I
+can see". A figure is dragged out of the corner of the frame onto the drawn
+world: a ring marks where it is held, a dashed line falls from it to the ground,
+and a second ring lies on the terrain where the camera would arrive. Aiming past
+the limb still answers — the near limb is the one part of a sphere a ray cannot
+land on, and it is where a horizon comes from.
+
 ---
 
 ## The tools
@@ -220,14 +231,14 @@ month is not.
 Everything is a **panel**, and every panel is dockable — see
 [ux](ux.md#dockable-panels).
 
-| Panel       | Answers                                                                      |
-| ----------- | ---------------------------------------------------------------------------- |
-| **Catalog** | Where can I go? Search the whole index, fold the systems, filter the classes |
-| **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
-| **Camera**  | The eye: where it looks from, where it stands, and what it looks through     |
-| **View**    | What is drawn over the sky — names, orbit paths, the ship                    |
-| **Presets** | Quick shots, the preset library dialog, and composition tools                |
-| **Time**    | Pause, warp, and what the clock is actually delivering                       |
+| Panel         | Answers                                                                  |
+| ------------- | ------------------------------------------------------------------------ |
+| **Navigator** | Where can I go? Find it by name, fold the systems, filter the classes    |
+| **Object**    | What is this? The record — physical, orbit, rotation, air, light         |
+| **Camera**    | The eye: where it looks from, where it stands, and what it looks through |
+| **View**      | What is drawn over the sky — names, orbit paths, the ship                |
+| **Presets**   | Quick shots, the preset library dialog, and composition tools            |
+| **Time**      | Pause, warp, and what the clock is actually delivering                   |
 
 The split between **Camera** and **View** is by what a control _changes_. A
 layer changes pixels the scene does not own — names, traces, the ship — and the
@@ -248,11 +259,17 @@ heading reading "in orbit". Descending is a camera act either way: **Orbit**
 carries the pose above the floor, **Ground** carries the sites, the descent and
 the heading below it, and only one of the two is drawn.
 
-### The catalog
+### The navigator
 
 Sol is a hundred and twenty-nine bodies, and a flat list of them in issue order
 is not something anybody browses twice. Three controls, and each answers a
 question a list cannot.
+
+The list is **windowed**: only the rows in the scroll viewport exist, and the
+rest is a tall empty box the scrollbar measures. At fifty light years the survey
+answers with fourteen hundred systems, and reconciling every one of them against
+a fresh array twice a second — beside the render loop — was the stutter. The
+derivations were never the cost; React was.
 
 **The folds.** One line per system, expanded where the camera is. The default is
 re-derived from the target on every render rather than stored — a set of _open_
@@ -272,6 +289,15 @@ Mercury.
 whole index, because "what is near me" and "what is called this" are different
 questions and only one of them can run per keystroke.
 
+**And the search ranks rather than filters.** The catalog's own index is exact,
+then prefix, then substring over normalized keys, which is right for an address
+and short of what a search box owes a person: `proxmia` found nothing,
+`centauri alpha` found nothing, and `europa` found nothing because the index is
+stars. The navigator matches over every designation the catalog holds _and_
+every body the world has generated, tolerating one error per term and any word
+order, and it lights the characters that matched so a reader can see why a row
+answered. A typed address still resolves first.
+
 **The neighborhood rail** is the part a list cannot be. Proxima at 4.24 ly and
 Sirius at 8.6 ly are two rows differing by a numeral and the factor of two never
 lands; on a scale it lands in 28 px. The dots are real stars at real distances
@@ -279,6 +305,39 @@ in their real colours — [art](art.md) puts a star's colour on the list of thin
 this game may not invent — and clicking one flies the camera there. The scale is
 √r: a survey's volume grows as r³, so linearly the whole neighborhood piles into
 the left tenth, and logarithmically the observer's own zero has nowhere to go.
+
+### The catalog dialog
+
+The navigator answers "where is the thing I can name". The catalog answers the
+other question a reading room exists for — _what is out there like this_ — and
+it is not a lookup at all.
+
+**There is nothing to index.** A system is a pure function of its seed, which is
+what makes the universe streamable and a save 744 bytes, and it means the only
+way to know whether a star has a world with a sea is to build the system and
+look. So the search is a sweep: every system inside the radius is generated and
+tested, on the worker pool, and the rows arrive while it is still running.
+
+Every clause reads a field the record already carries — the host's spectral
+class, the body's class, its air, its sea, its rings, its habitable zone, its
+landability, its moons. Nothing is a tag invented for searching, so a result is
+a claim about the world the generator makes rather than about a label somebody
+attached to it. "Sea" rather than "water", because the generator's answer is
+whether the ground temperature admits a _liquid_, and on a cold world that
+liquid is methane.
+
+The five yes/no clauses are **three-state**. A switch cannot say the difference
+between "I do not care whether it has air" and "I want the ones with none", and
+both are searches somebody runs — the airless worlds are where the sharp
+horizons are.
+
+It is a dialog rather than a panel because it takes seconds rather than
+keystrokes, and a panel that took four seconds inside a dock column would look
+broken. The count says how far along it is against how many systems there are,
+there is a Stop, and the nearest thousand are kept with the rest counted:
+"rocky, within 150 light years" is 37,929 systems and over a hundred thousand
+bodies, and a list is not a place to put them.
+[ADR-0035](../adr/0035-searching-the-volume.md).
 
 ### Presets
 
@@ -442,19 +501,21 @@ address. The planetarium has no ship to be in.
 
 ## Not built
 
-| Thing                        | Note                                                                                                                                                           |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bookmarks                    | ⬜ The address is already the whole record; the store is what is missing                                                                                       |
-| Measure between two objects  | ⬜ Shift-click two things, get a distance                                                                                                                      |
-| Walking the surface          | ⬜ The camera stands, turns and changes height. It does not travel across the ground: a stance is a coordinate, so a walk is a rule for changing one over time |
-| Export a still               | ⬜ Photo mode's export, without the ship                                                                                                                       |
-| Scale tiers beyond the local | ⬜ [galaxy](galaxy.md#scale-tiers) specifies three; the local one is what exists                                                                               |
-| Survey status as a filter    | ⬜ [galaxy](galaxy.md#interactions) filters by what _you_ have visited. That is a gameplay fact and the planetarium has no player                              |
+| Thing                         | Note                                                                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bookmarks                     | ⬜ The address is already the whole record; the store is what is missing                                                                                       |
+| Measure between two objects   | ⬜ Shift-click two things, get a distance                                                                                                                      |
+| Walking the surface           | ⬜ The camera stands, turns and changes height. It does not travel across the ground: a stance is a coordinate, so a walk is a rule for changing one over time |
+| Export a still                | ⬜ Photo mode's export, without the ship                                                                                                                       |
+| Scale tiers beyond the local  | ⬜ [galaxy](galaxy.md#scale-tiers) specifies three; the local one is what exists                                                                               |
+| Survey status as a filter     | ⬜ [galaxy](galaxy.md#interactions) filters by what _you_ have visited. That is a gameplay fact and the planetarium has no player                              |
+| A cache for the volume search | ⬜ The same question asked twice generates the same systems twice. A cache keyed on seed, generation manifest and query is a memory budget nobody has set      |
 
-Filters over the catalog are ✅ built — by class and by survey radius. What is
-not built is the half of [galaxy](galaxy.md#interactions)'s set that is about
-the player's own survey, and that half is deliberately absent: looking at Vega
-is not going there, and a mode with no ship has nothing to filter by.
+Filters over the catalog are ✅ built — by class and by survey radius in the
+navigator, and by what a world _is_ in the catalog dialog. What is not built is
+the half of [galaxy](galaxy.md#interactions)'s set that is about the player's
+own survey, and that half is deliberately absent: looking at Vega is not going
+there, and a mode with no ship has nothing to filter by.
 
 ---
 

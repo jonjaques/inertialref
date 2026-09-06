@@ -74,7 +74,8 @@ ir.preset('earthrise') // a named picture: address, framing and lens, in one cal
 ir.chrome(false) // the interface out of the frame — the state a plate is taken in
 ir.layers(false) // names and traces off, which is a different claim from the chrome
 ir.terrain() // the live streamer and the rocks on it — null headlessly
-ir.ascend() // back to the framing the camera left
+ir.ascend() // back to the framing the camera left, or abandon a drop
+ir.drop(20, -30, { seconds: 6 }) // fly down instead of cutting, facing the star
 ```
 
 **A patch count is only comparable against the lens it was taken through.** The
@@ -85,6 +86,11 @@ different question rather than a disagreement — the telephoto end of the slide
 measures 1.9× to 3.2× the flight lens's demand. `ir.lens()` is what the picture
 is being taken with, and `ir.descend` takes a `lens` and a `viewport` to ask at
 another one.
+
+**`ir.visit` cuts and `ir.drop` flies.** Use `visit` for a plate — the frame
+after it returns is the frame asked for — and `drop` when the descent itself is
+the subject, which takes its `seconds` and ends facing the star. A `--shot`
+taken straight after `drop` photographs the top of the arc.
 
 `ir.visit` stands a camera on the ground; `ir.land` teleports the ship onto it.
 The same distinction as `look` and `goTo`, one clamp lower — and they are not the

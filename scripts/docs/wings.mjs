@@ -144,6 +144,8 @@ export const WINGS = [
             'docs/adr/0033-presets-hold-a-photographic-instant.md',
             'Portable presets',
           ],
+          ['docs/adr/0034-the-drop.md', 'The drop'],
+          ['docs/adr/0035-searching-the-volume.md', 'Searching the volume'],
         ],
       },
     ],

@@ -8203,6 +8203,76 @@ field changes and invalid-link fixtures explicit; `--print-url` resolves them
 without Chrome. The drive skill and driving guide carry the setup and regression
 checks. The driver does not maintain a separate camera restoration path.
 
+## The navigator, the drop and a search over the volume (6 Sep 2026)
+
+The catalog panel is the **Navigator** in both workspaces. Its id and its three
+preference keys keep `catalogue`, because those are what a stored layout and a
+stored radius remember; a rename that reset every reader's chips would be a
+rename of the wrong thing.
+
+**The list is windowed** (`@tanstack/react-virtual`). At 50 ly the survey
+answers with 1,507 rows and the panel drew a capped 200 systems of them, every
+one a button with an SVG in it, reconciled twice a second beside the render
+loop. The derivations were never the cost — 0.19 ms at that size — React was.
+Measured in Chrome at 1600×900: 19 rows rendered at rest and 43 mid-scroll from
+a 42,196 px list, so the cap and its "further out — search by name" footer are
+gone. The scroll element is the panel body's, found by computed style and
+offset by `scrollMargin`, because a second scroller inside a 60vh-capped panel
+has no height anything can know.
+
+**Search ranks rather than filters** (`@leeoniya/ufuzzy`), over every
+designation the catalog holds and every body the world has generated, lighting
+the characters that matched. Verified in the browser: `proxmia` → Proxima
+Centauri, `centauri alpha` → Alpha Centauri, `europa` → Europa, `hip 71683` →
+Alpha Centauri with `HIP` and `71683` lit, `s:SOL/b:5` → Saturn. Each of the
+first three found nothing before. The matcher lives in the client because
+`packages/*` may carry no third-party dependency: the harness hands names out
+(`searchEntries`) and takes addresses back (`rowsFor`), and the index is rebuilt
+only when `searchIndexVersion` changes.
+
+**A figure dragged onto a world flies the camera down to it** (ADR-0034). The
+trajectory is the conic an unpowered body would follow, and the record holds
+`1 − e` rather than `e`: a drop from far out onto ground nearly under the eye
+has `e` within 1e-13 of one, and `1 − e·cos ψ` written as a subtraction loses
+every digit it has there.
+
+Two things the aid had to learn. **An overlay is flat** — it cannot be occluded
+by the limb it crosses and its ring is a circle rather than the ellipse a circle
+on a sphere is — so it is scene geometry. And **a point put through its own
+render compression sinks inside the body it is meant to lie on**: the ground
+ring vanished until the observatory answered in body radii in body-fixed axes
+and the drawer hung the aid off the placement the body was drawn with, the way
+a terrain patch is. Holding the figure at the viewer's full orbital radius put
+it 3.3 body-radii out at Earth, off the side of a 65° frame exactly when the aim
+reached a limb; a fifth of the altitude keeps it in frame and side-on.
+
+Verified with real CDP pointer events, since `scripts/drive.mjs` has no input
+dispatch: eight moves all reached the button, it never remounted, capture was
+never lost, and the ring sat on the pointer to **0.01 px** — which is what says
+the projection is right. Landed at 2 m on Earth, on Luna's cratered ground, and
+on a planet of the generated system `P221_4_0_a` with 292 terrain patches drawn.
+A 200-frame cast of a descent found no isolated frames at 60.3 fps.
+
+**The catalog dialog searches the volume by what a world is** (ADR-0035).
+Nothing can be indexed, because a body does not exist until its seed is
+expanded — so every system in the radius is generated and tested on the pool.
+Streaming is several jobs rather than one, because `WorkerOutbound` has no
+partial-result message: 32-system batches, dispatched nearest first.
+
+The cap is the finding worth keeping. Uncapped, re-sorting the accumulation as
+batches landed **dropped the simulation clock to 0.2× real time** while a wide
+sweep ran. The nearest thousand are kept, trimmed at twice that so the sort is
+amortized, and the true total is reported beside them. Measured at 1600×900:
+133 systems within 25 ly answer in under a second with 323 rocky worlds; 150 ly
+is 37,929 systems and the list fills continuously — 3,335 rows by 3%, 16,805 by
+17% — with Stop working throughout.
+
+**A windowed list needs a scroll container with a definite height.**
+`OverlayPage` gained an opt-in `fill` body for that: the default of scrolling
+the body is right for prose and wrong for a list measuring a window against its
+container, and without it the dialog rendered 1,100 rows for 323 results
+against 27 with it.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
