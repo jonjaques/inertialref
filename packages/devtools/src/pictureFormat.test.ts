@@ -10,6 +10,7 @@ import {
 } from './pictureFormat.ts'
 import { PICTURES } from './pictures.ts'
 import { snapshot } from '@inertialref/simulation'
+import { UV } from '@inertialref/spatial'
 
 function rig() {
   let lens = LENS_PRESETS.flight
@@ -28,6 +29,30 @@ function rig() {
 }
 
 describe('portable pictures', () => {
+  it('keeps an orbit camera beside the drawn body across date changes and navigation', () => {
+    const session = rig()
+    try {
+      const observer = session.harness.observatory
+      const hash = session.world.stateHash()
+      for (const time of [842011200, -86400, 123456, null]) {
+        observer.setTime(time)
+        for (const address of ['s:SOL/b:2', 's:SOL/b:2.0', 's:SOL/b:2']) {
+          observer.focus(address, { ease: false })
+          const pose = observer.sample(0)!
+          const shot = snapshot(session.world, undefined, observer.time)
+          const body = shot.bodies.find(
+            (one) => one.address === observer.target!.address,
+          )!
+          const distance = UV.distance(pose.position, body.position)
+          expect(distance).toBeCloseTo(observer.state.distance, 2)
+          expect(observer.eye).toEqual(pose.position)
+        }
+      }
+      expect(session.world.stateHash()).toBe(hash)
+    } finally {
+      session.dispose()
+    }
+  })
   it('round trips every bundled picture through the public format', () => {
     expect(decodePictures(JSON.parse(encodePictures(PICTURES)))).toEqual(
       PICTURES,

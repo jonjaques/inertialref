@@ -1408,7 +1408,7 @@ export class Observatory {
   #targetPosition(target: ObserverTarget): UniverseVector | null {
     const world = this.#host.world
     try {
-      return world.frames.pose(target.frame, world.clock.renderTime).position
+      return world.frames.pose(target.frame, this.time).position
     } catch {
       // The frame belongs to a system that was unloaded, or to a world that
       // has been replaced under us by a save load. Losing the pose for a frame
