@@ -24,5 +24,6 @@ export {
   isPicture,
   mergePictures,
   MAX_PICTURES,
+  MAX_FILE_PICTURES,
   MAX_PICTURE_BYTES,
 } from './pictureFormat.ts'

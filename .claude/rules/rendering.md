@@ -13,7 +13,8 @@ paths:
 Reasoning: `AGENTS.md` § "The rules that actually matter",
 `docs/guides/testing.md`, ADR-0003.
 
-- **Anything you put in a frame is asked for at `clock.renderTime`.** `clock.time` is the
+- **Anything you put in a frame uses the snapshot’s presentation instant.** Live time is
+  `clock.renderTime`; a planetarium preset can hold an observatory instant (ADR-0033). `clock.time` is the
   integer tick. The two differ by up to one tick and the gap sawtooths, so measuring
   against the wrong one is a vibration at the frame/tick beat, scaled by the subject's own
   radius. `terrainStreamer` and the observatory each learned this the hard way.

@@ -4,6 +4,7 @@ import {
   mergePictures,
   MAX_PICTURE_BYTES,
   MAX_PICTURES,
+  MAX_FILE_PICTURES,
   PICTURES,
   type Picture,
 } from '@inertialref/devtools'
@@ -75,7 +76,11 @@ export function SavedPictures({ engine, onNotice }: PlanetariumContext) {
         />
         <Action
           label="Export All"
-          onClick={() => downloadPictures(mergePictures(pictures, PICTURES))}
+          onClick={() =>
+            downloadPictures(
+              mergePictures(pictures, PICTURES, MAX_FILE_PICTURES),
+            )
+          }
         />
       </div>
       <input

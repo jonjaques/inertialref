@@ -1,3 +1,4 @@
+import { GENERATION_VERSIONS } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
 import {
   GALAXY_VIEWS,
@@ -1355,6 +1356,7 @@ export class GameHarness {
       label: label.trim(),
       why,
       seed: this.world.seedText,
+      generation: { ...GENERATION_VERSIONS },
       time: this.#observatory.time,
       address: this.#observatory.target!.address,
       framing,
@@ -1371,6 +1373,16 @@ export class GameHarness {
     picture: Picture
   } {
     if (!isPicture(picture)) throw new Error('Invalid preset.')
+    if (
+      Object.keys(picture.generation).length !==
+        Object.keys(GENERATION_VERSIONS).length ||
+      Object.entries(GENERATION_VERSIONS).some(
+        ([key, version]) => picture.generation[key] !== version,
+      )
+    )
+      throw new Error(
+        'This preset uses a different universe generation version.',
+      )
     if (picture.seed !== this.world.seedText)
       throw new Error(`This preset needs universe seed "${picture.seed}".`)
     // Resolve before changing the held time or lens, so a missing address leaves the picture intact.
@@ -1379,6 +1391,7 @@ export class GameHarness {
       this.world.galaxy,
       currentSystemOf(this.world, this.#host.player()),
     )
+    this.#observatory.validatePicture(picture.address, picture.framing)
     this.stopCutscene()
     this.#observatory.setTime(picture.time)
     if (picture.framing.kind === 'camera') {
@@ -1394,16 +1407,6 @@ export class GameHarness {
       }
     }
     this.#observatory.focus(picture.address, { ease: false })
-    if (picture.framing.kind === 'cinematic') {
-      this.play(picture.framing.script)
-      this.pause()
-      this.seekCutscene(picture.framing.frame)
-      return {
-        status: this.#observatory.status(),
-        fovDeg: picture.fovDeg ?? FLIGHT_FOV,
-        picture,
-      }
-    }
     if (picture.framing.kind === 'rise') {
       /*
        * The rise solves its own lens from the geometry, so the stance comes

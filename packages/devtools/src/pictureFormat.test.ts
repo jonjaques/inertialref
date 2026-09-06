@@ -3,7 +3,11 @@ import { LENS_PRESETS } from '@inertialref/rendering'
 import { TEST_CATALOG } from '@inertialref/universe'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { openSession } from './session.ts'
-import { decodePictures, encodePictures } from './pictureFormat.ts'
+import {
+  decodePictures,
+  encodePictures,
+  mergePictures,
+} from './pictureFormat.ts'
 import { PICTURES } from './pictures.ts'
 import { snapshot } from '@inertialref/simulation'
 
@@ -70,6 +74,72 @@ describe('portable pictures', () => {
       const data = JSON.parse(encodePictures([shot]))
       data.pictures[0].framing.state.distance = null
       expect(() => decodePictures(data)).toThrow()
+    } finally {
+      session.dispose()
+    }
+  })
+  it('keeps cinematic recipes out of planetarium imports', () => {
+    const picture = {
+      ...PICTURES[0]!,
+      framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 0 },
+    }
+    expect(() =>
+      decodePictures({
+        format: 'inertialref/presets',
+        version: 1,
+        pictures: [picture],
+      }),
+    ).toThrow()
+  })
+  it('imports collisions without replacing shots and is idempotent', () => {
+    const first = PICTURES[0]!
+    const second = { ...first, label: 'Another Shot' }
+    const merged = mergePictures([first], [second])
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toEqual(first)
+    expect(merged[1]!.id).not.toBe(first.id)
+    expect(mergePictures(merged, [second])).toEqual(merged)
+    const reordered = Object.fromEntries(
+      Object.entries(second).reverse(),
+    ) as typeof second
+    expect(mergePictures(merged, [reordered])).toEqual(merged)
+  })
+  it('plays photographic time without advancing canonical state and releases it on clear', () => {
+    const session = rig()
+    try {
+      const observer = session.harness.observatory
+      const hash = session.world.stateHash()
+      observer.setTime(100)
+      observer.advanceTime(2)
+      expect(observer.time).toBe(100)
+      observer.setTimeScale(10)
+      observer.setTimePaused(false)
+      observer.advanceTime(2)
+      expect(observer.time).toBe(120)
+      expect(session.world.stateHash()).toBe(hash)
+      observer.clear()
+      expect(observer.heldTime).toBeNull()
+      expect(observer.time).toBe(session.world.clock.renderTime)
+    } finally {
+      session.dispose()
+    }
+  })
+  it('refuses a surface shot on a gas giant before changing the view', () => {
+    const session = rig()
+    try {
+      const ir = session.harness
+      ir.visit('s:SOL/b:2.0', { height: 200 })
+      ir.observatory.setTime(123)
+      const saved = ir.capturePicture('test', 'Test')
+      const before = ir.observatory.status()
+      expect(() =>
+        ir.takePicture({ ...saved, address: 's:SOL/b:4', time: 456 }),
+      ).toThrow(/surface/)
+      expect(ir.observatory.status()).toEqual(before)
+      expect(() =>
+        ir.takePicture({ ...saved, generation: { galaxy: 999 } }),
+      ).toThrow(/generation/)
+      expect(ir.observatory.status()).toEqual(before)
     } finally {
       session.dispose()
     }

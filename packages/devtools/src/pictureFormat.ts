@@ -7,6 +7,7 @@ import { parseAddress } from '@inertialref/universe'
 import type { Picture } from './pictures.ts'
 
 export const MAX_PICTURES = 500
+export const MAX_FILE_PICTURES = 1000
 export const MAX_PICTURE_BYTES = 2_000_000
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -29,6 +30,11 @@ export function isPicture(value: unknown): value is Picture {
     !text(value.label, 120) ||
     typeof value.why !== 'string' ||
     value.why.length > 1000 ||
+    !record(value.generation) ||
+    Object.keys(value.generation).length > 16 ||
+    !Object.values(value.generation).every(
+      (version) => number(version, 1, 1000000) && Number.isInteger(version),
+    ) ||
     !text(value.seed, 256) ||
     !number(value.time, -3.15576e12, 3.15576e12) ||
     !text(value.address, 256)
@@ -72,12 +78,6 @@ export function isPicture(value: unknown): value is Picture {
       } catch {
         return false
       }
-    case 'cinematic':
-      return (
-        text(f.script, 128) &&
-        number(f.frame, 0, 1e8) &&
-        Number.isInteger(f.frame)
-      )
     case 'camera': {
       if (value.lens === undefined || !record(f.state) || !record(f.look))
         return false
@@ -112,10 +112,10 @@ export function decodePictures(data: unknown): readonly Picture[] {
     data.format !== 'inertialref/presets' ||
     data.version !== 1 ||
     !Array.isArray(data.pictures) ||
-    data.pictures.length > MAX_PICTURES
+    data.pictures.length > MAX_FILE_PICTURES
   )
     throw new Error(
-      'Expected an InertialRef presets file, version 1 (up to 500 shots).',
+      'Expected an InertialRef presets file, version 1 (up to 1,000 shots).',
     )
   const ids = new Set<string>()
   for (const [index, picture] of data.pictures.entries()) {
@@ -142,24 +142,30 @@ export function encodePictures(pictures: readonly Picture[]): string {
 export function mergePictures(
   held: readonly Picture[],
   incoming: readonly Picture[],
+  limit = MAX_PICTURES,
 ): readonly Picture[] {
   const result = [...held]
   for (const picture of incoming) {
-    if (
-      result.some(
-        (one) =>
-          JSON.stringify({ ...one, id: '' }) ===
-          JSON.stringify({ ...picture, id: '' }),
-      )
-    )
-      continue
+    if (result.some((one) => signature(one) === signature(picture))) continue
     let id = picture.id
     let suffix = 2
     while (result.some((one) => one.id === id))
       id = `${picture.id.slice(0, 115)}-${suffix++}`
     result.push({ ...picture, id })
   }
-  if (result.length > MAX_PICTURES)
-    throw new Error('Your library can hold up to 500 presets.')
+  if (result.length > limit)
+    throw new Error(`This library can hold up to ${limit} presets.`)
   return result
+}
+
+function signature(picture: Picture): string {
+  return JSON.stringify({ ...picture, id: '' }, (_key, value: unknown) =>
+    record(value)
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, value[key]]),
+        )
+      : value,
+  )
 }

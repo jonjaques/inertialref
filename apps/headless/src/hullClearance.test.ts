@@ -5,7 +5,6 @@ import { Quaternion as Q, UV } from '@inertialref/spatial'
 import {
   ENTERPRISE_PORTRAITS,
   openSession,
-  PICTURES,
   TNG_INTRO,
 } from '@inertialref/devtools'
 import { loadStarCatalog } from './catalog.ts'
@@ -153,13 +152,10 @@ describe('cutscene camera against the hero hull', () => {
     const session = openSession({ workers: null, catalog: loadStarCatalog() })
     try {
       const script = ENTERPRISE_PORTRAITS.prepare(session.world)
-      // The frames the pictures actually ask for, so a re-timed portrait is
-      // measured where it is shown rather than where it used to be.
-      const frames = PICTURES.flatMap((picture) =>
-        picture.framing.kind === 'cinematic' &&
-        picture.framing.script === ENTERPRISE_PORTRAITS.id
-          ? [picture.framing.frame]
-          : [],
+      // Sample the full cinema script independently of the planetarium library.
+      const frames = Array.from(
+        { length: ENTERPRISE_PORTRAITS.durationFrames },
+        (_, frame) => frame,
       )
       expect(frames.length).toBeGreaterThan(0)
       for (const frame of frames) {

@@ -173,6 +173,8 @@ export interface GalaxyJourneyStatus {
 export interface ObserverStatus {
   readonly time: number
   readonly heldTime: number | null
+  readonly timePaused: boolean
+  readonly timeScale: number
   readonly journey: GalaxyJourneyStatus | null
   readonly galaxyView: GalaxyView | null
   readonly target: ObserverTarget | null
@@ -238,6 +240,29 @@ export const RISE_HEIGHT_RADII = 0.063
 
 export class Observatory {
   #time: number | null = null
+  #timePaused = true
+  #timeScale = 1
+  get timePaused(): boolean {
+    return this.#timePaused
+  }
+  get timeScale(): number {
+    return this.#timeScale
+  }
+  setTimePaused(paused: boolean): void {
+    this.#timePaused = paused
+  }
+  setTimeScale(scale: number): void {
+    if (!Number.isFinite(scale) || scale <= 0 || scale > 100000)
+      throw new Error('Invalid photographic time rate.')
+    this.#timeScale = scale
+  }
+  advanceTime(seconds: number): void {
+    if (this.#time !== null && !this.#timePaused) {
+      const next = this.#time + Math.max(0, seconds) * this.#timeScale
+      if (Math.abs(next) <= 3.15576e12) this.#time = next
+      else this.#timePaused = true
+    }
+  }
 
   /** A held photographic instant, or the live simulation's presentation time. */
   get time(): number {
@@ -253,6 +278,7 @@ export class Observatory {
     )
       throw new Error('Choose a finite time within 100,000 years of J2000.')
     this.#time = time
+    this.#timePaused = true
   }
 
   capture(): Extract<PictureFraming, { kind: 'camera' }> {
@@ -263,6 +289,24 @@ export class Observatory {
       state: { ...this.#state },
       look: { ...this.#look },
       surface: this.#stance === null ? null : { ...this.#stance },
+    }
+  }
+
+  validatePicture(address: string, framing: PictureFraming): void {
+    const target = this.#resolve(address)
+    if (framing.kind === 'camera') {
+      if (framing.surface !== null) {
+        const body = this.#bodyOf(target)
+        if (body === null || !hasSolidSurface(body))
+          throw new Error('This preset has no solid surface to stand on.')
+        if (
+          framing.surface.height !==
+          clampStanceHeight(framing.surface.height, body.radius)
+        )
+          throw new Error('This preset is outside the surface camera range.')
+      } else if (framing.state.distance < target.radius) {
+        throw new Error('This preset puts the camera inside its subject.')
+      }
     }
   }
 
@@ -1275,6 +1319,8 @@ export class Observatory {
     return {
       time: this.time,
       heldTime: this.heldTime,
+      timePaused: this.timePaused,
+      timeScale: this.timeScale,
       journey: this.journey,
       galaxyView: this.#galaxyView,
       target: this.#target,

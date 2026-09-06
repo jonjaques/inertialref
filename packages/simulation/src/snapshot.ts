@@ -169,6 +169,8 @@ export function entitySnapshot(
 export function snapshot(
   world: World,
   alpha = world.clock.alpha,
+  // Only analytic body frames use photographic time. Integrated entities keep
+  // their simulation history; a view cannot reconstruct a ship at another epoch.
   presentationTime = world.clock.renderTimeAt(alpha),
 ): WorldSnapshot {
   const status = world.clock.status()

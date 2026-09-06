@@ -8,30 +8,7 @@ import type {
 } from '@inertialref/rendering'
 import { findComposition } from '@inertialref/rendering'
 
-/*
- * Pictures: the same frame, every time it is pressed.
- *
- * A composition is relative to whatever is under the camera — a phase, a tilt
- * and a standoff — and none of the sixteen is a picture of a *particular*
- * place. That is right for what they are and it is not what a review needs:
- * "the same picture, every time" is exactly what a before/after plate is, and
- * the geology phase is judged on those. So a picture is a composition plus the
- * two things a composition deliberately leaves out — an address, and a lens.
- *
- * **Here rather than in the planetarium panel that draws them**, and the reason
- * is `ir.preset`. `window.ir` *is* the harness, so a verb the panel offers and
- * the console cannot reach would break the rule this repository has held since
- * the first nav panel: the browser interface must not be able to do something
- * the headless runner and a test cannot replay. The panel's own presentation —
- * the plate path, the glyph — stays in the app, where a URL is a thing that
- * exists.
- *
- * The list is a judgment, and it is meant to be edited. Each is chosen from
- * what the renderer already does well today rather than from what the geology
- * will do later; a standing picture of terrain joins them when Phase 2 gives it
- * a geology to stand on, and the mechanism is the stance the Ground section
- * already produces.
- */
+/** Bundled planetarium shots use the same JSON decoder as personal imports. */
 
 /**
  * The plate for a picture: its file name, and the size it is captured at.
@@ -56,11 +33,6 @@ export const plateName = (id: string): string => `${id}.jpg`
 
 /** What a picture asks the camera to do. */
 export type PictureFraming =
-  | {
-      readonly kind: 'cinematic'
-      readonly script: string
-      readonly frame: number
-    }
   | { readonly kind: 'compose'; readonly composition: string }
   /**
    * A rise: stand on this body with its parent over the horizon.
@@ -79,6 +51,7 @@ export type PictureFraming =
 
 export interface Picture {
   /** Stable across a rename of the label — this is what `ir.preset` takes. */
+  readonly generation: Readonly<Record<string, number>>
   readonly seed: string
   /** Seconds from J2000, held independently of the simulation. */
   readonly time: number

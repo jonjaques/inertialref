@@ -211,7 +211,7 @@ Everything is a **panel**, and every panel is dockable — see
 | **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
 | **Camera**  | The eye: where it looks from, where it stands, and what it looks through     |
 | **View**    | What is drawn over the sky — names, orbit paths, the ship                    |
-| **Presets** | Seven pictures, sixteen compositions, the light on its own, and the way out  |
+| **Presets** | Personal and bundled shots, JSON import/export, compositions and lighting    |
 | **Time**    | Pause, warp, and what the clock is actually delivering                       |
 
 The split between **Camera** and **View** is by what a control _changes_. A
@@ -267,46 +267,28 @@ the left tenth, and logarithmically the observer's own zero has nowhere to go.
 
 ### Presets
 
-Two tiers, and the difference between them is whether the picture is of a
-_particular place_.
+**My Presets** saves the current camera, time and full lens under a chosen name.
+Rename a shot, update it from the current view, or delete it and use Undo to
+bring it back. Shots stay in this browser. Export one, all personal shots, or
+the combined library as JSON to keep a backup or share it. Import accepts the
+same file in each case and preserves shots already in the library.
 
-**Pictures** are absolute: an address, a framing and a lens. They produce the
-same frame every time they are pressed, which is what makes them fixtures —
-_the same picture, every time_ is what a before/after plate is, and the geology
-milestone is judged from those. Their thumbnails are **plates**: captured
-through the renderer and vendored, because a drawn diagram of a picture that
-exists is a worse thumbnail than the picture. A plate is taken with the chrome
-cleared and the layers off, because a thumbnail of a picture is a thumbnail of
-what the _camera_ does, and a trace slashing across one promises a layer the
-press does not set.
+**Included Presets** are photographs composed in the planetarium. Each has a
+vendored thumbnail taken through the renderer, and each can be exported on its
+own. Bundled and personal shots use the same validated JSON format. A preset
+contains no cinematic script; Enterprise portraits belong to Cinema.
 
-Earthrise is the one that names two bodies: a stance on Luna with Earth a stated
-clearance over the horizon, the horizon on the lower-third line, and the lens
-solved from the parent's angular size — 1.90° from Luna, 42.39° from Phobos, and
-one focal length is not the picture for both.
+**Compositions** work on the current subject. They set relative phase, tilt,
+standoff and aim, while a saved camera shot restores a particular place and
+instant. Layers remain the viewer's choice.
 
-**Compositions** are the tier under them, relative to whatever is under the
-camera. Sixteen of them, and there is one list where there were two: `gibbous`
-in this panel and `ir.shot('gibbous')` came out of one solver and meant one
-picture, but one moved a camera and the other teleported a hull. Three —
-`glint`, `sunset`, `oblique` — existed only for the hull, because they aim
-somewhere other than the body's center and the orbit arm's pose aims at the
-center by construction. With the aim solved as a look offset they are camera
-shots too, and the two that stand off below the orbit floor land on the surface
-arm: `sunset` at 1.04 radii _is_ a stance four hundredths of a radius up.
+The Time panel accepts a UTC instant and holds it independently of the ship
+simulation. A preset opens paused at its saved time. Play and warp advance
+that photographic time; Live Time returns to the running simulation's clock.
+The local readout and UTC input describe the same instant.
 
-They are drawn, to the geometry the solver uses: the disk's radius is
-`fill × half the frame height`, which is what the standoff solves a distance
-for, and the terminator is a half-ellipse of projected width `r·cos φ`, which is
-why it collapses to a straight line at 90°. The thumbnail is a prediction rather
-than an illustration — which is exactly why a _picture_ gets a plate instead.
-
-The light stays as its own row of five phase glyphs, because changing it
-_without_ losing your framing is the commonest thing anyone does here and a
-whole composition cannot express it. The two scale jumps are absolute distances
-rather than framings — one AU from Jupiter is a planet in a frame and one AU
-from Sol is most of the inner system — so they are labelled "Step Back" and kept
-apart.
+The format and time boundary are specified in
+[ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md).
 
 ### Names
 

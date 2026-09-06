@@ -8139,6 +8139,27 @@ The profiles and comparison script are in `.scratch/orbit-perf/`. Visible
 galaxy draws retain their measured cost; angular caching and the other
 remaining work stay in [the performance plan](design/plans/perf.md#the-galaxy).
 
+## A preset keeps the instant, and Cinema keeps the Enterprise (6 Sep 2026)
+
+[ADR-0033](docs/adr/0033-presets-hold-a-photographic-instant.md) records the
+portable preset format and the photographic clock. Restoring a surface shot
+preserves its pose, full lens and instant without changing `world.stateHash()`.
+The snapshot evaluates analytic bodies at that same instant; orbit traces need
+it too, because anchoring them to live time leaves a held moon detached from
+its path. Keyboard transport and panel transport share the clock selection.
+
+Scouting with the shipped catalog covers 464 bodies in 21 systems within
+12 light-years of Sol and 272 bodies in 17 systems across the galactic center.
+Tau Ceti supplies two additional local compositions. The far shore is on
+`P222_1_0_9/b:4`, about 53,350 light-years from Sol. Its low sun is composed at
+100331.9499824278 seconds from J2000. The six selected views have rendered
+480×320 JPEG plates and share the same JSON decoder as personal imports.
+
+A sparse eclipse plate is a valid 3,613-byte JPEG. A 4 KB minimum file-size
+check rejects it; the plate gate now checks dimensions and decodes every pixel.
+The Enterprise's three portraits belong to Cinema, so their clearance test
+samples the cinema script directly instead of reading planetarium presets.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

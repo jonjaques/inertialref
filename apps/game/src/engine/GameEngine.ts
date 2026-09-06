@@ -1191,6 +1191,11 @@ export class GameEngine {
         : ENGINE_PHASE,
     )
 
+    if (
+      this.harness.cutsceneStatus() === null &&
+      this.harness.observatory.target !== null
+    )
+      this.harness.observatory.advanceTime(delta)
     const shot = snapshot(
       this.world,
       undefined,

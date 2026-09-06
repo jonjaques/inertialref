@@ -415,8 +415,10 @@ returns a pose. No teleport, no clock, no entity write, no save.
 ### Rule 38
 
 **Never ask where something is at `clock.time` in order to put it in a
-frame.** Presentation happens at `SimulationClock.renderTime` — one tick
-back, plus the interpolation alpha — and `clock.time` is the _tick_, which
+frame.** Live presentation happens at `SimulationClock.renderTime` — one tick
+back, plus the interpolation alpha. A photographic preset supplies an explicit
+observatory instant to the same snapshot, camera, terrain and orbit traces
+([ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md)). `clock.time` is the _tick_, which
 moves in 1/64 s steps. Anything that places, points at, aims at or measures
 against a body for the picture uses the same instant the picture is drawn at,
 or it is aiming at where that body used to be by its velocity times up to

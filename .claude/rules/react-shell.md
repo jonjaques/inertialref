@@ -138,7 +138,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
 - **The planetarium never writes canonical state.** It resolves an address, asks where
   that is at `renderTime`, returns a pose. `observatory.test.ts` compares `world.stateHash()`
   across a session of flying around — that test is the design promise.
-- **Presentation asks at `clock.renderTime`, never `clock.time`.** The latter is the tick
+- **Presentation asks at the snapshot’s instant, never `clock.time`.** Live time is
+  `clock.renderTime`; photographic time is the observatory’s held instant (ADR-0033). The latter is the tick
   and moves in 1/64 s steps; the scene draws at the former. A camera placed against the
   tick aims at where the body was, by its velocity times up to 15.6 ms, sawtoothing as
   alpha resets — 11 and 19 pixels of vibration on Phobos and Deimos at 1×, nothing
