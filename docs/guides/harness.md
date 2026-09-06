@@ -108,6 +108,17 @@ In the browser's planetarium, `ir.galaxyView('face-on')` and
 under Presets → Milky Way. They change the observatory and lens, leaving the
 world unchanged. `ir.look('s:SOL/b:2')` returns to an Earth view.
 
+`ir.galaxyJourney(0)` holds 64,000 km above Earth through the long-exposure
+galaxy instrument. `ir.galaxyJourney(1, 36)` travels to 30 kpc above the galactic
+center over 36 presentation seconds; `ir.galaxyJourney(0, 36)` returns. The
+first argument is progress from zero to one, and an omitted duration holds the
+requested view immediately. `ir.observerStatus().journey` reads progress,
+destination and remaining duration without moving the camera. The Milky Way
+controls expose the same trip and a slider. Bright bodies can clip at the
+instrument's f/2, 2,400 s, ISO 400 exposure; the Camera panel still owns the lens.
+The live renderer's diagnostics include the observer frame, sensor exposure,
+sampling profile, and bounded local survey.
+
 `ir.galaxy().render()` returns the live target's dimensions and bytes, field
 and kernel versions, normalization, galactic-center origin in parsecs, step
 bounds, readiness and cumulative volume submissions. It returns `null` without

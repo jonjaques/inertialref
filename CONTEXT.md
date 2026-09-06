@@ -48,9 +48,10 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
 
-The galaxy preview now has fixed live face-on and edge-on planetarium
-instruments, using the M2 field through the scene and sensor. The field stays
-separate from active generation; dust and photometric calibration remain open
+The galaxy preview has fixed face-on and edge-on instruments and a reversible
+Earth-to-disk journey. Its live volume follows the planetarium observer through
+the scene and sensor. The field stays separate from active generation; dust,
+photometric calibration, and temporal optimization remain open
 ([ADR-0032](docs/adr/0032-the-stellar-field.md)).
 
 ## Decisions that are expensive to reverse
@@ -7862,6 +7863,84 @@ two slow files / five tests, documentation and production builds. The headless
 self-test passes 12/12. A newly launched clean Chrome session verifies resize
 and renderer remount without console errors; the only warning is the existing
 Three.js Clock deprecation.
+
+## Earth can leave the picture without moving the world (05 Sep 2026)
+
+M4 is implemented locally on `codex/galaxy-earth-to-the-disk`, based on M3's
+`d980228`. The [execution plan](design/plans/galaxy-m4-earth-to-the-disk.md)
+records scope and verification; [ADR-0032](docs/adr/0032-the-stellar-field.md)
+records the camera and sensor contracts. The route's target, 30 kpc above the
+center, is about 101,400 ly from Earth: a literal 100,000 ly ceiling clips it.
+The ordinary observatory's ceiling is therefore 110,000 ly. The field stays
+`galaxy-field@2`; the interior sampling port spends `galaxy-tsl@2`.
+
+Two integration mistakes earned regressions. Resuming from progress alone
+reconstructed the route's original angles after a manual orbit drag and jumped
+649,127,422,775,389.6 m. Timed travel now starts from the complete displayed
+orbit state, and Hold preserves that state. The 2,400 s instrument also exceeded
+the persisted lens's 30 s ceiling: the picture used the long exposure while the
+controls still described 1/60 s. The shared shutter control and guard now reach
+3,600 s; the existing request bridge carries the instrument into the preference
+and back into a newly bound engine. Both tests failed before their fixes.
+
+The response plates in `.scratch/galaxy-m4/` use one pose and lens per comparison.
+The outside and Earth-orbit instrument uses 90° vertical FOV, f/2, 2,400 s,
+ISO 400: EV100 −11.2288, pre-exposure 2,000, residual gain 1. Natural clips Earth.
+A 1/40,000 s plate at the same pose preserves Earth's surface and loses the faint
+field, a 26.5165-stop separation. The interior sky comparison uses 60 s, f/2,
+ISO 400, EV100 −5.9069. These are emission-only preview exposures, not M6's
+photometric acceptance. There is no dust, resolved-light subtraction, or
+partial-ray transport between an internal opaque body and the observer.
+
+On Apple M5, 32 GiB shared memory, macOS 26.6.2 and Chrome 152 WebGPU/Metal,
+production at 1920×1080, DPR 1, extended Display P3 with headroom 2, three
+40-frame queue-drained batches per response measured:
+
+| View / response    | Complete frame | Without volume | Added volume and composition |
+| ------------------ | -------------- | -------------- | ---------------------------- |
+| Outside / Direct   | 17.43–18.04 ms | 3.97–4.22 ms   | 13.21–13.86 ms               |
+| Outside / Neutral  | 18.06–18.70 ms | 4.20–4.29 ms   | 13.78–14.50 ms               |
+| Outside / Natural  | 14.69–14.88 ms | 3.65–3.70 ms   | 10.99–11.19 ms               |
+| Interior / Direct  | 32.39–35.53 ms | 2.12–2.27 ms   | 30.13–33.36 ms               |
+| Interior / Neutral | 28.56–30.37 ms | 1.70–1.73 ms   | 26.86–28.63 ms               |
+| Interior / Natural | 36.94–39.90 ms | 2.15–2.48 ms   | 34.51–37.75 ms               |
+
+These are sequential wall-clock measurements including submission overhead,
+not timestamp queries or a ranking of response algorithms. Every accepted
+batch produced exactly 40 volume updates. The first interior Neutral run
+was discarded: scene settlement resumed animation during its batch and the
+update counts were 43–49. Repeating after settlement produced 40 with the
+volume and zero without it. The 2 ms target remains open; the interior
+quadrature costs more than the outside view. Raw runs are
+`measure-disk-natural.json`, `measure-responses.json`, and
+`measure-interior-neutral.json` in the evidence directory.
+
+The volume owns 1,036,800 bytes at 480×270 rgba16f. Resizing to 953×617 at
+DPR 2 produces a 1906×1234 drawing buffer and a 477×309 target,
+1,179,144 bytes. Changing extended P3 to standard sRGB retires the old target
+to zero bytes and resumes exactly the same galactocentric observer origin
+and journey; returning to automatic output restores a ready extended target.
+The production controls perform Earth Orbit, Travel Out, Hold, and Return;
+the held state is unchanged after 600 ms. Browser reports contain no
+unhandled errors. The ordinary Three.js Clock deprecation remains.
+
+`VITEST_MAX_WORKERS=2 pnpm check` passes after both regression fixes:
+1,742 regular tests in 123 files, five slow tests, documentation and production
+builds. The physical GPU suite passes 71 tests in 18 files; the headless
+self-test passes 12/12. The observer quadrature agrees with the finer CPU
+reference within 1%, and 80 complete/clipped GPU ray cases agree with the CPU
+observer profile within the same tolerance.
+
+The full 36-second outward and 36-second return route completes in the
+production capture, with 99 diagnostic samples over 2,998 animation frames.
+The frozen world hash stays `bd75d6b3`, orientation changes by zero, and the
+maximum adjacent log-distance step is 0.038790. The selected local population
+never exceeds 10,155 sprites. All 5,000 captured compositor frames are nonblack;
+the darkest grayscale mean is 8.2663/255. The renderer carries no camera/lens
+finiteness or survey-bound failures. The first capture frame retains the view
+before the initial instrument seek; timed travel starts after the endpoint
+hold. The evidence script now waits for the initial seek to present before
+starting a recording.
 
 ## Known gaps
 

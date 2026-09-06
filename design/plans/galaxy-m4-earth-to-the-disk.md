@@ -1,6 +1,6 @@
 # M4: Earth to the galaxy through the sensor
 
-Status: implementation plan, 5 Sep 2026.
+Status: implementation and required gates complete; captured-frame analysis finishing, 5 Sep 2026.
 
 This is the execution plan for M4 of [the galaxy plan](the-galaxy.md). The
 requested result is a new branch containing the implemented and verified
@@ -45,14 +45,45 @@ work must subtract. The images' dark lanes therefore remain absent in M4.
   `/tmp/inertialref-m4-baseline.log`. The log records 1,723 regular tests, five
   slow tests, and successful production bundling. The process exits with code
   zero; the complete baseline gate passes.
-- The only implementation artifact so far is the uncommitted
-  `packages/devtools/src/galaxyJourney.test.ts`. Its valid journey case fails
-  because `ir.galaxyJourney` does not exist. Its invalid-input case currently
-  catches that same missing-method error, so it is not yet evidence of input
-  validation. Tighten it to the implemented validation message.
-- No production code has changed. No remote branch, PR, review, or media upload
-  is part of the current authorization. Make local commits as the repository
-  requires. Shipping is a separate user request.
+- Camera and harness: `e9b0273`; live sampling and sensor integration: `cc48472`;
+  journey controls: `39fb037`; interruption regression and fix: `5f72f0d`;
+  persisted instrument exposure: `7b612a1`.
+- The final complete gate passes 1,742 regular tests, five slow tests, docs and
+  production builds (exit zero in `/tmp/inertialref-m4-final-check.log`). The
+  physical GPU suite passes 71 tests in 18 files; the headless self-test passes
+  12/12. Both camera interruption and lens-persistence regressions failed
+  before their fixes.
+- Matched response plates are in `.scratch/galaxy-m4/`; their reports are
+  `initial.json` and `responses.json`. The production rig is Apple M5, 32 GiB,
+  macOS 26.6.2, Chrome 152, WebGPU, extended P3, 1920 × 1080, DPR 1. The
+  2,400 s instrument exposure clips Earth; a 1/40,000 s plate at the same pose
+  preserves its surface and loses the faint galaxy. The interior comparison
+  uses 60 s, f/2, ISO 400.
+- `ui-controls.json` verifies the actual Earth Orbit, Travel Out, Hold and
+  Return buttons. `ui-fixed.json` verifies the corrected 2,400 s readout.
+  `lifecycle.json` verifies zero retired bytes, the unchanged observer origin
+  and ready replacement targets through standard/extended remounts.
+  `resize.json` records the 953 × 617, DPR 2 drawing buffer of 1906 × 1234,
+  with a 477 × 309 rgba16f target (1,179,144 bytes).
+- `measure-disk-natural.json`, `measure-responses.json` and
+  `measure-interior-neutral.json` contain three 40-frame batches per view and
+  response. Accepted batches have exactly 40 volume updates; the unsettled
+  first interior Neutral run is excluded. The full frame costs 14.69–18.70 ms
+  outside and 28.56–39.90 ms inside. Added volume cost ranges from 10.99 to
+  37.75 ms. `CONTEXT.md` records each response and the measurement conditions.
+- The complete 36-second outward and 36-second return journey is captured in
+  5,000 compositor frames. `journey-summary.json` records completion after
+  2,998 animation frames, 99 diagnostic samples, no failures, zero orientation
+  change, maximum adjacent log-distance change 0.038790, and no more than
+  10,155 selected sprites. The frozen world hash stays `bd75d6b3`.
+  `black-frames.json` finds no black frame; the darkest mean is 8.2663/255.
+  The complete driver difference analysis and clip encoding are finishing.
+- Remaining acceptance work: collect the driver's frame analysis and clip,
+  record its capture rate and limits, validate the final documentation, and
+  commit the evidence ledger.
+- No remote branch, PR, review, or media upload is part of the current
+  authorization. Make local commits as the repository requires. Shipping is a
+  separate user request.
 
 ## Existing mechanisms to retain
 
@@ -123,6 +154,12 @@ starts at the currently displayed progress and moves to the requested endpoint
 or intermediate value. Reversing an active request starts from the current
 position. It must not restart from Earth or jump to an endpoint.
 
+Timed motion stores the complete displayed orbit as its starting state. After
+an intervening orbit gesture, it eases azimuth by the shortest arc and elevation
+back to the route as well as interpolating distance; it does not snap to the
+route angles on the first resumed frame. `holdGalaxyJourney()` freezes the
+actual displayed state rather than seeking to a progress-derived pose.
+
 Store journey presentation state in the observatory, not React. Advance its
 elapsed presentation time inside the existing `sample(dt)` call. Ease progress
 with a smooth endpoint function over the requested duration, then derive the
@@ -164,8 +201,11 @@ volume rendering can read the same eye and orientation as scene construction.
 Clear it when there is no camera. Do not call `observatory.sample` again from a
 component or infer the pose from a fixed view record.
 
-Enable the live volume whenever the observatory actually owns the frame,
-including ordinary planetarium orbits, fixed instruments, and the journey.
+Enable the live volume while the planetarium requests `diffuseGalaxy` through
+its presentation stance, or a named galaxy instrument owns the observatory.
+This includes ordinary planetarium orbits, fixed instruments, and the journey.
+The homepage also uses an observatory; its decorative orbit does not request
+the diffuse field.
 Keep its cinematic precedence explicit. Preserve inactive behavior for routes
 whose presentation stance does not select the observatory. Use the resolved
 lens for ray projection and the actual drawing-buffer aspect ratio.
@@ -208,6 +248,10 @@ Give the journey an explicit wide instrument lens, initially the M3 face-on
 lens: 90° vertical FOV, f/2, 2,400 s, ISO 400, focus at infinity. Set it on entry
 through the existing lens request port; do not persist a different lens every
 animation frame. User lens changes continue to go through that same port.
+The shared shutter control and persistence guard extend together from 30 s
+to 3,600 s. The 2,400 s instrument must survive that preference round trip;
+otherwise the rendered lens disagrees with the panel and a new binding restores
+the old exposure. Keep this covered through the real preference bridge.
 
 Define a resolved galaxy-instrument predicate covering fixed instruments and
 the journey. Use it consistently for the sensor's lens exposure pin, physical

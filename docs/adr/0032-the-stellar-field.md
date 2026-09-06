@@ -70,12 +70,12 @@ stretch and sRGB encoding; raw files precede that display transform. Repeated
 fixed-seed plates agree exactly. Small numeric plate references also detect
 unversioned changes between revisions.
 
-## The live external instrument (M3)
+## The live galaxy instruments
 
 `apps/game/src/render/galaxyKernel.ts` ports the same field and midpoint ray
 integral to TSL. It imports the population and arm parameter records, uses the
 CPU field's normalization, and derives the same young-arm seed. Its independent
-`galaxy-tsl@1` revision identifies the port. Nonzero GPU field samples and whole
+`galaxy-tsl@2` revision identifies the port. Nonzero GPU field samples and whole
 rays are held within 1% of the CPU reference, with absolute tolerances near zero.
 Explicit axial azimuths avoid Metal's fast `atan2` sign reversal at an exact
 zero denominator; the warp and arms otherwise disagree at +Z.
@@ -95,8 +95,9 @@ nW m⁻² sr⁻¹. A declared preview efficacy of 100 lm/W converts these channe
 at the scene boundary; it is an assumption pending M6, not a measured bandpass.
 The target feeds a background-depth surface through the scene's pre-exposure,
 optics and response. Foreground geometry occludes it at full scene resolution.
-This composition is scoped to the fixed outside views: it does not yet stop
-integration partway through a ray at an object inside the stellar volume.
+Geometry masks the background integral; transport does not stop partway
+through a ray at an object inside the stellar volume. Diffuse light between
+the eye and that object is therefore omitted at its silhouette.
 
 The render node updates once per scene submission, including repeated sensor
 submissions without an animation tick. There is no history. Its effect owns
@@ -104,11 +105,54 @@ the target, material, backdrop and warm-up registration; resize changes the
 same target, cleanup retires the same instance, and a late warm-up cannot
 revive it. Diagnostics report dimensions, bytes, versions and submission count.
 
-The external instrument uses physical resolved-star flux and the sensor PSF.
+The fixed instruments and the Earth-to-disk journey use physical resolved-star flux and the sensor PSF.
 Natural's relative-brightness star ramp and analytic solar glare are bypassed
 while this camera owns the frame: their local-scene normalization otherwise
 puts a bright Sun over the disk even from 30 kpc away. Ordinary views and
 cinematic staging keep their existing behavior.
+
+## Earth to the disk (M4)
+
+`ir.galaxyJourney(progress, seconds)` holds or travels between Earth orbit and
+30 kpc above the galactic center. Zero progress is 64,000 km above Earth;
+one is the outside endpoint. The route derives an orbit direction from the
+Earth-to-endpoint displacement and keeps looking toward Earth throughout.
+The existing observatory interpolates distance logarithmically, easing progress
+over presentation time. A frozen world's state hash is unchanged by the whole
+outward and return trip. Reversal starts at the displayed progress, and direct
+orbit or distance gestures stop automatic travel.
+
+The ordinary camera ceiling is 110,000 ly. The centered endpoint is about
+101,400 ly from Earth, so a literal 100,000 ly cap clips the journey. Positions
+remain sector coordinates, and target positions resolve at `renderTime`.
+The engine publishes its sampled universe pose for the volume; a component
+never advances the observatory a second time. The planetarium requests the
+volume through its presentation stance. The homepage's decorative observatory
+does not request it. Named galaxy instruments also enable it explicitly.
+
+The live quadrature uses the CPU integrator's `observer` sampling profile.
+Its steps are bounded by the warped-plane rule, 100 pc, and `1 pc + 0.1 t`,
+where `t` is distance from the observer. An interior ray resolves nearby light;
+a ray entering the volume after an empty approach already permits coarse
+intervals. The CPU `reference` profile retains its plate quadrature. The field
+and active population versions stay unchanged because only integration changes.
+
+The journey enters with the face-on lens and keeps exposure pinned to the
+resolved lens in Direct, Neutral, and Natural. The shared shutter control and
+persistence guard admit exposures through 3,600 s, so the 2,400 s instrument
+reaches the panel and survives a new preference binding. A person may change that lens
+through the existing camera controls. The long exposure can clip a bright body
+while revealing the disk; the instrument does not separately expose the galaxy
+or accumulate photons over its stated shutter duration. Photometric calibration
+and resolved-light subtraction remain later work.
+
+`ir.galaxy().render()` reports the galactocentric observer, orientation,
+lens and effective exposure, field and kernel revisions, sampling profile,
+journey state, target ownership, and local survey limits. The survey remains a
+125-cell cube with one pending request and a 20,000-sprite ceiling. Its extent
+is independent of the visible disk. The Presets panel's Milky Way section
+provides Earth Orbit, Travel Out, Return, Hold, and a progress slider. A full
+trip in either direction takes 36 seconds.
 
 ## Alternatives considered
 
@@ -138,8 +182,8 @@ amplitudes to make a composite attractive. They also make the missing dust
 plain: the observer plate has no dark lanes. The preview's RGB and population
 weights require calibration before a physical sensor or population generator
 can adopt them as calibrated quantities. The live volume now exposes those
-limitations through the actual sensor; continuous travel, dust and temporal
-reuse remain later milestones. The initial quarter-size volume costs more than
+limitations through the actual sensor; dust and temporal reuse remain later
+milestones. The initial quarter-size volume costs more than
 the 2 ms target on the measured rig; `CONTEXT.md` records the batch conditions
 and results. Three.js r185 also rebuilds one first-use integral pipeline as
 its cached function ordering changes, then reuses it on subsequent submissions.
