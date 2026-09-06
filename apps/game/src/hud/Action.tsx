@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FOCUS_RING, releaseFocus } from './focus.ts'
 
@@ -30,6 +31,7 @@ const TONE = {
 
 export function Action({
   label,
+  icon: Icon,
   type = 'button',
   onClick,
   disabled = false,
@@ -38,6 +40,7 @@ export function Action({
   className = '',
 }: {
   label: string
+  icon?: LucideIcon
   type?: 'button' | 'submit'
   onClick?: () => void
   disabled?: boolean
@@ -90,6 +93,7 @@ export function Action({
        */
       className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none transition-[color,border-color,background-color,box-shadow,scale] active:scale-[0.96] disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]} ${className}`}
     >
+      {Icon !== undefined && <Icon aria-hidden className="size-3.5" />}
       {label}
     </Button>
   )

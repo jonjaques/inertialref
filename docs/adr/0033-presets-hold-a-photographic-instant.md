@@ -23,7 +23,8 @@ and a `pictures` array. One shot and a whole library use the same envelope.
 Each picture carries an ID, label, description, address, universe seed,
 generation manifest and time in seconds from the simulation's J2000 epoch.
 A camera framing stores its orbit state, look offset and optional surface
-stance. Its lens stores focal length, gauge, zoom, aperture, focus, shutter
+stance. Optional orbit-basis and tracking fields record a second body and the
+reference instant that fixes its composition. Its lens stores focal length, gauge, zoom, aperture, focus, shutter
 and ISO. JSON `null` represents infinite focus.
 
 Bundled presets load from `packages/devtools/src/pictures.json` through the
@@ -38,14 +39,29 @@ imports are limited to 2 MB. A different seed or generation manifest refuses
 to open with an explanation; it does not silently produce a different world.
 
 Personal shots live in the preference registry under `planetarium.pictures`.
-They are camera preferences, not canonical saves. The panel saves, renames,
-updates and deletes shots, with undo for deletion, and exports one shot,
-personal shots or the combined library.
+They are camera preferences, not canonical saves. The `/planetarium/presets` child route saves, renames, updates and deletes
+shots, with undo for deletion. It exports one shot, personal shots or the
+combined library. Its parent keeps the camera and clock mounted. The global
+dialog routes do not own this feature.
+
+A built-in is addressed by `?preset=earthrise`. A custom view uses `?shot=`
+with the complete JSON envelope and `seed=` with its universe seed. `save=1`
+opens a save prompt after restoring the shot; it never writes the library
+without a save action. JSON files, pasted JSON and URLs share validation.
+
+The orbit anchor and tracking target are distinct bodies in one system.
+Their separation and relative velocity define a rotating frame. Camera
+offset and orientation follow that frame; scaling the offset with their
+separation preserves both centers' directions in the eye. The orbit floor
+still prevents entering the anchor. Capturing rebases the tracking frame at
+the shot's own time, so its distance and basis describe that instant.
+Releasing tracking commits the current basis and distance, preserving the
+view. A focus or surface stance replaces it.
 
 The observatory's time defaults to `clock.renderTime`. A preset or UTC date
 selection holds an explicit instant, initially paused. Playback advances that
 instant before the engine builds its snapshot. The observatory, body snapshot,
-terrain, water, clouds and orbit traces all use that presentation instant.
+terrain, water, clouds, orbit traces and the object dossier all use that presentation instant.
 Canonical entities retain their simulation history. Returning to live time or
 leaving the planetarium releases the photographic clock.
 

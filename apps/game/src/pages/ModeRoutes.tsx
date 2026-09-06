@@ -4,6 +4,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { CinemaMode } from '../cinema/CinemaMode.tsx'
 import { DocsMode } from '../docs/DocsMode.tsx'
 import { FlightMode } from '../flight/FlightMode.tsx'
+import { PresetsPage } from '../planetarium/PresetsPage.tsx'
 import { PlanetariumMode } from '../planetarium/PlanetariumMode.tsx'
 import { HomePage } from './HomePage.tsx'
 import { CINEMA, DOCS, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
@@ -87,7 +88,9 @@ export function ModeRoutes(props: ModeRouteProps) {
       <Route
         path={PLANETARIUM}
         element={<PlanetariumMode engine={props.engine} dev={props.dev} />}
-      />
+      >
+        <Route path="presets" element={<PresetsPage engine={props.engine} />} />
+      </Route>
       {/*
        * One route for the whole section, and the splat is the point: the
        * documentation's own addresses mirror the repository's directory tree,

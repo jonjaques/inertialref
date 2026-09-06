@@ -64,6 +64,21 @@ Two arms, and which one holds the camera is a question with one answer: the
 orbit arm above 1.5 radii, the surface arm below it. They meet exactly, with no
 band that is both or neither.
 
+### Targeting
+
+Orbiting and targeting are separate. The Camera panel names the body the
+camera orbits and lets the viewer target another body in that system. For
+example, orbit Earth and target Luna. The camera follows the pair's orbital
+plane and changes its distance with their separation, keeping both centers
+at their composed positions in the eye during time warp. Their rotation,
+illumination, and apparent sizes still change. Frame both bodies fits the
+pair inside the lens; drag and dolly remain available for composition.
+
+Clearing the target preserves the camera pose. Navigating to another body or
+standing on a surface clears tracking. The minimum safe orbit distance takes
+precedence when a pair contracts enough to approach the surface. Targeting
+belongs to the observatory and never moves a ship or changes canonical state.
+
 ### In orbit
 
 Three numbers — **azimuth, elevation, distance** — around a chosen target. Not a
@@ -211,7 +226,7 @@ Everything is a **panel**, and every panel is dockable — see
 | **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
 | **Camera**  | The eye: where it looks from, where it stands, and what it looks through     |
 | **View**    | What is drawn over the sky — names, orbit paths, the ship                    |
-| **Presets** | Personal and bundled shots, JSON import/export, compositions and lighting    |
+| **Presets** | Quick shots, the preset library dialog, and composition tools                |
 | **Time**    | Pause, warp, and what the clock is actually delivering                       |
 
 The split between **Camera** and **View** is by what a control _changes_. A
@@ -267,25 +282,35 @@ the left tenth, and logarithmically the observer's own zero has nowhere to go.
 
 ### Presets
 
-**My Presets** saves the current camera, time and full lens under a chosen name.
-Rename a shot, update it from the current view, or delete it and use Undo to
-bring it back. Shots stay in this browser. Export one, all personal shots, or
-the combined library as JSON to keep a backup or share it. Import accepts the
-same file in each case and preserves shots already in the library.
+The dock offers three quick shots and opens the full library at
+`/planetarium/presets`. This is a child route: the planetarium, camera, and
+photographic clock stay mounted beneath it. The dialog has Included, Saved,
+and Current view tabs. Composition tools and galaxy views are collapsed in
+the dock until requested.
 
-**Included Presets** are photographs composed in the planetarium. Each has a
-vendored thumbnail taken through the renderer, and each can be exported on its
-own. Bundled and personal shots use the same validated JSON format. A preset
-contains no cinematic script; Enterprise portraits belong to Cinema.
+Current view captures the camera, orbit anchor, target, time, and full lens
+when the tab opens. Name and save it, copy its JSON, copy a link, or download
+its file. Recapture refreshes the shot from the view behind the dialog. Saved
+holds rename, replace, share, delete, and undo controls. It accepts a JSON
+file or pasted JSON and exports saved shots or the combined library.
 
-**Compositions** work on the current subject. They set relative phase, tilt,
-standoff and aim, while a saved camera shot restores a particular place and
-instant. Layers remain the viewer's choice.
+Included shots use the same validated JSON format as personal shots. Each
+has a thumbnail captured through the renderer. Selecting a built-in writes
+`/planetarium?preset=earthrise`, with that shot's ID. A custom link carries
+the complete file envelope in `shot`, plus its universe `seed`. Adding
+`save=1` opens the restored view with the save dialog and a suggested name.
+Opening a link never saves to the library automatically.
 
-The Time panel accepts a UTC instant and holds it independently of the ship
-simulation. A preset opens paused at its saved time. Play and warp advance
-that photographic time; Live Time returns to the running simulation's clock.
-The local readout and UTC input describe the same instant.
+Presets contain no cinematic scripts. Enterprise portraits belong to Cinema.
+Layers remain the viewer's choice. Saved shots stay in this browser until
+exported or shared.
+
+The Time panel's Set date editor accepts UTC; Now selects the current date
+and time. Both hold that instant independently of the ship simulation. A
+preset opens paused at its saved time. Play, warp, and keyboard commands
+advance the photographic clock. Reset returns to the simulation clock. The
+local readout, UTC editor, camera anchor, body positions, surface, orbit
+traces, and Object panel describe the same instant.
 
 The format and time boundary are specified in
 [ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md).

@@ -8160,6 +8160,29 @@ check rejects it; the plate gate now checks dimensions and decodes every pixel.
 The Enterprise's three portraits belong to Cinema, so their clearance test
 samples the cinema script directly instead of reading planetarium presets.
 
+## Earth moved to September and the camera stayed in January (6 Sep 2026)
+
+The photographic snapshot used the selected date, but
+`Observatory.#targetPosition` still read `world.clock.renderTime`. Setting
+September 2026 left the orbit camera 250,074,693,191 meters from the drawn
+Earth, at a requested standoff of 20,779,659 meters. Surface-camera coverage
+missed it because that arm already used photographic time. The regression
+now compares the orbit eye to the drawn body's position across date jumps,
+Earth–Luna–Earth navigation, and return to simulation time.
+
+The orbit anchor and tracking target are separate. A year of Earth–Luna
+samples holds both centers' eye directions within 1e-7 while the canonical
+state hash stays unchanged. The pair's changing separation requires a
+camera-distance change as well as rotation; orientation alone cannot keep
+two screen positions fixed. The safe orbit floor takes precedence.
+[ADR-0033](docs/adr/0033-presets-hold-a-photographic-instant.md) records the
+camera basis and reference instant carried by a shared shot.
+
+Preset management lives at `/planetarium/presets`, owned by the planetarium's
+nested route. Its dock is a quick selector. A global `/presets` route would
+put a planetarium feature outside its mode and require a separate background
+location to preserve the camera. The nested parent supplies that lifetime.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

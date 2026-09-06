@@ -1,6 +1,6 @@
 import { presentationClock } from '../hud/time.ts'
 import { PictureTime } from './PictureTime.tsx'
-import { FastForward, Pause, Play, Rewind } from 'lucide-react'
+import { FastForward, Pause, Play, Rewind, RotateCcw } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
@@ -66,9 +66,11 @@ export function TimePanel(context: PlanetariumContext) {
       <PictureTime {...context} />
       {world.held && (
         <div className="flex items-center gap-2">
-          <span className="type-ui text-slate-400">Preset Time</span>
+          <span className="type-ui text-slate-400">Custom time</span>
           <Action
-            label="Live Time"
+            label="Reset"
+            icon={RotateCcw}
+            title="Return to the simulation clock"
             onClick={() => engine.harness.observatory.setTime(null)}
           />
         </div>

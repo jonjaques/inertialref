@@ -2,6 +2,9 @@ import { useCallback } from 'react'
 import { useLocation, useNavigate, type Location } from 'react-router'
 import {
   HOME,
+  PLANETARIUM,
+  PRESETS,
+  QUERY,
   overlayBackground,
   overlayState,
   type OverlayLocationState,
@@ -49,6 +52,15 @@ export function useOverlay(): Overlay {
   const background = overlayBackground(location)
 
   const close = useCallback(() => {
+    if (location.pathname === PRESETS) {
+      const query = new URLSearchParams(location.search)
+      for (const key of ['capture', 'name', QUERY.save]) query.delete(key)
+      void navigate(
+        { pathname: PLANETARIUM, search: query.toString() },
+        { replace: true },
+      )
+      return
+    }
     if (background === null) {
       void navigate(HOME)
       return
@@ -71,7 +83,7 @@ export function useOverlay(): Overlay {
       },
       { replace: true },
     )
-  }, [background, navigate])
+  }, [background, navigate, location.pathname, location.search])
 
   return {
     background,

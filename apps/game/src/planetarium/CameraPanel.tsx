@@ -1,3 +1,4 @@
+import { TargetControls } from './TargetControls.tsx'
 import { Compass } from 'lucide-react'
 import { formatReading } from '@inertialref/shared'
 import { compassDegrees, MIN_STANCE_HEIGHT } from '@inertialref/rendering'
@@ -34,16 +35,17 @@ import { useSurveySites } from './useSurveySites.ts'
  * camera changes the picture itself. Glare is an aperture's own artifact, so it
  * is the fifth channel of the lens rather than a section.
  */
-export function CameraPanel({
-  engine,
-  target,
-  dolly,
-  frameSubject,
-  flare,
-  onFlare,
-  freeLook,
-  onFreeLook,
-}: PlanetariumContext) {
+export function CameraPanel(context: PlanetariumContext) {
+  const {
+    engine,
+    target,
+    dolly,
+    frameSubject,
+    flare,
+    onFlare,
+    freeLook,
+    onFreeLook,
+  } = context
   const observatory = engine.harness.observatory
   const sites = useSurveySites(engine, target)
   /*
@@ -119,6 +121,7 @@ export function CameraPanel({
 
   return (
     <div className="flex flex-col gap-1">
+      <TargetControls {...context} />
       <Section
         id="planetarium.camera.aim"
         title="Aim"

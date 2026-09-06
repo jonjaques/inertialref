@@ -11,6 +11,7 @@ import {
   QUERY,
   overlaySurface,
   PROFILE,
+  PRESETS,
   resolvedLocation,
   SETTINGS,
   settingsSection,
@@ -77,6 +78,11 @@ const at = (path: string): string =>
   )
 
 describe('the routed dialogs', () => {
+  it('keeps presets in the planetarium child route, outside the global dialogs', () => {
+    expect(PRESETS).toBe('/planetarium/presets')
+    expect(modeForPath(PRESETS)).toBe('planetarium')
+    expect(at(PRESETS)).toBe('')
+  })
   it('renders nothing at all while a mode is running', () => {
     // The fallback route is the whole game: a dialog table that put anything on
     // screen at `/` or `/planetarium` would be chrome nobody asked for, in
@@ -98,7 +104,7 @@ describe('the routed dialogs', () => {
     // shadcn/ui's Button and a lucide icon, both resolved through `@/`.
     expect(markup).toContain('data-slot="button"')
     expect(markup).toContain('lucide-x')
-    expect(markup).toContain('aria-label="Close (Escape)"')
+    expect(markup).toContain('aria-label="Close · Escape"')
     // Sections are routes, so each one is a real link somebody can send.
     expect(markup).toContain(`href="${settingsSection('camera')}"`)
   })
