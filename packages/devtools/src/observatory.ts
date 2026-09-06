@@ -86,6 +86,7 @@ import {
   verticalFovDegrees,
   zoomFactorForNotches,
 } from '@inertialref/rendering'
+import type { PictureFraming } from './pictures.ts'
 import { currentSystemOf, resolveDestination } from './travel.ts'
 import type { Host } from './harness.ts'
 
@@ -170,6 +171,8 @@ export interface GalaxyJourneyStatus {
 }
 
 export interface ObserverStatus {
+  readonly time: number
+  readonly heldTime: number | null
   readonly journey: GalaxyJourneyStatus | null
   readonly galaxyView: GalaxyView | null
   readonly target: ObserverTarget | null
@@ -234,6 +237,46 @@ export const DEFAULT_FILL = 0.55
 export const RISE_HEIGHT_RADII = 0.063
 
 export class Observatory {
+  #time: number | null = null
+
+  /** A held photographic instant, or the live simulation's presentation time. */
+  get time(): number {
+    return this.#time ?? this.#host.world.clock.renderTime
+  }
+  get heldTime(): number | null {
+    return this.#time
+  }
+  setTime(time: number | null): void {
+    if (
+      time !== null &&
+      (!Number.isFinite(time) || Math.abs(time) > 3.15576e12)
+    )
+      throw new Error('Choose a finite time within 100,000 years of J2000.')
+    this.#time = time
+  }
+
+  capture(): Extract<PictureFraming, { kind: 'camera' }> {
+    if (this.#target === null || this.galaxyInstrument)
+      throw new Error('Choose a planet, moon or star before saving a shot.')
+    return {
+      kind: 'camera',
+      state: { ...this.#state },
+      look: { ...this.#look },
+      surface: this.#stance === null ? null : { ...this.#stance },
+    }
+  }
+
+  restore(
+    address: string,
+    framing: Extract<PictureFraming, { kind: 'camera' }>,
+  ): ObserverStatus {
+    this.focus(address, { ease: false })
+    if (framing.surface !== null) this.stand(undefined, framing.surface)
+    this.#state = this.#desired = { ...framing.state }
+    this.#look = { ...framing.look }
+    return this.status()
+  }
+
   readonly #host: Host
   #target: ObserverTarget | null = null
   #galaxyView: GalaxyView | null = null
@@ -545,6 +588,7 @@ export class Observatory {
    * "restore" step and nothing to put back, because nothing was taken.
    */
   clear(): void {
+    this.#time = null
     this.#journey = null
     this.#galaxyView = null
     this.#target = null
@@ -942,7 +986,7 @@ export class Observatory {
     try {
       const spin = this.#host.world.frames.pose(
         bodyFixedFrameId(body.address),
-        this.#host.world.clock.renderTime,
+        this.time,
       )
       return Q.rotateInverse(spin.orientation, direction)
     } catch {
@@ -965,13 +1009,10 @@ export class Observatory {
     if (body === null) return null
     const world = this.#host.world
     try {
-      const here = world.frames.pose(
-        bodyFixedFrameId(body.address),
-        world.clock.renderTime,
-      )
+      const here = world.frames.pose(bodyFixedFrameId(body.address), this.time)
       const there = world.frames.pose(
         bodyFrameId(other.address),
-        world.clock.renderTime,
+        this.time,
       ).position
       return Q.rotateInverse(
         here.orientation,
@@ -1232,6 +1273,8 @@ export class Observatory {
             verticalFov(this.#lens)
           : 0
     return {
+      time: this.time,
+      heldTime: this.heldTime,
       journey: this.journey,
       galaxyView: this.#galaxyView,
       target: this.#target,
@@ -1380,10 +1423,7 @@ export class Observatory {
     const world = this.#host.world
     let spin
     try {
-      spin = world.frames.pose(
-        bodyFixedFrameId(body.address),
-        world.clock.renderTime,
-      )
+      spin = world.frames.pose(bodyFixedFrameId(body.address), this.time)
     } catch {
       return null
     }
@@ -1463,7 +1503,7 @@ export class Observatory {
       // the moment the frame depicts.
       const star = world.frames.pose(
         systemFrameId(target.system),
-        world.clock.renderTime,
+        this.time,
       ).position
       const toStar = UV.difference(star, centre)
       return Vec.length(toStar) > 0 ? Vec.normalize(toStar) : null

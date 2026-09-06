@@ -18,3 +18,11 @@ export * from './terrainZoo.ts'
 export * from './travel.ts'
 
 export * from './galaxy.ts'
+export {
+  decodePictures,
+  encodePictures,
+  isPicture,
+  mergePictures,
+  MAX_PICTURES,
+  MAX_PICTURE_BYTES,
+} from './pictureFormat.ts'

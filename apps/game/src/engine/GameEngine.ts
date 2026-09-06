@@ -1191,7 +1191,14 @@ export class GameEngine {
         : ENGINE_PHASE,
     )
 
-    const shot = snapshot(this.world)
+    const shot = snapshot(
+      this.world,
+      undefined,
+      this.harness.cutsceneStatus() === null &&
+        this.harness.observatory.target !== null
+        ? this.harness.observatory.time
+        : undefined,
+    )
     this.snapshot = shot
     this.#phases.step('snapshot', ENGINE_PHASE)
 

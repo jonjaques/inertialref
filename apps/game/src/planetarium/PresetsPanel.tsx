@@ -1,3 +1,6 @@
+import { SavedPictures } from './SavedPictures.tsx'
+import { downloadPictures } from './presetFiles.ts'
+import { findPicture } from '@inertialref/devtools'
 import { GalaxySection } from './GalaxySection.tsx'
 import { AU, LIGHT_YEAR } from '@inertialref/shared'
 import {
@@ -69,9 +72,10 @@ export function PresetsPanel(context: PlanetariumContext) {
   return (
     <div className="flex flex-col gap-1">
       <GalaxySection {...context} />
+      <SavedPictures {...context} />
       <Section
         id="planetarium.presets.pictures"
-        title="Pictures"
+        title="Included Presets"
         trailing={`${engine.harness.presets().length}`}
       >
         {/*
@@ -87,29 +91,37 @@ export function PresetsPanel(context: PlanetariumContext) {
          */}
         <div className="grid grid-cols-3 gap-1.5">
           {engine.harness.presets().map((picture) => (
-            <PictureCard
-              key={picture.id}
-              picture={picture}
-              onTake={() => {
-                /*
-                 * Caught, because a picture can refuse: an address a build no
-                 * longer ships, or a rise from a moon that is not turning. A
-                 * throw out of an `onClick` reaches `window.onerror`, so the
-                 * press does nothing and says nothing.
-                 */
-                try {
-                  const taken = engine.harness.preset(picture.id)
-                  // The notice the shell already flashes, saying what the press
-                  // did — a preset that moved the camera and the lens with no
-                  // word for it is two changes a viewer has to infer.
-                  onNotice(
-                    `${taken.picture.label} — ${taken.status.target?.name ?? 'nowhere'}, ${Math.round(taken.fovDeg)}°`,
-                  )
-                } catch (cause) {
-                  onNotice(describeCause(cause))
+            <div key={picture.id} className="flex flex-col gap-1">
+              <PictureCard
+                picture={picture}
+                onTake={() => {
+                  /*
+                   * Caught, because a picture can refuse: an address a build no
+                   * longer ships, or a rise from a moon that is not turning. A
+                   * throw out of an `onClick` reaches `window.onerror`, so the
+                   * press does nothing and says nothing.
+                   */
+                  try {
+                    const taken = engine.harness.preset(picture.id)
+                    // The notice the shell already flashes, saying what the press
+                    // did — a preset that moved the camera and the lens with no
+                    // word for it is two changes a viewer has to infer.
+                    onNotice(
+                      `${taken.picture.label} — ${taken.status.target?.name ?? 'nowhere'}, ${Math.round(taken.fovDeg)}°`,
+                    )
+                  } catch (cause) {
+                    onNotice(describeCause(cause))
+                  }
+                }}
+              />
+              <Action
+                label="Export"
+                title={`Export ${picture.label}`}
+                onClick={() =>
+                  downloadPictures([findPicture(picture.id)], picture.id)
                 }
-              }}
-            />
+              />
+            </div>
           ))}
         </div>
         {/* The lens moves with a picture, which is the thing about them a

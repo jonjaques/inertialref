@@ -169,13 +169,14 @@ export function entitySnapshot(
 export function snapshot(
   world: World,
   alpha = world.clock.alpha,
+  presentationTime = world.clock.renderTimeAt(alpha),
 ): WorldSnapshot {
   const status = world.clock.status()
   // Present one tick behind so there is always a pair to interpolate between.
   // The arithmetic belongs to the clock: anything else that places something in
   // a frame has to arrive at the same number, and a second copy of it here is
   // how the observatory came to be placing its camera at the tick instead.
-  const renderTime = world.clock.renderTimeAt(alpha)
+  const renderTime = presentationTime
 
   const entities: EntitySnapshot[] = []
   for (const entity of world.entities.ordered())

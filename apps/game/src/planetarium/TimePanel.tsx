@@ -44,7 +44,8 @@ export function TimePanel({ engine }: PlanetariumContext) {
    */
   const world = useEngine(
     useShallow((snapshot) => ({
-      time: snapshot.status?.world.time ?? 0,
+      time: snapshot.observer?.time ?? snapshot.status?.world.time ?? 0,
+      held: snapshot.observer?.heldTime != null,
       timeScale: snapshot.status?.world.timeScale ?? 1,
       achievedTimeScale: snapshot.status?.world.achievedTimeScale ?? 1,
       paused: snapshot.status?.world.paused ?? false,
@@ -71,6 +72,15 @@ export function TimePanel({ engine }: PlanetariumContext) {
         <p className="type-micro truncate text-slate-400">{localZone()}</p>
       </div>
 
+      {world.held && (
+        <div className="flex items-center gap-2">
+          <span className="type-ui text-slate-400">Preset Time</span>
+          <Action
+            label="Live Time"
+            onClick={() => engine.harness.observatory.setTime(null)}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
         {/* The keys come from the keymap rather than from the string, so a
             rebind reaches these labels in the same commit that stores it — and
@@ -78,18 +88,27 @@ export function TimePanel({ engine }: PlanetariumContext) {
         <TransportButton
           label={slower}
           icon={Rewind}
-          onClick={() => warp(engine, -1)}
+          onClick={() => {
+            engine.harness.observatory.setTime(null)
+            warp(engine, -1)
+          }}
         />
         <TransportButton
           label={world.paused ? run : pause}
           icon={world.paused ? Play : Pause}
           primary
-          onClick={() => engine.world.clock.setPaused(!world.paused)}
+          onClick={() => {
+            engine.harness.observatory.setTime(null)
+            engine.world.clock.setPaused(!world.paused)
+          }}
         />
         <TransportButton
           label={faster}
           icon={FastForward}
-          onClick={() => warp(engine, 1)}
+          onClick={() => {
+            engine.harness.observatory.setTime(null)
+            warp(engine, 1)
+          }}
         />
         {/*
          * The rate readout *is* the way back to normal time.

@@ -1,0 +1,137 @@
+{
+  "format": "inertialref/presets",
+  "version": 1,
+  "pictures": [
+    {
+      "id": "enterprise-three-quarter",
+      "label": "The Enterprise at Tau Ceti",
+      "why": "the saucer, neck and nacelles in a held three-quarter portrait",
+      "address": "s:HIP8102/b:1",
+      "fovDeg": 40,
+      "framing": {
+        "kind": "cinematic",
+        "script": "enterprise-portraits",
+        "frame": 0
+      },
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "enterprise-nacelle",
+      "label": "Blue Hour",
+      "why": "close along a nacelle, with the lens focused on its luminous grille",
+      "address": "s:HIP8102/b:1",
+      "fovDeg": 8,
+      "framing": {
+        "kind": "cinematic",
+        "script": "enterprise-portraits",
+        "frame": 240
+      },
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "enterprise-saucer",
+      "label": "Along the Saucer",
+      "why": "grazing light across the hull, the focus held on a narrow band of plating",
+      "address": "s:HIP8102/b:1",
+      "fovDeg": 12,
+      "framing": {
+        "kind": "cinematic",
+        "script": "enterprise-portraits",
+        "frame": 480
+      },
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "earthrise",
+      "label": "Earthrise",
+      "why": "Earth over the lunar limb, the horizon in the lower third",
+      "address": "s:SOL/b:2.0",
+      "framing": {
+        "kind": "rise"
+      },
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "blue-marble",
+      "label": "Blue Marble",
+      "why": "the whole lit face, north a little high — the Apollo framing",
+      "address": "s:SOL/b:2",
+      "framing": {
+        "kind": "compose",
+        "composition": "blue-marble"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "night-side",
+      "label": "Night Side",
+      "why": "the dark disk inside its own airglow, the cities showing",
+      "address": "s:SOL/b:2",
+      "framing": {
+        "kind": "compose",
+        "composition": "backlit"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "the-rings",
+      "label": "The Rings",
+      "why": "up over the plane, gibbous, the rings open across the frame",
+      "address": "s:SOL/b:5",
+      "framing": {
+        "kind": "compose",
+        "composition": "high-angle"
+      },
+      "fovDeg": 80,
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "titans-haze",
+      "label": "Titan’s Haze",
+      "why": "a rim-lit crescent — the thickest atmosphere in the model",
+      "address": "s:SOL/b:5.5",
+      "framing": {
+        "kind": "compose",
+        "composition": "crescent"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "raking-mars",
+      "label": "Raking Mars",
+      "why": "light along the surface at its lowest, where relief is longest",
+      "address": "s:SOL/b:3",
+      "framing": {
+        "kind": "compose",
+        "composition": "raking"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0
+    },
+    {
+      "id": "jupiter-and-company",
+      "label": "Jupiter and Company",
+      "why": "the planet small and the Galileans strung out beside it",
+      "address": "s:SOL/b:4",
+      "framing": {
+        "kind": "compose",
+        "composition": "wide"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0
+    }
+  ]
+}

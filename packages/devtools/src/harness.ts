@@ -1,3 +1,4 @@
+import { isPicture } from './pictureFormat.ts'
 import {
   GALAXY_VIEWS,
   GALAXY_JOURNEY_LENS,
@@ -1341,8 +1342,57 @@ export class GameHarness {
     fovDeg: number
     picture: Picture
   } {
-    const picture = findPicture(id)
+    return this.takePicture(findPicture(id))
+  }
+
+  capturePicture(id: string, label: string, why = ''): Picture {
+    if (this.cutsceneStatus() !== null)
+      throw new Error('Stop the cinematic before saving a camera shot.')
+    const framing = this.#observatory.capture()
+    const lens = this.#host.render.framingLens()
+    const picture: Picture = {
+      id,
+      label: label.trim(),
+      why,
+      seed: this.world.seedText,
+      time: this.#observatory.time,
+      address: this.#observatory.target!.address,
+      framing,
+      lens: { ...lens, focus: Number.isFinite(lens.focus) ? lens.focus : null },
+    }
+    if (!isPicture(picture))
+      throw new Error('The shot needs a name and a valid camera and lens.')
+    return picture
+  }
+
+  takePicture(picture: Picture): {
+    status: ObserverStatus
+    fovDeg: number
+    picture: Picture
+  } {
+    if (!isPicture(picture)) throw new Error('Invalid preset.')
+    if (picture.seed !== this.world.seedText)
+      throw new Error(`This preset needs universe seed "${picture.seed}".`)
+    // Resolve before changing the held time or lens, so a missing address leaves the picture intact.
+    resolveDestination(
+      picture.address,
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
     this.stopCutscene()
+    this.#observatory.setTime(picture.time)
+    if (picture.framing.kind === 'camera') {
+      const lens = picture.lens!
+      this.#host.render.setFlightLens({
+        ...lens,
+        focus: lens.focus ?? Infinity,
+      })
+      return {
+        status: this.#observatory.restore(picture.address, picture.framing),
+        fovDeg: verticalFovDegrees({ ...lens, focus: lens.focus ?? Infinity }),
+        picture,
+      }
+    }
     this.#observatory.focus(picture.address, { ease: false })
     if (picture.framing.kind === 'cinematic') {
       this.play(picture.framing.script)

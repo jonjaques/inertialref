@@ -1,4 +1,12 @@
-import { FLIGHT_FOV, findComposition } from '@inertialref/rendering'
+import bundledPictures from './pictures.json' with { type: 'json' }
+import { decodePictures } from './pictureFormat.ts'
+import type {
+  Lens,
+  ObserverState,
+  LookOffset,
+  SurfaceStance,
+} from '@inertialref/rendering'
+import { findComposition } from '@inertialref/rendering'
 
 /*
  * Pictures: the same frame, every time it is pressed.
@@ -62,9 +70,20 @@ export type PictureFraming =
    * is solved rather than stated for the same reason — see `riseFov`.
    */
   | { readonly kind: 'rise' }
+  | {
+      readonly kind: 'camera'
+      readonly state: ObserverState
+      readonly look: LookOffset
+      readonly surface: SurfaceStance | null
+    }
 
 export interface Picture {
   /** Stable across a rename of the label — this is what `ir.preset` takes. */
+  readonly seed: string
+  /** Seconds from J2000, held independently of the simulation. */
+  readonly time: number
+  /** Null focus represents infinity in JSON. */
+  readonly lens?: Omit<Lens, 'focus'> & { readonly focus: number | null }
   readonly id: string
   readonly label: string
   /** One line: what the picture is, in the universe's voice. */
@@ -84,92 +103,7 @@ export interface Picture {
   readonly fovDeg?: number
 }
 
-export const PICTURES: readonly Picture[] = [
-  {
-    id: 'enterprise-three-quarter',
-    label: 'The Enterprise at Tau Ceti',
-    why: 'the saucer, neck and nacelles in a held three-quarter portrait',
-    address: 's:HIP8102/b:1',
-    fovDeg: 40,
-    framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 0 },
-  },
-  {
-    id: 'enterprise-nacelle',
-    label: 'Blue Hour',
-    why: 'close along a nacelle, with the lens focused on its luminous grille',
-    address: 's:HIP8102/b:1',
-    fovDeg: 8,
-    framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 240 },
-  },
-  {
-    id: 'enterprise-saucer',
-    label: 'Along the Saucer',
-    why: 'grazing light across the hull, the focus held on a narrow band of plating',
-    address: 's:HIP8102/b:1',
-    fovDeg: 12,
-    framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 480 },
-  },
-  {
-    id: 'earthrise',
-    label: 'Earthrise',
-    why: 'Earth over the lunar limb, the horizon in the lower third',
-    // Luna. The subject of the picture is Earth and the ground is Luna's, which
-    // is the whole reason this one needs a framing of its own.
-    address: 's:SOL/b:2.0',
-    framing: { kind: 'rise' },
-  },
-  {
-    id: 'blue-marble',
-    label: 'Blue Marble',
-    why: 'the whole lit face, north a little high — the Apollo framing',
-    address: 's:SOL/b:2',
-    framing: { kind: 'compose', composition: 'blue-marble' },
-    fovDeg: FLIGHT_FOV,
-  },
-  {
-    id: 'night-side',
-    label: 'Night Side',
-    why: 'the dark disk inside its own airglow, the cities showing',
-    address: 's:SOL/b:2',
-    framing: { kind: 'compose', composition: 'backlit' },
-    fovDeg: FLIGHT_FOV,
-  },
-  {
-    id: 'the-rings',
-    label: 'The Rings',
-    why: 'up over the plane, gibbous, the rings open across the frame',
-    address: 's:SOL/b:5',
-    framing: { kind: 'compose', composition: 'high-angle' },
-    // Wider than the flight lens, because the ring system is 2.3 times Saturn's
-    // own diameter and a framing solved against the planet's radius puts the A
-    // ring's outer edge off both sides at 65°.
-    fovDeg: 80,
-  },
-  {
-    id: 'titans-haze',
-    label: 'Titan’s Haze',
-    why: 'a rim-lit crescent — the thickest atmosphere in the model',
-    address: 's:SOL/b:5.5',
-    framing: { kind: 'compose', composition: 'crescent' },
-    fovDeg: FLIGHT_FOV,
-  },
-  {
-    id: 'raking-mars',
-    label: 'Raking Mars',
-    why: 'light along the surface at its lowest, where relief is longest',
-    address: 's:SOL/b:3',
-    framing: { kind: 'compose', composition: 'raking' },
-    fovDeg: FLIGHT_FOV,
-  },
-  {
-    id: 'jupiter-and-company',
-    label: 'Jupiter and Company',
-    why: 'the planet small and the Galileans strung out beside it',
-    address: 's:SOL/b:4',
-    framing: { kind: 'compose', composition: 'wide' },
-    fovDeg: FLIGHT_FOV,
-  },
-]
+export const PICTURES: readonly Picture[] = decodePictures(bundledPictures)
 
 export const pictureIds = (): readonly string[] => PICTURES.map((one) => one.id)
 

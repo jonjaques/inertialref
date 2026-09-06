@@ -30,6 +30,7 @@ const TONE = {
 
 export function Action({
   label,
+  type = 'button',
   onClick,
   disabled = false,
   title,
@@ -37,7 +38,8 @@ export function Action({
   className = '',
 }: {
   label: string
-  onClick: () => void
+  type?: 'button' | 'submit'
+  onClick?: () => void
   disabled?: boolean
   title?: string
   tone?: keyof typeof TONE
@@ -46,13 +48,14 @@ export function Action({
 }) {
   return (
     <Button
+      type={type}
       variant="outline"
       size="xs"
       title={title ?? label}
       disabled={disabled}
       onClick={(event) => {
         releaseFocus(event)
-        onClick()
+        onClick?.()
       }}
       /*
        * `min-h-6 min-w-6` — 24 px, which is WCAG 2.2's target minimum and not
