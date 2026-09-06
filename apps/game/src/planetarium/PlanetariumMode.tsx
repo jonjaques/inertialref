@@ -231,6 +231,9 @@ export function PlanetariumMode({
     try {
       const { picture } = readPictureLink(params)
       if (picture === null) return
+      // A syntactically valid link may still name an incompatible universe.
+      // Only a successfully restored view can become the save dialog's shot.
+      engine.harness.takePicture(picture)
       const clean = new URLSearchParams(params)
       clean.delete(QUERY.save)
       clean.set('capture', '1')
@@ -242,7 +245,7 @@ export function PlanetariumMode({
     } catch {
       // The view effect reports invalid links and leaves the current view intact.
     }
-  }, [saveRequested, params, navigate])
+  }, [engine, saveRequested, params, navigate])
 
   const panels = planetariumPanels({
     engine,
