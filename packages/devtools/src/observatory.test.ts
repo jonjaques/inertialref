@@ -1,7 +1,19 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { AU, type Meters } from '@inertialref/shared'
-import { TEST_CATALOG } from '@inertialref/universe'
+import {
+  bodyFixedFrameId,
+  type Body,
+  bodyFrameId,
+  findBody,
+  directionToGeodetic,
+  geodeticDirection,
+  parseAddress,
+  systemFrameId,
+  type StarSystem,
+  systemId,
+  TEST_CATALOG,
+} from '@inertialref/universe'
 import {
   type FrameId,
   Quaternion as Q,
@@ -16,6 +28,7 @@ import {
   type Lens,
   LENS_PRESETS,
   MAX_OBSERVER_DISTANCE,
+  MIN_STANCE_HEIGHT,
   verticalFov,
   verticalFovDegrees,
 } from '@inertialref/rendering'
@@ -696,5 +709,240 @@ describe('the drag sensitivity', () => {
     const { harness: ir, session } = harness()
     expect(ir.observatory.dragSensitivity()).toBe(1)
     session.dispose()
+  })
+})
+
+describe('a drop', () => {
+  /** Where a body's rotating frame is at the instant the picture depicts. */
+  const spinOf = (session: Session, address: string) =>
+    session.world.frames.pose(
+      bodyFixedFrameId(parseAddress(address)),
+      session.world.clock.renderTime,
+    )
+
+  /** Which way the camera is looking. `lookAlong` maps −Z to forward. */
+  const forwardOf = (pose: ObserverPose) =>
+    Q.rotate(pose.orientation, vec3(0, 0, -1))
+
+  /** A direction with the radial part removed — a bearing, as a vector. */
+  const horizontal = (direction: Vec3, up: Vec3): Vec3 =>
+    Vec.normalize(Vec.sub(direction, Vec.scale(up, Vec.dot(direction, up))))
+
+  it('leaves from exactly the camera it was released from', () => {
+    /*
+     * The frame the figure is let go is the frame before it. A drop that cut
+     * to the top of its own arc would be the interface taking the camera away
+     * and handing back a different one, which is the thing the ease exists to
+     * avoid — and it is invisible in a still, because the still after the cut
+     * is a perfectly good picture of somewhere else.
+     */
+    const { harness: ir } = harness()
+    ir.look('s:SOL/b:2')
+    ir.observatory.drag(200, 80)
+    const before = posed(ir.observerSample(0))
+    ir.drop(12, 34)
+    const first = posed(ir.observerSample(0))
+    expect(UV.distance(first.position, before.position)).toBeLessThan(1)
+    expect(Q.approxEquals(first.orientation, before.orientation, 1e-9)).toBe(
+      true,
+    )
+  })
+
+  it('lands on the coordinates it was given, at eye height', () => {
+    const { harness: ir } = harness()
+    ir.look('s:SOL/b:2')
+    ir.drop(12, 34, { seconds: 4 })
+    for (let i = 0; i < 300; i += 1) ir.observerSample(1 / 60)
+    const status = ir.observerStatus()
+    const stance = status?.surface?.stance
+    expect(status?.descent).toBeNull()
+    expect(status?.travelling).toBe(false)
+    // Degrees at the harness boundary, radians under it.
+    expect(((stance?.latitude ?? 0) * 180) / Math.PI).toBeCloseTo(12, 9)
+    expect(((stance?.longitude ?? 0) * 180) / Math.PI).toBeCloseTo(34, 9)
+    expect(stance?.height).toBe(MIN_STANCE_HEIGHT)
+  })
+
+  it('faces the star it landed under', () => {
+    /*
+     * The whole point of the gesture: you arrive looking at the lit half of
+     * the world you just dropped onto. Measured as a bearing rather than as a
+     * heading in radians, because a heading is a number in the body's rotating
+     * axes and the claim is about where the light is.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+    ir.drop(12, 34, { seconds: 4 })
+    for (let i = 0; i < 300; i += 1) ir.observerSample(1 / 60)
+    const pose = posed(ir.observerSample(0))
+    const star = originOf(session, systemFrameId(systemId('SOL')))
+    const spin = spinOf(session, 'g:milky-way/s:SOL/b:2')
+    const up = Q.rotate(
+      spin.orientation,
+      geodeticDirection((12 * Math.PI) / 180, (34 * Math.PI) / 180),
+    )
+    const toStar = Vec.normalize(UV.difference(star, pose.position))
+    const bearing = Vec.dot(
+      horizontal(forwardOf(pose), up),
+      horizontal(toStar, up),
+    )
+    // Within a degree of the star's own bearing along the ground.
+    expect(bearing).toBeGreaterThan(Math.cos((1 * Math.PI) / 180))
+    // And level with the horizon rather than at the sky or at its feet.
+    expect(Math.abs(Vec.dot(forwardOf(pose), up))).toBeLessThan(0.02)
+  })
+
+  it('comes down except where the ground rises, and never through it', () => {
+    /*
+     * Two claims, and the second is why the first is not "monotonic".
+     *
+     * `standing` from frame one is what refuses the orbit writers for the
+     * whole descent: a wheel notch mid-drop would otherwise rewrite the state
+     * `ascend` returns to, which is the failure the surface arm's refusal
+     * exists to prevent.
+     *
+     * The camera's *radius* is not monotonic and must not be. The conic is
+     * solved against the ground under the touchdown point, and the track
+     * crosses ground that is higher — so the stance's height clamp lifts the
+     * eye over a ridge rather than flying it through one, and the radius
+     * climbs while it does. The bound is the body's own relief, which is the
+     * most the ground can rise anywhere: 9.9 km on Earth against the 12 m this
+     * track actually meets. A schedule that ran away upward would break it;
+     * a mountain cannot.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+    ir.drop(-30, 100, { seconds: 3 })
+    expect(ir.observatory.standing).toBe(true)
+    const system = session.world.system(systemId('SOL'))
+    const earth = findBody(system as StarSystem, [2]) as Body
+    const relief = earth.surface.maxElevation
+    const centre = originOf(
+      session,
+      bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2')),
+    )
+    let previous = Number.POSITIVE_INFINITY
+    let climbed = 0
+    for (let i = 0; i < 200; i += 1) {
+      const pose = posed(ir.observerSample(1 / 60))
+      const radius = UV.distance(pose.position, centre)
+      if (radius > previous) climbed = Math.max(climbed, radius - previous)
+      // Never inside the world it is landing on.
+      expect(radius).toBeGreaterThan(earth.radius - relief)
+      previous = radius
+    }
+    expect(climbed).toBeLessThan(relief)
+    expect(previous).toBeLessThan(earth.radius + relief)
+    expect(ir.observerStatus()?.descent).toBeNull()
+  })
+
+  it('reports how far down it is while it is going', () => {
+    const { harness: ir } = harness()
+    ir.look('s:SOL/b:2')
+    ir.drop(0, 0, { seconds: 4 })
+    expect(ir.observerStatus()?.descent?.progress).toBe(0)
+    expect(ir.observerStatus()?.descent?.remainingSeconds).toBe(4)
+    for (let i = 0; i < 120; i += 1) ir.observerSample(1 / 60)
+    const half = ir.observerStatus()?.descent
+    expect(half?.progress).toBeCloseTo(0.5, 2)
+    expect(half?.remainingSeconds).toBeCloseTo(2, 2)
+    expect(ir.observerStatus()?.travelling).toBe(true)
+  })
+
+  it('moves the camera without moving the ship', () => {
+    // The planetarium's one rule, over the mode's one animated descent.
+    const { harness: ir } = harness()
+    const before = ir.status().world.stateHash
+    ir.look('s:SOL/b:2')
+    ir.drop(45, -120, { seconds: 2 })
+    for (let i = 0; i < 200; i += 1) ir.observerSample(1 / 60)
+    expect(ir.status().world.stateHash).toBe(before)
+  })
+
+  it('is abandoned by ascending, at the framing it left', () => {
+    const { harness: ir } = harness()
+    ir.look('s:SOL/b:2')
+    const orbit = ir.observerStatus()?.state.distance
+    ir.drop(12, 34)
+    for (let i = 0; i < 60; i += 1) ir.observerSample(1 / 60)
+    ir.ascend()
+    const status = ir.observerStatus()
+    expect(status?.descent).toBeNull()
+    expect(status?.surface).toBeNull()
+    // The orbit state was never touched, so there is nothing to restore.
+    expect(status?.state.distance).toBe(orbit)
+  })
+
+  it('refuses what it cannot land on, before it retargets anything', () => {
+    const { harness: ir } = harness()
+    ir.look('s:SOL/b:2')
+    // A star has no ground; the refusal must not leave the camera on it.
+    expect(() => ir.drop(0, 0, { address: 's:SOL' })).toThrow(/not a body/)
+    expect(ir.observatory.target?.address).toBe('g:milky-way/s:SOL/b:2')
+    expect(() => ir.drop(Number.NaN, 0)).toThrow(/finite/)
+    // And a second drop from the ground is a refusal rather than a new arc
+    // from an eye that is already standing on the answer.
+    ir.drop(12, 34, { seconds: 1 })
+    expect(() => ir.drop(20, 40)).toThrow(/leave the surface/)
+  })
+
+  it('finds the ground under a ray, and misses cleanly', () => {
+    /*
+     * The hit test the gesture is aimed with. Straight down from the camera is
+     * the sub-camera point, whatever the camera's angles are; a ray at right
+     * angles to that direction leaves the body entirely and must answer with
+     * nothing rather than with a plausible coordinate.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+    const eye = ir.observatory.eye
+    const centre = originOf(
+      session,
+      bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2')),
+    )
+    const down = Vec.normalize(UV.difference(centre, eye ?? centre))
+    const hit = ir.observatory.groundUnderRay(undefined, down)
+    expect(hit?.address).toBe('g:milky-way/s:SOL/b:2')
+    const spin = spinOf(session, 'g:milky-way/s:SOL/b:2')
+    const under = Q.rotateInverse(
+      spin.orientation,
+      UV.difference(eye ?? centre, spin.position),
+    )
+    const expected = directionToGeodetic(under)
+    expect(hit?.latitude).toBeCloseTo(expected.latitude, 6)
+    expect(hit?.longitude).toBeCloseTo(expected.longitude, 6)
+    // A ray across the sky hits nothing at all.
+    const across = Vec.normalize(
+      Vec.cross(down, Math.abs(down.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)),
+    )
+    expect(ir.observatory.groundUnderRay(undefined, across)).toBeNull()
+  })
+
+  it('previews an arc that starts at the eye and passes under the ground', () => {
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+    const preview = ir.observatory.entryArcPreview(undefined, {
+      latitude: (40 * Math.PI) / 180,
+      longitude: (-70 * Math.PI) / 180,
+    })
+    const eye = ir.observatory.eye
+    const centre = originOf(
+      session,
+      bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2')),
+    )
+    const first = preview?.arc[0]
+    const last = preview?.arc[preview.arc.length - 1]
+    expect(UV.distance(first ?? centre, eye ?? centre)).toBeLessThan(1)
+    expect(
+      UV.distance(last ?? centre, preview?.touchdown ?? centre),
+    ).toBeLessThan(1)
+    // The continuation goes under the ground, which is what makes it an entry
+    // rather than an orbit: no sample of it may sit above the surface.
+    const deepest = Math.min(
+      ...(preview?.through ?? []).map((point) => UV.distance(point, centre)),
+    )
+    expect(deepest).toBeLessThan(
+      UV.distance(preview?.touchdown ?? centre, centre),
+    )
   })
 })

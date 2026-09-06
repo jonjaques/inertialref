@@ -1643,6 +1643,30 @@ export class GameHarness {
   }
 
   /**
+   * Fly the camera from orbit down to a point on the ground, and stand there
+   * facing the star.
+   *
+   * The eased entry `visit` is not: the camera flies the ballistic arc over
+   * `seconds` of wall clock and the frame after this returns is the first
+   * frame of the descent, not the last. `ir.ascend()` abandons one in flight.
+   * Degrees at this boundary, radians below it, like `visit`.
+   */
+  drop(
+    latitude: number,
+    longitude: number,
+    options: { address?: string; seconds?: number } = {},
+  ): ObserverStatus {
+    return this.observatory.drop(
+      options.address,
+      {
+        latitude: (latitude * Math.PI) / 180,
+        longitude: (longitude * Math.PI) / 180,
+      },
+      options.seconds === undefined ? {} : { seconds: options.seconds },
+    )
+  }
+
+  /**
    * Fly a descent on paper and report what the streamer would be asked for.
    *
    * The unit of terrain measurement. Pure arithmetic — no world state changes,
@@ -1922,6 +1946,7 @@ export class GameHarness {
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',
       '  ir.ascend()                   back to orbit, at the framing you left',
+      '  ir.drop(latDeg, lonDeg, {address, seconds})  fly from orbit down to the ground, facing the star',
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  the live streamer, and the rocks on it',
