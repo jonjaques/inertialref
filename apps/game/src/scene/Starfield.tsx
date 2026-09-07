@@ -7,6 +7,10 @@ import { pixelsPerRadian } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { STAR_SPRITE_CEILING, type StarField } from '../engine/starSelection.ts'
 import { createStarfieldMaterial } from '../render/materials.ts'
+import {
+  uploadStarfieldAppearance,
+  type NamedStars,
+} from '../render/starfieldAppearance.ts'
 import { createStarProjection } from '../render/starProjection.ts'
 import { StarExtinctionCache } from '../render/starExtinctionCache.ts'
 import { acquireGalaxyStructure } from '../render/galaxyStructure.ts'
@@ -62,13 +66,15 @@ export function Starfield({ engine }: { engine: GameEngine }) {
   const group = useMemo(() => new Group(), [])
   const field = useRef<Field | null>(null)
   const written = useRef<StarField | null>(null)
-  const named = useRef(new Map<string, number[]>())
+  const named = useRef<NamedStars>(new Map())
   const hidden = useRef(new Set<number>())
 
   useEffect(() => {
     const created = createField(engine, gl as unknown as WebGPURenderer)
     field.current = created
     written.current = null
+    named.current.clear()
+    hidden.current.clear()
     group.add(created.sprite)
     warmAtMount({
       label: 'warming stellar extinction',
@@ -120,27 +126,15 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     current.extinction.advance(gl as unknown as WebGPURenderer)
     if (written.current !== stars) {
       projection.upload(stars)
-      const colours = material.colours.array as Float32Array
-      const names = new Map<string, number[]>()
       sprite.count = Math.min(stars.positions.length, STAR_SPRITE_CEILING)
-      for (let i = 0; i < sprite.count; i++) {
-        const colour = stars.colours[i] ?? [1, 1, 1]
-        const luminance =
-          colour[0] * 0.2126 + colour[1] * 0.7152 + colour[2] * 0.0722
-        const normalization = luminance > 0 ? 1 / luminance : 0
-        colours[i * 3] = colour[0] * normalization
-        colours[i * 3 + 1] = colour[1] * normalization
-        colours[i * 3 + 2] = colour[2] * normalization
-        const name = stars.names[i] ?? ''
-        const indices = names.get(name) ?? []
-        indices.push(i)
-        names.set(name, indices)
-      }
-      material.colours.needsUpdate = true
-      material.enabled.array.fill(1)
-      material.enabled.needsUpdate = true
-      named.current = names
-      hidden.current = new Set()
+      uploadStarfieldAppearance(
+        material,
+        stars,
+        written.current,
+        named.current,
+        hidden.current,
+        sprite.count,
+      )
       written.current = stars
     }
     const view = engine.lensView()
@@ -151,8 +145,11 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     material.integrated.value = engine.visibilityProcessing ? 1 : 0
     const resolved = new Set<number>()
     for (const star of scene.stars)
-      if (star.placement.angularRadius * ppr > 0.75)
-        for (const i of named.current.get(star.name) ?? []) resolved.add(i)
+      if (star.placement.angularRadius * ppr > 0.75) {
+        const indices = named.current.get(star.name)
+        if (typeof indices === 'number') resolved.add(indices)
+        else if (indices !== undefined) for (const i of indices) resolved.add(i)
+      }
     for (const i of hidden.current)
       if (!resolved.has(i)) {
         material.enabled.array[i] = 1

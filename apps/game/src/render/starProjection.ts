@@ -215,6 +215,7 @@ export function createStarProjection(
   const offset = displacement(current, pose, instanceIndex)
   const previousOffset = previousSources
     .greaterThan(0.5)
+    .and(current.cellNode.element(instanceIndex).w.greaterThan(0))
     .select(
       displacement(previous, previousPose, instanceIndex),
       displacement(current, previousPose, instanceIndex),
@@ -269,10 +270,8 @@ export function createStarProjection(
     },
     upload(sources: Sources): void {
       if (disposed || sources === held) return
-      const old = new Map<string, UniverseVector>()
-      if (held?.ids !== undefined)
-        for (let i = 0; i < held.ids.length; i++)
-          old.set(held.ids[i]!, held.positions[i]!)
+      const priorCount = count.value
+      let old: Map<string, UniverseVector> | null = null
       count.value = Math.min(capacity, sources.positions.length)
       absoluteVisibility.value =
         sources.visualLuminosities === undefined ? 0 : 1
@@ -280,29 +279,83 @@ export function createStarProjection(
         sources.visualLuminosities === undefined
           ? stellarIlluminance(1, SECTOR_SIZE)
           : stellarVisualIlluminance(1, SECTOR_SIZE)
+      let first = count.value
+      let last = -1
+      let previousFirst = count.value
+      let previousLast = -1
       for (let i = 0; i < count.value; i++) {
         const position = sources.positions[i]!
-        const before = old.get(sources.ids?.[i] ?? '') ?? position
-        writeStarCoordinates(
-          position,
-          current.cells.array as Int32Array,
-          current.offsets.array as Float32Array,
-          current.subcells.array as Int32Array,
-          i,
-        )
-        writeStarCoordinates(
-          before,
-          previous.cells.array as Int32Array,
-          previous.offsets.array as Float32Array,
-          previous.subcells.array as Int32Array,
-          i + previous.start,
-        )
-        current.offsets.array[i * 4 + 3] =
+        const id = sources.ids?.[i]
+        let before: UniverseVector | undefined
+        if (id !== undefined && held?.ids !== undefined) {
+          if (held.ids[i] === id) before = held.positions[i]
+          else {
+            // Stable ordering needs no identity index. Build one only when a
+            // replacement or reorder actually asks for a different old slot.
+            if (old === null) {
+              old = new Map()
+              for (let j = 0; j < priorCount; j++)
+                old.set(held.ids[j]!, held.positions[j]!)
+            }
+            before = old.get(id)
+          }
+        }
+        const moved = before !== undefined && !UV.equals(before, position)
+        const luminosity =
           sources.visualLuminosities?.[i] ?? sources.luminosities[i] ?? 1
+        const oldPosition = held?.positions[i]
+        const oldLuminosity =
+          held?.visualLuminosities?.[i] ?? held?.luminosities[i] ?? 1
+        if (
+          i >= priorCount ||
+          oldPosition === undefined ||
+          !UV.equals(oldPosition, position) ||
+          oldLuminosity !== luminosity ||
+          current.cells.array[i * 4 + 3] !== Number(moved)
+        ) {
+          writeStarCoordinates(
+            position,
+            current.cells.array as Int32Array,
+            current.offsets.array as Float32Array,
+            current.subcells.array as Int32Array,
+            i,
+          )
+          current.cells.array[i * 4 + 3] = Number(moved)
+          current.offsets.array[i * 4 + 3] = luminosity
+          first = Math.min(first, i)
+          last = i
+        }
+        // Reordered and newly admitted static sources share their current
+        // coordinates with the previous observer. Only actual stellar motion
+        // needs a second packed position and its corresponding upload.
+        if (moved && before !== undefined) {
+          writeStarCoordinates(
+            before,
+            previous.cells.array as Int32Array,
+            previous.offsets.array as Float32Array,
+            previous.subcells.array as Int32Array,
+            i + previous.start,
+          )
+          previousFirst = Math.min(previousFirst, i)
+          previousLast = i
+        }
       }
-      for (const buffers of allocations)
-        for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
+      const dirty = (coordinates: Coordinates, first: number, last: number) => {
+        if (first > last) return
+        for (const buffer of [
+          coordinates.cells,
+          coordinates.offsets,
+          coordinates.subcells,
+        ]) {
+          buffer.addUpdateRange(
+            (coordinates.start + first) * 4,
+            (last - first + 1) * 4,
+          )
           buffer.needsUpdate = true
+        }
+      }
+      dirty(current, first, last)
+      dirty(previous, previousFirst, previousLast)
       held = sources
       changed = true
       uploads++
