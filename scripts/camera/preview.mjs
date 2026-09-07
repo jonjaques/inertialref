@@ -13,7 +13,7 @@ import { pictureLink } from '../../apps/game/src/planetarium/presetUrl.ts'
 const SURFACE_LENS = {
   ...LENS_PRESETS.flight,
   fStop: 2.8,
-  shutter: 1 / 40_000,
+  shutter: 1 / 3200,
   iso: 100,
   zoom: 1,
 }
@@ -132,7 +132,7 @@ export function reviewMarkdown(pictures, origin) {
     )
     const lens = enhanced.lens
     rows.push(
-      `| ${enhanced.label.replace(' · enhanced', '')} | ${enhanced.time} | ${lens.focalLength.toFixed(2)} mm · f/${lens.fStop} · 1/40000 s · ISO ${lens.iso} | ${link(enhanced, 'Enhanced')} · ${link(automatic, 'Automatic')} · ${link(manual, 'Manual')} | ${link(long, 'Manual 2400 s')} |`,
+      `| ${enhanced.label.replace(' · enhanced', '')} | ${enhanced.time} | ${lens.focalLength.toFixed(2)} mm · f/${lens.fStop} · 1/3200 s · ISO ${lens.iso} | ${link(enhanced, 'Enhanced')} · ${link(automatic, 'Automatic')} · ${link(manual, 'Manual')} | ${link(long, 'Manual 2400 s')} |`,
     )
   }
   return [

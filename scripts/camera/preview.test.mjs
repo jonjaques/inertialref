@@ -27,7 +27,7 @@ it('makes matched camera triplets and separately declared long exposures', () =>
       expect(picture.address).toBe(enhanced.address)
       expect(picture.lens).toEqual(enhanced.lens)
       expect(picture.lens).toMatchObject({
-        shutter: 1 / 40_000,
+        shutter: 1 / 3200,
         fStop: 2.8,
         iso: 100,
         focus: null,
