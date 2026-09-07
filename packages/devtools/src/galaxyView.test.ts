@@ -8,15 +8,38 @@ import {
   LENS_PRESETS,
 } from '@inertialref/rendering'
 import { openSession } from './session.ts'
+import {
+  DEFAULT_PICTURE_PROCESSING,
+  type PictureProcessing,
+} from './pictures.ts'
 
 it('takes fixed galactic views through the observatory without changing the world', () => {
-  let lens: Lens = LENS_PRESETS.flight
+  const selectedLens = {
+    ...LENS_PRESETS.flight,
+    shutter: 1 / 250,
+    fStop: 8,
+    iso: 400,
+  }
+  const selectedProcessing = {
+    ...DEFAULT_PICTURE_PROCESSING,
+    mode: 'manual' as const,
+  }
+  let lens: Lens = selectedLens
+  let processing: PictureProcessing = selectedProcessing
+  let lensWrites = 0
+  let processingWrites = 0
   const session = openSession({
     workers: null,
     render: {
       framingLens: () => lens,
       setFlightLens: (next) => {
         lens = next
+        lensWrites++
+      },
+      cameraProcessing: () => processing,
+      setCameraProcessing: (next) => {
+        processing = next
+        processingWrites++
       },
     },
   })
@@ -29,8 +52,9 @@ it('takes fixed galactic views through the observatory without changing the worl
       expect(pose).toEqual(GALAXY_VIEWS[view].pose)
       expect(ir.observatory.eye).toEqual(pose.position)
       expect(ir.observerStatus()?.galaxyView).toBe(view)
-      expect(isUsableLens(lens)).toBe(true)
-      expect(lens).toEqual(GALAXY_VIEWS[view].lens)
+      expect(isUsableLens(GALAXY_VIEWS[view].lens)).toBe(true)
+      expect(lens).toEqual(selectedLens)
+      expect(processing).toEqual(selectedProcessing)
       const direction = Q.basis(pose.orientation).forward
       const center = UV.difference(UV.fromMeters(0, 0, 0), pose.position)
       expect(Vec.dot(direction, Vec.normalize(center))).toBeCloseTo(1, 12)
@@ -49,6 +73,8 @@ it('takes fixed galactic views through the observatory without changing the worl
     ir.observatory.clear()
     expect(ir.observerSample(0)).toBeNull()
     expect(ir.observerStatus()).toBeNull()
+    expect(lensWrites).toBe(0)
+    expect(processingWrites).toBe(0)
     expect(session.world.stateHash()).toBe(before)
   } finally {
     session.dispose()

@@ -5,8 +5,6 @@ import {
 } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
 import {
-  GALAXY_VIEWS,
-  GALAXY_JOURNEY_LENS,
   validateGalaxyJourney,
   type GalaxyView,
   isGalaxyView,
@@ -1960,16 +1958,13 @@ export class GameHarness {
   galaxyView(view: GalaxyView): ObserverStatus {
     if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
     this.stopCutscene()
-    this.#host.render.setFlightLens(GALAXY_VIEWS[view].lens)
     return this.#observatory.viewGalaxy(view)
   }
 
-  /** Seek or travel along the Earth-to-disk instrument using presentation time. */
+  /** Travel from Earth to the disk with the player's camera and presentation time. */
   galaxyJourney(progress = 0, seconds = 0): ObserverStatus {
     validateGalaxyJourney(progress, seconds)
     this.stopCutscene()
-    if (this.#observatory.journey === null)
-      this.#host.render.setFlightLens(GALAXY_JOURNEY_LENS)
     return this.#observatory.travelGalaxy(progress, seconds)
   }
 
