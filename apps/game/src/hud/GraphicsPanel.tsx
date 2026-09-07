@@ -1,4 +1,4 @@
-import { SensorSection } from './SensorSection.tsx'
+import { Slider } from '@/components/ui/slider'
 import { Mountain, Sparkles } from 'lucide-react'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
@@ -10,6 +10,7 @@ import {
   RENDER_AA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
+  RENDER_SENSOR,
   usePersistentState,
 } from '../state/preferences.ts'
 import type { HudRenderState } from './controls.ts'
@@ -17,6 +18,8 @@ import { OptionGroup } from './OptionGroup.tsx'
 import { Section } from './Section.tsx'
 import { SurfaceRow } from './SurfaceRow.tsx'
 import { SwitchRow } from './SwitchRow.tsx'
+import { Row } from './Row.tsx'
+import { releaseFocus } from './focus.ts'
 
 /*
  * Render-feature switches, and the extended-range override.
@@ -51,6 +54,7 @@ export function GraphicsPanel({
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
   const [aa, setAa] = usePersistentState(RENDER_AA)
   const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
+  const [sensor, setSensor] = usePersistentState(RENDER_SENSOR)
   const mode = render.output?.mode ?? null
   /*
    * Whether `auto` guessed something other than the obvious.
@@ -66,12 +70,11 @@ export function GraphicsPanel({
 
   return (
     <div className="flex flex-col gap-2">
-      <SensorSection />
       <Section id="graphics.features" title="Features">
         <SwitchRow
           bordered
           icon={Sparkles}
-          label="Lens Flare"
+          label="Lens flare"
           detail="ghosts, streak and glow when the star is in frame"
           on={lensFlare}
           onChange={setLensFlare}
@@ -140,7 +143,7 @@ export function GraphicsPanel({
 
       <Section
         id="graphics.output"
-        title="Output"
+        title="HDR output"
         trailing={mode ?? 'starting'}
       >
         {/*
@@ -156,7 +159,7 @@ export function GraphicsPanel({
          */}
         <div className="rounded border border-slate-800/80 bg-slate-900/40 p-1.5">
           <OptionGroup
-            label="Extended-range output"
+            label="HDR output"
             className="w-full [&>*]:flex-1"
             value={render.preference}
             values={OUTPUT_PREFERENCES}
@@ -187,6 +190,40 @@ export function GraphicsPanel({
             <span>rebuilds the renderer</span>
           </p>
         </div>
+        <Row
+          label="Encoding"
+          value={
+            render.output === null
+              ? 'Starting'
+              : `${render.output.gamut === 'display-p3' ? 'Display P3' : 'sRGB'} · ${mode === 'extended' ? 'Extended HDR' : 'SDR'}`
+          }
+        />
+        <p className="type-ui text-pretty text-slate-400">
+          {render.preference === 'extended' && mode === 'standard'
+            ? 'Extended HDR is unavailable here. This display uses SDR.'
+            : 'Display P3 widens the color gamut. Extended HDR adds luminance headroom.'}
+        </p>
+        {mode === 'extended' && (
+          <div>
+            <Row
+              label="Peak luminance"
+              value={`${sensor.peak.toFixed(2)}× white`}
+            />
+            <Slider
+              min={1}
+              max={2}
+              step={0.05}
+              value={[sensor.peak]}
+              aria-label="Peak luminance"
+              aria-valuetext={`${sensor.peak.toFixed(2)} times white`}
+              onValueChange={([peak]) => {
+                if (peak !== undefined) setSensor((held) => ({ ...held, peak }))
+              }}
+              onClick={releaseFocus}
+              className="min-w-0 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
+            />
+          </div>
+        )}
       </Section>
     </div>
   )

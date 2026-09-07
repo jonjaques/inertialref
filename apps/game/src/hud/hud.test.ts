@@ -3,7 +3,12 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openSession } from '@inertialref/devtools'
 import { engineStore } from '../state/engineStore.ts'
-import { CAMERA_LENS, RENDER_LENS_FLARE, write } from '../state/preferences.ts'
+import {
+  CAMERA_LENS,
+  RENDER_LENS_FLARE,
+  RENDER_SENSOR,
+  write,
+} from '../state/preferences.ts'
 import { LensSection } from './LensSection.tsx'
 import type { DevContext } from './context.ts'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
@@ -18,11 +23,7 @@ import {
   SEA_DETAILS,
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
-import {
-  lensForFov,
-  SENSOR_RESPONSES,
-  RESPONSE_PRESETS,
-} from '@inertialref/rendering'
+import { lensForFov, CAMERA_MODES, ExposureMeter } from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
 
 /*
@@ -107,7 +108,10 @@ describe('the author’s instruments', () => {
   // status as a prop, so a test that wants one showing data publishes a sample
   // the way `startEngineSampler` would — and clears it, so the tests that
   // assert the pre-first-frame rendering keep meaning what they say.
-  afterEach(() => engineStore.setState({ status: null }))
+  afterEach(() => {
+    engineStore.setState({ status: null, exposure: null })
+    write(RENDER_SENSOR, RENDER_SENSOR.initial)
+  })
 
   it('renders the universe it is pointed at', () => {
     const session = openSession({ seed: 'inertialref', workers: null })
@@ -255,26 +259,24 @@ describe('the author’s instruments', () => {
       }),
     )
     write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
-    expect(graphics).toContain('Lens Flare')
+    expect(graphics).toContain('Lens flare')
     // The lens-flare switch, off, and the rocks switch, on: no other switch
     // on this panel.
     expect(graphics.match(/role="switch"/g)).toHaveLength(2)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
-    // The output, surface and sensor choices are radio groups. A radio group rather than a button that
+    // The output and surface choices are radio groups. A radio group rather than a button that
     // cycles, so the states you are not on have a representation in the tree.
-    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(7)
+    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(5)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
       AA_LEVELS.length +
         OUTPUT_PREFERENCES.length +
         TERRAIN_DETAILS.length +
         GROUND_DETAILS.length +
-        SEA_DETAILS.length +
-        SENSOR_RESPONSES.length +
-        RESPONSE_PRESETS.length,
+        SEA_DETAILS.length,
     )
     // One checked per group.
-    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(7)
+    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(5)
     expect(graphics).toMatch(/aria-checked="true"[^>]*>2x</)
     for (const level of AA_LEVELS) expect(graphics).toContain(`>${level}<`)
     // The extended-range override moved here from the transport strip. It is a
@@ -303,6 +305,9 @@ describe('the author’s instruments', () => {
     expect(camera).toContain('31.3 mm')
     expect(camera).toContain('42°')
     expect(camera).toContain('Reset')
+    expect(camera.match(/role="radio"/g)).toHaveLength(CAMERA_MODES.length)
+    expect(camera).toContain('aria-label="Camera mode"')
+    expect(camera).not.toContain('aria-label="Peak luminance"')
     // All four channels are drawn, not just the focal length: an aperture the
     // depth-of-field readout depends on and no control for it is a readout
     // nobody can move.
@@ -315,6 +320,66 @@ describe('the author’s instruments', () => {
     expect(camera).toContain('aria-valuemax="1000"')
     expect(FOCAL_MIN).toBeCloseTo(8.4, 1)
     expect(FOCAL_MAX).toBeCloseTo(68.06, 1)
+  })
+
+  it.each(CAMERA_MODES)('shows the controls for the %s camera', (mode) => {
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode })
+    const markup = renderToStaticMarkup(
+      createElement(KeymapProvider, null, createElement(LensSection)),
+    )
+    expect(markup.includes('aria-label="Exposure time, seconds"')).toBe(
+      mode === 'manual',
+    )
+    expect(markup.includes('aria-label="Sensor gain, ISO"')).toBe(
+      mode === 'manual',
+    )
+    expect(markup.includes('aria-label="Exposure compensation"')).toBe(
+      mode === 'automatic',
+    )
+    expect(markup.includes('aria-label="Adaptation rate"')).toBe(
+      mode === 'automatic',
+    )
+    expect(markup).toContain('aria-label="White balance"')
+  })
+
+  it('explains unavailable Automatic and exposes its manual fallback controls', () => {
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode: 'automatic' })
+    const exposure = new ExposureMeter().update(
+      CAMERA_LENS.initial,
+      { ...RENDER_SENSOR.initial, mode: 'manual' },
+      0,
+    )
+    engineStore.setState({
+      exposure: {
+        ...exposure,
+        requestedMode: 'automatic',
+        automaticAvailable: false,
+      },
+    })
+    const markup = renderToStaticMarkup(
+      createElement(KeymapProvider, null, createElement(LensSection)),
+    )
+    expect(markup).toContain('Automatic needs WebGPU')
+    expect(markup).toContain('Use Manual')
+    expect(markup).toContain('aria-label="Exposure time, seconds"')
+    expect(markup).toContain('aria-label="Sensor gain, ISO"')
+    expect(markup).not.toContain('aria-label="Adaptation rate"')
+  })
+
+  it('reports an authored photographic exposure over an Enhanced preference', () => {
+    engineStore.setState({
+      exposure: new ExposureMeter().update(
+        CAMERA_LENS.initial,
+        RENDER_SENSOR.initial,
+        0,
+        1,
+      ),
+    })
+    const markup = renderToStaticMarkup(
+      createElement(KeymapProvider, null, createElement(LensSection)),
+    )
+    expect(markup).toContain('· Authored')
+    expect(markup).not.toContain('title="HDR composite"')
   })
 
   it('renders every destination the harness offers', () => {
