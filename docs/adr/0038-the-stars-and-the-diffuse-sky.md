@@ -82,6 +82,46 @@ Source IDs, field versions and queue epochs prevent stale work from attaching
 to a reused buffer slot. One renderer shares one 2,048² RG16F arm table between
 resolved transport and diffuse light; reference-counted leases own its lifetime.
 
+### The optically young population
+
+The active revisions are `galaxy@5` and `galaxy-field@5`. The GPU port is
+`galaxy-tsl@8`. This field corrects the earlier use of a 19 pc height for all
+young stellar light. [Reid et al. 2019](https://arxiv.org/abs/1910.03357)
+measures that height for very young high-mass maser tracers within 7 kpc.
+[Natale et al. 2022](https://doi.org/10.1093/mnras/stab2771) models geometric
+young stellar components with a broader, flaring sech² distribution.
+
+The shared height is `H(R) = 50 + 17 (R / 4500)^p` pc, where
+`p = log(40/17) / log(8178/4500)`. It reaches 50 pc at the center, 67 pc at
+4.5 kpc and 90 pc at the Sun. The vertical factor is
+`(50 / H) sech²((y − warp) / H)`, preserving the column as height changes.
+Applying that geometric profile to our arm ridges, and continuing its flare
+beyond the Sun, are declared model assumptions. The radial exponential, arm
+positions, dust, old populations and seeded texture remain unchanged.
+
+The effective mean solar V luminosities are 0.204 for the thin disk, 0.35 for
+the thick disk, 100 for young arms, 0.7725 for the bar/bulge and 0.1 for the
+halo. Thin and bulge means are fitted against the same three Solar sky regions
+and external V luminosity; these are population-model means, not measured
+individual-star luminosity functions. The default-seed V residuals are
++0.0765, +0.1785, −0.2800 and +0.0325 mag respectively, within the original
+0.3 mag limits. Local number density remains 0.1 star/pc³ and the reference
+cylinder contains 116.064 billion stars. The finer quadrature retains its
+original convergence test.
+
+The young cohort contributes 15.31% of emergent ridge V at solar radius,
+compared with 0.66% in the tracer-height model. This is a modest improvement
+to the external arms. The model's large central V luminosity fraction remains
+an approximation; a published stellar-mass bulge fraction is not a V-light
+constraint. RGB temperatures are illustrative and do not establish a Johnson
+B−V calibration. No display response enters the physical fit.
+
+The saved manifest identifies generation drift. `Q` addresses encode a
+level/cell/ordinal, so they can change under a different recorded generation
+version; an ordinal that no longer exists fails explicitly. The unpublished
+`galaxy@4` level population receives that existing drift policy. Old `P`
+destinations continue to use their exact legacy generator.
+
 ### Physical cubes and temporal history
 
 Ordinary nearby views refine complete 32², 128² and 512² cubemaps. Two 32² tiles

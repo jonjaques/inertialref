@@ -17,6 +17,7 @@ import {
   type GalaxyField,
   type GalaxyPopulation,
   type GalaxyRayOptions,
+  type ResolvedPopulationSelection,
 } from '@inertialref/universe'
 import type { Lens, Exposure } from '@inertialref/rendering'
 import type { Quat } from '@inertialref/spatial'
@@ -63,6 +64,11 @@ export interface GalaxyRenderReport {
     readonly bytes: number
   }
   readonly cache?: {
+    readonly archive?: {
+      readonly hits: number
+      readonly writes: number
+      readonly failures: number
+    }
     readonly faceSize: number
     readonly initialFaceSize: number
     readonly selectedFaceSize: number | null
@@ -92,6 +98,8 @@ export interface GalaxyRenderReport {
   readonly survey: {
     readonly radiusCells: number
     readonly cellCeiling: number
+    readonly candidateCeiling?: number
+    readonly resolved?: ResolvedPopulationSelection
     readonly spriteCount: number
     readonly spriteCeiling: number
     readonly pending: boolean
@@ -136,6 +144,8 @@ export interface GalaxyRenderReport {
       readonly batchSize: number
       readonly draws: number
       readonly bytes: number
+      readonly lagParsecs?: number
+      readonly reference?: string
     }
   }
   readonly originParsecs: readonly number[]
