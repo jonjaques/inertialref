@@ -9,14 +9,16 @@ sees that journey, following
 
 The M1–M6 planning baseline is [PR #70](https://github.com/jonjaques/inertialref/pull/70),
 `9911dd5`. The current completion branch is
-`codex/galaxy-the-sky-keeps-its-detail`, explicitly stacked on
+`codex/galaxy-the-sky-keeps-its-detail`, open as
+[PR #73](https://github.com/jonjaques/inertialref/pull/73), explicitly stacked on
 [PR #72](https://github.com/jonjaques/inertialref/pull/72),
 `codex/the-camera-reveals-the-sky` at `2847688`. The user's selected base
 supersedes the older session-branch sketch below for this PR. Physical
 calibration remains independent of Enhanced image treatment.
 
 M7–M11 are implemented and the assembled verification record follows below.
-The completion PR is ready for image review; the measured return hitches and
+PR #73 records verified implementation `ee0e9e1` and evidence commit `78e00dc`.
+It is ready for image review; the measured return hitches and
 source-morphology limits remain explicit rather than being called acceptance.
 [ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md) records active
 `galaxy@5`, physical `galaxy-field@5`, the resolved/diffuse partition, dust,
