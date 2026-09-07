@@ -13,6 +13,11 @@ import {
 } from './field.ts'
 
 import { GALAXY_SOLAR_V_WATTS } from './photometry.ts'
+import {
+  partitionGalaxyEmission,
+  unresolvedPopulationFraction,
+  type ResolvedPopulationSelection,
+} from './population.ts'
 /** A column in L☉/pc² converted to isotropic Johnson V radiance, nW m⁻² sr⁻¹. */
 export const GALAXY_RADIANCE_FACTOR =
   (GALAXY_SOLAR_V_WATTS / PARSEC ** 2 / (4 * Math.PI)) * 1e9
@@ -45,6 +50,8 @@ export const GALAXY_FOOTPRINT_STEP_FRACTION = 0.5
 export type GalaxyRaySampling = 'reference' | 'observer' | 'settled'
 
 export interface GalaxyRayOptions {
+  /** Admitted resolved bands are removed from their shared luminosity moments. Omit for total-field calibration. */
+  readonly resolved?: ResolvedPopulationSelection
   readonly sampling?: GalaxyRaySampling
   readonly population?: GalaxyPopulation
   readonly distanceParsecs?: number
@@ -192,15 +199,27 @@ export function integrateGalaxyRay(
     ) {
       const density = s.populations[population]
       const light =
-        (density * properties.meanSolarLuminosities * step) / colourV
+        ((density * properties.meanSolarLuminosities * step) / colourV) *
+        (options.resolved === undefined
+          ? 1
+          : unresolvedPopulationFraction(
+              population,
+              UV.distance(p, options.resolved.origin) / PARSEC,
+              options.resolved.apparentMagnitudeLimit,
+              options.resolved.levelMask,
+            ))
       r += wr * light * colour.r
       g += wg * light * colour.g
       b += wb * light * colour.b
       column += density * step
     } else {
-      r += wr * s.emissionRgb.r * step
-      g += wg * s.emissionRgb.g * step
-      b += wb * s.emissionRgb.b * step
+      const emission =
+        options.resolved === undefined
+          ? s.emissionRgb
+          : partitionGalaxyEmission(s, p, options.resolved).unresolved
+      r += wr * emission.r * step
+      g += wg * emission.g * step
+      b += wb * emission.b * step
       column += s.totalPerCubicParsec * step
     }
     tr *= Math.exp(-qr)

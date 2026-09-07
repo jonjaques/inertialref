@@ -398,10 +398,7 @@ describe('terrain task', () => {
     expect(survey.bodies[0]?.address).toMatch(/^g:milky-way\/s:SOL\/b:/)
   })
 
-  it('generates the same cell with and without the catalog context', async () => {
-    // The context is what stops the worker inventing stars the catalog has
-    // already accounted for. A wrong value has to change the answer, or passing
-    // it is decorative.
+  it('passes the catalog coverage into population generation', async () => {
     const cell = { x: 0, y: 0, z: 0 }
     const bare = await pool().run(generateCellTask, {
       seed: formatSeed(GALAXY_SEED),
@@ -410,9 +407,10 @@ describe('terrain task', () => {
     const filled = await pool().run(generateCellTask, {
       seed: formatSeed(GALAXY_SEED),
       cell,
-      context: { catalogued: 5, completeRadius: 0 },
+      context: { catalogued: 5, completeRadius: 1e22 },
     })
-    expect(filled.stars.length).toBe(Math.max(0, bare.stars.length - 5))
+    expect(bare.stars.length).toBeGreaterThan(0)
+    expect(filled.stars).toEqual([])
   })
 })
 

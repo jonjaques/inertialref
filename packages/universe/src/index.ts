@@ -24,6 +24,7 @@ export * from './worldQuery.ts'
 
 export * from './galaxy/arms.ts'
 export * from './galaxy/field.ts'
+export * from './galaxy/population.ts'
 export * from './galaxy/dust.ts'
 export * from './galaxy/integral.ts'
 

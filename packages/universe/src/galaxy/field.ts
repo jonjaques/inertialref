@@ -9,7 +9,7 @@ import {
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
 import { blackbodyColour, type LinearRgb } from '../catalog/photometry.ts'
-import { LOCAL_DENSITY } from '../galaxy.ts'
+import { LOCAL_DENSITY } from './constants.ts'
 import { armStrength } from './arms.ts'
 import { localBubbleFactor, localCloudExtinction } from './localDust.ts'
 import { GALAXY_DUST, galaxyDustModulation, galaxyDustProfile } from './dust.ts'
@@ -17,7 +17,7 @@ import { GALAXY_DUST, galaxyDustModulation, galaxyDustProfile } from './dust.ts'
 export const GALAXY_FIELD_ALGORITHM = Object.freeze(
   algorithm('galaxy-field', 4),
 )
-/** Preview versions never enter GENERATION_VERSIONS until population activation. */
+/** The physical field revision is also an active population generation input. */
 export const GALAXY_FIELD_VERSIONS = Object.freeze(
   manifest([GALAXY_FIELD_ALGORITHM]),
 )

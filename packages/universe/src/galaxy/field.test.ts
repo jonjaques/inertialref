@@ -17,11 +17,12 @@ const position = fc
   .map(([x = 0, y = 0, z = 0]) =>
     UV.fromMeters(x * PARSEC, y * PARSEC, z * PARSEC),
   )
-describe('the preview stellar field', () => {
-  it('normalizes the total solar density without activating a generator', () => {
+describe('the stellar field', () => {
+  it('normalizes the total solar density and versions the active population field', () => {
     expect(field.sample(SUN_POSITION).totalPerCubicParsec).toBeCloseTo(0.1, 14)
     expect(GALAXY_FIELD_VERSIONS).toEqual({ 'galaxy-field': 4 })
-    expect(GENERATION_VERSIONS).not.toHaveProperty('galaxy-field')
+    expect(GENERATION_VERSIONS['galaxy-field']).toBe(4)
+    expect(GENERATION_VERSIONS['galaxy']).toBe(3)
   })
   it('has finite nonnegative populations at every sampled position', () => {
     fc.assert(
