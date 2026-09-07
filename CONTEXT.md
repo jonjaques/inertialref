@@ -50,8 +50,12 @@ planetarium at 0.37 ms of engine (ADR-0025).
 
 The galaxy preview has fixed face-on and edge-on instruments and a reversible
 Earth-to-disk journey. Its live volume follows the planetarium observer through
-the scene and sensor. The field stays separate from active generation; dust,
-photometric calibration, and temporal optimization remain open
+the scene and sensor when the response admits diffuse light; ordinary Natural
+views at daylight calibration omit the volume. Shared seeded dust dims and reddens the diffuse light,
+with finer sampling after the camera settles. The field stays separate from
+active generation; local clouds, photometric calibration, resolved-star
+extinction, and temporal optimization remain open. The live dust rendering
+saturates the GPU in the full-resolution rig; performance acceptance is open
 ([ADR-0032](docs/adr/0032-the-stellar-field.md)).
 
 ## Decisions that are expensive to reverse
@@ -7969,6 +7973,171 @@ Five regression cases failed before these fixes, covering three seek
 positions and the actual rendered buttons after orbiting at either endpoint.
 The control tests render in Node. Browser tests are omitted at the user's
 request.
+
+## Light passes through the same dust from either side (05 Sep 2026)
+
+M5 is based on PR #66 at `837be56`, on `codex/galaxy-light-through-dust`.
+The CPU model spends `galaxy-field@3`; the TSL port spends `galaxy-tsl@3`.
+Active population generation stays unchanged. [ADR-0032](docs/adr/0032-the-stellar-field.md#dust-transport-m5)
+records the profile, source distinction, preview assumptions, and transport.
+
+The homogeneous-absorber regression initially returned 3,199.34 instead of
+2,022.37 in the red channel. Front-to-back analytic interval transport passes
+that test and the two-layer ordering check, zero-dust identity, channel bounds,
+column monotonicity, seed/order properties, and population additivity.
+
+Ten rays against a 0.25 pc CPU reference show why sampling quality and field
+identity are separate. Moving 100 pc sampling reaches 2.512% RGB error.
+Uniform 10 pc sampling reaches 0.663%, but long GPU paths with both stellar and
+dust evaluation can return all-zero RGBA without a validation error. Short
+paths and the independent transmittance graph agree with the CPU. Expanding
+fixed arm windings alone does not cure every ray. Sharing stellar and dust
+centerlines, concentrating fine intervals near the plane, and discarding
+further RGB when all transmittance channels fall below `1e-12` passes the
+complete matrix. The actual driver/compiler cause remains unproven.
+
+The settled profile caps intervals at `max(10 pc, 0.1 × warped height)` as well
+as the 100 pc maximum and observer step law. It uses 139–2,524 samples across
+the ten rays, with maximum RGB error 0.7806925%; optical-depth error peaks
+separately at 1.5373267%. Uniform 0.5 pc CPU rays agree with 0.25 pc within
+0.000776% RGB. The input cases and residuals are retained in
+`.scratch/galaxy-m5/convergence-uniform.jsonl` and `convergence-settled.jsonl`.
+The live view refines after eight stable submissions, using accumulated motion
+thresholds so ordinary local drift does not keep it at travel quality.
+
+The full physical GPU suite passes 74 tests in 19 files, including seeded dust
+points, 108 transported ray cases, separate transmittance, short-ray
+convergence, foreground-depth composition, orientation, and resource lifetime.
+The headless self-test passes 12/12. The first full gate finds a pre-existing
+orbital property failure at eccentricity 0.9874839879822216 and
+49.999961414866746 periods. Relative velocity error is
+`2.5500372384223466e-7` against a `2.5499980707433374e-7` bound. The physics,
+spatial, and shared sources are identical to PR #66; direct evaluation of the
+saved counterexample reproduces it there. Position passes. The dust work does
+not change that bound or the solver. The repeated full `pnpm check` passes:
+1,784 regular tests, five slow tests, formatting, lint, types, layering,
+documentation validation, and production build.
+
+The @3 edge-on capture has a dark lane through the warm bulge. The final
+interior capture uses a 640×360 drawing buffer, 160×90 volume and 115,200 target
+bytes, with settled sampling and the same field/kernel versions. Its 2,400 s
+exposure is still a preview, and resolved sprites remain unextinct. The
+captures and reports are in `.scratch/galaxy-m5/`; the inside and outside
+images have different resolutions.
+
+The user observed GPU saturation and OS UI stalls during the larger runs.
+No M5 frame-cost result is accepted. The @2 edge-on control passed submission
+counters at 1920×1080: 29.27–29.37 ms full, 4.335–4.385 ms without volume,
+24.93–24.99 ms added. The @3 40-frame batches timed out or lost their CDP
+connection. Even requests for a single frame recorded 5–10 volume updates,
+and the supposedly disabled volume still recorded 8–10. Those differences
+cannot measure the shader. The cause of the extra submissions remains open.
+A detached browser also returned to display ratio two despite an attached
+`--dpr 1` request; `supersample` was one, so this was not 4× AA. Actual canvas
+and target dimensions must accompany any subsequent measurement.
+
+At the user's request, feature work ends here and performance goes to a fresh
+agent. The reduced-resolution capture had no timing batches, a 45-second
+outer limit, and automatic Chrome shutdown. The test Chrome on port 9335 and
+preview server on 4173 are stopped. The
+[handoff](design/plans/galaxy-performance-handoff.md) distinguishes valid
+arithmetic/capture evidence from invalid timing, records the workload and
+numerical limitations, and leaves the performance design open.
+
+## The galaxy holds its picture and filters its dust (05 Sep 2026)
+
+The M5 handoff's invalid timing had one cause and it was not the shader:
+`measureGpuFrameMs` drains the queue with an `await`, animation frames keep
+presenting under it, and every one goes through the same chain — so a batch
+of one frame recorded five to ten volume draws, and a batch with the backdrop
+hidden recorded eight to ten more, because the frame callback that shows it
+outran the line that hid it. R3F's `setFrameloop('never')` is not a hold:
+`<Canvas>` writes the `frameloop` prop back through `configure` on any render
+of the shell, and a probe here held `never` for 1.5 s with nothing submitted,
+so neither outcome is a property of the flag. `engine/frameHold.ts` is the
+hold every frame consumer reads for itself; `ir.gpu()` takes it before its
+first await. Ten frames asked for are ten submissions, and the hidden
+backdrop is none. **Do not measure through R3F's frameloop again.**
+
+The saturation was the redraw. Measured headlessly on the Apple M5 at a
+480×270 target, a draw was 113 ms face-on, 246 edge-on, 165 and 237 at two
+interior points — 5 ns a sample over 21–47 million samples — and it happened
+on every scene submission whether or not the view had moved. The volume now
+draws on a change of view, field or size, once more to settle after eight
+unchanged submissions, and holds the target between: 0.17 ms a frame at rest
+at 960×540 against 60–80 ms a draw, one observer draw and one settled draw
+per view switch, and one draw a frame through the journey's last third with
+the period at vsync. `ir.galaxy().render()` reports `draws` and `held`.
+
+Attribution through a kernel copy with parts switched off, at 240×135
+edge-on: 58.5 ms whole, 7.4 without the four dust-noise bands, 33.8 without
+the arms, 2.4 with neither. A texel from 40 kpc spans 140 pc and none of the
+64, 16, 4 and 1 pc bands resolves there. The ray now carries the pixel's
+angle; unresolved bands are replaced by their lattice mean `exp(a²σ²/2)`,
+σ² measured at 0.0729 and matching the exact mean to five decimals, and the
+live intervals are floored at half the footprint under the observer and
+settled laws only — never the plane-crossing law, or the young disk renders
+as noise. Edge-on 53 → 10.8 ms moving, 64 → 9.6 settled; interior toward the
+center 51 → 15.9 and 80 → 17.2. Over seventeen edge-on texels the filtered
+sum is 0.994 of the exact one in the plane; the GPU/CPU tests hold within
+the existing 1%; the edge-on plate differs from M5's by an RMSE of 0.86%.
+The field stays `galaxy-field@3`; the port is `galaxy-tsl@4`.
+
+Two measured non-wins, so nobody builds them: an eighth-size travel target
+(16.4 ms at 120×68 against 10.8 at 240×135 — a small draw is bound by its
+longest in-plane rays, not by throughput) and early termination at the
+transmittance floor (the loop body is 4% of a draw). Orbit traces were
+pre-exposed with the scene and bloomed white under the 2,400 s instrument;
+they now carry `integratedSkyGain` and present at one brightness at every
+exposure, held by `orbitTrace.gpu.test.ts` across 10⁶ of pre-exposure. The
+meter still counts them. The rigs are `.scratch/galaxy-perf/` and the record
+is [perf § The galaxy](design/plans/perf.md#the-galaxy). Every browser figure
+is from a 960×540 rig at the user's request.
+
+## Orbit dragging was spending the frame on an invisible sky (06 Sep 2026)
+
+The report was a camera drag that slowed the game until the mouse stopped.
+On the production build at 1920×1080, DPR 1, Apple M5, the occluded rig
+reproduced 62.47 ms mean orbit frames and 55.69 ms free-look frames against
+16.67 ms at rest. The simulation took 0.29 ms during orbit rotation and
+terrain visited zero nodes. Every one of the 35 frames in a 2.2-second drag
+window redrew the galaxy integral. The same motion with the volume hidden
+returned to 16.67 ms. At 960×540, rotation averaged 18.37 ms, which is why the
+smaller rig did not reveal the full regression.
+
+The held-target fix only helped a camera that stopped moving. Ordinary
+Natural views now omit the diffuse volume when the lens and exposure range
+resolve to terrestrial daylight or darker. The test is the lens EV plus the
+bright range reaching the calibration EV, exactly the condition under which
+Natural's clamp admits that calibration. It reads current settings because
+the published exposure is one frame old. Brighter Natural settings, metered
+responses, Direct and named galaxy instruments still render the volume.
+
+Two regressions failed before the change. They cover repeated orbit movement,
+unchanged canonical state, and immediate transitions into and out of an
+eligible exposure. The physical-GPU comparison includes foreground PSF mixing
+and a fixed noise tick; three solar viewpoints differ by less than one 8-bit
+display code with and without dust. A long-exposure control remains visibly
+different when the sky is omitted. This bounds the tested scenes, not every
+possible sensor setting or field. The field and kernel versions are unchanged.
+
+The rebuilt production view holds 16.67 ms during orbit and free-look movement
+at 1920×1080 and at a confirmed 2880×1800 drawing buffer, the latter a
+1440×900 CSS viewport at DPR 2. There are zero volume submissions in all four
+windows. The Retina simulation-to-wall-time ratios are 0.9955 during orbit and
+1.0016 during free look, within one fixed tick of real time across each
+2.2-second window; their largest frame is 17.8 ms. The full `pnpm check`
+passes 1,793 regular tests, five slow tests, layering, formatting, lint, types,
+documentation validation and the production build. Both new physical-GPU
+daylight comparisons pass separately.
+
+The browser's face-on instrument remains active at 640×360, with the pinned
+2,000× exposure multiplier, one observer draw and one settled draw. The Earth
+and galaxy captures are retained beside the profiles.
+
+The profiles and comparison script are in `.scratch/orbit-perf/`. Visible
+galaxy draws retain their measured cost; angular caching and the other
+remaining work stay in [the performance plan](design/plans/perf.md#the-galaxy).
 
 ## Known gaps
 

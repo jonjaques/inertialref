@@ -119,19 +119,29 @@ const smooth = (t: number): number => {
   return x * x * (3 - 2 * x)
 }
 
+export interface ArmStrengthOptions {
+  readonly radiusOffsetParsecs?: number
+  readonly widthScale?: number
+}
+
 /** Smooth ridge sum; no field value is selected by nearest-arm identity. */
-export function armStrength(radius: number, beta: number): number {
+export function armStrength(
+  radius: number,
+  beta: number,
+  options: ArmStrengthOptions = {},
+): number {
   let sum = 0
   for (const arm of GALAXY_ARMS) {
     const width =
-      arm.id === 'local'
+      (arm.id === 'local'
         ? 310
-        : Math.max(140, 336 + 36 * (radius / 1000 - 8.15))
+        : Math.max(140, 336 + 36 * (radius / 1000 - 8.15))) *
+      (options.widthScale ?? 1)
     for (let turn = -2; turn <= 1; turn++) {
       const angle = beta + turn * TAU
       const degrees = angle / DEG
       if (degrees <= arm.startDegrees || degrees >= arm.endDegrees) continue
-      const ridge = armRadius(arm, angle)
+      const ridge = armRadius(arm, angle) + (options.radiusOffsetParsecs ?? 0)
       // The centerline may kink, but its transverse profile must not jump.
       // Blend the width projection across ±1° without moving the measured curve.
       const blend = smooth((degrees - arm.kinkDegrees + 1) / 2)

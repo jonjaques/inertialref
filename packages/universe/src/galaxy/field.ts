@@ -1,4 +1,4 @@
-import { PARSEC } from '@inertialref/shared'
+import { invariant, PARSEC } from '@inertialref/shared'
 import {
   algorithm,
   deriveSeed,
@@ -11,9 +11,10 @@ import { SUN_POSITION } from '../catalog/astrometry.ts'
 import { blackbodyColour, type LinearRgb } from '../catalog/photometry.ts'
 import { LOCAL_DENSITY } from '../galaxy.ts'
 import { armStrength } from './arms.ts'
+import { GALAXY_DUST, galaxyDustModulation, galaxyDustProfile } from './dust.ts'
 
 export const GALAXY_FIELD_ALGORITHM = Object.freeze(
-  algorithm('galaxy-field', 2),
+  algorithm('galaxy-field', 3),
 )
 /** Preview versions never enter GENERATION_VERSIONS until population activation. */
 export const GALAXY_FIELD_VERSIONS = Object.freeze(
@@ -59,6 +60,10 @@ export interface GalaxySample {
   /** Bolometric power per volume in solar luminosities/pc³; RGB is an illustrative color split. */
   readonly emissionSolarPerCubicParsec: number
   readonly emissionRgb: LinearRgb
+  /** Extinction coefficient in inverse parsecs at the preview RGB wavelengths. */
+  readonly extinctionPerParsec: LinearRgb
+  readonly dustArmStrength: number
+  readonly dustModulation: number
   readonly warpParsecs: number
   readonly armStrength: number
 }
@@ -66,13 +71,39 @@ export interface GalaxyField {
   readonly versions: typeof GALAXY_FIELD_VERSIONS
   readonly seed: Seed
   readonly normalization: number
-  sample(position: UniverseVector): GalaxySample
+  readonly dustScale: number
+  readonly dustNormalization: number
+  /**
+   * The field at a point. `footprintParsecs` is the width of the pixel
+   * asking, and zero — the default, and every canonical caller — is the
+   * exact field; see `galaxyDustModulation`.
+   */
+  sample(position: UniverseVector, footprintParsecs?: number): GalaxySample
+}
+
+export interface GalaxyFieldOptions {
+  readonly dustScale?: number
 }
 
 /** A normalized field owns only immutable parameters; sampling consumes no random stream. */
-export function createGalaxyField(seed: Seed): GalaxyField {
+export function createGalaxyField(
+  seed: Seed,
+  options: GalaxyFieldOptions = {},
+): GalaxyField {
+  const dustScale = options.dustScale ?? 1
+  invariant(
+    Number.isFinite(dustScale) &&
+      dustScale >= 0 &&
+      dustScale <= GALAXY_DUST.maxScale,
+    'Galaxy dust scale must be between 0 and 8',
+  )
   const ownedSeed = Object.freeze({ ...seed })
   const textureSeed = deriveSeed(ownedSeed, 'galaxy-field:young-arms')
+  const dustSeed = deriveSeed(ownedSeed, 'galaxy-field:dust')
+  // Normalize the smooth warped midplane, independent of its local texture.
+  const dustNormalization =
+    GALAXY_DUST.solarExtinctionPerParsec /
+    galaxyDustProfile(8178, 0, 0, 1).density
   const raw = (position: UniverseVector) => {
     const meters = UV.approxMeters(position)
     const x = meters.x / PARSEC,
@@ -110,7 +141,7 @@ export function createGalaxyField(seed: Seed): GalaxyField {
         Math.exp(-((radius / 5000) ** 4)),
       halo: 0.001 * ((1 + spheroid / 1000) / (1 + 8178 / 1000)) ** -3.5 * edge,
     }
-    return { populations, warp, arms }
+    return { populations, warp, arms, x, y, z, radius, beta, height, edge }
   }
   const sun = raw(SUN_POSITION)
   const normalization =
@@ -120,8 +151,28 @@ export function createGalaxyField(seed: Seed): GalaxyField {
     versions: GALAXY_FIELD_VERSIONS,
     seed: ownedSeed,
     normalization,
-    sample(position: UniverseVector): GalaxySample {
-      const { populations: rawPopulations, warp, arms } = raw(position)
+    dustScale,
+    dustNormalization,
+    sample(position: UniverseVector, footprintParsecs = 0): GalaxySample {
+      const {
+        populations: rawPopulations,
+        warp,
+        arms,
+        x,
+        y,
+        z,
+        radius,
+        beta,
+        height,
+        edge,
+      } = raw(position)
+      const dust = galaxyDustProfile(radius, beta, height, edge)
+      const dustModulation =
+        dustScale === 0
+          ? 1
+          : galaxyDustModulation(dustSeed, x, y, z, footprintParsecs)
+      const extinction =
+        dustScale * dustNormalization * dust.density * dustModulation
       const populations = {} as Record<GalaxyPopulation, number>
       let total = 0,
         emission = 0,
@@ -147,6 +198,13 @@ export function createGalaxyField(seed: Seed): GalaxyField {
         totalPerCubicParsec: total,
         emissionSolarPerCubicParsec: emission,
         emissionRgb: { r, g, b },
+        extinctionPerParsec: {
+          r: extinction * GALAXY_DUST.extinctionRgb.r,
+          g: extinction * GALAXY_DUST.extinctionRgb.g,
+          b: extinction * GALAXY_DUST.extinctionRgb.b,
+        },
+        dustArmStrength: dust.arms,
+        dustModulation,
         warpParsecs: warp,
         armStrength: arms,
       }

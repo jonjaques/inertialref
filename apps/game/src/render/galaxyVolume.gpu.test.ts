@@ -18,7 +18,11 @@ import {
   GALAXY_VIEWS,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import { createGalaxyBackdrop, GalaxyVolumeNode } from './galaxyVolume.ts'
+import {
+  createGalaxyBackdrop,
+  GalaxyVolumeNode,
+  GALAXY_SETTLE_SUBMISSIONS,
+} from './galaxyVolume.ts'
 import { createSensor, declareSceneTarget } from './sensor.ts'
 import { installToneCurve } from './tonemap.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
@@ -81,19 +85,25 @@ it('updates every sensor submission and composes foreground depth at full resolu
     body.visible = false
     sensor.render(output)
     const clear = await gpu.read(output)
-    expect(volume.diagnostics.submissions).toBe(1)
+    expect(volume.diagnostics).toMatchObject({ submissions: 1, draws: 1 })
     expect(clear.at(32, 32)[0]).toBeGreaterThan(0.1)
     const presented = gpu.pipelinesBuilt()
     body.visible = true
     sensor.render(output)
     const covered = await gpu.read(output)
-    expect(volume.diagnostics.submissions).toBe(2)
+    // The view has not changed, so the second submission composes the held
+    // target rather than drawing the volume again.
+    expect(volume.diagnostics).toMatchObject({
+      submissions: 2,
+      draws: 1,
+      held: true,
+    })
     expect(covered.at(32, 32)[0]).toBeLessThan(clear.at(32, 32)[0] * 0.02)
     expect(covered.at(24, 32)[0]).toBeGreaterThan(clear.at(24, 32)[0] * 0.9)
     sensor.render(output)
     const repeated = await gpu.read(output)
     expect(repeated.at(24, 32)).toEqual(covered.at(24, 32))
-    expect(volume.diagnostics.submissions).toBe(3)
+    expect(volume.diagnostics).toMatchObject({ submissions: 3, draws: 1 })
     expect(gpu.pipelinesBuilt()).toBe(presented)
     // One float readback output variant, plus r185's first cached Fn ordering
     // change. Subsequent submissions must build no more pipelines.
@@ -108,8 +118,18 @@ it('updates every sensor submission and composes foreground depth at full resolu
       width: 24,
       height: 16,
       submissions: 4,
+      draws: 2,
+      settled: false,
     })
     expect(resized.at(30, 30)[3]).toBe(1)
+    // Unchanged submissions settle the view once, and then hold it.
+    for (let i = 0; i <= GALAXY_SETTLE_SUBMISSIONS; i++) sensor.render(output)
+    await gpu.read(output)
+    expect(volume.diagnostics).toMatchObject({
+      draws: 3,
+      held: true,
+      settled: true,
+    })
   } finally {
     sensor.dispose()
     volume.dispose()

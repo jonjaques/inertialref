@@ -1,15 +1,9 @@
 import { useMemo, useRef } from 'react'
-import {
-  BufferAttribute,
-  BufferGeometry,
-  type Group,
-  Line,
-  LineBasicNodeMaterial,
-} from 'three/webgpu'
+import { BufferAttribute, BufferGeometry, type Group, Line } from 'three/webgpu'
 import { UV, Vec } from '@inertialref/spatial'
 import { placePathInto } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { sensorRadiance } from '../render/radiance.ts'
+import { createOrbitTraceMaterial } from '../render/orbitTrace.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /*
@@ -32,19 +26,10 @@ const ORBIT_CAPACITY = 4096
 export function OrbitTraces({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const lines = useRef(new Map<string, Line>())
-  const material = useMemo(() => {
-    // Pre-exposed with the rest of the scene: a trace left at unit gain sits
-    // 53× below its neighbours under Direct and follows the meter under
-    // Neutral, so it vanishes exactly when the picture is exposed for a body.
-    const line = sensorRadiance(new LineBasicNodeMaterial())
-    line.transparent = true
-    // Additive would bloom into a bright wash where the inner planets' orbits
-    // overlap; a low-alpha normal blend keeps ten traces readable as ten.
-    line.opacity = 0.32
-    line.depthWrite = false
-    line.color.setRGB(0.35, 0.62, 0.85)
-    return line
-  }, [])
+  // Context over the picture at a fixed brightness, whatever the exposure —
+  // `render/orbitTrace.ts` says why a pre-exposed trace was wrong at both
+  // ends of the lens's range.
+  const material = useMemo(() => createOrbitTraceMaterial(), [])
 
   useTimedFrame('orbitTraces', () => {
     const parent = group.current

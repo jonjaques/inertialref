@@ -10,8 +10,10 @@ import {
 } from 'three/webgpu'
 import { createGalaxyField } from '@inertialref/universe'
 import { rootSeed } from '@inertialref/procedural'
+import { PARSEC } from '@inertialref/shared'
+import { UV, vec3 } from '@inertialref/spatial'
 import { GALAXY_VIEWS } from '@inertialref/rendering'
-import { GalaxyVolumeNode } from './galaxyVolume.ts'
+import { GalaxyVolumeNode, GALAXY_SETTLE_SUBMISSIONS } from './galaxyVolume.ts'
 
 function recorder() {
   const initial = new RenderTarget()
@@ -45,6 +47,121 @@ function recorder() {
 const field = createGalaxyField(rootSeed('inertialref'))
 const view = GALAXY_VIEWS['face-on']
 
+it('settles to fine transport, tolerates local drift, and resets after accumulated travel', async () => {
+  const volume = new GalaxyVolumeNode(field)
+  const { renderer, initial } = recorder()
+  const frame = { renderer } as unknown as NodeFrame
+  await volume.warm(renderer as unknown as WebGPURenderer)
+  for (let i = 0; i <= GALAXY_SETTLE_SUBMISSIONS; i++) {
+    volume.configure(
+      {
+        ...view.pose,
+        position: UV.translate(view.pose.position, vec3(i * 1000, 0, 0)),
+      },
+      view.lens,
+    )
+    volume.updateBefore(frame)
+  }
+  expect(volume.diagnostics).toMatchObject({
+    maxStepParsecs: 100,
+    dustStepParsecs: 10,
+    settled: true,
+    emissionOnly: false,
+    dustScale: 1,
+    resolvedStarExtinction: false,
+  })
+  const pose = {
+    ...view.pose,
+    position: UV.translate(view.pose.position, vec3(0.02 * PARSEC, 0, 0)),
+  }
+  volume.configure(pose, view.lens)
+  volume.updateBefore(frame)
+  expect(volume.diagnostics).toMatchObject({
+    maxStepParsecs: 100,
+    settled: false,
+  })
+  for (let i = 0; i < GALAXY_SETTLE_SUBMISSIONS; i++) {
+    volume.configure(pose, view.lens)
+    volume.updateBefore(frame)
+  }
+  expect(volume.diagnostics.settled).toBe(true)
+  volume.configure(
+    pose,
+    view.lens,
+    createGalaxyField(field.seed, { dustScale: 0 }),
+  )
+  expect(volume.diagnostics).toMatchObject({
+    settled: false,
+    emissionOnly: true,
+    dustScale: 0,
+  })
+  volume.dispose()
+  initial.dispose()
+})
+
+it('draws once per change of view and once more to settle, and holds the target between', async () => {
+  const volume = new GalaxyVolumeNode(field)
+  const { renderer, initial } = recorder()
+  const frame = { renderer } as unknown as NodeFrame
+  await volume.warm(renderer as unknown as WebGPURenderer)
+  volume.configure(view.pose, view.lens)
+  for (let i = 0; i < GALAXY_SETTLE_SUBMISSIONS; i++) volume.updateBefore(frame)
+  // Eight submissions at one pose: the observer draw, then the target held.
+  expect(renderer.render).toHaveBeenCalledTimes(1)
+  expect(volume.diagnostics).toMatchObject({
+    submissions: GALAXY_SETTLE_SUBMISSIONS,
+    draws: 1,
+    held: true,
+    settled: false,
+  })
+  // The ninth settles, and nothing after it draws.
+  for (let i = 0; i < 20; i++) {
+    volume.configure(
+      {
+        ...view.pose,
+        position: UV.translate(view.pose.position, vec3(i * 1000, 0, 0)),
+      },
+      view.lens,
+    )
+    volume.updateBefore(frame)
+  }
+  expect(renderer.render).toHaveBeenCalledTimes(2)
+  expect(volume.diagnostics).toMatchObject({
+    submissions: GALAXY_SETTLE_SUBMISSIONS + 20,
+    draws: 2,
+    held: true,
+    settled: true,
+  })
+  // A change of view draws at once, at travel quality.
+  const moved = {
+    ...view.pose,
+    position: UV.translate(view.pose.position, vec3(0.02 * PARSEC, 0, 0)),
+  }
+  volume.configure(moved, view.lens)
+  volume.updateBefore(frame)
+  expect(renderer.render).toHaveBeenCalledTimes(3)
+  expect(volume.diagnostics).toMatchObject({
+    draws: 3,
+    held: false,
+    settled: false,
+  })
+  // So does a field change at the same pose.
+  volume.configure(
+    moved,
+    view.lens,
+    createGalaxyField(field.seed, { dustScale: 0 }),
+  )
+  volume.updateBefore(frame)
+  expect(renderer.render).toHaveBeenCalledTimes(4)
+  expect(volume.diagnostics).toMatchObject({
+    draws: 4,
+    held: false,
+    emissionOnly: true,
+  })
+  volume.dispose()
+  initial.dispose()
+})
+
 it('owns the same target for warming, quarter-size updates, resize, and retirement', async () => {
   const volume = new GalaxyVolumeNode(field)
   const { renderer, initial, size, compiled } = recorder()
@@ -61,6 +178,10 @@ it('owns the same target for warming, quarter-size updates, resize, and retireme
     height: 270,
     targetBytes: 1036800,
     submissions: 1,
+    draws: 1,
+    held: false,
+    // The face-on lens's 90° over 270 texel rows.
+    pixelAngle: Math.PI / 2 / 270,
   })
   size.set(953, 617)
   volume.updateBefore(frame)
@@ -69,6 +190,7 @@ it('owns the same target for warming, quarter-size updates, resize, and retireme
     height: 155,
     targetBytes: 296360,
     submissions: 2,
+    draws: 2,
   })
   expect(renderer.getRenderTarget()).toBe(initial)
   expect(renderer.getMRT()).toBe(mrt)

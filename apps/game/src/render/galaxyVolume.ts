@@ -27,7 +27,7 @@ import {
   uv,
   vec4,
 } from 'three/tsl'
-import { PARSEC } from '@inertialref/shared'
+import { getTimer, PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
 import {
   GALAXY_LUMINOUS_EFFICACY,
@@ -35,8 +35,14 @@ import {
   verticalFov,
   type Lens,
 } from '@inertialref/rendering'
-import { GALAXY_FIELD_VERSIONS, type GalaxyField } from '@inertialref/universe'
+import {
+  GALAXY_FIELD_VERSIONS,
+  GALAXY_DUST_SETTLED_STEP_PARSECS,
+  type GalaxyField,
+} from '@inertialref/universe'
 import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
+import { timingDetailed } from '../engine/browserTiming.ts'
+import { RENDER_PHASE } from '../engine/frameTiming.ts'
 import {
   createGalaxyKernel,
   GALAXY_KERNEL_VERSION,
@@ -47,10 +53,22 @@ import { sensorRadiance } from './radiance.ts'
 import { warmSensorPass } from './warmup.ts'
 
 export const GALAXY_RESOLUTION_DIVISOR = 4
+export const GALAXY_SETTLE_SUBMISSIONS = 8
+/** Sub-parsec drift must not hold an otherwise stationary instrument at travel quality. */
+export const GALAXY_SAMPLING_MOTION_PARSECS = 0.01
+const SAMPLING_ANGLE = 1e-4
 /** A half-float texel holds thousands of nW m^-2 sr^-1, preserving both halo and bulge. */
 const RADIANCE_UNIT = 1000
 
-/** One deterministic volume draw per scene submission; no history or borrowed targets. */
+/** Each draw is an entry on the Render track, so a trace says when the volume drew and at what quality. */
+const timer = getTimer('game.render')
+
+/**
+ * A deterministic volume draw whenever the view changes, held in its own
+ * target until it changes again; no history, no reprojection, no borrowed
+ * targets. Two draws per change of view: the observer profile at once, and
+ * the settled one after `GALAXY_SETTLE_SUBMISSIONS` unchanged submissions.
+ */
 export class GalaxyVolumeNode extends TempNode<'vec4'> {
   static get type() {
     return 'GalaxyVolumeNode'
@@ -67,6 +85,9 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   readonly #up = uniform(new Vector3(0, 1, 0))
   readonly #forward = uniform(new Vector3(0, 0, -1))
   readonly #plane = uniform(new Vector2(1, 1))
+  readonly #sampling = uniform(1, 'uint')
+  /** The angle one target texel subtends, so the kernel filters dust to what the texel can show. */
+  readonly #pixelAngle = uniform(0)
   readonly #kernel: ReturnType<typeof createGalaxyKernel>
   readonly outputTexture = passTexture(
     this as unknown as PassNode,
@@ -79,8 +100,17 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   #active = false
   #fov = 1
   #submissions = 0
+  #draws = 0
+  /** The target does not hold this view, field and size. */
+  #dirty = true
+  #held = false
+  /** The sampling the target was last drawn with; 0 before the first draw. */
+  #drawnSampling = 0
   #warm: Promise<void> | null = null
   #ready = false
+  #stableSubmissions = 0
+  #samplingPose: ObserverPose | null = null
+  #samplingFov = 0
 
   constructor(field: GalaxyField) {
     super('vec4')
@@ -103,7 +133,16 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       .add(this.#right.mul(screen.x.mul(this.#plane.x)))
       .add(this.#up.mul(screen.y.mul(this.#plane.y)))
     this.#material.fragmentNode = vec4(
-      this.#kernel.integrate(this.#origin, direction).rgb.div(RADIANCE_UNIT),
+      this.#kernel
+        .integrate(
+          this.#origin,
+          direction,
+          100000,
+          this.#sampling,
+          GALAXY_MAX_STEP_PARSECS,
+          this.#pixelAngle,
+        )
+        .rgb.div(RADIANCE_UNIT),
       1,
     )
     this.#material.name = 'Galaxy integral'
@@ -114,12 +153,40 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   }
 
   configure(pose: ObserverPose | null, lens: Lens, field = this.#field): void {
+    const previous = this.#samplingPose
+    if (
+      pose === null ||
+      previous === null ||
+      field !== this.#field ||
+      UV.distance(pose.position, previous.position) >
+        GALAXY_SAMPLING_MOTION_PARSECS * PARSEC ||
+      Math.abs(
+        pose.orientation.x * previous.orientation.x +
+          pose.orientation.y * previous.orientation.y +
+          pose.orientation.z * previous.orientation.z +
+          pose.orientation.w * previous.orientation.w,
+      ) < Math.cos(SAMPLING_ANGLE / 2) ||
+      Math.abs(verticalFov(lens) - this.#samplingFov) > SAMPLING_ANGLE
+    ) {
+      this.#stableSubmissions = 0
+      this.#sampling.value = 1
+      this.#dirty = true
+      this.#samplingPose =
+        pose === null
+          ? null
+          : {
+              position: { ...pose.position },
+              orientation: { ...pose.orientation },
+            }
+      this.#samplingFov = verticalFov(lens)
+    }
     this.#pose = pose
     this.#lens = lens
     this.#active = pose !== null && !this.#disposed
     if (field !== this.#field) {
       this.#field = field
       this.#kernel.setField(field)
+      this.#dirty = true
     }
     if (pose === null) return
     const p = UV.approxMeters(pose.position)
@@ -142,7 +209,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       coordinateFrame: 'galactocentric',
       orientation: this.#pose?.orientation ?? null,
       lens: this.#lens,
-      sampling: 'observer',
+      sampling: this.#sampling.value === 2 ? 'settled' : 'observer',
       exposure: null,
       instrument: false,
       journey: null,
@@ -159,9 +226,18 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
         : this.#target.width * this.#target.height * 8,
       resolutionDivisor: GALAXY_RESOLUTION_DIVISOR,
       maxStepParsecs: GALAXY_MAX_STEP_PARSECS,
+      dustStepParsecs:
+        this.#sampling.value === 2 ? GALAXY_DUST_SETTLED_STEP_PARSECS : null,
+      settled: this.#sampling.value === 2,
       maxSteps: GALAXY_MAX_STEPS,
       submissions: this.#submissions,
-      emissionOnly: true,
+      draws: this.#draws,
+      held: this.#held,
+      pixelAngle: this.#pixelAngle.value,
+      emissionOnly: this.#field.dustScale === 0,
+      dustScale: this.#field.dustScale,
+      dustNormalization: this.#field.dustNormalization,
+      resolvedStarExtinction: false,
       originParsecs: this.#origin.value.toArray(),
     }
   }
@@ -183,12 +259,35 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
 
   override updateBefore({ renderer }: NodeFrame): undefined {
     if (renderer === null || !this.active || !this.ready) return
+    this.#submissions++
+    this.#stableSubmissions++
     const size = renderer.getDrawingBufferSize(this.#size)
     const width = Math.max(1, Math.ceil(size.x / GALAXY_RESOLUTION_DIVISOR))
     const height = Math.max(1, Math.ceil(size.y / GALAXY_RESOLUTION_DIVISOR))
-    this.#target.setSize(width, height)
+    if (width !== this.#target.width || height !== this.#target.height) {
+      // `setSize` replaces the texture, and whatever it held goes with it.
+      this.#target.setSize(width, height)
+      this.#dirty = true
+    }
+    const sampling = this.#stableSubmissions > GALAXY_SETTLE_SUBMISSIONS ? 2 : 1
+    /*
+     * The same pose, field and size draw the same texels, so a target drawn
+     * at them already holds the frame, and drawing it again buys nothing at
+     * the whole volume's price — every frame, for as long as the instrument
+     * holds still. Measured headlessly on an Apple M5 at a 480×270 target:
+     * 113–357 ms a draw across the face-on, edge-on and two interior points,
+     * which at a stationary edge-on view is a GPU saturated at four frames a
+     * second by a picture that is not changing.
+     */
+    if (!this.#dirty && (sampling === 1 || this.#drawnSampling === 2)) {
+      this.#held = true
+      return
+    }
+    this.#sampling.value = sampling
     const half = Math.tan(this.#fov / 2)
     this.#plane.value.set((half * size.x) / Math.max(1, size.y), half)
+    this.#pixelAngle.value = this.#fov / height
+    const started = timer.on ? performance.now() : 0
     const previous = renderer.getRenderTarget(),
       mrt = renderer.getMRT()
     const tone = renderer.toneMapping,
@@ -201,7 +300,10 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       renderer.autoClear = true
       renderer.setRenderTarget(this.#target)
       this.#quad.render(renderer)
-      this.#submissions++
+      this.#draws++
+      this.#drawnSampling = sampling
+      this.#dirty = false
+      this.#held = false
     } finally {
       renderer.setRenderTarget(previous)
       renderer.setMRT(mrt)
@@ -209,6 +311,25 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       renderer.outputColorSpace = color
       renderer.autoClear = clear
     }
+    // The submission's own time, not the GPU's: the draw runs after this
+    // returns. What the entry carries is that a draw happened, and at what
+    // quality — which is the question the trace could not answer before.
+    if (timer.on)
+      timer.measure(
+        'galaxy.draw',
+        started,
+        performance.now(),
+        timingDetailed()
+          ? {
+              ...RENDER_PHASE,
+              properties: [
+                ['sampling', sampling === 2 ? 'settled' : 'observer'],
+                ['target', `${width}×${height}`],
+                ['draw', String(this.#draws)],
+              ],
+            }
+          : RENDER_PHASE,
+      )
   }
 
   override dispose(): void {

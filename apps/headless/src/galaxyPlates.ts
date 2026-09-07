@@ -24,7 +24,7 @@ export async function writeGalaxyPlates(
       scaleNanowatts: DISPLAY_SCALE,
       ceilingNanowatts: DISPLAY_CEILING,
       response:
-        'asinh(channel / scale) / asinh(ceiling / scale), then sRGB; illustrative bolometric RGB, no dust',
+        'asinh(channel / scale) / asinh(ceiling / scale), then sRGB; illustrative RGB with wavelength-dependent dust transport',
     },
     plates: [] as unknown[],
   }
