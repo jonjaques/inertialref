@@ -27,6 +27,7 @@ import { sensorRadiance } from './radiance.ts'
 import { createHistogramMeter } from './meter.ts'
 import { composeSky } from './enhancedSky.ts'
 import { installToneCurve } from './tonemap.ts'
+import { createRenderOrigin, rebase, UV } from '@inertialref/spatial'
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -125,6 +126,61 @@ it('retains faint radiance beside a bright silhouette before one output transfor
   }
 })
 afterAll(() => gpu.dispose())
+
+it('keeps metered exposure when continuous camera motion rebases the scene', async () => {
+  const renderer = gpu.renderer
+  renderer.setSize(32, 32, false)
+  declareSceneTarget(renderer, { samples: 0, optics: true })
+  installToneCurve(renderer, 1)
+  const scene = new Scene()
+  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 10)
+  camera.position.set(4090, 0, 2)
+  camera.updateMatrixWorld()
+  const material = sensorRadiance(new MeshBasicNodeMaterial())
+  material.colorNode = vec3(0.003)
+  const ground = new Mesh(new PlaneGeometry(2, 2), material)
+  ground.position.x = 4090
+  scene.add(ground)
+  let origin = createRenderOrigin(UV.UNIVERSE_ORIGIN)
+  let time = 0
+  const sensor = createSensor(renderer, scene, camera, () => ({
+    lens: GALAXY_VIEWS['edge-on'].lens,
+    settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'automatic' },
+    time,
+    headroom: 1,
+    pinned: null,
+    noiseTick: 0,
+    renderOrigin: origin,
+  }))
+  const target = new RenderTarget(32, 32, { type: FloatType })
+  try {
+    await sensor.warm()
+    for (let frame = 0; frame < 60; frame++) {
+      time += 0.1
+      sensor.render(target)
+      await gpu.read(target)
+    }
+    expect(sensor.exposure!.metered).toBe(true)
+    const before = sensor.exposure!.effectiveEV
+    expect(before).toBeLessThan(13)
+    // A homogeneous field keeps the photograph fixed as the physical eye moves
+    // ten meters. The render coordinate jumps by 4086 m at the snapped origin.
+    origin = rebase(origin, UV.fromMeters(4100, 0, 2))
+    camera.position.x = 4
+    camera.updateMatrixWorld()
+    ground.position.x = 4
+    time += 0.1
+    sensor.render(target)
+    expect(sensor.exposure!.metered).toBe(true)
+    expect(Math.abs(sensor.exposure!.effectiveEV - before)).toBeLessThan(0.1)
+    await gpu.read(target)
+  } finally {
+    sensor.dispose()
+    target.dispose()
+    ground.geometry.dispose()
+    material.dispose()
+  }
+})
 
 it('excludes visible instrument pixels from the physical histogram', async () => {
   declareSceneTarget(gpu.renderer, { samples: 0, optics: true })
