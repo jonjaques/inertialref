@@ -282,6 +282,7 @@ describe('the service worker', () => {
       new Map<string, unknown>([
         [`${ORIGIN}/assets/index-e5f6a7b8.js`, 'new chunk'],
         [`${ORIGIN}/assets/stars-150ly-c9d0.irsc`, 'catalogue'],
+        [`${ORIGIN}/assets/stars-sky-3ab8.irsc`, 'sky'],
         // Unhashed, so a copy *could* be stale — it must not migrate.
         [`${ORIGIN}/index.html`, 'old shell'],
       ]),
@@ -297,6 +298,7 @@ describe('the service worker', () => {
     expect(rescued?.get(`${ORIGIN}/assets/stars-150ly-c9d0.irsc`)).toBe(
       'catalogue',
     )
+    expect(rescued?.get(`${ORIGIN}/assets/stars-sky-3ab8.irsc`)).toBe('sky')
     expect(rescued?.has(`${ORIGIN}/index.html`)).toBe(false)
     expect(sw.deleted).toEqual(['inertialref-oldbuild'])
   })

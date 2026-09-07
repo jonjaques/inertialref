@@ -1,21 +1,25 @@
 import { readFileSync } from 'node:fs'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { LIGHT_YEAR } from '@inertialref/shared'
+import { LIGHT_YEAR, PARSEC } from '@inertialref/shared'
 import { rootSeed } from '@inertialref/procedural'
 import { UV } from '@inertialref/spatial'
 import {
   catalogStub,
   cellOf,
   cellsWithin,
+  equatorialToGalactic,
+  galacticToCartesian,
   generateCell,
   galaxySeedOf,
   generateSystem,
+  heliocentricToUniverse,
   isUnstableId,
   MILKY_WAY,
   orbitalOrder,
   readCatalog,
   type StarCatalog,
+  SUN_POSITION,
   systemsWithin,
   utf8,
 } from '@inertialref/universe'
@@ -38,18 +42,34 @@ import { chooseCommonName } from './naming.ts'
  */
 
 const ASSET = new URL('../../../data/catalog/stars-150ly.irsc', import.meta.url)
+const SKY_ASSET = new URL(
+  '../../../data/catalog/stars-sky.irsc',
+  import.meta.url,
+)
+const MANIFEST = new URL('../../../data/catalog/manifest.json', import.meta.url)
 
+/*
+ * Two readings of the same files. `volume()` is the 150 ly file alone, which
+ * is what every claim about the neighbourhood is a claim about; `catalog()` is
+ * the pair as a host loads them, which is what the sky's claims are about and
+ * what the survey checks are held against.
+ */
+let volumeOnly: StarCatalog | null = null
+const volume = (): StarCatalog =>
+  (volumeOnly ??= readCatalog(readFileSync(ASSET)))
 let cached: StarCatalog | null = null
-const catalog = (): StarCatalog => (cached ??= readCatalog(readFileSync(ASSET)))
+const catalog = (): StarCatalog =>
+  (cached ??= readCatalog(readFileSync(ASSET), readFileSync(SKY_ASSET)))
 
 const ROOT = rootSeed('inertialref')
 const GALAXY_SEED = galaxySeedOf(ROOT)
 
 describe('the vendored catalog', () => {
   it('covers the volume it claims to', () => {
-    const c = catalog()
+    const c = volume()
     expect(c.metadata.radiusLightYears).toBe(150)
     expect(c.stars.length).toBeGreaterThan(7_000)
+    expect(c.sky).toEqual([])
     for (const star of c.stars)
       expect(star.distanceLightYears).toBeLessThanOrEqual(150.001)
   })
@@ -136,6 +156,197 @@ describe('the vendored catalog', () => {
     const bare = c.stars.filter((s) => s.name === (s.id as string)).length
     expect(bare / c.stars.length).toBeLessThan(0.01)
     for (const star of c.stars) expect(star.name).not.toBe('')
+  })
+})
+
+describe('the sky asset', () => {
+  /** Apparent visual magnitude from the record: M + 5 log₁₀(d / 10 pc). */
+  const apparentMagnitude = (star: {
+    distanceLightYears: number
+    physical: { absoluteMagnitude: number | null }
+  }): number =>
+    (star.physical.absoluteMagnitude ?? Number.NaN) +
+    5 * Math.log10((star.distanceLightYears * LIGHT_YEAR) / PARSEC / 10)
+
+  it('holds the naked-eye sky beyond the volume, and nothing else', () => {
+    const c = catalog()
+    expect(c.metadata.sky).toEqual({
+      beyondLightYears: 150,
+      apparentMagnitudeLimit: 6.5,
+    })
+    expect(c.sky.length).toBeGreaterThan(7_000)
+    expect(c.stars.length).toBe(volume().stars.length + c.sky.length)
+    for (const star of c.sky) {
+      expect(star.distanceLightYears, star.name).toBeGreaterThan(150)
+      // The magnitude is stored to 0.01 and the position to 1 AU, so the
+      // recomputed apparent magnitude sits within 0.02 of the source's.
+      expect(apparentMagnitude(star), star.name).toBeLessThanOrEqual(6.52)
+    }
+  })
+
+  it('carries the attribution the license requires, for its own modification', () => {
+    const c = catalog()
+    const attribution = c.metadata.attribution.join(' ')
+    expect(attribution).toContain('apparent magnitude')
+    expect(attribution).toContain('CC BY-SA 4.0')
+    const skyOnly = readCatalog(readFileSync(ASSET), readFileSync(SKY_ASSET))
+    expect(skyOnly.version).toMatch(
+      /^hyg-4\.4\+nea-[0-9a-f]{8}\+sky-[0-9a-f]{8}$/,
+    )
+  })
+
+  /*
+   * Orion's seven brightest, at their published J2000 positions.
+   *
+   * The assertion a player can check against the sky. Each direction from Sol
+   * is compared with the published right ascension and declination run
+   * through the same rotation the ingest uses, so this holds the ingest's
+   * *transcription* — the right HYG row, the right column, hours and not
+   * degrees — to a published fact. The rotation itself is checked below by a
+   * separation that no rotation can change.
+   */
+  const ORION: readonly [string, string, number, number][] = [
+    // id, name, RA °, Dec °
+    ['HIP27989', 'Betelgeuse', 88.7929, 7.4071],
+    ['HIP24436', 'Rigel', 78.6345, -8.2016],
+    ['HIP25336', 'Bellatrix', 81.2828, 6.3497],
+    ['HIP25930', 'Mintaka', 83.0017, -0.2991],
+    ['HIP26311', 'Alnilam', 84.0534, -1.2019],
+    ['HIP26727', 'Alnitak', 85.1897, -1.9426],
+    ['HIP27366', 'Saiph', 86.9391, -9.6696],
+  ]
+
+  const DEG = Math.PI / 180
+
+  /** Heliocentric direction of a catalog star, in simulation axes. */
+  const directionOf = (position: ReturnType<typeof heliocentricToUniverse>) => {
+    const p = UV.approxMeters(position)
+    const s = UV.approxMeters(SUN_POSITION)
+    const d = { x: p.x - s.x, y: p.y - s.y, z: p.z - s.z }
+    const length = Math.hypot(d.x, d.y, d.z)
+    return { x: d.x / length, y: d.y / length, z: d.z / length }
+  }
+
+  const separationDeg = (
+    a: { x: number; y: number; z: number },
+    b: { x: number; y: number; z: number },
+  ): number =>
+    Math.acos(Math.min(1, Math.max(-1, a.x * b.x + a.y * b.y + a.z * b.z))) /
+    DEG
+
+  it.each(ORION)(
+    'puts %s, %s, at its published direction from Earth',
+    (id, name, ra, dec) => {
+      const star = catalog().get(id as never)
+      expect(star, id).toBeDefined()
+      expect(star?.name).toBe(name)
+      expect(catalog().sky).toContain(star)
+      if (star === undefined) throw new Error(id)
+      // At the star's own distance, not a unit vector: a universe position is
+      // 2.5 × 10²⁰ m from the origin, where a double resolves to tens of
+      // kilometres, and a one-metre offset from the Sun is rounding noise.
+      const published = galacticToCartesian(
+        equatorialToGalactic(ra, dec),
+        star.distanceLightYears * LIGHT_YEAR,
+      )
+      const expected = directionOf(
+        heliocentricToUniverse(published.x, published.y, published.z),
+      )
+      // 0.02° is 72 arcseconds: the published positions here are rounded to
+      // a ten-thousandth of a degree, and HYG's agree with them to arcseconds.
+      expect(separationDeg(directionOf(star.position), expected)).toBeLessThan(
+        0.02,
+      )
+    },
+  )
+
+  it('separates Betelgeuse from Rigel by the angle the sky does', () => {
+    // 18.6° between the shoulder and the foot, from the published
+    // coordinates by the spherical law of cosines — a number no rotation of
+    // the frame can change, so this is the check on the rotation itself.
+    const c = catalog()
+    const betelgeuse = c.get('HIP27989' as never)
+    const rigel = c.get('HIP24436' as never)
+    if (betelgeuse === undefined || rigel === undefined)
+      throw new Error('Orion')
+    expect(
+      separationDeg(
+        directionOf(betelgeuse.position),
+        directionOf(rigel.position),
+      ),
+    ).toBeCloseTo(18.62, 1)
+  })
+
+  it('shares no id with the volume, and resolves each of its own', () => {
+    const c = catalog()
+    const v = volume()
+    for (const star of c.sky) {
+      expect(v.get(star.id), star.id).toBeUndefined()
+      expect(c.get(star.id)).toBe(star)
+    }
+    const ids = new Set(c.stars.map((s) => s.id as string))
+    expect(ids.size).toBe(c.stars.length)
+    expect(c.find('Betelgeuse')?.id).toBe('HIP27989')
+    expect(c.find('Deneb')?.id).toBe('HIP102098')
+    expect(c.search('rigel', 1)[0]?.id).toBe('HIP24436')
+    // And the ladder holds: every sky system has a Hipparcos number.
+    expect(c.sky.filter((s) => isUnstableId(s.id)).length).toBe(0)
+  })
+
+  it('changes nothing a survey inside the volume can see', () => {
+    /*
+     * The sky rides beside the volume, not in it. Every cell the 150 ly sphere
+     * touches — 4,096 of them — answers the same with the sky loaded, so the
+     * procedural fill, which subtracts what the catalog holds, is the same
+     * galaxy; and the sweep the engine and the travel panel run comes back with
+     * the same systems.
+     */
+    const c = catalog()
+    const v = volume()
+    const sol = v.get('SOL' as never)
+    if (sol === undefined) throw new Error('no Sol')
+    for (const cell of cellsWithin(sol.position, 150 * LIGHT_YEAR))
+      expect(c.inCell(cell).length).toBe(v.inCell(cell).length)
+    expect(c.within(sol.position, 150 * LIGHT_YEAR).length).toBe(v.stars.length)
+    const ids = (catalogue: StarCatalog) =>
+      systemsWithin(GALAXY_SEED, catalogue, sol.position, 40 * LIGHT_YEAR).map(
+        (s) => s.id,
+      )
+    expect(ids(c)).toEqual(ids(v))
+  })
+
+  it('records the magnitude distribution it measured', () => {
+    // The manifest's histogram is the completeness rule's input, so it is
+    // held to the asset it describes: the same total, and each bin within the
+    // stars whose stored magnitude rounds across a whole number. The file
+    // keeps the absolute magnitude to 0.01, so an apparent magnitude
+    // recomputed from it lands on the other side of an edge for the stars
+    // within that of one — about half a percent of a bin, 14 of the 2,899 at
+    // V 5 when measured.
+    const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8')) as {
+      sky: { systems: number; apparentMagnitudes: Record<string, number> }
+    }
+    const c = catalog()
+    const bins = manifest.sky.apparentMagnitudes
+    expect(Object.values(bins).reduce((n, count) => n + count, 0)).toBe(
+      c.sky.length,
+    )
+    expect(manifest.sky.systems).toBe(c.sky.length)
+    const counted: Record<string, number> = {}
+    for (const star of c.sky) {
+      const bin = String(Math.floor(apparentMagnitude(star)))
+      counted[bin] = (counted[bin] ?? 0) + 1
+    }
+    for (const [bin, count] of Object.entries(bins))
+      expect(
+        Math.abs((counted[bin] ?? 0) - count),
+        `V ${bin}`,
+      ).toBeLessThanOrEqual(Math.max(5, Math.round(count * 0.01)))
+    // The shape the horizon of knowledge is drawn from: each whole magnitude
+    // to the limit holds more systems than the one before it.
+    expect(bins['6']).toBeGreaterThan(bins['5'] ?? 0)
+    expect(bins['5']).toBeGreaterThan(bins['4'] ?? 0)
+    expect(bins['4']).toBeGreaterThan(bins['3'] ?? 0)
   })
 })
 

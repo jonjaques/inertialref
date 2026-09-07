@@ -15,13 +15,13 @@ implemented.
 
 ## What already works
 
-| Area              | Implemented baseline                                                                                                                                                                  | Remaining work for this plan                                                                         |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Coordinates       | Galactocentric coordinates, the Sun's measured position, catalog astrometry and stable addresses.                                                                                     | Use the same frame throughout the volume, star field and camera journey.                             |
-| Local stars       | 7,123 catalog systems within 150 ly; deterministic stars in 20 ly cells; a 100 ly survey cube; up to 20,000 sprites.                                                                  | Distant bright stars, magnitude completeness, larger-scale population selection and dust extinction. |
-| Galaxy            | A simple double-exponential stellar density.                                                                                                                                          | Arms, bar, halo, dust, diffuse emission and a visible disk.                                          |
-| Sensor            | Lens exposure, pre-exposure, histogram metering and clamps, glare halo, defocus, motion, noise, vignetting, lateral color, SDR dither, white balance, response presets and P3 output. | Measure the faint galaxy through those responses and the complete frame cost.                        |
-| Resource lifetime | The reviewed branch gives heightfields fallback ownership, orbital bakes body-identity validity, live canvas-gamut negotiation and optical-pass warm/disposal ownership.              | Apply those contracts to volume targets, cached skies and their retirement.                          |
+| Area              | Implemented baseline                                                                                                                                                                  | Remaining work for this plan                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Coordinates       | Galactocentric coordinates, the Sun's measured position, catalog astrometry and stable addresses.                                                                                     | Use the same frame throughout the volume, star field and camera journey.       |
+| Local stars       | 7,123 catalog systems within 150 ly and the 7,515 naked-eye systems beyond them (M1); deterministic stars in 20 ly cells; a 100 ly survey cube; up to 20,000 sprites.                 | Magnitude completeness, larger-scale population selection and dust extinction. |
+| Galaxy            | A simple double-exponential stellar density.                                                                                                                                          | Arms, bar, halo, dust, diffuse emission and a visible disk.                    |
+| Sensor            | Lens exposure, pre-exposure, histogram metering and clamps, glare halo, defocus, motion, noise, vignetting, lateral color, SDR dither, white balance, response presets and P3 output. | Measure the faint galaxy through those responses and the complete frame cost.  |
+| Resource lifetime | The reviewed branch gives heightfields fallback ownership, orbital bakes body-identity validity, live canvas-gamut negotiation and optical-pass warm/disposal ownership.              | Apply those contracts to volume targets, cached skies and their retirement.    |
 
 Natural retains the production ACES fit, integrated star visibility, and
 analytic Sun glow and streak. Direct uses the lens exposure; the other Composite
@@ -92,19 +92,19 @@ integration branch; M11 decides whether the assembled picture is ready for main.
 
 All rows start **planned**. Fill the evidence columns as work completes.
 
-| Milestone | Session result                                                     | Depends on        | PR / verified commit / evidence |
-| --------- | ------------------------------------------------------------------ | ----------------- | ------------------------------- |
-| M1        | The distant bright sky is cataloged and drawn.                     | Reviewed baseline | Planned                         |
-| M2        | The stellar field has a measurable shape from outside.             | M1                | Planned                         |
-| M3        | The planetarium renders the whole stellar disk.                    | M2                | Planned                         |
-| M4        | The camera travels from Earth to the disk through the sensor.      | M3                | Planned                         |
-| M5        | Shared dust transport dims and reddens the volume.                 | M4                | Planned                         |
-| M6        | Local clouds and photometric checks constrain the sky.             | M5                | Planned                         |
-| M7        | A progressive cached sky replaces the local live march.            | M6                | Planned                         |
-| M8        | Observer motion projects the star shell on the GPU.                | M7                | Planned                         |
-| M9        | Magnitude levels extend the population within a bounded draw.      | M8                | Planned                         |
-| M10       | Resolved stars receive the same dust extinction.                   | M9                | Planned                         |
-| M11       | Temporal rendering and the full journey pass the integration gate. | M10               | Planned                         |
+| Milestone | Session result                                                     | Depends on        | PR / verified commit / evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------- | ------------------------------------------------------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1        | The distant bright sky is cataloged and drawn.                     | Reviewed baseline | [PR #62](https://github.com/jonjaques/inertialref/pull/62) → `codex/galaxy`, from `codex/galaxy-the-bright-sky`; verified commit `1da7335` (gate green locally, 110 files, 1,671 tests). 7,515 systems at V ≤ 6.5 beyond 150 ly, 188 KB brotli; Orion's seven held to published directions within 0.02° and [drawn from 64,000 km above Earth](https://agentic-media-dumpster.jonjaques.com/2026/09/3u9ffd27xa/orion-3-marked.jpg); every cell inside 150 ly unchanged. Measurements in `CONTEXT.md`, 5 Sep 2026. |
+| M2        | The stellar field has a measurable shape from outside.             | M1                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M3        | The planetarium renders the whole stellar disk.                    | M2                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M4        | The camera travels from Earth to the disk through the sensor.      | M3                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M5        | Shared dust transport dims and reddens the volume.                 | M4                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M6        | Local clouds and photometric checks constrain the sky.             | M5                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M7        | A progressive cached sky replaces the local live march.            | M6                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M8        | Observer motion projects the star shell on the GPU.                | M7                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M9        | Magnitude levels extend the population within a bounded draw.      | M8                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M10       | Resolved stars receive the same dust extinction.                   | M9                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| M11       | Temporal rendering and the full journey pass the integration gate. | M10               | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### M1. The distant bright sky
 
@@ -186,7 +186,10 @@ orientation, finite camera/lens values, foreground occlusion and absence of
 black frames or camera jumps. Confirm a frozen camera cannot write canonical
 world state. Capture identical views through the three responses, including a
 bright body beside the faint field. Record exposure limitations here; final
-photometric acceptance waits for M6.
+photometric acceptance waits for M6. One is already measured: from Earth
+orbit under Natural, the sprite ramp anchors on Sol and every other star sits
+at the ramp's floor, so M1's plate shows Orion's seven at their directions but
+not at their magnitudes (`CONTEXT.md`, 5 Sep 2026).
 
 **PR.** `codex/galaxy-earth-to-the-disk` → `codex/galaxy`. Include the cast and
 response comparison. The game now demonstrates its largest scale before sky
@@ -641,15 +644,17 @@ section is the middle.
 **The naked-eye sky is a catalog, not a model.** Betelgeuse is 550 ly out, Rigel
 860, Deneb 2,600: many recognizable constellation stars are beyond the 150 ly
 bundle; each distant source is absent from the current local survey. The ingest
-gains a second asset, `stars-sky.irsc`: every HYG row with V ≤ 6.5 beyond 150
-ly; about 9,000 stars, **60 KB brotli** at the 16-byte record; at their
-published positions, loaded and indexed by cell like the rest. They are catalog
-stars in every sense, resolvable by id, and the only thing that distinguishes
-them is that the travel survey never reaches them. M1 also adds a distant-sky
-selection path to the draw. Loading the asset alone cannot make Orion visible
-because the travel survey never reaches those cells. The extension to V ≤ 8,
-about 40,000 stars and 250 KB, is a measurement of the cold download against its
-4 s budget, not a decision made here.
+has a second asset, `stars-sky.irsc`: every HYG row with V ≤ 6.5 beyond 150 ly;
+measured at 7,515 systems and **188 KB brotli** — the shipped record carries the
+id, the name and the spectral string at 25.6 B per system, not the 16-byte
+record the 60 KB estimate assumed. They are catalog stars in every sense,
+resolvable by id and by name, at their published positions; what distinguishes
+them is that they are indexed for identity and search and not by cell, so the
+travel survey and the procedural fill are unchanged by them (`StarCatalog.sky`
+has the reasoning). The draw joins them to the survey in
+`apps/game/src/engine/starSelection.ts`. The extension to V ≤ 8 is 37,271 HYG
+rows, which at the measured record is about 930 KB brotli; whether the cold
+download's 4 s budget affords that is a measurement not yet taken.
 
 **The completeness rule, as a magnitude.** The initial proposal estimates V 7.5
 inside 150 ly and V 6.5 beyond it. M1 measures the catalog distribution and M9

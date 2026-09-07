@@ -85,10 +85,14 @@ numbers beside it, not a blanket claim about the object.
 The catalog is an **ingest**, not a hand-transcription. ✅ **Built** — see
 [`docs/guides/catalogue.md`](../guides/catalogue.md) for how to operate it.
 `data/catalog/stars-150ly.irsc` holds **7,123 systems and 702 confirmed
-planets**, 179 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
+planets**, 178 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
 Exoplanet Archive and committed. It replaced 18 hand-entered stars, which is the
 swap that file's comment promised would change nothing downstream — it changed
-three signatures and no architecture.
+three signatures and no architecture. Beside it, `stars-sky.irsc` holds the
+**naked-eye sky beyond 150 ly**: 7,515 systems at apparent V ≤ 6.5, 188 KB
+brotli, the farthest at 3,198 ly. The two load as one catalog; the sky's stars
+resolve by id and are drawn from anywhere in the volume, and they stay out of
+the cell index so the procedural fill is the same galaxy with or without them.
 
 | Dataset                    | Provides                                                  | Scale                                                                                                                                                           | License posture                                                                                                                                                                                                    |
 | -------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

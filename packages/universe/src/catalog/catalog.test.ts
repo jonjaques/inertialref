@@ -31,7 +31,14 @@ import {
   type PackedPlanet,
   type PackedStar,
 } from './format.ts'
-import { TEST_CATALOG } from './fixture.ts'
+import {
+  TEST_CATALOG,
+  TEST_CATALOG_WITH_SKY,
+  TEST_SKY,
+  TEST_VOLUME,
+} from './fixture.ts'
+import { loadCatalog } from './starCatalog.ts'
+import { cellOf } from '../cells.ts'
 
 describe('spectral types', () => {
   /*
@@ -439,6 +446,120 @@ describe('the packed format', () => {
     const wrongMagic = bytes.slice()
     wrongMagic[0] = 0
     expect(() => decodeCatalog(wrongMagic)).toThrow(/Not a star catalog/)
+  })
+})
+
+describe('the sky catalog', () => {
+  const LY = 9.4607304725808e15
+
+  it('joins the volume under one version, after it', () => {
+    const c = TEST_CATALOG_WITH_SKY
+    expect(c.version).toBe('fixture-1+sky-fixture-1')
+    expect(c.metadata.sky).toEqual({
+      beyondLightYears: 10,
+      apparentMagnitudeLimit: 6.5,
+    })
+    expect(c.stars.length).toBe(TEST_CATALOG.stars.length + 2)
+    expect(c.sky.map((s) => s.name)).toEqual(['Betelgeuse', 'Rigel'])
+    // The volume's radius is the catalog's; the sky adds no volume.
+    expect(c.radius).toBe(TEST_CATALOG.radius)
+    expect(c.completeRadius).toBe(TEST_CATALOG.completeRadius)
+    // The planet table points at the volume's indices, which the sky's stars
+    // — appended after them — leave where the volume's own file put them.
+    expect(c.get('HIP87937' as never)?.planets.map((p) => p.name)).toEqual([
+      "Barnard's Star b",
+      "Barnard's Star c",
+    ])
+  })
+
+  it('resolves a sky star by id and by every name, and ranks it in search', () => {
+    const c = TEST_CATALOG_WITH_SKY
+    const betelgeuse = c.get('HIP27989' as never)
+    expect(betelgeuse?.name).toBe('Betelgeuse')
+    expect(betelgeuse?.distanceLightYears).toBeCloseTo(497.9, 0)
+    // A red supergiant reads red, from the same photometry as the volume.
+    expect(betelgeuse?.physical.colour.r).toBeGreaterThan(
+      betelgeuse?.physical.colour.b ?? 1,
+    )
+    for (const query of [
+      'Betelgeuse',
+      'Alpha Orionis',
+      'α Ori',
+      '58 Orionis',
+      'HD 39801',
+      'HR 2061',
+    ])
+      expect(c.find(query)?.id, query).toBe('HIP27989')
+    // `rig` alone finds Rigil Kentaurus first, and rightly: search ranks a
+    // prefix match at 4 ly above one at 860.
+    expect(c.search('rigel', 1)[0]?.id).toBe('HIP24436')
+    expect(c.search('rig').map((s) => s.id)).toEqual(['HIP71683', 'HIP24436'])
+    // And the volume alone knows nothing of it.
+    expect(TEST_CATALOG.get('HIP27989' as never)).toBeUndefined()
+  })
+
+  it('keeps the sky out of the cell index', () => {
+    const c = TEST_CATALOG_WITH_SKY
+    const betelgeuse = c.get('HIP27989' as never)
+    if (betelgeuse === undefined) throw new Error('no Betelgeuse')
+    expect(c.inCell(cellOf(betelgeuse.position))).toEqual([])
+    expect(c.within(betelgeuse.position, LY)).toEqual([])
+    // Every cell the volume occupies answers exactly as it does without the
+    // sky, which is what keeps the procedural fill's counts where they are.
+    for (const star of TEST_CATALOG.stars) {
+      const cell = cellOf(star.position)
+      expect(c.inCell(cell).map((s) => s.id)).toEqual(
+        TEST_CATALOG.inCell(cell).map((s) => s.id),
+      )
+    }
+  })
+
+  it('refuses a sky that is not disjoint from the volume', () => {
+    const betelgeuse = TEST_SKY.stars[0] as PackedStar
+    // A sky star inside the volume: the survey would draw it on top of itself.
+    expect(() =>
+      loadCatalog(TEST_VOLUME, {
+        ...TEST_SKY,
+        stars: [{ ...betelgeuse, x: 3 * LY, y: 0, z: 0 }],
+      }),
+    ).toThrow(/inside the 10 ly volume/)
+    // An id both files hold: a system with two records.
+    expect(() =>
+      loadCatalog(TEST_VOLUME, {
+        ...TEST_SKY,
+        stars: [{ ...betelgeuse, id: 'HIP32349' }],
+      }),
+    ).toThrow(/both the volume and the sky/)
+    // A sky beginning past the volume's edge: a shell nobody covers.
+    expect(() =>
+      loadCatalog(TEST_VOLUME, {
+        ...TEST_SKY,
+        metadata: {
+          ...TEST_SKY.metadata,
+          sky: { beyondLightYears: 20, apparentMagnitudeLimit: 6.5 },
+        },
+      }),
+    ).toThrow(/begins at 20 ly/)
+    // A file with no selection is not a sky asset, whatever its stars.
+    expect(() =>
+      loadCatalog(TEST_VOLUME, {
+        ...TEST_SKY,
+        metadata: {
+          version: 'sky-fixture-1',
+          radiusLightYears: 0,
+          completeRadiusLightYears: 0,
+          attribution: [],
+          sources: [],
+        },
+      }),
+    ).toThrow(/selection/)
+    // Planets in the sky would name the volume's stars by index.
+    expect(() =>
+      loadCatalog(TEST_VOLUME, {
+        ...TEST_SKY,
+        planets: TEST_VOLUME.planets,
+      }),
+    ).toThrow(/planets/)
   })
 })
 

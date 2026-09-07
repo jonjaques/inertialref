@@ -216,7 +216,8 @@ in the browser. Twelve capability checks, each reporting a measurement rather
 than a tick, run by CI on every pull request alongside `pnpm check`.
 
 **Real data**, in `data/`: 7,123 real star systems out to 150 light-years from
-HYG v4.4 converted through ICRS → galactic coordinates; 702 confirmed exoplanets
+HYG v4.4 converted through ICRS → galactic coordinates, and the 7,515 naked-eye
+stars beyond that radius so the constellations are the real ones; 702 confirmed exoplanets
 around 443 of them with published orbits, masses and radii; and **129 Solar
 System bodies** — eight planets, nine dwarf planets, fifty asteroids and comets
 and sixty-two moons — with measured radii, oblateness, axial tilts,

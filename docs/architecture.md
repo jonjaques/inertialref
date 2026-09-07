@@ -245,8 +245,9 @@ many workers. [Determinism](concepts/determinism.md) ·
 
 **Except where somebody measured it.** The catalog is a second generation input
 (`docs/design/galaxy.md` Rule 1), and so are `packages/universe/src/solar/` and
-`data/shapes/` — 7,123 real stars, 702 confirmed exoplanets, the Solar System's
-129 bodies, and twenty-five published shape models. The split is not per object
+`data/shapes/` — 7,123 real stars within 150 ly and the 7,515 naked-eye stars
+beyond, 702 confirmed exoplanets, the Solar System's 129 bodies, and
+twenty-five published shape models. The split is not per object
 but per _field_: an `observed` body uses the published number for everything
 somebody published and derives the rest from its own seed, and the absence of a
 value is what decides which. Phobos's whole shape is a measurement; 67P's is a

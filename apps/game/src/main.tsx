@@ -151,8 +151,8 @@ if (root === null) {
  * and a catalog together, so a world constructed before it arrives is a
  * different world and would have to be thrown away and rebuilt — replacing the
  * ship, the frames and the starfield a second or two after the player is already
- * flying. One fetch of a precached 460 KB asset is the cheaper trade, and a
- * failed fetch falls back rather than blocking.
+ * flying. Two concurrent fetches of precached assets, 900 KB together, are the
+ * cheaper trade, and a failed fetch falls back rather than blocking.
  */
 try {
   const catalog = await loadStarCatalog()

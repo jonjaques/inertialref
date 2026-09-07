@@ -17,12 +17,20 @@ import { type CsvTable, number, parseCsv } from './csv.ts'
 import { chooseCommonName, type NameSource } from './naming.ts'
 
 /*
- * HYG + the NASA Exoplanet Archive → one packed catalog.
+ * HYG + the NASA Exoplanet Archive → two packed catalogs.
  *
  * The pipeline is normalize → resolve identity → merge planets → pack, and the
  * middle two steps are where an ingest goes quietly wrong, so both count what
  * they did and the caller prints it. A run that silently drops 30% of the
  * catalog looks exactly like a run that does not, unless it says so.
+ *
+ * Two selections run through it. The **volume** is every row inside a radius,
+ * with the archive's planets merged in; the **sky** is every row beyond that
+ * radius bright enough to be seen from Earth, with no planets — the archive's
+ * query stops at the same radius, and a planet around a star 500 ly out is not
+ * something this game has a use for yet. Both are grouped into systems and
+ * given ids by the same code, so Betelgeuse's address is decided by the same
+ * ladder as Proxima's.
  */
 
 const PARSECS_TO_LIGHT_YEARS = PARSEC / LIGHT_YEAR
@@ -96,7 +104,7 @@ interface HygRow {
   readonly sentinelProperMotion: boolean
 }
 
-function readHyg(table: CsvTable, row: readonly string[]): HygRow | null {
+function readHygRow(table: CsvTable, row: readonly string[]): HygRow | null {
   const distance = number(table, row, 'dist')
   if (distance === null || distance >= NO_PARALLAX_PARSECS) return null
   const bayerRaw = table.cell(row, 'bayer')
@@ -156,34 +164,60 @@ interface HostIndex {
   readonly positions: readonly { ra: number; dec: number; pc: number }[]
 }
 
-export function buildCatalog(
-  hygCsv: string,
-  exoplanetCsv: string,
-  options: BuildOptions,
-): { catalog: PackedCatalog; report: BuildReport } {
-  const hyg = parseCsv(hygCsv)
-  const maxParsecs = options.radiusLightYears / PARSECS_TO_LIGHT_YEARS
+/**
+ * HYG, read once: every row with a usable parallax, and the lookup by HYG id
+ * that grouping needs. Both selections are cut from this, so the 34 MB parse
+ * happens once per ingest rather than once per asset.
+ */
+export interface HygTable {
+  readonly rows: readonly HygRow[]
+  readonly byHygId: ReadonlyMap<string, HygRow>
+  readonly droppedNoParallax: number
+}
 
-  /* --- normalize ------------------------------------------------------- */
-
+export function readHyg(csv: string): HygTable {
+  const hyg = parseCsv(csv)
   let droppedNoParallax = 0
-  let sentinelProperMotions = 0
   const rows: HygRow[] = []
   const byHygId = new Map<string, HygRow>()
   for (const raw of hyg.rows) {
-    const row = readHyg(hyg, raw)
+    const row = readHygRow(hyg, raw)
     if (row === null) {
       droppedNoParallax += 1
       continue
     }
     byHygId.set(row.hygId, row)
-    if (row.distanceParsecs > maxParsecs) continue
-    if (row.sentinelProperMotion) sentinelProperMotions += 1
     rows.push(row)
   }
+  return { rows, byHygId, droppedNoParallax }
+}
 
-  /* --- resolve identity ------------------------------------------------ */
+/** What grouping and packing counted, beside the records they produced. */
+interface PackedSystems {
+  readonly stars: PackedStar[]
+  readonly idToIndex: Map<string, number>
+  /** The primary row of each system, parallel to `stars`. */
+  readonly primaries: HygRow[]
+  readonly duplicateIds: string[]
+  readonly unstableIds: number
+  readonly spectralUnparsed: number
+  readonly multiples: number
+  readonly sentinelProperMotions: number
+}
 
+/**
+ * Group the kept rows into systems and pack one record per system.
+ *
+ * `exclude` names ids that belong to another asset. A companion can straddle a
+ * selection its primary does not — a secondary just past the radius whose
+ * primary is just inside it — and would otherwise come out as a second record
+ * for a system the volume already holds. The caller counts what it excludes.
+ */
+function packSystems(
+  rows: readonly HygRow[],
+  byHygId: ReadonlyMap<string, HygRow>,
+  exclude: (id: string) => boolean = () => false,
+): PackedSystems {
   /*
    * Group components into systems using HYG's own `comp_primary`, which is the
    * HYG id of the system's primary. Deriving the grouping from proximity was
@@ -191,7 +225,9 @@ export function buildCatalog(
    * sky, and a positional rule would merge them permanently and silently.
    */
   const groups = new Map<string, HygRow[]>()
+  let sentinelProperMotions = 0
   for (const row of rows) {
+    if (row.sentinelProperMotion) sentinelProperMotions += 1
     const primary =
       row.compPrimary !== '' && byHygId.has(row.compPrimary)
         ? row.compPrimary
@@ -202,6 +238,7 @@ export function buildCatalog(
   }
 
   const stars: PackedStar[] = []
+  const primaries: HygRow[] = []
   const idToIndex = new Map<string, number>()
   const duplicateIds: string[] = []
   let unstableIds = 0
@@ -230,6 +267,7 @@ export function buildCatalog(
       sourceKey: primary.hygId,
       proper: primary.proper,
     })
+    if (exclude(id)) continue
     if (id.startsWith('HYG')) unstableIds += 1
     if (idToIndex.has(id)) {
       // Two systems cannot share an address. Keeping the first and reporting the
@@ -258,6 +296,7 @@ export function buildCatalog(
     )
 
     idToIndex.set(id, stars.length)
+    primaries.push(primary)
     stars.push({
       id,
       x: cartesian.x,
@@ -282,6 +321,28 @@ export function buildCatalog(
       commonName: chooseCommonName(components.map(nameSource), id),
     })
   }
+
+  return {
+    stars,
+    idToIndex,
+    primaries,
+    duplicateIds,
+    unstableIds,
+    spectralUnparsed,
+    multiples,
+    sentinelProperMotions,
+  }
+}
+
+export function buildCatalog(
+  hyg: HygTable,
+  exoplanetCsv: string,
+  options: BuildOptions,
+): { catalog: PackedCatalog; report: BuildReport } {
+  const maxParsecs = options.radiusLightYears / PARSECS_TO_LIGHT_YEARS
+  const rows = hyg.rows.filter((row) => row.distanceParsecs <= maxParsecs)
+  const packed = packSystems(rows, hyg.byHygId)
+  const { stars, idToIndex } = packed
 
   /* --- merge planets --------------------------------------------------- */
 
@@ -317,23 +378,150 @@ export function buildCatalog(
     report: {
       starsConsidered: rows.length,
       starsKept: stars.length,
-      droppedNoParallax,
+      droppedNoParallax: hyg.droppedNoParallax,
       systems: stars.length,
-      multiples,
+      multiples: packed.multiples,
       withProperName: stars.filter((s) => s.proper !== '').length,
       withSpectralType: stars.filter((s) => s.spectralType !== '').length,
       withColourIndex: stars.filter((s) => s.colourIndex !== null).length,
       withMagnitude: stars.filter((s) => s.absoluteMagnitude !== null).length,
-      unstableIds,
-      duplicateIds,
+      unstableIds: packed.unstableIds,
+      duplicateIds: packed.duplicateIds,
       planetsConsidered: matched + unmatched.length,
       planetsMatched: matched,
       planetsUnmatched: unmatched,
       unmatchedHosts,
       hostSystems,
       matchedBy,
-      spectralUnparsed,
-      sentinelProperMotions,
+      spectralUnparsed: packed.spectralUnparsed,
+      sentinelProperMotions: packed.sentinelProperMotions,
+    },
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* The sky                                                                    */
+/* ------------------------------------------------------------------------- */
+
+export interface SkyBuildOptions {
+  /** Rows at or inside this distance belong to the volume and are left out. */
+  readonly beyondLightYears: number
+  /** Apparent visual magnitude a row must be at or brighter than. */
+  readonly apparentMagnitudeLimit: number
+  readonly version: string
+  /** Every id the volume asset holds. A sky system carrying one is dropped. */
+  readonly volumeIds: ReadonlySet<string>
+}
+
+export interface SkyBuildReport {
+  /** Rows beyond the radius and at or above the magnitude limit. */
+  readonly starsConsidered: number
+  readonly systems: number
+  readonly multiples: number
+  readonly withProperName: number
+  readonly withSpectralType: number
+  readonly withColourIndex: number
+  readonly unstableIds: number
+  readonly duplicateIds: readonly string[]
+  /** Systems left out because the volume asset already holds their id. */
+  readonly inVolume: readonly string[]
+  readonly spectralUnparsed: number
+  readonly sentinelProperMotions: number
+  /**
+   * Systems per whole apparent magnitude, keyed by the floor: `'5'` counts
+   * V 5.00 to 5.99. This is the measurement the completeness rule is fitted
+   * against later, so it is recorded with the asset rather than recomputed.
+   */
+  readonly apparentMagnitudes: Readonly<Record<string, number>>
+  readonly farthestLightYears: number
+  readonly brightest: readonly {
+    readonly id: string
+    readonly name: string
+    readonly apparentMagnitude: number
+    readonly lightYears: number
+  }[]
+}
+
+/**
+ * The naked-eye sky beyond the volume: one record per system, no planets.
+ *
+ * Selected by the row's own apparent magnitude, so a faint companion of a
+ * bright primary is absent and the primary's record carries a component count
+ * of one — the file describes what the limit admits, not what the system
+ * contains. The histogram is over the systems packed, at their primary's
+ * magnitude, which is the number the completeness rule needs.
+ */
+export function buildSkyCatalog(
+  hyg: HygTable,
+  options: SkyBuildOptions,
+): { catalog: PackedCatalog; report: SkyBuildReport } {
+  const minParsecs = options.beyondLightYears / PARSECS_TO_LIGHT_YEARS
+  const rows = hyg.rows.filter(
+    (row) =>
+      row.distanceParsecs > minParsecs &&
+      row.apparentMagnitude <= options.apparentMagnitudeLimit,
+  )
+  const inVolume: string[] = []
+  const packed = packSystems(rows, hyg.byHygId, (id) => {
+    if (!options.volumeIds.has(id)) return false
+    inVolume.push(id)
+    return true
+  })
+
+  const apparentMagnitudes: Record<string, number> = {}
+  let farthest = 0
+  for (const primary of packed.primaries) {
+    const bin = String(Math.floor(primary.apparentMagnitude))
+    apparentMagnitudes[bin] = (apparentMagnitudes[bin] ?? 0) + 1
+    farthest = Math.max(
+      farthest,
+      primary.distanceParsecs * PARSECS_TO_LIGHT_YEARS,
+    )
+  }
+  const brightest = packed.primaries
+    .map((primary, i) => ({
+      id: (packed.stars[i] as PackedStar).id,
+      name: (packed.stars[i] as PackedStar).commonName,
+      apparentMagnitude: primary.apparentMagnitude,
+      lightYears: primary.distanceParsecs * PARSECS_TO_LIGHT_YEARS,
+    }))
+    .sort((a, b) => a.apparentMagnitude - b.apparentMagnitude)
+    .slice(0, 10)
+
+  const { stars } = packed
+  return {
+    catalog: {
+      metadata: {
+        version: options.version,
+        // No volume, and complete nowhere: the file holds the bright few of
+        // every cell it touches. `StarCatalog.sky` is what reads this.
+        radiusLightYears: 0,
+        completeRadiusLightYears: 0,
+        attribution: SKY_ATTRIBUTION,
+        sources: [],
+        sky: {
+          beyondLightYears: options.beyondLightYears,
+          apparentMagnitudeLimit: options.apparentMagnitudeLimit,
+        },
+      },
+      stars,
+      planets: [],
+    },
+    report: {
+      starsConsidered: rows.length,
+      systems: stars.length,
+      multiples: packed.multiples,
+      withProperName: stars.filter((s) => s.proper !== '').length,
+      withSpectralType: stars.filter((s) => s.spectralType !== '').length,
+      withColourIndex: stars.filter((s) => s.colourIndex !== null).length,
+      unstableIds: packed.unstableIds,
+      duplicateIds: packed.duplicateIds,
+      inVolume,
+      spectralUnparsed: packed.spectralUnparsed,
+      sentinelProperMotions: packed.sentinelProperMotions,
+      apparentMagnitudes,
+      farthestLightYears: farthest,
+      brightest,
     },
   }
 }
@@ -578,4 +766,14 @@ const ATTRIBUTION: readonly string[] = [
     'which is operated by the California Institute of Technology, under ' +
     'contract with the National Aeronautics and Space Administration under ' +
     'the Exoplanet Exploration Program.',
+]
+
+/** The sky asset's notice: the same source, a different modification. */
+const SKY_ATTRIBUTION: readonly string[] = [
+  'Star data: The HYG Database v4.4 by David Nash (astronexus), ' +
+    'https://codeberg.org/astronexus/hyg — licensed CC BY-SA 4.0, ' +
+    'https://creativecommons.org/licenses/by-sa/4.0/. Modified: filtered by ' +
+    'apparent magnitude and distance, grouped into systems, re-projected ' +
+    'into galactic coordinates and repacked. This derived database is ' +
+    'likewise CC BY-SA 4.0.',
 ]

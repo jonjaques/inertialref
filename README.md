@@ -113,8 +113,8 @@ Neither is needed to run the game, the tests or the build.
   in at build time (`pnpm media:pull`), never committed. Without it the cutscene
   plays silent, which is what a fork gets and is a supported outcome rather than
   a failure. `scripts/media.mjs` has the reasoning.
-- **Raw catalog downloads.** 34 MB of HYG to produce a 458 KB asset, and the
-  asset is committed. `pnpm catalog:fetch` re-downloads them if you want to
+- **Raw catalog downloads.** 34 MB of HYG to produce 907 KB of assets, and the
+  assets are committed. `pnpm catalog:fetch` re-downloads them if you want to
   rebuild.
 
 </details>
