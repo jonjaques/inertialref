@@ -154,3 +154,23 @@ it('retires completed and pending light when the resolved selection changes', ()
   expect(cache.selected).not.toBeNull()
   expect(cache.next()).toBeNull()
 })
+
+it('publishes an archived cube only into its still-current request', () => {
+  const cache = new GalaxyCacheSchedule({
+    initialFaceSize: 16,
+    faceSize: 32,
+    tileSize: 8,
+  })
+  cache.configure(SUN_POSITION, field)
+  const request = cache.next()!
+  expect(cache.restore(request, SUN_POSITION, 32)).toBe(true)
+  expect(cache.selected?.faceSize).toBe(32)
+  expect(cache.next()).toBeNull()
+  expect(cache.complete(request)).toBe(false)
+  cache.configure(UV.translate(SUN_POSITION, vec3(PARSEC, 0, 0)), field)
+  const canceled = cache.next()!
+  cache.configure(SUN_POSITION, field)
+  expect(cache.restore(canceled, canceled.position, 32)).toBe(false)
+  cache.dispose()
+  expect(cache.restore(request, SUN_POSITION, 32)).toBe(false)
+})

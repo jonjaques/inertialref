@@ -55,6 +55,7 @@ import { sensorRadiance } from './radiance.ts'
 import { composeSky } from './enhancedSky.ts'
 import { warmSensorPass } from './warmup.ts'
 import { GalaxySkyCache, GALAXY_RADIANCE_UNIT } from './galaxySkyCache.ts'
+import type { GalaxySkyStore } from './galaxySkyArchive.ts'
 import type { GalaxyCacheOptions } from './galaxyCache.ts'
 import { GalaxyStructureTable } from './galaxyStructure.ts'
 import {
@@ -75,6 +76,7 @@ const COLD_LONG_EDGE = 64
 export interface GalaxyVolumeOptions {
   /** Diagnostic plates may request the live volume by omitting this. */
   readonly cache?: GalaxyCacheOptions
+  readonly archive?: GalaxySkyStore
   readonly temporal?: GalaxyTemporalOptions
   readonly structure?: boolean | GalaxyStructureTable
 }
@@ -181,7 +183,12 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#cache =
       options.cache === undefined
         ? null
-        : new GalaxySkyCache(field, options.cache, kernelOptions)
+        : new GalaxySkyCache(
+            field,
+            options.cache,
+            kernelOptions,
+            options.archive,
+          )
     this.updateBeforeType = NodeUpdateType.RENDER
     this.#target.texture.name = 'Galaxy radiance'
     this.#target.texture.minFilter = LinearFilter

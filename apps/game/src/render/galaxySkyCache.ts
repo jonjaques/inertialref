@@ -30,6 +30,13 @@ import {
   GalaxyCacheSchedule,
   type GalaxyCacheOptions,
 } from './galaxyCache.ts'
+import {
+  galaxySkyQuery,
+  validateGalaxySkyArchive,
+  type GalaxySkyStore,
+} from './galaxySkyArchive.ts'
+import { readGalaxyCube, restoreGalaxyCube } from './galaxySkyTransfer.ts'
+import { GALAXY_KERNEL_VERSION } from './galaxyKernel.ts'
 import { trackAtMount, warmSensorPass, type WarmTicket } from './warmup.ts'
 
 /** Linear RGB, nW m^-2 sr^-1 per stored unit. Green retains Johnson V radiance. */
@@ -89,6 +96,14 @@ export class GalaxySkyCache {
   readonly #pixelAngle = uniform(1)
   readonly #tilesPerSubmission: number
   #field: GalaxyField
+  #resolved: ResolvedPopulationSelection | undefined
+  readonly #archive: GalaxySkyStore | undefined
+  #archiveKey: string | null = null
+  #archiveRequest = 0
+  #archiveSaved = 0
+  #archiveHits = 0
+  #archiveWrites = 0
+  #archiveFailures = 0
   #disposed = false
   #ready = false
   #warm: Promise<void> | null = null
@@ -99,6 +114,7 @@ export class GalaxySkyCache {
     field: GalaxyField,
     options: GalaxyCacheOptions = {},
     kernelOptions: GalaxyKernelOptions = {},
+    archive?: GalaxySkyStore,
   ) {
     this.schedule = new GalaxyCacheSchedule({
       ...options,
@@ -110,6 +126,7 @@ export class GalaxySkyCache {
       Math.min(8, Math.floor(options.tilesPerSubmission ?? 1)),
     )
     this.#field = field
+    this.#archive = archive
     this.#kernel = createGalaxyKernel(field, kernelOptions)
     this.#pixelAngle.value = Math.PI / 2 / this.schedule.faceSize
     this.#targets = Array.from({ length: GALAXY_CACHE_SLOTS }, (_, slot) =>
@@ -149,6 +166,15 @@ export class GalaxySkyCache {
     resolved?: ResolvedPopulationSelection,
   ): void {
     if (this.#disposed) return
+    if (
+      position === null ||
+      field !== this.#field ||
+      resolved !== this.#resolved
+    ) {
+      this.#archiveKey = null
+      this.#archiveRequest++
+    }
+    this.#resolved = resolved
     if (this.#field !== field) {
       this.#field = field
       this.#kernel.setField(field)
@@ -188,6 +214,11 @@ export class GalaxySkyCache {
   get diagnostics() {
     return {
       ...this.schedule.report,
+      archive: {
+        hits: this.#archiveHits,
+        writes: this.#archiveWrites,
+        failures: this.#archiveFailures,
+      },
       radiusParsecs: GALAXY_CACHE_RADIUS_PARSECS,
       bytes: this.#disposed
         ? 0
@@ -213,11 +244,13 @@ export class GalaxySkyCache {
 
   /** Each submission has a fixed dispatch ceiling, independent of unfinished work. */
   advance(renderer: Renderer): boolean {
+    this.#readArchive(renderer as WebGPURenderer)
     let drawn = false
     for (let i = 0; i < this.#tilesPerSubmission; i++) {
       if (!this.#advanceTile(renderer)) break
       drawn = true
     }
+    this.#writeArchive(renderer as WebGPURenderer)
     return drawn
   }
 
@@ -298,6 +331,95 @@ export class GalaxySkyCache {
       renderer.setScissorTest(scissorTest)
     }
     return true
+  }
+
+  #readArchive(renderer: WebGPURenderer): void {
+    const request = this.schedule.next()
+    if (
+      !this.#ready ||
+      this.#archive === undefined ||
+      request === null ||
+      this.#disposed
+    )
+      return
+    const query = galaxySkyQuery(
+      this.#field,
+      request.position,
+      this.schedule.faceSize,
+      GALAXY_KERNEL_VERSION,
+      this.#resolved,
+    )
+    const key = JSON.stringify(query)
+    if (this.#archiveKey === key) return
+    this.#archiveKey = key
+    const id = ++this.#archiveRequest
+    void this.#archive
+      .read(query)
+      .then((value) => {
+        if (
+          this.#disposed ||
+          id !== this.#archiveRequest ||
+          key !== this.#archiveKey
+        )
+          return
+        const record = validateGalaxySkyArchive(value, query)
+        const current = this.schedule.next()
+        if (
+          record === null ||
+          current === null ||
+          UV.distance(current.position, query.origin) > 1
+        )
+          return
+        const target = skyTarget(record.faceSize, current.slot)
+        try {
+          restoreGalaxyCube(renderer, target, record.faces)
+          if (!this.schedule.restore(current, record.origin, record.faceSize)) {
+            target.dispose()
+            return
+          }
+          this.#targets[current.slot]!.dispose()
+          this.#targets[current.slot] = target
+          this.#select()
+          this.#archiveSaved = this.revision
+          this.#archiveHits++
+          this.#finishTicket()
+        } catch {
+          target.dispose()
+          this.#archiveFailures++
+        }
+      })
+      .catch(() => {
+        this.#archiveFailures++
+      })
+  }
+
+  #writeArchive(renderer: WebGPURenderer): void {
+    const entry = this.schedule.selected
+    if (
+      this.#archive === undefined ||
+      this.#disposed ||
+      entry === null ||
+      entry.faceSize !== this.schedule.faceSize ||
+      entry.generation === this.#archiveSaved
+    )
+      return
+    this.#archiveSaved = entry.generation
+    const query = galaxySkyQuery(
+      entry.field,
+      entry.position,
+      entry.faceSize,
+      GALAXY_KERNEL_VERSION,
+      this.#resolved,
+    )
+    void readGalaxyCube(renderer, this.#targets[entry.slot]!)
+      .then(async (faces) => {
+        if (this.#disposed) return
+        await this.#archive!.write({ ...query, version: 1, faces })
+        if (!this.#disposed) this.#archiveWrites++
+      })
+      .catch(() => {
+        this.#archiveFailures++
+      })
   }
 
   #finishTicket(): void {

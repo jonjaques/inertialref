@@ -2,6 +2,7 @@ import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
 import { createGalaxyField, type GalaxyField } from '@inertialref/universe'
+import { IndexedDbGalaxySkyStore } from '../engine/galaxySkyStore.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
   createGalaxyBackdrop,
@@ -37,6 +38,10 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
         tilesPerSubmission: 2,
       },
       structure: structure.table,
+      archive: (gl as unknown as { backend: { isWebGPUBackend?: boolean } })
+        .backend.isWebGPUBackend
+        ? new IndexedDbGalaxySkyStore()
+        : undefined,
       temporal: { stride: 4 },
     })
     const mesh = createGalaxyBackdrop(volume)

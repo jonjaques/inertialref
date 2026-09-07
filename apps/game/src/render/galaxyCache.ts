@@ -250,6 +250,41 @@ export class GalaxyCacheSchedule {
     return true
   }
 
+  /** The caller uploads all faces before publication; an old request cannot take a reused slot. */
+  restore(
+    request: GalaxyCacheEntry,
+    position: UniverseVector,
+    faceSize: number,
+  ): boolean {
+    if (
+      this.#disposed ||
+      this.#pending?.generation !== request.generation ||
+      faceSize !== this.faceSize ||
+      UV.distance(position, request.position) >
+        GALAXY_CACHE_RADIUS_PARSECS * PARSEC
+    )
+      return false
+    const entry = {
+      ...request,
+      position: { ...position },
+      faceSize,
+      generation: ++this.#generation,
+    }
+    this.#pending = null
+    this.#tile = 0
+    this.#completed = this.#completed.filter(
+      (held) =>
+        held.slot !== entry.slot &&
+        UV.distance(held.position, entry.position) >
+          GALAXY_CACHE_RADIUS_PARSECS * PARSEC,
+    )
+    this.#completed.push(entry)
+    this.#completed = this.#completed.slice(-(GALAXY_CACHE_SLOTS - 1))
+    this.#selected = entry
+    this.#published++
+    return true
+  }
+
   #cancel(): void {
     if (this.#pending !== null) this.#cancellations++
     this.#pending = null
