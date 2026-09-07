@@ -124,6 +124,7 @@ To regenerate the checked-in source manifest and runtime cloud/sky tables:
 
 ```sh
 node apps/ingest/src/galaxyReference.ts /path/to/cube_ext.fits /path/to/RadianceOut.csv
+pnpm exec prettier -w packages/universe/src/galaxy/localClouds.generated.ts packages/universe/src/galaxy/skyCalibration.generated.ts
 ```
 
 The inputs are the uncompressed Lallement 2022 FITS cube and GAMBONS supplemental

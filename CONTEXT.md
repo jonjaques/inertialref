@@ -8337,6 +8337,15 @@ Physical luminosities fit the linear sky and external-light constraints; current
 Natural visibility is not a calibration input. `pnpm sim --galaxy-calibration
 --quiet` reproduces the checks without a renderer.
 
+The gate passes 1,898 regular tests and six slow tests; the physical-GPU suite
+passes 80 and the headless self-test 12/12. Source regeneration followed by
+formatting reproduces the checked-in tables exactly. The 960×540 Direct rig
+captures face-on at 30 kpc, f/2, 2,400 s, ISO 400; edge-on at 40 kpc, f/2,
+600 s, ISO 400; and 64,000 km above Earth at the face-on lens. Earth clips at
+that exposure. The 240×135 target draws twice per held view and keeps the
+canonical hash unchanged. These are integration plates, not Natural appearance
+acceptance. Captures and raw reports remain in `.scratch/galaxy-m6/`.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
