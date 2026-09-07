@@ -12,7 +12,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { Fn, float, texture, uniform, uv, vec2, vec4 } from 'three/tsl'
-import { PARSEC } from '@inertialref/shared'
+import { invariant, PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
 import { verticalFov, type Lens } from '@inertialref/rendering'
 import type { ObserverPose } from '@inertialref/devtools'
@@ -80,6 +80,10 @@ export class GalaxyTemporalVolume {
 
   constructor(ray: GalaxyTemporalRay, options: GalaxyTemporalOptions = {}) {
     this.stride = options.stride ?? 4
+    invariant(
+      [1, 2, 4, 8].includes(this.stride),
+      'Galaxy temporal stride must be 1, 2, 4 or 8',
+    )
     const direction = (coord: Node<'vec2'>) => {
       const screen = coord.mul(2).sub(1)
       return this.#forward

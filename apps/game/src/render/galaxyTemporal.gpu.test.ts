@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { vec4 } from 'three/tsl'
+import { uniform, vec4 } from 'three/tsl'
 import { Quaternion as Q, UV, vec3 } from '@inertialref/spatial'
+import { PARSEC } from '@inertialref/shared'
 import { LENS_PRESETS, verticalFov } from '@inertialref/rendering'
 import { GalaxyTemporalVolume } from './galaxyTemporal.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
@@ -64,4 +65,54 @@ it('fills every phase, reprojects rotation, and forgets a cut or resize', async 
     volume.dispose()
   }
   expect(volume.report.bytes).toBe(0)
+})
+
+it('rejects depth disocclusion and large translation without retaining old color', async () => {
+  const depth = uniform(100)
+  const volume = new GalaxyTemporalVolume((_origin, direction) =>
+    vec4(
+      depth.lessThan(200).select(direction.x.mul(0.1).add(0.6), 0.05),
+      0.1,
+      depth.greaterThan(200).select(0.7, 0.02),
+      depth,
+    ),
+  )
+  const pose = { position: UV.fromMeters(0, 0, 0), orientation: Q.IDENTITY }
+  try {
+    volume.configure(pose, LENS_PRESETS.flight, 1)
+    await volume.warm(gpu.renderer)
+    volume.render(gpu.renderer, 65, 49)
+    depth.value = 500
+    volume.render(gpu.renderer, 65, 49)
+    const read = () =>
+      gpu.drawGraph(volume.sample(), { float: true, width: 65, height: 49 })
+    const uncovered = await read()
+    for (let y = 2; y < 47; y += 5)
+      for (let x = 2; x < 63; x += 7) {
+        expect(uncovered.at(x, y)[0]).toBeCloseTo(0.05, 3)
+        expect(uncovered.at(x, y)[2]).toBeCloseTo(0.7, 3)
+      }
+    // Radiance history is independent of exposure; neither the shutter nor
+    // gain changes a physical ray or forces a discarded history.
+    const resets = volume.report.resets
+    volume.configure(pose, { ...LENS_PRESETS.flight, iso: 6400 }, 1)
+    volume.render(gpu.renderer, 65, 49)
+    expect(volume.report.resets).toBe(resets)
+    depth.value = 100
+    volume.configure(
+      { ...pose, position: UV.fromMeters(1000 * PARSEC, 0, 0) },
+      LENS_PRESETS.flight,
+      1,
+    )
+    volume.render(gpu.renderer, 65, 49)
+    const translated = await read()
+    expect(translated.at(32, 24)[0]).toBeGreaterThan(0.59)
+    expect(translated.at(32, 24)[2]).toBeCloseTo(0.02, 3)
+    volume.configure(null, LENS_PRESETS.flight, 1)
+    volume.configure(pose, LENS_PRESETS.flight, 1)
+    volume.render(gpu.renderer, 65, 49)
+    expect(volume.report.resets).toBe(resets + 1)
+  } finally {
+    volume.dispose()
+  }
 })
