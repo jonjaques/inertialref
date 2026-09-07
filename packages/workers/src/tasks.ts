@@ -199,7 +199,15 @@ export interface SurveySkyRequest {
 }
 export interface SurveySkyResponse {
   readonly origin: WireUniverseVector
-  readonly stars: readonly GeneratedStar[]
+  readonly stars: readonly Pick<
+    GeneratedStar,
+    | 'id'
+    | 'name'
+    | 'position'
+    | 'colour'
+    | 'solarLuminosities'
+    | 'visualLuminosities'
+  >[]
   readonly apparentMagnitudeLimit: number
   readonly levelMask: number
   readonly candidateCount: number
@@ -207,7 +215,7 @@ export interface SurveySkyResponse {
 }
 export const surveySkyTask = defineTask<SurveySkyRequest, SurveySkyResponse>({
   name: 'universe.surveySky',
-  version: 1,
+  version: 2,
   run(request, context) {
     const result = selectPopulationSky(
       createGalaxyField(parseSeed(request.seed)),
@@ -217,7 +225,16 @@ export const surveySkyTask = defineTask<SurveySkyRequest, SurveySkyResponse>({
     return {
       ...result,
       origin: request.origin,
-      stars: result.stars.map(encodeStub),
+      // The sky consumes light and position. Cloning full system stubs also
+      // sends masses, radii and planet records that this draw never reads.
+      stars: result.stars.map((star) => ({
+        id: star.id as string,
+        name: star.name,
+        position: encodeUniverseVector(star.position),
+        colour: [star.colour.r, star.colour.g, star.colour.b] as const,
+        solarLuminosities: star.solarLuminosities,
+        visualLuminosities: star.visualLuminosities,
+      })),
     }
   },
 })

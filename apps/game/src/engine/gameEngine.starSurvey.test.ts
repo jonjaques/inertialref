@@ -42,16 +42,9 @@ function response(request: SurveySkyRequest, id: string): SurveySkyResponse {
             z: 0,
           }),
         ),
-        spectralType: 'G',
-        solarMasses: 1,
-        solarRadii: 1,
         solarLuminosities: 1,
         visualLuminosities: 1,
-        temperature: 5778,
         colour: [1, 1, 1],
-        components: 1,
-        catalogued: false,
-        planets: [],
       },
     ],
   }
@@ -62,6 +55,7 @@ afterEach(() => vi.restoreAllMocks())
 it('holds a completed source field and its exact diffuse envelope until replacement', async () => {
   const pending = controlledSurveys()
   const game = headlessEngine()
+  const submissions = vi.spyOn(game.pool()!, 'run')
   try {
     game.harness.pause()
     game.harness.galaxyJourney(0)
@@ -78,6 +72,12 @@ it('holds a completed source field and its exact diffuse envelope until replacem
     game.harness.galaxyJourney(0.8)
     game.frame(0)
     await vi.waitFor(() => expect(pending).toHaveLength(2))
+    const requests = submissions.mock.calls.filter(
+      ([task]) => task === surveySkyTask,
+    )
+    expect((requests[1]![1] as SurveySkyRequest).coverage).toBe(
+      (requests[0]![1] as SurveySkyRequest).coverage,
+    )
     expect(game.starField).toBe(completed)
     expect(game.starField.resolved).toBe(completed.resolved)
     expect(game.starSurvey.center).not.toEqual(completed.resolved!.origin)
@@ -94,6 +94,32 @@ it('holds a completed source field and its exact diffuse envelope until replacem
       UV.universeVector(...pending[1]!.request.origin),
     )
     expect(game.world.stateHash()).toBe(hash)
+  } finally {
+    game.dispose()
+  }
+})
+
+it('keeps a completed empty exterior sky while the next survey runs', async () => {
+  const pending = controlledSurveys()
+  const game = headlessEngine()
+  try {
+    game.harness.pause()
+    game.harness.galaxyJourney(1)
+    game.frame(0)
+    await vi.waitFor(() => expect(pending).toHaveLength(1))
+    pending[0]!.resolve({ ...response(pending[0]!.request, 'none'), stars: [] })
+    await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
+    const completed = game.starField
+    expect(completed.ids).toHaveLength(0)
+    expect(completed.resolved).toBeDefined()
+    game.harness.galaxyJourney(0.9)
+    game.frame(0)
+    await vi.waitFor(() => expect(pending).toHaveLength(2))
+    expect(game.starField).toBe(completed)
+    expect(game.starField.ids).toHaveLength(0)
+    pending[1]!.resolve(response(pending[1]!.request, 'return'))
+    await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
+    expect(game.starField.ids).toContain('return')
   } finally {
     game.dispose()
   }
