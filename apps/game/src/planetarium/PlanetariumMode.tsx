@@ -133,6 +133,7 @@ export function PlanetariumMode({
     const held = engine.presentation.push({
       observatory: true,
       motionBlur: false,
+      diffuseGalaxy: true,
     })
     stance.current = held
     return () => {
@@ -143,6 +144,7 @@ export function PlanetariumMode({
   useEffect(() => {
     stance.current?.update({
       motionBlur: false,
+      diffuseGalaxy: true,
       showShip: ship,
       showOrbits: orbits,
       orbitScope,

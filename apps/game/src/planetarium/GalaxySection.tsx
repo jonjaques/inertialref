@@ -1,3 +1,4 @@
+import { GalaxyJourneyControls } from './GalaxyJourneyControls.tsx'
 import { GALAXY_VIEWS, type GalaxyView } from '@inertialref/rendering'
 import { formatShutter } from '../hud/controls.ts'
 import { Action } from '../hud/Action.tsx'
@@ -30,9 +31,10 @@ export function GalaxySection({ engine, onNotice }: PlanetariumContext) {
         ))}
       </div>
       <p className="type-ui mt-1.5 text-pretty text-slate-400">
-        Fixed views through a long exposure. Stellar light, without dust
-        extinction. Choose a body to return to its orbit.
+        The stellar disk through a long exposure. Choose a fixed view or travel
+        from Earth to 30 kpc above the center. Dust extinction is absent.
       </p>
+      <GalaxyJourneyControls engine={engine} onNotice={onNotice} />
     </Section>
   )
 }

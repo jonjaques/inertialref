@@ -40,6 +40,11 @@ import {
 } from '@inertialref/universe'
 import {
   GALAXY_VIEWS,
+  createGalaxyJourney,
+  galaxyJourneyState,
+  galaxyJourneyProgress,
+  validateGalaxyJourney,
+  type GalaxyJourneyRoute,
   type GalaxyView,
   isGalaxyView,
   anglesForPhase,
@@ -158,7 +163,14 @@ export interface SurfaceStatus {
 }
 
 /** Everything a panel needs to draw the observatory's state. */
+export interface GalaxyJourneyStatus {
+  readonly progress: number
+  readonly destination: number
+  readonly remainingSeconds: number
+}
+
 export interface ObserverStatus {
+  readonly journey: GalaxyJourneyStatus | null
   readonly galaxyView: GalaxyView | null
   readonly target: ObserverTarget | null
   readonly state: ObserverState
@@ -225,6 +237,114 @@ export class Observatory {
   readonly #host: Host
   #target: ObserverTarget | null = null
   #galaxyView: GalaxyView | null = null
+  #journey: {
+    route: GalaxyJourneyRoute
+    progress: number
+    motion: {
+      from: ObserverState
+      to: number
+      duration: number
+      elapsed: number
+    } | null
+  } | null = null
+
+  get galaxyInstrument(): boolean {
+    return this.#galaxyView !== null || this.#journey !== null
+  }
+
+  get journey(): GalaxyJourneyStatus | null {
+    const held = this.#journey
+    return held === null
+      ? null
+      : {
+          progress: held.progress,
+          destination: held.motion?.to ?? held.progress,
+          remainingSeconds:
+            held.motion === null
+              ? 0
+              : held.motion.duration - held.motion.elapsed,
+        }
+  }
+
+  travelGalaxy(progress: number, seconds: number): ObserverStatus {
+    validateGalaxyJourney(progress, seconds)
+    if (this.#journey === null) {
+      this.focus('s:SOL/b:2', { ease: false })
+      const earth = this.#targetPosition(this.#target!)
+      if (earth === null) throw new Error('Earth has no presentation frame')
+      const route = createGalaxyJourney(earth, this.#target!.radius)
+      this.#state = this.#desired = galaxyJourneyState(route, 0)
+      this.#journey = { route, progress: 0, motion: null }
+    }
+    const held = this.#journey
+    held.motion =
+      seconds === 0
+        ? null
+        : {
+            from: this.#state,
+            to: progress,
+            duration: seconds,
+            elapsed: 0,
+          }
+    if (held.motion === null) {
+      held.progress = progress
+      this.#state = this.#desired = galaxyJourneyState(held.route, progress)
+      this.#look = NO_LOOK
+    }
+    return this.status()
+  }
+
+  /** Hold the displayed pose, including an orbit gesture made during the journey. */
+  holdGalaxyJourney(): ObserverStatus {
+    this.#stopJourneyTravel()
+    this.#desired = this.#state
+    return this.status()
+  }
+
+  #stopJourneyTravel(): void {
+    const held = this.#journey
+    if (held === null) return
+    held.motion = null
+    held.progress = galaxyJourneyProgress(held.route, this.#state.distance)
+  }
+
+  #advanceJourney(dt: Seconds): void {
+    const held = this.#journey
+    if (held === null) return
+    const motion = held.motion
+    if (motion === null) {
+      held.progress = galaxyJourneyProgress(held.route, this.#state.distance)
+      return
+    }
+    motion.elapsed = Math.min(motion.duration, motion.elapsed + Math.max(0, dt))
+    // Repeated frame deltas may sum an ulp short of an exact endpoint.
+    if (motion.duration - motion.elapsed < 1e-9)
+      motion.elapsed = motion.duration
+    const t = motion.elapsed / motion.duration
+    const eased = t * t * (3 - 2 * t)
+    const destination = galaxyJourneyState(held.route, motion.to)
+    this.#state = this.#desired =
+      t === 0
+        ? motion.from
+        : t === 1
+          ? destination
+          : {
+              azimuth:
+                motion.from.azimuth +
+                shortestAngle(motion.from.azimuth, destination.azimuth) * eased,
+              elevation:
+                motion.from.elevation +
+                (destination.elevation - motion.from.elevation) * eased,
+              distance:
+                motion.from.distance *
+                (destination.distance / motion.from.distance) ** eased,
+            }
+    held.progress =
+      t === 1
+        ? motion.to
+        : galaxyJourneyProgress(held.route, this.#state.distance)
+    if (t === 1) held.motion = null
+  }
 
   get galaxyView(): GalaxyView | null {
     return this.#galaxyView
@@ -354,6 +474,7 @@ export class Observatory {
     const target = this.#resolve(destination)
     const previous = this.#target
     this.#galaxyView = null
+    this.#journey = null
     this.#target = target
     this.#phaseOrbit = null
     // Focusing something else is leaving the ground. A stance names a latitude
@@ -424,6 +545,7 @@ export class Observatory {
    * "restore" step and nothing to put back, because nothing was taken.
    */
   clear(): void {
+    this.#journey = null
     this.#galaxyView = null
     this.#target = null
     this.#phaseOrbit = null
@@ -457,6 +579,7 @@ export class Observatory {
     sensitivity = this.dragSensitivity(),
   ): void {
     if (this.#stance !== null || this.#galaxyView !== null) return
+    this.#stopJourneyTravel()
     // Both are written, not just the desired: a drag is direct manipulation and
     // must not lag a damping filter. Easing is for travel, not for the hand.
     this.#desired = applyDrag(this.#desired, dxPixels, dyPixels, sensitivity)
@@ -466,6 +589,7 @@ export class Observatory {
   /** Zoom by a ratio. Above 1 retreats. */
   zoom(factor: number): void {
     if (this.#stance !== null || this.#galaxyView !== null) return
+    this.#stopJourneyTravel()
     const radius = this.#target?.radius ?? 0
     this.#desired = applyZoom(this.#desired, factor, radius)
     // The wheel eases while the drag does not, because a wheel arrives in
@@ -481,6 +605,7 @@ export class Observatory {
   /** Set the distance directly — the panel's slider and the presets. */
   setDistance(distance: Meters, ease = true): void {
     if (this.#stance !== null || this.#galaxyView !== null) return
+    this.#stopJourneyTravel()
     const radius = this.#target?.radius ?? 0
     this.#desired = {
       ...this.#desired,
@@ -505,6 +630,7 @@ export class Observatory {
     look: LookOffset = NO_LOOK,
   ): void {
     if (this.#stance !== null || this.#galaxyView !== null) return
+    this.#stopJourneyTravel()
     this.#desired = {
       ...this.#desired,
       azimuth,
@@ -946,6 +1072,7 @@ export class Observatory {
       options.height ?? MIN_STANCE_HEIGHT,
       body.radius,
     )
+    this.#journey = null
     this.#stance = {
       latitude,
       longitude,
@@ -1105,13 +1232,16 @@ export class Observatory {
             verticalFov(this.#lens)
           : 0
     return {
+      journey: this.journey,
       galaxyView: this.#galaxyView,
       target: this.#target,
       state: this.#state,
       desired: this.#desired,
       look: this.#look,
       aimed: !isCentred(this.#look),
-      travelling: this.#galaxyView === null && !this.#arrived(),
+      travelling:
+        this.#galaxyView === null &&
+        (this.#journey?.motion != null || !this.#arrived()),
       // Standing, the reader wants the height above the ground under their feet
       // — not the distance from a datum the orbit arm was last left at.
       altitude: surface?.stance.height ?? altitude,
@@ -1145,6 +1275,7 @@ export class Observatory {
       this.setPhase(orbit.phase, orbit.tilt, false)
     }
 
+    this.#advanceJourney(dt)
     if (!this.#arrived()) {
       this.#state = approachState(this.#state, this.#desired, dt, TRAVEL_TAU)
     } else {

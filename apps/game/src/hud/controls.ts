@@ -50,6 +50,10 @@ export const ZOOM_MAX = 8
 export const F_STOP_MIN = 1.4
 export const F_STOP_MAX = 22
 
+/** One hour includes the galaxy instrument's 2,400 s exposure. */
+export const SHUTTER_MIN = 1 / 8000
+export const SHUTTER_MAX = 3600
+
 /**
  * The focus band, meters, with infinity at the top of the travel.
  *
@@ -134,8 +138,11 @@ export const LENS_CHANNELS = {
   shutter: {
     label: 'Shutter',
     description: 'Exposure time, seconds',
-    scrub: (lens) => scrubOf(lens.shutter, 1 / 8000, 30),
-    at: (lens, scrub) => ({ ...lens, shutter: valueOf(scrub, 1 / 8000, 30) }),
+    scrub: (lens) => scrubOf(lens.shutter, SHUTTER_MIN, SHUTTER_MAX),
+    at: (lens, scrub) => ({
+      ...lens,
+      shutter: valueOf(scrub, SHUTTER_MIN, SHUTTER_MAX),
+    }),
     format: (lens) => formatShutter(lens.shutter),
   },
   iso: {
@@ -246,7 +253,7 @@ export const isLens = (value: unknown): value is Lens => {
     within('gauge', DEFAULT_GAUGE, DEFAULT_GAUGE) &&
     within('zoom', ZOOM_MIN, ZOOM_MAX) &&
     within('fStop', F_STOP_MIN, F_STOP_MAX) &&
-    within('shutter', 1 / 8000, 30) &&
+    within('shutter', SHUTTER_MIN, SHUTTER_MAX) &&
     within('iso', 25, 409_600) &&
     // The one field that is legitimately not finite, and the reason this guard
     // is written out rather than reduced to "every value is a finite number".

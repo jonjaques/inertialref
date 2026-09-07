@@ -19,8 +19,11 @@ unchanged. Its emission-only radiance and parameter assumptions are recorded
 in [ADR-0032](../adr/0032-the-stellar-field.md). The planetarium also renders
 fixed face-on and edge-on views through the existing sensor, with one live
 quarter-size volume target. Open Presets → Milky Way, or call
-`ir.galaxyView('face-on')`. Dust, continuous travel and photometric calibration
-remain separate milestones.
+`ir.galaxyView('face-on')`. Earth Orbit and Travel Out trace a reversible journey
+to 30 kpc above the galactic center. `ir.galaxyJourney(1, 36)` makes that trip
+through the existing camera and lens; progress zero returns to Earth orbit.
+The live field also follows ordinary planetarium navigation. Dust and
+photometric calibration remain separate milestones.
 
 ## The three-layer body model
 

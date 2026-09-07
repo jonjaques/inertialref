@@ -2,7 +2,7 @@ import { PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV, vec3 } from '@inertialref/spatial'
 import { lensForFov } from './lens.ts'
 
-/** Fixed external instruments. The continuous interior camera belongs to M4. */
+/** Fixed outside instruments; the journey shares the face-on lens. */
 export const GALAXY_VIEWS = {
   'face-on': {
     label: 'Face-on',

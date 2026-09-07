@@ -1,4 +1,4 @@
-import type { GalaxyRenderReport } from '@inertialref/devtools'
+import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
@@ -80,6 +80,7 @@ import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
 import {
   EMPTY_STAR_FIELD,
+  STAR_SPRITE_CEILING,
   selectStars,
   type StarCandidate,
   type StarField,
@@ -165,6 +166,7 @@ export const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 export type { StarField }
 
 /** How far the player must move before the starfield is surveyed again. */
+const STARFIELD_RADIUS_CELLS = 2
 const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
 
 /** A catalog star as the star field's selection sees it. */
@@ -547,6 +549,34 @@ export class GameEngine {
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
   galaxyRenderer: (() => GalaxyRenderReport) | null = null
+  #observedPose: ObserverPose | null = null
+
+  /** The pose already sampled for this scene, never a second camera update. */
+  get galaxyPose(): ObserverPose | null {
+    return this.cinematic === null &&
+      (this.presentation.resolved().diffuseGalaxy || this.galaxyInstrument)
+      ? this.#observedPose
+      : null
+  }
+
+  get galaxyInstrument(): boolean {
+    return (
+      this.cinematic === null &&
+      this.observer !== null &&
+      this.harness.observatory.galaxyInstrument
+    )
+  }
+
+  get starSurvey() {
+    return {
+      radiusCells: STARFIELD_RADIUS_CELLS,
+      cellCeiling: (2 * STARFIELD_RADIUS_CELLS + 1) ** 3,
+      spriteCount: this.#starField.positions.length,
+      spriteCeiling: STAR_SPRITE_CEILING,
+      pending: this.#starFieldPending,
+      center: this.#starFieldCentre,
+    }
+  }
 
   /** The resolved external instrument, under the usual camera precedence. */
   get galaxyView() {
@@ -557,7 +587,7 @@ export class GameEngine {
 
   get calibratedLight(): boolean {
     return (
-      (this.galaxyView === null && naturalResponse(this.sensorSettings)) ||
+      (!this.galaxyInstrument && naturalResponse(this.sensorSettings)) ||
       (this.cinematic?.effects.calibratedLight ?? 0) > 0
     )
   }
@@ -1175,6 +1205,7 @@ export class GameEngine {
      */
     const observed =
       cinematic === null ? this.harness.observerSample(delta) : null
+    this.#observedPose = observed
     this.#phases.step('observatory', ENGINE_PHASE)
 
     // The one precedence order, unchanged: cutscene, then observatory, then
@@ -1418,7 +1449,7 @@ export class GameEngine {
     this.#starFieldCentre = centre
     this.#starFieldPending = true
     const world = this.#starFieldWorld
-    const radiusCells = 2
+    const radiusCells = STARFIELD_RADIUS_CELLS
     // `cellOf`, not a hand-inlined copy of it. The copy restated CELL_SIZE as
     // `20 * 9.4607304725808e15` and recomputed `approxMeters` three times, so
     // changing the galaxy's cell size would have left the client surveying

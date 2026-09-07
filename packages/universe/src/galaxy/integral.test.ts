@@ -121,3 +121,54 @@ it.each(['youngArm', 'constructor', '__proto__', null])(
     ).toThrow('Unknown galaxy population')
   },
 )
+
+it('resolves the observer neighborhood while keeping the reference quadrature explicit', () => {
+  const options = { distanceParsecs: 100 }
+  const reference = integrateGalaxyRay(
+    field,
+    SUN_POSITION,
+    vec3(1, 0, 0),
+    options,
+  )
+  const observer = integrateGalaxyRay(field, SUN_POSITION, vec3(1, 0, 0), {
+    ...options,
+    sampling: 'observer',
+  })
+  expect(observer.samples).toBeGreaterThan(reference.samples)
+  expect(
+    Math.abs(observer.radianceNanowatts / reference.radianceNanowatts - 1),
+  ).toBeLessThan(0.01)
+})
+
+it.each([
+  [-8178, 20.8, 0, 1, 0, 0],
+  [-8178, 20.8, 0, -1, 0, 0],
+  [-8178, 20.8, 0, 0, 1, 0],
+  [-8178, 20.8, 0, 0, -1, 0],
+  [-8178, 20.8, 0, 1, 0, -1],
+  [-7900, 1000, 0, 1, -0.1, 0.1],
+  [-24000, 600, 3000, 0.5, -0.05, -1],
+  [3000, -20, 1000, -1, 0.01, 0.2],
+  [0, 30000, 0, 0.2, -1, 0.1],
+])(
+  'converges from observer (%s, %s, %s) within the live iteration budget',
+  (x, y, z, dx, dy, dz) => {
+    const origin = UV.fromMeters(x * PARSEC, y * PARSEC, z * PARSEC)
+    const direction = vec3(dx, dy, dz)
+    const live = integrateGalaxyRay(field, origin, direction, {
+      distanceParsecs: 100000,
+      sampling: 'observer',
+    })
+    const fine = integrateGalaxyRay(field, origin, direction, {
+      distanceParsecs: 100000,
+      sampling: 'observer',
+      maxStepParsecs: 10,
+    })
+    expect(live.samples).toBeLessThan(16384)
+    expect(live.radianceNanowatts).toBeGreaterThan(0)
+    for (let i = 0; i < 3; i++)
+      expect(
+        Math.abs(live.rgbNanowatts[i]! / fine.rgbNanowatts[i]! - 1),
+      ).toBeLessThan(0.01)
+  },
+)

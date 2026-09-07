@@ -43,9 +43,7 @@ export function Sensor({ engine }: { engine: GameEngine }) {
         time: engine.snapshot?.renderTime ?? 0,
         pinned:
           engine.cinematic?.effects.exposure ??
-          (engine.galaxyView === null
-            ? null
-            : exposurePinnedToLens(engine.lens)),
+          (!engine.galaxyInstrument ? null : exposurePinnedToLens(engine.lens)),
         headroom: engine.gl?.description.headroom ?? 1,
         motionBlur: engine.presentation.resolved().motionBlur,
         noiseTick: Math.floor(
