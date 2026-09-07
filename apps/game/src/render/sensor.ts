@@ -1,4 +1,5 @@
 import { PsfNode } from './psf.ts'
+import type { RenderOrigin } from '@inertialref/spatial'
 import { sensorMrt } from './sensorMrt.ts'
 import { DefocusNode } from './defocus.ts'
 import { MotionNode } from './motion.ts'
@@ -17,8 +18,6 @@ import {
   type Scene,
   type WebGPURenderer,
   Vector2,
-  Vector3,
-  Quaternion,
 } from 'three/webgpu'
 import { nodeObject, pass, renderOutput, texture, vec4 } from 'three/tsl'
 import {
@@ -182,6 +181,7 @@ export interface SensorFrame {
   readonly adaptationTime?: number
   /** Identifies cuts and a held photographic-time scrub independently of adaptation. */
   readonly historyKey?: string
+  readonly renderOrigin?: RenderOrigin | null
   readonly stagingLook?: boolean
   readonly pinned: number | null
   readonly headroom: number
@@ -278,15 +278,11 @@ export function createSensor(
   const size = new Vector2()
   let previousTime: number | null = null
   let previousGeneration = 0
-  let cameraEpoch = 0
-  const previousPosition = new Vector3()
-  const previousOrientation = new Quaternion()
   const keyFor = (state: SensorFrame): string =>
     [
       state.settings.mode,
       state.pinned,
       state.historyKey ?? '',
-      cameraEpoch,
       state.lens.fStop,
       state.lens.shutter,
       state.lens.iso,
@@ -294,6 +290,11 @@ export function createSensor(
       state.lens.zoom,
       state.lens.gauge,
     ].join(':')
+  const cameraFor = (state: SensorFrame) => ({
+    position: camera.position,
+    orientation: camera.quaternion,
+    origin: state.renderOrigin,
+  })
   let previousFocus = ''
   let maximumCircle = 40
   let builtToneMapping = renderer.toneMapping
@@ -368,19 +369,10 @@ export function createSensor(
           !automaticAvailable && state.settings.mode === 'automatic'
             ? { ...state.settings, mode: 'manual' as const }
             : state.settings
-        if (
-          previousTime !== null &&
-          (Math.abs(previousOrientation.dot(camera.quaternion)) <
-            Math.cos(Math.PI / 24) ||
-            previousPosition.distanceTo(camera.position) >
-              Math.max(1, previousPosition.length() * 0.25))
-        )
-          cameraEpoch++
-        previousPosition.copy(camera.position)
-        previousOrientation.copy(camera.quaternion)
         generation = history.advance(
           keyFor(state),
           state.adaptationTime ?? state.time,
+          cameraFor(state),
         )
         if (generation !== previousGeneration) exposure.reset()
         previousGeneration = generation
@@ -435,7 +427,9 @@ export function createSensor(
         if (motion !== null)
           motion.fraction.value = shutterFraction(
             state.lens.shutter,
-            previousTime === null ? 0 : state.time - previousTime,
+            previousTime === null || history.motionReset
+              ? 0
+              : state.time - previousTime,
             state.motionBlur ?? false,
           )
         previousTime = state.time
@@ -492,19 +486,24 @@ export function createSensor(
             scenePass.renderTarget.height,
             (bins, circle) => {
               const current = frame?.()
-              if (
+              const accepted =
                 current !== undefined &&
-                current.settings.mode === 'automatic' &&
-                current.pinned === null &&
                 history.accepts(
                   generation,
                   keyFor(current),
                   current.adaptationTime ?? current.time,
-                  current.settings.rate === 0,
+                  false,
+                  cameraFor(current),
                 )
+              if (
+                accepted &&
+                current.settings.mode === 'automatic' &&
+                current.pinned === null &&
+                current.settings.rate !== 0
               )
                 exposure.measure(bins, pre, current.lens, current.settings)
-              if (submitted === previousFocus) maximumCircle = circle
+              if (accepted && submitted === previousFocus)
+                maximumCircle = circle
             },
           )
         }
