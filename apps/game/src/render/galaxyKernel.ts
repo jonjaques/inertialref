@@ -45,10 +45,12 @@ import {
   type GalaxyField,
 } from '@inertialref/universe'
 
+import { coveredLuminosityCeiling } from './galaxyPopulationPartition.ts'
+
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@6'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@7'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
@@ -296,13 +298,14 @@ const emissionColors = POPULATION_NAMES.map((name) => {
 
 /** Galactic-center offsets in parsecs, packed from UniverseVector only at the host boundary. */
 const sample = Fn(
-  ([p, seed, normalization, structure, threshold, levelMask]: [
+  ([p, seed, normalization, structure, threshold, levelMask, coveredCeiling]: [
     Node<'vec3'>,
     Node<'uint'>,
     Node<'float'>,
     Node<'vec3'>,
     Node<'float'>,
     Node<'uint'>,
+    Node<'float'>,
   ]) => {
     const radius = p.xz.length().toVar()
     const height = structure.z,
@@ -346,38 +349,46 @@ const sample = Fn(
         .mul(0.001),
     ]
     const result = vec4(0).toVar()
-    const light = LUMINOSITY_BANDS.map((band) =>
-      levelMask
-        .bitAnd(uint(1 << band.level))
-        .equal(uint(0))
-        .select(
-          float(1),
-          threshold
-            .sub(band.minSolarV)
-            .div(band.maxSolarV - band.minSolarV)
-            .clamp(),
+    const fractions = populations.map(() => float(1).toVar())
+    // Finite luminosity bands cannot contribute resolved light beyond their
+    // brightest covered source. Exterior rays skip the entire partition;
+    // the near field retains the exact same first-moment arithmetic.
+    If(
+      levelMask.notEqual(uint(0)).and(threshold.lessThan(coveredCeiling)),
+      () => {
+        const light = LUMINOSITY_BANDS.map((band) =>
+          levelMask
+            .bitAnd(uint(1 << band.level))
+            .equal(uint(0))
+            .select(
+              float(1),
+              threshold
+                .sub(band.minSolarV)
+                .div(band.maxSolarV - band.minSolarV)
+                .clamp(),
+            )
+            .toVar(),
         )
-        .toVar(),
+        fractions.forEach((fraction, i) => {
+          const name = POPULATION_NAMES[i]!
+          fraction.assign(0)
+          LUMINOSITY_BANDS.forEach((band, j) =>
+            fraction.addAssign(
+              light[j]!.mul(
+                (POPULATION_LUMINOSITY_WEIGHTS[name][j]! * band.meanSolarV) /
+                  GALAXY_POPULATIONS[name].meanSolarLuminosities,
+              ),
+            ),
+          )
+        })
+      },
     )
     populations.forEach((density, i) => {
-      const fraction = float(1).toVar()
-      If(levelMask.notEqual(uint(0)), () => {
-        const name = POPULATION_NAMES[i]!
-        fraction.assign(0)
-        LUMINOSITY_BANDS.forEach((band, j) =>
-          fraction.addAssign(
-            light[j]!.mul(
-              (POPULATION_LUMINOSITY_WEIGHTS[name][j]! * band.meanSolarV) /
-                GALAXY_POPULATIONS[name].meanSolarLuminosities,
-            ),
-          ),
-        )
-      })
       result.addAssign(
         vec4(
           vec3(...emissionColors[i]!)
             .mul(density)
-            .mul(fraction.clamp()),
+            .mul(fractions[i]!.clamp()),
           density,
         ),
       )
@@ -394,6 +405,7 @@ const sample = Fn(
     { name: 'structure', type: 'vec3' },
     { name: 'threshold', type: 'float' },
     { name: 'levelMask', type: 'uint' },
+    { name: 'coveredCeiling', type: 'float' },
   ],
 })
 
@@ -533,6 +545,7 @@ function createIntegral(
   resolvedOrigin: Node<'vec3'>,
   resolvedLimit: Node<'float'>,
   resolvedMask: Node<'uint'>,
+  resolvedCeiling: Node<'float'>,
 ) {
   return Fn(
     ([
@@ -634,6 +647,7 @@ function createIntegral(
           structure,
           midpoint.sub(resolvedOrigin).lengthSq().mul(resolvedLimit),
           resolvedMask,
+          resolvedCeiling,
         ).toVar()
         const q = vec3(0).toVar()
         const illuminated = transmission.r
@@ -707,12 +721,14 @@ export function createGalaxyKernel(
   const resolvedOrigin = uniform(new Vector3())
   const resolvedLimit = uniform(0)
   const resolvedMask = uniform(0, 'uint')
+  const resolvedCeiling = uniform(0)
   const integrate = createIntegral(
     structureAt,
     options.radianceDepth ?? false,
     resolvedOrigin,
     resolvedLimit,
     resolvedMask,
+    resolvedCeiling,
   )
   const seed = uniform(
     deriveSeed(field.seed, 'galaxy-field:young-arms').a,
@@ -753,6 +769,7 @@ export function createGalaxyKernel(
   return {
     setResolved(selection: ResolvedPopulationSelection | undefined) {
       resolvedMask.value = selection?.levelMask ?? 0
+      resolvedCeiling.value = coveredLuminosityCeiling(resolvedMask.value)
       resolvedLimit.value =
         selection === undefined
           ? 0
@@ -785,6 +802,7 @@ export function createGalaxyKernel(
         structureAt(position),
         position.sub(resolvedOrigin).lengthSq().mul(resolvedLimit),
         resolvedMask,
+        resolvedCeiling,
       ),
     extinction: (position: Node<'vec3'>): Node<'vec3'> =>
       extinction(

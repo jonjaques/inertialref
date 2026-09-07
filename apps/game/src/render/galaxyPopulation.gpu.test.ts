@@ -7,9 +7,12 @@ import { UV, vec3 as v3 } from '@inertialref/spatial'
 import {
   createGalaxyField,
   integrateGalaxyRay,
+  partitionGalaxyEmission,
+  populationLimitingLuminosity,
   SUN_POSITION,
 } from '@inertialref/universe'
 import { createGalaxyKernel } from './galaxyKernel.ts'
+import { coveredLuminosityCeiling } from './galaxyPopulationPartition.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 let gpu: GpuSession
 beforeAll(async () => {
@@ -86,4 +89,53 @@ it('keeps cached partitioned rays within one percent when eye and envelope share
   for (let x = 0; x < 5; x++)
     for (const error of pixels.at(x, 0).slice(0, 3))
       expect(error).toBeLessThan(0.01)
+})
+
+it('preserves CPU emission at the selection origin and either side of each covered ceiling', async () => {
+  const field = createGalaxyField(rootSeed('inertialref'))
+  const kernel = createGalaxyKernel(field)
+  const origin = UV.translate(
+    SUN_POSITION,
+    v3(20 * PARSEC, 7 * PARSEC, -13 * PARSEC),
+  )
+  for (const levelMask of [0, 3, 511]) {
+    const resolved = { origin, apparentMagnitudeLimit: 8, levelMask }
+    kernel.setResolved(resolved)
+    const limit = populationLimitingLuminosity(1, 8)
+    const reach = Math.sqrt(
+      Math.max(0.16, coveredLuminosityCeiling(levelMask)) / limit,
+    )
+    const points = [0, 0.1, 1 - 1e-4, 1, 1 + 1e-4, 4].map((factor) =>
+      UV.translate(origin, v3(reach * factor * PARSEC, 0, 0)),
+    )
+    const positions = uniformArray<'vec3'>(
+      points.map((point) => {
+        const p = UV.approxMeters(point)
+        return new Vector3(p.x / PARSEC, p.y / PARSEC, p.z / PARSEC)
+      }),
+      'vec3',
+    ).element(int(uv().x.mul(points.length)))
+    const pixels = await gpu.drawGraph(kernel.sample(positions), {
+      float: true,
+      width: points.length,
+      height: 1,
+    })
+    for (const [index, point] of points.entries()) {
+      const sample = field.sample(point)
+      const expected = partitionGalaxyEmission(
+        sample,
+        point,
+        resolved,
+      ).unresolved
+      for (const [channel, key] of (['r', 'g', 'b'] as const).entries()) {
+        const value = pixels.at(index, 0)[channel]!
+        if (expected[key] === 0) expect(value).toBe(0)
+        else
+          expect(
+            Math.abs(value / expected[key] - 1),
+            `mask ${levelMask}, point ${index}, channel ${key}`,
+          ).toBeLessThan(3e-4)
+      }
+    }
+  }
 })
