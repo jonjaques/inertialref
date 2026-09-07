@@ -281,6 +281,40 @@ export interface TextureBuildOptions {
   readonly onProgress?: (message: string) => void
 }
 
+/** Build one source through the same transforms and provenance as the full set. */
+export async function buildTexture(
+  source: TextureSource,
+  options: TextureBuildOptions,
+): Promise<TextureEntry> {
+  const directory = join(options.root, options.outputDirectory)
+  mkdirSync(directory, { recursive: true })
+  const raw = await download(source, options.root)
+  const output =
+    source.transform === 'elevation'
+      ? await elevationToNormal(raw, source)
+      : source.transform === 'luminance'
+        ? await luminanceToAlpha(raw, source)
+        : await plainImage(raw, source)
+
+  const name = `${source.body}_${source.map}.webp`
+  writeFileSync(join(directory, name), output)
+  options.onProgress?.(
+    `  ${`${source.body}/${source.map}`.padEnd(24)} ${String(source.width).padStart(5)}px  ${(output.length / 1024).toFixed(0).padStart(6)} KB   ${source.licence}`,
+  )
+  return {
+    body: source.body,
+    map: source.map,
+    file: name,
+    width: source.width,
+    height: source.width / 2,
+    bytes: output.length,
+    licence: source.licence,
+    credit: source.credit,
+    source: source.url,
+    sha256: createHash('sha256').update(output).digest('hex').slice(0, 16),
+  }
+}
+
 export async function buildTextures(
   options: TextureBuildOptions,
 ): Promise<TextureManifest> {
@@ -288,33 +322,8 @@ export async function buildTextures(
   mkdirSync(directory, { recursive: true })
 
   const entries: TextureEntry[] = []
-  for (const source of TEXTURE_SOURCES) {
-    const raw = await download(source, options.root)
-    const output =
-      source.transform === 'elevation'
-        ? await elevationToNormal(raw, source)
-        : source.transform === 'luminance'
-          ? await luminanceToAlpha(raw, source)
-          : await plainImage(raw, source)
-
-    const name = `${source.body}_${source.map}.webp`
-    writeFileSync(join(directory, name), output)
-    entries.push({
-      body: source.body,
-      map: source.map,
-      file: name,
-      width: source.width,
-      height: source.width / 2,
-      bytes: output.length,
-      licence: source.licence,
-      credit: source.credit,
-      source: source.url,
-      sha256: createHash('sha256').update(output).digest('hex').slice(0, 16),
-    })
-    options.onProgress?.(
-      `  ${`${source.body}/${source.map}`.padEnd(24)} ${String(source.width).padStart(5)}px  ${(output.length / 1024).toFixed(0).padStart(6)} KB   ${source.licence}`,
-    )
-  }
+  for (const source of TEXTURE_SOURCES)
+    entries.push(await buildTexture(source, options))
 
   /*
    * Anything the manifest no longer names is deleted.
