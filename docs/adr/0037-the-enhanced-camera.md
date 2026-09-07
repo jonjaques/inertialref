@@ -108,6 +108,14 @@ transmission and dust extinction. It cannot paint a sky over a planet, restore
 stars hidden behind opaque dust, or manufacture illumination on an unlit body.
 Any dark-surface lift is an explicit Enhanced treatment.
 
+A mapped surface takes reflectance from its texture and hue from a normalized
+tint. A mapless surface takes reflectance from its physical palette. The sphere,
+streamed ground and orbital reflectance bake share that convention; a bake
+contains no camera visibility gain. Enhanced applies its bounded dark-body gain
+once, at the scene material. Its 3% terrain and water fill is also visibility
+processing. Photographic modes retain modeled atmospheric scattering but apply
+neither that floor nor the dark-body gain.
+
 One sensor chain and the existing camera/lens producers remain in charge.
 Camera settings and adaptation are presentation state, outside the canonical
 world and its hash. [ADR-0029](0029-the-sensor-spine.md) continues to govern

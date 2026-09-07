@@ -8589,6 +8589,85 @@ was made, and the diagnostic branch did not execute on the successful run.
 The verification record preserves the transient failure rather than inventing
 a shader or driver fix. All owned GPU processes have exited.
 
+## The camera keeps the light through a change of origin (07 Sep 2026)
+
+The camera completion branch starts at PR #73's `9e26512`, with the physical
+field and its 960-pixel live-history cap intact. The
+[camera completion record](design/plans/the-camera.md#camera-completion-record)
+owns the matched images and complete-frame measurements; the sensor index
+points to the same C1–C5 sequence. Iris sampling, diffraction, spectral
+attachments, export, tether controls and headroom discovery remain separate
+follow-ups.
+
+A ten-meter camera move can look like a 4,086-meter jump when its render
+origin advances by 4,096 meters. Comparing render-relative camera positions
+therefore resets a correctly adapting meter. Sensor history now compares
+physical positions and keeps origin changes as an independent optical-motion
+reset. The real GPU regression fails against PR #73 because metering becomes
+uncalibrated at the rebase. Its fixed run retains exposure; a separate motion
+test suppresses blur on that frame and resumes it on the next. In the app,
+361 frames of a 1,000× photographic clock produce 360 rebases, no uncalibrated
+frames and a maximum adjacent exposure change of 0.000987 EV. Canonical time
+is paused for this probe; its world hash stays unchanged.
+
+Earth's blue night-side glow comes from a colorized basemap, not city emission.
+The ingestion source is NASA's grayscale Black Marble 2016 map, with a distinct
+cache filename. Dark Pacific, Sahara and Antarctica patches and bright city
+patches hold the distinction in tests. Only the night map and its manifest
+record are regenerated. The 4096×2048 asset falls from 259,990 to 145,144 bytes;
+all 25 maps total 24.884 MiB. This is a relative night-light illustration,
+not a measurement of absolute city radiance or emission spectra.
+
+The Enhanced sky uses gain `2^23` and a 0.5 luminance ceiling. The matched
+Earth-and-band view keeps a darker background and stronger separation between
+the lane and neighboring light without changing physical radiance or adding
+passes. Smooth Gaussian cloud morphology remains visible in that field;
+changing the response does not recover structure the source does not contain.
+
+Bennu's mapped sphere multiplied the map by its 0.066-scale albedo swatch
+again. Its nominal Enhanced gain still left the lit face near black. Mapped
+surfaces now use the map's reflectance and a normalized hue tint; mapless
+surfaces use the physical palette. Ground and orbital bakes share those
+inputs, and the scene applies the Enhanced gain once. The terrain's 3% night
+fill and water's matching fill belong to Enhanced. Foam receives the same
+direct, sky and visibility illumination as the surrounding water; white foam
+does not supply its own nighttime light. Hull ambient and camera fill likewise
+follow resolved processing, with explicit cinematic calibration as the scoped
+exception. The readout distinguishes Calibrating, Metered and Held.
+
+A pending star survey keeps its completed field and the matching resolved
+envelope, including an empty exterior field. Falling back to the ambient
+catalog during every request changes the represented light and uploads source
+records again. Catalog preparation is cached per world, and worker replies
+carry only the source fields the renderer consumes. The paired Node clone
+benchmark reduces Solar packets from 6,408,271 to 3,976,194 bytes and regional
+packets from 12,206,045 to 7,578,045 bytes. Median clone costs fall from
+26.38 to 17.02 ms and 49.83 to 31.86 ms respectively; these are Node transfer
+measurements, not browser frame timings.
+
+The matched-lens Chrome return traces at PR #73 and `bface6f` measure survey
+preparation at 0.532 versus 0.022 ms mean and starfield preparation at 0.285
+versus 0.197 ms. Engine intervals above 25 ms fall from 12 to seven over
+40 seconds, but the maximum grows from 42.7 to 62.1 ms. The largest final
+delay is mostly outside instrumented spans. Reply application remains about
+1.5 ms mean and 6.3 ms p95. Different initial world hashes and asynchronous
+survey completion prevent a claim of identical input state or improved worst
+frame time. All pending final samples retain their envelope. Extinction source
+writes fall, while mapping writes and temporal resets rise as completed fields
+reach their consumers; reduced preparation does not mean every cache does
+less work.
+
+One full-check attempt finds the existing near-parabolic propagation property
+boundary at seed `972706803`. At eccentricity 0.9872096784537322 over almost
+50 periods, relative velocity error is `2.550006871955817e-7` against
+`2.549997502695383e-7`, 3.674 ppm over the empirical bound. The same
+counterexample reproduces with byte-identical PR #73 physics. Reconstructing
+the state changes the inferred semimajor axis by 0.034153 meters and the period
+by 4.833 microseconds; correcting only that accumulated phase difference
+reduces the discrepancy to 0.01078 meters. Physics and tolerances are
+untouched. The focused rerun and subsequent complete check pass; the boundary
+is retained here for a separate test-oracle correction.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
