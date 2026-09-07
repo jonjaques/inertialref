@@ -39,7 +39,7 @@ function target(name: string): RenderTarget {
   return value
 }
 
-/** Interleaved physical rays reproject into an owned quarter-resolution history. */
+/** Interleaved physical rays reproject into an owned reduced-resolution history. */
 export class GalaxyTemporalVolume {
   readonly #rays = target('Galaxy current rays')
   readonly #history = [target('Galaxy history A'), target('Galaxy history B')]

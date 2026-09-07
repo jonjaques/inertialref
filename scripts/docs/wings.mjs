@@ -151,6 +151,10 @@ export const WINGS = [
             'The pointer holds the rope',
           ],
           ['docs/adr/0037-the-enhanced-camera.md', 'The Enhanced camera'],
+          [
+            'docs/adr/0038-the-stars-and-the-diffuse-sky.md',
+            'Stars and diffuse sky',
+          ],
         ],
       },
     ],
