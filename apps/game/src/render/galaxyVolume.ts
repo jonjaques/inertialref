@@ -28,7 +28,7 @@ import {
   vec4,
   vec3,
 } from 'three/tsl'
-import { getTimer, PARSEC } from '@inertialref/shared'
+import { getTimer, invariant, PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
 import {
   GALAXY_LUMINOUS_EFFICACY,
@@ -79,6 +79,8 @@ export interface GalaxyVolumeOptions {
   readonly archive?: GalaxySkyStore
   readonly temporal?: GalaxyTemporalOptions
   readonly resolutionDivisor?: 2 | 4
+  /** Bound physical history and live rays without resizing the scene or stars. */
+  readonly maxLongEdge?: number
   readonly structure?: boolean | GalaxyStructureTable
 }
 
@@ -108,6 +110,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   readonly #ownsStructure: boolean
   readonly #temporal: GalaxyTemporalVolume | null
   readonly #resolutionDivisor: number
+  readonly #maxLongEdge: number
   readonly #temporalMaterial = new NodeMaterial()
   #samplingDraws = 0
   #liveDraws = 0
@@ -152,6 +155,12 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     super('vec4')
     this.#resolutionDivisor =
       options.resolutionDivisor ?? GALAXY_RESOLUTION_DIVISOR
+    invariant(
+      options.maxLongEdge === undefined ||
+        (Number.isSafeInteger(options.maxLongEdge) && options.maxLongEdge > 0),
+      'Galaxy target maximum edge must be a positive integer',
+    )
+    this.#maxLongEdge = options.maxLongEdge ?? Infinity
     this.#field = field
     this.#ownsStructure = options.structure === true
     this.#structure =
@@ -364,17 +373,9 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
 
   warm(renderer: WebGPURenderer): Promise<void> {
     if (this.#disposed) return Promise.resolve()
-    const size = renderer.getDrawingBufferSize(this.#size)
-    const divisor =
-      this.#cache === null || this.#temporal !== null
-        ? this.#resolutionDivisor
-        : Math.max(
-            this.#resolutionDivisor,
-            Math.max(size.x, size.y) / COLD_LONG_EDGE,
-          )
-    this.#target.setSize(
-      Math.max(1, Math.ceil(size.x / divisor)),
-      Math.max(1, Math.ceil(size.y / divisor)),
+    this.#resizeTarget(
+      renderer.getDrawingBufferSize(this.#size),
+      this.#cache?.available ?? false,
     )
     this.#warm ??= Promise.all([
       warmSensorPass(renderer, this.#quad, [
@@ -393,6 +394,26 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       if (!this.#disposed) this.#ready = true
     })
     return this.#warm
+  }
+
+  /** Warming, cache transitions and viewport resizes share one pixel budget. */
+  #resizeTarget(size: Vector2, cached: boolean): void {
+    const maximum =
+      this.#cache !== null && !cached && this.#temporal === null
+        ? Math.min(this.#maxLongEdge, COLD_LONG_EDGE)
+        : this.#maxLongEdge
+    const divisor = Math.max(
+      this.#resolutionDivisor,
+      Math.max(size.x, size.y) / maximum,
+    )
+    // Clamp after ceil as well: floating division must not grow the longest
+    // edge one texel beyond its budget. The other edge keeps the same scale.
+    const width = Math.max(1, Math.min(maximum, Math.ceil(size.x / divisor)))
+    const height = Math.max(1, Math.min(maximum, Math.ceil(size.y / divisor)))
+    if (width !== this.#target.width || height !== this.#target.height) {
+      this.#target.setSize(width, height)
+      this.#dirty = true
+    }
   }
 
   override updateBefore({ renderer }: NodeFrame): undefined {
@@ -415,20 +436,8 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       this.#dirty = true
     this.#cacheRevision = revision
     this.#usedCache = cached
-    const divisor =
-      this.#cache === null || cached || this.#temporal !== null
-        ? this.#resolutionDivisor
-        : Math.max(
-            this.#resolutionDivisor,
-            Math.max(size.x, size.y) / COLD_LONG_EDGE,
-          )
-    const width = Math.max(1, Math.ceil(size.x / divisor))
-    const height = Math.max(1, Math.ceil(size.y / divisor))
-    if (width !== this.#target.width || height !== this.#target.height) {
-      // `setSize` replaces the texture, and whatever it held goes with it.
-      this.#target.setSize(width, height)
-      this.#dirty = true
-    }
+    this.#resizeTarget(size, cached)
+    const { width, height } = this.#target
     const sampling =
       cached || this.#stableSubmissions > GALAXY_SETTLE_SUBMISSIONS ? 2 : 1
     /*

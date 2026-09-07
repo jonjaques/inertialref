@@ -44,6 +44,7 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
         : undefined,
       temporal: { stride: 8 },
       resolutionDivisor: 2,
+      maxLongEdge: 960,
     })
     const mesh = createGalaxyBackdrop(volume)
     const held = { volume, mesh, field, world: engine.world }
