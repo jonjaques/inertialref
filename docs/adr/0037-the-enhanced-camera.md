@@ -84,8 +84,15 @@ Atmospheric transmission and modeled dust attenuation remain upstream of this
 visibility treatment. The lifted sky feeds glare and detector noise in Enhanced.
 Automatic meters only its photographic inputs.
 
+The diffuse gain is `2^23`, with a scene-luminance ceiling of `0.5` before the
+shared display response. The wider shoulder preserves contrast between faint
+background, dark lanes and bright star clouds. It changes no source radiance,
+physical cache or photographic exposure, and adds no passes or allocations.
+
 Enhanced also owns the dark-body visibility lift, integrated star visibility
-and analytic solar core. Automatic and Manual use physical lighting and stellar
+and analytic solar core. Its near-field ambient and camera fill reach the hull
+and props. Photographic views disable both; only a script's explicit
+`calibratedLight` staging can retain them. Automatic and Manual use physical lighting and stellar
 flux with the same hue-preserving photographic response. A script can explicitly
 request calibrated lighting and the measured ACES staging look with
 `calibratedLight`; this is an authored override with a fixed exposure, and it
@@ -129,6 +136,15 @@ Photographic time still places bodies and controls motion and detector noise.
 Camera cuts, mode changes and photographic-time scrubs reset meter history;
 generation checks discard asynchronous results from an earlier history.
 Manual and pinned frames ignore meter gain and repeat at a held instant.
+
+Camera continuity is measured in universe coordinates with the render origin
+and its orientation. A 4,096 m origin rebase cannot become an exposure cut.
+The physical displacement and recent velocity distinguish a discontinuity from
+continuous travel; target, lens and held-time changes also invalidate history.
+Motion blur bypasses the origin-change frame independently and resumes with
+continuous transforms. Stale readbacks cannot update either exposure or the
+defocus extent. Automatic reports Calibrating until it has a meter reading,
+then Metered or Held according to the adaptation setting.
 
 The WebGL fallback supports Enhanced SDR and lens-controlled Manual. Automatic
 is visibly unavailable because that backend has no supported meter readback.

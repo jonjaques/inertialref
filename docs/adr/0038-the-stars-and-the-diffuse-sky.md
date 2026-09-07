@@ -56,6 +56,14 @@ shipped distant sky supplies V 6.5 beyond it. Sparse catalogue counts outside
 the complete envelope reduce the corresponding procedural cell and band.
 Catalogue records retain their measured identities and flux convention.
 
+A pending survey retains the completed source field and its exact diffuse
+selection envelope, including a completed empty exterior field. The next reply
+replaces both atomically. Only a new world publishes the initial catalogue
+fallback. Catalogue candidates and completeness coverage are derived once per
+world. The version 2 sky-task response carries only source identity, name,
+position, color and the two luminosities the renderer consumes. Other system
+queries retain their full records.
+
 A source upload carries integer sectors, integer 1,024 m subcells and bounded
 float remainders. Observer uniforms produce directions in the vertex stage;
 ordinary translation uploads no source positions. Stable IDs preserve previous
