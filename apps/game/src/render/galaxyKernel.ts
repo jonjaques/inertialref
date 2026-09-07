@@ -35,6 +35,7 @@ import {
   galaxyDustOctaveMean,
   GALAXY_HEIGHT_PARSECS,
   GALAXY_POPULATIONS,
+  GALAXY_YOUNG_HEIGHT,
   GALAXY_RADIUS_PARSECS,
   GALAXY_RADIANCE_FACTOR,
   GALAXY_OBSERVER_MIN_STEP_PARSECS,
@@ -50,7 +51,7 @@ import { coveredLuminosityCeiling } from './galaxyPopulationPartition.ts'
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@7'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@8'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
@@ -314,6 +315,20 @@ const sample = Fn(
       float(GALAXY_RADIUS_PARSECS).sub(radius).div(4000),
     ).toVar()
     const radial = float(8178).sub(radius).div(2600).exp().mul(edge).toVar()
+    const youngHeight = radius
+      .div(GALAXY_YOUNG_HEIGHT.innerRadiusParsecs)
+      .pow(GALAXY_YOUNG_HEIGHT.power)
+      .mul(
+        GALAXY_YOUNG_HEIGHT.innerParsecs - GALAXY_YOUNG_HEIGHT.centralParsecs,
+      )
+      .add(GALAXY_YOUNG_HEIGHT.centralParsecs)
+      .toVar()
+    // sech²(h/H), expressed with a nonpositive exponent to avoid overflow.
+    const youngTail = height.div(youngHeight).mul(-2).exp().toVar()
+    const youngVertical = youngTail
+      .mul(4)
+      .div(youngTail.add(1).pow(2))
+      .mul(float(GALAXY_YOUNG_HEIGHT.centralParsecs).div(youngHeight))
     const c = Math.cos(27 * DEG),
       s = Math.sin(27 * DEG)
     const along = p.x.mul(-c).sub(p.z.mul(s))
@@ -329,7 +344,7 @@ const sample = Fn(
         .mul(edge)
         .mul(0.04),
       radial
-        .mul(height.div(-19).exp())
+        .mul(youngVertical)
         .mul(strength)
         .mul(noise(seed, p.div(350)).mul(0.2).add(1))
         .mul(0.003),
