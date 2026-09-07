@@ -51,6 +51,24 @@ export interface GalaxyPlate {
 }
 
 export interface GalaxyRenderReport {
+  readonly cache?: {
+    readonly faceSize: number
+    readonly tileSize: number
+    readonly totalTiles: number
+    readonly completedTiles: number
+    readonly tiles: number
+    readonly published: number
+    readonly cancellations: number
+    readonly pending: boolean
+    readonly ready: boolean
+    readonly retained: number
+    readonly radiusParsecs: number
+    readonly bytes: number
+    readonly units: 'RGB nW m^-2 sr^-1 / 1000'
+    readonly samplingDraws: number
+    readonly liveDraws: number
+    readonly using: boolean
+  }
   readonly coordinateFrame: 'galactocentric'
   readonly orientation: Quat | null
   readonly lens: Lens | null
