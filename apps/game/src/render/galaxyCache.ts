@@ -27,6 +27,7 @@ export interface GalaxyCacheEntry {
   readonly generation: number
   readonly position: UniverseVector
   readonly field: GalaxyField
+  readonly radiusParsecs: number
 }
 
 export interface GalaxyCacheTile extends GalaxyCacheEntry {
@@ -127,8 +128,7 @@ export class GalaxyCacheSchedule {
       return
     }
     const valid = (entry: GalaxyCacheEntry) =>
-      UV.distance(position, entry.position) <=
-      GALAXY_CACHE_RADIUS_PARSECS * PARSEC
+      UV.distance(position, entry.position) <= entry.radiusParsecs * PARSEC
     let selected: GalaxyCacheEntry | null = null
     for (const entry of this.#completed)
       if (
@@ -175,6 +175,7 @@ export class GalaxyCacheSchedule {
       generation: ++this.#generation,
       position: { ...position },
       field,
+      radiusParsecs: GALAXY_CACHE_RADIUS_PARSECS,
     }
     this.#tile = 0
   }
@@ -255,19 +256,23 @@ export class GalaxyCacheSchedule {
     request: GalaxyCacheEntry,
     position: UniverseVector,
     faceSize: number,
+    radiusParsecs = GALAXY_CACHE_RADIUS_PARSECS,
   ): boolean {
     if (
       this.#disposed ||
       this.#pending?.generation !== request.generation ||
       faceSize !== this.faceSize ||
-      UV.distance(position, request.position) >
-        GALAXY_CACHE_RADIUS_PARSECS * PARSEC
+      !Number.isFinite(radiusParsecs) ||
+      radiusParsecs < 0 ||
+      radiusParsecs > GALAXY_CACHE_RADIUS_PARSECS ||
+      UV.distance(position, request.position) > radiusParsecs * PARSEC
     )
       return false
     const entry = {
       ...request,
       position: { ...position },
       faceSize,
+      radiusParsecs,
       generation: ++this.#generation,
     }
     this.#pending = null

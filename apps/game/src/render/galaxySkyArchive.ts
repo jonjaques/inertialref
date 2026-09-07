@@ -111,9 +111,8 @@ export function validateGalaxySkyArchive(
     value.kernelVersion !== query.kernelVersion ||
     value.faceSize !== query.faceSize ||
     fieldKey(value.field) !== fieldKey(query.field) ||
-    !sameResolved(value.resolved, query.resolved) ||
     UV.distance(value.origin, query.origin) >
-      GALAXY_CACHE_RADIUS_PARSECS * PARSEC ||
+      galaxySkyReuseRadius(value, query) * PARSEC ||
     !Array.isArray(value.faces) ||
     value.faces.length !== 6
   )
@@ -137,16 +136,21 @@ export function validateGalaxySkyArchive(
   return value as unknown as GalaxySkyArchiveRecord
 }
 
-function sameResolved(
-  a: ResolvedPopulationSelection | undefined,
-  b: ResolvedPopulationSelection | undefined,
-): boolean {
-  if (a === undefined || b === undefined) return a === b
-  return (
-    UV.equals(a.origin, b.origin) &&
-    a.apparentMagnitudeLimit === b.apparentMagnitudeLimit &&
-    a.levelMask === b.levelMask
+/** The source envelope and future eye motion spend one physical reuse budget. */
+export function galaxySkyReuseRadius(
+  record: GalaxySkyQuery,
+  query: GalaxySkyQuery,
+): number {
+  const a = record.resolved,
+    b = query.resolved
+  if (a === undefined || b === undefined)
+    return a === b ? GALAXY_CACHE_RADIUS_PARSECS : -Infinity
+  if (
+    a.apparentMagnitudeLimit !== b.apparentMagnitudeLimit ||
+    a.levelMask !== b.levelMask
   )
+    return -Infinity
+  return GALAXY_CACHE_RADIUS_PARSECS - UV.distance(a.origin, b.origin) / PARSEC
 }
 
 function object(value: unknown): value is Record<string, unknown> {

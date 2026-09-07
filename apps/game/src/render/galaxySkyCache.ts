@@ -32,6 +32,7 @@ import {
 } from './galaxyCache.ts'
 import {
   galaxySkyQuery,
+  galaxySkyReuseRadius,
   validateGalaxySkyArchive,
   type GalaxySkyStore,
 } from './galaxySkyArchive.ts'
@@ -373,7 +374,14 @@ export class GalaxySkyCache {
         const target = skyTarget(record.faceSize, current.slot)
         try {
           restoreGalaxyCube(renderer, target, record.faces)
-          if (!this.schedule.restore(current, record.origin, record.faceSize)) {
+          if (
+            !this.schedule.restore(
+              current,
+              record.origin,
+              record.faceSize,
+              galaxySkyReuseRadius(record, query),
+            )
+          ) {
             target.dispose()
             return
           }

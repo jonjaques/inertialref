@@ -174,3 +174,17 @@ it('publishes an archived cube only into its still-current request', () => {
   cache.dispose()
   expect(cache.restore(request, SUN_POSITION, 32)).toBe(false)
 })
+
+it('keeps the reduced eye allowance of a restored source partition', () => {
+  const cache = new GalaxyCacheSchedule({ faceSize: 32 })
+  const at = (pc: number) => UV.translate(SUN_POSITION, vec3(pc * PARSEC, 0, 0))
+  cache.configure(at(0.07), field)
+  expect(cache.restore(cache.next()!, SUN_POSITION, 32, 0.08)).toBe(true)
+  cache.configure(at(0.079), field)
+  expect(cache.selected).not.toBeNull()
+  cache.configure(at(0.081), field)
+  expect(cache.selected).toBeNull()
+  cache.configure(at(0.07), field)
+  expect(cache.selected).not.toBeNull()
+  cache.dispose()
+})

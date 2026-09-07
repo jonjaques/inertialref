@@ -82,7 +82,7 @@ describe('physical sky archive', () => {
         ...query,
         resolved: {
           ...resolved,
-          origin: UV.translate(resolved.origin, { x: 1, y: 0, z: 0 }),
+          origin: UV.translate(resolved.origin, { x: PARSEC, y: 0, z: 0 }),
         },
       },
     ]
@@ -132,4 +132,26 @@ describe('physical sky archive', () => {
       validateGalaxySkyArchive({ ...record(), ...snapshot }, snapshot),
     ).not.toBeNull()
   })
+})
+
+it('spends one displacement budget on the eye and its resolved envelope together', () => {
+  const archived = record()
+  const shifted = {
+    ...query,
+    origin: UV.translate(query.origin, { x: 0.07 * PARSEC, y: 0, z: 0 }),
+    resolved: {
+      ...resolved,
+      origin: UV.translate(resolved.origin, { x: 0, y: 0.07 * PARSEC, z: 0 }),
+    },
+  }
+  expect(validateGalaxySkyArchive(archived, shifted) === archived).toBe(true)
+  expect(
+    validateGalaxySkyArchive(archived, {
+      ...shifted,
+      resolved: {
+        ...shifted.resolved,
+        origin: UV.translate(resolved.origin, { x: 0, y: 0.09 * PARSEC, z: 0 }),
+      },
+    }),
+  ).toBeNull()
 })
