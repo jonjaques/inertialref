@@ -11,6 +11,7 @@ import {
   float,
   instanceIndex,
   instancedBufferAttribute,
+  mix,
   storage,
   uint,
   uvec4,
@@ -48,6 +49,7 @@ interface Source {
   written: number
   reference?: readonly [number, number, number]
   corrected?: readonly [number, number, number]
+  previous?: readonly [number, number, number]
   published?: number
 }
 export interface StarExtinctionBatch {
@@ -65,6 +67,7 @@ export class StarExtinctionSchedule {
   #cursor = 0
   #field: GalaxyField | null = null
   #origin: UniverseVector | null = null
+  #observer: UniverseVector | null = null
   #generation = 0
   #version = 0
   #disposed = false
@@ -89,12 +92,21 @@ export class StarExtinctionSchedule {
       selection.ids !== this.#selection?.ids ||
       selection.positions !== this.#selection?.positions ||
       selection.catalogued !== this.#selection?.catalogued
+    this.#observer = observer
     const moved =
       observer === null ||
       this.#origin === null ||
       UV.distance(observer, this.#origin) >
         STAR_EXTINCTION_CACHE_RADIUS_PARSECS * PARSEC
-    if (changedField || moved) {
+    // Finish a bounded cycle at one origin before chasing the moving observer.
+    // Otherwise continuous travel keeps restarting at source zero forever.
+    const refresh =
+      changedField ||
+      (observer === null
+        ? this.#origin !== null
+        : this.#origin === null ||
+          (moved && this.#queue.length === this.#cursor))
+    if (refresh) {
       if (this.#queue.length > this.#cursor) this.#cancellations++
       this.#generation++
       this.#origin =
@@ -107,6 +119,7 @@ export class StarExtinctionSchedule {
                 : observer),
             }
       this.#queue = []
+      this.#cursor = 0
     }
     this.#field = field
     if (changedField || changedSelection) {
@@ -154,23 +167,30 @@ export class StarExtinctionSchedule {
       })
       this.#selection = selection
     }
-    if (this.#origin !== null && UV.distance(this.#origin, SUN_POSITION) === 0)
+    if (
+      (changedSelection || refresh) &&
+      this.#origin !== null &&
+      UV.distance(this.#origin, SUN_POSITION) === 0
+    )
       for (const source of this.#selected)
         if (source.catalogued) {
           source.written = this.#generation
           source.corrected = [1, 1, 1]
+          source.previous = undefined
           source.published = -1
         }
-    if (changedField || changedSelection || moved) {
+    if (changedSelection || refresh) {
+      const pending = new Set(
+        this.#selected.filter((source) => source.written !== this.#generation),
+      )
+      // Reordering a viewport selection must not starve the tail of the cycle.
+      const retained = this.#queue
+        .slice(this.#cursor)
+        .filter((source) => pending.delete(source))
       this.#cursor = 0
-      this.#queue =
-        this.#origin === null
-          ? []
-          : this.#selected.filter(
-              (source) => source.written !== this.#generation,
-            )
+      this.#queue = this.#origin === null ? [] : [...retained, ...pending]
     }
-    return changedField || changedSelection || moved
+    return changedSelection || refresh
   }
   next(count: number): StarExtinctionBatch | null {
     return this.#disposed || this.#queue.length === this.#cursor
@@ -210,6 +230,10 @@ export class StarExtinctionSchedule {
       retained: this.#sources.size,
       completed: this.#completed,
       cancellations: this.#cancellations,
+      lagParsecs:
+        this.#origin === null || this.#observer === null
+          ? 0
+          : UV.distance(this.#origin, this.#observer) / PARSEC,
     }
   }
   dispose(): void {
@@ -219,6 +243,7 @@ export class StarExtinctionSchedule {
     this.#selected = []
     this.#sources.clear()
     this.#origin = null
+    this.#observer = null
   }
 }
 
@@ -228,6 +253,22 @@ export interface StarExtinctionCacheOptions {
   readonly cpu?: boolean
   readonly cpuBatchSize?: number
   readonly kernel?: ReturnType<typeof createGalaxyKernel>
+}
+
+/** Interpolate optical depth when both columns exist; a new source fades in once. */
+function displayedColumn(
+  value: Node<'vec3'>,
+  previous: Node<'vec4'>,
+  alpha: Node<'float'>,
+): Node<'vec3'> {
+  const blended = mix(
+    previous.rgb.max(1e-35).log(),
+    value.max(1e-35).log(),
+    alpha,
+  ).exp()
+  return alpha
+    .greaterThanEqual(1)
+    .select(value, previous.w.greaterThan(0).select(blended, value.mul(alpha)))
 }
 
 /** Bounded retained RGB transport, with the catalogue calibrated at its actual observing origin. */
@@ -241,12 +282,14 @@ export class StarExtinctionCache {
   readonly #reference: StorageInstancedBufferAttribute
   readonly #stamp: StorageInstancedBufferAttribute
   readonly #cpuOutput: StorageInstancedBufferAttribute
+  readonly #cpuPrevious: StorageInstancedBufferAttribute
   readonly #buffers: StorageInstancedBufferAttribute[]
   readonly #generation = uniform(0, 'uint')
   readonly #frame = uniform(0)
   readonly #count = uniform(0, 'uint')
   readonly #origin = uniform(new Vector3())
   readonly #atSol = uniform(false)
+  readonly #active = uniform(false)
   readonly #extinction
   readonly #compute
   readonly #batchSize: number
@@ -286,7 +329,7 @@ export class StarExtinctionCache {
       'CPU extinction batches must contain 1 through 64 sources',
     )
     this.transmission = new StorageInstancedBufferAttribute(
-      new Float32Array(capacity * 4),
+      new Float32Array(capacity * 8),
       4,
     )
     this.#positions = new StorageInstancedBufferAttribute(
@@ -317,6 +360,10 @@ export class StarExtinctionCache {
       new Float32Array(capacity * 4),
       4,
     )
+    this.#cpuPrevious = new StorageInstancedBufferAttribute(
+      new Float32Array(capacity * 4),
+      4,
+    )
     this.#buffers = [
       this.transmission,
       this.#positions,
@@ -326,13 +373,14 @@ export class StarExtinctionCache {
       this.#reference,
       this.#stamp,
       this.#cpuOutput,
+      this.#cpuPrevious,
     ]
     this.#extinction = createStarExtinction(field, {}, options.kernel)
     const positions = storage(this.#positions, 'vec4', capacity),
       versions = storage(this.#versions, 'uint', capacity),
       pending = storage(this.#pending, 'uint', this.#batchSize),
       reference = storage(this.#reference, 'vec4', capacity),
-      output = storage(this.transmission, 'vec4', capacity),
+      output = storage(this.transmission, 'vec4', capacity * 2),
       stamp = storage(this.#stamp, 'uvec4', capacity)
     this.#compute = Fn(() => {
       If(instanceIndex.lessThan(this.#count), () => {
@@ -364,6 +412,31 @@ export class StarExtinctionCache {
             depth.addAssign(saved.rgb)
           })
         })
+        const oldValue = output.element(index).toVar()
+        const oldPrevious = output.element(index.add(capacity)).toVar()
+        const alpha = this.#frame
+          .sub(float(metadata.w))
+          .add(1)
+          .div(FADE_SUBMISSIONS)
+          .clamp()
+        const sameSource = metadata.y.equal(version)
+        const calibratedAtSol = source.w
+          .greaterThan(1.5)
+          .and(metadata.x.notEqual(this.#generation))
+        output
+          .element(index.add(capacity))
+          .assign(
+            vec4(
+              calibratedAtSol.select(
+                vec3(1),
+                sameSource.select(
+                  displayedColumn(oldValue.rgb, oldPrevious, alpha),
+                  vec3(0),
+                ),
+              ),
+              float(sameSource.or(calibratedAtSol)),
+            ),
+          )
         const saturated = depth.x
           .max(depth.y)
           .max(depth.z)
@@ -388,36 +461,51 @@ export class StarExtinctionCache {
   sample(index: Node<'uint'>): Node<'vec3'> {
     if (this.#cpu) {
       const value = instancedBufferAttribute<'vec4'>(this.#cpuOutput, 'vec4')
-      return value.rgb.mul(
+      const previous = instancedBufferAttribute<'vec4'>(
+        this.#cpuPrevious,
+        'vec4',
+      )
+      const alpha = this.#frame
+        .sub(value.w)
+        .add(1)
+        .div(FADE_SUBMISSIONS)
+        .clamp()
+      return this.#active.select(
         value.w
           .lessThan(0)
           .select(
-            float(1),
+            value.rgb,
             value.w
               .greaterThan(0)
-              .select(
-                this.#frame.sub(value.w).add(1).div(FADE_SUBMISSIONS).clamp(),
-                float(0),
-              ),
+              .select(displayedColumn(value.rgb, previous, alpha), vec3(0)),
           ),
+        vec3(0),
       )
     }
     const capacity = this.schedule.capacity
     const mapped = storage(this.#mapping, 'uvec4', capacity).element(index)
     const slot = mapped.x
-    const value = storage(this.transmission, 'vec4', capacity).element(slot)
+    const columns = storage(this.transmission, 'vec4', capacity * 2)
+    const value = columns.element(slot)
+    const previous = columns.element(slot.add(capacity))
     const version = mapped.y
     const stamp = storage(this.#stamp, 'uvec4', capacity).element(slot)
-    const valid = stamp.y.equal(version).and(stamp.x.equal(this.#generation))
+    const valid = stamp.y.equal(version)
     const visibility = this.#frame
       .sub(float(stamp.w))
       .add(1)
       .div(FADE_SUBMISSIONS)
       .clamp()
-    const catalogueAtSol = mapped.z.greaterThan(0).and(this.#atSol)
-    return catalogueAtSol.select(
-      vec3(1),
-      valid.select(value.rgb.mul(visibility), vec3(0)),
+    const catalogueAtSol = mapped.z
+      .greaterThan(0)
+      .and(this.#atSol)
+      .or(mapped.w.greaterThan(0).and(stamp.x.notEqual(this.#generation)))
+    return this.#active.select(
+      catalogueAtSol.select(
+        vec3(1),
+        valid.select(displayedColumn(value.rgb, previous, visibility), vec3(0)),
+      ),
+      vec3(0),
     )
   }
 
@@ -436,25 +524,37 @@ export class StarExtinctionCache {
       this.#field = field
       this.#extinction.setField(field)
     }
+    const previousOrigin = this.schedule.origin
     if (!this.schedule.configure(selection, observer, field)) return
     this.#generation.value = this.schedule.generation
     const origin = this.schedule.origin
+    this.#active.value = origin !== null
     if (origin !== null) this.#origin.value.copy(starExtinctionOrigin(origin))
     this.#atSol.value =
       origin !== null && UV.distance(origin, SUN_POSITION) / PARSEC < 1e-6
-    if (inputsChanged) {
+    if (inputsChanged || previousOrigin !== origin) {
       this.#selection = selection
       this.schedule.selected.forEach((source, index) => {
         this.#instanceBySlot[source.slot] = index
         const p = starExtinctionOrigin(source.position),
           slot = source.slot
         this.#positions.array.set(
-          [p.x, p.y, p.z, source.catalogued ? 1 : 0],
+          [
+            p.x,
+            p.y,
+            p.z,
+            source.catalogued ? (source.published === -1 ? 2 : 1) : 0,
+          ],
           slot * 4,
         )
         this.#versions.array[slot] = source.version
         this.#mapping.array.set(
-          [slot, source.version, source.catalogued ? 1 : 0, 0],
+          [
+            slot,
+            source.version,
+            source.catalogued ? 1 : 0,
+            source.published === -1 ? 1 : 0,
+          ],
           index * 4,
         )
       })
@@ -508,6 +608,24 @@ export class StarExtinctionCache {
         }
         if (depth.some((value) => value > STAR_EXTINCTION_MAX_LOG_GAIN))
           this.#saturated++
+        const alpha = Math.max(
+          0,
+          Math.min(
+            1,
+            (this.#frame.value - (source.published ?? 0) + 1) /
+              FADE_SUBMISSIONS,
+          ),
+        )
+        source.previous = source.corrected?.map((value, c) =>
+          source.published === -1 || alpha === 1
+            ? value
+            : source.previous === undefined
+              ? value * alpha
+              : Math.exp(
+                  Math.log(Math.max(1e-35, source.previous[c]!)) * (1 - alpha) +
+                    Math.log(Math.max(1e-35, value)) * alpha,
+                ),
+        ) as [number, number, number] | undefined
         source.corrected = depth.map((value) =>
           Math.exp(Math.min(value, STAR_EXTINCTION_MAX_LOG_GAIN)),
         ) as [number, number, number]
@@ -520,6 +638,7 @@ export class StarExtinctionCache {
       this.#pending.needsUpdate = true
       this.#count.value = batch.sources.length
       renderer.compute(this.#compute)
+      for (const source of batch.sources) source.published = this.#frame.value
     }
     this.schedule.complete(batch)
     this.#draws++
@@ -530,16 +649,20 @@ export class StarExtinctionCache {
   #writeCpu(sources = this.schedule.selected): void {
     sources.forEach((source) => {
       const index = this.#instanceBySlot[source.slot]!
-      const valid =
-        source.written === this.schedule.generation &&
-        source.corrected !== undefined
+      const valid = source.corrected !== undefined
       this.#cpuOutput.addUpdateRange(index * 4, 4)
+      this.#cpuPrevious.addUpdateRange(index * 4, 4)
+      this.#cpuPrevious.array.set(
+        source.previous === undefined ? [0, 0, 0, 0] : [...source.previous, 1],
+        index * 4,
+      )
       this.#cpuOutput.array.set(
         valid ? [...source.corrected!, source.published!] : [0, 0, 0, 0],
         index * 4,
       )
     })
     this.#cpuOutput.needsUpdate = true
+    this.#cpuPrevious.needsUpdate = true
   }
 
   get diagnostics() {
@@ -567,6 +690,7 @@ export class StarExtinctionCache {
     if (this.#disposed) return
     this.#disposed = true
     this.#ready = false
+    this.#active.value = false
     this.schedule.dispose()
     this.#generation.value = this.schedule.generation
     this.#compute.dispose()

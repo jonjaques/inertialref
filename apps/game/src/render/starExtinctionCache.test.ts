@@ -43,17 +43,14 @@ it('preserves source slots and completed columns through selection reorder and l
   expect(schedule.next(12)!.sources.map((s) => s.id)).toEqual(['2', '3'])
 })
 
-it('rejects canceled observer, replaced source and retired batches', () => {
+it('rejects canceled inactive, replaced source and retired batches', () => {
   const schedule = new StarExtinctionSchedule(3),
     stars = selection(['0', '1', '2'])
   schedule.configure(stars, SUN_POSITION, field)
   const stale = schedule.next(3)!
-  schedule.configure(
-    stars,
-    UV.translate(SUN_POSITION, vec3(PARSEC, 0, 0)),
-    field,
-  )
+  schedule.configure(stars, null, field)
   expect(schedule.complete(stale)).toBe(false)
+  schedule.configure(stars, SUN_POSITION, field)
   const moved = schedule.next(3)!
   schedule.configure(
     selection(['0', '1', '3']),
@@ -162,4 +159,33 @@ it('rejects a warm-up result that arrives after renderer retirement', async () =
   await warm
   expect(cache.diagnostics.ready).toBe(false)
   expect(cache.advance(renderer)).toBe(false)
+})
+
+it('finishes a finite observer cycle during continuous travel before refreshing at the latest observer', () => {
+  const schedule = new StarExtinctionSchedule(12),
+    stars = selection(Array.from({ length: 12 }, (_, i) => String(i)))
+  schedule.configure(stars, SUN_POSITION, field)
+  const generation = schedule.generation
+  for (let frame = 0; frame < 6; frame++) {
+    schedule.configure(
+      stars,
+      UV.translate(SUN_POSITION, vec3((frame + 1) * PARSEC, 0, 0)),
+      field,
+    )
+    expect(schedule.generation).toBe(generation)
+    expect(UV.distance(schedule.origin!, SUN_POSITION)).toBe(0)
+    const batch = schedule.next(2)!
+    expect(batch.sources.map((s) => s.id)).toEqual([
+      String(frame * 2),
+      String(frame * 2 + 1),
+    ])
+    expect(schedule.complete(batch)).toBe(true)
+  }
+  expect(schedule.diagnostics.pending).toBe(0)
+  expect(schedule.diagnostics.lagParsecs).toBeCloseTo(6, 10)
+  const latest = UV.translate(SUN_POSITION, vec3(7 * PARSEC, 0, 0))
+  schedule.configure(stars, latest, field)
+  expect(schedule.generation).toBe(generation + 1)
+  expect(UV.distance(schedule.origin!, latest)).toBe(0)
+  expect(schedule.diagnostics.pending).toBe(12)
 })

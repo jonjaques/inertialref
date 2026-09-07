@@ -20,7 +20,7 @@ beforeAll(async () => {
 })
 afterAll(() => gpu.dispose())
 
-it('publishes only evaluated sources, preserves catalogue light at Sol and corrects a translated observer', async () => {
+it('retains physical columns through travel and blends each finite refresh without hiding established sources', async () => {
   const field = createGalaxyField(rootSeed('inertialref'))
   const cloud = LOCAL_CLOUDS.find((c) => c.name === 'Aquila Rift')!
   const length = Math.hypot(
@@ -85,9 +85,18 @@ it('publishes only evaluated sources, preserves catalogue light at Sol and corre
     expect(reorderedLight.at(1, 0)).toEqual(ready.at(0, 0))
     const moved = at(250)
     cache.configure(reordered, moved)
-    const invalidated = await draw(2)
-    for (let i = 0; i < 2; i++)
-      expect(invalidated.at(i, 0).slice(0, 3)).toEqual([0, 0, 0])
+    const retained = await draw(2)
+    expect(retained.at(0, 0)).toEqual(reorderedLight.at(0, 0))
+    expect(retained.at(1, 0)).toEqual(reorderedLight.at(1, 0))
+    cache.advance(gpu.renderer)
+    const intermediate = await draw(2)
+    expect(intermediate.at(0, 0)[1]).toBeGreaterThan(retained.at(0, 0)[1])
+    expect(intermediate.at(1, 0).slice(0, 3)).toEqual([1, 1, 1])
+    const generation = cache.schedule.generation
+    cache.configure(reordered, at(300))
+    expect(cache.schedule.generation).toBe(generation)
+    cache.advance(gpu.renderer)
+    expect(cache.diagnostics.pending).toBe(0)
     for (let i = 0; i < 7; i++) cache.advance(gpu.renderer)
     const corrected = await draw(2)
     const current = integrateStarExtinction(
@@ -107,6 +116,10 @@ it('publishes only evaluated sources, preserves catalogue light at Sol and corre
         2,
       )
     }
+    cache.configure(reordered, null)
+    const inactive = await draw(2)
+    expect(inactive.at(0, 0).slice(0, 3)).toEqual([0, 0, 0])
+    expect(inactive.at(1, 0).slice(0, 3)).toEqual([0, 0, 0])
     cache.configure(
       reordered,
       moved,
