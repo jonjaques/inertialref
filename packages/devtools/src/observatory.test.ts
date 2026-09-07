@@ -988,6 +988,40 @@ describe('a drop', () => {
     ).toBeLessThan(1e-9)
   })
 
+  it('puts the actual camera at the preview touchdown on round and irregular bodies', () => {
+    const { harness: ir, session } = harness()
+    try {
+      fc.assert(
+        fc.property(
+          fc.constantFrom('s:SOL/b:2', 's:SOL/b:2.0', 's:SOL/b:3.0'),
+          fc.double({ min: -Math.PI / 2, max: Math.PI / 2, noNaN: true }),
+          fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+          (address, latitude, longitude) => {
+            ir.ascend()
+            ir.look(address)
+            const point = { latitude, longitude }
+            const preview = ir.observatory.entryArcPreview(undefined, point)
+            expect(preview).not.toBeNull()
+            const radius = ir.observatory.target!.radius
+            ir.observatory.drop(undefined, point, { seconds: 0.1 })
+            const pose = posed(ir.observerSample(1))
+            const spin = spinOf(session, ir.observatory.target!.address)
+            const expected = UV.translate(
+              spin.position,
+              Q.rotate(spin.orientation, Vec.scale(preview!.touchdown, radius)),
+            )
+            expect(UV.distance(pose.position, expected)).toBeLessThan(
+              UV.POSITION_RESOLUTION * 4,
+            )
+          },
+        ),
+        { numRuns: 24 },
+      )
+    } finally {
+      session.dispose()
+    }
+  })
+
   it('has no preview to draw once there is no aim', () => {
     const { harness: ir } = harness()
     ir.look('s:SOL/b:2')

@@ -71,13 +71,20 @@ export function entryArc(eye: Vec3, ground: Vec3): EntryArc | null {
   const toEye = Vec.scale(eye, 1 / apoapsis)
   const toGround = Vec.scale(ground, 1 / touchdown)
   const cosSweep = Math.max(-1, Math.min(1, Vec.dot(toEye, toGround)))
-  const sweep = Math.acos(cosSweep)
+  // acos loses the angle near a radial drop: normalization alone can turn
+  // zero into 2e-8 radians, moving a planetary touchdown by decimeters.
+  const normal = Vec.cross(toEye, toGround)
+  const sinSweep = Vec.length(normal)
+  const sweep =
+    sinSweep <= Number.EPSILON * 4 && cosSweep > 0
+      ? 0
+      : Math.atan2(sinSweep, cosSweep)
   // The in-plane perpendicular, by removing the radial part of the touchdown
   // direction. Degenerate exactly when the touchdown is under the eye, where
   // any perpendicular does, because it multiplies `sin 0`.
-  const sideways = Vec.sub(toGround, Vec.scale(toEye, cosSweep))
+  const sideways = Vec.cross(normal, toEye)
   const across =
-    Vec.length(sideways) > 1e-9
+    sinSweep > 0
       ? Vec.normalize(sideways)
       : Vec.normalize(
           Vec.cross(
