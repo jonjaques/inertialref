@@ -112,7 +112,7 @@ export interface GalaxyRenderReport {
   readonly maxSteps: number
   /** Scene submissions the volume was asked in, drawn or not. */
   readonly submissions: number
-  /** Volume draws. Less than `submissions` once the target is being reused. */
+  /** All diffuse GPU draws, including each tile, ray pass and history resolve. */
   readonly draws: number
   /** Whether the last submission reused the target rather than drawing. */
   readonly held: boolean
@@ -121,7 +121,23 @@ export interface GalaxyRenderReport {
   readonly emissionOnly: boolean
   readonly dustScale: number
   readonly dustNormalization: number
-  readonly resolvedStarExtinction: false
+  readonly resolvedStarExtinction: boolean
+  readonly stars?: {
+    readonly count: number
+    readonly uploads: number
+    readonly reductions: number
+    readonly bytes: number
+    readonly extinction: {
+      readonly ready: boolean
+      readonly backend: string
+      readonly pending: number
+      readonly completed: number
+      readonly cancellations: number
+      readonly batchSize: number
+      readonly draws: number
+      readonly bytes: number
+    }
+  }
   readonly originParsecs: readonly number[]
 }
 

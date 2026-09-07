@@ -8,6 +8,8 @@ import {
   GalaxyVolumeNode,
 } from '../render/galaxyVolume.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import type { createStarProjection } from '../render/starProjection.ts'
+import type { StarExtinctionCache } from '../render/starExtinctionCache.ts'
 import { acquireGalaxyStructure } from '../render/galaxyStructure.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -41,15 +43,31 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
     const held = { volume, mesh, field, world: engine.world }
     live.current = held
     scene.add(mesh)
-    const report = () => ({
-      ...volume.diagnostics,
-      exposure: engine.exposure,
-      survey: engine.starSurvey,
-      instrument: engine.galaxyInstrument,
-      journey: engine.galaxyInstrument
-        ? engine.harness.observatory.journey
-        : null,
-    })
+    const report = () => {
+      const sprite = scene.getObjectByName('Starfield')
+      const projection = sprite?.userData.starProjection as
+        ReturnType<typeof createStarProjection> | undefined
+      const extinction = sprite?.userData.starExtinction as
+        StarExtinctionCache | undefined
+      return {
+        ...volume.diagnostics,
+        resolvedStarExtinction: extinction?.diagnostics.ready ?? false,
+        ...(projection === undefined || extinction === undefined
+          ? {}
+          : {
+              stars: {
+                ...projection.diagnostics,
+                extinction: extinction.diagnostics,
+              },
+            }),
+        exposure: engine.exposure,
+        survey: engine.starSurvey,
+        instrument: engine.galaxyInstrument,
+        journey: engine.galaxyInstrument
+          ? engine.harness.observatory.journey
+          : null,
+      }
+    }
     engine.galaxyRenderer = report
     warmAtMount({
       label: 'warming the galaxy',
