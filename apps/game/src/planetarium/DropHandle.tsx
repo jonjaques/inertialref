@@ -167,7 +167,9 @@ export function DropHandle({
   }
 
   const release = (event: React.PointerEvent<HTMLButtonElement>): void => {
-    const held = aim
+    // React keeps only hit/miss for the label. The observatory owns the
+    // coordinates currently drawn, including motion across one valid region.
+    const held = engine.harness.observatory.aim
     const node = event.currentTarget
     if (node.hasPointerCapture(event.pointerId))
       node.releasePointerCapture(event.pointerId)
@@ -181,14 +183,14 @@ export function DropHandle({
       onNotice(`Drag onto ${name ?? 'the world'} to stand there.`)
       return
     }
-    if (event.type !== 'pointerup' || held.hit === null) return
+    if (event.type !== 'pointerup') return
     try {
       // Through the harness, so the console verb and this gesture are one call
       // and cannot drift on the degrees/radians boundary — `ir.drop` takes
       // degrees and the arm under it takes radians.
       engine.harness.drop(
-        (held.hit.latitude * 180) / Math.PI,
-        (held.hit.longitude * 180) / Math.PI,
+        (held.latitude * 180) / Math.PI,
+        (held.longitude * 180) / Math.PI,
       )
     } catch (cause) {
       onNotice(describeCause(cause))
