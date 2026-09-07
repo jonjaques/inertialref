@@ -64,6 +64,7 @@ export class GalaxyTemporalVolume {
   readonly #phase = uniform(new Vector2())
   readonly #angle = uniform(1)
   readonly #valid = uniform(0)
+  readonly #stationary = uniform(0)
   readonly stride: number
   #pose: ObserverPose | null = null
   #lens: Lens | null = null
@@ -158,7 +159,9 @@ export class GalaxyTemporalVolume {
         lower.assign(lower.min(neighbor))
         upper.assign(upper.max(neighbor))
       }
-      const kept = vec4(history.rgb.clamp(lower, upper), current.a)
+      const kept = this.#stationary
+        .greaterThan(0)
+        .select(history, vec4(history.rgb.clamp(lower, upper), current.a))
       return ownPhase.or(valid.not()).select(current, kept)
     })()
     this.#resolveMaterial.name = 'Galaxy physical history resolve'
@@ -226,6 +229,15 @@ export class GalaxyTemporalVolume {
       this.#resets++
       this.#phaseIndex = 0
     }
+    this.#stationary.value =
+      valid &&
+      previous !== null &&
+      UV.distance(pose.position, previous.position) < PARSEC * 1e-6 &&
+      dot > 1 - 1e-12 &&
+      Math.abs(Math.tan(verticalFov(lens) / 2) - this.#previousPlane.value.y) <
+        1e-8
+        ? 1
+        : 0
     this.#valid.value = valid ? 1 : 0
     this.#phase.value.set(
       this.#phaseIndex % this.stride,

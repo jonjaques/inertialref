@@ -116,3 +116,33 @@ it('rejects depth disocclusion and large translation without retaining old color
     volume.dispose()
   }
 })
+
+it('retains fine stationary structure across all sixteen interleaved phases', async () => {
+  const volume = new GalaxyTemporalVolume((_origin, direction) =>
+    vec4(
+      direction.x.div(direction.z).mul(90).sin().mul(0.3).add(0.4),
+      0.1,
+      0.1,
+      1000,
+    ),
+  )
+  const pose = { position: UV.fromMeters(0, 0, 0), orientation: Q.IDENTITY }
+  try {
+    volume.configure(pose, LENS_PRESETS.flight, 1)
+    await volume.warm(gpu.renderer)
+    for (let i = 0; i < 16; i++) volume.render(gpu.renderer, 64, 48)
+    const pixels = await gpu.drawGraph(volume.sample(), {
+      float: true,
+      width: 64,
+      height: 48,
+    })
+    const half = Math.tan(verticalFov(LENS_PRESETS.flight) / 2)
+    for (let x = 4; x < 60; x++) {
+      const dx = (((2 * (x + 0.5)) / 64 - 1) * half * 64) / 48
+      const expected = 0.4 + 0.3 * Math.sin(-dx * 90)
+      expect(Math.abs(pixels.at(x, 24)[0] - expected)).toBeLessThan(0.001)
+    }
+  } finally {
+    volume.dispose()
+  }
+})
