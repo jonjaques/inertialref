@@ -16,6 +16,7 @@ import {
   type Seconds,
 } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
+import { encodeUniverseVector } from '@inertialref/protocol'
 import {
   orientationToRenderSpace,
   type Quat,
@@ -34,8 +35,7 @@ import {
 import {
   type Body,
   type CatalogStar,
-  cellKey,
-  cellOf,
+  populationCoverage,
   type EntityId,
   findBody,
   parseAddress,
@@ -60,7 +60,7 @@ import {
 import {
   type HeightfieldSource,
   type Heightfields,
-  surveyRegionTask,
+  surveySkyTask,
   type WorkerFactory,
   WorkerPool,
 } from '@inertialref/workers'
@@ -170,7 +170,8 @@ export const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 export type { StarField }
 
 /** How far the player must move before the starfield is surveyed again. */
-const STARFIELD_RADIUS_CELLS = 2
+const STARFIELD_CELL_CEILING = 2000
+const STARFIELD_CANDIDATE_CEILING = 200000
 const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
 
 /** A catalog star as the star field's selection sees it. */
@@ -184,6 +185,11 @@ const asCandidate = (star: CatalogStar): StarCandidate => ({
     star.physical.colour.b,
   ],
   solarLuminosities: star.physical.solarLuminosities,
+  visualLuminosities:
+    star.physical.absoluteMagnitude === null
+      ? undefined
+      : 10 ** ((4.81 - star.physical.absoluteMagnitude) / 2.5),
+  catalogued: true,
 })
 
 /**
@@ -588,8 +594,10 @@ export class GameEngine {
 
   get starSurvey() {
     return {
-      radiusCells: STARFIELD_RADIUS_CELLS,
-      cellCeiling: (2 * STARFIELD_RADIUS_CELLS + 1) ** 3,
+      radiusCells: 2,
+      cellCeiling: STARFIELD_CELL_CEILING,
+      candidateCeiling: STARFIELD_CANDIDATE_CEILING,
+      resolved: this.#starField.resolved,
       spriteCount: this.#starField.positions.length,
       spriteCeiling: STAR_SPRITE_CEILING,
       pending: this.#starFieldPending,
@@ -1494,138 +1502,74 @@ export class GameEngine {
     })
   }
 
-  /**
-   * Keep a local starfield around the player.
-   *
-   * Re-surveyed only when the player has actually gone somewhere, because a
-   * 40 ly sweep is tens of thousands of stars and belongs in a worker — which
-   * is exactly where it goes.
-   *
-   * Two halves. The worker invents the procedural stars, which is the expensive
-   * part; the cataloged ones are read straight out of the local index, which is
-   * cheaper than serializing them across a thread boundary would be, and means
-   * the real sky is on screen on the first frame after a jump even if the worker
-   * pool is busy or absent.
-   */
+  /** A bounded magnitude survey is independent of the travel query's spatial radius. */
   #maybeSurveyStars(centre: UniverseVector): void {
     if (this.#starFieldPending) return
-    const moved =
-      this.#starFieldCentre === null ||
-      UV.distance(this.#starFieldCentre, centre) > STARFIELD_HYSTERESIS
-    if (!moved) return
-
+    if (
+      this.#starFieldCentre !== null &&
+      UV.distance(this.#starFieldCentre, centre) <= STARFIELD_HYSTERESIS
+    )
+      return
     this.#starFieldCentre = centre
     this.#starFieldPending = true
     const world = this.#starFieldWorld
-    const radiusCells = STARFIELD_RADIUS_CELLS
-    // `cellOf`, not a hand-inlined copy of it. The copy restated CELL_SIZE as
-    // `20 * 9.4607304725808e15` and recomputed `approxMeters` three times, so
-    // changing the galaxy's cell size would have left the client surveying
-    // cells that no longer correspond to where the player is — a compile-clean
-    // change that presents as "the stars are in the wrong place".
-    const cell = cellOf(centre)
     const catalog = this.world.catalog
-
-    // The worker has no catalog, so what it needs to know about one travels
-    // with the request: how many stars are already in each cell, and the radius
-    // inside which it should invent none. Only non-empty cells are listed.
-    const catalogued: Record<string, number> = {}
-    const catalogStars: CatalogStar[] = []
-    for (let x = cell.x - radiusCells; x <= cell.x + radiusCells; x += 1)
-      for (let y = cell.y - radiusCells; y <= cell.y + radiusCells; y += 1)
-        for (let z = cell.z - radiusCells; z <= cell.z + radiusCells; z += 1) {
-          const stars = catalog.inCell({ x, y, z })
-          if (stars.length === 0) continue
-          catalogued[cellKey({ x, y, z })] = stars.length
-          catalogStars.push(...stars)
-        }
-
+    const known = catalog.stars.map(asCandidate)
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
-      min: {
-        x: cell.x - radiusCells,
-        y: cell.y - radiusCells,
-        z: cell.z - radiusCells,
-      },
-      max: {
-        x: cell.x + radiusCells,
-        y: cell.y + radiusCells,
-        z: cell.z + radiusCells,
-      },
-      catalogued,
-      completeRadius: catalog.completeRadius,
+      origin: encodeUniverseVector(centre),
+      coverage: populationCoverage(catalog),
+      spriteCeiling: STAR_SPRITE_CEILING,
+      cellCeiling: STARFIELD_CELL_CEILING,
+      candidateCeiling: STARFIELD_CANDIDATE_CEILING,
+      apparentMagnitudeLimit: 8,
     }
-
-    /*
-     * The three selections, in the order they are trusted: the survey's
-     * catalog stars, the worker's fill, and the sky asset's distant bright
-     * stars. The sky is the same list every time — it is the catalog's, not
-     * the survey's — and it rides with every field because no survey reaches
-     * it: Betelgeuse is 500 ly out and the survey is a 100 ly cube.
-     */
-    const surveyed: StarCandidate[] = catalogStars.map(asCandidate)
-    const sky: StarCandidate[] = catalog.sky.map(asCandidate)
-
-    // The cataloged half goes up *now*, not when the worker answers — that
-    // is the header's promise about the real sky being on screen on the first
-    // frame after a jump. Gated on the survey it waited behind a busy pool,
-    // and a single failed survey dropped it entirely, with the hysteresis
-    // then blocking any retry until the player had moved another 8 ly.
-    this.#starField = selectStars(centre, [surveyed, sky])
-
+    // Known stars arrive immediately. The completed worker reply supplies the
+    // fully covered magnitude envelope needed to partition diffuse emission.
+    this.#starField = selectStars(centre, [known])
     const run =
       this.pool() === null
         ? Promise.resolve(
-            surveyRegionTask.run(payload, { cancelled: () => false }),
+            surveySkyTask.run(payload, { cancelled: () => false }),
           )
-        : (this.pool() as WorkerPool).run(surveyRegionTask, payload)
-
+        : (this.pool() as WorkerPool).run(surveySkyTask, payload)
     void Promise.resolve(run)
-      .then((cells) => {
-        // The world this survey was asked about is gone; let the next frame
-        // start one against the world that replaced it.
+      .then((selection) => {
         if (world !== this.#starFieldWorld) return
-        /*
-         * The expensive half, and it is not inside any frame.
-         *
-         * The `survey` phase in `#step` brackets the *dispatch* — building the
-         * cataloged half and handing the region walk to the pool — and returns.
-         * This runs in a microtask whenever the worker answers, outside
-         * `frame()` entirely, and it allocates four arrays over every star in
-         * an 8 ly sweep. Left uninstrumented it was main-thread work on no
-         * track at all, which is the exact gap this whole phase exists to
-         * close.
-         *
-         * A span rather than a `PhaseClock` step, because it is a one-off with
-         * no neighbor to tile against. Opened after the stale-world return, so
-         * an entry means the field was actually rebuilt.
-         */
         const applying = timer.span('survey.apply', ENGINE_PHASE)
-        const fill: StarCandidate[] = []
-        for (const entry of cells) {
-          for (const star of entry.stars) {
-            const [sx, sy, sz, ox, oy, oz] = star.position
-            fill.push({
-              id: star.id,
-              name: star.name,
-              position: UV.universeVector(sx, sy, sz, ox, oy, oz),
-              colour: star.colour,
-              solarLuminosities: star.solarLuminosities,
-            })
-          }
-        }
-        this.#starField = selectStars(centre, [surveyed, fill, sky])
+        const fill: StarCandidate[] = selection.stars.map((star) => ({
+          id: star.id,
+          name: star.name,
+          position: UV.universeVector(...star.position),
+          colour: star.colour,
+          solarLuminosities: star.solarLuminosities,
+          visualLuminosities: star.visualLuminosities,
+          catalogued: false,
+        }))
+        this.#starField = selectStars(
+          centre,
+          [known, fill],
+          STAR_SPRITE_CEILING,
+          {
+            origin: centre,
+            apparentMagnitudeLimit: selection.apparentMagnitudeLimit,
+            levelMask: selection.levelMask,
+          },
+        )
         applying.end()
         log.info('starfield surveyed', {
           stars: this.#starField.positions.length,
-          catalogued: catalogStars.length,
+          catalogued: known.length,
           fill: fill.length,
-          sky: sky.length,
+          cells: selection.cellsVisited,
+          candidates: selection.candidateCount,
+          resolved: this.#starField.resolved,
         })
       })
-      .catch((cause: unknown) =>
-        log.warn('starfield survey failed', { cause: String(cause) }),
-      )
+      .catch((cause: unknown) => {
+        log.warn('starfield survey failed', { cause: String(cause) })
+        if (world === this.#starFieldWorld) this.#starFieldCentre = null
+      })
       .finally(() => {
         this.#starFieldPending = false
       })

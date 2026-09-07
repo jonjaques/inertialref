@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { surveyRegionTask } from '@inertialref/workers'
+import { surveySkyTask } from '@inertialref/workers'
 import { ExposureMeter, SURFACE_LUMINANCE } from '@inertialref/rendering'
 import { headlessEngine } from './headlessEngine.ts'
 
@@ -96,7 +96,7 @@ it('publishes the sampled universe pose and scopes diffuse rendering to its pres
   }
 })
 
-it('keeps each survey local and its requests and sprite selection bounded along both directions', async () => {
+it('keeps magnitude surveys and sprite selection bounded along both directions', async () => {
   const game = headlessEngine()
   try {
     game.harness.pause()
@@ -104,26 +104,25 @@ it('keeps each survey local and its requests and sprite selection bounded along 
     for (const progress of [0, 0.45, 0.7, 0.85, 1, 0.7, 0]) {
       game.harness.galaxyJourney(progress)
       game.frame(0)
-      const requests = run.mock.calls.filter(
-        ([task]) => task === surveyRegionTask,
-      )
+      const requests = run.mock.calls.filter(([task]) => task === surveySkyTask)
       const count = requests.length
       for (let i = 0; i < 5; i++) game.frame(0)
       expect(
-        run.mock.calls.filter(([task]) => task === surveyRegionTask),
+        run.mock.calls.filter(([task]) => task === surveySkyTask),
       ).toHaveLength(count)
       await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
       expect(game.starSurvey.spriteCount).toBeLessThanOrEqual(20_000)
-      expect(game.starSurvey.cellCeiling).toBe(125)
+      expect(game.starSurvey.cellCeiling).toBe(2000)
+      expect(game.starSurvey.candidateCeiling).toBe(200000)
+      expect(game.starField.resolved).toBeDefined()
     }
-    const requests = run.mock.calls.filter(
-      ([task]) => task === surveyRegionTask,
-    )
+    const requests = run.mock.calls.filter(([task]) => task === surveySkyTask)
     expect(requests.length).toBeGreaterThan(2)
     for (const [, payload] of requests) {
-      const request = payload as Parameters<typeof surveyRegionTask.run>[0]
-      for (const axis of ['x', 'y', 'z'] as const)
-        expect(request.max[axis] - request.min[axis]).toBe(4)
+      const request = payload as Parameters<typeof surveySkyTask.run>[0]
+      expect(request.cellCeiling).toBe(2000)
+      expect(request.candidateCeiling).toBe(200000)
+      expect(request.spriteCeiling).toBe(20000)
     }
   } finally {
     game.dispose()

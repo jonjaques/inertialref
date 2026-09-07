@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { formatSeed, rootSeed } from '@inertialref/procedural'
-import { decodeUniverseVector } from '@inertialref/protocol'
+import {
+  decodeUniverseVector,
+  encodeUniverseVector,
+} from '@inertialref/protocol'
 import {
   expect as unwrap,
   timingHub,
@@ -19,6 +22,10 @@ import {
   surfaceDetailFloor,
   surfaceGrammar,
   TEST_CATALOG,
+  SUN_POSITION,
+  populationCoverage,
+  resolveSystem,
+  type SystemId,
 } from '@inertialref/universe'
 import { createInlineWorker } from './inline.ts'
 import { WorkerPool } from './pool.ts'
@@ -33,10 +40,42 @@ import {
   surfaceDetailFloorTask,
   surveySystemTask,
   surveyRegionTask,
+  surveySkyTask,
 } from './tasks.ts'
 
 const SEED = rootSeed('inertialref')
 const GALAXY_SEED = galaxySeedOf(SEED, MILKY_WAY)
+
+it('transfers the bounded sky and retains canonical source identities', async () => {
+  const payload = {
+    seed: formatSeed(GALAXY_SEED),
+    origin: encodeUniverseVector(SUN_POSITION),
+    coverage: populationCoverage(TEST_CATALOG),
+    spriteCeiling: 100,
+    candidateCeiling: 20000,
+    cellCeiling: 2000,
+    apparentMagnitudeLimit: 8,
+  }
+  const direct = await runInline(surveySkyTask, payload)
+  const p = pool()
+  try {
+    const transferred = await p.run(surveySkyTask, payload)
+    expect(transferred).toEqual(direct)
+    expect(transferred.stars.length).toBeLessThanOrEqual(100)
+    expect(transferred.candidateCount).toBeLessThanOrEqual(20000)
+    for (const star of transferred.stars.slice(0, 12)) {
+      const resolved = resolveSystem(
+        GALAXY_SEED,
+        TEST_CATALOG,
+        star.id as SystemId,
+      )
+      expect(resolved).toBeDefined()
+      expect(encodeStub(resolved!)).toEqual(star)
+    }
+  } finally {
+    p.terminate()
+  }
+})
 
 /** A deterministic fake clock, so timing assertions are exact. */
 function fakeClock() {

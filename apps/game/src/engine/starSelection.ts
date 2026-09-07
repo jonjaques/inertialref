@@ -1,5 +1,9 @@
-import { LIGHT_YEAR } from '@inertialref/shared'
+import { PARSEC } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
+import {
+  populationApparentMagnitude,
+  type ResolvedPopulationSelection,
+} from '@inertialref/universe'
 
 /*
  * Which stars the sky is drawn from.
@@ -28,6 +32,8 @@ import { UV, type UniverseVector } from '@inertialref/spatial'
 export const STAR_SPRITE_CEILING = 20_000
 
 export interface StarField {
+  readonly ids: readonly string[]
+  readonly catalogued: readonly boolean[]
   readonly positions: readonly UniverseVector[]
   readonly names: readonly string[]
   /**
@@ -44,6 +50,8 @@ export interface StarField {
    * constant.
    */
   readonly luminosities: readonly number[]
+  readonly visualLuminosities: readonly number[]
+  readonly resolved?: ResolvedPopulationSelection
 }
 
 /** One star as any of the three selections offers it. */
@@ -53,13 +61,18 @@ export interface StarCandidate {
   readonly position: UniverseVector
   readonly colour: readonly [number, number, number]
   readonly solarLuminosities: number
+  readonly visualLuminosities?: number
+  readonly catalogued?: boolean
 }
 
 export const EMPTY_STAR_FIELD: StarField = {
+  ids: [],
+  catalogued: [],
   positions: [],
   names: [],
   colours: [],
   luminosities: [],
+  visualLuminosities: [],
 }
 
 /**
@@ -89,6 +102,7 @@ export function selectStars(
   centre: UniverseVector,
   selections: readonly (readonly StarCandidate[])[],
   ceiling: number = STAR_SPRITE_CEILING,
+  resolved?: ResolvedPopulationSelection,
 ): StarField {
   const seen = new Set<string>()
   let chosen: StarCandidate[] = []
@@ -100,33 +114,71 @@ export function selectStars(
     }
   }
 
+  const magnitude = (star: StarCandidate) =>
+    populationApparentMagnitude(
+      star.visualLuminosities ?? star.solarLuminosities,
+      UV.distance(star.position, centre) / PARSEC,
+    )
+  const requestedMagnitude = resolved?.apparentMagnitudeLimit
+  if (requestedMagnitude !== undefined)
+    chosen = chosen.filter((star) => magnitude(star) <= requestedMagnitude)
+
   if (chosen.length > ceiling) {
     const flux = new Map<string, number>()
     for (const star of chosen) {
       // The one-light-year floor is the same one the draw applies: a star the
       // camera is inside has no meaningful flux and must not divide by zero.
-      const metres = Math.max(UV.distance(star.position, centre), LIGHT_YEAR)
-      flux.set(star.id, star.solarLuminosities / (metres * metres))
-    }
-    chosen = chosen
-      .sort(
-        (a, b) =>
-          (flux.get(b.id) as number) - (flux.get(a.id) as number) ||
-          (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+      const metres = Math.max(UV.distance(star.position, centre), 1)
+      flux.set(
+        star.id,
+        (star.visualLuminosities ?? star.solarLuminosities) / (metres * metres),
       )
-      .slice(0, ceiling)
+    }
+    chosen = chosen.sort(
+      (a, b) =>
+        (flux.get(b.id) as number) - (flux.get(a.id) as number) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    )
+    if (resolved === undefined) chosen = chosen.slice(0, ceiling)
+    else {
+      resolved = {
+        ...resolved,
+        apparentMagnitudeLimit: Math.min(
+          resolved.apparentMagnitudeLimit,
+          magnitude(chosen[ceiling]!) - 1e-10,
+        ),
+      }
+      chosen = chosen.filter(
+        (star) => magnitude(star) <= resolved!.apparentMagnitudeLimit,
+      )
+    }
   }
 
   const positions: UniverseVector[] = new Array(chosen.length)
+  const ids: string[] = new Array(chosen.length)
+  const catalogued: boolean[] = new Array(chosen.length)
   const names: string[] = new Array(chosen.length)
   const colours: [number, number, number][] = new Array(chosen.length)
   const luminosities: number[] = new Array(chosen.length)
+  const visualLuminosities: number[] = new Array(chosen.length)
   for (let i = 0; i < chosen.length; i += 1) {
     const star = chosen[i] as StarCandidate
+    ids[i] = star.id
+    catalogued[i] = star.catalogued ?? false
     positions[i] = star.position
     names[i] = star.name
     colours[i] = [star.colour[0], star.colour[1], star.colour[2]]
     luminosities[i] = star.solarLuminosities
+    visualLuminosities[i] = star.visualLuminosities ?? star.solarLuminosities
   }
-  return { positions, names, colours, luminosities }
+  return {
+    ids,
+    catalogued,
+    positions,
+    names,
+    colours,
+    luminosities,
+    visualLuminosities,
+    resolved,
+  }
 }
