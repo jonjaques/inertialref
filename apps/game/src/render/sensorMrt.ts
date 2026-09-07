@@ -1,6 +1,7 @@
 import {
   BlendMode,
   CustomBlending,
+  MaxEquation,
   OneFactor,
   OneMinusSrcAlphaFactor,
   SrcAlphaFactor,
@@ -30,11 +31,13 @@ import {
  * plain single-attachment target.
  */
 export const motionOverlay = property('float', 'MotionOverlay')
+export const meterOverlay = property('float', 'MeterOverlay')
 
 /** Two half-float attachments: radiance and velocity.xy / reciprocal view meters. */
 export function sensorMrt() {
   const node = mrt({
     output,
+    meterMask: vec4(meterOverlay, 0, 0, 1),
     // The whole vector, not just the alpha, goes to zero for an overlay: in
     // core mode the alpha blend below keeps the surface underneath, and in
     // compatibility mode, where the material's own additive blend applies to
@@ -56,5 +59,9 @@ export function sensorMrt() {
   blend.blendDst = OneMinusSrcAlphaFactor
   blend.blendSrcAlpha = ZeroFactor
   blend.blendDstAlpha = OneFactor
-  return node.setBlendMode('motion', blend)
+  const maskBlend = new BlendMode(CustomBlending)
+  maskBlend.blendEquation = MaxEquation
+  maskBlend.blendSrc = OneFactor
+  maskBlend.blendDst = OneFactor
+  return node.setBlendMode('motion', blend).setBlendMode('meterMask', maskBlend)
 }

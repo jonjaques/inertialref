@@ -12,6 +12,8 @@ import {
   NodeUpdateType,
   RenderPipeline,
   RenderTarget,
+  RedFormat,
+  UnsignedByteType,
   type Scene,
   type WebGPURenderer,
   Vector2,
@@ -122,10 +124,15 @@ function sceneTarget(
     type: HalfFloatType,
     samples: shape.samples,
     depthTexture,
-    count: shape.optics === true ? 2 : 1,
+    count: shape.optics === true ? 3 : 1,
   })
   target.textures[0]!.name = 'output'
-  if (shape.optics === true) target.textures[1]!.name = 'motion'
+  if (shape.optics === true) {
+    target.textures[1]!.name = 'motion'
+    target.textures[2]!.name = 'meterMask'
+    target.textures[2]!.format = RedFormat
+    target.textures[2]!.type = UnsignedByteType
+  }
   return target
 }
 
@@ -195,6 +202,9 @@ export function createSensor(
   if (shape.optics === true) {
     scenePass.setMRT(sensorMrt())
     scenePass.getTextureNode('motion')
+    const mask = scenePass.getTextureNode('meterMask').value
+    mask.format = RedFormat
+    mask.type = UnsignedByteType
   }
   /*
    * The pass draws the scene once per *render call*, not once per three
@@ -223,6 +233,9 @@ export function createSensor(
       : createHistogramMeter(
           scenePass.renderTarget.texture,
           motionTexture?.value,
+          shape.optics === true
+            ? scenePass.getTextureNode('meterMask').value
+            : undefined,
         )
   const post = new RenderPipeline(renderer)
 
