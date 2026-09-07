@@ -116,6 +116,25 @@ it('retains physical columns through travel and blends each finite refresh witho
         2,
       )
     }
+    const replacement: StarExtinctionSelection = {
+      ids: ['new-foreground', 'catalogue'],
+      positions: [at(100), at(1000)],
+      catalogued: [false, true],
+    }
+    cache.configure(replacement, moved)
+    const pendingReplacement = await draw(2)
+    expect(pendingReplacement.at(0, 0).slice(0, 3)).toEqual([0, 0, 0])
+    expect(pendingReplacement.at(1, 0)).toEqual(corrected.at(1, 0))
+    for (let i = 0; i < 8; i++) cache.advance(gpu.renderer)
+    const foregroundReplacement = await draw(2)
+    const foregroundColumn = integrateStarExtinction(
+      field,
+      moved,
+      at(100),
+    ).transmittanceRgb
+    foregroundColumn.forEach((value, c) =>
+      expect(foregroundReplacement.at(0, 0)[c]).toBeCloseTo(value, 3),
+    )
     cache.configure(reordered, null)
     const inactive = await draw(2)
     expect(inactive.at(0, 0).slice(0, 3)).toEqual([0, 0, 0])

@@ -211,3 +211,38 @@ it('does not rewrite catalogue reference columns during idle Sol frames', () => 
     )
   }
 })
+
+it('uploads only changed source records when a worker reply retains the same physical stars', () => {
+  const cache = new StarExtinctionCache(100, field)
+  const first = selection(['0', '1', '2', '3'])
+  cache.configure(first, SUN_POSITION)
+  expect(cache.diagnostics.sourceRecordsWritten).toBe(4)
+  const reordered = selection(['3', '2', '1', '4'])
+  cache.configure(reordered, SUN_POSITION)
+  expect(cache.diagnostics.sourceRecordsWritten).toBe(5)
+  const mappings = cache.diagnostics.mappingRecordsWritten
+  cache.configure(selection(['3', '2', '1', '4']), SUN_POSITION)
+  expect(cache.diagnostics.sourceRecordsWritten).toBe(5)
+  expect(cache.diagnostics.mappingRecordsWritten).toBe(mappings)
+  cache.dispose()
+})
+
+it('rejects a repeated identity even when its first occurrence replaced the old coordinate', () => {
+  const schedule = new StarExtinctionSchedule(2)
+  const stars = selection(['0', '1'])
+  schedule.configure(stars, SUN_POSITION, field)
+  expect(() =>
+    schedule.configure(
+      {
+        ids: ['1', '1'],
+        positions: [
+          UV.translate(stars.positions[1]!, vec3(1, 0, 0)),
+          stars.positions[1]!,
+        ],
+        catalogued: [false, false],
+      },
+      SUN_POSITION,
+      field,
+    ),
+  ).toThrow('source ids must be unique')
+})

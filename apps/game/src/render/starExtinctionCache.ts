@@ -45,11 +45,14 @@ export interface StarExtinctionSelection {
 }
 interface Source {
   readonly id: string
-  readonly slot: number
+  slot: number
   readonly position: UniverseVector
   readonly catalogued: boolean
   readonly version: number
   written: number
+  queued: number
+  selection: number
+  seen: number
   reference?: readonly [number, number, number]
   corrected?: readonly [number, number, number]
   previous?: readonly [number, number, number]
@@ -64,6 +67,9 @@ export interface StarExtinctionBatch {
 export class StarExtinctionSchedule {
   readonly capacity: number
   readonly #sources = new Map<string, Source>()
+  readonly #free: number[] = []
+  #nextSlot = 0
+  #selectionEpoch = 0
   #selection: StarExtinctionSelection | null = null
   #selected: Source[] = []
   #queue: Source[] = []
@@ -132,42 +138,56 @@ export class StarExtinctionSchedule {
           selection.ids.length <= this.capacity,
         'Star extinction selection arrays must agree and fit their capacity',
       )
-      const active = new Set(selection.ids)
-      invariant(
-        active.size === selection.ids.length,
-        'Star extinction source ids must be unique',
-      )
-      const free: number[] = []
-      const occupied = new Set<number>()
-      for (const [id, source] of this.#sources) {
-        if (!active.has(id)) {
-          this.#sources.delete(id)
-        } else occupied.add(source.slot)
-      }
-      for (let slot = 0; slot < this.capacity; slot++)
-        if (!occupied.has(slot)) free.push(slot)
-      this.#selected = selection.ids.map((id, index) => {
-        const previous = this.#sources.get(id),
+      const epoch = ++this.#selectionEpoch
+      const selected: Source[] = new Array(selection.ids.length)
+      const unassigned: Source[] = []
+      for (let index = 0; index < selection.ids.length; index++) {
+        const id = selection.ids[index]!,
           position = selection.positions[index]!,
           catalogued = selection.catalogued[index]!
+        // Worker replies clone coordinates, but most identities keep their index.
+        const atIndex = this.#selected[index]
+        const previous = atIndex?.id === id ? atIndex : this.#sources.get(id)
+        invariant(
+          previous?.seen !== epoch,
+          'Star extinction source ids must be unique',
+        )
+        if (previous !== undefined) previous.seen = epoch
         if (
           previous !== undefined &&
           !changedField &&
           previous.catalogued === catalogued &&
-          UV.distance(previous.position, position) === 0
-        )
-          return previous
-        const source: Source = {
-          id,
-          position: { ...position },
-          catalogued,
-          slot: previous?.slot ?? free.pop()!,
-          version: ++this.#version,
-          written: 0,
+          UV.equals(previous.position, position)
+        ) {
+          previous.selection = epoch
+          selected[index] = previous
+        } else {
+          const source: Source = {
+            id,
+            position: { ...position },
+            catalogued,
+            slot: previous?.slot ?? -1,
+            version: ++this.#version,
+            written: 0,
+            queued: 0,
+            selection: epoch,
+            seen: epoch,
+          }
+          this.#sources.set(id, source)
+          selected[index] = source
+          if (source.slot < 0) unassigned.push(source)
         }
-        this.#sources.set(id, source)
-        return source
-      })
+      }
+      for (const [id, source] of this.#sources) {
+        if (source.selection !== epoch) {
+          this.#sources.delete(id)
+          this.#free.push(source.slot)
+        }
+      }
+      // Reclaim before assigning so a full-capacity replacement needs no spare slot.
+      for (const source of unassigned)
+        source.slot = this.#free.pop() ?? this.#nextSlot++
+      this.#selected = selected
       this.#selection = selection
     }
     if (
@@ -176,22 +196,37 @@ export class StarExtinctionSchedule {
       UV.distance(this.#origin, SUN_POSITION) === 0
     )
       for (const source of this.#selected)
-        if (source.catalogued) {
+        if (source.catalogued && source.written !== this.#generation) {
           source.written = this.#generation
           source.corrected = [1, 1, 1]
           source.previous = undefined
           source.published = -1
         }
     if (changedSelection || refresh) {
-      const pending = new Set(
-        this.#selected.filter((source) => source.written !== this.#generation),
-      )
-      // Reordering a viewport selection must not starve the tail of the cycle.
-      const retained = this.#queue
-        .slice(this.#cursor)
-        .filter((source) => pending.delete(source))
+      // Keep the old unfinished order when worker replies reorder the view.
+      // A queued generation avoids rebuilding a membership Set for every star.
+      const queue: Source[] = []
+      if (this.#origin !== null) {
+        for (let index = this.#cursor; index < this.#queue.length; index++) {
+          const source = this.#queue[index]!
+          if (
+            source.selection === this.#selectionEpoch &&
+            source.written !== this.#generation
+          )
+            queue.push(source)
+        }
+        for (const source of this.#selected) {
+          if (
+            source.written !== this.#generation &&
+            source.queued !== this.#generation
+          ) {
+            source.queued = this.#generation
+            queue.push(source)
+          }
+        }
+      }
       this.#cursor = 0
-      this.#queue = this.#origin === null ? [] : [...retained, ...pending]
+      this.#queue = queue
     }
     return changedSelection || refresh
   }
@@ -245,6 +280,7 @@ export class StarExtinctionSchedule {
     this.#queue = []
     this.#selected = []
     this.#sources.clear()
+    this.#free.length = 0
     this.#origin = null
     this.#observer = null
   }
@@ -307,6 +343,8 @@ export class StarExtinctionCache {
   #warm: Promise<void> | null = null
   #draws = 0
   #saturated = 0
+  #sourceRecordsWritten = 0
+  #mappingRecordsWritten = 0
 
   constructor(
     capacity: number,
@@ -537,33 +575,66 @@ export class StarExtinctionCache {
       origin !== null && UV.distance(origin, SUN_POSITION) / PARSEC < 1e-6
     if (inputsChanged || previousOrigin !== origin) {
       this.#selection = selection
-      this.schedule.selected.forEach((source, index) => {
-        this.#instanceBySlot[source.slot] = index
-        const p = starExtinctionOrigin(source.position),
-          slot = source.slot
-        this.#positions.array.set(
-          [
-            p.x,
-            p.y,
-            p.z,
-            source.catalogued ? (source.published === -1 ? 2 : 1) : 0,
-          ],
-          slot * 4,
-        )
-        this.#versions.array[slot] = source.version
-        this.#mapping.array.set(
-          [
-            slot,
-            source.version,
-            source.catalogued ? 1 : 0,
-            source.published === -1 ? 1 : 0,
-          ],
-          index * 4,
-        )
-      })
-      this.#positions.needsUpdate = true
-      this.#versions.needsUpdate = true
-      this.#mapping.needsUpdate = true
+      let sourceLo = this.schedule.capacity,
+        sourceHi = -1
+      let versionLo = this.schedule.capacity,
+        versionHi = -1
+      let mappingLo = this.schedule.capacity,
+        mappingHi = -1
+      const positions = this.#positions.array,
+        versions = this.#versions.array,
+        mapping = this.#mapping.array
+      const selected = this.schedule.selected
+      for (let index = 0; index < selected.length; index++) {
+        const source = selected[index]!,
+          slot = source.slot,
+          offset = slot * 4,
+          mapped = index * 4
+        this.#instanceBySlot[slot] = index
+        const atSol = source.published === -1 ? 1 : 0
+        const catalogued = source.catalogued ? 1 : 0
+        const flag = catalogued + atSol
+        if (versions[slot] !== source.version) {
+          const p = starExtinctionOrigin(source.position)
+          positions[offset] = p.x
+          positions[offset + 1] = p.y
+          positions[offset + 2] = p.z
+          versions[slot] = source.version
+          versionLo = Math.min(versionLo, slot)
+          versionHi = Math.max(versionHi, slot)
+          sourceLo = Math.min(sourceLo, slot)
+          sourceHi = Math.max(sourceHi, slot)
+          this.#sourceRecordsWritten++
+        }
+        if (positions[offset + 3] !== flag) {
+          positions[offset + 3] = flag
+          sourceLo = Math.min(sourceLo, slot)
+          sourceHi = Math.max(sourceHi, slot)
+        }
+        if (
+          mapping[mapped] !== slot ||
+          mapping[mapped + 1] !== source.version ||
+          mapping[mapped + 2] !== catalogued ||
+          mapping[mapped + 3] !== atSol
+        ) {
+          mapping[mapped] = slot
+          mapping[mapped + 1] = source.version
+          mapping[mapped + 2] = catalogued
+          mapping[mapped + 3] = atSol
+          mappingLo = Math.min(mappingLo, index)
+          mappingHi = Math.max(mappingHi, index)
+          this.#mappingRecordsWritten++
+        }
+      }
+      for (const [buffer, lo, hi, stride] of [
+        [this.#positions, sourceLo, sourceHi, 4],
+        [this.#versions, versionLo, versionHi, 1],
+        [this.#mapping, mappingLo, mappingHi, 4],
+      ] as const) {
+        if (hi < lo) continue
+        buffer.addUpdateRange(lo * stride, (hi - lo + 1) * stride)
+        buffer.needsUpdate = true
+      }
     }
     if (this.#cpu) this.#writeCpu()
   }
@@ -675,6 +746,8 @@ export class StarExtinctionCache {
       backend: this.#cpu ? 'cpu' : 'webgpu',
       batchSize: this.#cpu ? this.#cpuBatchSize : this.#batchSize,
       draws: this.#draws,
+      sourceRecordsWritten: this.#sourceRecordsWritten,
+      mappingRecordsWritten: this.#mappingRecordsWritten,
       radiusParsecs: STAR_EXTINCTION_CACHE_RADIUS_PARSECS,
       reference: 'catalogue-at-sol' as const,
       maxLogGain: STAR_EXTINCTION_MAX_LOG_GAIN,
