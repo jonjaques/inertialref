@@ -1,5 +1,6 @@
 import { SURFACE_LUMINANCE } from '@inertialref/rendering'
 import { integratedSkyGain, sensorRadiance } from './radiance.ts'
+import type { StarProjection } from './starProjection.ts'
 import {
   AddEquation,
   BackSide,
@@ -46,6 +47,7 @@ import {
   step,
   texture,
   uniform,
+  varying,
   uv,
   vec2,
   vec3,
@@ -484,6 +486,8 @@ export interface StarfieldMaterial {
   readonly angularDensity: { value: number }
   readonly integrated: { value: number }
   readonly visibility: InstancedBufferAttribute
+  readonly enabled: InstancedBufferAttribute
+  readonly transmission: InstancedBufferAttribute
 }
 
 /**
@@ -500,7 +504,10 @@ export interface StarfieldMaterial {
  * @param capacity Instances to allocate. The buffer is written in place and only
  *   the draw count moves; reallocating per survey would rebuild the pipeline.
  */
-export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
+export function createStarfieldMaterial(
+  capacity: number,
+  projection?: StarProjection,
+): StarfieldMaterial {
   const positions = new InstancedBufferAttribute(
     new Float32Array(capacity * 3),
     3,
@@ -511,6 +518,14 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   )
   const prominence = new InstancedBufferAttribute(new Float32Array(capacity), 1)
   const visibility = new InstancedBufferAttribute(new Float32Array(capacity), 1)
+  const enabled = new InstancedBufferAttribute(
+    new Float32Array(capacity).fill(1),
+    1,
+  )
+  const transmission = new InstancedBufferAttribute(
+    new Float32Array(capacity * 3).fill(1),
+    3,
+  )
   const integrated = uniform(0)
   const size = uniform(1.8)
   const angularDensity = uniform(1)
@@ -521,22 +536,30 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   const radius = length(uv().sub(0.5)).mul(2)
   const profile = oneMinus(smoothstep(0.15, 1, radius))
   // Typed explicitly for the reason `terrain.ts` gives: the literal widens.
-  const scale = instancedBufferAttribute<'float'>(prominence, 'float')
+  const scale =
+    projection === undefined
+      ? instancedBufferAttribute<'float'>(prominence, 'float')
+      : varying(projection.illuminance)
 
   const material = sensorRadiance(new PointsNodeMaterial())
   material.positionNode = Fn(() => {
-    const point = instancedBufferAttribute(positions)
+    const point = projection?.point ?? instancedBufferAttribute(positions)
     // The instance is the star. The quad's geometry is only its pixel footprint;
     // using it as the previous position invents motion across the whole sky.
-    positionPrevious.assign(point)
+    positionPrevious.assign(projection?.previousPoint ?? point)
     return point
   })()
-  const visible = instancedBufferAttribute<'float'>(visibility, 'float')
+  const visible =
+    projection === undefined
+      ? instancedBufferAttribute<'float'>(visibility, 'float')
+      : varying(projection.visibility)
   material.sizeNode = integrated
     .greaterThan(0.5)
     .select(visible.mul(0.55).add(0.45).mul(3.4), size)
+    .mul(instancedBufferAttribute<'float'>(enabled, 'float'))
   material.sizeAttenuation = false
   material.colorNode = instancedBufferAttribute<'vec3'>(colours, 'vec3')
+    .mul(instancedBufferAttribute<'vec3'>(transmission, 'vec3'))
     .mul(profile.mul(profile))
     .mul(
       integrated
@@ -572,6 +595,8 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
     integrated,
     size,
     angularDensity,
+    enabled,
+    transmission,
   }
 }
 
