@@ -71,7 +71,15 @@ describe('physical sky archive', () => {
       { ...query, faceSize: 32 },
       { ...query, backend: 'webgl' },
       { ...query, field: { ...query.field, seed: '1'.repeat(32) } },
-      { ...query, field: { ...query.field, versions: { 'galaxy-field': 5 } } },
+      {
+        ...query,
+        field: {
+          ...query.field,
+          versions: {
+            'galaxy-field': query.field.versions['galaxy-field']! + 1,
+          },
+        },
+      },
       { ...query, field: { ...query.field, normalization: 0.2 } },
       { ...query, field: { ...query.field, dustScale: 0 } },
       { ...query, field: { ...query.field, dustNormalization: 0 } },
