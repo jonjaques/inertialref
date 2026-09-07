@@ -11,8 +11,9 @@ a figure about that point.
 sky an ordinary gameplay requirement. The camera acceptance matrix is
 [camera C5](the-camera.md#c5-acceptance-through-the-actual-image). Natural
 measurements below retain their named response; they do not establish the cost
-of that default. Prioritize M7's cache, bounded cold work and moving-orbit cost
-with visible sky. Keep the upscaler and optional optical effects separate.
+of that default. The completed cache, GPU star projection and bounded population
+are measured below. Final default-image and whole-journey costs remain pending.
+Keep the upscaler and optional optical effects separate.
 
 **Where the numbers come from.** Two rigs. Stationary operating points — the
 flight start in Earth orbit at 27.6 km/s, the planetarium looking at Earth from
@@ -219,23 +220,19 @@ on a 20 Mbit connection. If it needs shortening, this is the only line worth an
 hour: upload the loaded system's maps first and let the rest trail the reveal,
 or move the set to a GPU-compressed container so the decode disappears.
 
-### The default sky needs a bounded boot path
+### The default sky has a progressive cache; final boot timing is open
 
-`SceneView` mounts `GalaxyVolume` and registers its warm-up. PR #65 code review
-identified a quarter-resolution `rgba16f` target, about 1 MiB at 1080p, and two
-warm-up units; its added cold-load cost remains unmeasured.
+The original PR #65 quarter-resolution target and two warm-up units are
+superseded. Production now refines 32² → 128² → 512² physical cubes in bounded
+tiles and can restore a completed WebGPU cube from a separate two-entry disk
+cache. Cache misses do not require a synchronous full 512² bake before any sky
+can appear. The archive does not write the save database.
 
-Enhanced needs visible sky at ordinary boot, so deferring everything until a
-planetarium instrument opens does not meet the direction. M7 owns a progressive
-cache, low-resolution first image and bounded queued work. Measure first useful
-sky, convergence, warm-up and peak memory before choosing a boot policy. The
-cached path must not introduce a blocking full-volume compile on first motion.
-
-One smaller thing in the same file, worth taking whenever that one is. The
-draw sets `renderer.autoClear = true` before a quad that covers every texel and
-writes alpha 1, so the clear of the attachment is a load-op bought for nothing
-on every draw. The other half of this entry — the volume updating every
-submission whether or not anything moved — is the galaxy section below.
+The measured corrected 512² drained bake is 3.829 s, with 36 MiB of resident
+cube targets. This is total isolated bake work, not time to first useful sky or
+a measured browser boot penalty. First visible sky, progressive convergence,
+archive-hit reload and peak whole-app memory still need the final assembled
+boot record. The old 120 ms full-bake estimate is not a performance claim.
 
 ## The galaxy
 
@@ -246,7 +243,96 @@ over `openGpu`), and the driver at 960×540, DPR 1, occluded, so a draw is a
 240×135 target. Per-sample cost is flat across target sizes, so the headless
 rig answers kernel questions at any size the machine can spare.
 
-### Ordinary Earth orbit pays for a galaxy below its daylight response
+### Completion record, 7 September 2026
+
+This record supersedes the open galaxy optimization list from 5 September.
+The completion branch stays on the user-selected
+[PR #72](https://github.com/jonjaques/inertialref/pull/72) base. Active versions
+are `galaxy@5`, `galaxy-field@5` and `galaxy-tsl@8`. The implementation and
+acceptance status are in
+[the galaxy plan](the-galaxy.md#completion-measurements-7-september-2026) and
+[ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md).
+
+The shared 2048² arm table replaces repeated analytic arm evaluation in both
+sky and live volume. Observer motion projects stable stars on the GPU. Physical
+cubes and temporal history own their validity; a separate disk cache keeps at
+most two completed cubes. The actual resolved threshold and admitted level mask
+partition the calibrated first luminosity moment. Conservation is exact for the
+ensemble, with an explicit finite-realization residual.
+
+The original **2 ms live volume at 1080p** target is deliberately revised.
+The measured uncapped half-resolution, stride-8 inside view costs **6.366 ms**
+at 1920×1080 and **12.693 ms** at 2880×1800. Production caps the target's long
+edge at 960 while preserving half-resolution detail below that cap. This bounds
+Retina target/history growth; it does not make all live views fit 2 ms.
+
+| Physical volume, half resolution / stride 8 / cap 960 |  Face-on |  Edge-on |   Inside | Owned target/history bytes |
+| ----------------------------------------------------- | -------: | -------: | -------: | -------------------------: |
+| 1920×1080 drawing buffer                              | 2.225 ms | 4.501 ms | 6.296 ms |                 29,284,096 |
+| 2880×1800 drawing buffer                              | 2.460 ms | 5.525 ms | 7.399 ms |                 30,673,216 |
+
+Apple M5, WebGPU, 40 moving draws per view with 0.2 pc translation each,
+V8/mask-511 envelope, GPU timestamp instrumentation. The physical targets are
+960×540 and 960×600; the scene and star buffers are unchanged. These are
+isolated volume costs, not complete frame periods. Verified cap commit:
+`434009f`, `.scratch/galaxy-finish/capped-galaxy-summary.json`; uncapped
+comparison: `final-quality-bench.log` in the same directory.
+
+Cached sampling is **0.030–0.047 ms** at the measured 960×540 and 1440×900
+sampling targets. The corrected 512² cube has maximum RGB error **0.629%**
+across 72 arbitrary directions, with 0.086% at 12 texel centers. Its measured
+3.829 s full bake and 36 MiB residency support the 512² tier; the 1024²
+experiment costs 18.256 s and 144 MiB. Field@5 retains the 0.15 pc reuse radius
+within the unchanged 1% radiance budget over 21 tested origins. Source records:
+`cube-quality.log`, `cube-footprint-summary.json` and
+`cache-radius-field5-summary.json`.
+
+At **100,000 stars**, the measured median added GPU draw cost is **0.687 ms**
+(20k: 0.343 ms; 200k: 1.254 ms). This is Apple M5, 1920×1080, 4× MSAA through
+the sensor MRT, with downstream optics bypassed and retained transparent
+extinction. It excludes active dust integration. `starShell-gpu-benchmark.jsonl`
+and `star-benchmark-notes.md` record three paired empty/populated batches of 80
+submissions, including first-batch outliers and concurrent CPU-test caveats.
+
+Replacing 10% of a fixed 28,942-source fixture lowers CPU preparation median
+**9.802 → 3.000 ms**, p95 **11.747 → 4.419 ms**. Broad reordering after the
+change is 4.877 ms median and 8.261 ms p95. These are paired earlier-population
+comparisons at capacity 100,000, excluding GPU execution and driver submission;
+they do not promise every new selection fits five milliseconds. Source records:
+`star-replacement-pair.json` and `star-replacement-pair-reordered.json`.
+
+Field@5's production V8 request is bounded by **100,000 sprites, 1,000,000
+candidates and 2,000 cells**. The actual default-seed operating points are:
+
+| Observer                | Total stars | Candidates / cells | Level mask | Worker median | Host apply median | Observed peak heap |
+| ----------------------- | ----------: | -----------------: | ---------: | ------------: | ----------------: | -----------------: |
+| Sol                     |      29,257 |      213,380 / 544 |        511 |    119.722 ms |         10.443 ms |         139.69 MiB |
+| 1 kpc toward the center |      37,423 |      322,669 / 512 |        511 |    172.355 ms |         17.415 ms |         180.87 MiB |
+| Galactic center         |      16,004 |      287,681 / 576 |          3 |    132.045 ms |          7.892 ms |         158.60 MiB |
+
+All retain V8 without duplicate identities or budget violations. The central
+query admits levels 0–1 and leaves omitted levels fully diffuse. Node 26.5 runs
+the production worker and host selection inline for three clean timing repeats;
+a separate memory pass samples their combined heap. These are observed peaks,
+not exact V8 maxima or isolated browser-worker memory. Worker payloads serialize
+to 5.05–11.64 MiB. Generation runs off the main thread in production; it is
+**not a sub-5 ms CPU query**. Host application is per survey, not per frame.
+`field5-operating-summary.json` records counts, thresholds, masks and methods.
+
+Resolved dust updates at most 1,024 sources per GPU cycle. The **WebGL fallback
+updates one CPU source column per submission** and converges progressively;
+the earlier Solar smoke capture still had 18,806 pending columns. That shader
+and backend check does not establish equal convergence time to WebGPU. See
+`webgl-smoke-summary.json`.
+
+- **Pending: final C5 image matrix and full outward/return journey.** The
+  central morphology remains approximate; broad photometric calibration does
+  not close exterior appearance acceptance.
+- **Pending: assembled gate and complete-frame/boot record.** Record the final
+  commit and checks after the last integration change. Isolated GPU timings
+  above exclude the native scene and sensor's remaining work.
+
+### Historical Natural Earth-orbit measurement
 
 These are Natural baseline measurements. Its omission predicate is superseded
 as default-camera direction by ADR-0037. Retain the physical-GPU comparison as
@@ -316,31 +402,19 @@ longest rays — the in-plane edge-on ones run to 1,500 intervals at the
 crossing law's 40 pc — not by throughput, so shrinking the target during
 travel buys nothing at the view where travel is expensive. Declined.
 
-### What is left, in order
+### Status of the earlier optimization list
 
-- **The arms as a table.** With the noise filtered, the five arms' four
-  windings of log-spiral, exponential and trigonometry at every sample are the
-  cost: 33.8 ms of 58.5 before the filter, and most of what remains after it.
-  The arm sum is a smooth function of radius and azimuth — the narrowest lane
-  is 140 pc wide — so a 1024² two-channel texture over the disk, baked once
-  from the same `structureAt`, would replace it with a bilinear fetch. The
-  young-arm population reads the same sum. Not built: the GPU/CPU ray tests
-  would need a tolerance for the interpolation, and the win is unmeasured.
-- **The meter counts orbit traces.** They now present at one brightness at
-  every exposure (`render/orbitTrace.ts`), but the histogram samples every
-  fourth pixel of the scene target and a trace is a one-pixel line, so a
-  frame of nothing but traces under a metered response is metered on them. A
-  mask channel is the fix; no plate has needed it.
-- **The settled draw is one submission.** 40–70 ms at 480×270 with the
-  filter, once per view change. Splitting it over rows with a scissor would
-  bound the longest submission; nothing has asked for it since the hold.
-- **Early termination at the transmittance floor.** The handoff's third
-  starting point. Not taken: the loop body is 4% of a draw, so the tail it
-  would cut is a fraction of that.
-- **The 2 ms budget at 1080p.** The plan's live-volume target is still an
-  order away for a moving frame at 480×270 (43–63 ms a draw, projected from
-  the 240×135 figures). What reaches it is M7's cached sky or the 3D slab the
-  plan names, not more of the above.
+The arm table, bounded progressive sky work and temporal reuse are implemented;
+the completion record above replaces their former unbuilt status and old
+43–63 ms projected live cost. The original universal 2 ms target is revised
+explicitly there. Early transmittance termination and a separate 3D slab are
+not needed to explain the measured implementation.
+
+The meter's treatment of orbit traces remains a separate sensor question.
+Traces present at one brightness at every exposure, but a histogram that samples
+scene pixels can still include them. No galaxy plate has established a need for
+a meter mask. Whole-frame and final image acceptance remain open as recorded
+above.
 
 ## Memory and the resident world
 
@@ -461,18 +535,16 @@ inflated three-fold by a cold module cache, in a ratio that happened to look
 plausible. Alternating the two costs nothing and is the only form of this
 measurement worth quoting.
 
-**What the engine's 0.4 ms is now.** `Engine/snapshot` at 0.28–0.39 ms — 129
-bodies' orbit and spin poses at the render instant, per frame, whether or not
-the body draws as more than a point — and nothing else over 0.05. The
-loaded-system scaling entry above is this line's future. Above the engine,
-`Render/starfield` is **0.62–0.79 ms a frame under warp**, 4–5% of the frame
-and the largest measured span: the shell's parallax budget binds on the
-system's own sun, which is in the survey and placed on the shell, so an eye
-moving 75,000 km a frame at 100,000× rewrites twenty thousand sprites every
-frame. Excluding the stars whose bodies are drawn from the budget — and from
-the shell — would make the budget bind on the nearest _other_ star, four light
-years out, and the rewrite an every-few-minutes event; it is a scene decision
-because the sun's sprite currently sits behind its disk.
+**What the engine's 0.4 ms contained in this run.** `Engine/snapshot` costs
+0.28–0.39 ms for 129 bodies' orbit and spin poses, with no other engine span over
+0.05 ms. The loaded-system scaling entry above concerns that work. At the time,
+`Render/starfield` costs 0.62–0.79 ms under warp because the Sun binds the shell
+parallax budget and twenty thousand sprite positions are rewritten per frame.
+
+That starfield finding is closed by M8's GPU projection. Observer translation
+updates uniforms instead of projecting the source array on the CPU. The current
+selection/replacement costs and GPU scaling appear in the galaxy completion
+record above; the old span is a comparison baseline, not unfinished work.
 
 **The rig's late frames are not the engine's.** 3 of 240 frames over 25 ms in
 the 10⁷× profile, the largest span inside them the starfield at 0.9 ms. Same
@@ -484,9 +556,9 @@ caveat as below.
 
 1. **Shipped-build mode switches and docs pages.** Every figure is dev React at
    about five times the real cost. Measure before acting.
-2. **The starfield under warp**, 0.6–0.8 ms a frame rewriting a sky that has
-   not moved a pixel, because the budget binds on the sun. A scene decision
-   about the star whose body is drawn.
+2. **Final galaxy integration measurements.** The GPU shell and progressive
+   cache are implemented. Close C5, whole-frame/boot and journey acceptance at
+   the final capped operating points; retain the explicit CPU and WebGL limits.
 3. **Per-job heightfield time**, which is what fallback convergence is made of.
    One worker's first patch against its tenth on the same body separates the
    cold per-body caches from the grammar and the scheduler.
