@@ -94,7 +94,7 @@ it('matches CPU directions and flux near stars, at the rim, and across translate
         const error = Vec.length(
           Vec.sub(vec3(actual[0], actual[1], actual[2]), expected),
         )
-        // The meter-scale same-sector case spends the residual's millimeter bound.
+        // Meter-scale separations include the sector coordinate's submillimeter bound.
         expect(error, `case ${index}, angle ${angle}`).toBeLessThan(
           index === 1 ? 0.002 : 3e-6,
         )
@@ -133,7 +133,7 @@ it('updates only uniforms during translation and reduces the brightest flux on t
     (buffers) => [
       buffers.cells.version,
       buffers.offsets.version,
-      buffers.residuals.version,
+      buffers.subcells.version,
     ],
   )
   try {
@@ -161,7 +161,7 @@ it('updates only uniforms during translation and reduces the brightest flux on t
       [projection.current, projection.previous].flatMap((buffers) => [
         buffers.cells.version,
         buffers.offsets.version,
-        buffers.residuals.version,
+        buffers.subcells.version,
       ]),
     ).toEqual(versions)
   } finally {

@@ -1,11 +1,15 @@
 import { SECTOR_SIZE, type UniverseVector } from '@inertialref/spatial'
 
-/** A sector-local fraction and its float32 residual retain nearby-star parallax. */
+/** Each float32 position spans one kilometer, including at the galactic rim. */
+export const STAR_POSITION_QUANTUM = 1024
+export const STAR_SUBCELLS = SECTOR_SIZE / STAR_POSITION_QUANTUM
+
+/** Integer subcells prevent shader reassociation from rebuilding an absolute float. */
 export function writeStarCoordinates(
   position: UniverseVector,
   cells: Int32Array,
   offsets: Float32Array,
-  residuals: Float32Array,
+  subcells: Int32Array,
   index: number,
 ): void {
   const base = index * 4
@@ -14,9 +18,8 @@ export function writeStarCoordinates(
   cells[base + 2] = position.sz
   const local = [position.ox, position.oy, position.oz]
   for (let axis = 0; axis < 3; axis++) {
-    const fraction = local[axis]! / SECTOR_SIZE
-    const high = Math.fround(fraction)
-    offsets[base + axis] = high
-    residuals[base + axis] = fraction - high
+    const cell = Math.floor(local[axis]! / STAR_POSITION_QUANTUM)
+    subcells[base + axis] = cell
+    offsets[base + axis] = local[axis]! / STAR_POSITION_QUANTUM - cell
   }
 }

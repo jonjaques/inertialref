@@ -9,6 +9,8 @@ import {
 } from '@inertialref/spatial'
 import {
   STAR_SHELL_RADIUS,
+  STAR_POSITION_QUANTUM,
+  STAR_SUBCELLS,
   stellarIlluminance,
   writeStarCoordinates,
 } from '@inertialref/rendering'
@@ -27,7 +29,8 @@ import {
   Fn,
   If,
   instanceIndex,
-  ivec3,
+  int,
+  float,
   log2,
   storage,
   uint,
@@ -44,17 +47,14 @@ interface Sources {
 function coordinates(capacity: number) {
   const cells = new StorageBufferAttribute(new Int32Array(capacity * 4), 4)
   const offsets = new StorageBufferAttribute(new Float32Array(capacity * 4), 4)
-  const residuals = new StorageBufferAttribute(
-    new Float32Array(capacity * 4),
-    4,
-  )
+  const subcells = new StorageBufferAttribute(new Int32Array(capacity * 4), 4)
   return {
     cells,
     offsets,
-    residuals,
+    subcells,
     cellNode: storage(cells, 'ivec4', capacity).toReadOnly(),
     offsetNode: storage(offsets, 'vec4', capacity).toReadOnly(),
-    residualNode: storage(residuals, 'vec4', capacity).toReadOnly(),
+    subcellNode: storage(subcells, 'ivec4', capacity).toReadOnly(),
   }
 }
 
@@ -62,7 +62,7 @@ function observer() {
   return {
     cells: uniform(new Vector3(), 'ivec3'),
     offsets: uniform(new Vector3()),
-    residuals: uniform(new Vector3()),
+    subcells: uniform(new Vector3(), 'ivec3'),
     orientation: uniform(new Vector4(0, 0, 0, 1)),
     eye: uniform(new Vector3()),
   }
@@ -78,15 +78,15 @@ function writeObserver(
   eye: Vec3,
 ): void {
   target.cells.value.set(position.sx, position.sy, position.sz)
-  target.offsets.value.set(
-    Math.fround(position.ox / SECTOR_SIZE),
-    Math.fround(position.oy / SECTOR_SIZE),
-    Math.fround(position.oz / SECTOR_SIZE),
+  target.subcells.value.set(
+    Math.floor(position.ox / STAR_POSITION_QUANTUM),
+    Math.floor(position.oy / STAR_POSITION_QUANTUM),
+    Math.floor(position.oz / STAR_POSITION_QUANTUM),
   )
-  target.residuals.value.set(
-    position.ox / SECTOR_SIZE - target.offsets.value.x,
-    position.oy / SECTOR_SIZE - target.offsets.value.y,
-    position.oz / SECTOR_SIZE - target.offsets.value.z,
+  target.offsets.value.set(
+    position.ox / STAR_POSITION_QUANTUM - target.subcells.value.x,
+    position.oy / STAR_POSITION_QUANTUM - target.subcells.value.y,
+    position.oz / STAR_POSITION_QUANTUM - target.subcells.value.z,
   )
   target.orientation.value.set(
     -orientation.x,
@@ -104,24 +104,49 @@ function displacement(
   index: Node<'uint'>,
 ) {
   const cells = source.cellNode.element(index).xyz
-  const high = ivec3(
-    cells.x.shiftRight(16).sub(pose.cells.x.shiftRight(16)),
-    cells.y.shiftRight(16).sub(pose.cells.y.shiftRight(16)),
-    cells.z.shiftRight(16).sub(pose.cells.z.shiftRight(16)),
-  )
-  const low = ivec3(
-    cells.x.bitAnd(65535).sub(pose.cells.x.bitAnd(65535)),
-    cells.y.bitAnd(65535).sub(pose.cells.y.bitAnd(65535)),
-    cells.z.bitAnd(65535).sub(pose.cells.z.bitAnd(65535)),
-  )
-  return vec3(high)
-    .mul(65536)
-    .add(vec3(low).add(source.offsetNode.element(index).xyz.sub(pose.offsets)))
-    .add(source.residualNode.element(index).xyz.sub(pose.residuals))
+  const subcells = source.subcellNode.element(index).xyz.sub(pose.subcells)
+  const axis = (key: 'x' | 'y' | 'z') => {
+    const local = subcells[key]
+    const carry = int(
+      local
+        .greaterThan(STAR_SUBCELLS / 2)
+        .select(
+          int(1),
+          local.lessThan(-STAR_SUBCELLS / 2).select(int(-1), int(0)),
+        ),
+    )
+    const balanced = local.sub(carry.mul(STAR_SUBCELLS))
+    const sector = cells[key]
+      .bitAnd(65535)
+      .sub(pose.cells[key].bitAnd(65535))
+      .add(carry)
+    const sectorCarry = int(
+      sector
+        .greaterThan(32767)
+        .select(int(1), sector.lessThan(-32768).select(int(-1), int(0))),
+    )
+    const high = cells[key]
+      .shiftRight(16)
+      .sub(pose.cells[key].shiftRight(16))
+      .add(sectorCarry)
+    const low = sector.sub(sectorCarry.mul(65536))
+    return float(high)
+      .mul(65536)
+      .add(float(low))
+      .add(
+        float(balanced)
+          .add(source.offsetNode.element(index)[key].sub(pose.offsets[key]))
+          .div(STAR_SUBCELLS),
+      )
+  }
+  return vec3(axis('x'), axis('y'), axis('z'))
 }
 
 function shell(offset: Node<'vec3'>, pose: Observer) {
-  const direction = offset.div(offset.length().max(1e-30))
+  const distance = offset.length()
+  const direction = distance
+    .greaterThan(0)
+    .select(offset.div(distance.max(1e-30)), vec3(0, 0, -1))
   const turn = cross(pose.orientation.xyz, direction).mul(2)
   return direction
     .add(turn.mul(pose.orientation.w))
@@ -148,7 +173,13 @@ export function createStarProjection(capacity: number) {
     const distance = displacement(current, pose, index)
       .length()
       .max(LIGHT_YEAR / SECTOR_SIZE)
-    return current.offsetNode.element(index).w.div(distance.mul(distance))
+    return displacement(current, pose, index)
+      .dot(displacement(current, pose, index))
+      .greaterThan(0)
+      .select(
+        current.offsetNode.element(index).w.div(distance.mul(distance)),
+        float(0),
+      )
   }
   const reduce = Fn(() => {
     If(instanceIndex.lessThan(count), () => {
@@ -194,11 +225,13 @@ export function createStarProjection(capacity: number) {
     previous,
     pose,
     previousPose,
-    point: shell(offset, pose),
-    previousPoint: shell(previousOffset, previousPose),
+    offset,
+    point: Fn(() => shell(offset.toVar(), pose))(),
+    previousPoint: Fn(() => shell(previousOffset.toVar(), previousPose))(),
     illuminance,
     visibility,
     distance: offset.length().mul(SECTOR_SIZE),
+    drawable: offset.dot(offset).greaterThan(0).select(1, 0),
     clear,
     reduce,
     maximum,
@@ -221,24 +254,20 @@ export function createStarProjection(capacity: number) {
           position,
           current.cells.array as Int32Array,
           current.offsets.array as Float32Array,
-          current.residuals.array as Float32Array,
+          current.subcells.array as Int32Array,
           i,
         )
         writeStarCoordinates(
           before,
           previous.cells.array as Int32Array,
           previous.offsets.array as Float32Array,
-          previous.residuals.array as Float32Array,
+          previous.subcells.array as Int32Array,
           i,
         )
         current.offsets.array[i * 4 + 3] = sources.luminosities[i] ?? 1
       }
       for (const buffers of [current, previous])
-        for (const buffer of [
-          buffers.cells,
-          buffers.offsets,
-          buffers.residuals,
-        ])
+        for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
           buffer.needsUpdate = true
       held = sources
       changed = true
@@ -282,11 +311,7 @@ export function createStarProjection(capacity: number) {
       reduce.dispose()
       maximum.dispose()
       for (const buffers of [current, previous])
-        for (const buffer of [
-          buffers.cells,
-          buffers.offsets,
-          buffers.residuals,
-        ])
+        for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
           buffer.dispose()
     },
   }

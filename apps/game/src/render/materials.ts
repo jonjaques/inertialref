@@ -557,6 +557,7 @@ export function createStarfieldMaterial(
     .greaterThan(0.5)
     .select(visible.mul(0.55).add(0.45).mul(3.4), size)
     .mul(instancedBufferAttribute<'float'>(enabled, 'float'))
+    .mul(projection?.drawable ?? 1)
   material.sizeAttenuation = false
   material.colorNode = instancedBufferAttribute<'vec3'>(colours, 'vec3')
     .mul(instancedBufferAttribute<'vec3'>(transmission, 'vec3'))
