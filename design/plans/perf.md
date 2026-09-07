@@ -12,7 +12,9 @@ sky an ordinary gameplay requirement. The camera acceptance matrix is
 [camera C5](the-camera.md#c5-acceptance-through-the-actual-image). Natural
 measurements below retain their named response; they do not establish the cost
 of that default. The completed cache, GPU star projection and bounded population
-are measured below. Final default-image and whole-journey costs remain pending.
+are measured below. The [final galaxy record](the-galaxy.md#assembled-image-and-motion-record)
+adds complete-sensor costs and full outward/return casts, including the return's
+52.8 fps recording and frame-time spikes.
 Keep the upscaler and optional optical effects separate.
 
 **Where the numbers come from.** Two rigs. Stationary operating points — the

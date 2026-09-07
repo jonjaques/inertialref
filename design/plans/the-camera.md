@@ -11,7 +11,11 @@ model, local dust and linear photometry remain independently calibrated.
 C5 CPU/GPU verification passes, with matched SDR captures, real WebGL fallback
 and negotiated extended P3 checked. Manual visual
 acceptance is deferred to the user's feedback on the Cloudflare PR preview.
-C5 and galaxy M8–M11 are not complete.
+The galaxy completion branch implements M7–M11 and repeats sixteen exact
+public-picture captures plus outward/return recordings. The
+[assembled galaxy record](the-galaxy.md#assembled-image-and-motion-record)
+separates passing checks from remaining morphology, night-emission and
+return-frame limits; those limits are not called visual acceptance.
 
 The sections below retain the implementation and acceptance requirements.
 Implemented processing is not a claim that every matched image, transition or
@@ -38,9 +42,10 @@ separate long Manual view changes shutter only. The generated version 2
 library can also be imported into Presets. Display output remains the
 reviewer's choice; start in standard SDR. Measurements and their limits are
 recorded in [CONTEXT](../../CONTEXT.md#the-sky-had-to-survive-before-it-could-be-revealed-07-sep-2026).
-The 0.05 ms sampling target is narrowly missed, and moving cold blocks can
-exceed the 2 ms volume budget. The complete coarse cube is the initial quality
-fallback; full cold/descent/travel performance acceptance remains open.
+That is the historical camera-branch measurement. The assembled galaxy
+records 0.030–0.047 ms isolated cube sampling, a deliberately revised live
+volume budget and a 960-pixel history cap. Its whole outward/return recordings
+expose a slower return; held GPU costs do not establish sustained 60 fps.
 
 ## The picture we are building
 
@@ -280,10 +285,19 @@ settings; do not rename legacy labels while silently retaining legacy lighting.
 
 ## C5. Acceptance through the actual image
 
-Automated and technical verification is in progress. The user will provide
-manual verification and feedback through the Cloudflare PR preview. Keep this
-step open until the image, transition and performance requirements below have
-their evidence; C1–C4 implementation does not complete C5 or galaxy M8–M11.
+The [assembled galaxy evidence](the-galaxy.md#assembled-image-and-motion-record)
+repeats the technical checks against field@5/kernel@8. Sixteen native SDR
+images restore exact public pose, instant, lens and processing; two complete
+journeys preserve canonical state, mode and lens. The cold-picture shutter
+race is fixed by binding preferences before route restoration.
+
+The requested PR carries that evidence for review. Artistic acceptance remains
+with the user. The recorded image limitations include smooth projected dust
+morphology and Earth's colorized night-map background being emitted as light;
+the latter keeps the night Automatic fixture from showing a star-dominated
+exposure. The return also has frame-time spikes. These findings remain open
+against the intended checklist below; implementation and passing suites do not
+erase them.
 
 Use identical pose, time, lens geometry and scene data across each mode triplet.
 Record mode, aperture, shutter, ISO, effective exposure or composite gains,

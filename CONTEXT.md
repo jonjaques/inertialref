@@ -8548,6 +8548,30 @@ in the layout phase, before route restoration, keeping its existing owner and
 cleanup. Camera fixtures compare actual pose, time, lens and processing after
 settling, rather than trusting their encoded URL.
 
+The assembled production check at `ee0e9e1` passes 2,010 regular tests and eight
+slow tests, plus all build, type and documentation gates. Sixteen exact public
+pictures pass in native 1920×1080 sRGB; source pose, time, lens and processing
+are compared after settling. The complete held sensor costs 4.257 ms for
+Enhanced Earth-band, 4.562 ms for Automatic Earth and 5.043 ms for the long
+Manual photograph. Those are 60 queued frames, not moving-app costs.
+
+The outward and return casts each contain 2,400 compositor frames and preserve
+canonical hash `98b5b2be`, mode and lens. Outward averages 59.7 fps with a
+18.0 ms frame-interval p95; return averages 52.8 fps with 32.5 ms p95 and a
+150 ms maximum. Both complete the same 36-second presentation journey. The
+return has visible performance headroom to recover; the held 2.765 ms returned
+orbit does not cancel those spikes. [The evidence](design/plans/the-galaxy.md#assembled-image-and-motion-record)
+links the public images and both recordings.
+
+Two limits are source findings. At the reviewed Earth-band pose, unfiltered
+versus 512-filtered radiance differs by at most 0.38% across two 81-ray patches;
+1024 faces would not recover the missing broad dust structure. The smooth
+Gaussian clouds and population profiles dominate. The night Automatic image
+also exposes the blue background of the colorized Black Marble map being
+emitted together with city lights. Its 238.94 cd/m² meter result is inside the
+comfort bounds; forcing more gain would amplify the source error. Neither was
+hidden by adjusting exposure or relaxing calibration.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

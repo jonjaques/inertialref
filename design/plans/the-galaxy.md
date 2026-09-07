@@ -15,22 +15,23 @@ The M1–M6 planning baseline is [PR #70](https://github.com/jonjaques/inertialr
 supersedes the older session-branch sketch below for this PR. Physical
 calibration remains independent of Enhanced image treatment.
 
-M7–M10 and M11's renderer are implemented. The final assembled image,
-transition and performance record follows below once the release checks finish.
+M7–M11 are implemented and the assembled verification record follows below.
+The completion PR is ready for image review; the measured return hitches and
+source-morphology limits remain explicit rather than being called acceptance.
 [ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md) records active
 `galaxy@5`, physical `galaxy-field@5`, the resolved/diffuse partition, dust,
 cache and history contracts. Historical milestone rows retain their original
 verification and do not assert that an earlier PR has merged.
 
-## Implemented, with acceptance still open
+## Implemented and measured
 
 | Area                    | Current implementation                                                                                             | Open acceptance or limit                                                                              |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
 | Coordinates and catalog | Shared galactocentric coordinates, measured Sun position, stable catalog addresses and distant bright stars.       | Q addresses require the recorded generation manifest.                                                 |
 | Field and transport     | `galaxy-field@5` / `galaxy-tsl@8`, shared dust, flared young population and calibrated V light.                    | Central morphology remains an approximation; photometry alone does not establish exterior appearance. |
 | Star population         | `galaxy@5`, magnitude levels, GPU shell projection, bounded selection, ensemble light partition and resolved dust. | Dense regions may omit whole levels; WebGL completes one source extinction column per submission.     |
-| Sensor                  | Enhanced, Automatic and Manual responses, with physical caches independent of presentation.                        | Final camera C5 acceptance with the active galaxy is pending.                                         |
-| Resource lifetime       | Progressive cubes, a separate two-entry disk cache, temporal history and stale-work retirement.                    | Final outward/return journey and assembled repository gate are pending.                               |
+| Sensor                  | Enhanced, Automatic and Manual responses, with physical caches independent of presentation.                        | Sixteen matched C5 plates verified; appearance limits are recorded below.                             |
+| Resource lifetime       | Progressive cubes, a separate two-entry disk cache, temporal history and stale-work retirement.                    | Outward/return recordings and assembled gate pass; return hitches remain measurable.                  |
 
 Physical calibration and the displayed image have separate acceptance checks.
 Enhanced must show bright worlds and faint galactic structure together; its
@@ -116,7 +117,7 @@ its final images repeat camera C5 with the active population.
 | M8        | Observer motion projects the star shell on the GPU.                | M7                             | Implemented: integer sector/subcell GPU projection, stable motion IDs, partial source uploads and absolute-V visibility. Equal-load CPU preparation and 20k/100k/200k GPU measurements below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | M9        | Magnitude levels extend the population within a bounded draw.      | M8                             | Implemented: galaxy@5 magnitude levels, V8/100k/1m/2000 budgets, catalogue completeness, ensemble light partition and legacy P/Q manifest tests. Ten-thousand-cell slow property passes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | M10       | Resolved stars receive the same dust extinction.                   | M9                             | Implemented: shared observer-to-source dust, catalogue Solar correction, 1024-source GPU cycles and bounded WebGL fallback. Physical CPU/GPU columns and continuous-travel queue tests pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| M11       | Temporal rendering and the full journey pass the integration gate. | M10 + C5                       | Renderer implemented: interleaved physical history, cut/disocclusion/resize/version retirement, stationary detail retention and WebGL shader regression. Final journey and C5 verification in progress.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| M11       | Temporal rendering and the full journey pass the integration gate. | M10 + C5                       | Renderer implemented: interleaved physical history, cut/disocclusion/resize/version retirement, stationary detail retention and WebGL shader regression. Sixteen C5 plates and two 2,400-frame journeys recorded; exact state/lens/mode invariants pass. The completion record retains image and return-frame limits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### M1–M5. Implemented foundation
 
@@ -217,12 +218,12 @@ retirement. Production uses a half-resolution target with stride 8 and a
 960-pixel maximum long edge. The scene and resolved stars retain their own
 resolution. The measured live-volume budget revision follows below.
 
-Acceptance remains pending for camera C5, outward and return travel through
-local/regional/galactic scales, and the final assembled `pnpm check`. Record the
-actual commit, backend, drawing-buffer size, DPR, response and exposure beside
-the images and timings. The journey must expose cache crossings, bright
-foregrounds, dark lanes and exterior views. Passing component tests does not
-close those image and integration checks.
+The production build at `ee0e9e1` passes the assembled repository gate and
+sixteen exact public-picture checks. Outward and return recordings cover the
+full route with unchanged canonical hash, camera mode and lens. This is author
+verification for a ready PR; it is not a claim of the user's artistic approval.
+The return's frame-time spikes and the model's smooth morphology remain visible
+in the attached evidence.
 
 ### Completion measurements, 7 September 2026
 
@@ -234,7 +235,7 @@ with the default session seed and shipped catalog. They exclude IPC and dust.
 
 | Physical sky measurement                 | Result and scope                                                                                                                                                                                            |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 512² cube, corrected `cube@2` footprint  | 3.829 s drained cold bake; 36 MiB resident cache targets; maximum relative RGB error 0.629% across 72 arbitrary directions and 0.086% at 12 texel centers.                                                  |
+| 512² cube, corrected `cube@2` footprint  | 3.829 s drained cold bake; isolated three-target allocation 36 MiB; maximum relative RGB error 0.629% across 72 arbitrary directions and 0.086% at 12 texel centers.                                        |
 | Cube sampling                            | 0.030–0.047 ms across the measured 960×540 and 1440×900 sampling targets.                                                                                                                                   |
 | 0.15 pc reuse at field@5                 | 3,120 translated rays from 21 origins; worst coarse error 0.710%, with 0.25 pc-step rechecks below 0.661%. The 1% budget is unchanged.                                                                      |
 | 100k star draw                           | 0.687 ms median added GPU time at 1920×1080, 4× MSAA, sensor MRT, downstream optics bypassed and retained transparent extinction. The 20k and 200k controls add 0.343 and 1.254 ms.                         |
@@ -242,15 +243,15 @@ with the default session seed and shipped catalog. They exclude IPC and dust.
 
 The original live-volume **2 ms at 1080p** budget is deliberately revised.
 The uncapped half-resolution/stride-8 inside view measures **6.366 ms** at
-1920×1080, and 12.693 ms at 2880×1800. The accepted spatial detail costs more
+1920×1080, and 12.693 ms at 2880×1800. The chosen spatial detail costs more
 than that original target; cached ordinary views stay near 0.03–0.05 ms. The
 production 960-pixel cap bounds target/history growth while retaining that
 sampling detail. It does not establish a universal 2 ms live path.
 
-| Moving live volume, production half resolution / stride 8 / cap 960 |  Face-on |  Edge-on |   Inside | Owned target/history bytes |
-| ------------------------------------------------------------------- | -------: | -------: | -------: | -------------------------: |
-| 1920×1080 drawing buffer                                            | 2.225 ms | 4.501 ms | 6.296 ms |                 29,284,096 |
-| 2880×1800 drawing buffer                                            | 2.460 ms | 5.525 ms | 7.399 ms |                 30,673,216 |
+| Moving live volume, production half resolution / stride 8 / cap 960 |  Face-on |  Edge-on |   Inside | Volume + shared-table bytes |
+| ------------------------------------------------------------------- | -------: | -------: | -------: | --------------------------: |
+| 1920×1080 drawing buffer                                            | 2.225 ms | 4.501 ms | 6.296 ms |                  29,284,096 |
+| 2880×1800 drawing buffer                                            | 2.460 ms | 5.525 ms | 7.399 ms |                  30,673,216 |
 
 Each result measures 40 moving draws with 0.2 pc translation per draw and a
 V8/mask-511 envelope. The 1080p target is 960×540; the larger buffer uses
@@ -285,10 +286,77 @@ Source files: `cube-footprint-summary.json`, `cube-quality.log`,
 `capped-galaxy-summary.json`, `field5-operating-summary.json` and
 `population-height-plate.json` in that scratch directory.
 
-- **Pending: camera C5.** Record the final active-model image matrix and review.
-- **Pending: journey.** Record outward/return travel and representation crossings.
-- **Pending: assembled gate.** Record final commit, `pnpm check`, physical GPU
-  checks and complete-frame measurements after the last integration change.
+### Assembled image and motion record
+
+All images use the production source at `ee0e9e1`, Apple M5, Chrome 152,
+WebGPU, sRGB SDR and MSAA 4. The sixteen camera fixtures use native
+1920×1080 / DPR 1, with identical pose, time and lens in each Enhanced /
+Automatic / Manual triplet. Public URL restoration preserves every encoded
+field. This repeats the cold-restore regression that previously replaced
+1/3200 s with 1/60 s. The parent preference binding now runs before the route
+restores its photograph.
+
+[Earth and band](https://agentic-media-dumpster.jonjaques.com/2026/09/h7ufhup55u/triplet-earth-band.jpg),
+[Luna](https://agentic-media-dumpster.jonjaques.com/2026/09/r4rakwrbnu/triplet-luna.jpg),
+[night side](https://agentic-media-dumpster.jonjaques.com/2026/09/fqbc4tqrdx/triplet-night.jpg)
+and [Bennu](https://agentic-media-dumpster.jonjaques.com/2026/09/x3az4a68s7/triplet-bennu.jpg)
+show the matched modes. Enhanced retains foreground relief and the sky;
+Automatic and short Manual suppress faint sky beside a lit subject. The
+[2,400 s Manual exposure](https://agentic-media-dumpster.jonjaques.com/2026/09/749er9thf4/camera-review-earth-band-manual-long.png)
+reveals the band and clips Earth. Bodies occlude the band and stars, with no
+observed sky-through-disk or reversed dust lane.
+
+The [outward cast](https://agentic-media-dumpster.jonjaques.com/2026/09/f654hxpc66/cast.mp4)
+and [return cast](https://agentic-media-dumpster.jonjaques.com/2026/09/yrbzpaa8yy/cast.mp4)
+each contain 2,400 compositor frames. Both finish the 36-second presentation
+journey, preserve canonical hash `98b5b2be` and retain the same Enhanced mode
+and lens. Sampling includes a short held tail. Neither cast reports isolated
+frames; because the camera moves, that detector alone does not prove an absence
+of every artifact. Reviewed scale samples retain the sky and show no blank
+representation switch. [Earth orbit](https://agentic-media-dumpster.jonjaques.com/2026/09/nxjjmbizyx/orbit.png),
+[exterior](https://agentic-media-dumpster.jonjaques.com/2026/09/9xd33s2t35/exterior.png)
+and [edge-on instrument](https://agentic-media-dumpster.jonjaques.com/2026/09/9tfs94rja4/edge-on.png)
+are full-size plates from that run.
+
+| Complete app / sensor operating point, 1920×1080 DPR 1   | Measured result                                                               |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Outward compositor cast                                  | 59.7 fps over 40.21 s; rAF interval p95 18.0 ms, p99 18.7 ms, maximum 50.9 ms |
+| Return compositor cast                                   | 52.8 fps over 45.49 s; rAF interval p95 32.5 ms, p99 50.2 ms, maximum 150 ms  |
+| Held Enhanced Earth-band                                 | 4.257 ms / 60 queued complete sensor frames                                   |
+| Held Automatic Earth                                     | 4.562 ms / 60 queued complete sensor frames                                   |
+| Held Manual Earth-band, 2400 s                           | 5.043 ms / 60 queued complete sensor frames                                   |
+| Held journey exterior / returned orbit / edge instrument | 2.868 / 2.765 / 2.513 ms / 60 queued complete sensor frames each              |
+
+Compositor rates, paced frame intervals and drained GPU submissions measure
+different things. The return has 113 intervals above 25 ms and 26 above 50 ms
+among 2,209 sampled intervals; it does **not** establish sustained 60 fps.
+Most sampled slow frames occur while returning from outside the disk. The
+held GPU result is not a substitute for this moving-app limit.
+
+The visual limits are also measurable. At the Earth-band pose, removing cube
+filtering changes physical RGB by at most 0.38% across two 81-ray patches;
+broad RMS contrast remains about 13.1% at 512, 1024 or unfiltered resolution.
+Enhanced compresses that to about 10.0%. The smooth disks and Gaussian local
+clouds dominate the broad brown lobes; a larger cube would not create the
+missing projected structure. The exterior's central light fraction remains
+an approximate population model. Reference-matched dust morphology is further
+physical-model work, not a hidden quality setting.
+
+The night Automatic plate exposes an existing Earth source issue: the colorized
+Black Marble map contains blue land/ocean background, and the body shader emits
+that background together with city lights. The meter settles inside its comfort
+bounds at EV 8.388 and amplifies the hemisphere while stars remain below
+visibility. This fixture does not meet the proposed star-dominated night image;
+forcing more gain would amplify the source error. The galaxy PR does not alter
+Earth's night-emission material.
+
+The full `pnpm check` passes 2,010 regular tests in 153 files and eight slow
+tests, plus graph, presets, formatting, lint, all typechecks, documentation and
+production builds. `pnpm sim --self-test` passes 12/12. The final GPU suite and
+Retina/output transition record are appended before publication. No tolerances
+were relaxed to obtain these results. The detailed local records are
+`camera-acceptance/final-fixed/`, `journey-final/` and
+`earth-band-contrast-summary.json` under `.scratch/galaxy-finish/`.
 
 ## Follow-up sessions after the integration
 
@@ -628,11 +696,11 @@ an optional measured follow-up; it is not needed to claim a second field model.
 
 ## Evidence still to resolve
 
-- Camera C5, the final continuous journey and the assembled gate remain pending
-  in the completion record. The capped physical-volume timing does not measure
-  the whole native-resolution scene and sensor.
-- Cold first useful sky, archive-hit boot and full convergence need the final
-  browser operating-point record. A drained full-bake time is not a boot time.
+- The completion record separates passing author checks from the remaining
+  image limits and return-frame spikes. A universal 60 fps journey is not proven.
+- A drained full-bake time is not a boot time. The current boot capture completes
+  all 1,638 progressive tiles and writes one archive; storage, readback and driver
+  differences still affect cold/reload latency.
 - Central morphology, H II line emission and clusters remain approximate or
   deferred. Integrated V calibration does not measure their spatial light mix.
 - The catalog's coverage assumptions are explicit; deeper observed completeness
