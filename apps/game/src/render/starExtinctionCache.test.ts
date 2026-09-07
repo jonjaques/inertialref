@@ -189,3 +189,25 @@ it('finishes a finite observer cycle during continuous travel before refreshing 
   expect(UV.distance(schedule.origin!, latest)).toBe(0)
   expect(schedule.diagnostics.pending).toBe(12)
 })
+
+it('does not rewrite catalogue reference columns during idle Sol frames', () => {
+  const schedule = new StarExtinctionSchedule(3)
+  const stars = {
+    ...selection(['0', '1', '2']),
+    catalogued: [true, true, true],
+  }
+  schedule.configure(stars, SUN_POSITION, field)
+  const columns = schedule.selected.map((source) => source.corrected)
+  for (let frame = 0; frame < 100; frame++) {
+    expect(
+      schedule.configure(
+        stars,
+        UV.translate(SUN_POSITION, vec3(frame, 0, 0)),
+        field,
+      ),
+    ).toBe(false)
+    schedule.selected.forEach((source, index) =>
+      expect(source.corrected).toBe(columns[index]),
+    )
+  }
+})

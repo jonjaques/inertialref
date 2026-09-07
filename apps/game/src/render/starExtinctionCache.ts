@@ -31,6 +31,8 @@ import { createStarExtinction, starExtinctionOrigin } from './starExtinction.ts'
 
 export const STAR_EXTINCTION_CACHE_RADIUS_PARSECS = 0.15
 export const STAR_EXTINCTION_BATCH_SIZE = 256
+/** Measured M5 mean at 1–6 kpc: 0.85 ms per column, 1.65 ms with a cold Sol reference. */
+export const STAR_EXTINCTION_CPU_BATCH_SIZE = 1
 /** A finite presentation range, recorded when a reference correction exceeds it. */
 export const STAR_EXTINCTION_MAX_LOG_GAIN = 16 * Math.LN2
 const FADE_SUBMISSIONS = 6
@@ -314,7 +316,7 @@ export class StarExtinctionCache {
     this.#field = field
     this.#instanceBySlot = new Int32Array(capacity)
     this.#batchSize = options.batchSize ?? STAR_EXTINCTION_BATCH_SIZE
-    this.#cpuBatchSize = options.cpuBatchSize ?? 4
+    this.#cpuBatchSize = options.cpuBatchSize ?? STAR_EXTINCTION_CPU_BATCH_SIZE
     this.#cpu = options.cpu ?? false
     invariant(
       Number.isInteger(this.#batchSize) &&
