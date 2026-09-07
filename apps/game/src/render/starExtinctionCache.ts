@@ -298,8 +298,8 @@ export class StarExtinctionCache {
       1,
     )
     this.#mapping = new StorageInstancedBufferAttribute(
-      new Uint32Array(capacity),
-      1,
+      new Uint32Array(capacity * 4),
+      4,
     )
     this.#pending = new StorageInstancedBufferAttribute(
       new Uint32Array(this.#batchSize),
@@ -403,9 +403,10 @@ export class StarExtinctionCache {
       )
     }
     const capacity = this.schedule.capacity
-    const slot = storage(this.#mapping, 'uint', capacity).element(index)
+    const mapped = storage(this.#mapping, 'uvec4', capacity).element(index)
+    const slot = mapped.x
     const value = storage(this.transmission, 'vec4', capacity).element(slot)
-    const version = storage(this.#versions, 'uint', capacity).element(slot)
+    const version = mapped.y
     const stamp = storage(this.#stamp, 'uvec4', capacity).element(slot)
     const valid = stamp.y.equal(version).and(stamp.x.equal(this.#generation))
     const visibility = this.#frame
@@ -413,10 +414,7 @@ export class StarExtinctionCache {
       .add(1)
       .div(FADE_SUBMISSIONS)
       .clamp()
-    const catalogueAtSol = storage(this.#positions, 'vec4', capacity)
-      .element(slot)
-      .w.greaterThan(0.5)
-      .and(this.#atSol)
+    const catalogueAtSol = mapped.z.greaterThan(0).and(this.#atSol)
     return catalogueAtSol.select(
       vec3(1),
       valid.select(value.rgb.mul(visibility), vec3(0)),
@@ -455,7 +453,10 @@ export class StarExtinctionCache {
           slot * 4,
         )
         this.#versions.array[slot] = source.version
-        this.#mapping.array[index] = slot
+        this.#mapping.array.set(
+          [slot, source.version, source.catalogued ? 1 : 0, 0],
+          index * 4,
+        )
       })
       this.#positions.needsUpdate = true
       this.#versions.needsUpdate = true
