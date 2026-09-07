@@ -8572,6 +8572,14 @@ emitted together with city lights. Its 238.94 cd/m² meter result is inside the
 comfort bounds; forcing more gain would amplify the source error. Neither was
 hidden by adjusting exposure or relaxing calibration.
 
+The final output lifecycle run negotiates Extended display-P3 at 2× headroom,
+then returns to Standard sRGB with renderer replacement. Native Retina
+2880×1800 retains 960×600 galaxy history and costs 6.410 ms across 60 held
+complete-sensor frames. Both resized and Extended views restore an archive
+with one hit and no write or failure. Mode-switch and photographic pause/resume
+casts contain 360 and 240 frames respectively, with no isolated-frame flags or
+browser errors. All owned Chrome rigs and preview servers are closed.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

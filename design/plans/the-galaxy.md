@@ -352,8 +352,21 @@ Earth's night-emission material.
 
 The full `pnpm check` passes 2,010 regular tests in 153 files and eight slow
 tests, plus graph, presets, formatting, lint, all typechecks, documentation and
-production builds. `pnpm sim --self-test` passes 12/12. The final GPU suite and
-Retina/output transition record are appended before publication. No tolerances
+production builds. `pnpm sim --self-test` passes 12/12. The final GPU suite is recorded before publication. The additional lifecycle
+run uses public mode changes and photographic pause/resume, then negotiates
+Extended display-P3 at 2× headroom through the real settings UI and returns to
+Standard sRGB with verified renderer replacement. At 1440×900 CSS / DPR 2,
+the native scene is 2880×1800, the physical history is 960×600, and 60 queued
+complete sensor frames average 6.410 ms. Extended and resized views restore
+one finished archive, with zero writes or failures.
+
+The [mode-switch recording](https://agentic-media-dumpster.jonjaques.com/2026/09/h8uwsrmxbk/cast.mp4)
+contains 360 compositor frames; the
+[pause/resume recording](https://agentic-media-dumpster.jonjaques.com/2026/09/kibamqkipn/cast.mp4)
+contains 240. Both have no isolated-frame flags or browser errors. Real WebGL
+orbit and external-instrument captures also render without errors; Automatic
+remains explicitly unsupported on that backend. Every owned Chrome rig and
+preview server is closed. No tolerances
 were relaxed to obtain these results. The detailed local records are
 `camera-acceptance/final-fixed/`, `journey-final/` and
 `earth-band-contrast-summary.json` under `.scratch/galaxy-finish/`.
