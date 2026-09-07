@@ -634,7 +634,7 @@ pnpm vitest run --config apps/game/vitest.gpu.config.ts upscale.gpu
   [ADR-0017](../../docs/adr/0017-the-lens.md) — why selection and the pixel
   angle stay display-referred
 - [the sensor](the-sensor.md) — the exposure this couples to and the
-  motion-blur phase that reads the guides
+  implemented motion pass whose guide reuse needs verification
 - [perf](perf.md) — the frame this is measured against
 - [art](../../docs/design/art.md#also-required) — the row that has been
   asking for reversed-Z
