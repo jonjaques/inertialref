@@ -30,7 +30,8 @@ import { createGalaxyKernel } from './galaxyKernel.ts'
 import { createStarExtinction, starExtinctionOrigin } from './starExtinction.ts'
 
 export const STAR_EXTINCTION_CACHE_RADIUS_PARSECS = 0.15
-export const STAR_EXTINCTION_BATCH_SIZE = 256
+/** Shared-table M5 means: 1.5–1.7 ms; a cold catalogue correction is 3.1 ms. */
+export const STAR_EXTINCTION_BATCH_SIZE = 1024
 /** Measured M5 mean at 1–6 kpc: 0.85 ms per column, 1.65 ms with a cold Sol reference. */
 export const STAR_EXTINCTION_CPU_BATCH_SIZE = 1
 /** A finite presentation range, recorded when a reference correction exceeds it. */
