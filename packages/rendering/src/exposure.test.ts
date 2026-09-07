@@ -269,6 +269,30 @@ it('applies compensation as gain over the lens without changing aperture, shutte
   expect(lens).toEqual(LENS_PRESETS.flight)
 })
 
+it('resolves compensation and a changed comfort range from the retained scene luminance', () => {
+  const meter = new ExposureMeter()
+  const tight = { ...automatic, range: { bright: 0, dark: 0 } }
+  const bins = histogram([10_000])
+  meter.update(LENS_PRESETS.flight, tight, 0)
+  meter.measure(bins, 1, LENS_PRESETS.flight, tight)
+  const settings = { ...automatic, compensation: 2 }
+  const expected =
+    meterHistogram(bins, 1, exposureValue(LENS_PRESETS.flight), settings).ev - 2
+  expect(
+    meter.update(LENS_PRESETS.flight, settings, 1000).effectiveEV,
+  ).toBeCloseTo(expected, 12)
+})
+
+it('uses the current dark comfort limit when an empty reading outlives a range change', () => {
+  const meter = new ExposureMeter()
+  const tight = { ...automatic, range: { bright: 0, dark: 0 } }
+  meter.update(LENS_PRESETS.flight, tight, 0)
+  meter.measure(histogram([0]), 1, LENS_PRESETS.flight, tight)
+  expect(
+    meter.update(LENS_PRESETS.flight, automatic, 1000).effectiveEV,
+  ).toBeCloseTo(exposureValue(LENS_PRESETS.flight) - automatic.range.dark, 12)
+})
+
 it('Manual ignores the meter and follows the photographic stop arithmetic', () => {
   fc.assert(
     fc.property(

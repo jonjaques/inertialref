@@ -330,12 +330,13 @@ export class ExposureMeter {
     const dt = this.#time === null ? 0 : Math.max(0, time - this.#time)
     if (policy.fixedEV !== null) this.#ev = policy.fixedEV
     else {
-      const target = clampExposure(
-        (this.#target?.ev ?? exposureForLuminance(SURFACE_LUMINANCE)) -
-          policy.compensation,
-        set,
-        settings,
-      )
+      const wanted =
+        this.#target === null
+          ? exposureForLuminance(SURFACE_LUMINANCE)
+          : this.#target.samples === 0
+            ? set - settings.range.dark
+            : exposureForLuminance(this.#target.luminance / METER_SHOULDER)
+      const target = clampExposure(wanted - policy.compensation, set, settings)
       const current = this.#ev + this.#compensation - policy.compensation
       this.#ev = clampExposure(
         adaptExposure(current, target, dt, settings.rate),
