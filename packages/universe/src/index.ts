@@ -28,3 +28,7 @@ export * from './galaxy/dust.ts'
 export * from './galaxy/integral.ts'
 
 export * from './galaxy/localDust.ts'
+
+export * from './galaxy/photometry.ts'
+
+export * from './galaxy/calibration.ts'

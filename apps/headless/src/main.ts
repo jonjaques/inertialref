@@ -44,6 +44,7 @@ const OPTIONS = {
   targets: { type: 'boolean', default: false },
   'self-test': { type: 'boolean', default: false },
   'galaxy-plates': { type: 'string' },
+  'galaxy-calibration': { type: 'boolean', default: false },
   'galaxy-width': { type: 'string', default: '192' },
   /**
    * Walk the terrain zoo and print what a descent costs. See docs/guides/harness.md.
@@ -131,6 +132,19 @@ const session = openSession({
 // Note `session.world` rather than a destructured `world`: loading a save
 // replaces it, and a captured reference is the exact bug the getter exists for.
 const { harness, system, target } = session
+
+if (values['galaxy-calibration'] === true) {
+  let passed = false
+  try {
+    const report = harness.galaxy().calibration()
+    console.log(JSON.stringify(report, null, 2))
+    passed = report.passed
+  } finally {
+    session.dispose()
+    releaseTiming?.()
+  }
+  process.exit(passed ? 0 : 1)
+}
 
 if (values['galaxy-plates'] !== undefined) {
   try {

@@ -26,6 +26,7 @@ import {
   uniform,
   uv,
   vec4,
+  vec3,
 } from 'three/tsl'
 import { getTimer, PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
@@ -351,9 +352,11 @@ export function createGalaxyBackdrop(
   material.depthNode = float(1)
   material.depthWrite = false
   material.fog = false
-  material.colorNode = nodeObject(volume).rgb.mul(
-    (RADIANCE_UNIT * 1e-9 * GALAXY_LUMINOUS_EFFICACY) / SURFACE_LUMINANCE,
-  )
+  const rgb = nodeObject(volume).rgb
+  const luminance = rgb.dot(vec3(0.2126, 0.7152, 0.0722))
+  material.colorNode = rgb
+    .mul(rgb.g.div(luminance.max(1e-30)))
+    .mul((RADIANCE_UNIT * 1e-9 * GALAXY_LUMINOUS_EFFICACY) / SURFACE_LUMINANCE)
   const mesh = new Mesh(new PlaneGeometry(2, 2), material)
   mesh.name = 'Galaxy backdrop'
   mesh.frustumCulled = false

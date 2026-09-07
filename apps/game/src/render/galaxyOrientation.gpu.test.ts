@@ -3,7 +3,11 @@ import { PerspectiveCamera, Scene } from 'three/webgpu'
 import { PARSEC } from '@inertialref/shared'
 import { rootSeed } from '@inertialref/procedural'
 import { Quaternion as Q, UV, vec3 } from '@inertialref/spatial'
-import { createGalaxyField, integrateGalaxyRay } from '@inertialref/universe'
+import {
+  createGalaxyField,
+  integrateGalaxyRay,
+  galaxyDisplayRgb,
+} from '@inertialref/universe'
 import {
   GALAXY_LUMINOUS_EFFICACY,
   GALAXY_VIEWS,
@@ -106,7 +110,8 @@ it.each(['outside', 'inside'] as const)(
         // fetch. Measured at 0.4–0.9% across these four rows. The rows are the
         // outer ones on purpose — mirrored, these land 32% to 5.7× out, where a
         // pair either side of the bulge would be 3% out and pass.
-        const expected = cpu.rgbNanowatts[0] * RADIANCE_TO_SCENE
+        const expected =
+          galaxyDisplayRgb(cpu.rgbNanowatts)[0] * RADIANCE_TO_SCENE
         expect(
           Math.abs(pixels.at(SIZE / 2, row)[0] / expected - 1),
         ).toBeLessThan(0.03)

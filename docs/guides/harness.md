@@ -80,7 +80,7 @@ circle of confusion is a claim about a display, and there is no display.
 
 `ir.galaxy()` returns a read-only inspector for the current world's galaxy
 seed. `sample(position?)` accepts a `UniverseVector`, defaults to the Sun, and
-reports population densities, bolometric emission, RGB extinction per parsec,
+reports population densities, Johnson V emission, RGB extinction per parsec,
 dust modulation, normalization, and both
 preview and active generation versions. `count(options?)` integrates the
 reference cylinder; `tangencies()` reports the arm curve's tangent longitudes.
@@ -97,7 +97,8 @@ The command writes `face-on`, `edge-on`, `observer`, `young-arms`, `bar-bulge`,
 and `halo` PNGs, paired `.f64` arrays, and `report.json`. The report declares
 units, dimensions, sample counts, timings, hashes and the shared display
 stretch. The raw arrays contain interleaved RGB float64 little-endian values in
-bolometric nW m⁻² sr⁻¹. Their channel sum is total radiance. The observer plate
+V-anchored nW m⁻² sr⁻¹. Green is Johnson V radiance; red and blue describe
+illustrative chromaticity, and the channel sum is not bolometric power. The observer plate
 is an equirectangular sky with the galactic center in the middle and longitude
 increasing to the left.
 
@@ -110,6 +111,24 @@ step maximum by default. `dustScale: 0` selects the emission-only control and
 its 100 pc default; `maxStepParsecs` overrides either. Metadata records these
 settings. See
 [ADR-0032](../adr/0032-the-stellar-field.md) for parameters and calibration limits.
+
+`pnpm sim --galaxy-calibration --quiet` emits the linear-light acceptance report
+and exits with status 1 if a bound fails. `ir.galaxy().calibration()` returns the
+same report without an exposure or display response; `localDust()` lists the
+Local Bubble approximation and nine source-derived cloud records. The reference
+sky includes diffuse Galactic and extragalactic light beyond the modeled stellar
+component. The report declares that limitation, its units, and the 0.3 mag bound.
+Natural-specific display treatment and final appearance acceptance remain deferred.
+
+To regenerate the checked-in source manifest and runtime cloud/sky tables:
+
+```sh
+node apps/ingest/src/galaxyReference.ts /path/to/cube_ext.fits /path/to/RadianceOut.csv
+```
+
+The inputs are the uncompressed Lallement 2022 FITS cube and GAMBONS supplemental
+sky map; source links, hashes and exact selection windows accompany the output in
+`data/reference/galaxy.json`. No catalogue or procedural systems are regenerated.
 
 In the browser's planetarium, `ir.galaxyView('face-on')` and
 `ir.galaxyView('edge-on')` select the fixed external instruments also available
@@ -139,8 +158,8 @@ those the target is held and a submission costs the backdrop's composite.
 at a time, and `ir.gpu()` holds the loop while it measures, so its frame
 count and these counters agree. It returns `null` without a renderer. `ir.lens()` gives the actual instrument exposure. The face-on view
 uses f/2, 2,400 s, ISO 400; edge-on uses f/2, 600 s, ISO 400. Both contain
-stellar emission transported through the shared dust field, with an illustrative
-visible efficacy pending photometric calibration. `resolvedStarExtinction: false`
+stellar emission transported through the shared dust field. A declared photopic/V
+ratio of 1.25 converts V power to luminance; color remains illustrative. `resolvedStarExtinction: false`
 records the temporary mismatch between attenuated diffuse light and star sprites.
 
 ```sh

@@ -284,7 +284,7 @@ const structureAt = Fn(([p]: [Node<'vec3'>]) => {
 const emissionColors = POPULATION_NAMES.map((name) => {
   const population = GALAXY_POPULATIONS[name]
   const c = blackbodyColour(population.temperature)
-  const factor = population.meanSolarLuminosities / (c.r + c.g + c.b)
+  const factor = population.meanSolarLuminosities / c.g
   return [c.r * factor, c.g * factor, c.b * factor] as const
 })
 

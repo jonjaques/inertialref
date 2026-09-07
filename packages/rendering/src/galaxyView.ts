@@ -1,3 +1,4 @@
+import { GALAXY_V_LUMINOUS_EFFICACY } from '@inertialref/universe'
 import { PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV, vec3 } from '@inertialref/spatial'
 import { lensForFov } from './lens.ts'
@@ -47,5 +48,5 @@ export type GalaxyView = keyof typeof GALAXY_VIEWS
 export const isGalaxyView = (value: unknown): value is GalaxyView =>
   typeof value === 'string' && Object.hasOwn(GALAXY_VIEWS, value)
 
-/** Preview bolometric-to-visible efficacy, pending M6 bandpass calibration. */
-export const GALAXY_LUMINOUS_EFFICACY = 100
+/** Fixed V-to-photopic spectral approximation; the field records its calibration. */
+export const GALAXY_LUMINOUS_EFFICACY = GALAXY_V_LUMINOUS_EFFICACY

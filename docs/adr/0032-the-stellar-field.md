@@ -16,7 +16,7 @@ longitudes, or change its brightness between inside and outside views.
 ## Decision
 
 **One seeded field supplies CPU references and a GPU preview; its
-`galaxy-field@3` manifest stays separate from active generation.**
+`galaxy-field@4` manifest stays separate from active generation.**
 
 `createGalaxyField` accepts a galaxy seed and samples `UniverseVector`
 positions. Internally the field uses parsec offsets in the galactic-center
@@ -48,15 +48,14 @@ regularization is an explicit profile choice and spends preview version 2.
 The measured centerlines and their tangencies stay intact. The disk tapers
 from 26 to 30 kpc.
 
-Each population carries a mean bolometric luminosity and blackbody color
-assumption. Density times mean luminosity gives L☉/pc³. The ray integrator
-returns bolometric nW m⁻² sr⁻¹ using
-`3.828e26 / (4π PARSEC²) × 1e9` per L☉/pc². Its RGB channels partition that
-power according to normalized blackbody RGB. They are illustrative color
-channels, not measured bandpasses or a luminance calibration. Dust attenuates
-these channels before sensor conversion. Resolved-star subtraction and M6
-photometric accuracy remain open. The live
-preview below feeds these illustrative channels through the existing sensor.
+Each population carries a mean Johnson V luminosity in solar V units and an
+illustrative blackbody color. The integrator returns Johnson V nW m⁻² sr⁻¹;
+green carries V radiance, while red and blue carry relative chromaticity after
+wavelength-dependent absorption. Their sum is not a physical bolometric power.
+The conversion uses the GAMBONS Vega/STIS003 zero radiance of 143.1685 W m⁻²
+sr⁻¹ and Willmer's solar absolute V magnitude of 4.81. At ten parsecs those
+values define the solar V wattage, which replaces the bolometric solar wattage
+in `L_V / (4π PARSEC²) × 1e9`.
 
 `ir.galaxy()` derives an inspector from the current session. Samples expose
 both manifests and the normalization. Count quadrature covers the cylinder of
@@ -90,7 +89,8 @@ midplane is normalized to one V magnitude per kiloparsec, or
 Their seed derives from `galaxy-field:dust`, independently of young-star texture.
 Effective wavelengths of 650, 550, and 450 nm give extinction ratios
 `550/650`, one, and `550/450`. These illustrative RGB coefficients are not
-measured sensor bandpasses. Named clouds and the Local Bubble belong to M6.
+measured sensor bandpasses. The local correction below adds the named clouds
+and Local Bubble.
 
 For each interval, the integrator samples emission `j` and extinction `k` at
 its midpoint. With length `h`, optical depth `q = k h`, and incoming
@@ -131,12 +131,98 @@ exact center rays' in the plane and 0.997 above it, and the settled sample
 count falls 3.2×. Filtering density under a convex transport underestimates
 the mean transmission slightly; that 0.6% is the named cost.
 
+## The local sky and linear calibration (M6)
+
+Nine named cloud complexes derive from [Lallement et al. 2022's extinction
+cube](https://cdsarc.cds.unistra.fr/ftp/J/A+A/661/A147/cube_ext.fits.gz).
+`apps/ingest/src/galaxyReference.ts` selects explicit longitude, latitude and
+distance windows, subtracts a 0.001 mag/pc background floor, and fits the excess
+with diagonal Gaussian moments. The amplitude preserves the selected excess
+volume integral; each record declares the resulting central column. These are
+compact approximations to a published map, not published ellipsoid fits. The
+12.5 pc minimum sigma follows half the map's 25 pc resolution. Smooth compact
+tails span four to five sigma. All clouds contribute to the same extinction
+sum; overlapping windows or a nearest-cloud ranking never select a field value.
+
+The FITS header declares `A0(550nm)/parsec`, in magnitudes per parsec. Its actual
+floating-point values must not be interpreted using the catalogue ReadMe's
+nanomagnitude label. The grid uses 10 pc cells and half-index solar coordinates;
+cell centers span −3,000…3,000 pc in the plane. Ingest records the source hash,
+selection windows, centers, sigmas, amplitudes and columns in
+`data/reference/galaxy.json`, and generates the runtime tables. Heliocentric
+astronomy coordinates (+Z north) map to the existing simulation frame (+Y north,
+Sun at −X); the center, pole and Aquila direction have regression checks.
+
+[Zucker et al. 2022](https://doi.org/10.1038/s41586-021-04286-5) gives a present
+shell **radius** of 165 ± 6 pc. Its quoted expansion center is in the LSR
+14.4 Myr ago; treating those coordinates as a present heliocentric center would
+be incorrect. The runtime deliberately approximates the irregular cavity with
+a solar-centered sphere, a 25 pc transition on each side, and 20% residual smooth
+dust. The residual agrees approximately with the Lallement solar cell, about
+0.00017 mag/pc. Clouds add outside this smooth-disk reduction. Nearby emission
+and residual extinction are integrated; no empty ten-parsec skip is valid.
+
+`pnpm sim --galaxy-calibration --quiet` reports linear radiance and returns a
+failing status when a photometric, count or normalization bound fails. The
+same report is `ir.galaxy().calibration()`; `localDust()` exposes the source
+records. [GAMBONS](https://doi.org/10.1093/mnras/staa4005)'s supplementary
+`RadianceOut.csv` supplies equal-area HEALPix averages outside the atmosphere.
+The reference includes integrated starlight, diffuse Galactic light and the
+extragalactic background; the modeled component is integrated starlight only.
+The 0.3 mag comparison is a broad astrophysical sky constraint, with that
+component mismatch explicit in the report. It is not a measurement of the
+stellar component in isolation. Scattering and extragalactic light are absent.
+
+| Region           | Longitude | Absolute latitude | Reference V nW m⁻² sr⁻¹ |   Model | Residual mag |
+| ---------------- | --------- | ----------------- | ----------------------: | ------: | -----------: |
+| Mid-latitudes    | 0–360°    | 30–60°            |                  53.559 |  47.401 |       +0.133 |
+| Polar caps       | 0–360°    | 60–90°            |                  41.862 |  33.744 |       +0.234 |
+| Aquila sightline | 40–50°    | 0–5°              |                 176.410 | 216.650 |       −0.223 |
+
+These values use seed `inertialref`, 384 equal-solid-angle rays per region, and
+the settled CPU quadrature. Increasing to 1,536 rays and a 10 pc maximum step
+changes every region mean by less than 1%. Physical-GPU rays agree with the CPU
+within 1% individually and 0.01 mag in the region averages. The approximate
+photopic residuals are +0.108, +0.185 and −0.100 mag. All remain inside the
+original 0.3 mag bound; there is no display response in the calculation.
+
+[Licquia et al. 2015](https://arxiv.org/abs/1508.04446), Table 3, reports
+`M_V − 5 log h = −20.74`; with the paper's `h = 0.7`, the target is
+**M_V = −21.515**, not −21.37. The comparison integrates the emergent face-on
+image, including absorption, to an isotropic-equivalent luminosity. The model's
+3.216 × 10¹⁰ solar V luminosities give M_V = −21.458, a +0.056 mag residual.
+A 96×96 grid changes the 48×48 result by less than 1%. Intrinsic emission is
+5.078 × 10¹⁰ solar V luminosities; comparing that unattenuated sum to observed
+photometry would fit the wrong quantity. The unchanged density model contains
+116.104 billion stars on the report's 120×96×48 grid and 0.1 star/pc³ locally.
+
+The fitted mean solar V luminosities are 0.214 (thin disk), 0.35 (thick disk),
+10 (young arms), 0.748 (bar/bulge) and 0.1 (halo). With the thick-disk, young-arm and halo coefficients held fixed, the thin-disk
+and bar/bulge coefficients are a joint fit to the three sky regions and external luminosity, rounded to
+three decimals. These effective population means are model assumptions, not
+independent stellar-luminosity-function measurements. Temperatures remain
+illustrative. Neither the B−V color nor Freeman's B-band central disk brightness
+is accepted as a V-band or total-bulge constraint.
+
+The proposed 75 nW target in the plan is GAMBONS Table 4's ground-level annual
+zenith average at geographic 40° N, including atmospheric contributions. It
+cannot stand for a Galactic mid-latitude stellar sky. Table 3 does not supply
+the plan's proposed generic 22.3–23.4 range either. The directly averaged
+supplemental map replaces both targets without relaxing the tolerance.
+
+**Natural-specific display treatment and final appearance acceptance are on
+hold while the response is revised.** M6 changes the physical V-band units,
+local dust and calibration. It leaves the Natural response and daylight
+submission policy unchanged. Fixed-exposure Direct plates are integration
+checks; they do not accept Natural's appearance. Active generation and saved
+addresses remain unchanged at this preview revision.
+
 ## The live galaxy instruments
 
 `apps/game/src/render/galaxyKernel.ts` ports the same field and midpoint ray
 integral to TSL. It imports the population and arm parameter records, uses the
 CPU field's normalization, and derives the same young-arm seed. Its independent
-`galaxy-tsl@4` revision identifies the port. Nonzero GPU field samples and whole
+`galaxy-tsl@5` revision identifies the port. Nonzero GPU field samples and whole
 rays are held within 1% of the CPU reference, with absolute tolerances near zero,
 at a zero pixel angle and at the live edge-on target's.
 Explicit axial azimuths avoid Metal's fast `atan2` sign reversal at an exact
@@ -152,9 +238,12 @@ metering. These are instantaneous previews at a declared exposure, not a
 simulation accumulating photons over those durations.
 
 The live target has one quarter of the drawing buffer's width and height,
-rounded up. Each rgba16f texel stores RGB in units of 1,000 bolometric
-nW m⁻² sr⁻¹. A declared preview efficacy of 100 lm/W converts these channels
-at the scene boundary; it is an assumption pending M6, not a measured bandpass.
+rounded up. Each rgba16f texel stores V-anchored RGB divided by 1,000
+nW m⁻² sr⁻¹. At the scene boundary RGB is normalized so its linear Rec.709
+luminance equals the green V radiance. A fixed photopic/V ratio of 1.25 and
+683 lm/W then convert to cd/m². The ratio is a declared spectral approximation:
+the three source regions span 1.20–1.40. This conversion does not depend on
+exposure, Natural's response, or whether the galaxy is visible on screen.
 The target feeds a background-depth surface through the scene's pre-exposure,
 optics and response. Foreground geometry occludes it at full scene resolution.
 Geometry masks the background integral; transport does not stop partway
@@ -245,8 +334,8 @@ persistence guard admit exposures through 3,600 s, so the 2,400 s instrument
 reaches the panel and survives a new preference binding. A person may change that lens
 through the existing camera controls. The long exposure can clip a bright body
 while revealing the disk; the instrument does not separately expose the galaxy
-or accumulate photons over its stated shutter duration. Photometric calibration
-and resolved-light subtraction remain later work.
+or accumulate photons over its stated shutter duration. Resolved-light
+subtraction remains later work; M6 measures the diffuse field in linear light.
 
 `ir.galaxy().render()` reports the galactocentric observer, orientation,
 lens and effective exposure, field and kernel revisions, sampling profile,
@@ -269,8 +358,8 @@ light. Only ray origins and projection differ between these plates.
 **Treat all plan values as literal transcriptions.** Reid's unadjusted
 quadrant-IV tangencies miss two of the selected median targets by more than
 3°. Calibrating within the stated uncertainties keeps the acceptance bound;
-changing the bound would conceal the mismatch. The bar, halo and luminosity
-assumptions remain identified as model choices requiring later calibration.
+changing the bound would conceal the mismatch. The bar and halo profiles remain model choices; M6 fits effective V luminosities
+against the source conventions above.
 
 ## Consequences
 
@@ -281,11 +370,10 @@ reference cylinder; the small halo tail above its vertical bounds is omitted.
 
 Population plates reveal faint structures without changing their physical
 amplitudes to make a composite attractive. The same dust attenuates every
-population and produces dark lanes in inside and outside views. The preview's RGB and population
-weights require calibration before a physical sensor or population generator
-can adopt them as calibrated quantities. The live volume now exposes those
-limitations through the actual sensor. Photometric calibration, resolved-star
-extinction, and temporal reuse remain later milestones. A held view costs the
+population and produces dark lanes in inside and outside views. V-band
+radiance has explicit broad-region and external-light checks; RGB color and the
+photopic conversion retain their spectral approximations. Natural appearance,
+resolved-star extinction, population activation and angular caching remain open. A held view costs the
 backdrop's composite, 0.17 ms a frame at 960×540; a moving one costs a draw a
 frame, 10.8 to 17 ms at a 240×135 target with the dust filtered, which is
 still above the 2 ms target the plan sets for 1080p. `CONTEXT.md` and

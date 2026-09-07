@@ -2,6 +2,9 @@ import { invariant, PARSEC } from '@inertialref/shared'
 import { UV, vec3, type UniverseVector, type Vec3 } from '@inertialref/spatial'
 import {
   createGalaxyField,
+  calibrateGalaxy,
+  LOCAL_CLOUDS,
+  LOCAL_BUBBLE,
   GALAXY_FIELD_VERSIONS,
   GALAXY_DUST_SETTLED_STEP_PARSECS,
   GENERATION_VERSIONS,
@@ -37,11 +40,11 @@ export interface GalaxyPlate {
   readonly height: number
   readonly fieldVersions: typeof GALAXY_FIELD_VERSIONS
   readonly seed: string
-  readonly units: 'bolometric nW m^-2 sr^-1'
+  readonly units: 'Johnson V nW m^-2 sr^-1'
   readonly emissionOnly: boolean
   readonly dustScale: number
   readonly maxStepParsecs: number
-  /** Interleaved linear RGB. Its sum is the pixel's bolometric radiance. */
+  /** Interleaved relative-color RGB. Green is the pixel's Johnson V radiance. */
   readonly rgb: Float64Array
   readonly maxRadiance: number
   readonly samples: number
@@ -118,6 +121,12 @@ export class GalaxyInspector {
   }
   ray(direction: Vec3, options: GalaxyRayOptions = {}, origin = SUN_POSITION) {
     return integrateGalaxyRay(this.field, origin, direction, options)
+  }
+  calibration() {
+    return calibrateGalaxy(this.field)
+  }
+  localDust() {
+    return { bubble: LOCAL_BUBBLE, clouds: LOCAL_CLOUDS }
   }
   tangencies() {
     return GALAXY_ARMS.map((arm) => ({
@@ -205,7 +214,7 @@ export class GalaxyInspector {
       height,
       fieldVersions: GALAXY_FIELD_VERSIONS,
       seed: this.#seed,
-      units: 'bolometric nW m^-2 sr^-1',
+      units: 'Johnson V nW m^-2 sr^-1',
       emissionOnly: field.dustScale === 0,
       dustScale: field.dustScale,
       maxStepParsecs,

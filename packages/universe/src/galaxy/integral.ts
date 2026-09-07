@@ -12,10 +12,10 @@ import {
   type PopulationDensities,
 } from './field.ts'
 
-const SOLAR_LUMINOSITY_WATTS = 3.828e26
-/** A column in L☉/pc² converted to isotropic bolometric radiance, nW m⁻² sr⁻¹. */
+import { GALAXY_SOLAR_V_WATTS } from './photometry.ts'
+/** A column in L☉/pc² converted to isotropic Johnson V radiance, nW m⁻² sr⁻¹. */
 export const GALAXY_RADIANCE_FACTOR =
-  (SOLAR_LUMINOSITY_WATTS / PARSEC ** 2 / (4 * Math.PI)) * 1e9
+  (GALAXY_SOLAR_V_WATTS / PARSEC ** 2 / (4 * Math.PI)) * 1e9
 
 export interface GalaxyRayIntegral {
   readonly radianceNanowatts: number
@@ -108,7 +108,7 @@ export function integrateGalaxyRay(
     properties === undefined
       ? undefined
       : blackbodyColour(properties.temperature)
-  const colourSum = colour === undefined ? 1 : colour.r + colour.g + colour.b
+  const colourV = colour === undefined ? 1 : colour.g
   const dx = direction.x / length,
     dy = direction.y / length,
     dz = direction.z / length
@@ -192,7 +192,7 @@ export function integrateGalaxyRay(
     ) {
       const density = s.populations[population]
       const light =
-        (density * properties.meanSolarLuminosities * step) / colourSum
+        (density * properties.meanSolarLuminosities * step) / colourV
       r += wr * light * colour.r
       g += wg * light * colour.g
       b += wb * light * colour.b
@@ -213,7 +213,7 @@ export function integrateGalaxyRay(
     t += step
   }
   return {
-    radianceNanowatts: (r + g + b) * GALAXY_RADIANCE_FACTOR,
+    radianceNanowatts: g * GALAXY_RADIANCE_FACTOR,
     rgbNanowatts: [
       r * GALAXY_RADIANCE_FACTOR,
       g * GALAXY_RADIANCE_FACTOR,

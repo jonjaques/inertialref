@@ -99,7 +99,7 @@ All rows start **planned**. Fill the evidence columns as work completes.
 | M3        | The planetarium renders the whole stellar disk.                    | M2                | Open [PR #65](https://github.com/jonjaques/inertialref/pull/65) on `codex/galaxy-the-disk-is-visible`, targeting PR #63’s branch at `bdbfd93`; verified implementation `dfe75a2`. Fixed face-on/edge-on instruments, `galaxy-tsl@1`, full scene-depth composition and an owned rgba16f quarter-size target. CPU/GPU fields and 33 rays stay within 1%; all 69 GPU tests pass. At 1920×1080 on Apple M5: 0.989 MiB target, 10.58–10.61 ms added face-on and 23.14–23.31 ms edge-on. The 2 ms target, dust, continuous travel and temporal reuse remain open. Full gate: 1,723 regular tests and five slow tests; headless self-test 12/12. Captures are attached to PR #65; measurements and lifecycle evidence are in `CONTEXT.md`.                                                                                                           |
 | M4        | The camera travels from Earth to the disk through the sensor.      | M3                | Open in [PR #66](https://github.com/jonjaques/inertialref/pull/66), `codex/galaxy-earth-to-the-disk` → PR #65’s branch at `d980228`; verified implementation `7b612a1`, complete evidence ledger `8235d85`. [Execution plan](galaxy-m4-earth-to-the-disk.md); full outward/return capture and matched response plates in `.scratch/galaxy-m4/`. `pnpm check`: 1,742 regular tests, five slow tests, docs and build; physical GPU: 71 tests; headless: 12/12. Exposure clipping and 11–38 ms added volume cost remain explicit limits. [Journey recording](https://agentic-media-dumpster.jonjaques.com/2026/09/qxvm25qiw7/journey.mp4) and response plates are attached to PR #66.                                                                                                                                                            |
 | M5        | Shared dust transport dims and reddens the volume.                 | M4                | Feature implementation verified locally at `1d12369` on `codex/galaxy-light-through-dust`, from PR #66 at `837be56`. `galaxy-field@3`, `galaxy-tsl@3`; 1,784 regular tests, five slow tests, 74 GPU tests, headless 12/12. Inside/outside captures in `.scratch/galaxy-m5/`. **Performance run the same day:** the volume holds its target between changes of view (0.17 ms a frame at rest in the browser, against 113–357 ms a draw before), the dust texture is filtered to what a texel resolves (edge-on 53 → 10.8 ms a moving draw at 240×135), `galaxy-tsl@4`, orbit traces present at one brightness at every exposure. [Handoff and record](galaxy-performance-handoff.md). Open [PR #67](https://github.com/jonjaques/inertialref/pull/67), targeting M4; the daylight orbit follow-up and current verification are recorded there. |
-| M6        | Local clouds and photometric checks constrain the sky.             | M5                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| M6        | Local clouds and photometric checks constrain the sky.             | M5                | Physical model and linear photometry implemented; Natural treatment and final appearance acceptance deferred.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | M7        | A progressive cached sky replaces the local live march.            | M6                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | M8        | Observer motion projects the star shell on the GPU.                | M7                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | M9        | Magnitude levels extend the population within a bounded draw.      | M8                | Planned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -273,20 +273,27 @@ can be checked.
 reference, with source records for their positions, extents and columns. Fit
 emission and population constants against the supported photometric checks.
 Verify source conventions before transcribing arm fits or adopting a numerical
-target. Record how Natural displays the calibrated diffuse sky; any declared
-processing follows ADR-0031 and gets an explicit decision if its behavior
-changes.
+target. **Scope update, 6 Sep 2026:** continue the physical model and photometric
+checks in linear radiance or at a fixed, declared photographic exposure. Hold
+Natural-specific display treatment and final appearance acceptance while its
+response is revised. Physical brightness must not be adjusted to overcome the
+current Natural response. Any later display processing follows ADR-0031.
 
 **Verify.** Check the galactic center and pole, the Aquila Rift's direction, CPU
 and GPU sky brightness within 0.3 mag of supported targets, total luminosity,
 and local population normalization together. Freeman's central brightness is a
 model comparison until its applicability is established; an unread source is an
-open gate, not permission to tune toward it. Repeat M4's exposure plates with
-dust. Update constants and their version together.
+open gate, not permission to tune toward it. Use fixed-exposure Direct plates
+with dust for renderer integration; defer the Natural appearance comparison.
+Update constants and their version together.
 
-**PR.** `codex/galaxy-the-calibrated-sky` → `codex/galaxy`. Include source
-provenance, calibration residuals and a reference comparison. If evidence
-requires revising a target, document the reason rather than widening tolerance.
+**PR.** `codex/galaxy-the-calibrated-sky` → `feat/the-navigator-and-the-descent`
+(PR #69), following review of #67–69. Source conventions, calibration residuals
+and the reference comparison are recorded in
+[ADR-0032](../../docs/adr/0032-the-stellar-field.md#the-local-sky-and-linear-calibration-m6).
+The physical preview is `galaxy-field@4`, with port `galaxy-tsl@5`; Natural
+appearance acceptance remains open. Source corrections below replace unsupported
+targets without widening the 0.3 mag tolerance.
 
 ### M7. A cached sky with an owned lifetime
 
@@ -565,13 +572,14 @@ inward of the stellar ridges, and a log-normal multiplicative noise term of four
 bands down to about 1 pc (following the noise approach in GAMER, Groeneboom & Dahle 2014).
 Reddening is `τ ∝ λ⁻¹`, three coefficients, so the band goes brown behind the
 rift and the bulge reads warm through its foreground. On top of the field, a
-table of **local clouds** as ellipsoids with published centers, extents and
-column densities, from the Lallement 2022 and Edenhofer 2023 maps: the Aquila
-Rift at 225–500 pc, the Cygnus Rift, Ophiuchus at 130, Taurus at 140, Perseus,
-Orion, Chamaeleon, Lupus, the Coalsack at 180. And the **Local Bubble**: the Sun
-sits inside a cavity about 165 pc across with almost no dust (Zucker et al.
-2022), which is why the first ten parsecs of every ray can be skipped and why
-the nearest dust anything sees is a hundred parsecs off.
+table of **local clouds** approximates nine complexes in the Lallement 2022
+map: Aquila, Cygnus, Ophiuchus, Taurus, Perseus, Orion, Chamaeleon, Lupus and the
+Coalsack. M6 records the selection windows and fits Gaussian moments and excess
+columns from the actual 25 pc resolution cube; the compact ellipsoids are model
+approximations. Zucker et al. 2022 gives the **Local Bubble's radius** as
+165 ± 6 pc, not its diameter. M6 uses a declared solar-centered approximation
+with residual dust. It does not skip nearby emission or assume an empty first
+ten parsecs.
 
 **H II regions.** Along the young-arm ridges only, within 40 pc of the plane,
 Poisson-disc clumps seeded from the arm coordinate, each a small Gaussian
@@ -594,21 +602,31 @@ real direction and size. The follow-up ledger preserves these targets; the field
 parameter record allows separate objects without scheduling them in the
 integration PR.
 
-**Calibration.** Fit the field against the following proposed checks. M6
-verifies each source, bandpass and viewing geometry before accepting its target:
+**Calibration.** M6 verifies the source, bandpass and viewing geometry before
+accepting the target. The following replaces the draft transcriptions:
 
-| Check                                                   | Published                                                           | Tolerance |
-| ------------------------------------------------------- | ------------------------------------------------------------------- | --------- |
-| Integrated starlight from the Sun, mid-latitude average | 75 nW m⁻² sr⁻¹ ≈ **23.2 mag/arcsec²** (Masana et al. 2021, GAMBONS) | 0.3 mag   |
-| On the plane at l = 45°, a rift sightline               | 22.3–23.4 mag/arcsec² (Masana, Table 3)                             | in range  |
-| The galaxy's total absolute magnitude                   | **M_V = −21.37**, B−V 0.73 (Licquia & Newman 2015)                  | 0.3 mag   |
-| Face-on central surface brightness from outside         | 21.65 B mag/arcsec² (Freeman's law)                                 | 0.3 mag   |
+| Check                                               | Source target                                      | Tolerance                  |
+| --------------------------------------------------- | -------------------------------------------------- | -------------------------- |
+| Solar sky, all longitudes, 30–60° absolute latitude | 53.559 V nW m⁻² sr⁻¹, GAMBONS supplemental map     | 0.3 mag                    |
+| Solar sky, all longitudes, 60–90° absolute latitude | 41.862 V nW m⁻² sr⁻¹, same map                     | 0.3 mag                    |
+| Aquila region, l = 40–50°, absolute b = 0–5°        | 176.410 V nW m⁻² sr⁻¹, same map                    | 0.3 mag                    |
+| Emergent face-on isotropic-equivalent luminosity    | M_V = −21.515, Licquia et al. Table 3 with h = 0.7 | 0.3 mag                    |
+| Central disk B brightness / integrated B−V          | Freeman comparison / Licquia B−V = 0.744           | No V-band acceptance claim |
 
-The unit is the sensor's: luminance in cd/m², and 22 mag/arcsec² is 2 × 10⁻⁴
-cd/m², thirteen orders below the Sun's disk. The sensor's pre-exposure carries
-the portion of that range visible in the current frame. The bake stores nW m⁻² sr⁻¹, values from 10 to
-10⁴, because the same numbers in W m⁻² sr⁻¹ sit at 10⁻⁸ and below half-float's
-normal range.
+The GAMBONS reference includes integrated starlight, diffuse Galactic light and
+extragalactic background. The model supplies the stellar component only; this
+is a broad sky constraint with a declared component mismatch. The original
+75 nW target is a ground-level annual zenith average at geographic 40° N and
+includes atmospheric contributions. Table 3 does not give the proposed generic
+22.3–23.4 mag range. The external magnitude needs the paper's `5 log h`
+correction; the earlier −21.37 transcription is not its V-band target.
+
+Green in the raw RGB field is Johnson V radiance; red and blue retain
+illustrative color and extinction. A fixed photopic/V ratio of 1.25 converts
+V radiance to luminance at 683 lm/W. A target texel stores those V-anchored
+channels divided by 1,000 nW m⁻² sr⁻¹. Neither exposure nor a display response
+enters the photometric acceptance calculation. The Natural-specific work is
+held separately from these physical units and constants.
 
 **Versioning.** The field is a generation algorithm and changes to it are
 versioned through `algorithm()` and `manifest()` like every other one

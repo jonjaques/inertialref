@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, it } from 'vitest'
 import { LOCAL_CLOUD_RECORDS } from '../../../packages/universe/src/galaxy/localClouds.generated.ts'
+import { SKY_REGION_REFERENCES } from '../../../packages/universe/src/galaxy/skyCalibration.generated.ts'
 import { extractSky, readDustCube } from './galaxyReference.ts'
 
 it('keeps runtime cloud records identical to the source manifest', () => {
@@ -11,6 +12,7 @@ it('keeps runtime cloud records identical to the source manifest', () => {
     ),
   )
   expect(LOCAL_CLOUD_RECORDS).toEqual(source.dust.clouds)
+  expect(SKY_REGION_REFERENCES).toEqual(source.sky.regions)
   expect(source.dust.sha256).toHaveLength(64)
   expect(source.sky.sha256).toHaveLength(64)
 })

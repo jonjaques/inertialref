@@ -38,10 +38,7 @@ describe('the preview stellar field', () => {
           expect(Number.isFinite(value)).toBe(true)
           expect(value).toBeGreaterThanOrEqual(0)
         }
-        expect(s.emissionRgb.r + s.emissionRgb.g + s.emissionRgb.b).toBeCloseTo(
-          s.emissionSolarPerCubicParsec,
-          12,
-        )
+        expect(s.emissionRgb.g).toBeCloseTo(s.emissionSolarPerCubicParsec, 12)
         expect(s.totalPerCubicParsec).toBe(
           Object.values(s.populations).reduce((a, b) => a + b, 0),
         )
