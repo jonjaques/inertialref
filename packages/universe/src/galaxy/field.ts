@@ -15,7 +15,7 @@ import { localBubbleFactor, localCloudExtinction } from './localDust.ts'
 import { GALAXY_DUST, galaxyDustModulation, galaxyDustProfile } from './dust.ts'
 
 export const GALAXY_FIELD_ALGORITHM = Object.freeze(
-  algorithm('galaxy-field', 4),
+  algorithm('galaxy-field', 5),
 )
 /** The physical field revision is also an active population generation input. */
 export const GALAXY_FIELD_VERSIONS = Object.freeze(
@@ -35,16 +35,41 @@ export type PopulationDensities = Readonly<Record<GalaxyPopulation, number>>
 
 /** Mean Johnson V luminosities in solar V units; fitted jointly to the local sky and total light. */
 export const GALAXY_POPULATIONS = Object.freeze({
-  thinDisk: Object.freeze({ meanSolarLuminosities: 0.214, temperature: 5000 }),
+  thinDisk: Object.freeze({ meanSolarLuminosities: 0.204, temperature: 5000 }),
   thickDisk: Object.freeze({ meanSolarLuminosities: 0.35, temperature: 4600 }),
-  youngArms: Object.freeze({ meanSolarLuminosities: 10, temperature: 12000 }),
-  barBulge: Object.freeze({ meanSolarLuminosities: 0.748, temperature: 4300 }),
+  youngArms: Object.freeze({ meanSolarLuminosities: 100, temperature: 12000 }),
+  barBulge: Object.freeze({ meanSolarLuminosities: 0.7725, temperature: 4300 }),
   halo: Object.freeze({ meanSolarLuminosities: 0.1, temperature: 4800 }),
 })
 const COLOURS = POPULATION_NAMES.map((name) =>
   blackbodyColour(GALAXY_POPULATIONS[name].temperature),
 )
 const BAR_ANGLE = (27 * Math.PI) / 180
+
+/**
+ * Natale et al. 2022 Table 1 and equations 2–4: stellar sech² heights.
+ * Applying their geometric young component to the measured arm ridges, and
+ * extending the flare beyond the Sun, are explicit model assumptions.
+ * https://doi.org/10.1093/mnras/stab2771
+ */
+export const GALAXY_YOUNG_HEIGHT = Object.freeze({
+  centralParsecs: 50,
+  innerParsecs: 67,
+  solarParsecs: 90,
+  innerRadiusParsecs: 4500,
+  solarRadiusParsecs: 8178,
+  power: Math.log(40 / 17) / Math.log(8178 / 4500),
+})
+
+/** A stellar population height; the 19 pc maser height describes a narrower tracer. */
+export function galaxyYoungHeight(radiusParsecs: number): number {
+  const h = GALAXY_YOUNG_HEIGHT
+  return (
+    h.centralParsecs +
+    (h.innerParsecs - h.centralParsecs) *
+      (radiusParsecs / h.innerRadiusParsecs) ** h.power
+  )
+}
 
 /** Chen et al. 2019 Table 1, all-Cepheid power-law fit, converted from kpc to pc. */
 export function galaxyWarp(radiusParsecs: number, beta: number): number {
@@ -123,6 +148,7 @@ export function createGalaxyField(
     const across = x * Math.sin(BAR_ANGLE) - z * Math.cos(BAR_ANGLE)
     const box = ((along / 1500) ** 4 + (across / 750) ** 4) ** 0.25
     const spheroid = Math.hypot(radius, y / 0.6)
+    const youngHeight = galaxyYoungHeight(radius)
     const populations = {
       thinDisk: radial * Math.exp(-height / 300) * (1 + 0.2 * arms),
       thickDisk:
@@ -131,9 +157,11 @@ export function createGalaxyField(
         Math.exp(-height / 900) *
         edge,
       youngArms:
-        0.003 *
-        radial *
-        Math.exp(-height / 19) *
+        ((0.003 *
+          radial *
+          // H0/H preserves the stellar column as the shared number field flares.
+          (GALAXY_YOUNG_HEIGHT.centralParsecs / youngHeight)) /
+          Math.cosh(height / youngHeight) ** 2) *
         arms *
         (1 + 0.2 * noise3(textureSeed, x / 350, y / 350, z / 350)),
       barBulge:

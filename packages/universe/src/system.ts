@@ -170,7 +170,7 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  * `sketch.ts` carries both figures and the bodies they were measured on.
  */
 export const TERRAIN_ALGORITHM = algorithm('terrain', 4)
-export const GALAXY_ALGORITHM = algorithm('galaxy', 4)
+export const GALAXY_ALGORITHM = algorithm('galaxy', 5)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.
  *

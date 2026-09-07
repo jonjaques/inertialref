@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
+import { galaxySeedOf } from '../galaxy.ts'
 import { createGalaxyField } from './field.ts'
 import { integrateGalaxyRay } from './integral.ts'
 import {
@@ -11,11 +12,23 @@ import {
 } from './calibration.ts'
 import { galaxyVMagnitude, GALAXY_PHOTOPIC_TO_V } from './photometry.ts'
 
+it('calibrates the actual default session galaxy seed', () => {
+  const field = createGalaxyField(galaxySeedOf(rootSeed('inertialref')))
+  const report = calibrateGalaxy(field)
+  expect(report.passed).toBe(true)
+  expect(report.population.localPerCubicParsec).toBeCloseTo(0.1, 14)
+  expect(report.population.totalStars / 1e9).toBeCloseTo(116.064, 2)
+  for (const sky of report.sky) {
+    expect(Math.abs(sky.residualMagnitude)).toBeLessThan(0.3)
+    expect(Math.abs(sky.photopicResidualMagnitude)).toBeLessThan(0.3)
+  }
+}, 120000)
+
 it('checks local sky, external luminosity and population normalization together', () => {
   const field = createGalaxyField(rootSeed('inertialref'))
   const report = calibrateGalaxy(field)
   expect(report.passed).toBe(true)
-  expect(report.fieldVersions).toEqual({ 'galaxy-field': 4 })
+  expect(report.fieldVersions).toEqual({ 'galaxy-field': 5 })
   expect(report.luminosity.intrinsicSolarV).toBeGreaterThan(
     report.luminosity.faceOnSolarV,
   )

@@ -324,6 +324,35 @@ describe('migrations', () => {
 })
 
 describe('the universe a save was written against', () => {
+  it('reports Q generation drift and rejects an invalidated index without substituting another star', () => {
+    const world = new World({ seed: 'inertialref' })
+    const id = systemId('Q4_4n_0_0_0')
+    world.loadSystem(id)
+    const ship = world.spawnShip(
+      'Population Scout',
+      systemFrameId(id),
+      vec3(0, 1e9, 0),
+    )
+    const captured = captureSave(world, ship.id)
+    const old = {
+      ...captured,
+      generation: { ...captured.generation, galaxy: 4, 'galaxy-field': 4 },
+    }
+    const restored = unwrap(restoreSave(old), 'restore')
+    expect(restored.drift).toEqual([
+      { key: 'galaxy', ours: 4, theirs: 5 },
+      { key: 'galaxy-field', ours: 4, theirs: 5 },
+    ])
+    expect(restored.world.stateHash()).toBe(world.stateHash())
+
+    // This cell has 900 members at galaxy@4 and 872 at galaxy@5; index 899
+    // is an actual old address, not a malformed address or a catalog alias.
+    const retired = systemId('Q4_4n_0_0_oz')
+    const failed = restoreSave({ ...old, loadedSystems: [retired] })
+    expect(failed.ok).toBe(false)
+    if (!failed.ok) expect(failed.error).toContain(retired)
+  })
+
   it('restores a galaxy@2 procedural address through its pinned legacy generator', () => {
     const world = new World({ seed: 'inertialref' })
     const id = systemId('P21j_6_0_0')

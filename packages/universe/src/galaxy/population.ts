@@ -248,6 +248,11 @@ export interface PopulationSystemRef {
   readonly cell: GalacticCell
   readonly index: number
 }
+/**
+ * Q addresses resolve against their recorded generation manifest. A revision
+ * can move their contents or invalidate an index; resolution never substitutes
+ * a neighboring index. Legacy P addresses have their own pinned generator.
+ */
 export const populationSystemId = (
   level: number,
   cell: GalacticCell,
