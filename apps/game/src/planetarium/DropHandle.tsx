@@ -1,41 +1,16 @@
 'use no memo'
 import { useEffect, useRef, useState } from 'react'
-import { PersonStanding } from 'lucide-react'
+import { useReducedMotion } from 'motion/react'
+import { ArrowDownToLine, PersonStanding } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Action } from '../hud/Action.tsx'
+import { formatReading } from '@inertialref/shared'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { describeCause } from '../hud/notice.ts'
 import { useEngine } from '../state/engineStore.ts'
-import { rayFromScreen } from './entryAid.ts'
+import { heldDropFromScreen } from './entryAid.ts'
 import { useSurveySites } from './useSurveySites.ts'
-
-/*
- * Put a person on that world.
- *
- * The planetarium can already stand on a surface — the Ground section's site
- * buttons cut straight to the summit or the shoreline — and what it could not
- * do is let somebody choose *that spot, there*, on the disk they are looking
- * at. Typing a latitude into a sphere lands on the same undifferentiated
- * mid-slope every time, which is the argument `surveySites` was written from;
- * a pointer aimed at a place on a drawn planet is the other way to answer it,
- * and the only one that works for a world nobody has named anything on.
- *
- * The gesture is a drag rather than a click because the camera already spends
- * every click it has: a click in the sky focuses whatever it hits, and taking
- * that away — or overloading it with a modifier — would cost the mode its
- * primary verb to add a rarer one. Picking the figure up is an unambiguous
- * statement of intent, the arc under the pointer is the answer to "where would
- * that put me", and letting go is the commit. Nothing is decided until then.
- *
- * **Nothing here draws the aid.** This sets the observatory's aim and the
- * scene draws it — `scene/EntryTrace.tsx` — because the arc and its rings are
- * things in the world rather than marks over it: the fall has to pass behind a
- * limb, the ring on the ground has to be the ellipse a circle on a sphere
- * really is, and the dashes have to shorten with distance. An overlay in the
- * HUD can do none of those, which is what it was before.
- *
- * `'use no memo'`: the hit test runs from the engine inside a frame loop, which
- * is mutable state the compiler cannot see changing.
- */
 
 /** Movement under this, in pixels, and the press was a click on the handle. */
 const CLICK_SLOP = 4
@@ -60,8 +35,15 @@ export function DropHandle({
    * every one of the eight samples a second, so selecting it would rebuild
    * this at that rate beside a camera that has not moved.
    */
+  const reducedMotion = useReducedMotion()
   const standing = useEngine((snapshot) => snapshot.observer?.surface != null)
   const dropping = useEngine((snapshot) => snapshot.observer?.descent != null)
+  const progress = useEngine(
+    (snapshot) => snapshot.observer?.descent?.progress ?? 0,
+  )
+  const height = useEngine(
+    (snapshot) => snapshot.observer?.surface?.stance.height ?? 0,
+  )
   const radius = useEngine((snapshot) => snapshot.observer?.target?.radius ?? 0)
   const name = useEngine((snapshot) => snapshot.observer?.target?.name ?? null)
   /*
@@ -75,20 +57,22 @@ export function DropHandle({
   const sites = useSurveySites(engine, target)
   const landable = sites !== null && sites.length > 0
 
-  /** What the drag is over, or null when nothing is dragging. */
-  const [aim, setAim] = useState<{
-    readonly hit: { latitude: number; longitude: number } | null
+  // Coordinates stay with the scene's owner. React only needs gesture state.
+  const [aim, setAim] = useState<'outside' | 'ground' | null>(null)
+  const live = useRef<{
+    x: number
+    y: number
+    pointerId: number
+    address: string | null
   } | null>(null)
-  // Read by the frame loop, which outlives any one render.
-  const live = useRef<{ x: number; y: number } | null>(null)
   const travelled = useRef(0)
-  /*
-   * Whether a gesture is in flight, as the one thing the loop's lifetime turns
-   * on. The loop writes `aim` on most frames and must not be torn down and
-   * rebuilt by its own write, so it depends on this boolean rather than on the
-   * state it is producing.
-   */
   const dragging = aim !== null
+  const guiding = dragging || dropping
+  useEffect(() => {
+    if (!guiding) return
+    const layer = engine.presentation.push({ showOrbits: false, labels: false })
+    return () => layer.release()
+  }, [engine, guiding])
 
   /*
    * The aim is recast every frame rather than on every pointer move, and the
@@ -109,17 +93,15 @@ export function DropHandle({
       handle = window.requestAnimationFrame(tick)
       const pointer = live.current
       if (pointer === null) return
-      const ray = rayFromScreen(engine, pointer, viewportSize())
-      const hit =
-        ray === null ? null : observatory.groundUnderRay(undefined, ray)
-      observatory.previewDrop(hit)
-      setAim((held) =>
-        // Identity while the answer has not changed in kind, so a drag across
-        // a world is not sixty React renders a second for one boolean.
-        held !== null && (held.hit === null) === (hit === null)
-          ? held
-          : { hit: hit === null ? null : { ...hit } },
-      )
+      if (pointer.address !== observatory.target?.address) {
+        observatory.previewDrop(null)
+        setAim('outside')
+        return
+      }
+      const held = heldDropFromScreen(engine, pointer, viewportSize())
+      if (held === null) observatory.previewDrop(null)
+      else observatory.previewLaunch(held.hold, held.up)
+      setAim(observatory.aim === null ? 'outside' : 'ground')
     }
     handle = window.requestAnimationFrame(tick)
     return () => {
@@ -142,19 +124,63 @@ export function DropHandle({
    * flight, and a drag that is already running is allowed to finish and be
    * refused on its merits by `drop`.
    */
-  if (!dragging && (standing || dropping || !landable || radius <= 0))
-    return null
+  if (!dragging && (standing || dropping))
+    return (
+      <div className="pointer-events-auto absolute bottom-16 left-3 sm:bottom-3 flex max-w-[calc(100%-1.5rem)] flex-col gap-2 rounded-lg border border-slate-700/60 bg-slate-950/85 p-3 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-3">
+          <ArrowDownToLine
+            aria-hidden
+            className="size-4 shrink-0 text-sky-300"
+          />
+          <div className="min-w-0">
+            <p role="status" className="type-label text-sky-200">
+              {dropping ? 'Descending' : 'On the ground'}
+            </p>
+            <p className="type-readout truncate text-slate-300">
+              {name} · {formatReading(height)} above ground
+            </p>
+          </div>
+          <Action
+            label="Return to orbit"
+            onClick={() => engine.harness.ascend()}
+          />
+        </div>
+        {dropping && (
+          <div
+            role="progressbar"
+            aria-label="Descent"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            className="h-px overflow-hidden bg-slate-700"
+          >
+            <div
+              className="h-full origin-left bg-sky-300 transition-transform duration-150 motion-reduce:transition-none"
+              style={{ transform: `scaleX(${progress})` }}
+            />
+          </div>
+        )}
+      </div>
+    )
+  if (!dragging && (!landable || radius <= 0)) return null
 
   const begin = (event: React.PointerEvent<HTMLButtonElement>): void => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
+    if (live.current !== null) return
     event.currentTarget.setPointerCapture(event.pointerId)
     travelled.current = 0
-    live.current = { x: event.clientX, y: event.clientY }
-    setAim({ hit: null })
+    live.current = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+      address: engine.harness.observatory.target?.address ?? null,
+    }
+    setAim('outside')
   }
 
   const move = (event: React.PointerEvent<HTMLButtonElement>): void => {
-    if (live.current === null) return
+    if (live.current === null || live.current.pointerId !== event.pointerId)
+      return
     const previous = live.current
     travelled.current += Math.hypot(
       event.clientX - previous.x,
@@ -163,27 +189,30 @@ export function DropHandle({
     // Into the ref only. The frame loop above is what turns a pointer position
     // into an arc, so a move event that also projected would do the work twice
     // and draw the older of the two answers.
-    live.current = { x: event.clientX, y: event.clientY }
+    live.current = { ...previous, x: event.clientX, y: event.clientY }
   }
 
   const release = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    const pointer = live.current
+    if (pointer === null || pointer.pointerId !== event.pointerId) return
     // React keeps only hit/miss for the label. The observatory owns the
     // coordinates currently drawn, including motion across one valid region.
-    const held = engine.harness.observatory.aim
+    const observatory = engine.harness.observatory
+    const held =
+      pointer.address === observatory.target?.address ? observatory.aim : null
     const node = event.currentTarget
+    live.current = null
     if (node.hasPointerCapture(event.pointerId))
       node.releasePointerCapture(event.pointerId)
-    live.current = null
     setAim(null)
     engine.harness.observatory.previewDrop(null)
-    if (held === null) return
     // A press that never travelled is somebody discovering the control, not a
     // drop onto whatever happens to be under a resting cursor.
-    if (travelled.current < CLICK_SLOP) {
+    if (event.type === 'pointerup' && travelled.current < CLICK_SLOP) {
       onNotice(`Drag onto ${name ?? 'the world'} to stand there.`)
       return
     }
-    if (event.type !== 'pointerup') return
+    if (event.type !== 'pointerup' || held === null) return
     try {
       // Through the harness, so the console verb and this gesture are one call
       // and cannot drift on the degrees/radians boundary — `ir.drop` takes
@@ -191,6 +220,7 @@ export function DropHandle({
       engine.harness.drop(
         (held.latitude * 180) / Math.PI,
         (held.longitude * 180) / Math.PI,
+        reducedMotion ? { seconds: 0.1 } : {},
       )
     } catch (cause) {
       onNotice(describeCause(cause))
@@ -198,26 +228,37 @@ export function DropHandle({
   }
 
   return (
-    <>
-      <div className="pointer-events-auto absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-950/85 py-1 pr-2.5 pl-1 backdrop-blur">
-        <button
-          type="button"
-          onPointerDown={begin}
-          onPointerMove={move}
-          onPointerUp={release}
-          onPointerCancel={release}
-          title={`Drag onto ${name ?? 'the world'} to stand there`}
-          aria-label={`Drag onto ${name ?? 'the world'} to stand there`}
-          className={`flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded text-sky-300 transition-colors hover:bg-sky-500/15 hover:text-sky-200 active:cursor-grabbing ${FOCUS_RING}`}
-        >
-          <PersonStanding aria-hidden className="size-5" />
-        </button>
-        {/* The label is the instruction, and it is the whole of the control's
-            discoverability: a figure alone is a glyph nobody has a verb for. */}
-        <span className="type-label hidden text-sky-400/80 sm:inline">
-          Drag to stand
+    <div
+      className={`pointer-events-auto absolute bottom-16 left-3 sm:bottom-3 max-w-[calc(100%-1.5rem)] rounded-lg border bg-slate-950/85 backdrop-blur transition-colors ${dragging ? 'border-sky-400/60' : 'border-slate-700/60'}`}
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        onPointerDown={begin}
+        onPointerMove={move}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onLostPointerCapture={release}
+        title={`Drag onto ${name ?? 'the world'} to stand there`}
+        aria-label={`Drag onto ${name ?? 'the world'} to stand there`}
+        className={`h-auto min-h-11 cursor-grab touch-none gap-3 rounded-lg px-3 py-2 text-sky-300 hover:bg-sky-500/15 hover:text-sky-200 active:cursor-grabbing ${FOCUS_RING}`}
+      >
+        <PersonStanding aria-hidden className="size-5 shrink-0" />
+        <span className="flex min-w-0 flex-col items-start gap-0.5 text-left">
+          <span role="status" className="type-label text-sky-200">
+            {aim === 'ground'
+              ? 'Release to land'
+              : dragging
+                ? 'Choose a landing site'
+                : 'Drag to stand'}
+          </span>
+          <span className="type-ui max-w-48 truncate text-slate-400">
+            {aim === 'ground'
+              ? `On ${name ?? 'the world'} · Follow the ring`
+              : `Onto ${name ?? 'the world'}`}
+          </span>
         </span>
-      </div>
-    </>
+      </Button>
+    </div>
   )
 }

@@ -216,13 +216,19 @@ Because they are derived, "the highest ground on this world" is still the
 interesting place after the generator changes, and a latitude written down last
 month is not.
 
-**And where you can stand is also pointed at.** Six derived sites is a good
-answer to "somewhere interesting" and no answer to "there, that spot, the one I
-can see". A figure is dragged out of the corner of the frame onto the drawn
-world: a ring marks where it is held, a dashed line falls from it to the ground,
-and a second ring lies on the terrain where the camera would arrive. Aiming past
-the limb still answers — the near limb is the one part of a sphere a ray cannot
-land on, and it is where a horizon comes from.
+**A launch from the pointer chooses a landing site.** Dragging the figure
+holds one end of a spring rope under the pointer. An upward and inward launch
+curves toward the world under gravity; its contact chooses the surface marker.
+The rope flexes as the hand moves, while both endpoints remain pinned. Releasing
+lands the camera at that marker. Aiming outside the disk keeps the held end
+visible beside the world, where the curve is easiest to read.
+
+Orbit traces and labels recede during the gesture and descent, then return.
+The control names the release action while aiming, reports height and progress
+during descent, and offers a return to orbit. Pointer cancellation and lost
+capture leave the camera in orbit. Reduced motion shows the equilibrium curve
+and shortens the camera transition. [ADR-0036](../adr/0036-the-pointer-holds-the-rope.md)
+records the aiming model and its limits.
 
 ---
 

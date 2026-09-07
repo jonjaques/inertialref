@@ -1022,6 +1022,35 @@ describe('a drop', () => {
     }
   })
 
+  it('lands at the gravity-selected rope endpoint, including on an irregular body', () => {
+    const { harness: ir, session } = harness()
+    const before = session.world.stateHash()
+    try {
+      for (const address of ['s:SOL/b:2', 's:SOL/b:3.0']) {
+        ir.ascend()
+        ir.look(address)
+        ir.observatory.previewLaunch(vec3(-2, -0.5, 1.2), vec3(0, 1, 0))
+        const aim = ir.observatory.aim!
+        const preview = ir.observatory.entryArcPreview(undefined, aim)!
+        expect(preview.from).toEqual(vec3(-2, -0.5, 1.2))
+        const radius = ir.observatory.target!.radius
+        ir.observatory.drop(undefined, aim, { seconds: 0.1 })
+        const pose = posed(ir.observerSample(1))
+        const spin = spinOf(session, ir.observatory.target!.address)
+        const expected = UV.translate(
+          spin.position,
+          Q.rotate(spin.orientation, Vec.scale(preview.touchdown, radius)),
+        )
+        expect(UV.distance(pose.position, expected)).toBeLessThan(
+          UV.POSITION_RESOLUTION * 4,
+        )
+      }
+      expect(session.world.stateHash()).toBe(before)
+    } finally {
+      session.dispose()
+    }
+  })
+
   it('has no preview to draw once there is no aim', () => {
     const { harness: ir } = harness()
     ir.look('s:SOL/b:2')

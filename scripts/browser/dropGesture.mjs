@@ -17,11 +17,11 @@ assert(button !== null, 'The drop handle must be available over Earth')
 button.setPointerCapture = () => {}
 button.hasPointerCapture = () => false
 const rect = button.getBoundingClientRect()
-const send = (type, x, y) =>
+const send = (type, x, y, pointerId = 41) =>
   button.dispatchEvent(
     new PointerEvent(type, {
       bubbles: true,
-      pointerId: 41,
+      pointerId,
       pointerType: 'mouse',
       button: 0,
       buttons: type === 'pointerup' ? 0 : 1,
@@ -29,12 +29,47 @@ const send = (type, x, y) =>
       clientY: y,
     }),
   )
+// Cancel and lost capture must both release the aid without starting a drop.
+for (const ending of ['pointercancel', 'lostpointercapture']) {
+  send('pointerdown', rect.x + rect.width / 2, rect.y + rect.height / 2)
+  send('pointermove', innerWidth * 0.48, innerHeight * 0.5)
+  await settle(4)
+  assert(
+    engine.harness.observatory.aim !== null,
+    'Cancellation must exercise a live aim',
+  )
+  send(ending, innerWidth * 0.48, innerHeight * 0.5)
+  await settle(4)
+  assert(
+    engine.harness.observatory.aim === null,
+    'Cancellation must clear the aim',
+  )
+  assert(
+    ir.observerStatus().surface === null,
+    'Cancellation must leave the camera in orbit',
+  )
+}
 send('pointerdown', rect.x + rect.width / 2, rect.y + rect.height / 2)
 send('pointermove', innerWidth * 0.48, innerHeight * 0.5)
 await settle(6)
 const first = engine.harness.observatory.aim
+send('pointermove', innerWidth * 0.8, innerHeight * 0.8, 42)
+send('pointerup', innerWidth * 0.8, innerHeight * 0.8, 42)
+await settle(4)
+assert(
+  ir.observerStatus().surface === null,
+  'A second pointer must not commit the drag',
+)
+assert(
+  engine.harness.observatory.aim?.longitude === first?.longitude,
+  'A second pointer must not move the held end',
+)
 assert(first !== null, 'The first point must acquire ground')
-send('pointermove', innerWidth * 0.57, innerHeight * 0.46)
+const pointer = globalThis.dropPointer ?? {
+  x: innerWidth * 0.57,
+  y: innerHeight * 0.46,
+}
+send('pointermove', pointer.x, pointer.y)
 await settle(6)
 const preview = engine.harness.observatory.aim
 assert(preview !== null, 'The second point must acquire ground')
@@ -42,7 +77,35 @@ assert(
   Math.abs(first.longitude - preview.longitude) > 0.01,
   'The drag must change its destination',
 )
-send('pointerup', innerWidth * 0.57, innerHeight * 0.46)
+// Project the scene's held endpoint back through the real camera. This proves
+// attachment in pixels, independently of the adapter that unprojects the hand.
+const scene = engine.scene()
+const drawn = scene.bodies.find(
+  (body) => body.address === engine.harness.observatory.target.address,
+)
+const held = preview.launch[0]
+const projected = engine.view.camera.position
+  .clone()
+  .set(held.x, held.y, held.z)
+projected.multiplyScalar(drawn.placement.scale)
+projected.applyQuaternion(drawn.orientation)
+projected.add(drawn.placement.position).project(engine.view.camera)
+const pointerError = Math.hypot(
+  ((projected.x + 1) * innerWidth) / 2 - pointer.x,
+  ((1 - projected.y) * innerHeight) / 2 - pointer.y,
+)
+assert(
+  pointerError < 0.01,
+  `The held endpoint misses the pointer by ${pointerError} pixels`,
+)
+if (globalThis.dropGestureHold)
+  return {
+    pointer,
+    pointerError,
+    latitude: preview.latitude,
+    longitude: preview.longitude,
+  }
+send('pointerup', pointer.x, pointer.y)
 // Complete the actual camera arm without waiting eight wall-clock seconds.
 for (let index = 0; index < 600; index += 1) ir.observerSample(1 / 60)
 const landed = ir.observerStatus()?.surface?.stance
@@ -55,4 +118,9 @@ assert(
   error < 1e-9,
   `Landing differs from the last preview by ${error} radians`,
 )
-return { preview, landed, error }
+return {
+  preview: { latitude: preview.latitude, longitude: preview.longitude },
+  landed,
+  error,
+  pointerError,
+}

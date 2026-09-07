@@ -78,6 +78,7 @@ import {
   horizonPitch,
   isCentred,
   localTriad,
+  launchArc,
   type LookOffset,
   NO_LOOK,
   MIN_STANCE_HEIGHT,
@@ -330,6 +331,14 @@ const HOLD_ALTITUDE_SHARE = 0.2
  * on the ground rather than hovering over it.
  */
 const RING_LIFT_SHARE = 0.08
+
+export interface DropAim {
+  readonly latitude: Radians
+  readonly longitude: Radians
+  /** Launch samples and screen up, in body radii and body-fixed axes. */
+  readonly launch?: readonly Vec3[]
+  readonly up?: Vec3
+}
 
 export class Observatory {
   #time: number | null = null
@@ -701,8 +710,7 @@ export class Observatory {
    */
   #descent: Descent | null = null
   /** The point a drop is being aimed at. Presentation only; see `aim`. */
-  #aim: { readonly latitude: Radians; readonly longitude: Radians } | null =
-    null
+  #aim: DropAim | null = null
   /**
    * Where the head is turned, relative to whatever the pose aims at.
    *
@@ -1644,10 +1652,7 @@ export class Observatory {
    * cleared by everything that replaces the pose, so an aim cannot survive the
    * body it was taken over.
    */
-  get aim(): {
-    readonly latitude: Radians
-    readonly longitude: Radians
-  } | null {
+  get aim(): DropAim | null {
     return this.#aim
   }
 
@@ -1663,30 +1668,32 @@ export class Observatory {
           }
   }
 
-  /**
-   * The entry the aim would fly, as positions something can draw.
-   *
-   * Universe positions, because the aid is drawn *in the scene* and the scene
-   * places a universe point through the same radial compression it places the
-   * body with. Handing back render coordinates would tie this to the origin
-   * the renderer happens to be snapped to, which lags the camera and jumps.
-   *
-   * Four pieces, because they are four claims:
-   *
-   *   `from`    where the figure is held — a little way down the arc from the
-   *             eye, so it reads as a thing in space at the cursor rather than
-   *             as something emitted by the viewer's own face.
-   *   `arc`     the path it would fall, from there to the ground.
-   *   `through` the rest of the conic, under the ground and out the far side.
-   *             It is what says the trajectory is an *entry* and not a capture,
-   *             and it is the only part drawn against the body's own inside.
-   *   `ring`    a closed loop lying on the drawn ground around the touchdown,
-   *             which is the part that has to follow terrain — a flat disc
-   *             would sink into a slope and float over a basin.
-   */
+  /** Aim by a held point in body radii. Gravity chooses the touchdown. */
+  previewLaunch(hold: Vec3, up: Vec3): void {
+    const body = this.#body()
+    if (body === null || !hasSolidSurface(body) || Vec.length(hold) <= 1) {
+      this.#aim = null
+      return
+    }
+    const launch = [...launchArc(hold, up)]
+    const end = launch.at(-1)
+    if (end === undefined) {
+      this.#aim = null
+      return
+    }
+    const { latitude, longitude } = directionToGeodetic(end)
+    const ground = geodeticDirection(latitude, longitude)
+    launch[launch.length - 1] = Vec.scale(
+      ground,
+      (drawnSurfaceRadius(body, ground) + MIN_STANCE_HEIGHT) / body.radius,
+    )
+    this.#aim = { latitude, longitude, launch, up }
+  }
+
+  /** Scene geometry in body radii, sharing the landing coordinate with release. */
   entryArcPreview(
     destination: string | undefined,
-    point: { readonly latitude: Radians; readonly longitude: Radians },
+    point: DropAim,
     samples = 48,
   ): {
     /** Every field below is body radii, in the body's own rotating axes. */
@@ -1714,6 +1721,26 @@ export class Observatory {
       spin.orientation,
       UV.difference(eye, spin.position),
     )
+    if (point.launch !== undefined) {
+      const from = point.launch[0]!
+      const touchdown = point.launch.at(-1)!
+      const unit = (offset: Vec3): Vec3 => Vec.scale(offset, 1 / body.radius)
+      return {
+        from,
+        hold: this.#holdRing(Vec.scale(from, body.radius), local, point.up).map(
+          unit,
+        ),
+        arc: point.launch,
+        through: [],
+        ring: this.#groundRing(
+          body,
+          ground,
+          Vec.length(touchdown) * body.radius,
+          eye,
+        ).map(unit),
+        touchdown,
+      }
+    }
     /*
      * The figure is held in the viewer's own orbit, above the point aimed at.
      *
@@ -1792,12 +1819,13 @@ export class Observatory {
    * Angular, like the ground ring, and for the same reason: the gesture spans
    * six decades of distance and no fixed size survives that.
    */
-  #holdRing(at: Vec3, eye: Vec3): readonly Vec3[] {
+  #holdRing(at: Vec3, eye: Vec3, screenUp?: Vec3): readonly Vec3[] {
     const toEye = Vec.sub(eye, at)
     const range = Vec.length(toEye)
     if (!(range > 0)) return []
     const forward = Vec.scale(toEye, 1 / range)
-    const seed = Math.abs(forward.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)
+    const seed =
+      screenUp ?? (Math.abs(forward.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0))
     const right = Vec.normalize(Vec.cross(seed, forward))
     const up = Vec.cross(forward, right)
     const across = range * HOLD_ANGLE

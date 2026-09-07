@@ -1,5 +1,5 @@
 import { Vector3, type PerspectiveCamera } from 'three/webgpu'
-import { Quaternion as Q, type Vec3 } from '@inertialref/spatial'
+import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import type { GameEngine } from '../engine/GameEngine.ts'
 
 /*
@@ -49,4 +49,45 @@ export function rayFromScreen(
     y: scratch.y,
     z: scratch.z,
   })
+}
+
+/** The held end on an eye-facing plane in front of the drawn body, in body radii. */
+export function heldDropFromScreen(
+  engine: GameEngine,
+  point: { readonly x: number; readonly y: number },
+  size: { readonly width: number; readonly height: number },
+): { readonly hold: Vec3; readonly up: Vec3 } | null {
+  const scene = engine.scene()
+  const view = engine.view
+  const drawn = scene?.bodies.find(
+    (body) => body.address === engine.harness.observatory.target?.address,
+  )
+  if (scene === null || view === null || drawn === undefined) return null
+  const camera = view.camera as PerspectiveCamera
+  scratch
+    .set((point.x / size.width) * 2 - 1, (-point.y / size.height) * 2 + 1, 0.5)
+    .unproject(camera)
+    .sub(camera.position)
+    .normalize()
+  const ray = { x: scratch.x, y: scratch.y, z: scratch.z }
+  const forward = Q.rotate(camera.quaternion, { x: 0, y: 0, z: -1 })
+  const centre = drawn.placement.position
+  const offset = Vec.sub(centre, camera.position)
+  const depth = Vec.dot(offset, forward) - drawn.placement.scale * 1.15
+  const along = Vec.dot(ray, forward)
+  if (!(depth > 0) || !(along > 0)) return null
+  const held = Vec.sub(
+    Vec.add(camera.position, Vec.scale(ray, depth / along)),
+    centre,
+  )
+  return {
+    hold: Vec.scale(
+      Q.rotateInverse(drawn.orientation, held),
+      1 / drawn.placement.scale,
+    ),
+    up: Q.rotateInverse(
+      drawn.orientation,
+      Q.rotate(camera.quaternion, { x: 0, y: 1, z: 0 }),
+    ),
+  }
 }

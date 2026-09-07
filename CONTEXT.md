@@ -8273,6 +8273,26 @@ the body is right for prose and wrong for a list measuring a window against its
 container, and without it the dialog rendered 1,100 rows for 323 results
 against 27 with it.
 
+## The pointer and the camera agree on the landing (6 Sep 2026)
+
+The drop retained the first valid hit in React while its scene preview followed
+the hand. A browser drag across Earth missed the final preview by 0.552 radians.
+Release now reads the observatory's live aim; the same fixture agrees within
+1.2e-16 radians. A property check of actual camera positions also exposed a
+13 cm error in nearly radial arcs: `acos` amplified normalization error. The
+cross-product/dot-product `atan2` form keeps the endpoint within the spatial
+position resolution.
+
+The pointer holds the launch end of a spring rope. Its launch chooses the
+surface endpoint, and the camera lands there. The browser projection check
+places the held end within 1e-8 pixels of the pointer at 1600 × 900, DPR 1.
+[ADR-0036](docs/adr/0036-the-pointer-holds-the-rope.md) records the gesture.
+
+The first full check timed out after 300 seconds in the existing terrain
+fixture. With the browser rig closed, that fixture passed in 179 seconds.
+Browser work and verification run serially; the task's rig is closed after
+its capture rather than left rendering between checks.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

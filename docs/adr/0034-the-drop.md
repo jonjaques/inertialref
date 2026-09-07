@@ -1,6 +1,7 @@
 # ADR-0034: The drop is an eased entry onto the surface arm, aimed by a figure
 
-Status: accepted · 6 Sep 2026
+Status: accepted · 6 Sep 2026. The preview gesture is superseded by
+[ADR-0036](0036-the-pointer-holds-the-rope.md); the camera descent remains in effect.
 
 ## Context
 

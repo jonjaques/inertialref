@@ -1,176 +1,164 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { useReducedMotion } from 'motion/react'
+import { SpringRope } from '@inertialref/rendering'
 import {
   BufferAttribute,
   BufferGeometry,
   type Group,
-  Line,
   LineSegments,
+  type InterleavedBufferAttribute,
 } from 'three/webgpu'
-import type { Vec3 } from '@inertialref/spatial'
+import { LineSegments2 } from 'three/addons/lines/webgpu/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
+import { Vec, type Vec3 } from '@inertialref/spatial'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createEntryTraceMaterials } from '../render/entryTrace.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
-/*
- * Where the figure would land, drawn in the scene rather than over it.
- *
- * The aid was an SVG in the HUD first, and it was wrong for a reason no amount
- * of styling fixes: an overlay is flat. It cannot be occluded by the limb it
- * crosses, its dashes do not shorten with distance, and the ring it puts on
- * the ground is a circle rather than the ellipse a circle on a sphere actually
- * is.
- *
- * **It is placed in the body's own frame, exactly as a terrain patch is.** A
- * body is not drawn where its metric position says: render compression pulls
- * it nearer and shrinks it so its angular size survives, and `placement.scale`
- * is the radius it comes out at. A point put through its *own* compression
- * therefore lands at a different depth from the sphere it is supposed to be
- * lying on — and that is not a subtle error: placed that way the ground ring
- * sank inside the planet and disappeared. So the observatory answers in body
- * radii, in the body's rotating axes, and this hangs the whole aid off the
- * placement the body was drawn with. One unit is the drawn surface, by
- * construction.
- *
- * The buffers are therefore *camera-independent*: they change when the aim
- * moves and not when the eye does, so a frame in which the hand held still
- * writes nothing at all.
- */
-
-/** Points in the fall and the x-ray, and in either ring. */
 const SAMPLES = 48
-const RING_POINTS = 49
-
-/**
- * The fall is drawn as segments with gaps, not as a dashed material.
- *
- * A dashed line in a node material needs per-vertex line distances and a
- * shader that reads them; alternate segments of a `LineSegments` are the same
- * picture with no material work and no second attribute to keep in step.
- */
+const RING_SEGMENTS = 48
 const DASH_SEGMENTS = Math.floor((SAMPLES - 1) / 2)
+const HEAD_SEGMENTS = 12
+const FIGURE_SEGMENTS = HEAD_SEGMENTS + 5
 
+/** The aid uses the body's placement, so compression cannot bury its ground ring. */
 export function EntryTrace({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
+  const rope = useMemo(() => new SpringRope(), [])
+  const reducedMotion = useReducedMotion()
   const materials = useMemo(() => createEntryTraceMaterials(), [])
-  const parts = useRef<{
-    fall: LineSegments
-    through: LineSegments
-    ring: Line
-    hold: Line
-  } | null>(null)
-  /** The aim the buffers hold, so a still hand costs one comparison a frame. */
-  const written = useRef('')
+  const parts = useMemo(() => {
+    const wide = (count: number, material: typeof materials.ring) =>
+      new LineSegments2(
+        new LineSegmentsGeometry().setPositions(new Float32Array(count * 6)),
+        material,
+      )
+    const geometry = new BufferGeometry()
+    geometry.setAttribute(
+      'position',
+      new BufferAttribute(new Float32Array(DASH_SEGMENTS * 6), 3),
+    )
+    const ring = wide(RING_SEGMENTS, materials.ring)
+    const outline = new LineSegments2(ring.geometry, materials.outline)
+    const all = {
+      fall: wide(32, materials.fall),
+      through: new LineSegments(geometry, materials.through),
+      outline,
+      ring,
+      hold: wide(RING_SEGMENTS, materials.hold),
+      figure: wide(FIGURE_SEGMENTS, materials.figure),
+    }
+    Object.values(all).forEach((part, index) => {
+      part.frustumCulled = false
+      part.renderOrder = index + 1
+    })
+    return all
+  }, [materials])
 
-  useTimedFrame('entryTrace', () => {
+  useEffect(() => {
+    const parent = group.current
+    if (parent === null) return
+    const children = Object.values(parts)
+    parent.add(...children)
+    return () => {
+      parent.remove(...children)
+      for (const geometry of new Set(children.map((part) => part.geometry)))
+        geometry.dispose()
+      for (const material of Object.values(materials)) material.dispose()
+      rope.reset()
+    }
+  }, [parts, materials, rope])
+
+  useTimedFrame('entryTrace', (_, delta) => {
     const parent = group.current
     if (parent === null) return
     const observatory = engine.harness.observatory
     const aim = observatory.aim
     const scene = engine.scene()
     const address = observatory.target?.address ?? null
-    // The body as it was *drawn*: the placement carries the compression, and
-    // the aid is only in the right place if it uses the same one.
-    const drawn =
-      scene === null || address === null
-        ? undefined
-        : scene.bodies.find((body) => body.address === address)
-    if (aim === null || drawn === undefined) {
+    const drawn = scene?.bodies.find((body) => body.address === address)
+    if (aim === null || drawn === undefined || scene === null) {
       parent.visible = false
-      written.current = ''
+      rope.reset()
       return
     }
     parent.visible = true
-    const placement = drawn.placement
+    const { placement, orientation } = drawn
     parent.position.set(
       placement.position.x,
       placement.position.y,
       placement.position.z,
     )
-    // The body's own turn, so the aid rides the ground rather than inertial
-    // space — the aim is a latitude, and a latitude moves with the world.
     parent.quaternion.set(
-      drawn.orientation.x,
-      drawn.orientation.y,
-      drawn.orientation.z,
-      drawn.orientation.w,
+      orientation.x,
+      orientation.y,
+      orientation.z,
+      orientation.w,
     )
-    // One unit of the buffers is one body radius, and this is the radius the
-    // body came out at — so the ring lands on the ground that is on screen.
     parent.scale.setScalar(placement.scale)
 
-    if (parts.current === null) {
-      const build = (count: number): BufferGeometry => {
-        const geometry = new BufferGeometry()
-        geometry.setAttribute(
-          'position',
-          new BufferAttribute(new Float32Array(count * 3), 3),
-        )
-        return geometry
-      }
-      const fall = new LineSegments(build(DASH_SEGMENTS * 2), materials.fall)
-      const through = new LineSegments(
-        build(DASH_SEGMENTS * 2),
-        materials.through,
-      )
-      const ring = new Line(build(RING_POINTS), materials.ring)
-      const hold = new Line(build(RING_POINTS), materials.hold)
-      // The group is placed in the compressed shell, so a bounding sphere
-      // computed from its geometry means nothing to the culler.
-      for (const part of [fall, through, ring, hold]) {
-        part.frustumCulled = false
-        parent.add(part)
-      }
-      parts.current = { fall, through, ring, hold }
-    }
-    const held = parts.current
-
-    /*
-     * The aim is the key the buffers are cached against. Two angles decide
-     * every point, so a drag that has paused writes nothing rather than a
-     * hundred and ninety vertices.
-     */
-    const key = `${aim.latitude},${aim.longitude}`
-    if (key === written.current) return
     const preview = observatory.entryArcPreview(undefined, aim, SAMPLES)
     if (preview === null) {
       parent.visible = false
       return
     }
-    written.current = key
 
-    /** Every second segment, so the line is dashed by omission. */
-    const dash = (points: readonly Vec3[], target: LineSegments): void => {
+    const write = (target: LineSegments2, pairs: readonly Vec3[]): void => {
       const attribute = target.geometry.getAttribute(
-        'position',
-      ) as BufferAttribute
-      const out = attribute.array as Float32Array
-      for (let pair = 0; pair < DASH_SEGMENTS; pair += 1) {
-        const from = points[pair * 2]
-        const to = points[pair * 2 + 1]
-        if (from === undefined || to === undefined) continue
-        out.set([from.x, from.y, from.z, to.x, to.y, to.z], pair * 6)
-      }
-      attribute.needsUpdate = true
+        'instanceStart',
+      ) as InterleavedBufferAttribute
+      const out = attribute.data.array as Float32Array
+      pairs.forEach((point, index) =>
+        out.set([point.x, point.y, point.z], index * 3),
+      )
+      attribute.data.needsUpdate = true
     }
-
-    const loop = (points: readonly Vec3[], target: Line): void => {
-      const attribute = target.geometry.getAttribute(
-        'position',
-      ) as BufferAttribute
-      const out = attribute.array as Float32Array
-      for (let index = 0; index < RING_POINTS; index += 1) {
-        const point = points[index]
-        if (point === undefined) continue
-        out.set([point.x, point.y, point.z], index * 3)
-      }
-      attribute.needsUpdate = true
+    const segments = (points: readonly Vec3[], stride: number): Vec3[] => {
+      const out: Vec3[] = []
+      for (let index = 0; index + 1 < points.length; index += stride)
+        out.push(points[index]!, points[index + 1]!)
+      return out
     }
+    write(
+      parts.fall,
+      segments(rope.step(preview.arc, delta, reducedMotion === true), 1),
+    )
+    write(parts.ring, segments(preview.ring, 1))
+    write(parts.hold, segments(preview.hold, 1))
+    parts.through.visible = preview.through.length > 0
+    const through = parts.through.geometry.getAttribute(
+      'position',
+    ) as BufferAttribute
+    segments(preview.through, 2)
+      .slice(0, DASH_SEGMENTS * 2)
+      .forEach((point, index) =>
+        through.setXYZ(index, point.x, point.y, point.z),
+      )
+    through.needsUpdate = true
 
-    dash(preview.arc, held.fall)
-    dash(preview.through, held.through)
-    loop(preview.ring, held.ring)
-    loop(preview.hold, held.hold)
+    // The held loop supplies a billboard basis in body-fixed axes. The figure
+    // belongs inside it, so its feet, head and scale follow the same frame.
+    const right = Vec.sub(preview.hold[0]!, preview.from)
+    const up = Vec.sub(preview.hold[RING_SEGMENTS / 4]!, preview.from)
+    const at = (x: number, y: number): Vec3 =>
+      Vec.add(preview.from, Vec.add(Vec.scale(right, x), Vec.scale(up, y)))
+    const figure: Vec3[] = []
+    for (let index = 0; index < HEAD_SEGMENTS; index += 1) {
+      for (const endpoint of [index, index + 1]) {
+        const angle = (endpoint / HEAD_SEGMENTS) * Math.PI * 2
+        figure.push(at(Math.cos(angle) * 0.13, 0.47 + Math.sin(angle) * 0.13))
+      }
+    }
+    for (const [x1, y1, x2, y2] of [
+      [0, 0.26, 0, -0.12],
+      [-0.38, 0.15, 0, 0.22],
+      [0, 0.22, 0.38, 0.15],
+      [0, -0.12, -0.25, -0.55],
+      [0, -0.12, 0.25, -0.55],
+    ] as const)
+      figure.push(at(x1, y1), at(x2, y2))
+    write(parts.figure, figure)
   })
 
-  return <group ref={group} />
+  return <group ref={group} visible={false} />
 }

@@ -146,6 +146,10 @@ export const WINGS = [
           ],
           ['docs/adr/0034-the-drop.md', 'The drop'],
           ['docs/adr/0035-searching-the-volume.md', 'Searching the volume'],
+          [
+            'docs/adr/0036-the-pointer-holds-the-rope.md',
+            'The pointer holds the rope',
+          ],
         ],
       },
     ],
