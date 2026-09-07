@@ -27,7 +27,7 @@ export function TargetActions({
 }: {
   engine: GameEngine
   target: TravelTarget
-  /** The panel's own try/catch-and-report. See `CataloguePanel`. */
+  /** The panel's own try/catch-and-report. See `NavigatorPanel`. */
   run: (label: string, action: () => void) => void
 }) {
   if (target.kind === 'system')

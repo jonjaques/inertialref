@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest'
 import type { TravelTarget } from '@inertialref/devtools'
 import { AU, LIGHT_YEAR } from '@inertialref/shared'
 import {
+  flattenGroups,
   groupBySystem,
   indentOf,
   measureOf,
   neighbours,
   moveInList,
   orbitalOrder,
-} from './catalogue.ts'
+  searchRows,
+} from './navigator.ts'
 import { acceptsRow } from './kinds.ts'
 
 /*
@@ -343,5 +345,80 @@ describe('moveInList', () => {
     expect(moveInList('ArrowRight', 2, 5)).toBeNull()
     expect(moveInList('Enter', 2, 5)).toBeNull()
     expect(moveInList('ArrowDown', 0, 0)).toBeNull()
+  })
+})
+
+describe('flattenGroups', () => {
+  const groups = groupBySystem(
+    [
+      star({ address: 's:A', name: 'A' }),
+      row({
+        address: 's:A/b:0',
+        system: 'A',
+        parent: 's:A',
+        semiMajorAxis: AU,
+      }),
+      row({
+        address: 's:A/b:0/b:0',
+        system: 'A',
+        parent: 's:A/b:0',
+        depth: 2,
+        bodyKind: 'moon',
+        semiMajorAxis: 1e8,
+      }),
+      star({ address: 's:B', name: 'B' }),
+    ],
+    ALL,
+  )
+
+  it('draws an open system as its row and every body under it, in order', () => {
+    const rows = flattenGroups(
+      groups.map((group) => ({ group, open: group.system.address === 's:A' })),
+    )
+    expect(rows.map((one) => one.key)).toEqual([
+      's:A',
+      's:A/b:0',
+      's:A/b:0/b:0',
+      's:B',
+    ])
+    // A moon under a drawn planet indents twice; a planet once.
+    expect(rows[1]).toMatchObject({ kind: 'body', indent: 1, parent: 's:A' })
+    expect(rows[2]).toMatchObject({ kind: 'body', indent: 2, parent: 's:A' })
+  })
+
+  it('draws a closed system as one row that says what it is hiding', () => {
+    const rows = flattenGroups(groups.map((group) => ({ group, open: false })))
+    expect(rows.map((one) => one.key)).toEqual(['s:A', 's:B'])
+    expect(rows[0]).toMatchObject({
+      kind: 'system',
+      open: false,
+      foldable: true,
+      folded: 2,
+    })
+    // A system with nothing under it has nothing to fold, whatever it was asked.
+    expect(rows[1]).toMatchObject({ foldable: false, folded: 0, open: false })
+  })
+
+  it('keys every row by its address, so a fold above does not re-mount below', () => {
+    const rows = flattenGroups(groups.map((group) => ({ group, open: true })))
+    for (const one of rows) expect(one.key).toBe(one.row.address)
+    expect(new Set(rows.map((one) => one.key)).size).toBe(rows.length)
+  })
+})
+
+describe('searchRows', () => {
+  it('keeps the matcher’s order and never groups', () => {
+    // Europa without Jupiter is the ordinary case for a search, and the case
+    // `groupBySystem` would drop.
+    const rows = searchRows([
+      row({ address: 's:SOL/b:4/b:1', name: 'Europa', parent: 's:SOL/b:4' }),
+      star({ address: 's:HIP71683', name: 'Alpha Centauri' }),
+    ])
+    expect(rows.map((one) => one.row.name)).toEqual([
+      'Europa',
+      'Alpha Centauri',
+    ])
+    expect(rows[0]).toMatchObject({ kind: 'body', indent: 0 })
+    expect(rows[1]).toMatchObject({ kind: 'system', foldable: false })
   })
 })

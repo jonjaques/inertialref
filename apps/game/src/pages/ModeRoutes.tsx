@@ -4,6 +4,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { CinemaMode } from '../cinema/CinemaMode.tsx'
 import { DocsMode } from '../docs/DocsMode.tsx'
 import { FlightMode } from '../flight/FlightMode.tsx'
+import { CatalogPage } from '../planetarium/CatalogPage.tsx'
 import { PresetsPage } from '../planetarium/PresetsPage.tsx'
 import { PlanetariumMode } from '../planetarium/PlanetariumMode.tsx'
 import { HomePage } from './HomePage.tsx'
@@ -90,6 +91,7 @@ export function ModeRoutes(props: ModeRouteProps) {
         element={<PlanetariumMode engine={props.engine} dev={props.dev} />}
       >
         <Route path="presets" element={<PresetsPage engine={props.engine} />} />
+        <Route path="catalog" element={<CatalogPage engine={props.engine} />} />
       </Route>
       {/*
        * One route for the whole section, and the splat is the point: the

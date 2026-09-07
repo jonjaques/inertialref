@@ -22,6 +22,9 @@ import {
   type SystemId,
   type SystemStub,
   walkBodies,
+  findWorlds,
+  type WorldMatch,
+  type WorldQuery,
 } from '@inertialref/universe'
 import { UV } from '@inertialref/spatial'
 import type { JobHandle, WorkerPool } from './pool.ts'
@@ -461,6 +464,62 @@ export const surveySystemTask = defineTask<
   },
 })
 
+/* ------------------------------------------------------------------------- */
+/* Finding worlds                                                             */
+/* ------------------------------------------------------------------------- */
+
+export interface FindWorldsRequest {
+  readonly seed: string
+  readonly galaxy: string
+  /**
+   * The systems this job is to walk, already resolved by the caller.
+   *
+   * A batch rather than a radius, and that is the whole shape of the feature:
+   * the caller cuts the volume into batches and submits one job each, so
+   * answers arrive batch by batch and the list fills in while the search is
+   * still running. A task that took a radius could only answer once, at the
+   * end, and the protocol has no way to send a partial result — a job is one
+   * request and one response.
+   */
+  readonly stubs: readonly GeneratedStar[]
+  readonly query: WorldQuery
+  /** Where distances are measured from, so the caller can sort by them. */
+  readonly from: WireUniverseVector
+}
+
+export interface FindWorldsResponse {
+  readonly matches: readonly WorldMatch[]
+  /** How many systems were actually built, for a rate nobody has to guess at. */
+  readonly generated: number
+}
+
+/**
+ * Generate a batch of systems and return the bodies that answer a query.
+ *
+ * This is the expensive one. Generating a system is milliseconds and matching
+ * a body is microseconds, so the cost is the batch size times the generator —
+ * which is exactly why it is here rather than on the main thread, and why the
+ * caller is expected to submit several of these at once.
+ */
+export const findWorldsTask = defineTask<FindWorldsRequest, FindWorldsResponse>(
+  {
+    name: 'universe.findWorlds',
+    version: 1,
+    run({ seed, galaxy, stubs, query, from }, context) {
+      const decoded = stubs.map(decodeStub)
+      const matches = findWorlds(
+        parseSeed(seed),
+        galaxyId(galaxy),
+        decoded,
+        query,
+        UV.universeVector(from[0], from[1], from[2], from[3], from[4], from[5]),
+        context.cancelled,
+      )
+      return { matches, generated: decoded.length }
+    },
+  },
+)
+
 /** Everything the worker entry point serves. */
 export function createTaskRegistry(): TaskRegistry {
   const registry = new TaskRegistry()
@@ -469,5 +528,6 @@ export function createTaskRegistry(): TaskRegistry {
   registry.register(generateHeightfieldTask)
   registry.register(surveySystemTask)
   registry.register(surfaceDetailFloorTask)
+  registry.register(findWorldsTask)
   return registry
 }

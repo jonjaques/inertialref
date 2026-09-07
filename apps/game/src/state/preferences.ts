@@ -412,18 +412,24 @@ export const PLANETARIUM_HINTED = define({
   accept: isBoolean,
 })
 
-export const CATALOGUE_RADIUS = define<string>({
+/*
+ * The navigator's three keys keep `catalogue` in their stored names. A key is
+ * what a reader's browser already holds, and renaming it would put every
+ * radius and every chip selection back to the default on the next visit — a
+ * rename of the panel's title that reset its settings.
+ */
+export const NAVIGATOR_RADIUS = define<string>({
   key: 'planetarium.catalogue.radius',
   group: 'planetarium',
-  what: 'the catalog’s survey radius',
+  what: 'the navigator’s survey radius',
   initial: '10',
   accept: oneOf(RADII),
 })
 
-export const CATALOGUE_CLASSES = define<readonly string[]>({
+export const NAVIGATOR_CLASSES = define<readonly string[]>({
   key: 'planetarium.catalogue.classes',
   group: 'planetarium',
-  what: 'which object classes the catalog lists',
+  what: 'which object classes the navigator lists',
   initial: ALL_CLASSES,
   // Membership in the live set, not merely "an array of strings". The point of
   // a validator here is the value that survives a *rename* — a stored id no
@@ -434,10 +440,10 @@ export const CATALOGUE_CLASSES = define<readonly string[]>({
   ),
 })
 
-export const CATALOGUE_FILTERING = define({
+export const NAVIGATOR_FILTERING = define({
   key: 'planetarium.catalogue.filtering',
   group: 'planetarium',
-  what: 'whether the catalog’s filter row is showing',
+  what: 'whether the navigator’s filter row is showing',
   initial: false,
   accept: isBoolean,
 })
@@ -539,9 +545,9 @@ export const REGISTRY: readonly AnyPreference[] = [
   PLANETARIUM_SHIP,
   PLANETARIUM_FLARE,
   PLANETARIUM_HINTED,
-  CATALOGUE_RADIUS,
-  CATALOGUE_CLASSES,
-  CATALOGUE_FILTERING,
+  NAVIGATOR_RADIUS,
+  NAVIGATOR_CLASSES,
+  NAVIGATOR_FILTERING,
   DEBUG_ON,
   TIMING_LEVEL,
 ]

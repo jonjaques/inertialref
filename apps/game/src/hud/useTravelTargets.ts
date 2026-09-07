@@ -11,7 +11,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  * nothing here". Both filtered the survey's *result* with `.includes()`, which
  * made a search box a search of a few light years rather than of the catalog.
  *
- * There is one panel now — `planetarium/CataloguePanel.tsx`, drawn in the
+ * There is one panel now — `planetarium/NavigatorPanel.tsx`, drawn in the
  * planetarium and in flight with a verb that depends on the mode — and this
  * hook is still separate from it, because the survey is a question about the
  * sky rather than about a component.
@@ -23,7 +23,9 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  *     on where you are and that changes as you fly.
  *   - **a query** → the index, over the whole 150 light-year catalog, on the
  *     keystroke. Measured at 0.14–0.30 ms; the sweep is not in that league and
- *     never could be.
+ *     never could be. The navigator ranks its own fuzzy index instead
+ *     (`planetarium/useNavigatorSearch.ts`) and pauses this hook while it
+ *     does; the console's `ir.search` still answers from here.
  *
  * The poll stays a poll rather than joining the engine snapshot, and
  * deliberately: a survey is a star sweep, not a field read, and sampling two of
@@ -54,6 +56,15 @@ export interface TravelListingOptions {
   readonly refreshMs?: number
   /** Bumped by a caller's action, so the listing refreshes on the spot. */
   readonly generation?: number
+  /**
+   * Hold the last listing and stop polling.
+   *
+   * For the panel that has switched to a search: the survey is a star sweep
+   * twice a second, and nothing on screen is reading it while a query is
+   * typed. The rows are kept rather than cleared, so clearing the query puts
+   * the list back without a "surveying…" frame in between.
+   */
+  readonly paused?: boolean
 }
 
 export function useTravelTargets(
@@ -66,6 +77,7 @@ export function useTravelTargets(
     query,
     refreshMs = 1_000,
     generation = 0,
+    paused = false,
   } = options
   const [listing, setListing] = useState<TravelListing>({
     rows: [],
@@ -75,6 +87,7 @@ export function useTravelTargets(
   const needle = query.trim()
 
   useEffect(() => {
+    if (paused) return
     const read = (): void => {
       try {
         const rows =
@@ -114,7 +127,7 @@ export function useTravelTargets(
     if (needle !== '') return
     const timer = window.setInterval(read, refreshMs)
     return () => window.clearInterval(timer)
-  }, [engine, lightYears, origin, needle, refreshMs, generation])
+  }, [engine, lightYears, origin, needle, refreshMs, generation, paused])
 
   return listing
 }

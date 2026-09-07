@@ -30,8 +30,108 @@ import { acceptsRow } from './kinds.ts'
  * without a world, a renderer or a React tree.
  */
 
+/**
+ * One row of the drawn list.
+ *
+ * The tree is drawn flat — a windowed list can only window a flat array — so
+ * the fold is a property of the system row rather than a nesting. `key` is
+ * the address, which is stable across polls; a windowed row keyed on its index
+ * would be re-mounted every time a fold above it moved everything down by one.
+ */
+export type ListRow =
+  | {
+      readonly kind: 'system'
+      readonly key: string
+      readonly row: TravelTarget
+      /** Whether the bodies under it are drawn. */
+      readonly open: boolean
+      /** Whether there are bodies to fold at all. */
+      readonly foldable: boolean
+      /** How many bodies the fold is hiding; 0 when open or when there are none. */
+      readonly folded: number
+    }
+  | {
+      readonly kind: 'body'
+      readonly key: string
+      readonly row: TravelTarget
+      /** The system row `←` returns to. */
+      readonly parent: string
+      readonly indent: number
+    }
+
+/** The rows a listing draws, from the groups and which of them are open. */
+export function flattenGroups(
+  folded: readonly { readonly group: NavigatorGroup; readonly open: boolean }[],
+): readonly ListRow[] {
+  const rows: ListRow[] = []
+  for (const { group, open } of folded) {
+    const foldable = group.bodies.length > 0
+    rows.push({
+      kind: 'system',
+      key: group.system.address,
+      row: group.system,
+      open: foldable && open,
+      foldable,
+      folded: foldable && !open ? group.bodies.length : 0,
+    })
+    if (!foldable || !open) continue
+    const visible = new Set(group.bodies.map((body) => body.address))
+    for (const body of group.bodies) {
+      rows.push({
+        kind: 'body',
+        key: body.address,
+        row: body,
+        parent: group.system.address,
+        indent: indentOf(body, visible),
+      })
+    }
+  }
+  return rows
+}
+
+/**
+ * Search results as rows: flat, in the order the matcher ranked them.
+ *
+ * Not grouped. A search can return Europa without Jupiter, and `groupBySystem`
+ * drops a body that arrives before its system — correctly, for a survey, where
+ * that cannot happen. Here it is the ordinary case, so every hit is its own
+ * top-level row and a body says which system it belongs to in its title.
+ */
+export function searchRows(rows: readonly TravelTarget[]): readonly ListRow[] {
+  return rows.map((row) =>
+    row.kind === 'system'
+      ? {
+          kind: 'system',
+          key: row.address,
+          row,
+          open: false,
+          foldable: false,
+          folded: 0,
+        }
+      : {
+          kind: 'body',
+          key: row.address,
+          row,
+          parent: row.parent ?? row.system,
+          indent: 0,
+        },
+  )
+}
+
+/**
+ * Where a fuzzy match landed, for the row to draw.
+ *
+ * `text` is the string that matched — a designation, which is not always the
+ * row's own name: `HIP 71683` finds Alpha Centauri — and `ranges` are the
+ * matcher's `[start, end, start, end, …]` character pairs over that string.
+ */
+export interface Highlight {
+  readonly text: string
+  readonly ranges: readonly number[]
+}
+
 /** One system and the bodies under it, ready to draw. */
-export interface CatalogueGroup {
+export interface NavigatorGroup {
   /** The star's own row. Always present — a group is a system. */
   readonly system: TravelTarget
   /** Its bodies, filtered and in orbital order, moons under their planets. */
@@ -52,7 +152,7 @@ export interface CatalogueGroup {
 export function groupBySystem(
   rows: readonly TravelTarget[],
   chosen: readonly string[],
-): readonly CatalogueGroup[] {
+): readonly NavigatorGroup[] {
   const groups: {
     system: TravelTarget
     bodies: TravelTarget[]

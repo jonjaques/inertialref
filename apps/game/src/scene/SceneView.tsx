@@ -7,6 +7,7 @@ import { Bodies } from './Bodies.tsx'
 import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
 import { NearFieldProps } from './NearFieldProps.tsx'
+import { EntryTrace } from './EntryTrace.tsx'
 import { OrbitTraces } from './OrbitTraces.tsx'
 import { Sensor } from './Sensor.tsx'
 import { ShipModel } from './ShipModel.tsx'
@@ -86,6 +87,7 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <WaterPatches engine={engine} water={water} />
       <ScatterRocks engine={engine} terrain={terrain} />
       <OrbitTraces engine={engine} />
+      <EntryTrace engine={engine} />
       <SunFlare engine={engine} />
       <ShipModel engine={engine} />
       <NearFieldProps engine={engine} />

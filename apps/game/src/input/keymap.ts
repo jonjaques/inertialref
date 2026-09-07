@@ -246,7 +246,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('session.load', 'Load', 'Session', 'global', chord('F9')),
 
   press('nav.goTo', 'Go To', 'Session', 'global', chord('Slash'), {
-    hint: 'focus the catalog’s search, which takes anything an address does',
+    hint: 'focus the navigator’s search, which takes a name, a near miss of one, or anything an address does',
   }),
 
   press('chrome.panes', 'Both Panes', 'Screen', 'global', chord('KeyH'), {

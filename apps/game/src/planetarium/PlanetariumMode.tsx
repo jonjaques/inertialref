@@ -29,10 +29,11 @@ import {
 import { useChromeHidden } from '../hud/chrome.ts'
 import { useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
-import { QUERY, PRESETS } from '../pages/paths.ts'
+import { QUERY, CATALOG, PRESETS } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
+import { DropHandle } from './DropHandle.tsx'
 import { pick } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
@@ -243,11 +244,16 @@ export function PlanetariumMode({
     }
   }, [engine, saveRequested, params, navigate])
 
+  const openCatalog = () => {
+    void navigate({ pathname: CATALOG, search: params.toString() })
+  }
+
   const panels = planetariumPanels({
     engine,
     target,
     focus,
     managePresets,
+    openCatalog,
     takePicture: (picture, builtin = false) => {
       try {
         engine.harness.takePicture(picture)
@@ -398,6 +404,17 @@ export function PlanetariumMode({
         minor={labelMinor}
         target={target}
       />
+
+      {/* Somewhere to stand, and the arc that says where. Chrome, so the plate
+          rig's `Shift+H` clears it along with everything else — a figure in
+          the corner of a captured picture is the interface in a photograph. */}
+      {!chromeHidden && (
+        <DropHandle
+          engine={engine}
+          target={target}
+          onNotice={(text) => setNotice({ text, tone: 'said' })}
+        />
+      )}
 
       {/* The aiming point. Small and always there: it is the answer to "what
           will a click hit", and in a mode with no ship it is the only thing

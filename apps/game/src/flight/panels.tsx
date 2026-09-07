@@ -1,7 +1,7 @@
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Neighbourhood } from '../icons/index.tsx'
-import { CataloguePanel } from '../planetarium/CataloguePanel.tsx'
+import { NavigatorPanel } from '../planetarium/NavigatorPanel.tsx'
 
 /**
  * What a flight mode contributes to its workspace.
@@ -15,9 +15,9 @@ import { CataloguePanel } from '../planetarium/CataloguePanel.tsx'
  * depends on the mode is what replaces it.
  *
  * The panel comes from `planetarium/`, which is where it was written and where
- * it still belongs by subject — the catalog is a reading of the sky, and flight
- * is a consumer of it. Moving the file to a neutral directory would be filing
- * by who reads it rather than by what it is about.
+ * it still belongs by subject — the navigator is a reading of the sky, and
+ * flight is a consumer of it. Moving the file to a neutral directory would be
+ * filing by who reads it rather than by what it is about.
  */
 export function flightPanels(
   engine: GameEngine,
@@ -25,13 +25,14 @@ export function flightPanels(
 ): readonly DockPanelDefinition[] {
   return [
     {
+      // The id is what a stored layout remembers; see `planetarium/registry.tsx`.
       id: 'catalogue',
-      title: 'Catalog',
+      title: 'Navigator',
       icon: Neighbourhood,
       zone: 'right',
       hint: 'Everything within reach — fold it, filter it, fly to it',
       render: () => (
-        <CataloguePanel
+        <NavigatorPanel
           engine={engine}
           // Nothing is "current" in flight the way a subject is in the
           // planetarium: the ship is somewhere, and where it is going is a

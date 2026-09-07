@@ -1,4 +1,8 @@
-import { GENERATION_VERSIONS } from '@inertialref/universe'
+import {
+  GENERATION_VERSIONS,
+  type WorldMatch,
+  type WorldQuery,
+} from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
 import {
   GALAXY_VIEWS,
@@ -18,6 +22,7 @@ import {
   RingBufferSink,
 } from '@inertialref/shared'
 import { circularSpeed } from '@inertialref/physics'
+import { formatSeed } from '@inertialref/procedural'
 import {
   type FrameId,
   Quaternion as Q,
@@ -45,6 +50,7 @@ import {
   systemFrameId,
   systemId,
   type SystemId,
+  type SystemStub,
   surveySites,
   systemsWithin,
   walkBodies,
@@ -67,9 +73,18 @@ import {
   type RenderScene,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import type { PoolStats, WorkerPool } from '@inertialref/workers'
+import {
+  encodeStub,
+  findWorldsTask,
+  type PoolStats,
+  type WorkerPool,
+} from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
-import { describeDrift, type VersionDrift } from '@inertialref/protocol'
+import {
+  describeDrift,
+  encodeUniverseVector,
+  type VersionDrift,
+} from '@inertialref/protocol'
 import {
   runCapabilityChecks,
   summarizeCapabilities,
@@ -85,9 +100,16 @@ import {
   type WorldInspection,
 } from './inspect.ts'
 import {
+  DEFAULT_SEARCH_LIGHT_YEARS,
+  DEFAULT_SEARCH_LIMIT,
+  SEARCH_BATCH,
   currentSystemOf,
   resolveDestination,
+  type SearchEntry,
+  searchEntries,
+  searchIndexVersion,
   searchTargets,
+  targetsFor,
   type TravelTarget,
   type TravelTargetOptions,
   travelTargets,
@@ -520,6 +542,200 @@ export class GameHarness {
       (options.origin === 'observer' ? this.observatory.eye : null) ??
       this.#here()
     return searchTargets(this.world, from, text)
+  }
+
+  /**
+   * Rows for addresses the caller already holds, nearest first not implied —
+   * the order is the caller's.
+   *
+   * The third question, after `targets` and `search`: a fuzzy index in the
+   * navigator answers with addresses, and this turns them back into the rows
+   * the survey draws, measured from the same eye. `b:2` and friends resolve
+   * against the system the player is in, exactly as `goTo` reads them; an
+   * address that names nothing is dropped rather than thrown, so one stale
+   * entry cannot empty the list.
+   */
+  rowsFor(
+    addresses: readonly string[],
+    options: TravelTargetOptions = {},
+  ): readonly TravelTarget[] {
+    const from =
+      (options.origin === 'observer' ? this.observatory.eye : null) ??
+      this.#here()
+    return targetsFor(
+      this.world,
+      from,
+      addresses,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+  }
+
+  /**
+   * Every string a place can be found by, paired with its address.
+   *
+   * What a fuzzy matcher indexes. The matcher itself lives in the client — it
+   * is a third-party dependency, which `packages/*` may not carry — so the
+   * boundary is this list: names out, addresses back in through `rowsFor`.
+   * `searchIndexVersion` says when the list has changed.
+   */
+  searchEntries(): readonly SearchEntry[] {
+    return searchEntries(this.world)
+  }
+
+  searchIndexVersion(): string {
+    return searchIndexVersion(this.world)
+  }
+
+  /**
+   * Search the volume for bodies that answer a query, in batches.
+   *
+   * The other question a catalog can be asked. `search` answers "what is
+   * called this" from an index; this answers "what is out there *like* this",
+   * and it cannot come from an index because the bodies do not exist until
+   * they are generated. So it is a sweep, and the sweep is the cost: a system
+   * is milliseconds to build and a body is microseconds to test.
+   *
+   * **It answers in batches rather than once.** The volume is cut into jobs
+   * and each is submitted separately, so rows arrive while the search is still
+   * running and a fifty-light-year question is not a blank panel for two
+   * seconds. That shape is forced as well as chosen: a job is one request and
+   * one response, with no partial-result message in the protocol, so streaming
+   * has to be several jobs rather than one job that reports as it goes.
+   *
+   * `cancel` stops it — the queued jobs are dropped and the running ones are
+   * told through `TaskContext.cancelled`, which `findWorlds` polls once per
+   * system. A second question therefore does not wait behind the first one's
+   * whole volume.
+   *
+   * With no pool the batches run inline, on this thread, in order. That is the
+   * headless runner and it is slow rather than wrong, which is the same
+   * bargain every other task here makes.
+   */
+  findWorlds(
+    query: WorldQuery,
+    options: {
+      lightYears?: number
+      /**
+       * How many of the nearest matches to keep.
+       *
+       * A sweep is bounded by the volume, and the volume is not bounded by
+       * anything a reader will read: "rocky, within 150 light years" answers
+       * with over a hundred thousand bodies. Keeping them all is twenty
+       * megabytes of records nobody scrolls to, and re-sorting them on every
+       * batch is the main thread's whole budget — measured, it dropped the
+       * simulation clock to a fifth of real time while the sweep ran. So the
+       * nearest are kept and the rest are counted.
+       */
+      limit?: number
+      /**
+       * Called as each batch answers: the nearest matches so far, how far
+       * through the sweep it is, and how many were found in total — which is
+       * not `found.length` once the cap has bitten, and saying so is the
+       * difference between a list that is short and a search that found little.
+       */
+      onBatch?: (
+        found: readonly WorldMatch[],
+        progress: number,
+        total: number,
+      ) => void
+    } = {},
+  ): {
+    /** How many systems the sweep will walk. Zero means there is nothing to do. */
+    readonly systems: number
+    readonly cancel: () => void
+    readonly done: Promise<readonly WorldMatch[]>
+  } {
+    const from = this.observatory.eye ?? this.#here()
+    const stubs = systemsWithin(
+      this.world.galaxySeed,
+      this.world.catalog,
+      from,
+      (options.lightYears ?? DEFAULT_SEARCH_LIGHT_YEARS) * LIGHT_YEAR,
+    )
+    /*
+     * Nearest first, so the batches that answer first are the ones a reader
+     * cares about most. `systemsWithin` sorts by id to stay a pure function of
+     * its query; the ordering that matters *here* is a display decision and is
+     * made here, which is the same split `orbitalOrder` makes.
+     */
+    const ordered = [...stubs].sort(
+      (a, b) => UV.distance(a.position, from) - UV.distance(b.position, from),
+    )
+    const pool = this.#host.pool()
+    const jobs: {
+      readonly result: Promise<{ readonly matches: readonly WorldMatch[] }>
+      readonly cancel: () => void
+    }[] = []
+    const limit = Math.max(1, options.limit ?? DEFAULT_SEARCH_LIMIT)
+    let stopped = false
+    let total = 0
+    let found: WorldMatch[] = []
+    const wire = encodeUniverseVector(from)
+    const seed = formatSeed(this.world.rootSeed)
+
+    const batches: (readonly SystemStub[])[] = []
+    for (let at = 0; at < ordered.length; at += SEARCH_BATCH)
+      batches.push(ordered.slice(at, at + SEARCH_BATCH))
+
+    let answered = 0
+    const run = async (): Promise<readonly WorldMatch[]> => {
+      for (const batch of batches) {
+        if (stopped) break
+        const payload = {
+          seed,
+          galaxy: this.world.galaxy as string,
+          stubs: batch.map(encodeStub),
+          query,
+          from: wire,
+        }
+        const job =
+          pool === null
+            ? {
+                result: Promise.resolve(
+                  findWorldsTask.run(payload, {
+                    cancelled: () => stopped,
+                  }),
+                ),
+                cancel: () => {},
+              }
+            : pool.submit(findWorldsTask, payload)
+        jobs.push(job)
+        void Promise.resolve(job.result)
+          .then((answer) => {
+            if (stopped) return
+            total += answer.matches.length
+            found.push(...answer.matches)
+            /*
+             * Trimmed at twice the cap rather than at the cap, so the sort is
+             * amortized: cutting on every batch would sort a nearly-full array
+             * every time, and cutting at twice it sorts once per capful.
+             */
+            if (found.length > limit * 2) {
+              found.sort((a, b) => a.lightYears - b.lightYears)
+              found = found.slice(0, limit)
+            }
+            answered += 1
+            options.onBatch?.(found, answered / batches.length, total)
+          })
+          .catch(() => {
+            // A batch that failed is a gap in an answer, not a failed search.
+            // Counting it keeps the progress honest about being finished.
+            answered += 1
+          })
+      }
+      await Promise.allSettled(jobs.map((job) => job.result))
+      found.sort((a, b) => a.lightYears - b.lightYears)
+      return found.slice(0, limit)
+    }
+
+    return {
+      systems: ordered.length,
+      cancel: () => {
+        stopped = true
+        for (const job of jobs) job.cancel()
+      },
+      done: run(),
+    }
   }
 
   /**
@@ -1597,6 +1813,30 @@ export class GameHarness {
   }
 
   /**
+   * Fly the camera from orbit down to a point on the ground, and stand there
+   * facing the star.
+   *
+   * The eased entry `visit` is not: the camera flies the ballistic arc over
+   * `seconds` of wall clock and the frame after this returns is the first
+   * frame of the descent, not the last. `ir.ascend()` abandons one in flight.
+   * Degrees at this boundary, radians below it, like `visit`.
+   */
+  drop(
+    latitude: number,
+    longitude: number,
+    options: { address?: string; seconds?: number } = {},
+  ): ObserverStatus {
+    return this.observatory.drop(
+      options.address,
+      {
+        latitude: (latitude * Math.PI) / 180,
+        longitude: (longitude * Math.PI) / 180,
+      },
+      options.seconds === undefined ? {} : { seconds: options.seconds },
+    )
+  }
+
+  /**
    * Fly a descent on paper and report what the streamer would be asked for.
    *
    * The unit of terrain measurement. Pure arithmetic — no world state changes,
@@ -1845,6 +2085,7 @@ export class GameHarness {
       '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
+      '  ir.rowsFor([address, …])      those places, as listing rows',
       '  ir.goTo(target)               a system id or a body address; does the right thing',
       '  ir.loadSystem(id)             generate a system without traveling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',
@@ -1875,6 +2116,7 @@ export class GameHarness {
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',
       '  ir.ascend()                   back to orbit, at the framing you left',
+      '  ir.drop(latDeg, lonDeg, {address, seconds})  fly from orbit down to the ground, facing the star',
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  the live streamer, and the rocks on it',

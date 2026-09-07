@@ -6,7 +6,9 @@ import {
   type BodyKind,
   type BodyProvenance,
   bodyFrameId,
+  type CatalogStar,
   type EntityId,
+  findBody,
   formatAddress,
   formatSpectralType,
   parentAddress,
@@ -14,6 +16,7 @@ import {
   type GalaxyId,
   isLandable,
   parseAddress,
+  resolveSystem,
   type StarSystem,
   type SystemId,
   systemId,
@@ -240,6 +243,41 @@ export interface TravelTargetOptions {
 /** Default survey radius. Wide enough to hold the nearest half-dozen stars. */
 const DEFAULT_SURVEY_LIGHT_YEARS = 8
 
+/**
+ * How far a world search sweeps when it is not told.
+ *
+ * Twenty-five light years, which is the catalog's own complete radius — inside
+ * it every star is a real one and the answers are about places that exist,
+ * which is the sweep worth defaulting to. Wider is a deliberate act, and the
+ * panel offers it.
+ */
+export const DEFAULT_SEARCH_LIGHT_YEARS = 25
+
+/**
+ * How many systems one search job walks.
+ *
+ * The number decides how often the list grows, and both ends of the range are
+ * bad. Too large and a fifty-light-year sweep is a handful of jobs, so rows
+ * arrive in three lumps and the last worker holds the whole answer; too small
+ * and the queue is thousands of jobs whose per-job overhead — a structured
+ * clone of the batch each way — is a real share of the work. Thirty-two
+ * systems is about a quarter-second of generating, which is close enough to a
+ * frame's worth of new rows to read as filling in.
+ */
+export const SEARCH_BATCH = 32
+
+/**
+ * How many of the nearest matches a search keeps.
+ *
+ * A thousand, and the number is about reading rather than about memory. The
+ * far end of a sweep's answer is the part nobody reaches: results come back
+ * nearest first, and a reader looking for somewhere to go stops long before
+ * the thousandth. What the cap buys is a bounded sort — the accumulated array
+ * is re-ordered as batches land, and unbounded that is the main thread's whole
+ * budget on a wide sweep.
+ */
+export const DEFAULT_SEARCH_LIMIT = 1_000
+
 export function travelTargets(
   world: World,
   from: UniverseVector,
@@ -337,51 +375,273 @@ export function travelTargets(
     })
     if (system === undefined) continue
 
-    for (const body of walkBodies(system)) {
-      // A body's position is its frame's pose, not its orbital elements: the
-      // elements say where it is relative to its primary, and the listing wants
-      // how far away it is from the player, which is a different question once
-      // the player is in another system entirely.
-      const position = world.frames.pose(
-        bodyFrameId(body.address),
-        time,
-      ).position
-      const bodyDistance = UV.distance(position, from)
-      targets.push({
-        kind: 'body',
-        address: formatAddress(body.address),
-        name: body.name,
-        system: id,
-        // A planet's address has one index, a moon's has two.
-        depth: body.address.kind === 'body' ? body.address.body.length : 1,
-        detail: describeBody(body),
-        distance: bodyDistance,
-        distanceText: formatReading(bodyDistance),
-        landable: isLandable(body),
-        loaded: true,
-        // The body's own, not its system's: Sol is observed and Ganymede is
-        // observed, but every moon of a catalog star is currently a projection.
-        provenance: body.provenance,
-        bodyKind: body.kind,
-        spectralType: null,
-        colour: null,
-        radius: body.radius,
-        semiMajorAxis: body.elements.semiMajorAxis,
-        children: body.moons.length,
-        /*
-         * `parentAddress`, which is `universe`'s own — it already answers the
-         * depth-1 case with the system's address. Slicing the path here and
-         * concatenating `g:…/s:…` for the top level was a second copy of the
-         * address grammar, and one it would be silent about breaking: a changed
-         * separator leaves every `parent` failing to match any `address`, which
-         * `orbitalOrder` reads as "no parent is present" and flattens the tree.
-         */
-        parent: formatAddress(parentAddress(body.address) ?? systemAddress),
-      })
-    }
+    for (const body of walkBodies(system))
+      targets.push(bodyTarget(world, from, time, system, body))
   }
 
   return targets
+}
+
+/**
+ * One body, as a row.
+ *
+ * Shared between the survey and `targetsFor`, so a body reached by sweeping
+ * the sky and the same body reached by typing its name are one row and not two
+ * projections of it that agree by luck.
+ */
+function bodyTarget(
+  world: World,
+  from: UniverseVector,
+  time: number,
+  system: StarSystem,
+  body: Body,
+): TravelTarget {
+  // A body's position is its frame's pose, not its orbital elements: the
+  // elements say where it is relative to its primary, and the listing wants
+  // how far away it is from the player, which is a different question once
+  // the player is in another system entirely.
+  const position = world.frames.pose(bodyFrameId(body.address), time).position
+  const bodyDistance = UV.distance(position, from)
+  const systemAddress: UniverseAddress = {
+    kind: 'system',
+    galaxy: world.galaxy,
+    system: system.id,
+  }
+  return {
+    kind: 'body',
+    address: formatAddress(body.address),
+    name: body.name,
+    system: system.id,
+    // A planet's address has one index, a moon's has two.
+    depth: body.address.kind === 'body' ? body.address.body.length : 1,
+    detail: describeBody(body),
+    distance: bodyDistance,
+    distanceText: formatReading(bodyDistance),
+    landable: isLandable(body),
+    loaded: true,
+    // The body's own, not its system's: Sol is observed and Ganymede is
+    // observed, but every moon of a catalog star is currently a projection.
+    provenance: body.provenance,
+    bodyKind: body.kind,
+    spectralType: null,
+    colour: null,
+    radius: body.radius,
+    semiMajorAxis: body.elements.semiMajorAxis,
+    children: body.moons.length,
+    /*
+     * `parentAddress`, which is `universe`'s own — it already answers the
+     * depth-1 case with the system's address. Slicing the path here and
+     * concatenating `g:…/s:…` for the top level was a second copy of the
+     * address grammar, and one it would be silent about breaking: a changed
+     * separator leaves every `parent` failing to match any `address`, which
+     * `orbitalOrder` reads as "no parent is present" and flattens the tree.
+     */
+    parent: formatAddress(parentAddress(body.address) ?? systemAddress),
+  }
+}
+
+/**
+ * One system, as a row, from whichever record the world has for it.
+ *
+ * Three records can describe a system — the loaded `StarSystem`, the
+ * `CatalogStar`, and a procedural stub — and a listing has to draw the same
+ * row from any of them. The loaded record wins because it alone knows the
+ * planet count; the catalog star carries the measured colour and the confirmed
+ * planets; the stub is what a generated star has. `undefined` when the id
+ * names nothing at all.
+ */
+function systemTarget(
+  world: World,
+  from: UniverseVector,
+  id: SystemId,
+): TravelTarget | undefined {
+  const system = world.system(id)
+  const star = world.catalog.get(id)
+  if (star !== undefined) return catalogStarTarget(world, from, star, system)
+  const stub = resolveSystem(world.galaxySeed, world.catalog, id)
+  if (stub === undefined) return undefined
+  const position = system?.position ?? stub.position
+  const distance = UV.distance(position, from)
+  return {
+    kind: 'system',
+    address: `g:${world.galaxy}/s:${id}`,
+    name: system?.name ?? stub.name,
+    system: id,
+    depth: 0,
+    detail:
+      system === undefined
+        ? `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`
+        : `${system.star.spectralType} · ${planetCount(system)} planets`,
+    distance,
+    distanceText: formatReading(distance),
+    landable: false,
+    loaded: system !== undefined,
+    provenance: 'projected',
+    bodyKind: null,
+    spectralType: system?.star.spectralType ?? stub.spectralType,
+    colour: system?.star.colour ?? stub.colour,
+    radius: system?.star.radius ?? 0,
+    semiMajorAxis: 0,
+    children: system === undefined ? 0 : planetCount(system),
+    parent: null,
+  }
+}
+
+/**
+ * Rows for the addresses a caller already holds.
+ *
+ * The third question a listing can ask, after "what is near me" and "what is
+ * called this": *these ones, as rows*. A fuzzy index over names answers with
+ * addresses and nothing else — an index that carried the rows would be a copy
+ * of the survey that goes stale as the camera moves — so the panel that owns
+ * the index hands the addresses back here and gets the same rows the survey
+ * draws, with distances measured from the same eye.
+ *
+ * Anything `resolveDestination` accepts is accepted: `SOL`, `s:SOL/b:2`, the
+ * full `g:` form, and `b:2` relative to `currentSystem`. An address that names
+ * nothing is skipped rather than thrown, because one bad entry in a list of
+ * forty should cost that entry and not the listing. A body row needs its
+ * system generated — a body has no record before that — so a body of an
+ * unloaded system is skipped too.
+ */
+export function targetsFor(
+  world: World,
+  from: UniverseVector,
+  addresses: readonly string[],
+  currentSystem: SystemId | null = null,
+): readonly TravelTarget[] {
+  const time = world.clock.time
+  const rows: TravelTarget[] = []
+  for (const text of addresses) {
+    let destination: TravelDestination
+    try {
+      destination = resolveDestination(text, world.galaxy, currentSystem)
+    } catch {
+      continue
+    }
+    if (destination.kind === 'system') {
+      const row = systemTarget(world, from, destination.system)
+      if (row !== undefined) rows.push(row)
+      continue
+    }
+    const system = world.system(destination.system)
+    if (system === undefined || destination.address.kind !== 'body') continue
+    const body = findBody(system, destination.address.body)
+    if (body === undefined) continue
+    rows.push(bodyTarget(world, from, time, system, body))
+  }
+  return rows
+}
+
+/** One string a place can be found by, and the address it belongs to. */
+export interface SearchEntry {
+  readonly address: string
+  readonly text: string
+}
+
+/**
+ * Every name the world can be searched by, for a caller building an index.
+ *
+ * The catalog's own `search` is exact-then-prefix-then-substring over
+ * normalized keys, which is right for a console and short of what a search box
+ * wants: a typo, two words out of order, or a planet's name. Ranking those is
+ * the job of a fuzzy matcher, and a matcher wants a flat list of strings. This
+ * is that list — every designation of every catalog star, the sky's included,
+ * and the name of every body in every loaded system — each paired with the
+ * address the match should open. The matcher never sees the world; the world
+ * never sees the matcher.
+ *
+ * Bodies only from loaded systems, because a body has no name before its
+ * system is generated. That is a real limit and `searchIndexVersion` says
+ * when it moves.
+ */
+export function searchEntries(world: World): readonly SearchEntry[] {
+  const entries: SearchEntry[] = []
+  for (const star of world.catalog.stars) {
+    const address = `g:${world.galaxy}/s:${star.id}`
+    const seen = new Set<string>()
+    for (const designation of star.designations) {
+      if (seen.has(designation.text)) continue
+      seen.add(designation.text)
+      entries.push({ address, text: designation.text })
+    }
+    if (!seen.has(star.id)) entries.push({ address, text: star.id })
+  }
+  for (const system of world.loadedSystems()) {
+    if (world.catalog.get(system.id) === undefined) {
+      // A generated star has no designation but its id; without this row a
+      // system flown to by address could not be found again by the same
+      // string it was reached by.
+      entries.push({
+        address: `g:${world.galaxy}/s:${system.id}`,
+        text: system.name,
+      })
+    }
+    for (const body of walkBodies(system))
+      entries.push({ address: formatAddress(body.address), text: body.name })
+  }
+  return entries
+}
+
+/**
+ * A key that changes exactly when `searchEntries` would.
+ *
+ * The catalog is a value and never changes under a running world; the loaded
+ * set does, every time the camera crosses into a system. Building a 24,000
+ * string index on every poll is the cost this avoids, and comparing the two
+ * lists to find out whether to rebuild costs about as much as rebuilding.
+ */
+export function searchIndexVersion(world: World): string {
+  const loaded = world
+    .loadedSystems()
+    .map((system) => system.id as string)
+    .sort()
+  return `${world.catalog.version}|${loaded.join(',')}`
+}
+
+/** The projection of a catalog star onto a row, loaded or not. */
+function catalogStarTarget(
+  world: World,
+  from: UniverseVector,
+  star: CatalogStar,
+  system: StarSystem | undefined,
+): TravelTarget {
+  const position = system?.position ?? star.position
+  const distance = UV.distance(position, from)
+  return {
+    kind: 'system' as const,
+    address: `g:${world.galaxy}/s:${star.id}`,
+    name: star.designations[0]?.text ?? star.id,
+    system: star.id,
+    depth: 0,
+    /*
+     * `formatSpectralType`, not the object.
+     *
+     * `CatalogStar.spectralType` is the *parsed* type — a record of class,
+     * subclass and luminosity — and interpolating it wrote `[object Object]`
+     * into every search result for a star that was not loaded, which is most
+     * of them. The loaded branch reads `system.star.spectralType`, which is
+     * the string, and the two looked identical in the source.
+     */
+    detail:
+      system === undefined
+        ? `${formatSpectralType(star.spectralType)} · ${star.physical.solarMasses.toFixed(2)} M☉`
+        : `${system.star.spectralType} · ${planetCount(system)} planets`,
+    distance,
+    distanceText: formatReading(distance),
+    landable: false,
+    loaded: system !== undefined,
+    // Everything the catalog holds is a star somebody has observed. That is
+    // what being in it means.
+    provenance: 'observed' as const,
+    bodyKind: null,
+    spectralType: formatSpectralType(star.spectralType),
+    colour: system?.star.colour ?? star.physical.colour,
+    radius: system?.star.radius ?? 0,
+    semiMajorAxis: 0,
+    children: system === undefined ? star.planets.length : planetCount(system),
+    parent: null,
+  }
 }
 
 /**
@@ -406,46 +666,9 @@ export function searchTargets(
   const loaded = new Map<SystemId, StarSystem>(
     world.loadedSystems().map((s) => [s.id, s]),
   )
-  return world.catalog.search(text, limit).map((star) => {
-    const system = loaded.get(star.id)
-    const position = system?.position ?? star.position
-    const distance = UV.distance(position, from)
-    return {
-      kind: 'system' as const,
-      address: `g:${world.galaxy}/s:${star.id}`,
-      name: star.designations[0]?.text ?? star.id,
-      system: star.id,
-      depth: 0,
-      /*
-       * `formatSpectralType`, not the object.
-       *
-       * `CatalogStar.spectralType` is the *parsed* type — a record of class,
-       * subclass and luminosity — and interpolating it wrote `[object Object]`
-       * into every search result for a star that was not loaded, which is most
-       * of them. The loaded branch reads `system.star.spectralType`, which is
-       * the string, and the two looked identical in the source.
-       */
-      detail:
-        system === undefined
-          ? `${formatSpectralType(star.spectralType)} · ${star.physical.solarMasses.toFixed(2)} M☉`
-          : `${system.star.spectralType} · ${planetCount(system)} planets`,
-      distance,
-      distanceText: formatReading(distance),
-      landable: false,
-      loaded: system !== undefined,
-      // Everything the catalog holds is a star somebody has observed. That is
-      // what being in it means.
-      provenance: 'observed' as const,
-      bodyKind: null,
-      spectralType: formatSpectralType(star.spectralType),
-      colour: system?.star.colour ?? star.physical.colour,
-      radius: system?.star.radius ?? 0,
-      semiMajorAxis: 0,
-      children:
-        system === undefined ? star.planets.length : planetCount(system),
-      parent: null,
-    }
-  })
+  return world.catalog
+    .search(text, limit)
+    .map((star) => catalogStarTarget(world, from, star, loaded.get(star.id)))
 }
 
 function describeBody(body: Body): string {

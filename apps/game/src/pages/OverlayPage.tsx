@@ -12,12 +12,26 @@ export function OverlayPage({
   subtitle,
   wide = false,
   modal = false,
+  fill = false,
   children,
 }: {
   title: string
   subtitle?: string
   wide?: boolean
   modal?: boolean
+  /**
+   * Give the body the dialog's remaining height and let the content scroll
+   * itself, instead of scrolling the body.
+   *
+   * For a dialog holding a long list beside controls that must stay put. The
+   * default is right for every dialog whose content is prose or a form — the
+   * body scrolls and the dialog is as tall as it needs to be — and it is wrong
+   * for a windowed list, which needs a scroll container with a *definite*
+   * height to measure its window against. Without one the list has no bound to
+   * window to and renders every row, which is the cost the windowing exists to
+   * avoid.
+   */
+  fill?: boolean
   children: ReactNode
 }) {
   const { close } = useOverlay()
@@ -78,7 +92,13 @@ export function OverlayPage({
           <X />
         </Button>
       </header>
-      <div className="min-h-0 overflow-y-auto px-4 py-3">{children}</div>
+      <div
+        className={`min-h-0 px-4 py-3 ${
+          fill ? 'flex flex-1 flex-col overflow-hidden' : 'overflow-y-auto'
+        }`}
+      >
+        {children}
+      </div>
     </motion.div>
   )
 

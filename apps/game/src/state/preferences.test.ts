@@ -5,7 +5,7 @@ import { isBoolean, numberWithin, oneOf } from './accept.ts'
 import * as preferences from './preferences.ts'
 import {
   CAMERA_LENS,
-  CATALOGUE_CLASSES,
+  NAVIGATOR_CLASSES,
   CONTROLS_KEYMAP,
   DOCK_PANES,
   EXPORT_APP,
@@ -281,7 +281,7 @@ describe('an import', () => {
   })
 
   it('rejects a class list naming something no chip answers to', () => {
-    expect(CATALOGUE_CLASSES.accept(['stars'])).toBe(true)
-    expect(CATALOGUE_CLASSES.accept(['stars', 'wormholes'])).toBe(false)
+    expect(NAVIGATOR_CLASSES.accept(['stars'])).toBe(true)
+    expect(NAVIGATOR_CLASSES.accept(['stars', 'wormholes'])).toBe(false)
   })
 })

@@ -215,6 +215,17 @@ means is arithmetic in `apps/game/src/dock/layout.ts` and `dock/floating.ts`.
 The backend is chosen once at mount from `(pointer: coarse)` because
 `DndProvider` cannot be handed a different one. [ADR-0012](../adr/0012-dockable-panels.md).
 
+**Two headless libraries carry the long lists.**
+`@tanstack/react-virtual` windows the navigator's tree and the catalog
+dialog's results — at fifty light years the survey is fourteen hundred systems
+and reconciling them twice a second beside the render loop is the stutter, not
+the arithmetic. It is headless, so the tree keeps its own markup, its single tab
+stop and its keyboard. `@leeoniya/ufuzzy` ranks the navigator's search: the
+catalog's own index is exact-then-prefix-then-substring, which is right for an
+address and cannot find `proxmia`. It returns match ranges rather than markup,
+which is what lets a row light the matched characters without
+`dangerouslySetInnerHTML` over catalog data.
+
 **shadcn/ui** is the overlay control set. Do not hand-roll a control the
 registry has. Go through `hud/Action.tsx`, `hud/SwitchRow.tsx`, or
 `hud/TransportButton.tsx`. They call `releaseFocus` after a pointer click so

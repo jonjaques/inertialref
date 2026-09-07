@@ -1,4 +1,4 @@
-import type { Neighbour } from './catalogue.ts'
+import type { Neighbour } from './navigator.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { starColour } from './kinds.ts'
 
@@ -17,7 +17,7 @@ import { starColour } from './kinds.ts'
  * flies the camera there, which makes this the fastest control in the mode for
  * the one gesture it is worth being fast at.
  *
- * The scale is `√r`, argued in `catalogue.ts` § `neighbours`. The short version
+ * The scale is `√r`, argued in `navigator.ts` § `neighbours`. The short version
  * is that a survey's volume grows as r³, so linearly the whole neighborhood
  * piles into the left tenth of the rail.
  */
