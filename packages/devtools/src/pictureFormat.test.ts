@@ -8,9 +8,19 @@ import {
   encodePictures,
   mergePictures,
 } from './pictureFormat.ts'
-import { PICTURES } from './pictures.ts'
+import { PICTURES, type PictureProcessing } from './pictures.ts'
 import { snapshot } from '@inertialref/simulation'
 import { UV, Vec, Quaternion as Q } from '@inertialref/spatial'
+import bundledPictures from './pictures.json' with { type: 'json' }
+
+const enhanced = {
+  mode: 'enhanced' as const,
+  look: 'neutral' as const,
+  compensation: 0,
+  rate: 1,
+  range: { bright: 24, dark: 16 },
+  balance: 6500,
+}
 
 function rig() {
   let lens = LENS_PRESETS.flight
@@ -29,6 +39,100 @@ function rig() {
 }
 
 describe('portable pictures', () => {
+  it('maps version 1 to Enhanced while preserving its pose, time and lens', () => {
+    const decoded = decodePictures(bundledPictures)
+    expect(decoded).toEqual(
+      bundledPictures.pictures.map((picture) => ({
+        ...picture,
+        processing: enhanced,
+      })),
+    )
+  })
+  it('writes version 2 with processing and rejects invalid processing before import', () => {
+    const picture = { ...PICTURES[0]!, processing: enhanced }
+    const encoded = JSON.parse(encodePictures([picture]))
+    expect(encoded.version).toBe(2)
+    expect(decodePictures(encoded)).toEqual([picture])
+    for (const processing of [
+      undefined,
+      null,
+      { ...enhanced, mode: 'composite' },
+      { ...enhanced, look: 'natural' },
+      { ...enhanced, compensation: NaN },
+      { ...enhanced, compensation: 8.1 },
+      { ...enhanced, rate: -1 },
+      { ...enhanced, rate: 4.1 },
+      { ...enhanced, balance: 1999 },
+      { ...enhanced, range: { bright: 33, dark: 16 } },
+      { ...enhanced, range: { bright: 24, dark: -1 } },
+      { ...enhanced, range: { bright: 24, dark: 16, history: 1 } },
+      { ...enhanced, peak: 2 },
+      { ...enhanced, ev: 12 },
+      { ...enhanced, output: 'display-p3' },
+    ]) {
+      expect(() =>
+        decodePictures({
+          ...encoded,
+          pictures: [{ ...picture, processing }],
+        }),
+      ).toThrow(/Invalid preset/)
+    }
+    expect(() => decodePictures({ ...encoded, version: 1 })).toThrow()
+  })
+  it('captures and restores selected processing without changing canonical state', () => {
+    const liveRange = { bright: 10, dark: 12 }
+    let processing: PictureProcessing = {
+      ...enhanced,
+      mode: 'automatic',
+      compensation: 1.5,
+      rate: 0.5,
+      range: liveRange,
+      balance: 4800,
+    }
+    const session = openSession({
+      seed: 'inertialref',
+      catalog: TEST_CATALOG,
+      workers: () => createInlineWorker(createTaskRegistry()),
+      render: {
+        cameraProcessing: () => processing,
+        setCameraProcessing: (next) => {
+          processing = next
+        },
+      },
+    })
+    try {
+      session.harness.look('s:SOL/b:2', { ease: false })
+      const hash = session.world.stateHash()
+      const picture = session.harness.capturePicture('automatic', 'Automatic')
+      expect(picture.processing).toEqual(processing)
+      const saved = { ...processing, range: { ...processing.range } }
+      liveRange.bright = 0
+      expect(picture.processing).toEqual(saved)
+      processing = { ...processing, mode: 'manual', balance: 6500 }
+      session.harness.takePicture(picture)
+      expect(processing).toEqual(saved)
+      expect(session.world.stateHash()).toBe(hash)
+      const invalid = { ...picture, address: 's:SOL/b:999' }
+      expect(() => session.harness.takePicture(invalid)).toThrow()
+      expect(processing).toEqual(saved)
+    } finally {
+      session.dispose()
+    }
+  })
+  it('retains restored processing in a headless host', () => {
+    const session = rig()
+    try {
+      session.harness.look('s:SOL/b:2', { ease: false })
+      const picture = session.harness.capturePicture('manual', 'Manual')
+      const processing = { ...enhanced, mode: 'manual' as const, balance: 4800 }
+      session.harness.takePicture({ ...picture, processing })
+      expect(session.harness.capturePicture('copy', 'Copy').processing).toEqual(
+        processing,
+      )
+    } finally {
+      session.dispose()
+    }
+  })
   it('keeps an orbit camera beside the drawn body across date changes and navigation', () => {
     const session = rig()
     try {

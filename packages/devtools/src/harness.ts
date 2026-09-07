@@ -116,6 +116,11 @@ import {
   viewingAltitudeKm,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
+import {
+  captureCameraProcessing,
+  DEFAULT_PICTURE_PROCESSING,
+  type PictureProcessing,
+} from './pictureProcessing.ts'
 import { findShot, placeShot, SHOTS } from './shots.ts'
 import {
   CutsceneDirector,
@@ -237,6 +242,10 @@ export interface RenderHost {
    * camera to fit it to and the arithmetic is worth running anyway.
    */
   setFlightLens(lens: Lens): void
+  /** The player's settings, independent of cinematic and instrument staging. */
+  cameraProcessing(): PictureProcessing
+  /** Restore processing through the same preference owner as the camera panel. */
+  setCameraProcessing(processing: PictureProcessing): void
   /**
    * How many display pixels one CSS pixel is, on this host.
    *
@@ -296,6 +305,7 @@ export interface RenderHost {
  * otherwise win over the default and put a `?.` back into every reader.
  */
 export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
+  let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
   return {
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
@@ -304,6 +314,12 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
     lensView: overrides.lensView ?? (() => null),
     framingLens: overrides.framingLens ?? (() => LENS_PRESETS.flight),
     setFlightLens: overrides.setFlightLens ?? (() => {}),
+    cameraProcessing: overrides.cameraProcessing ?? (() => processing),
+    setCameraProcessing:
+      overrides.setCameraProcessing ??
+      ((next) => {
+        processing = captureCameraProcessing(next)
+      }),
     pixelRatio: overrides.pixelRatio ?? (() => 1),
     setChrome: overrides.setChrome ?? (() => {}),
     setLayers: overrides.setLayers ?? (() => {}),
@@ -1588,6 +1604,7 @@ export class GameHarness {
       address: this.#observatory.target!.address,
       framing,
       lens: { ...lens, focus: Number.isFinite(lens.focus) ? lens.focus : null },
+      processing: captureCameraProcessing(this.#host.render.cameraProcessing()),
     }
     if (!isPicture(picture))
       throw new Error('The shot needs a name and a valid camera and lens.')
@@ -1620,6 +1637,9 @@ export class GameHarness {
     )
     this.#observatory.validatePicture(picture.address, picture.framing)
     this.stopCutscene()
+    this.#host.render.setCameraProcessing(
+      captureCameraProcessing(picture.processing ?? DEFAULT_PICTURE_PROCESSING),
+    )
     this.#observatory.setTime(picture.time)
     if (picture.framing.kind === 'camera') {
       const lens = picture.lens!

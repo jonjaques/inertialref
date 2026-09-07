@@ -8,6 +8,12 @@ import type {
   SurfaceStance,
 } from '@inertialref/rendering'
 import { findComposition } from '@inertialref/rendering'
+import type { PictureProcessing } from './pictureProcessing.ts'
+export {
+  DEFAULT_PICTURE_PROCESSING,
+  captureCameraProcessing,
+  type PictureProcessing,
+} from './pictureProcessing.ts'
 
 /** Bundled planetarium shots use the same JSON decoder as personal imports. */
 
@@ -65,6 +71,8 @@ export interface Picture {
   readonly time: number
   /** Null focus represents infinity in JSON. */
   readonly lens?: Omit<Lens, 'focus'> & { readonly focus: number | null }
+  /** Absent in version 1, which restores the Enhanced defaults. */
+  readonly processing?: PictureProcessing
   readonly id: string
   readonly label: string
   /** One line: what the picture is, in the universe's voice. */
