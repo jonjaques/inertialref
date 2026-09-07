@@ -1,3 +1,4 @@
+import { GalaxySection } from './GalaxySection.tsx'
 import { AU, LIGHT_YEAR } from '@inertialref/shared'
 import {
   angularRadius,
@@ -44,7 +45,8 @@ import { ShotThumb } from './ShotThumb.tsx'
  * finger and no keyboard, so a preset is the only way to reach a framing that
  * would otherwise take a drag, a pinch and a phase solve.
  */
-export function PresetsPanel({ engine, onNotice }: PlanetariumContext) {
+export function PresetsPanel(context: PlanetariumContext) {
+  const { engine, onNotice } = context
   // The lens each card's fill is converted through: the one on screen, which
   // is the preference — a preset's fitted lens lands there too.
   const [lens] = usePersistentState(CAMERA_LENS)
@@ -66,6 +68,7 @@ export function PresetsPanel({ engine, onNotice }: PlanetariumContext) {
 
   return (
     <div className="flex flex-col gap-1">
+      <GalaxySection {...context} />
       <Section
         id="planetarium.presets.pictures"
         title="Pictures"

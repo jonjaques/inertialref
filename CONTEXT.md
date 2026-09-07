@@ -48,6 +48,11 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
 
+The galaxy preview now has fixed live face-on and edge-on planetarium
+instruments, using the M2 field through the scene and sensor. The field stays
+separate from active generation; dust and photometric calibration remain open
+([ADR-0032](docs/adr/0032-the-stellar-field.md)).
+
 ## Decisions that are expensive to reverse
 
 Full reasoning is in `docs/adr/`. The short version:
@@ -211,6 +216,16 @@ Every driving verb took an address and nothing produced one.
   throws on first render, which nothing else in the suite would notice.
 
 ## Bugs the tests found (worth not reintroducing)
+
+- **An axial GPU azimuth had the wrong sign.** On Metal, fast `atan2(-z, -x)`
+  at exactly x = 0 reversed the warp at +Z and shifted the arm strength from
+  0.064 to 0.98. Explicit axial values hold the TSL field and clipped rays to
+  the CPU reference; near-axis and kink checks keep the correction narrow.
+- **Depthless sensor passes warmed a depth attachment.** Three.js r185's
+  `compileAsync` reads renderer depth/stencil flags even for offscreen targets.
+  `warmSensorPass` now matches the target while issuing each compile and
+  restores the renderer afterward. The GPU regression counted a second
+  pipeline before the fix and none afterward.
 
 - **A cache keyed without the body, cleared without the queue.** `regionKey` is
   packed arithmetic over the region alone, so after a retarget a job still out
@@ -7791,6 +7806,62 @@ plates change and receive new versioned references. `VITEST_MAX_WORKERS=2 pnpm c
 tests, five slow tests, documentation and production builds. The headless
 self-test passes 12/12. All six 384-wide v2 plates were regenerated and
 visually checked in `.scratch/galaxy-m2/plates-v2`.
+
+## The disk reaches the sensor, and the rig starts clean (05 Sep 2026)
+
+M3 starts from PR #63 at `bdbfd93450dd38726e77478256a82ba12c074e18` on
+`codex/galaxy-the-disk-is-visible`, open in [PR #65](https://github.com/jonjaques/inertialref/pull/65)
+against PR #63’s branch. The CPU reference remains
+`galaxy-field@2`; the port is `galaxy-tsl@1`. The live external instrument and
+its depth/ownership limits are recorded in [ADR-0032](docs/adr/0032-the-stellar-field.md).
+
+The first browser view was washed out by the local Sun's relative-brightness
+glare. Lowering the exposure only revealed its ghosts. Isolating the volume
+showed that its radiance was correct: fixed external views now use physical
+star flux and the sensor PSF, while the ordinary camera keeps its prior look.
+The CPU/GPU comparison includes two seeds, nonzero fields, axes and their
+neighborhoods, arm kinks and the extrapolated join, plus 33 complete/clipped
+rays. The 1% bound is unchanged. GPU composition also checks a black foreground
+sphere, repeated deterministic frames and an odd-size resize.
+
+On a MacBook Air with a 10-core Apple M5 GPU and 32 GB shared memory, macOS
+26.6.2, Chrome 152, WebGPU/Metal, at 1920×1080 and DPR 1, the owned target is
+480×270 rgba16f: **1,036,800 bytes (0.989 MiB)**. The existing scene and sensor
+retain their own targets. Three batches of 40 submissions per view, through
+`ir.gpu(40)` with the animation loop held and the GPU queue drained at both
+ends, measured:
+
+| View    | Full sensor frame | Same frame without volume | Incremental volume and composition |
+| ------- | ----------------- | ------------------------- | ---------------------------------- |
+| Face-on | 14.66–14.69 ms    | 4.08–4.09 ms              | 10.58–10.61 ms                     |
+| Edge-on | 27.23–27.39 ms    | 4.08–4.09 ms              | 23.14–23.31 ms                     |
+
+Each measured 40-frame batch produced exactly 40 volume updates. These are
+wall-clock queue measurements including submission overhead, not timestamp
+queries; the output was extended Display P3 with headroom 2. The 2 ms volume
+target remains open. There is no temporal reuse, dust extinction, partial-ray
+foreground integration, or M6 bandpass calibration. r185's first-use cached
+function ordering rebuilds one integral pipeline after warming; subsequent
+frames add none. The full physical-GPU suite passes 69 tests in 17 files. In the live
+browser, a 65 m black sphere 500 m in front of the instrument masks the volume.
+Resizing to 953×617 produces a 239×155 target (296,360 bytes). Switching the
+canvas from extended P3 to standard sRGB retires the old target to zero owned
+bytes and resumes the same edge-on instrument with a new ready target.
+
+The driver now clears local storage and cookies before each invocation's boot.
+It leaves the app before clearing the current and requested origins so an
+already-running instance cannot retain or write back old preferences.
+`--keep-storage` retains them and permits a warm attach; IndexedDB saves and
+asset caches remain. A harmless storage marker and cookie survived the old
+default, disappeared under the new default, and survived
+`--keep-storage --fresh`. The shared drive skill and browser guide describe
+that contract.
+
+`VITEST_MAX_WORKERS=2 pnpm check` passes: 120 regular files / 1,723 tests,
+two slow files / five tests, documentation and production builds. The headless
+self-test passes 12/12. A newly launched clean Chrome session verifies resize
+and renderer remount without console errors; the only warning is the existing
+Three.js Clock deprecation.
 
 ## Known gaps
 

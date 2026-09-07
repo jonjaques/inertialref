@@ -105,14 +105,17 @@ port, so it needs no focus and does not touch the browser a person is using.
 ```bash
 node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:5')" \
                        --wait 3000 --shot saturn.jpg
-node scripts/drive.mjs --sample 240 --sample-js "ir.terrain()"
+node scripts/drive.mjs --keep-storage --sample 240 --sample-js "ir.terrain()"
 node scripts/drive.mjs --down
 ```
 
 Steps run in the order written, in one session, and Chrome stays up between
-invocations — boot is about five seconds and every call after the first attaches
-to the booted page in well under one. Batch the steps rather than paying a
-process per question. `--help` lists them all.
+calls. Each invocation clears local storage and cookies, then boots the requested
+page. `--keep-storage` retains them and permits attaching to the booted page;
+`--fresh` still forces a reload when combined with it. IndexedDB saves, asset
+caches and service workers are retained. Batch setup and measurements in one
+invocation when they must share state. `--reload` steps keep that invocation's
+storage.
 
 Run shutdown separately. `--down` exits before step processing, so a command
 containing both `--js` and `--down` closes Chrome without evaluating the script.

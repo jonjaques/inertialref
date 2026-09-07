@@ -1,3 +1,4 @@
+import { exposurePinnedToLens } from '@inertialref/rendering'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
@@ -40,7 +41,11 @@ export function Sensor({ engine }: { engine: GameEngine }) {
         lens: engine.lens,
         settings: engine.sensorSettings,
         time: engine.snapshot?.renderTime ?? 0,
-        pinned: engine.cinematic?.effects.exposure ?? null,
+        pinned:
+          engine.cinematic?.effects.exposure ??
+          (engine.galaxyView === null
+            ? null
+            : exposurePinnedToLens(engine.lens)),
         headroom: engine.gl?.description.headroom ?? 1,
         motionBlur: engine.presentation.resolved().motionBlur,
         noiseTick: Math.floor(

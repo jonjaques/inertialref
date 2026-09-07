@@ -25,7 +25,14 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
   useTimedFrame('sunFlare', () => {
     const scene = engine.scene()
     const star = scene?.stars[0]
-    if (!engine.lensFlare || scene == null || star === undefined) {
+    // The external instrument has no relative-brightness solar glare. Its
+    // unresolved stars feed the sensor PSF with their physical flux instead.
+    if (
+      !engine.lensFlare ||
+      engine.galaxyView !== null ||
+      scene == null ||
+      star === undefined
+    ) {
       flare.group.visible = false
       return
     }

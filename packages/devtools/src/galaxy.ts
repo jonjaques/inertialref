@@ -39,11 +39,33 @@ export interface GalaxyPlate {
   readonly samples: number
 }
 
+export interface GalaxyRenderReport {
+  readonly active: boolean
+  readonly ready: boolean
+  readonly fieldVersions: typeof GALAXY_FIELD_VERSIONS
+  readonly kernelVersion: string
+  readonly normalization: number
+  readonly width: number
+  readonly height: number
+  readonly targetBytes: number
+  readonly resolutionDivisor: number
+  readonly maxStepParsecs: number
+  readonly maxSteps: number
+  readonly submissions: number
+  readonly emissionOnly: true
+  readonly originParsecs: readonly number[]
+}
+
 /** Read-only diagnostics derive from the current world, including after a save load. */
 export class GalaxyInspector {
   readonly field: GalaxyField
   readonly #seed: string
-  constructor(world: World) {
+  readonly render: () => GalaxyRenderReport | null
+  constructor(
+    world: World,
+    render: () => GalaxyRenderReport | null = () => null,
+  ) {
+    this.render = render
     this.field = createGalaxyField(world.galaxySeed)
     this.#seed = world.seedText
   }

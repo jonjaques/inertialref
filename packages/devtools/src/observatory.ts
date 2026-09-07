@@ -39,6 +39,9 @@ import {
   planetCount,
 } from '@inertialref/universe'
 import {
+  GALAXY_VIEWS,
+  type GalaxyView,
+  isGalaxyView,
   anglesForPhase,
   angularRadius,
   applyDrag,
@@ -156,6 +159,7 @@ export interface SurfaceStatus {
 
 /** Everything a panel needs to draw the observatory's state. */
 export interface ObserverStatus {
+  readonly galaxyView: GalaxyView | null
   readonly target: ObserverTarget | null
   readonly state: ObserverState
   /** Where the head is turned, relative to what the pose aims at. */
@@ -220,6 +224,18 @@ export const RISE_HEIGHT_RADII = 0.063
 export class Observatory {
   readonly #host: Host
   #target: ObserverTarget | null = null
+  #galaxyView: GalaxyView | null = null
+
+  get galaxyView(): GalaxyView | null {
+    return this.#galaxyView
+  }
+
+  viewGalaxy(view: GalaxyView): ObserverStatus {
+    if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
+    this.clear()
+    this.#galaxyView = view
+    return this.status()
+  }
   #state: ObserverState = { azimuth: 0.6, elevation: 0.25, distance: 1e9 }
   #desired: ObserverState = this.#state
   #phaseOrbit: {
@@ -283,6 +299,8 @@ export class Observatory {
    * have a panel stepping the camera's animation every time it polled.
    */
   get eye(): UniverseVector | null {
+    if (this.#galaxyView !== null)
+      return GALAXY_VIEWS[this.#galaxyView].pose.position
     const target = this.#target
     if (target === null) return null
     // The surface arm first, because when it holds the camera the orbit state
@@ -335,6 +353,7 @@ export class Observatory {
   ): ObserverStatus {
     const target = this.#resolve(destination)
     const previous = this.#target
+    this.#galaxyView = null
     this.#target = target
     this.#phaseOrbit = null
     // Focusing something else is leaving the ground. A stance names a latitude
@@ -405,6 +424,7 @@ export class Observatory {
    * "restore" step and nothing to put back, because nothing was taken.
    */
   clear(): void {
+    this.#galaxyView = null
     this.#target = null
     this.#phaseOrbit = null
     this.#stance = null
@@ -436,7 +456,7 @@ export class Observatory {
     dyPixels: number,
     sensitivity = this.dragSensitivity(),
   ): void {
-    if (this.#stance !== null) return
+    if (this.#stance !== null || this.#galaxyView !== null) return
     // Both are written, not just the desired: a drag is direct manipulation and
     // must not lag a damping filter. Easing is for travel, not for the hand.
     this.#desired = applyDrag(this.#desired, dxPixels, dyPixels, sensitivity)
@@ -445,7 +465,7 @@ export class Observatory {
 
   /** Zoom by a ratio. Above 1 retreats. */
   zoom(factor: number): void {
-    if (this.#stance !== null) return
+    if (this.#stance !== null || this.#galaxyView !== null) return
     const radius = this.#target?.radius ?? 0
     this.#desired = applyZoom(this.#desired, factor, radius)
     // The wheel eases while the drag does not, because a wheel arrives in
@@ -460,7 +480,7 @@ export class Observatory {
 
   /** Set the distance directly — the panel's slider and the presets. */
   setDistance(distance: Meters, ease = true): void {
-    if (this.#stance !== null) return
+    if (this.#stance !== null || this.#galaxyView !== null) return
     const radius = this.#target?.radius ?? 0
     this.#desired = {
       ...this.#desired,
@@ -484,7 +504,7 @@ export class Observatory {
     ease = true,
     look: LookOffset = NO_LOOK,
   ): void {
-    if (this.#stance !== null) return
+    if (this.#stance !== null || this.#galaxyView !== null) return
     this.#desired = {
       ...this.#desired,
       azimuth,
@@ -1085,12 +1105,13 @@ export class Observatory {
             verticalFov(this.#lens)
           : 0
     return {
+      galaxyView: this.#galaxyView,
       target: this.#target,
       state: this.#state,
       desired: this.#desired,
       look: this.#look,
       aimed: !isCentred(this.#look),
-      travelling: !this.#arrived(),
+      travelling: this.#galaxyView === null && !this.#arrived(),
       // Standing, the reader wants the height above the ground under their feet
       // — not the distance from a datum the orbit arm was last left at.
       altitude: surface?.stance.height ?? altitude,
@@ -1109,6 +1130,7 @@ export class Observatory {
    * also freezes a fly-to mid-flight would be a bug in every screenshot.
    */
   sample(dt: Seconds): ObserverPose | null {
+    if (this.#galaxyView !== null) return GALAXY_VIEWS[this.#galaxyView].pose
     const target = this.#target
     if (target === null) return null
     // The surface arm short-circuits the ease entirely. See `stand`.

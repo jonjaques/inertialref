@@ -1,3 +1,4 @@
+import type { GalaxyRenderReport } from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
@@ -545,10 +546,18 @@ export class GameEngine {
   sensorSettings: SensorSettings = DEFAULT_SENSOR_SETTINGS
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
+  galaxyRenderer: (() => GalaxyRenderReport) | null = null
+
+  /** The resolved external instrument, under the usual camera precedence. */
+  get galaxyView() {
+    return this.cinematic === null && this.observer !== null
+      ? this.harness.observatory.galaxyView
+      : null
+  }
 
   get calibratedLight(): boolean {
     return (
-      naturalResponse(this.sensorSettings) ||
+      (this.galaxyView === null && naturalResponse(this.sensorSettings)) ||
       (this.cinematic?.effects.calibratedLight ?? 0) > 0
     )
   }
@@ -749,6 +758,7 @@ export class GameEngine {
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
+        galaxyRender: () => this.galaxyRenderer?.() ?? null,
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
         pixelRatio: () => this.displayRatio,

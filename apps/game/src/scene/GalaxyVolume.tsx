@@ -1,0 +1,79 @@
+import { GALAXY_VIEWS } from '@inertialref/rendering'
+import { useThree } from '@react-three/fiber'
+import { useEffect, useRef } from 'react'
+import type { WebGPURenderer } from 'three/webgpu'
+import { createGalaxyField, type GalaxyField } from '@inertialref/universe'
+import type { GameEngine } from '../engine/GameEngine.ts'
+import {
+  createGalaxyBackdrop,
+  GalaxyVolumeNode,
+} from '../render/galaxyVolume.ts'
+import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
+
+/** The effect owns GPU objects; StrictMode cleanup retires exactly the instance it creates. */
+export function GalaxyVolume({ engine }: { engine: GameEngine }) {
+  const gl = useThree((state) => state.gl)
+  const scene = useThree((state) => state.scene)
+  const camera = useThree((state) => state.camera)
+  const live = useRef<{
+    volume: GalaxyVolumeNode
+    mesh: ReturnType<typeof createGalaxyBackdrop>
+    field: GalaxyField
+    world: GameEngine['world']
+  } | null>(null)
+
+  useEffect(() => {
+    const field = createGalaxyField(engine.world.galaxySeed)
+    const volume = new GalaxyVolumeNode(field)
+    const mesh = createGalaxyBackdrop(volume)
+    const held = { volume, mesh, field, world: engine.world }
+    live.current = held
+    scene.add(mesh)
+    const report = () => volume.diagnostics
+    engine.galaxyRenderer = report
+    warmAtMount({
+      label: 'warming the galaxy',
+      units: 2,
+      run: async (done) => {
+        const current = live.current
+        if (current === null) {
+          done()
+          done()
+          return
+        }
+        await current.volume.warm(gl as unknown as WebGPURenderer)
+        done()
+        if (live.current === current)
+          await warmCompile(warmRenderer(gl), {
+            object: current.mesh,
+            camera,
+            scene,
+          })
+        done()
+      },
+    })
+    return () => {
+      if (live.current === held) live.current = null
+      if (engine.galaxyRenderer === report) engine.galaxyRenderer = null
+      scene.remove(mesh)
+      volume.dispose()
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+    }
+  }, [engine, gl, scene, camera])
+
+  useTimedFrame('galaxy', () => {
+    const current = live.current
+    if (current === null) return
+    if (current.world !== engine.world) {
+      current.world = engine.world
+      current.field = createGalaxyField(engine.world.galaxySeed)
+    }
+    const view = engine.galaxyView
+    const pose = view === null ? null : GALAXY_VIEWS[view].pose
+    current.volume.configure(pose, engine.lens, current.field)
+    current.mesh.visible = current.volume.active && current.volume.ready
+  })
+  return null
+}

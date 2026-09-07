@@ -1,3 +1,4 @@
+import { GalaxyVolume } from './GalaxyVolume.tsx'
 import { useMemo } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createTerrainMaterial } from '../render/terrain.ts'
@@ -79,6 +80,7 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <EngineTick engine={engine} />
       <CameraRig engine={engine} />
       <Starfield engine={engine} />
+      <GalaxyVolume engine={engine} />
       <Bodies engine={engine} terrain={terrain} />
       <TerrainPatches engine={engine} terrain={terrain} />
       <WaterPatches engine={engine} water={water} />

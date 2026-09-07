@@ -1,4 +1,9 @@
-import { GalaxyInspector } from './galaxy.ts'
+import {
+  GALAXY_VIEWS,
+  type GalaxyView,
+  isGalaxyView,
+} from '@inertialref/rendering'
+import { GalaxyInspector, type GalaxyRenderReport } from './galaxy.ts'
 import {
   AU,
   getLogger,
@@ -166,6 +171,8 @@ export interface RenderHost {
    * whether the cache is holding. The two disagreeing is the interesting case.
    */
   terrain(): TerrainReport | null
+  /** The live volume, if a renderer is attached. */
+  galaxyRender(): GalaxyRenderReport | null
   /**
    * The lens the picture is being taken with, and the pixels it lands on.
    *
@@ -266,6 +273,7 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
   return {
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
+    galaxyRender: overrides.galaxyRender ?? (() => null),
     terrain: overrides.terrain ?? (() => null),
     lensView: overrides.lensView ?? (() => null),
     framingLens: overrides.framingLens ?? (() => LENS_PRESETS.flight),
@@ -1622,9 +1630,19 @@ export class GameHarness {
     return terrainZoo(this.world)
   }
 
+  /** Select a fixed external instrument without moving anything in the world. */
+  galaxyView(view: GalaxyView): ObserverStatus {
+    if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
+    this.stopCutscene()
+    this.#host.render.setFlightLens(GALAXY_VIEWS[view].lens)
+    return this.#observatory.viewGalaxy(view)
+  }
+
   /** Preview field diagnostics read the current session without activating generation. */
   galaxy(): GalaxyInspector {
-    return new GalaxyInspector(this.world)
+    return new GalaxyInspector(this.world, () =>
+      this.#host.render.galaxyRender(),
+    )
   }
 
   /**
@@ -1722,7 +1740,10 @@ export class GameHarness {
 
   /** The observatory's camera, or null when it has no target. */
   observerStatus(): ObserverStatus | null {
-    return this.#observatory.target === null ? null : this.#observatory.status()
+    return this.#observatory.target === null &&
+      this.#observatory.galaxyView === null
+      ? null
+      : this.#observatory.status()
   }
 
   /**
@@ -1783,6 +1804,7 @@ export class GameHarness {
       '  ir.terrain()                  the live streamer, and the rocks on it',
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
+      '  ir.galaxyView(view)           fixed face-on or edge-on planetarium instrument',
       '  ir.galaxy()                   stellar field samples, counts, and CPU plates',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.timing(level?)             off | trace | full — what reaches the timeline',
