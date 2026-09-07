@@ -11,7 +11,7 @@ import {
   type Node,
   type WebGPURenderer,
 } from 'three/webgpu'
-import { Fn, float, texture, uniform, uv, vec2, vec4 } from 'three/tsl'
+import { Fn, If, float, texture, uniform, uv, vec2, vec4 } from 'three/tsl'
 import { invariant, PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
 import { verticalFov, type Lens } from '@inertialref/rendering'
@@ -159,10 +159,20 @@ export class GalaxyTemporalVolume {
         lower.assign(lower.min(neighbor))
         upper.assign(upper.max(neighbor))
       }
-      const kept = this.#stationary
-        .greaterThan(0)
-        .select(history, vec4(history.rgb.clamp(lower, upper), current.a))
-      return ownPhase.or(valid.not()).select(current, kept)
+      // Keep the branch result in this function's stack. GLSL infers a nested
+      // select's return type after that stack ends and cannot recover the
+      // outer texture variables used by its isolated branches.
+      const resolved = vec4(0).toVar()
+      If(ownPhase.or(valid.not()), () => {
+        resolved.assign(current)
+      }).Else(() => {
+        If(this.#stationary.greaterThan(0), () => {
+          resolved.assign(history)
+        }).Else(() => {
+          resolved.assign(vec4(history.rgb.clamp(lower, upper), current.a))
+        })
+      })
+      return resolved
     })()
     this.#resolveMaterial.name = 'Galaxy physical history resolve'
   }
