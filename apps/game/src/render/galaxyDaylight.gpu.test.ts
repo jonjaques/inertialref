@@ -35,7 +35,7 @@ beforeAll(async () => {
 afterAll(() => gpu.dispose())
 
 it.each([1, 0])(
-  'omitting diffuse light at daylight stays below one display code with dust scale %s',
+  'photographic daylight omission stays below one display code with dust scale %s',
   async (dustScale) => {
     const { renderer } = gpu
     renderer.setSize(96, 96, false)
@@ -68,7 +68,7 @@ it.each([1, 0])(
       type: FloatType,
       depthBuffer: false,
     })
-    let pinned: number | null = null
+    let pinned: number | null = 0
     const sensor = createSensor(renderer, scene, camera, () => ({
       lens,
       settings: DEFAULT_SENSOR_SETTINGS,

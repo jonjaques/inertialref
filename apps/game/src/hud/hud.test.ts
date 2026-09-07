@@ -259,7 +259,7 @@ describe('the author’s instruments', () => {
       }),
     )
     write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
-    expect(graphics).toContain('Lens flare')
+    expect(graphics).toContain('Lens Flare')
     // The lens-flare switch, off, and the rocks switch, on: no other switch
     // on this panel.
     expect(graphics.match(/role="switch"/g)).toHaveLength(2)

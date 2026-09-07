@@ -74,7 +74,7 @@ export function GraphicsPanel({
         <SwitchRow
           bordered
           icon={Sparkles}
-          label="Lens flare"
+          label="Lens Flare"
           detail="ghosts, streak and glow when the star is in frame"
           on={lensFlare}
           onChange={setLensFlare}

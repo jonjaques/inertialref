@@ -27,7 +27,7 @@ describe('driver view URLs', () => {
     )
     expect(url.origin).toBe('http://localhost:8787')
     expect(url.pathname).toBe('/planetarium')
-    expect(url.searchParams.get('shot')).toBe('1')
+    expect(url.searchParams.get('shot')).toBe('2')
     expect(url.searchParams.get('presentation')).toBe('occluded')
     expect(readPictureLink(url.searchParams).picture?.id).toBe('earthrise')
   })
