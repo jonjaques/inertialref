@@ -25,7 +25,7 @@ it('integrates a homogeneous emitter with the analytic path length and 4π conve
       },
       totalPerCubicParsec: 2,
       emissionSolarPerCubicParsec: 3,
-      emissionRgb: { r: 1, g: 1, b: 1 },
+      emissionRgb: { r: 3, g: 3, b: 3 },
       extinctionPerParsec: { r: 0, g: 0, b: 0 },
       dustArmStrength: 0,
       dustModulation: 1,
@@ -75,10 +75,7 @@ it.each([vec3(1, 0, 0), vec3(0, 1, 0), vec3(1, 0, -1)])(
     expect(
       Math.abs(a.radianceNanowatts / b.radianceNanowatts - 1),
     ).toBeLessThan(0.01)
-    expect(a.rgbNanowatts.reduce((x, y) => x + y, 0)).toBeCloseTo(
-      a.radianceNanowatts,
-      8,
-    )
+    expect(a.rgbNanowatts[1]).toBeCloseTo(a.radianceNanowatts, 8)
   },
 )
 it('rejects parameters that cannot describe a finite integral', () => {
@@ -183,7 +180,7 @@ it('integrates a homogeneous absorbing emitter within each interval analytically
     sample: (position) => ({
       ...field.sample(position),
       totalPerCubicParsec: 2,
-      emissionSolarPerCubicParsec: 3,
+      emissionSolarPerCubicParsec: 1,
       emissionRgb: { r: 1, g: 1, b: 1 },
       extinctionPerParsec: { r: 0.01, g: 0.02, b: 0.03 },
     }),

@@ -35,9 +35,9 @@ it('makes repeatable CPU plates through a session without changing canonical sta
 })
 
 it.each([
-  ['face-on', 7467.533615960387, 30824.638347876065],
-  ['edge-on', 13467.419656853888, 62747.68437106824],
-  ['observer', 11347.873133070729, 144661.7075324133],
+  ['face-on', 674.2742416931517, 7127.818764144375],
+  ['edge-on', 1566.4262359487452, 21154.97651406909],
+  ['observer', 1162.1320960465246, 30079.319801786067],
 ] as const)(
   'retains the dust-free numeric plate reference for %s',
   (view, max, sum) => {
@@ -46,7 +46,7 @@ it.each([
       const plate = session.harness
         .galaxy()
         .plate({ view, width: 12, height: 8, dustScale: 0 })
-      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 3 })
+      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 4 })
       expect(plate.emissionOnly).toBe(true)
       expect(plate.maxRadiance).toBeCloseTo(max, 6)
       expect([...plate.rgb].reduce((a, b) => a + b, 0)).toBeCloseTo(sum, 6)
@@ -57,17 +57,17 @@ it.each([
 )
 
 it.each([
-  ['face-on', 6012.956429804703, 26060.112987154007],
-  ['edge-on', 13223.456827898237, 61539.64948305343],
-  ['observer', 7620.979884300879, 115131.37029264722],
+  ['face-on', 541.3435738212103, 5973.8100010261],
+  ['edge-on', 1546.0116667278733, 20735.55752388157],
+  ['observer', 813.0269151818513, 24127.780183096],
 ] as const)(
-  'pins galaxy-field@3 dust transport plates for %s',
+  'pins galaxy-field@4 dust transport plates for %s',
   (view, max, sum) => {
     const session = openSession()
     try {
       const inspector = session.harness.galaxy()
       const plate = inspector.plate({ view, width: 12, height: 8 })
-      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 3 })
+      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 4 })
       expect(plate.emissionOnly).toBe(false)
       expect(plate.maxStepParsecs).toBe(10)
       expect(plate.maxRadiance).toBeCloseTo(max, 6)

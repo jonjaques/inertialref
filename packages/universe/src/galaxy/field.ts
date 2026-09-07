@@ -11,10 +11,11 @@ import { SUN_POSITION } from '../catalog/astrometry.ts'
 import { blackbodyColour, type LinearRgb } from '../catalog/photometry.ts'
 import { LOCAL_DENSITY } from '../galaxy.ts'
 import { armStrength } from './arms.ts'
+import { localBubbleFactor, localCloudExtinction } from './localDust.ts'
 import { GALAXY_DUST, galaxyDustModulation, galaxyDustProfile } from './dust.ts'
 
 export const GALAXY_FIELD_ALGORITHM = Object.freeze(
-  algorithm('galaxy-field', 3),
+  algorithm('galaxy-field', 4),
 )
 /** Preview versions never enter GENERATION_VERSIONS until population activation. */
 export const GALAXY_FIELD_VERSIONS = Object.freeze(
@@ -32,13 +33,13 @@ export const POPULATION_NAMES = Object.freeze([
 export type GalaxyPopulation = (typeof POPULATION_NAMES)[number]
 export type PopulationDensities = Readonly<Record<GalaxyPopulation, number>>
 
-/** Mean bolometric luminosities are explicit preview assumptions, pending M6 calibration. */
+/** Mean Johnson V luminosities in solar V units; fitted jointly to the local sky and total light. */
 export const GALAXY_POPULATIONS = Object.freeze({
-  thinDisk: Object.freeze({ meanSolarLuminosities: 0.5, temperature: 5000 }),
+  thinDisk: Object.freeze({ meanSolarLuminosities: 0.214, temperature: 5000 }),
   thickDisk: Object.freeze({ meanSolarLuminosities: 0.35, temperature: 4600 }),
-  youngArms: Object.freeze({ meanSolarLuminosities: 80, temperature: 12000 }),
-  barBulge: Object.freeze({ meanSolarLuminosities: 0.6, temperature: 4300 }),
-  halo: Object.freeze({ meanSolarLuminosities: 0.3, temperature: 4800 }),
+  youngArms: Object.freeze({ meanSolarLuminosities: 10, temperature: 12000 }),
+  barBulge: Object.freeze({ meanSolarLuminosities: 0.748, temperature: 4300 }),
+  halo: Object.freeze({ meanSolarLuminosities: 0.1, temperature: 4800 }),
 })
 const COLOURS = POPULATION_NAMES.map((name) =>
   blackbodyColour(GALAXY_POPULATIONS[name].temperature),
@@ -57,7 +58,7 @@ export function galaxyWarp(radiusParsecs: number, beta: number): number {
 export interface GalaxySample {
   readonly populations: PopulationDensities
   readonly totalPerCubicParsec: number
-  /** Bolometric power per volume in solar luminosities/pc³; RGB is an illustrative color split. */
+  /** Johnson V luminosity per volume in solar V units/pc³; green carries V and red/blue carry illustrative chromaticity. */
   readonly emissionSolarPerCubicParsec: number
   readonly emissionRgb: LinearRgb
   /** Extinction coefficient in inverse parsecs at the preview RGB wavelengths. */
@@ -172,7 +173,12 @@ export function createGalaxyField(
           ? 1
           : galaxyDustModulation(dustSeed, x, y, z, footprintParsecs)
       const extinction =
-        dustScale * dustNormalization * dust.density * dustModulation
+        dustScale *
+        (dustNormalization *
+          dust.density *
+          dustModulation *
+          localBubbleFactor(x, y, z) +
+          localCloudExtinction(x, y, z))
       const populations = {} as Record<GalaxyPopulation, number>
       let total = 0,
         emission = 0,
@@ -187,8 +193,8 @@ export function createGalaxyField(
         const light = density * GALAXY_POPULATIONS[name].meanSolarLuminosities
         emission += light
         const colour = COLOURS[i]!
-        // Normalize the three channels to conserve the stated bolometric power.
-        const sum = colour.r + colour.g + colour.b
+        // Green carries the measured V band; chromaticity cannot redefine its power.
+        const sum = colour.g
         r += (light * colour.r) / sum
         g += (light * colour.g) / sum
         b += (light * colour.b) / sum

@@ -24,8 +24,11 @@ to 30 kpc above the galactic center. `ir.galaxyJourney(1, 36)` makes that trip
 through the existing camera and lens; progress zero returns to Earth orbit.
 The live field also follows ordinary planetarium navigation. Seeded dust lanes
 dim and redden the diffuse light, with finer sampling after travel settles.
-Local clouds, photometric calibration, and extinction of resolved star sprites
-remain separate milestones.
+Nine local cloud complexes and a Local Bubble approximation now shape the
+field. Linear V-band sky averages and external luminosity have source-based
+checks through `pnpm sim --galaxy-calibration --quiet`. Natural display treatment
+and appearance acceptance are deferred while its response is revised; extinction
+of resolved star sprites remains a separate milestone.
 
 ## The three-layer body model
 

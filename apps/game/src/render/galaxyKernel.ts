@@ -21,6 +21,8 @@ import {
   blackbodyColour,
   GALAXY_ARMS,
   GALAXY_DUST,
+  LOCAL_BUBBLE,
+  LOCAL_CLOUDS,
   GALAXY_DUST_SETTLED_STEP_PARSECS,
   GALAXY_DUST_SETTLED_HEIGHT_FACTOR,
   GALAXY_FOOTPRINT_STEP_FRACTION,
@@ -40,7 +42,7 @@ import {
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@4'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@5'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
@@ -282,7 +284,7 @@ const structureAt = Fn(([p]: [Node<'vec3'>]) => {
 const emissionColors = POPULATION_NAMES.map((name) => {
   const population = GALAXY_POPULATIONS[name]
   const c = blackbodyColour(population.temperature)
-  const factor = population.meanSolarLuminosities / (c.r + c.g + c.b)
+  const factor = population.meanSolarLuminosities / c.g
   return [c.r * factor, c.g * factor, c.b * factor] as const
 })
 
@@ -352,12 +354,52 @@ const sample = Fn(
   ],
 })
 
+const localDust = Fn(([p]: [Node<'vec3'>]) => {
+  const distance = p
+    .sub(vec3(-8178, 20.8, 0))
+    .length()
+    .toVar()
+  const bubble = float(LOCAL_BUBBLE.residual).add(
+    smooth(
+      distance
+        .sub(LOCAL_BUBBLE.radiusParsecs - LOCAL_BUBBLE.transitionParsecs)
+        .div(2 * LOCAL_BUBBLE.transitionParsecs),
+    ).mul(1 - LOCAL_BUBBLE.residual),
+  )
+  const clouds = float(0).toVar()
+  // Every compact cloud lies within 1.5 kpc of the Sun; the outside disk pays one bound.
+  If(distance.lessThan(1500), () => {
+    for (const c of LOCAL_CLOUDS) {
+      const d = p
+        .sub(vec3(c.center.x, c.center.y, c.center.z))
+        .div(vec3(c.sigma.x, c.sigma.y, c.sigma.z))
+        .toVar()
+      const q = d.dot(d).toVar()
+      If(q.lessThan(25), () => {
+        clouds.addAssign(
+          q
+            .mul(-0.5)
+            .exp()
+            .mul(c.extinctionPerParsec)
+            .mul(smooth(float(25).sub(q).div(9))),
+        )
+      })
+    }
+  })
+  return vec2(bubble, clouds)
+}).setLayout({
+  name: 'galaxyLocalDust',
+  type: 'vec2',
+  inputs: [{ name: 'p', type: 'vec3' }],
+})
+
 const extinction = Fn(
-  ([p, seed, normalization, structure, footprint]: [
+  ([p, seed, normalization, structure, footprint, dustScale]: [
     Node<'vec3'>,
     Node<'uint'>,
     Node<'float'>,
     Node<'vec3'>,
+    Node<'float'>,
     Node<'float'>,
   ]) => {
     const radius = p.xz.length().toVar()
@@ -408,8 +450,11 @@ const extinction = Fn(
       .mul(strength.mul(GALAXY_DUST.armContrast).add(1))
       .mul(logModulation.exp())
       .mul(normalization)
+    const local = localDust(p).toVar()
     const rgb = GALAXY_DUST.extinctionRgb
-    return vec3(rgb.r, rgb.g, rgb.b).mul(coefficient)
+    return vec3(rgb.r, rgb.g, rgb.b).mul(
+      coefficient.mul(local.x).add(local.y.mul(dustScale)),
+    )
   },
 ).setLayout({
   name: 'galaxyExtinction',
@@ -420,6 +465,7 @@ const extinction = Fn(
     { name: 'normalization', type: 'float' },
     { name: 'structure', type: 'vec3' },
     { name: 'footprint', type: 'float' },
+    { name: 'dustScale', type: 'float' },
   ],
 })
 
@@ -449,6 +495,7 @@ const integrate = Fn(
     normalization,
     dustSeed,
     dustNormalization,
+    dustScale,
     transmissionOnly,
     pixelAngle,
   ]: [
@@ -460,6 +507,7 @@ const integrate = Fn(
     Node<'uint'>,
     Node<'float'>,
     Node<'uint'>,
+    Node<'float'>,
     Node<'float'>,
     Node<'bool'>,
     Node<'float'>,
@@ -544,6 +592,7 @@ const integrate = Fn(
               dustNormalization,
               structure,
               pixelAngle.mul(t.add(step.mul(0.5))),
+              dustScale,
             ).mul(step),
           )
         },
@@ -578,6 +627,7 @@ const integrate = Fn(
     { name: 'normalization', type: 'float' },
     { name: 'dustSeed', type: 'uint' },
     { name: 'dustNormalization', type: 'float' },
+    { name: 'dustScale', type: 'float' },
     { name: 'transmissionOnly', type: 'bool' },
     { name: 'pixelAngle', type: 'float' },
   ],
@@ -594,6 +644,7 @@ export function createGalaxyKernel(field: GalaxyField) {
     'uint',
   )
   const dustNormalization = uniform(field.dustNormalization * field.dustScale)
+  const dustScale = uniform(field.dustScale)
   const ray = (
     origin: Node<'vec3'>,
     direction: Node<'vec3'>,
@@ -615,6 +666,7 @@ export function createGalaxyKernel(field: GalaxyField) {
       normalization,
       dustSeed,
       dustNormalization,
+      dustScale,
       bool(transmissionOnly),
       typeof pixelAngle === 'number' ? float(pixelAngle) : pixelAngle,
     )
@@ -624,6 +676,7 @@ export function createGalaxyKernel(field: GalaxyField) {
       normalization.value = next.normalization
       dustSeed.value = deriveSeed(next.seed, 'galaxy-field:dust').a
       dustNormalization.value = next.dustNormalization * next.dustScale
+      dustScale.value = next.dustScale
     },
     structure: (p: Node<'vec3'>): Node<'vec4'> =>
       Fn(() => {
@@ -642,6 +695,7 @@ export function createGalaxyKernel(field: GalaxyField) {
         dustNormalization,
         structureAt(position),
         float(0),
+        dustScale,
       ),
     /** `pixelAngle` is `GalaxyRayOptions.pixelAngle`: zero is the exact field along the pixel's center. */
     integrate: (

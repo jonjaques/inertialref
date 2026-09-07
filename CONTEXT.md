@@ -53,8 +53,10 @@ Earth-to-disk journey. Its live volume follows the planetarium observer through
 the scene and sensor when the response admits diffuse light; ordinary Natural
 views at daylight calibration omit the volume. Shared seeded dust dims and reddens the diffuse light,
 with finer sampling after the camera settles. The field stays separate from
-active generation; local clouds, photometric calibration, resolved-star
-extinction, and temporal optimization remain open. The live dust rendering
+active generation. Nine local clouds and a Local Bubble approximation now have
+source records, and V-band radiance has linear photometric checks. Natural
+treatment and appearance acceptance, resolved-star extinction, and angular
+caching remain open. The live dust rendering
 saturates the GPU in the full-resolution rig; performance acceptance is open
 ([ADR-0032](docs/adr/0032-the-stellar-field.md)).
 
@@ -8299,6 +8301,53 @@ The first full check timed out after 300 seconds in the existing terrain
 fixture. With the browser rig closed, that fixture passed in 179 seconds.
 Browser work and verification run serially; the task's rig is closed after
 its capture rather than left rendering between checks.
+
+## The sky has a V band, and the source has a coordinate convention (06 Sep 2026)
+
+M6 continues on PR #69's tip, after reading #67's transport and display policies
+and #68–69's photographic instant and navigation changes. The source corrections
+matter more than a prettier plate: GAMBONS's 75 nW value is a ground-level annual
+zenith mean, Zucker's 165 pc is a radius, and Licquia's V magnitude is reported
+with `5 log h` removed. [ADR-0032](docs/adr/0032-the-stellar-field.md#the-local-sky-and-linear-calibration-m6)
+records their replacement targets and the model approximations.
+
+The Lallement FITS header uses magnitudes per parsec despite the catalogue
+ReadMe's nanomagnitude label. Nine Gaussian cloud approximations derive from
+explicit windows in that cube; source hashes and columns accompany the runtime
+records. A solar-centered 165 pc cavity reduces the smooth dust to 20% locally,
+without removing stars or skipping nearby light. Removing the cavity makes the
+solar extinction regression fail at 0.000767 per pc against its 0.0002 bound.
+
+The calibrated field is `galaxy-field@4`, port `galaxy-tsl@5`; active generation
+stays unchanged. With the default session, V residuals against the three
+equal-area GAMBONS regions are
++0.132, +0.235 and −0.211 mag, with a +0.055 mag residual in external face-on
+absolute magnitude. The report contains 116.107 billion stars and exactly
+0.1 star/pc³ locally. The GAMBONS sky also includes scattering and extragalactic
+light, which the model omits; these comparisons do not isolate those components.
+The 1,536-ray sky and 96×96 luminosity quadratures change the default results by
+less than 1%. GPU region averages agree with CPU within 0.01 mag, and individual
+rays within 1%, using the suite's directly seeded test field. Its numbers differ
+slightly from the CLI's session-derived galaxy seed; the command's values are
+the ones quoted here. The full convergence check takes about 25 seconds locally and
+belongs in the slow suite.
+
+The sensor receives V power through a declared photopic/V ratio of 1.25, with
+illustrative RGB normalized independently of luminance. It no longer treats
+bolometric power as visible light. At the user's direction, Natural-specific
+display treatment and final appearance acceptance wait for the response revision.
+Physical luminosities fit the linear sky and external-light constraints; current
+Natural visibility is not a calibration input. `pnpm sim --galaxy-calibration
+--quiet` reproduces the checks without a renderer.
+
+The gate passes 1,898 regular tests and six slow tests; the physical-GPU suite
+passes 80 and the headless self-test 12/12. Source regeneration followed by
+formatting reproduces the checked-in tables exactly. The 960×540 Direct rig
+captures face-on at 30 kpc, f/2, 2,400 s, ISO 400; edge-on at 40 kpc, f/2,
+600 s, ISO 400; and 64,000 km above Earth at the face-on lens. Earth clips at
+that exposure. The 240×135 target draws twice per held view and keeps the
+canonical hash unchanged. These are integration plates, not Natural appearance
+acceptance. Captures and raw reports remain in `.scratch/galaxy-m6/`.
 
 ## Known gaps
 
