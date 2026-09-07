@@ -31,6 +31,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { parseArgs } from 'node:util'
 import {
   PICTURES,
   PLATE_HEIGHT,
@@ -40,6 +41,25 @@ import { PLATES, plateName } from './check.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const DRIVE = path.join(ROOT, 'scripts/drive.mjs')
+const { values, positionals: wanted } = parseArgs({
+  options: {
+    port: { type: 'string', default: '9333' },
+    help: { type: 'boolean' },
+  },
+  allowPositionals: true,
+})
+if (values.help) {
+  console.log(
+    'Usage: pnpm presets:plates [--port 9341] [preset-id ...]\nCaptures standard SDR at DPR 1 using the selected driver profile. Recipe presets start from the default lens; camera presets restore their declared lens.',
+  )
+  process.exit(0)
+}
+if (
+  !/^\d+$/.test(values.port) ||
+  Number(values.port) < 1 ||
+  Number(values.port) > 65535
+)
+  throw new Error('--port needs an integer from 1 to 65535.')
 
 /**
  * Where the capture happens.
@@ -52,7 +72,8 @@ const DRIVE = path.join(ROOT, 'scripts/drive.mjs')
 const PAGE = 'http://localhost:5173/planetarium'
 
 /** Where the per-picture step script goes. Removed on the way out. */
-const STEP = path.join(ROOT, '.data/drive/preset-step.mjs')
+const STEP = path.join(ROOT, `.data/drive/preset-step-${values.port}.mjs`)
+const SETUP = path.join(ROOT, `.data/drive/preset-setup-${values.port}.mjs`)
 
 /*
  * The plate's pixel size comes from `pictures.ts`, beside the file name, so the
@@ -73,7 +94,6 @@ const HEIGHT = PLATE_HEIGHT
  */
 const SETTLE = 2500
 
-const wanted = process.argv.slice(2)
 const pictures =
   wanted.length === 0
     ? PICTURES
@@ -86,10 +106,14 @@ if (pictures.length === 0) {
 
 const drive = (args) =>
   new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [DRIVE, ...args], {
-      stdio: 'inherit',
-      cwd: ROOT,
-    })
+    const child = spawn(
+      process.execPath,
+      [DRIVE, '--port', values.port, '--dpr', '1', '--keep-storage', ...args],
+      {
+        stdio: 'inherit',
+        cwd: ROOT,
+      },
+    )
     child.on('error', reject)
     child.on('exit', (code) =>
       code === 0
@@ -109,34 +133,16 @@ await mkdir(PLATES, { recursive: true })
  */
 await mkdir(path.dirname(STEP), { recursive: true })
 
-for (const picture of pictures) {
-  console.log(`${picture.id} — ${picture.why}`)
-  /*
-   * One call, because `ir.preset` fits the lens itself.
-   *
-   * That is the whole reason a picture is a harness verb rather than a panel
-   * click handler: the frame it produces has to be reproducible from a script,
-   * and a script that had to reassemble the picture out of three calls would be
-   * a second definition of what the picture is.
-   */
-  /*
-   * A file rather than `--js`, on the driver's own advice: a multi-statement
-   * body needs an explicit `return`, and one written as an inline IIFE comes
-   * back `null` through the shell's quoting.
-   */
-  await writeFile(
-    STEP,
-    [
-      `ir.chrome(false)`,
-      // Names and traces off as well, and they are a *different* claim from
-      // the chrome: a thumbnail of a picture is a thumbnail of what the camera
-      // does, and the layers are the viewer's, drawn over whatever it does. A
-      // trace slashing across a plate promises a layer the press does not set.
-      `ir.layers(false)`,
-      `const p = ir.preset(${JSON.stringify(picture.id)})`,
-      `return p.picture.label + ' at ' + Math.round(p.fovDeg) + '\u00b0'`,
-    ].join('\n'),
-  )
+// The preference owner writes standard output before a reload reads it at mount.
+await writeFile(
+  SETUP,
+  [
+    `const { RENDER_HDR, write } = await import('/src/state/preferences.ts')`,
+    `write(RENDER_HDR, 'standard')`,
+    `return 'Standard SDR requested'`,
+  ].join('\n'),
+)
+try {
   await drive([
     '--url',
     PAGE,
@@ -144,19 +150,60 @@ for (const picture of pictures) {
     String(WIDTH),
     '--height',
     String(HEIGHT),
-    '--max-px',
-    '0',
     '--quiet',
     '--file',
-    STEP,
-    '--wait',
-    String(SETTLE),
-    '--shot',
-    path.join(PLATES, plateName(picture.id)),
+    SETUP,
+    '--reload',
+    '--js',
+    `(() => { if (engine.gl.description.mode !== 'standard') throw new Error('Preset plates require standard SDR'); return engine.gl.description })()`,
   ])
+  for (const picture of pictures) {
+    console.log(`${picture.id} — ${picture.why}`)
+    // Recipes solve lens geometry and inherit the other lens channels. Start
+    // from declared defaults so a previous long exposure cannot change a plate.
+    /*
+     * A file rather than `--js`, on the driver's own advice: a multi-statement
+     * body needs an explicit `return`, and one written as an inline IIFE comes
+     * back `null` through the shell's quoting.
+     */
+    await writeFile(
+      STEP,
+      [
+        `ir.chrome(false)`,
+        // Names and traces off as well, and they are a *different* claim from
+        // the chrome: a thumbnail of a picture is a thumbnail of what the camera
+        // does, and the layers are the viewer's, drawn over whatever it does. A
+        // trace slashing across a plate promises a layer the press does not set.
+        `ir.layers(false)`,
+        `const { LENS_PRESETS } = await import('/@fs' + ${JSON.stringify(path.join(ROOT, 'packages/rendering/src/index.ts'))})`,
+        `engine.requestLens(LENS_PRESETS.flight)`,
+        `const p = ir.preset(${JSON.stringify(picture.id)})`,
+        `return p.picture.label + ' at ' + Math.round(p.fovDeg) + '\u00b0'`,
+      ].join('\n'),
+    )
+    await drive([
+      '--url',
+      PAGE,
+      '--width',
+      String(WIDTH),
+      '--height',
+      String(HEIGHT),
+      '--max-px',
+      '0',
+      '--quiet',
+      '--file',
+      STEP,
+      '--wait',
+      String(SETTLE),
+      '--js',
+      `({ id: ${JSON.stringify(picture.id)}, time: ir.observatory.time, lens: ir.lens(), mode: engine.sensorSettings.mode, exposure: { effectiveEV: engine.exposure?.effectiveEV, gain: engine.exposure?.gain, processing: engine.exposure?.processing, override: engine.exposure?.override }, output: engine.gl.description, dpr: 1 })`,
+      '--shot',
+      path.join(PLATES, plateName(picture.id)),
+    ])
+  }
+} finally {
+  await Promise.all([rm(STEP, { force: true }), rm(SETUP, { force: true })])
 }
-
-await rm(STEP, { force: true })
 
 console.log(
   `\n${pictures.length} plate${pictures.length === 1 ? '' : 's'} in apps/game/public/presets. pnpm drive --down when finished.`,
