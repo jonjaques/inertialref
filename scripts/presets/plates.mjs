@@ -196,7 +196,7 @@ try {
       '--wait',
       String(SETTLE),
       '--js',
-      `({ id: ${JSON.stringify(picture.id)}, time: ir.observatory.time, lens: ir.lens(), mode: engine.sensorSettings.mode, exposure: { effectiveEV: engine.exposure?.effectiveEV, gain: engine.exposure?.gain, processing: engine.exposure?.processing, override: engine.exposure?.override }, output: engine.gl.description, dpr: 1 })`,
+      `({ id: ${JSON.stringify(picture.id)}, time: ir.observatory.time, lens: engine.lens, mode: engine.sensorSettings.mode, exposure: { effectiveEV: engine.exposure?.effectiveEV, gain: engine.exposure?.gain, processing: engine.exposure?.processing, override: engine.exposure?.override }, output: engine.gl.description, dpr: 1 })`,
       '--shot',
       path.join(PLATES, plateName(picture.id)),
     ])
