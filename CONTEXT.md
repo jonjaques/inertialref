@@ -8580,6 +8580,15 @@ with one hit and no write or failure. Mode-switch and photographic pause/resume
 casts contain 360 and 240 frames respectively, with no isolated-frame flags or
 browser errors. All owned Chrome rigs and preview servers are closed.
 
+The final physical GPU suite passes 107 tests in 36 files on source identical
+to `ee0e9e1`. Its first run returned zero light in two dust tests; a focused
+run also reproduced one zero readback. The cause remains unproven. Six focused
+reruns, a cold-program probe of 72 distinct shaders and 864 rays, then two full
+suite reruns pass the original bounds. No production, test or tolerance change
+was made, and the diagnostic branch did not execute on the successful run.
+The verification record preserves the transient failure rather than inventing
+a shader or driver fix. All owned GPU processes have exited.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

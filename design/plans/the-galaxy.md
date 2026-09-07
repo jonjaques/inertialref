@@ -352,7 +352,12 @@ Earth's night-emission material.
 
 The full `pnpm check` passes 2,010 regular tests in 153 files and eight slow
 tests, plus graph, presets, formatting, lint, all typechecks, documentation and
-production builds. `pnpm sim --self-test` passes 12/12. The final GPU suite is recorded before publication. The additional lifecycle
+production builds. `pnpm sim --self-test` passes 12/12. The final physical GPU suite passes 107 tests in 36 files on byte-identical
+`ee0e9e1` source. An initial run returned zero light in two dust tests; the
+cause remains unproven. Six focused reruns, 72 distinct freshly compiled
+shaders covering 864 rays, and two complete suite reruns pass without any
+production, test or tolerance change. The record retains that initial failure
+instead of claiming a diagnosed fix. The additional lifecycle
 run uses public mode changes and photographic pause/resume, then negotiates
 Extended display-P3 at 2× headroom through the real settings UI and returns to
 Standard sRGB with verified renderer replacement. At 1440×900 CSS / DPR 2,
