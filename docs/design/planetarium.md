@@ -64,6 +64,21 @@ Two arms, and which one holds the camera is a question with one answer: the
 orbit arm above 1.5 radii, the surface arm below it. They meet exactly, with no
 band that is both or neither.
 
+### Targeting
+
+Orbiting and targeting are separate. The Camera panel names the body the
+camera orbits and lets the viewer target another body in that system. For
+example, orbit Earth and target Luna. The camera follows the pair's orbital
+plane and changes its distance with their separation, keeping both centers
+at their composed positions in the eye during time warp. Their rotation,
+illumination, and apparent sizes still change. Frame both bodies fits the
+pair inside the lens; drag and dolly remain available for composition.
+
+Clearing the target preserves the camera pose. Navigating to another body or
+standing on a surface clears tracking. The minimum safe orbit distance takes
+precedence when a pair contracts enough to approach the surface. Targeting
+belongs to the observatory and never moves a ship or changes canonical state.
+
 ### In orbit
 
 Three numbers — **azimuth, elevation, distance** — around a chosen target. Not a
@@ -211,7 +226,7 @@ Everything is a **panel**, and every panel is dockable — see
 | **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
 | **Camera**  | The eye: where it looks from, where it stands, and what it looks through     |
 | **View**    | What is drawn over the sky — names, orbit paths, the ship                    |
-| **Presets** | Seven pictures, sixteen compositions, the light on its own, and the way out  |
+| **Presets** | Quick shots, the preset library dialog, and composition tools                |
 | **Time**    | Pause, warp, and what the clock is actually delivering                       |
 
 The split between **Camera** and **View** is by what a control _changes_. A
@@ -267,46 +282,40 @@ the left tenth, and logarithmically the observer's own zero has nowhere to go.
 
 ### Presets
 
-Two tiers, and the difference between them is whether the picture is of a
-_particular place_.
+The dock offers three quick shots and opens the full library at
+`/planetarium/presets`. This is a child route: the planetarium, camera, and
+photographic clock stay mounted beneath it. The dialog has Included, Saved,
+and Current view tabs. Composition tools and galaxy views are collapsed in
+the dock until requested.
 
-**Pictures** are absolute: an address, a framing and a lens. They produce the
-same frame every time they are pressed, which is what makes them fixtures —
-_the same picture, every time_ is what a before/after plate is, and the geology
-milestone is judged from those. Their thumbnails are **plates**: captured
-through the renderer and vendored, because a drawn diagram of a picture that
-exists is a worse thumbnail than the picture. A plate is taken with the chrome
-cleared and the layers off, because a thumbnail of a picture is a thumbnail of
-what the _camera_ does, and a trace slashing across one promises a layer the
-press does not set.
+Current view captures the camera, orbit anchor, target, time, and full lens
+when the tab opens. Name and save it, copy its JSON, copy a link, or download
+its file. Recapture refreshes the shot from the view behind the dialog. Saved
+holds rename, replace, share, delete, and undo controls. It accepts a JSON
+file or pasted JSON and exports saved shots or the combined library.
 
-Earthrise is the one that names two bodies: a stance on Luna with Earth a stated
-clearance over the horizon, the horizon on the lower-third line, and the lens
-solved from the parent's angular size — 1.90° from Luna, 42.39° from Phobos, and
-one focal length is not the picture for both.
+Included shots use the same validated JSON format as personal shots. Each
+has a thumbnail captured through the renderer. Selecting a built-in writes
+`/planetarium?preset=earthrise`, with that shot's ID. A custom link starts with
+`shot=1` and flattens the picture into named query parameters: `seed`, `label`,
+`address`, `time`, `framing.state.azimuth`, `lens.zoom`, and the remaining
+fields. Text is ordinary URL-escaped text; numbers keep their full precision.
+Adding `save=1` opens the restored view with the save dialog and a suggested name.
+Opening a link never saves to the library automatically.
 
-**Compositions** are the tier under them, relative to whatever is under the
-camera. Sixteen of them, and there is one list where there were two: `gibbous`
-in this panel and `ir.shot('gibbous')` came out of one solver and meant one
-picture, but one moved a camera and the other teleported a hull. Three —
-`glint`, `sunset`, `oblique` — existed only for the hull, because they aim
-somewhere other than the body's center and the orbit arm's pose aims at the
-center by construction. With the aim solved as a look offset they are camera
-shots too, and the two that stand off below the orbit floor land on the surface
-arm: `sunset` at 1.04 radii _is_ a stance four hundredths of a radius up.
+Presets contain no cinematic scripts. Enterprise portraits belong to Cinema.
+Layers remain the viewer's choice. Saved shots stay in this browser until
+exported or shared.
 
-They are drawn, to the geometry the solver uses: the disk's radius is
-`fill × half the frame height`, which is what the standoff solves a distance
-for, and the terminator is a half-ellipse of projected width `r·cos φ`, which is
-why it collapses to a straight line at 90°. The thumbnail is a prediction rather
-than an illustration — which is exactly why a _picture_ gets a plate instead.
+The Time panel's Set date editor accepts UTC; Now selects the current date
+and time. Both hold that instant independently of the ship simulation. A
+preset opens paused at its saved time. Play, warp, and keyboard commands
+advance the photographic clock. Reset returns to the simulation clock. The
+local readout, UTC editor, camera anchor, body positions, surface, orbit
+traces, and Object panel describe the same instant.
 
-The light stays as its own row of five phase glyphs, because changing it
-_without_ losing your framing is the commonest thing anyone does here and a
-whole composition cannot express it. The two scale jumps are absolute distances
-rather than framings — one AU from Jupiter is a planet in a frame and one AU
-from Sol is most of the inner system — so they are labelled "Step Back" and kept
-apart.
+The format and time boundary are specified in
+[ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md).
 
 ### Names
 

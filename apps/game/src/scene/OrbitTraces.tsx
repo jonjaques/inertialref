@@ -93,8 +93,10 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
       // difference, so only this lookup has to move.
       const shift = engine.world.frames.has(path.parent)
         ? UV.difference(
-            engine.world.frames.pose(path.parent, engine.world.clock.renderTime)
-              .position,
+            engine.world.frames.pose(
+              path.parent,
+              engine.snapshot?.renderTime ?? engine.world.clock.renderTime,
+            ).position,
             path.anchor,
           )
         : Vec.ZERO

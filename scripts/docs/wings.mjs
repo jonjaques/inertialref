@@ -140,6 +140,10 @@ export const WINGS = [
           ['docs/adr/0030-three-r185.md', 'three r185'],
           ['docs/adr/0031-the-sensor-response.md', 'The sensor response'],
           ['docs/adr/0032-the-stellar-field.md', 'The stellar field'],
+          [
+            'docs/adr/0033-presets-hold-a-photographic-instant.md',
+            'Portable presets',
+          ],
         ],
       },
     ],

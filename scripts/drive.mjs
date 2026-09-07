@@ -55,12 +55,7 @@ import { parseArgs, promisify } from 'node:util'
 import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-// The key table itself, not a copy of one of its values. Node strips the types
-// on the way in — `paths.ts` imports nothing at runtime — and `scripts/brand/`
-// already reaches into `apps/game/src` this way. A literal here is a twin of
-// `QUERY.presentation` that nothing holds to it, and the rename that broke it
-// would show up as a slow boot rather than as an error.
-import { QUERY } from '../apps/game/src/pages/paths.ts'
+import { driveUrl } from './driveUrl.mjs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -74,6 +69,10 @@ const CAST_PX = 1280
 const OPTIONS = {
   /* Session — these describe the browser, not a step. */
   url: { type: 'string', default: 'http://localhost:5173/' },
+  /** Planetarium fixtures use the public URL codec and the page's restore path. */
+  preset: { type: 'string' },
+  picture: { type: 'string' },
+  query: { type: 'string', multiple: true },
   /** Keys the Chrome profile directory as well as the debugging port, so two
    *  agents on different ports cannot fight over one profile. */
   port: { type: 'string', default: '9333' },
@@ -95,6 +94,7 @@ const OPTIONS = {
   /* Lifecycle — each exits without running steps. */
   down: { type: 'boolean', default: false },
   status: { type: 'boolean', default: false },
+  'print-url': { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
 
   /* Steps, in the order written. */
@@ -162,6 +162,11 @@ Steps run in the order they are written, in one browser session:
 Session flags:
 
   --url <url>        default http://localhost:5173/
+  --preset <id>      bundled planetarium shot, expanded into a full shot URL
+  --picture <path>   JSON export containing one planetarium shot; excludes --preset
+  --query <key=value> override a query field; repeat for more fields, last wins.
+                     Quote raw text, without URL encoding: --query 'label=Sea + sky'
+                     Applied after --preset/--picture; presentation stays occluded.
   --port <n>         default 9333; also keys the Chrome profile, so parallel
                      agents must differ
   --width/--height   viewport, default 1600x900
@@ -178,10 +183,20 @@ Session flags:
 Lifecycle:
 
   --status           what this rig has running
+  --print-url        print the resolved URL without starting Chrome or a server
   --down             close the Chrome and the dev server this rig started
 
 Chrome stays up between invocations. Each call clears local storage and cookies
-and reboots the page unless --keep-storage is given. --down when finished.`
+and reboots the page unless --keep-storage is given. --down when finished.
+
+Photographic fixtures (session flags, before all measurement steps):
+
+  node scripts/drive.mjs --preset earthrise --wait 2000 --shot earthrise.jpg
+  node scripts/drive.mjs --picture shot.json --query 'lens.zoom=2' --shot detail.jpg
+  node scripts/drive.mjs --picture shot.json --query 'save=1' --logs
+
+--preset and --picture select /planetarium on --url's host. To test the built-in
+alias itself, use --url 'http://localhost:5173/planetarium?preset=earthrise'.`
 
 const { values, tokens } = parseArgs({
   options: OPTIONS,
@@ -214,11 +229,19 @@ const PORT = Number(values.port)
  * argument. It is added to whatever `--url` asks for, and the attach check
  * below compares asked-for keys only, so it does not disturb the match.
  */
-const URL_ = (() => {
-  const url = new URL(String(values.url))
-  url.searchParams.set(QUERY.presentation, 'occluded')
-  return url.toString()
-})()
+const URL_ = driveUrl({
+  url: values.url,
+  preset: values.preset,
+  picture:
+    values.picture === undefined
+      ? undefined
+      : JSON.parse(await readFile(values.picture, 'utf8')),
+  query: values.query,
+})
+if (values['print-url'] === true) {
+  console.log(URL_)
+  process.exit(0)
+}
 const WIDTH = Number(values.width)
 const HEIGHT = Number(values.height)
 const DPR = Number(values.dpr)

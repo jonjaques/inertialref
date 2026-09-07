@@ -36,6 +36,9 @@ export const PLAY_MULTIPLAYER = '/play/multiplayer'
 /** Free navigation of the galaxy. No ship, no fuel, nowhere you cannot go. */
 export const PLANETARIUM = '/planetarium'
 
+/** Preset library, over the current planetarium view. */
+export const PRESETS = `${PLANETARIUM}/presets`
+
 /** The scene library. */
 export const CINEMA = '/cinema'
 
@@ -137,6 +140,7 @@ export function modeForPath(pathname: string): AppMode {
 /** Whether a path is a dialog that opens over a mode rather than replacing it. */
 export function isOverlayPath(pathname: string): boolean {
   return (
+    pathname === PRESETS ||
     pathname === SETTINGS ||
     pathname.startsWith(`${SETTINGS}/`) ||
     pathname === ABOUT ||
@@ -245,6 +249,10 @@ export const QUERY = {
   autoplay: 'play',
   /** Planetarium: the address the observatory opens on. */
   at: 'at',
+  preset: 'preset',
+  /** Planetarium: URL format version; picture fields use dotted query keys. */
+  shot: 'shot',
+  save: 'save',
   /** Every mode: the world seed, which `GameEngine` already reads. */
   seed: 'seed',
   /**

@@ -1,3 +1,5 @@
+import { GENERATION_VERSIONS } from '@inertialref/universe'
+import { isPicture } from './pictureFormat.ts'
 import {
   GALAXY_VIEWS,
   GALAXY_JOURNEY_LENS,
@@ -528,7 +530,13 @@ export class GameHarness {
    * and the question "what is Europa" has no answer in the entity store.
    */
   dossier(address: string): Dossier | null {
-    return dossier(this.#host, address)
+    return dossier(
+      this.#host,
+      address,
+      this.#observatory.target === null
+        ? this.world.clock.renderTime
+        : this.#observatory.time,
+    )
   }
 
   /**
@@ -1341,19 +1349,75 @@ export class GameHarness {
     fovDeg: number
     picture: Picture
   } {
-    const picture = findPicture(id)
+    return this.takePicture(findPicture(id))
+  }
+
+  /** Keep a companion in the composition while orbiting the current body. */
+  target(address: string | null): ObserverStatus {
+    return this.#observatory.track(address)
+  }
+
+  capturePicture(id: string, label: string, why = ''): Picture {
+    if (this.cutsceneStatus() !== null)
+      throw new Error('Stop the cinematic before saving a camera shot.')
+    const framing = this.#observatory.capture()
+    const lens = this.#host.render.framingLens()
+    const picture: Picture = {
+      id,
+      label: label.trim(),
+      why,
+      seed: this.world.seedText,
+      generation: { ...GENERATION_VERSIONS },
+      time: this.#observatory.time,
+      address: this.#observatory.target!.address,
+      framing,
+      lens: { ...lens, focus: Number.isFinite(lens.focus) ? lens.focus : null },
+    }
+    if (!isPicture(picture))
+      throw new Error('The shot needs a name and a valid camera and lens.')
+    return picture
+  }
+
+  takePicture(picture: Picture): {
+    status: ObserverStatus
+    fovDeg: number
+    picture: Picture
+  } {
+    if (!isPicture(picture)) throw new Error('Invalid preset.')
+    if (
+      Object.keys(picture.generation).length !==
+        Object.keys(GENERATION_VERSIONS).length ||
+      Object.entries(GENERATION_VERSIONS).some(
+        ([key, version]) => picture.generation[key] !== version,
+      )
+    )
+      throw new Error(
+        'This preset uses a different universe generation version.',
+      )
+    if (picture.seed !== this.world.seedText)
+      throw new Error(`This preset needs universe seed "${picture.seed}".`)
+    // Resolve before changing the held time or lens, so a missing address leaves the picture intact.
+    resolveDestination(
+      picture.address,
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+    this.#observatory.validatePicture(picture.address, picture.framing)
     this.stopCutscene()
-    this.#observatory.focus(picture.address, { ease: false })
-    if (picture.framing.kind === 'cinematic') {
-      this.play(picture.framing.script)
-      this.pause()
-      this.seekCutscene(picture.framing.frame)
+    this.#observatory.setTime(picture.time)
+    if (picture.framing.kind === 'camera') {
+      const lens = picture.lens!
+      this.#host.render.setFlightLens({
+        ...lens,
+        focus: lens.focus ?? Infinity,
+      })
       return {
-        status: this.#observatory.status(),
-        fovDeg: picture.fovDeg ?? FLIGHT_FOV,
+        status: this.#observatory.restore(picture.address, picture.framing),
+        fovDeg: verticalFovDegrees({ ...lens, focus: lens.focus ?? Infinity }),
         picture,
       }
     }
+    this.#observatory.focus(picture.address, { ease: false })
     if (picture.framing.kind === 'rise') {
       /*
        * The rise solves its own lens from the geometry, so the stance comes
@@ -1778,6 +1842,7 @@ export class GameHarness {
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation}) / ir.hold()',
+      '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
       '  ir.goTo(target)               a system id or a body address; does the right thing',

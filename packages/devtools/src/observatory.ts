@@ -86,6 +86,8 @@ import {
   verticalFovDegrees,
   zoomFactorForNotches,
 } from '@inertialref/rendering'
+import { pairFrame } from './tracking.ts'
+import type { PictureFraming } from './pictures.ts'
 import { currentSystemOf, resolveDestination } from './travel.ts'
 import type { Host } from './harness.ts'
 
@@ -170,9 +172,14 @@ export interface GalaxyJourneyStatus {
 }
 
 export interface ObserverStatus {
+  readonly time: number
+  readonly heldTime: number | null
+  readonly timePaused: boolean
+  readonly timeScale: number
   readonly journey: GalaxyJourneyStatus | null
   readonly galaxyView: GalaxyView | null
   readonly target: ObserverTarget | null
+  readonly tracking: ObserverTarget | null
   readonly state: ObserverState
   /** Where the head is turned, relative to what the pose aims at. */
   readonly look: LookOffset
@@ -234,8 +241,227 @@ export const DEFAULT_FILL = 0.55
 export const RISE_HEIGHT_RADII = 0.063
 
 export class Observatory {
+  #time: number | null = null
+  #timePaused = true
+  #timeScale = 1
+  get timePaused(): boolean {
+    return this.#timePaused
+  }
+  get timeScale(): number {
+    return this.#timeScale
+  }
+  setTimePaused(paused: boolean): void {
+    this.#timePaused = paused
+  }
+  setTimeScale(scale: number): void {
+    if (!Number.isFinite(scale) || scale <= 0 || scale > 100000)
+      throw new Error('Invalid photographic time rate.')
+    this.#timeScale = scale
+  }
+  advanceTime(seconds: number): void {
+    if (this.#time !== null && !this.#timePaused) {
+      const next = this.#time + Math.max(0, seconds) * this.#timeScale
+      if (Math.abs(next) <= 3.15576e12) this.#time = next
+      else this.#timePaused = true
+    }
+  }
+
+  /** A held photographic instant, or the live simulation's presentation time. */
+  get time(): number {
+    return this.#time ?? this.#host.world.clock.renderTime
+  }
+  get heldTime(): number | null {
+    return this.#time
+  }
+  setTime(time: number | null): void {
+    if (
+      time !== null &&
+      (!Number.isFinite(time) || Math.abs(time) > 3.15576e12)
+    )
+      throw new Error('Choose a finite time within 100,000 years of J2000.')
+    this.#time = time
+    this.#timePaused = true
+  }
+
+  capture(): Extract<PictureFraming, { kind: 'camera' }> {
+    if (this.#target === null || this.galaxyInstrument)
+      throw new Error('Choose a planet, moon or star before saving a shot.')
+    const transform = this.#trackingTransform()
+    return {
+      kind: 'camera',
+      ...(transform.rotation === Q.IDENTITY
+        ? {}
+        : { basis: transform.rotation }),
+      ...(this.#tracking === null
+        ? {}
+        : {
+            tracking: {
+              address: this.#tracking.target.address,
+              referenceTime: this.time,
+            },
+          }),
+      state: {
+        ...this.#state,
+        distance: this.#state.distance * transform.scale,
+      },
+      look: { ...this.#look },
+      surface: this.#stance === null ? null : { ...this.#stance },
+    }
+  }
+
+  validatePicture(address: string, framing: PictureFraming): void {
+    const target = this.#resolve(address)
+    if (framing.kind === 'camera') {
+      if (framing.tracking !== undefined) {
+        const tracked = this.#resolve(framing.tracking.address)
+        if (
+          framing.surface !== null ||
+          tracked.address === target.address ||
+          tracked.system !== target.system
+        )
+          throw new Error(
+            'Tracking needs two different bodies in one system and an orbit camera.',
+          )
+        this.#pair(target, tracked, framing.tracking.referenceTime)
+      }
+      if (framing.surface !== null) {
+        const body = this.#bodyOf(target)
+        if (body === null || !hasSolidSurface(body))
+          throw new Error('This preset has no solid surface to stand on.')
+        if (
+          framing.surface.height !==
+          clampStanceHeight(framing.surface.height, body.radius)
+        )
+          throw new Error('This preset is outside the surface camera range.')
+      } else if (framing.state.distance < target.radius) {
+        throw new Error('This preset puts the camera inside its subject.')
+      }
+    }
+  }
+
+  restore(
+    address: string,
+    framing: Extract<PictureFraming, { kind: 'camera' }>,
+  ): ObserverStatus {
+    this.focus(address, { ease: false })
+    if (framing.surface !== null) this.stand(undefined, framing.surface)
+    this.#state = this.#desired = { ...framing.state }
+    this.#look = { ...framing.look }
+    this.#basis = framing.basis ?? Q.IDENTITY
+    this.#tracking =
+      framing.tracking === undefined
+        ? null
+        : {
+            target: this.#resolve(framing.tracking.address),
+            referenceTime: framing.tracking.referenceTime,
+          }
+    return this.status()
+  }
+
   readonly #host: Host
   #target: ObserverTarget | null = null
+  #basis: Quat = Q.IDENTITY
+  #tracking: { target: ObserverTarget; referenceTime: number } | null = null
+
+  #pair(anchor: ObserverTarget, target: ObserverTarget, time: number) {
+    const a = this.#host.world.frames.pose(anchor.frame, time)
+    const b = this.#host.world.frames.pose(target.frame, time)
+    return pairFrame(
+      UV.difference(b.position, a.position),
+      Vec.sub(b.velocity, a.velocity),
+    )
+  }
+
+  #trackingTransform(): { rotation: Quat; scale: number } {
+    const held = this.#tracking
+    if (
+      held === null ||
+      this.#target === null ||
+      held.referenceTime === this.time
+    )
+      return { rotation: this.#basis, scale: 1 }
+    const before = this.#pair(this.#target, held.target, held.referenceTime)
+    const now = this.#pair(this.#target, held.target, this.time)
+    return {
+      rotation: Q.normalize(
+        Q.multiply(
+          Q.multiply(now.orientation, Q.conjugate(before.orientation)),
+          this.#basis,
+        ),
+      ),
+      // A shrinking pair cannot carry the observer below its safe orbit floor.
+      scale:
+        clampDistance(
+          (this.#state.distance * now.distance) / before.distance,
+          this.#target.radius,
+        ) / this.#state.distance,
+    }
+  }
+
+  /** Target a companion while keeping the current orbit anchor and composition. */
+  track(address: string | null): ObserverStatus {
+    const target = address === null ? null : this.#resolve(address)
+    if (target !== null) {
+      if (
+        this.#target === null ||
+        this.#stance !== null ||
+        this.galaxyInstrument
+      )
+        throw new Error('Enter orbit before targeting another body.')
+      if (
+        target.address === this.#target.address ||
+        target.system !== this.#target.system
+      )
+        throw new Error('Choose another body in this system.')
+      this.#pair(this.#target, target, this.time)
+    }
+    const transform = this.#trackingTransform()
+    this.#basis = transform.rotation
+    this.#state = {
+      ...this.#state,
+      distance: this.#state.distance * transform.scale,
+    }
+    this.#desired = {
+      ...this.#desired,
+      distance: this.#desired.distance * transform.scale,
+    }
+    this.#tracking =
+      target === null ? null : { target, referenceTime: this.time }
+    this.#phaseOrbit = null
+    return this.status()
+  }
+
+  /** Fit the pair inside the vertical field while retaining its orbit angles. */
+  framePair(): void {
+    if (this.#target === null || this.#tracking === null) return
+    const pair = this.#pair(this.#target, this.#tracking.target, this.time)
+    this.#look = NO_LOOK
+    this.setDistance(
+      framingDistance(
+        pair.distance + this.#tracking.target.radius,
+        verticalFovDegrees(this.#lens),
+        0.8,
+      ),
+    )
+  }
+
+  #orbitPose(centre: UniverseVector): ObserverPose {
+    const transform = this.#trackingTransform()
+    const pose = observerPose(centre, this.#state, this.#look)
+    if (transform.rotation === Q.IDENTITY && transform.scale === 1) return pose
+    return {
+      position: UV.translate(
+        centre,
+        Q.rotate(
+          transform.rotation,
+          Vec.scale(UV.difference(pose.position, centre), transform.scale),
+        ),
+      ),
+      orientation: Q.normalize(
+        Q.multiply(transform.rotation, pose.orientation),
+      ),
+    }
+  }
   #galaxyView: GalaxyView | null = null
   #journey: {
     route: GalaxyJourneyRoute
@@ -401,7 +627,10 @@ export class Observatory {
   }
 
   get state(): ObserverState {
-    return this.#state
+    return {
+      ...this.#state,
+      distance: this.#state.distance * this.#trackingTransform().scale,
+    }
   }
 
   /** Whether the camera is on the ground rather than in orbit. */
@@ -429,9 +658,7 @@ export class Observatory {
     // where the viewer was before the descent.
     if (this.#stance !== null) return this.#surfacePose()?.position ?? null
     const centre = this.#targetPosition(target)
-    return centre === null
-      ? null
-      : observerPose(centre, this.#state, this.#look).position
+    return centre === null ? null : this.#orbitPose(centre).position
   }
 
   /**
@@ -476,6 +703,8 @@ export class Observatory {
     this.#galaxyView = null
     this.#journey = null
     this.#target = target
+    this.#tracking = null
+    this.#basis = Q.IDENTITY
     this.#phaseOrbit = null
     // Focusing something else is leaving the ground. A stance names a latitude
     // and a longitude on one particular body, so carrying it across a change of
@@ -545,9 +774,12 @@ export class Observatory {
    * "restore" step and nothing to put back, because nothing was taken.
    */
   clear(): void {
+    this.#time = null
     this.#journey = null
     this.#galaxyView = null
     this.#target = null
+    this.#tracking = null
+    this.#basis = Q.IDENTITY
     this.#phaseOrbit = null
     this.#stance = null
     this.#site = null
@@ -591,7 +823,13 @@ export class Observatory {
     if (this.#stance !== null || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     const radius = this.#target?.radius ?? 0
-    this.#desired = applyZoom(this.#desired, factor, radius)
+    const scale = this.#trackingTransform().scale
+    const actual = applyZoom(
+      { ...this.#desired, distance: this.#desired.distance * scale },
+      factor,
+      radius,
+    )
+    this.#desired = { ...actual, distance: actual.distance / scale }
     // The wheel eases while the drag does not, because a wheel arrives in
     // discrete jumps a hand cannot smooth and a drag arrives already smooth.
     // Without this a notch is a visible step at every scale.
@@ -609,7 +847,8 @@ export class Observatory {
     const radius = this.#target?.radius ?? 0
     this.#desired = {
       ...this.#desired,
-      distance: clampDistance(distance, radius),
+      distance:
+        clampDistance(distance, radius) / this.#trackingTransform().scale,
     }
     if (!ease) this.#state = this.#desired
   }
@@ -767,7 +1006,7 @@ export class Observatory {
     const toStar = this.#starDirection()
     if (toStar === null) return
     const { azimuth, elevation } = anglesForPhase(
-      toStar,
+      Q.rotateInverse(this.#trackingTransform().rotation, toStar),
       phaseDeg,
       elevationDeg,
     )
@@ -807,6 +1046,8 @@ export class Observatory {
    * for exactly this reason before the surface arm existed to receive them.
    */
   compose(id: string): ObserverStatus {
+    this.track(null)
+    this.#basis = Q.IDENTITY
     const composition = findComposition(id)
     const body = this.#body()
     const toStar = this.#starDirection()
@@ -942,7 +1183,7 @@ export class Observatory {
     try {
       const spin = this.#host.world.frames.pose(
         bodyFixedFrameId(body.address),
-        this.#host.world.clock.renderTime,
+        this.time,
       )
       return Q.rotateInverse(spin.orientation, direction)
     } catch {
@@ -965,13 +1206,10 @@ export class Observatory {
     if (body === null) return null
     const world = this.#host.world
     try {
-      const here = world.frames.pose(
-        bodyFixedFrameId(body.address),
-        world.clock.renderTime,
-      )
+      const here = world.frames.pose(bodyFixedFrameId(body.address), this.time)
       const there = world.frames.pose(
         bodyFrameId(other.address),
-        world.clock.renderTime,
+        this.time,
       ).position
       return Q.rotateInverse(
         here.orientation,
@@ -1073,6 +1311,8 @@ export class Observatory {
       body.radius,
     )
     this.#journey = null
+    this.track(null)
+    this.#basis = Q.IDENTITY
     this.#stance = {
       latitude,
       longitude,
@@ -1207,7 +1447,9 @@ export class Observatory {
 
   status(): ObserverStatus {
     const radius = this.#target?.radius ?? 0
-    const altitude = Math.max(0, this.#state.distance - radius)
+    const scale = this.#trackingTransform().scale
+    const distance = this.#state.distance * scale
+    const altitude = Math.max(0, distance - radius)
     const surface = this.#surfaceStatus()
     /*
      * How much of the frame the body fills — and standing on it, that is all of
@@ -1227,16 +1469,20 @@ export class Observatory {
     const fill =
       surface !== null
         ? 1
-        : radius > 0 && this.#state.distance > radius
-          ? (2 * angularRadius(radius, this.#state.distance)) /
-            verticalFov(this.#lens)
+        : radius > 0 && distance > radius
+          ? (2 * angularRadius(radius, distance)) / verticalFov(this.#lens)
           : 0
     return {
+      time: this.time,
+      heldTime: this.heldTime,
+      timePaused: this.timePaused,
+      timeScale: this.timeScale,
       journey: this.journey,
       galaxyView: this.#galaxyView,
       target: this.#target,
-      state: this.#state,
-      desired: this.#desired,
+      tracking: this.#tracking?.target ?? null,
+      state: { ...this.#state, distance },
+      desired: { ...this.#desired, distance: this.#desired.distance * scale },
       look: this.#look,
       aimed: !isCentred(this.#look),
       travelling:
@@ -1284,7 +1530,7 @@ export class Observatory {
 
     const centre = this.#targetPosition(target)
     if (centre === null) return null
-    return observerPose(centre, this.#state, this.#look)
+    return this.#orbitPose(centre)
   }
 
   /** Whether the ease has close enough that holding it open is noise. */
@@ -1319,7 +1565,7 @@ export class Observatory {
   #targetPosition(target: ObserverTarget): UniverseVector | null {
     const world = this.#host.world
     try {
-      return world.frames.pose(target.frame, world.clock.renderTime).position
+      return world.frames.pose(target.frame, this.time).position
     } catch {
       // The frame belongs to a system that was unloaded, or to a world that
       // has been replaced under us by a save load. Losing the pose for a frame
@@ -1380,10 +1626,7 @@ export class Observatory {
     const world = this.#host.world
     let spin
     try {
-      spin = world.frames.pose(
-        bodyFixedFrameId(body.address),
-        world.clock.renderTime,
-      )
+      spin = world.frames.pose(bodyFixedFrameId(body.address), this.time)
     } catch {
       return null
     }
@@ -1463,7 +1706,7 @@ export class Observatory {
       // the moment the frame depicts.
       const star = world.frames.pose(
         systemFrameId(target.system),
-        world.clock.renderTime,
+        this.time,
       ).position
       const toStar = UV.difference(star, centre)
       return Vec.length(toStar) > 0 ? Vec.normalize(toStar) : null

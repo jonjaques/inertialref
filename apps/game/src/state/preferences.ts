@@ -1,3 +1,4 @@
+import { isPicture, MAX_PICTURES, type Picture } from '@inertialref/devtools'
 import { useEffect, useRef, useState } from 'react'
 import {
   type Lens,
@@ -275,6 +276,18 @@ export const RENDER_SURFACE = define<SurfaceQuality>({
 /* camera                                                                    */
 /* ------------------------------------------------------------------------ */
 
+export const PERSONAL_PICTURES = define<readonly Picture[]>({
+  key: 'planetarium.pictures',
+  group: 'planetarium',
+  what: 'personal camera shots',
+  initial: [],
+  accept: (value): value is readonly Picture[] =>
+    Array.isArray(value) &&
+    value.length <= MAX_PICTURES &&
+    value.every(isPicture) &&
+    new Set(value.map((one) => one.id)).size === value.length,
+})
+
 export const CAMERA_LENS = define<Lens>({
   key: 'camera.lens',
   group: 'camera',
@@ -516,6 +529,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
   CAMERA_LENS,
+  PERSONAL_PICTURES,
   CONTROLS_KEYMAP,
   PLANETARIUM_LABELS,
   PLANETARIUM_LABEL_DENSITY,

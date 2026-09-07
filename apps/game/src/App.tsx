@@ -1,3 +1,4 @@
+import { presentationClock } from './hud/time.ts'
 import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
@@ -463,17 +464,19 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
   const commands: HudCommands = {
     togglePause: () => {
-      const paused = !engine.world.clock.paused
-      engine.world.clock.setPaused(paused)
+      const clock = presentationClock(engine)
+      const paused = !clock.paused
+      clock.setPaused(paused)
       flash(paused ? 'paused' : 'running')
     },
     warp: (direction: number) => {
-      const next = nextWarp(engine.world.clock.timeScale, direction)
-      engine.world.clock.setTimeScale(next)
+      const clock = presentationClock(engine)
+      const next = nextWarp(clock.timeScale, direction)
+      clock.setTimeScale(next)
       flash(`time warp ${next}×`)
     },
     realTime: () => {
-      engine.world.clock.setTimeScale(1)
+      presentationClock(engine).setTimeScale(1)
       flash('time warp 1×')
     },
     toggleAssist: () =>

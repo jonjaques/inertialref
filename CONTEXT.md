@@ -8139,6 +8139,70 @@ The profiles and comparison script are in `.scratch/orbit-perf/`. Visible
 galaxy draws retain their measured cost; angular caching and the other
 remaining work stay in [the performance plan](design/plans/perf.md#the-galaxy).
 
+## A preset keeps the instant, and Cinema keeps the Enterprise (6 Sep 2026)
+
+[ADR-0033](docs/adr/0033-presets-hold-a-photographic-instant.md) records the
+portable preset format and the photographic clock. Restoring a surface shot
+preserves its pose, full lens and instant without changing `world.stateHash()`.
+The snapshot evaluates analytic bodies at that same instant; orbit traces need
+it too, because anchoring them to live time leaves a held moon detached from
+its path. Keyboard transport and panel transport share the clock selection.
+
+Scouting with the shipped catalog covers 464 bodies in 21 systems within
+12 light-years of Sol and 272 bodies in 17 systems across the galactic center.
+Tau Ceti supplies two additional local compositions. The far shore is on
+`P222_1_0_9/b:4`, about 53,350 light-years from Sol. Its low sun is composed at
+100331.9499824278 seconds from J2000. The six selected views have rendered
+480×320 JPEG plates and share the same JSON decoder as personal imports.
+
+A sparse eclipse plate is a valid 3,613-byte JPEG. A 4 KB minimum file-size
+check rejects it; the plate gate now checks dimensions and decodes every pixel.
+The Enterprise's three portraits belong to Cinema, so their clearance test
+samples the cinema script directly instead of reading planetarium presets.
+
+## Earth moved to September and the camera stayed in January (6 Sep 2026)
+
+The photographic snapshot used the selected date, but
+`Observatory.#targetPosition` still read `world.clock.renderTime`. Setting
+September 2026 left the orbit camera 250,074,693,191 meters from the drawn
+Earth, at a requested standoff of 20,779,659 meters. Surface-camera coverage
+missed it because that arm already used photographic time. The regression
+now compares the orbit eye to the drawn body's position across date jumps,
+Earth–Luna–Earth navigation, and return to simulation time.
+
+The orbit anchor and tracking target are separate. A year of Earth–Luna
+samples holds both centers' eye directions within 1e-7 while the canonical
+state hash stays unchanged. The pair's changing separation requires a
+camera-distance change as well as rotation; orientation alone cannot keep
+two screen positions fixed. The safe orbit floor takes precedence.
+[ADR-0033](docs/adr/0033-presets-hold-a-photographic-instant.md) records the
+camera basis and reference instant carried by a shared shot.
+
+Preset management lives at `/planetarium/presets`, owned by the planetarium's
+nested route. Its dock is a quick selector. A global `/presets` route would
+put a planetarium feature outside its mode and require a separate background
+location to preserve the camera. The nested parent supplies that lifetime.
+
+## Shared shots have readable query fields (6 Sep 2026)
+
+Custom links use `shot=1` with dotted picture keys through `URLSearchParams`,
+including the ordinary `seed` boot parameter. They replace URL-encoded JSON;
+the JSON file envelope stays unchanged. Field paths determine value types so
+numeric-looking seeds remain strings and `lens.focus=null` means infinity.
+Unknown paths, duplicate fields, conflicting paths and invalid numbers are
+rejected before the camera reads the reconstructed picture.
+
+The parent route compares only sorted picture parameters. Changing a lens or
+time field restores the shot; entering the preset dialog, changing its name
+query, or reordering parameters preserves the current pose. Focusing a body
+clears all picture fields while keeping the universe seed and diagnostics.
+
+The browser driver opens those same URLs with `--preset <id>` or
+`--picture <single-shot.json>`. Repeatable `--query key=value` overrides make
+field changes and invalid-link fixtures explicit; `--print-url` resolves them
+without Chrome. The drive skill and driving guide carry the setup and regression
+checks. The driver does not maintain a separate camera restoration path.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
