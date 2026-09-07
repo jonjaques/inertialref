@@ -147,6 +147,8 @@ export interface SensorDiagnostics {
   readonly meterMaskBytes: number
   readonly maximumCircle: number
   readonly defocusPasses: number
+  /** Source samples in each near/far gather; zero when defocus bypasses. */
+  readonly defocusSamples: number
   readonly motionPasses: number
   readonly shutterFraction: number
 }
@@ -355,6 +357,7 @@ export function createSensor(
             : 0,
         maximumCircle,
         defocusPasses: defocus?.passes ?? 0,
+        defocusSamples: defocus?.samples ?? 0,
         motionPasses: motion?.passes ?? 0,
         shutterFraction: motion?.fraction.value ?? 0,
       }

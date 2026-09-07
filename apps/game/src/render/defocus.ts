@@ -31,8 +31,9 @@ import {
 /** A deterministic equal-area iris sample; the outer ring describes the blades. */
 export function irisPattern(
   glass: Glass,
+  samples = 48,
 ): readonly (readonly [number, number])[] {
-  return Array.from({ length: 48 }, (_, i) => {
+  return Array.from({ length: samples }, (_, i) => {
     const angle = i * Math.PI * (3 - Math.sqrt(5)) + glass.bladeAngle
     const sector = (2 * Math.PI) / glass.blades
     const polygon =
@@ -41,7 +42,7 @@ export function irisPattern(
         ((((angle - glass.bladeAngle) % sector) + sector) % sector) -
           sector / 2,
       )
-    const radius = Math.sqrt((i + 0.5) / 48) * polygon
+    const radius = Math.sqrt((i + 0.5) / samples) * polygon
     return [Math.cos(angle) * radius, Math.sin(angle) * radius] as const
   })
 }
@@ -60,6 +61,13 @@ export class DefocusNode extends TempNode<'vec4'> {
     target: new RenderTarget(1, 1, { type: HalfFloatType, depthBuffer: false }),
     material: new NodeMaterial(),
   }))
+  // A circle up to four pixels in the drawing buffer reaches only one
+  // half-resolution texel from its center. Twelve samples cover that footprint without the
+  // large circle's redundant gathers. Materials share the existing targets.
+  readonly #smallGathers: readonly WarmPass[] = [1, 2].map((stage) => ({
+    target: this.#stages[stage]!.target,
+    material: new NodeMaterial(),
+  }))
   #disposed = false
   readonly #quad = new QuadMesh()
   readonly #size = new Vector2()
@@ -70,6 +78,8 @@ export class DefocusNode extends TempNode<'vec4'> {
   readonly inputNode: TextureNode
   readonly motionNode: TextureNode
   passes = 0
+  /** Source samples per near/far gather in the last submitted frame. */
+  samples = 0
 
   constructor(input: TextureNode, motion: TextureNode) {
     super('vec4')
@@ -92,38 +102,46 @@ export class DefocusNode extends TempNode<'vec4'> {
       circle,
     ).context(context)
     const source = texture(this.#stages[0]!.target.texture)
-    const pattern = irisPattern(GLASS_PRESETS.flight)
-    for (const near of [false, true]) {
-      const gather = Fn(() => {
-        const center = source.sample(uv())
-        const radius = near ? this.maximum.mul(0.5) : center.a.max(0).mul(0.5)
-        const sum = vec4(0).toVar()
-        for (const [index, [x, y]] of pattern.entries()) {
-          const circularRadius = Math.sqrt((index + 0.5) / pattern.length)
-          const length = Math.hypot(x, y)
-          const offset = mix(
-            vec2(x, y),
-            vec2((x / length) * circularRadius, (y / length) * circularRadius),
-            this.openness,
-          )
-          const sample = source.sample(
-            uv().add(offset.mul(radius).mul(this.pixelStep)),
-          )
-          const reach = near ? sample.a.negate() : sample.a
-          // Circle coverage is premultiplied into the color. A sharp near
-          // surface contributes nothing to the soft far layer behind it.
-          const coverage = reach
-            .mul(0.5)
-            .sub(radius.mul(offset.length()))
-            .add(1)
-            .clamp()
-            .mul(reach.sub(0.5).clamp())
-          sum.addAssign(vec4(sample.rgb.mul(coverage), coverage))
-        }
-        return sum.div(pattern.length)
-      })()
-      this.#stages[near ? 2 : 1]!.material.fragmentNode =
-        gather.context(context)
+    for (const samples of [48, 12]) {
+      const pattern = irisPattern(GLASS_PRESETS.flight, samples)
+      for (const near of [false, true]) {
+        const gather = Fn(() => {
+          const center = source.sample(uv())
+          const radius = near ? this.maximum.mul(0.5) : center.a.max(0).mul(0.5)
+          const sum = vec4(0).toVar()
+          for (const [index, [x, y]] of pattern.entries()) {
+            const circularRadius = Math.sqrt((index + 0.5) / pattern.length)
+            const length = Math.hypot(x, y)
+            const offset = mix(
+              vec2(x, y),
+              vec2(
+                (x / length) * circularRadius,
+                (y / length) * circularRadius,
+              ),
+              this.openness,
+            )
+            const sample = source.sample(
+              uv().add(offset.mul(radius).mul(this.pixelStep)),
+            )
+            const reach = near ? sample.a.negate() : sample.a
+            // Circle coverage is premultiplied into the color. A sharp near
+            // surface contributes nothing to the soft far layer behind it.
+            const coverage = reach
+              .mul(0.5)
+              .sub(radius.mul(offset.length()))
+              .add(1)
+              .clamp()
+              .mul(reach.sub(0.5).clamp())
+            sum.addAssign(vec4(sample.rgb.mul(coverage), coverage))
+          }
+          return sum.div(pattern.length)
+        })()
+        const stage =
+          samples === 48
+            ? this.#stages[near ? 2 : 1]!
+            : this.#smallGathers[near ? 1 : 0]!
+        stage.material.fragmentNode = gather.context(context)
+      }
     }
     const near = texture(this.#stages[2]!.target.texture)
     const far = texture(this.#stages[1]!.target.texture)
@@ -148,6 +166,9 @@ export class DefocusNode extends TempNode<'vec4'> {
     this.#stages.forEach(({ material }, i) => {
       material.name = `Sensor Defocus ${i}`
     })
+    this.#smallGathers.forEach(({ material }, i) => {
+      material.name = `Sensor Defocus ${i + 1} small`
+    })
     // Keeping the bypass in the graph avoids any pipeline rebuild as focus
     // changes. A measured sharp frame submits no defocus draws at all.
     return this.outputTexture
@@ -156,17 +177,22 @@ export class DefocusNode extends TempNode<'vec4'> {
   warm(renderer: WebGPURenderer): Promise<void> {
     return this.#disposed
       ? Promise.resolve()
-      : warmSensorPass(renderer, this.#quad, this.#stages)
+      : warmSensorPass(renderer, this.#quad, [
+          ...this.#stages,
+          ...this.#smallGathers,
+        ])
   }
 
   override updateBefore({ renderer }: NodeFrame): undefined {
     if (this.#disposed) return
     this.passes = 0
+    this.samples = 0
     this.outputTexture.value =
       this.enabled.value < 0.5
         ? this.inputNode.value
         : this.#stages[3]!.target.texture
     if (renderer === null || this.enabled.value < 0.5) return
+    this.samples = this.maximum.value <= 4 ? 12 : 48
     const previous = renderer.getRenderTarget()
     const size = renderer.getDrawingBufferSize(this.#size)
     this.pixelStep.value.set(1 / size.x, 1 / size.y)
@@ -178,7 +204,10 @@ export class DefocusNode extends TempNode<'vec4'> {
           i === 3 ? size.y : Math.max(1, Math.ceil(size.y / 2)),
         )
         renderer.setRenderTarget(target)
-        this.#quad.material = this.#stages[i]!.material
+        this.#quad.material =
+          this.samples === 12 && (i === 1 || i === 2)
+            ? this.#smallGathers[i - 1]!.material
+            : this.#stages[i]!.material
         this.#quad.render(renderer)
         this.passes += 1
       }
@@ -194,6 +223,7 @@ export class DefocusNode extends TempNode<'vec4'> {
       target.dispose()
       material.dispose()
     }
+    for (const { material } of this.#smallGathers) material.dispose()
     super.dispose()
   }
 }
