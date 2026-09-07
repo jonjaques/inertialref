@@ -2,6 +2,11 @@
 
 Status: accepted · 5 Sep 2026
 
+The ordinary-view daylight omission policy is superseded as product direction
+by [ADR-0037](0037-the-enhanced-camera.md). Its implementation and measurements
+below describe Natural; they do not satisfy Enhanced's visible-sky requirement.
+Field calibration, transport, versioning and cache ownership remain in force.
+
 ## Context
 
 The active `stellarDensity` controls procedural system counts. Replacing its

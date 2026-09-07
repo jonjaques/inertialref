@@ -1,5 +1,12 @@
 # M4: Earth to the galaxy through the sensor
 
+This is a historical execution and evidence record for M4. Its Natural,
+Neutral and Direct plate instructions describe the recorded implementation.
+[The camera plan](the-camera.md) supersedes its prospective image requirements,
+including preservation of ordinary Natural behavior and implicit long-exposure
+instrument staging. Retain those captures as photographic comparisons; the
+active galaxy milestones are in [the galaxy plan](the-galaxy.md).
+
 Status: implemented and verified; [PR #66](https://github.com/jonjaques/inertialref/pull/66) is open for review with the lighting and capture limits below, 5 Sep 2026.
 
 This is the execution plan for M4 of [the galaxy plan](the-galaxy.md). The

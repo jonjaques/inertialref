@@ -1,5 +1,11 @@
 # The upscaler: the sensor draws small and reconstructs the display
 
+Status: separate, deferred performance proposal. Camera C1–C5 and galaxy M7
+establish a useful Enhanced image and visible-sky cost first. Whole-scene
+reconstruction is not required for the three camera modes. Revalidate the
+library integration and depth assumptions against the implementation tip before
+starting this work.
+
 [The sensor](the-sensor.md) owns the frame: one `RenderPipeline` around one
 scene pass and the house curve, and everything a camera does to light hangs
 off it. This page is the plan for the one thing that makes the scene pass
@@ -10,8 +16,8 @@ Super Resolution brought to three's `WebGPURenderer` as WGSL compute passes.
 It is optional, it is one row of the same picture record the anti-aliasing
 lives in, and at its fullest it is a temporal reconstruction that anti-aliases
 for free, a reactive mask for every blended surface in this scene, an exposure
-the sensor's meter will condition, and a set of guides the motion-blur phase
-of the sensor plan reads instead of re-deriving.
+the sensor conditions, and guides whose reuse by the implemented motion pass
+requires a measured compatibility check.
 
 What this page is not: the sensor's exposure, glare and response are
 [the sensor](the-sensor.md); the ground's own detail levers are
@@ -355,7 +361,7 @@ jumps ([ADR-0003](../../docs/adr/0003-render-coordinates.md)); at a rebase
 every object's `matrixWorld` and the camera move by the same vector, and the
 velocity node's `previous view × previous model` product is the same view-space
 position before and after, so a body at rest has zero velocity across a rebase
-by construction. That is the property the sensor plan's motion-blur phase
+by construction. That is the property the implemented sensor motion pass
 already wants tested, and it lands here: `upscale.gpu.test.ts` reads the
 velocity attachment back across a forced rebase and holds it to zero at every
 texel. Vertex displacement is the one thing the node cannot see:
@@ -403,11 +409,14 @@ this table says.
 
 **Exposure.** The library conditions accumulation in an invertible tonemap
 space so fireflies cannot dominate the history, and it meters its own
-pre-exposure by default. That stays on until the sensor's phase 1 lands;
-then `exposureTexture` is the meter's 1×1 and `preExposureTexture` is the
-pre-exposure the materials bake, so the history is conditioned by the number
-the curve uses and a stepped exposure does not read as a full-screen shading
-change. The sensor plan's § 4 gains the sentence.
+pre-exposure by default. The implemented sensor in ADR-0031 reduces its
+histogram on the CPU; this plan cannot assume a GPU 1×1 exposure texture
+already exists. Adapt the sensor's resolved exposure and pre-exposure values
+to the library's verified input contract, without adding a second meter.
+Camera C2 defines Enhanced's storage and processing domains first. Keep
+reconstruction in a declared linear domain before nonlinear composition;
+invalidate history on incompatible mode, staging or domain changes. Do not
+feed a composite gain into the library as though it were one physical EV.
 
 **RCAS.** `standard` is the library's 0.8; `crisp` is 1.0; `off` is 0, where
 the spatial path blits EASU alone and the temporal path skips the sharpen. A
@@ -536,9 +545,9 @@ cost table again, and the device's memory figure.
 
 **Phase 5 — the seams and the record.** `trackTimestamp` on the renderer under
 `?timing=full` so `upscaler.gpuTimings` reaches the perf panel per pass;
-`exposureTexture` and `preExposureTexture` when the sensor's phase 1 has
-landed; `temporalGuides` published for the motion-blur phase to read the
-dilated motion instead of its own tile pass; the ADR, _the upscaler_, with the
+the exposure adapter against camera C2's resolved domains;
+`temporalGuides` considered for the implemented motion-blur pass only after
+compatibility and cost measurements; the ADR, _the upscaler_, with the
 tables from § 6 as measurements.
 
 ---
@@ -554,7 +563,7 @@ tables from § 6 as measurements.
    and the whole of the plumbing the temporal path then inherits.
 4. **Phase 4.** The reactive table is the part that takes iteration; the
    debug views are what make it iteration rather than guesswork.
-5. **Phase 5**, when the sensor's exposure exists to couple to.
+5. **Phase 5**, after camera C2 defines the exposure domains to couple to.
 
 ---
 

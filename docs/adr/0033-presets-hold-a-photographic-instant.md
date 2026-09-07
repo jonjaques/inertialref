@@ -2,6 +2,10 @@
 
 Status: accepted · 6 Sep 2026
 
+[ADR-0037](0037-the-enhanced-camera.md) adds accepted camera direction. Its
+planned preset extension records processing mode; this record describes the
+implemented version 1 format, which stores a lens but no camera response.
+
 ## Context
 
 A hand-composed shot needs its camera, its lens and the instant that puts the

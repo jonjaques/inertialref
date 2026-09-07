@@ -1,5 +1,11 @@
 # Galaxy performance handoff
 
+This is the M5 performance investigation record, including its original
+checkpoint. It is not a fresh execution assignment. Current work follows
+[the galaxy plan](the-galaxy.md) and [camera C5](the-camera.md#c5-acceptance-through-the-actual-image).
+Natural daylight omission does not satisfy the Enhanced performance gate.
+Keep the measured sampling limits and submission controls as evidence.
+
 Prepared 5 September 2026 as the checkpoint for a fresh performance
 investigation, after the user observed full GPU saturation and OS UI stalls
 during the M5 rendering runs. The run that followed the same day is recorded
@@ -83,7 +89,7 @@ commits; preserve it and other agents' worktrees.
 
 ## What is implemented
 
-Read [M5](the-galaxy.md#m5-dust-transport) and
+Read [M5’s implemented foundation](the-galaxy.md#m1m5-implemented-foundation) and
 [ADR-0032](../../docs/adr/0032-the-stellar-field.md#dust-transport-m5).
 
 The shared field is `galaxy-field@3`; the GPU port is `galaxy-tsl@3`. Active

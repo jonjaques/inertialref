@@ -83,7 +83,7 @@ export const WINGS = [
     id: 'concepts',
     label: 'Concepts',
     blurb:
-      'The ten mechanisms that carry the architecture, and the twenty-six decisions underneath them.',
+      'The mechanisms that carry the architecture, and the decisions underneath them.',
     framing: { address: 's:SOL/b:5', phase: -122, tilt: -26, fill: 1.5 },
     groups: [
       {
@@ -150,6 +150,7 @@ export const WINGS = [
             'docs/adr/0036-the-pointer-holds-the-rope.md',
             'The pointer holds the rope',
           ],
+          ['docs/adr/0037-the-enhanced-camera.md', 'The Enhanced camera'],
         ],
       },
     ],

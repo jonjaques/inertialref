@@ -1,5 +1,11 @@
 # tng-intro — what is left of the accuracy pass
 
+Camera alignment: authored cinematic exposures remain explicit staging under
+[ADR-0037](../../docs/adr/0037-the-enhanced-camera.md). This plan's reference
+matching does not constrain ordinary Enhanced gameplay to Natural's image.
+Camera C4 verifies exposure override/release and rechecks the authored shots;
+it does not redesign their framing or bypass the existing director.
+
 `tng-intro` (`packages/devtools/src/cutscenes/tngIntro.ts`) is a shot-for-shot
 study of the 1987 television title sequence, staged in the real Solar System.
 Every timing and every composition in it is a measured number, so a render can
