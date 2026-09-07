@@ -20,6 +20,7 @@ export function SensorSection() {
             processing: snapshot.exposure.processing,
             effectiveEV: snapshot.exposure.effectiveEV,
             gain: snapshot.exposure.gain,
+            metered: snapshot.exposure.metered,
             override: snapshot.exposure.override,
             automaticAvailable: snapshot.exposure.automaticAvailable,
           },
@@ -133,7 +134,7 @@ export function SensorSection() {
             ? 'Starting'
             : exposure.processing === 'enhanced'
               ? 'HDR composite'
-              : `EV ${exposure.effectiveEV.toFixed(1)} · ${exposure.override === 'staging' ? 'Authored' : exposure.mode === 'manual' ? 'Lens' : settings.rate === 0 ? 'Held' : 'Metered'}`
+              : `EV ${exposure.effectiveEV.toFixed(1)} · ${exposure.override === 'staging' ? 'Authored' : exposure.mode === 'manual' ? 'Lens' : settings.rate === 0 ? 'Held' : exposure.metered ? 'Metered' : 'Calibrating'}`
         }
       />
       {exposure?.mode === 'automatic' && exposure.override === null && (

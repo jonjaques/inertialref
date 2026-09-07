@@ -23,7 +23,12 @@ import {
   SEA_DETAILS,
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
-import { lensForFov, CAMERA_MODES, ExposureMeter } from '@inertialref/rendering'
+import {
+  lensForFov,
+  CAMERA_MODES,
+  ExposureMeter,
+  histogram,
+} from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
 
 /*
@@ -364,6 +369,29 @@ describe('the author’s instruments', () => {
     expect(markup).toContain('aria-label="Exposure time, seconds"')
     expect(markup).toContain('aria-label="Sensor gain, ISO"')
     expect(markup).not.toContain('aria-label="Adaptation rate"')
+  })
+
+  it('labels Automatic calibration, a measured exposure, hold, and a reset truthfully', () => {
+    const settings = { ...RENDER_SENSOR.initial, mode: 'automatic' as const }
+    write(RENDER_SENSOR, settings)
+    const meter = new ExposureMeter()
+    const renderExposure = (time: number, expected: string) => {
+      engineStore.setState({
+        exposure: meter.update(CAMERA_LENS.initial, settings, time),
+      })
+      const markup = renderToStaticMarkup(
+        createElement(KeymapProvider, null, createElement(LensSection)),
+      )
+      expect(markup).toContain(`· ${expected}`)
+    }
+    renderExposure(0, 'Calibrating')
+    meter.measure(histogram([0.3]), 1, CAMERA_LENS.initial, settings)
+    renderExposure(1, 'Metered')
+    write(RENDER_SENSOR, { ...settings, rate: 0 })
+    renderExposure(1, 'Held')
+    write(RENDER_SENSOR, settings)
+    meter.reset()
+    renderExposure(1, 'Calibrating')
   })
 
   it('reports an authored photographic exposure over an Enhanced preference', () => {
