@@ -9,6 +9,16 @@ lets published data change underneath a running game without breaking it.
 
 ---
 
+## The preview stellar field
+
+`packages/universe/src/galaxy/` contains a seeded field for the disk, arms,
+bar/bulge and halo. Its CPU integrator produces headless outside and
+observer-centered plates through the [harness](../guides/harness.md#measuring-the-stellar-field).
+The field has its own version and leaves active population generation
+unchanged. Its emission-only radiance and parameter assumptions are recorded
+in [ADR-0032](../adr/0032-the-stellar-field.md). Dust, live volume rendering and
+photometric calibration remain separate milestones.
+
 ## The three-layer body model
 
 Every object in the galaxy is exactly one of three things, and the player can
@@ -89,7 +99,7 @@ planets**, 178 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
 Exoplanet Archive and committed. It replaced 18 hand-entered stars, which is the
 swap that file's comment promised would change nothing downstream — it changed
 three signatures and no architecture. Beside it, `stars-sky.irsc` holds the
-**naked-eye sky beyond 150 ly**: 7,515 systems at apparent V ≤ 6.5, 188 KB
+**naked-eye sky beyond 150 ly**: 7,514 systems at apparent V ≤ 6.5, 188 KB
 brotli, the farthest at 3,198 ly. The two load as one catalog; the sky's stars
 resolve by id and are drawn from anywhere in the volume, and they stay out of
 the cell index so the procedural fill is the same galaxy with or without them.

@@ -59,7 +59,7 @@ import type {
 export const MILKY_WAY: GalaxyId = galaxyId('milky-way')
 
 /** Stellar number density in the solar neighborhood, stars per cubic meter. */
-const LOCAL_DENSITY = 0.1 / PARSEC ** 3
+export const LOCAL_DENSITY = 0.1 / PARSEC ** 3
 /** Exponential disk scale length and height (kpc-scale structure). */
 const DISK_SCALE_LENGTH: Meters = 2_600 * PARSEC
 const DISK_SCALE_HEIGHT: Meters = 300 * PARSEC

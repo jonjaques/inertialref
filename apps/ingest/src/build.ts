@@ -216,7 +216,7 @@ interface PackedSystems {
 function packSystems(
   rows: readonly HygRow[],
   byHygId: ReadonlyMap<string, HygRow>,
-  exclude: (id: string) => boolean = () => false,
+  exclude: (id: string, group: string) => boolean = () => false,
 ): PackedSystems {
   /*
    * Group components into systems using HYG's own `comp_primary`, which is the
@@ -255,7 +255,11 @@ function packSystems(
     // Primary first, then by component number: the primary supplies the
     // position, the identity and the photometry the system is described by.
     components.sort((a, b) =>
-      a.hygId === primaryId ? -1 : b.hygId === primaryId ? 1 : a.comp - b.comp,
+      a.hygId === primaryId
+        ? -1
+        : b.hygId === primaryId
+          ? 1
+          : a.comp - b.comp || Number(a.hygId) - Number(b.hygId),
     )
     const primary = components[0] as HygRow
 
@@ -267,7 +271,7 @@ function packSystems(
       sourceKey: primary.hygId,
       proper: primary.proper,
     })
-    if (exclude(id)) continue
+    if (exclude(id, primaryId)) continue
     if (id.startsWith('HYG')) unstableIds += 1
     if (idToIndex.has(id)) {
       // Two systems cannot share an address. Keeping the first and reporting the
@@ -461,10 +465,23 @@ export function buildSkyCatalog(
       row.distanceParsecs > minParsecs &&
       row.apparentMagnitude <= options.apparentMagnitudeLimit,
   )
+  // A selected companion can have a different HIP id from the record in the
+  // volume. Compare the shared HYG group before treating it as a new system.
+  const volumeGroups = new Map<string, string>()
+  for (const row of hyg.rows) {
+    const id = canonicalSystemId({ ...row, sourceKey: row.hygId })
+    if (!options.volumeIds.has(id)) continue
+    const group =
+      row.compPrimary !== '' && hyg.byHygId.has(row.compPrimary)
+        ? row.compPrimary
+        : row.hygId
+    volumeGroups.set(group, id)
+  }
   const inVolume: string[] = []
-  const packed = packSystems(rows, hyg.byHygId, (id) => {
-    if (!options.volumeIds.has(id)) return false
-    inVolume.push(id)
+  const packed = packSystems(rows, hyg.byHygId, (id, group) => {
+    const volumeId = volumeGroups.get(group)
+    if (volumeId === undefined && !options.volumeIds.has(id)) return false
+    inVolume.push(volumeId ?? id)
     return true
   })
 

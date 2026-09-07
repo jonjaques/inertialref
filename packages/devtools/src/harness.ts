@@ -1,3 +1,4 @@
+import { GalaxyInspector } from './galaxy.ts'
 import {
   AU,
   getLogger,
@@ -1621,6 +1622,11 @@ export class GameHarness {
     return terrainZoo(this.world)
   }
 
+  /** Preview field diagnostics read the current session without activating generation. */
+  galaxy(): GalaxyInspector {
+    return new GalaxyInspector(this.world)
+  }
+
   /**
    * The Phase 0 baseline: the zoo, a descent over each member, and the measured
    * cost of generating the patches those descents ask for.
@@ -1777,6 +1783,7 @@ export class GameHarness {
       '  ir.terrain()                  the live streamer, and the rocks on it',
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
+      '  ir.galaxy()                   stellar field samples, counts, and CPU plates',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.timing(level?)             off | trace | full — what reaches the timeline',
       '  ir.timing.tracks() / .mark(name) / .drain()',

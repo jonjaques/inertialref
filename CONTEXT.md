@@ -7688,6 +7688,110 @@ as rounding noise — scale to the star's own distance. And `search('rig')`
 returns Rigil Kentaurus first, at 4 ly, above Rigel at 860; that is the
 ranking rule working, and the test now asks for `rigel`.
 
+## The sky keeps the volume and shares its system identities (5 Sep 2026)
+
+PR 62's review exposes two independent failure paths. Both host loaders treat
+an unreadable optional sky as a reason to discard a valid volume. They now
+retry the volume alone. Fixtures prove corrupt and incompatible skies preserve
+all 7,123 local systems, while a missing sky exercises the same result.
+
+HYG companions on opposite sides of 150 ly can carry different HIP ids.
+Excluding by packed id misses that they share `comp_primary`. Group exclusion
+removes one duplicate from the real asset: 7,514 sky systems, version
+`sky-0414d660`; the volume bytes stay identical. The sky digest includes both
+selection bounds even when changing a bound selects the same rows. Source-id
+ties also settle equal component numbers so reversing CSV rows cannot change
+the selected primary. Regression tests fail before each fix. The sprite
+selection property identifies generated stars by unique id-derived names.
+
+Baseline `pnpm check` passes at PR 62's `76cef98`. The review fixes pass 74
+focused tests and all five TypeScript projects; the full gate follows M2.
+
+## The galaxy can be measured from outside (5 Sep 2026)
+
+M2's `galaxy-field@1` is a CPU preview beside active `galaxy@2`.
+[ADR-0032](docs/adr/0032-the-stellar-field.md) records the version boundary,
+sources and calibration assumptions. `ir.galaxy()` exposes samples, count
+quadrature, tangent longitudes and six plate selections through `openSession`.
+The session hash is identical before and after making the plates.
+
+For the default session seed, the normalization is 0.09487290001358409 and
+solar density is 0.1 star/pc³. The 30 kpc-radius, ±10 kpc-height cylinder holds
+116.107 billion stars on a 120 × 96 × 96 grid and 116.185 billion on a
+240 × 192 × 192 grid, a 0.067% difference. The finer population totals are
+58.642 billion thin-disk stars, 10.242 billion thick-disk stars, 2.394 million
+young-arm stars, 46.145 billion bar/bulge stars and 1.153 billion halo stars.
+The halo above the reference cylinder remains outside this count.
+
+The six tangent longitudes are Scutum 32.70°, Sagittarius 47.26°, Carina
+283.23°, Centaurus 308.79°, Norma 327.79° and near-3kpc 25.54°. All are within
+3° of Hou & Han's medians. Reid's unadjusted Scutum and Sagittarius
+quadrant-IV pitches miss that bound; calibration moves each by one published
+standard deviation. Chen's power-law warp begins at 7.72 kpc, not the plan's
+20 kpc, and displaces the model's solar mid-plane by −6.39 pc. The Sun's
+catalog position stays unchanged.
+
+`pnpm sim --galaxy-plates .scratch/galaxy-m2/plates --galaxy-width 384 --quiet`
+writes six PNGs, raw float64 radiance and a report. Node 26.5.0 on this Apple
+Silicon host takes 20.5 s for face-on, 26.5 s for edge-on, and 10.4 s for the
+observer plate. These are CPU wall times, not GPU budgets. The display's
+asinh stretch reveals the faint arm modulation; isolated population plates
+show the arms, bar and halo without retuning their densities. Every view uses
+the same display parameters. There is no dust, resolved-star masking or
+physical sensor calibration. The PNGs cannot establish visible-band brightness.
+
+The focused M2 checks pass 22 tests: finite nonnegative samples, solar
+normalization, order independence, tangent locations, azimuth wrap, converged
+counts and rays, additive population emission, unchanged session state and
+fixed numeric references for three plates. PR 62's five Copilot comments and
+the companion-order bug are addressed in the preceding checkpoint. The full
+`pnpm check` passes at `3936e35`: 118 files, 1,704 regular tests, four slow
+tests, documentation build and production build. `pnpm sim --self-test` passes
+12/12. A final catalog rebuild produces no diff. The branch remains local,
+based on PR 62 at `76cef98`; no M2 PR is opened.
+
+## Counting the galaxy belongs in the slow suite (05 Sep 2026)
+
+PR #63’s first completed CI gate passed 1,703 tests and timed out on the
+count-convergence test at 20 s. The same four-test file passed in 8.55 s
+locally with two workers. Its two quadratures evaluate 9,953,280 field
+positions, so the test now uses `.slow.test.ts` and a two-minute call-site
+budget. Both grids and every assertion stay intact; `pnpm check` still runs
+it. Moving the expensive integration out of the regular suite also removes
+that cost from the per-turn hook.
+
+## A diagnostic must name the population it integrates (05 Sep 2026)
+
+Copilot’s review of PR #63 found that a runtime population typo fell through
+to composite emission and returned a plate labeled with the typo. The ray
+integrator now validates membership in `POPULATION_NAMES` before lookup,
+even for a ray outside the field. Tests also reject inherited property names
+and `null`. The ADR-0032 index row is back inside its Markdown table.
+
+Self-review found that a width-only plate request kept the fixed default
+height, stretching the projection. The omitted height now follows the width:
+square face-on, half-height edge-on and observer views. Eight regression cases
+failed before these two API fixes. The plan’s command inventory now names the
+implemented exporter. Field samples, explicitly sized plates, and the field
+version are unchanged.
+
+## The arm curve kinked, and its density jumped (05 Sep 2026)
+
+Self-review of PR #63 found a discontinuity beyond the centerline: the
+Gaussian distance projected by the pitch on either side of a kink, so a hard
+pitch branch changed off-ridge density instantly. Four of six new boundary
+regressions failed; Sagittarius’s ridge sum jumped by 0.03514 at a 300 pc
+radial offset across a two-nanoradian step.
+
+Width projection now blends from 1° before to 1° after each kink. The measured
+centerlines and tangencies are untouched. This changes field values, so the
+preview spends `galaxy-field@2`; active generation stays unchanged. The fine
+reference count is 116,184,595,789.68 stars. The edge-on and observer numeric
+plates change and receive new versioned references. `VITEST_MAX_WORKERS=2 pnpm check` passes at `33f50fb`: 1,717 regular
+tests, five slow tests, documentation and production builds. The headless
+self-test passes 12/12. All six 384-wide v2 plates were regenerated and
+visually checked in `.scratch/galaxy-m2/plates-v2`.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

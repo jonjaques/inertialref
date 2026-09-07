@@ -86,7 +86,16 @@ export async function loadStarCatalog(): Promise<StarCatalog> {
     ])
     span.end()
     decode = timer.span('catalog.decode', BOOT_PHASE)
-    const catalog = readCatalog(volume, sky)
+    let catalog: StarCatalog
+    try {
+      catalog = readCatalog(volume, sky)
+    } catch (cause) {
+      if (sky === undefined) throw cause
+      log.warn('invalid sky catalog; keeping the local volume', {
+        cause: String(cause),
+      })
+      catalog = readCatalog(volume)
+    }
     decode.end()
     log.info('catalog loaded', {
       version: catalog.version,

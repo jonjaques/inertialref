@@ -17,26 +17,28 @@ import { selectStars, type StarCandidate } from './starSelection.ts'
 const centre = UV.fromMeters(0, 0, 0)
 
 /** A star within a few hundred light-years, with an id from a small alphabet. */
-const candidate = fc.record<StarCandidate>({
-  // Ninety ids for up to a few hundred stars: collisions are the point.
-  id: fc.integer({ min: 0, max: 89 }).map((n) => `S${n}`),
-  name: fc.string({ minLength: 1, maxLength: 8 }),
-  position: fc
-    .tuple(
-      fc.double({ min: -500, max: 500, noNaN: true }),
-      fc.double({ min: -500, max: 500, noNaN: true }),
-      fc.double({ min: -500, max: 500, noNaN: true }),
-    )
-    .map(([x, y, z]) =>
-      UV.fromMeters(x * LIGHT_YEAR, y * LIGHT_YEAR, z * LIGHT_YEAR),
+const candidate = fc
+  .record<StarCandidate>({
+    // Ninety ids for up to a few hundred stars: collisions are the point.
+    id: fc.integer({ min: 0, max: 89 }).map((n) => `S${n}`),
+    name: fc.constant(''),
+    position: fc
+      .tuple(
+        fc.double({ min: -500, max: 500, noNaN: true }),
+        fc.double({ min: -500, max: 500, noNaN: true }),
+        fc.double({ min: -500, max: 500, noNaN: true }),
+      )
+      .map(([x, y, z]) =>
+        UV.fromMeters(x * LIGHT_YEAR, y * LIGHT_YEAR, z * LIGHT_YEAR),
+      ),
+    colour: fc.tuple(
+      fc.double({ min: 0, max: 1, noNaN: true }),
+      fc.double({ min: 0, max: 1, noNaN: true }),
+      fc.double({ min: 0, max: 1, noNaN: true }),
     ),
-  colour: fc.tuple(
-    fc.double({ min: 0, max: 1, noNaN: true }),
-    fc.double({ min: 0, max: 1, noNaN: true }),
-    fc.double({ min: 0, max: 1, noNaN: true }),
-  ),
-  solarLuminosities: fc.double({ min: 1e-3, max: 1e5, noNaN: true }),
-})
+    solarLuminosities: fc.double({ min: 1e-3, max: 1e5, noNaN: true }),
+  })
+  .map((star) => ({ ...star, name: star.id }))
 
 const selections = fc.array(fc.array(candidate, { maxLength: 60 }), {
   minLength: 1,

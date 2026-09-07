@@ -54,7 +54,16 @@ export function loadStarCatalog(): StarCatalog {
     })
   }
   try {
-    const catalog = readCatalog(volume, sky)
+    let catalog: StarCatalog
+    try {
+      catalog = readCatalog(volume, sky)
+    } catch (cause) {
+      if (sky === undefined) throw cause
+      log.warn('invalid sky catalog; keeping the local volume', {
+        cause: String(cause),
+      })
+      catalog = readCatalog(volume)
+    }
     log.info('catalog loaded', {
       version: catalog.version,
       systems: catalog.stars.length,

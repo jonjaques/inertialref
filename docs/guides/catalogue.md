@@ -14,7 +14,7 @@ publishes something, and the things that will bite you if you change it.
 ```
 data/catalog/
   stars-150ly.irsc     the volume: 7,123 systems and 702 confirmed planets within 150 ly, 458 KB
-  stars-sky.irsc       the sky: 7,515 systems beyond 150 ly at V ≤ 6.5, 449 KB
+  stars-sky.irsc       the sky: 7,514 systems beyond 150 ly at V ≤ 6.5, 449 KB
   manifest.json        the pair's version, each file's own, counts, and the digest of each source
   LICENSE.md           CC BY-SA 4.0 and the attribution it requires
 ```
