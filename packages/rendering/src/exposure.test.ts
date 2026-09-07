@@ -125,24 +125,26 @@ it('applies a tightened comfort range even while adaptation is held', () => {
   expect(held.pre).toBe(held.total)
 })
 
-it('clears the reading and prior gain on reset, and labels only automatic frames metered', () => {
+it('clears an adapted Automatic reading and its target on reset', () => {
   const meter = new ExposureMeter()
   meter.measure(
     histogram([0.01]),
     1 / SURFACE_LUMINANCE,
     LENS_PRESETS.flight,
-    DEFAULT_SENSOR_SETTINGS,
+    automatic,
   )
-  meter.update(LENS_PRESETS.flight, DEFAULT_SENSOR_SETTINGS, 0)
-  meter.update(LENS_PRESETS.flight, DEFAULT_SENSOR_SETTINGS, 10)
-  expect(
-    meter.update(LENS_PRESETS.flight, DEFAULT_SENSOR_SETTINGS, 10, 0).metered,
-  ).toBe(false)
+  meter.update(LENS_PRESETS.flight, automatic, 0)
+  const adapted = meter.update(LENS_PRESETS.flight, automatic, 10)
+  expect(adapted.metered).toBe(true)
+  expect(adapted.effectiveEV).toBeLessThan(
+    exposureForLuminance(SURFACE_LUMINANCE) - 2,
+  )
   meter.reset()
   expect(meter.reading).toBeNull()
-  const reset = meter.update(LENS_PRESETS.flight, DEFAULT_SENSOR_SETTINGS, 0)
-  expect(reset.adapted).toBe(exposureForLuminance(SURFACE_LUMINANCE))
+  const reset = meter.update(LENS_PRESETS.flight, automatic, 0)
+  expect(reset.effectiveEV).toBe(exposureForLuminance(SURFACE_LUMINANCE))
   expect(reset.metered).toBe(false)
+  expect(reset.luminance).toBe(0)
 })
 
 it('keeps Enhanced at its surface calibration independently of look and comfort settings', () => {
@@ -372,4 +374,13 @@ it('rejects malformed imports instead of guessing a camera mode', () => {
     expect(isSensorSettings(invalid)).toBe(false)
     expect(parseSensorSettings(invalid)).toBeNull()
   }
+})
+
+it('trims an isolated hot pixel without discarding a resolved bright subject', () => {
+  const baseline = histogram(Array<number>(10_000).fill(0.01))
+  const contaminated = histogram([...Array<number>(10_000).fill(0.01), 65504])
+  const expected = meterHistogram(baseline, 1, 9, automatic)
+  const actual = meterHistogram(contaminated, 1, 9, automatic)
+  expect(actual.ev).toBeCloseTo(expected.ev, 12)
+  expect(actual.luminance).toBeCloseTo(expected.luminance, 12)
 })
