@@ -175,26 +175,27 @@ stellar component in isolation. Scattering and extragalactic light are absent.
 
 | Region           | Longitude | Absolute latitude | Reference V nW m⁻² sr⁻¹ |   Model | Residual mag |
 | ---------------- | --------- | ----------------- | ----------------------: | ------: | -----------: |
-| Mid-latitudes    | 0–360°    | 30–60°            |                  53.559 |  47.401 |       +0.133 |
-| Polar caps       | 0–360°    | 60–90°            |                  41.862 |  33.744 |       +0.234 |
-| Aquila sightline | 40–50°    | 0–5°              |                 176.410 | 216.650 |       −0.223 |
+| Mid-latitudes    | 0–360°    | 30–60°            |                  53.559 |  47.415 |       +0.132 |
+| Polar caps       | 0–360°    | 60–90°            |                  41.862 |  33.727 |       +0.235 |
+| Aquila sightline | 40–50°    | 0–5°              |                 176.410 | 214.315 |       −0.211 |
 
-These values use seed `inertialref`, 384 equal-solid-angle rays per region, and
+These values use the default session (`--seed inertialref`) and its derived
+galaxy seed, 384 equal-solid-angle rays per region, and
 the settled CPU quadrature. Increasing to 1,536 rays and a 10 pc maximum step
-changes every region mean by less than 1%. Physical-GPU rays agree with the CPU
-within 1% individually and 0.01 mag in the region averages. The approximate
-photopic residuals are +0.108, +0.185 and −0.100 mag. All remain inside the
+changes every region mean by less than 1%. The physical-GPU suite uses a directly seeded `rootSeed('inertialref')` field;
+its rays agree with their corresponding CPU reference within 1% individually and 0.01 mag in the region averages. The approximate
+photopic residuals are +0.108, +0.186 and −0.089 mag. All remain inside the
 original 0.3 mag bound; there is no display response in the calculation.
 
 [Licquia et al. 2015](https://arxiv.org/abs/1508.04446), Table 3, reports
 `M_V − 5 log h = −20.74`; with the paper's `h = 0.7`, the target is
 **M_V = −21.515**, not −21.37. The comparison integrates the emergent face-on
 image, including absorption, to an isotropic-equivalent luminosity. The model's
-3.216 × 10¹⁰ solar V luminosities give M_V = −21.458, a +0.056 mag residual.
+3.220 × 10¹⁰ solar V luminosities give M_V = −21.460, a +0.055 mag residual.
 A 96×96 grid changes the 48×48 result by less than 1%. Intrinsic emission is
 5.078 × 10¹⁰ solar V luminosities; comparing that unattenuated sum to observed
 photometry would fit the wrong quantity. The unchanged density model contains
-116.104 billion stars on the report's 120×96×48 grid and 0.1 star/pc³ locally.
+116.107 billion stars on the report's 120×96×48 grid and 0.1 star/pc³ locally.
 
 The fitted mean solar V luminosities are 0.214 (thin disk), 0.35 (thick disk),
 10 (young arms), 0.748 (bar/bulge) and 0.1 (halo). With the thick-disk, young-arm and halo coefficients held fixed, the thin-disk

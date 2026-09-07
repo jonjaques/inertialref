@@ -8319,14 +8319,17 @@ without removing stars or skipping nearby light. Removing the cavity makes the
 solar extinction regression fail at 0.000767 per pc against its 0.0002 bound.
 
 The calibrated field is `galaxy-field@4`, port `galaxy-tsl@5`; active generation
-stays unchanged. Linear V residuals against three equal-area GAMBONS regions are
-+0.133, +0.234 and −0.223 mag, with a +0.056 mag residual in external face-on
-absolute magnitude. The report contains 116.104 billion stars and exactly
+stays unchanged. With the default session, V residuals against the three
+equal-area GAMBONS regions are
++0.132, +0.235 and −0.211 mag, with a +0.055 mag residual in external face-on
+absolute magnitude. The report contains 116.107 billion stars and exactly
 0.1 star/pc³ locally. The GAMBONS sky also includes scattering and extragalactic
 light, which the model omits; these comparisons do not isolate those components.
 The 1,536-ray sky and 96×96 luminosity quadratures change the default results by
 less than 1%. GPU region averages agree with CPU within 0.01 mag, and individual
-rays within 1%. The full convergence check takes about 25 seconds locally and
+rays within 1%, using the suite's directly seeded test field. Its numbers differ
+slightly from the CLI's session-derived galaxy seed; the command's values are
+the ones quoted here. The full convergence check takes about 25 seconds locally and
 belongs in the slow suite.
 
 The sensor receives V power through a declared photopic/V ratio of 1.25, with
