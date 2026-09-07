@@ -15,7 +15,10 @@ import {
 import { cubeTexture, uniform, uv, vec3, vec4 } from 'three/tsl'
 import { PARSEC } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
-import type { GalaxyField } from '@inertialref/universe'
+import type {
+  GalaxyField,
+  ResolvedPopulationSelection,
+} from '@inertialref/universe'
 import {
   createGalaxyKernel,
   GALAXY_MAX_STEP_PARSECS,
@@ -140,7 +143,11 @@ export class GalaxySkyCache {
     return this.#map.sample(vec3(direction.x.mul(this.#flip), direction.yz))
   }
 
-  configure(position: UniverseVector | null, field: GalaxyField): void {
+  configure(
+    position: UniverseVector | null,
+    field: GalaxyField,
+    resolved?: ResolvedPopulationSelection,
+  ): void {
     if (this.#disposed) return
     if (this.#field !== field) {
       this.#field = field
@@ -148,7 +155,8 @@ export class GalaxySkyCache {
     }
     const cancellations =
       this.#ticket === null ? null : this.schedule.report.cancellations
-    this.schedule.configure(position, field)
+    this.#kernel.setResolved(resolved)
+    this.schedule.configure(position, field, resolved)
     if (
       cancellations !== null &&
       this.schedule.report.cancellations !== cancellations
@@ -221,7 +229,13 @@ export class GalaxySkyCache {
       this.#tracked = true
       this.#ticket = trackAtMount(
         'baking the nearby sky',
-        this.schedule.totalTiles,
+        this.schedule.tiers
+          .filter((size) => size <= 128)
+          .reduce(
+            (sum, size) =>
+              sum + 6 * Math.ceil(size / this.schedule.tileSize) ** 2,
+            0,
+          ),
       )
     }
     const p = UV.approxMeters(tile.position)
@@ -267,7 +281,13 @@ export class GalaxySkyCache {
       this.schedule.complete(tile)
       this.#ticket?.done()
       this.#select()
-      if (this.available && !this.schedule.report.pending) this.#finishTicket()
+      if (
+        this.available &&
+        (this.schedule.selected!.faceSize >=
+          Math.min(128, this.schedule.faceSize) ||
+          !this.schedule.report.pending)
+      )
+        this.#finishTicket()
     } finally {
       target.scissorTest = false
       renderer.setRenderTarget(previous, face, mip)

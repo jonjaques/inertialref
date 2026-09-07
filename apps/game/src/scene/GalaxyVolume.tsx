@@ -88,7 +88,12 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
       current.field = createGalaxyField(engine.world.galaxySeed)
     }
     const pose = engine.galaxyPose
-    current.volume.configure(pose, engine.lens, current.field)
+    current.volume.configure(
+      pose,
+      engine.lens,
+      current.field,
+      engine.starField.resolved,
+    )
     current.mesh.visible = current.volume.active && current.volume.ready
   })
   return null

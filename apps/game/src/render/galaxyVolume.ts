@@ -40,6 +40,7 @@ import {
   GALAXY_FIELD_VERSIONS,
   GALAXY_DUST_SETTLED_STEP_PARSECS,
   type GalaxyField,
+  type ResolvedPopulationSelection,
 } from '@inertialref/universe'
 import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
 import { timingDetailed } from '../engine/browserTiming.ts'
@@ -124,6 +125,8 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   #pose: ObserverPose | null = null
   #lens: Lens | null = null
   #field: GalaxyField
+  #resolved: ResolvedPopulationSelection | undefined
+  #physicalVersion = {}
   #disposed = false
   #active = false
   #fov = 1
@@ -211,7 +214,19 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     return this.outputTexture
   }
 
-  configure(pose: ObserverPose | null, lens: Lens, field = this.#field): void {
+  configure(
+    pose: ObserverPose | null,
+    lens: Lens,
+    field = this.#field,
+    resolved?: ResolvedPopulationSelection,
+  ): void {
+    if (field !== this.#field || resolved !== this.#resolved) {
+      this.#resolved = resolved
+      this.#physicalVersion = {}
+      this.#kernel.setResolved(resolved)
+      this.#stableSubmissions = 0
+      this.#dirty = true
+    }
     const previous = this.#samplingPose
     if (
       pose === null ||
@@ -244,11 +259,15 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     const cubePosition =
       pose !== null &&
       (this.#temporal === null ||
-        Math.abs(UV.approxMeters(pose.position).y / PARSEC) < 1000)
+        (Math.abs(UV.approxMeters(pose.position).y / PARSEC) < 1000 &&
+          Math.hypot(
+            UV.approxMeters(pose.position).x / PARSEC,
+            UV.approxMeters(pose.position).z / PARSEC,
+          ) < 30000))
         ? pose.position
         : null
-    this.#cache?.configure(cubePosition, field)
-    this.#temporal?.configure(pose, lens, field)
+    this.#cache?.configure(cubePosition, field, resolved)
+    this.#temporal?.configure(pose, lens, this.#physicalVersion)
     this.#pose = pose
     this.#lens = lens
     this.#active = pose !== null && !this.#disposed
@@ -364,11 +383,14 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#stableSubmissions++
     const size = renderer.getDrawingBufferSize(this.#size)
     if (
+      this.#cache !== null &&
       (this.#temporal === null ||
-        this.#stableSubmissions > GALAXY_SETTLE_SUBMISSIONS) &&
-      this.#cache?.advance(renderer)
-    )
-      this.#draws++
+        this.#stableSubmissions > GALAXY_SETTLE_SUBMISSIONS)
+    ) {
+      const before = this.#cache.diagnostics.tiles
+      this.#cache.advance(renderer)
+      this.#draws += this.#cache.diagnostics.tiles - before
+    }
     const cached = this.#cache?.available ?? false
     const revision = this.#cache?.revision ?? 0
     if (cached !== this.#usedCache || revision !== this.#cacheRevision)
@@ -430,8 +452,10 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       renderer.toneMapping = NoToneMapping
       renderer.outputColorSpace = ColorManagement.workingColorSpace
       renderer.autoClear = true
-      if (!cached)
-        this.#temporal?.render(renderer as WebGPURenderer, width, height)
+      if (!cached && this.#temporal !== null) {
+        this.#temporal.render(renderer as WebGPURenderer, width, height)
+        this.#draws += 2
+      }
       renderer.setRenderTarget(this.#target)
       this.#quad.material = cached
         ? this.#cachedMaterial

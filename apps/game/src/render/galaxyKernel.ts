@@ -1,4 +1,6 @@
-import type { Node } from 'three/webgpu'
+import { Vector3, type Node } from 'three/webgpu'
+import { PARSEC } from '@inertialref/shared'
+import { UV } from '@inertialref/spatial'
 import {
   array,
   atan,
@@ -20,6 +22,10 @@ import { deriveSeed } from '@inertialref/procedural'
 import {
   blackbodyColour,
   GALAXY_ARMS,
+  LUMINOSITY_BANDS,
+  POPULATION_LUMINOSITY_WEIGHTS,
+  populationLimitingLuminosity,
+  type ResolvedPopulationSelection,
   GALAXY_DUST,
   LOCAL_BUBBLE,
   LOCAL_CLOUDS,
@@ -290,11 +296,13 @@ const emissionColors = POPULATION_NAMES.map((name) => {
 
 /** Galactic-center offsets in parsecs, packed from UniverseVector only at the host boundary. */
 const sample = Fn(
-  ([p, seed, normalization, structure]: [
+  ([p, seed, normalization, structure, threshold, levelMask]: [
     Node<'vec3'>,
     Node<'uint'>,
     Node<'float'>,
     Node<'vec3'>,
+    Node<'float'>,
+    Node<'uint'>,
   ]) => {
     const radius = p.xz.length().toVar()
     const height = structure.z,
@@ -338,9 +346,42 @@ const sample = Fn(
         .mul(0.001),
     ]
     const result = vec4(0).toVar()
-    populations.forEach((density, i) =>
-      result.addAssign(vec4(vec3(...emissionColors[i]!).mul(density), density)),
+    const light = LUMINOSITY_BANDS.map((band) =>
+      levelMask
+        .bitAnd(uint(1 << band.level))
+        .equal(uint(0))
+        .select(
+          float(1),
+          threshold
+            .sub(band.minSolarV)
+            .div(band.maxSolarV - band.minSolarV)
+            .clamp(),
+        )
+        .toVar(),
     )
+    populations.forEach((density, i) => {
+      const fraction = float(1).toVar()
+      If(levelMask.notEqual(uint(0)), () => {
+        const name = POPULATION_NAMES[i]!
+        fraction.assign(0)
+        LUMINOSITY_BANDS.forEach((band, j) =>
+          fraction.addAssign(
+            light[j]!.mul(
+              (POPULATION_LUMINOSITY_WEIGHTS[name][j]! * band.meanSolarV) /
+                GALAXY_POPULATIONS[name].meanSolarLuminosities,
+            ),
+          ),
+        )
+      })
+      result.addAssign(
+        vec4(
+          vec3(...emissionColors[i]!)
+            .mul(density)
+            .mul(fraction.clamp()),
+          density,
+        ),
+      )
+    })
     return result.mul(normalization)
   },
 ).setLayout({
@@ -351,6 +392,8 @@ const sample = Fn(
     { name: 'seed', type: 'uint' },
     { name: 'normalization', type: 'float' },
     { name: 'structure', type: 'vec3' },
+    { name: 'threshold', type: 'float' },
+    { name: 'levelMask', type: 'uint' },
   ],
 })
 
@@ -487,6 +530,9 @@ const segmentTransmission = Fn(([q]: [Node<'vec3'>]) =>
 function createIntegral(
   structureAt: (p: Node<'vec3'>) => Node<'vec3'>,
   radianceDepth: boolean,
+  resolvedOrigin: Node<'vec3'>,
+  resolvedLimit: Node<'float'>,
+  resolvedMask: Node<'uint'>,
 ) {
   return Fn(
     ([
@@ -581,7 +627,14 @@ function createIntegral(
         })
         const midpoint = origin.add(d.mul(t.add(step.mul(0.5)))).toVar()
         const structure = structureAt(midpoint).toVar()
-        const emitted = sample(midpoint, seed, normalization, structure).toVar()
+        const emitted = sample(
+          midpoint,
+          seed,
+          normalization,
+          structure,
+          midpoint.sub(resolvedOrigin).lengthSq().mul(resolvedLimit),
+          resolvedMask,
+        ).toVar()
         const q = vec3(0).toVar()
         const illuminated = transmission.r
           .max(transmission.g)
@@ -651,7 +704,16 @@ export function createGalaxyKernel(
 ) {
   const structureAt =
     options.structure ?? ((p: Node<'vec3'>) => galaxyStructureAt(p))
-  const integrate = createIntegral(structureAt, options.radianceDepth ?? false)
+  const resolvedOrigin = uniform(new Vector3())
+  const resolvedLimit = uniform(0)
+  const resolvedMask = uniform(0, 'uint')
+  const integrate = createIntegral(
+    structureAt,
+    options.radianceDepth ?? false,
+    resolvedOrigin,
+    resolvedLimit,
+    resolvedMask,
+  )
   const seed = uniform(
     deriveSeed(field.seed, 'galaxy-field:young-arms').a,
     'uint',
@@ -689,6 +751,17 @@ export function createGalaxyKernel(
       typeof pixelAngle === 'number' ? float(pixelAngle) : pixelAngle,
     )
   return {
+    setResolved(selection: ResolvedPopulationSelection | undefined) {
+      resolvedMask.value = selection?.levelMask ?? 0
+      resolvedLimit.value =
+        selection === undefined
+          ? 0
+          : populationLimitingLuminosity(1, selection.apparentMagnitudeLimit)
+      if (selection !== undefined) {
+        const p = UV.approxMeters(selection.origin)
+        resolvedOrigin.value.set(p.x / PARSEC, p.y / PARSEC, p.z / PARSEC)
+      }
+    },
     setField(next: GalaxyField) {
       seed.value = deriveSeed(next.seed, 'galaxy-field:young-arms').a
       normalization.value = next.normalization
@@ -705,7 +778,14 @@ export function createGalaxyKernel(
         return vec4(total, warp(radius, beta), 0, 1)
       })(),
     sample: (position: Node<'vec3'>): Node<'vec4'> =>
-      sample(position, seed, normalization, structureAt(position)),
+      sample(
+        position,
+        seed,
+        normalization,
+        structureAt(position),
+        position.sub(resolvedOrigin).lengthSq().mul(resolvedLimit),
+        resolvedMask,
+      ),
     extinction: (position: Node<'vec3'>): Node<'vec3'> =>
       extinction(
         position,

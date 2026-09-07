@@ -134,3 +134,23 @@ it('publishes a complete middle tier before the final tier', () => {
   expect(schedule.report.tiles).toBe(6 + 96 + 1536)
   schedule.dispose()
 })
+
+it('retires completed and pending light when the resolved selection changes', () => {
+  const cache = new GalaxyCacheSchedule({ faceSize: 32, tileSize: 16 })
+  const first = {
+    origin: SUN_POSITION,
+    apparentMagnitudeLimit: 8,
+    levelMask: 511,
+  }
+  cache.configure(SUN_POSITION, field, first)
+  finish(cache)
+  cache.configure(SUN_POSITION, field, { ...first, levelMask: 3 })
+  expect(cache.selected).toBeNull()
+  const canceled = cache.next()!
+  cache.configure(SUN_POSITION, field, first)
+  expect(cache.complete(canceled)).toBe(false)
+  finish(cache)
+  cache.configure(SUN_POSITION, field, first)
+  expect(cache.selected).not.toBeNull()
+  expect(cache.next()).toBeNull()
+})

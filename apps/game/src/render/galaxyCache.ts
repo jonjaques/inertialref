@@ -1,6 +1,9 @@
 import { invariant, PARSEC } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
-import type { GalaxyField } from '@inertialref/universe'
+import type {
+  GalaxyField,
+  ResolvedPopulationSelection,
+} from '@inertialref/universe'
 
 /** A ceiling on reuse, in parsecs, including the observer's local dust. */
 export const GALAXY_CACHE_RADIUS_PARSECS = 0.15
@@ -52,6 +55,7 @@ export class GalaxyCacheSchedule {
   #pending: GalaxyCacheEntry | null = null
   #selected: GalaxyCacheEntry | null = null
   #field: GalaxyField | null = null
+  #resolved: ResolvedPopulationSelection | undefined
   #tile = 0
   #tiles = 0
   #published = 0
@@ -104,13 +108,18 @@ export class GalaxyCacheSchedule {
     )
   }
 
-  configure(position: UniverseVector | null, field: GalaxyField): void {
+  configure(
+    position: UniverseVector | null,
+    field: GalaxyField,
+    resolved?: ResolvedPopulationSelection,
+  ): void {
     if (this.#disposed) return
-    if (field !== this.#field) {
+    if (field !== this.#field || resolved !== this.#resolved) {
       this.#cancel()
       this.#completed = []
       this.#selected = null
       this.#field = field
+      this.#resolved = resolved
     }
     if (position === null) {
       this.#cancel()
