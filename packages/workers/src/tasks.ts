@@ -46,16 +46,8 @@ import { defineTask, TaskRegistry } from './task.ts'
  */
 
 /*
- * The catalog is not shipped to workers.
- *
- * Every task here used to take a system id and resolve it, which now needs the
- * 200 KB star catalog — in every worker, for every pool, to answer questions
- * the caller already knows the answer to. Instead the caller passes what it
- * resolved: a cell's cataloged *count* for generation, and a whole stub for a
- * survey. The count is the only thing procedural generation needs from the
- * catalog (see `proceduralCount`), and passing it makes the dependency an
- * argument rather than an ambient table that has to be kept in sync across a
- * thread boundary.
+ * Workers receive catalog coverage and sparse source counts, or a resolved stub
+ * for a system query. The full catalog remains with its host adapter.
  */
 export interface GenerateCellRequest {
   readonly seed: string

@@ -13,10 +13,11 @@
       "seed": "inertialref",
       "time": 0,
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       }
     },
     {
@@ -32,10 +33,11 @@
       "seed": "inertialref",
       "time": 0,
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       }
     },
     {
@@ -51,10 +53,11 @@
       "seed": "inertialref",
       "time": 0,
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       }
     },
     {
@@ -70,10 +73,11 @@
       "seed": "inertialref",
       "time": 0,
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       }
     },
     {
@@ -89,10 +93,11 @@
       "seed": "inertialref",
       "time": 0,
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       }
     },
     {
@@ -108,10 +113,11 @@
       "seed": "inertialref",
       "time": 0,
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       }
     },
     {
@@ -127,10 +133,11 @@
       "seed": "inertialref",
       "time": 0,
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       }
     },
     {
@@ -139,10 +146,11 @@
       "why": "A low sun over the blue rim of Alpha Centauri II, 4.4 light-years from home.",
       "seed": "inertialref",
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       },
       "time": 0,
       "address": "g:milky-way/s:HIP71683/b:1",
@@ -181,10 +189,11 @@
       "why": "Tau Ceti III hangs above its moon’s ridges, 12 light-years from Sol.",
       "seed": "inertialref",
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       },
       "time": 0,
       "address": "g:milky-way/s:HIP8102/b:2.1",
@@ -223,10 +232,11 @@
       "why": "A ringed giant rises over its moon, across the galaxy from Sol.",
       "seed": "inertialref",
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       },
       "time": 0,
       "address": "g:milky-way/s:P222_0_0_6/b:7.2",
@@ -265,10 +275,11 @@
       "why": "Low sunlight over an ocean shore, 53,350 light-years from Sol.",
       "seed": "inertialref",
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       },
       "time": 100331.9499824278,
       "address": "g:milky-way/s:P222_1_0_9/b:4",
@@ -307,10 +318,11 @@
       "why": "Low sunlight across the summit ridges of Tau Ceti II.",
       "seed": "inertialref",
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       },
       "time": 120049.62267576344,
       "address": "g:milky-way/s:HIP8102/b:1",
@@ -349,10 +361,11 @@
       "why": "The Moon masks most of the Sun, seen from a camera beyond the lunar orbit.",
       "seed": "inertialref",
       "generation": {
-        "galaxy": 2,
+        "galaxy": 4,
         "system": 4,
         "terrain": 4,
-        "photometry": 1
+        "photometry": 1,
+        "galaxy-field": 4
       },
       "time": 0,
       "address": "g:milky-way/s:SOL/b:2.0",

@@ -1,5 +1,5 @@
 import { invariant, LIGHT_YEAR, PARSEC } from '@inertialref/shared'
-import { derivePath, deriveSeed, Rng } from '@inertialref/procedural'
+import { derivePath, deriveSeed, Rng, type Seed } from '@inertialref/procedural'
 import { UV, vec3, type UniverseVector } from '@inertialref/spatial'
 import { systemId, type SystemId } from '../address.ts'
 import { CELL_SIZE, cellKey, type GalacticCell } from '../cells.ts'
@@ -77,22 +77,46 @@ export interface PopulationCoverage {
   readonly innerMagnitude: number
   readonly outerMagnitude: number
   readonly completeRadiusParsecs: number
+  /** Known stars outside the complete magnitude envelope, by owning level and cell. */
+  readonly cataloguedByCell?: Readonly<Record<string, number>>
 }
 
 /**
- * ESA SP-1200, volume 1 section 2.2: Hipparcos is largely complete to V 7.3
+ * ESA SP-1200, volume 1: Hipparcos is largely complete to V 7.3
  * or deeper, depending on latitude and spectral class. 7.3 uses the shallowest
  * limit. Outside the volume the shipped asset only admits V 6.5. The nearby
  * volume exclusion also protects known faint neighbors missing from that survey.
  * https://www.cosmos.esa.int/documents/532822/552851/vol1_all.pdf
  */
 export function populationCoverage(catalog: StarCatalog): PopulationCoverage {
-  return {
+  const coverage = {
     radiusParsecs: catalog.radius / PARSEC,
     innerMagnitude: catalog.radius > 0 ? 7.3 : -Infinity,
     outerMagnitude: catalog.metadata.sky?.apparentMagnitudeLimit ?? -Infinity,
     completeRadiusParsecs: catalog.completeRadius / PARSEC,
   }
+  const cataloguedByCell: Record<string, number> = {}
+  for (const star of catalog.stars) {
+    const absolute = star.physical.absoluteMagnitude
+    if (absolute === null) continue
+    const luminosity = 10 ** ((GALAXY_SOLAR_V_MAGNITUDE - absolute) / 2.5)
+    const distance = UV.distance(star.position, SUN_POSITION) / PARSEC
+    if (
+      distance < coverage.completeRadiusParsecs ||
+      populationApparentMagnitude(luminosity, distance) <=
+        (distance < coverage.radiusParsecs
+          ? coverage.innerMagnitude
+          : coverage.outerMagnitude)
+    )
+      continue
+    const band = LUMINOSITY_BANDS.find(
+      (one) => luminosity >= one.minSolarV && luminosity < one.maxSolarV,
+    )
+    if (band === undefined) continue
+    const key = `${band.level}:${cellKey(populationCellOf(star.position, band.level))}`
+    cataloguedByCell[key] = (cataloguedByCell[key] ?? 0) + 1
+  }
+  return { ...coverage, cataloguedByCell }
 }
 
 export const populationApparentMagnitude = (
@@ -244,7 +268,8 @@ export function parsePopulationSystemId(
     index: parseInt(match[5]!, 36),
   }
   return Object.values(ref.cell).every(Number.isSafeInteger) &&
-    Number.isSafeInteger(ref.index)
+    Number.isSafeInteger(ref.index) &&
+    populationSystemId(ref.level, ref.cell, ref.index) === id
     ? ref
     : null
 }
@@ -270,6 +295,9 @@ interface CellPlan {
   readonly counts: readonly number[]
   readonly count: number
   readonly layouts: readonly PopulationLayout[]
+  readonly seeds: readonly Seed[]
+  readonly origin: UniverseVector
+  readonly size: number
 }
 
 interface PopulationLayout {
@@ -306,8 +334,13 @@ export function createPopulationGenerator(field: GalaxyField) {
   const plans = new Map<string, CellPlan>()
   const keyOf = (level: number, cell: GalacticCell) =>
     `${level}:${cellKey(cell)}`
-  const plan = (level: number, cell: GalacticCell): CellPlan => {
-    const key = keyOf(level, cell)
+  const plan = (
+    level: number,
+    cell: GalacticCell,
+    coverage?: PopulationCoverage,
+  ): CellPlan => {
+    const catalogued = coverage?.cataloguedByCell?.[keyOf(level, cell)] ?? 0
+    const key = `${keyOf(level, cell)}:${catalogued}`
     const held = plans.get(key)
     if (held !== undefined) return held
     const size = populationCellSize(level)
@@ -337,11 +370,17 @@ export function createPopulationGenerator(field: GalaxyField) {
       `level:${level}`,
       cellKey(cell),
     ])
-    const counts = POPULATION_NAMES.map((name, i) => {
-      const expected =
+    const expectations = POPULATION_NAMES.map(
+      (name, i) =>
         densities[i]! *
         (size / PARSEC) ** 3 *
-        POPULATION_LUMINOSITY_WEIGHTS[name][level]!
+        POPULATION_LUMINOSITY_WEIGHTS[name][level]!,
+    )
+    const totalExpected = expectations.reduce((a, b) => a + b, 0)
+    const fraction =
+      totalExpected === 0 ? 0 : Math.max(0, 1 - catalogued / totalExpected)
+    const counts = POPULATION_NAMES.map((name, i) => {
+      const expected = expectations[i]! * fraction
       const whole = Math.floor(expected)
       return (
         whole +
@@ -354,11 +393,15 @@ export function createPopulationGenerator(field: GalaxyField) {
     const result = {
       level,
       cell,
+      origin,
+      size,
+      seeds: POPULATION_NAMES.map((name) => deriveSeed(cellSeed, name)),
       counts,
       count: counts.reduce((a, b) => a + b, 0),
       layouts: counts.map((count, i) => {
-        const grid = Math.max(1, Math.ceil(Math.cbrt(count))),
-          slots = grid ** 3
+        let grid = 1
+        while (grid ** 3 < count) grid++
+        const slots = grid ** 3
         const rng = new Rng(
           deriveSeed(cellSeed, `layout:${POPULATION_NAMES[i]}`),
         )
@@ -376,7 +419,11 @@ export function createPopulationGenerator(field: GalaxyField) {
     plans.set(key, result)
     return result
   }
-  const starAt = (one: CellPlan, index: number): SystemStub | undefined => {
+  const starAt = (
+    one: CellPlan,
+    index: number,
+    accept?: (position: UniverseVector, solarV: number) => boolean,
+  ): SystemStub | undefined => {
     if (index < 0 || index >= one.count) return undefined
     let populationIndex = 0,
       offset = index
@@ -385,31 +432,27 @@ export function createPopulationGenerator(field: GalaxyField) {
     const population = POPULATION_NAMES[populationIndex]!
     // Population and its own index are the seed, so another population's count
     // cannot move this source. The address stores both without a global index.
-    const seed = derivePath(field.seed, [
-      'population',
-      `level:${one.level}`,
-      cellKey(one.cell),
-      population,
-      `star:${offset}`,
-    ])
+    const seed = deriveSeed(one.seeds[populationIndex]!, `star:${offset}`)
     const rng = new Rng(seed)
     const band = LUMINOSITY_BANDS[one.level]!
     const visualLuminosities =
       band.minSolarV * (band.maxSolarV / band.minSolarV) ** rng.next()
-    const size = populationCellSize(one.level)
+    const size = one.size
     const layout = one.layouts[populationIndex]!
     const slot = (layout.stride * offset + layout.shift) % layout.slots
     const gx = Math.floor(slot / layout.grid ** 2),
       gy = Math.floor(slot / layout.grid) % layout.grid,
       gz = slot % layout.grid
     const position = UV.translate(
-      populationCellOrigin(one.cell, one.level),
+      one.origin,
       vec3(
         ((gx + rng.next()) * size) / layout.grid,
         ((gy + rng.next()) * size) / layout.grid,
         ((gz + rng.next()) * size) / layout.grid,
       ),
     )
+    if (accept !== undefined && !accept(position, visualLuminosities))
+      return undefined
     const evolved = one.level >= 5 && population !== 'youngArms'
     const temperature = evolved
       ? GALAXY_POPULATIONS[population].temperature
@@ -460,7 +503,7 @@ export function createPopulationGenerator(field: GalaxyField) {
       ref: PopulationSystemRef,
       coverage?: PopulationCoverage,
     ): SystemStub | undefined {
-      const star = starAt(plan(ref.level, ref.cell), ref.index)
+      const star = starAt(plan(ref.level, ref.cell, coverage), ref.index)
       return star === undefined || coveredPopulationStar(star, coverage)
         ? undefined
         : star
@@ -470,16 +513,18 @@ export function createPopulationGenerator(field: GalaxyField) {
       cell: GalacticCell,
       coverage?: PopulationCoverage,
       box?: PopulationBox,
+      accept?: (position: UniverseVector, solarV: number) => boolean,
     ): readonly SystemStub[] {
-      const one = plan(level, cell)
+      const one = plan(level, cell, coverage)
       invariant(
         one.count <= 1000000,
         'A population cell exceeds the generation budget',
       )
       const stars: SystemStub[] = []
       const add = (index: number) => {
-        const star = starAt(one, index)!
-        if (!coveredPopulationStar(star, coverage)) stars.push(star)
+        const star = starAt(one, index, accept)
+        if (star !== undefined && !coveredPopulationStar(star, coverage))
+          stars.push(star)
       }
       if (box === undefined)
         for (let index = 0; index < one.count; index++) add(index)
@@ -609,7 +654,9 @@ export function selectPopulationSky(
       cellCeiling - cellsVisited,
     )
     if (cells.length === 0) continue
-    const plans = cells.map((cell) => generator.plan(band.level, cell))
+    const plans = cells.map((cell) =>
+      generator.plan(band.level, cell, options.coverage),
+    )
     cellsVisited += cells.length
     const candidates = plans.reduce((sum, one) => sum + one.count, 0)
     if (candidateCount + candidates > candidateCeiling) continue
@@ -625,15 +672,18 @@ export function selectPopulationSky(
           levelMask: 0,
           apparentMagnitudeLimit: -Infinity,
         }
-      for (const star of generator.cell(band.level, cell, options.coverage)) {
-        if (
+      for (const star of generator.cell(
+        band.level,
+        cell,
+        options.coverage,
+        undefined,
+        (position, luminosity) =>
           populationApparentMagnitude(
-            star.visualLuminosities!,
-            UV.distance(star.position, origin) / PARSEC,
-          ) <= magnitudeLimit
-        )
-          stars.push(star)
-      }
+            luminosity,
+            UV.distance(position, origin) / PARSEC,
+          ) <= magnitudeLimit,
+      ))
+        stars.push(star)
     }
   }
   const magnitudes = new Map(
@@ -663,7 +713,7 @@ export function selectPopulationSky(
 }
 
 export const POPULATION_COVERAGE_REFERENCE = Object.freeze({
-  source: 'ESA SP-1200 volume 1 section 2.2',
+  source: 'ESA SP-1200 volume 1',
   url: 'https://www.cosmos.esa.int/documents/532822/552851/vol1_all.pdf',
   volumeMagnitude: 7.3,
   volumeRadiusLightYears: 150,

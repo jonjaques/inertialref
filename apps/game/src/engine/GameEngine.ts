@@ -171,7 +171,7 @@ export type { StarField }
 
 /** How far the player must move before the starfield is surveyed again. */
 const STARFIELD_CELL_CEILING = 2000
-const STARFIELD_CANDIDATE_CEILING = 200000
+const STARFIELD_CANDIDATE_CEILING = 1000000
 const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
 
 /** A catalog star as the star field's selection sees it. */

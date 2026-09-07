@@ -324,6 +324,35 @@ describe('migrations', () => {
 })
 
 describe('the universe a save was written against', () => {
+  it('restores a galaxy@2 procedural address through its pinned legacy generator', () => {
+    const world = new World({ seed: 'inertialref' })
+    const id = systemId('P21j_6_0_0')
+    const system = world.loadSystem(id)
+    expect(system.position).toEqual(
+      UV.universeVector(
+        -227756235,
+        672557,
+        4128,
+        665507666736,
+        58129326464,
+        713372339814,
+      ),
+    )
+    const ship = world.spawnShip(
+      'Legacy Scout',
+      systemFrameId(id),
+      vec3(0, 1e9, 0),
+    )
+    const captured = captureSave(world, ship.id)
+    const { ['galaxy-field']: _field, ...generation } = captured.generation
+    const old = { ...captured, generation: { ...generation, galaxy: 2 } }
+    const restored = unwrap(restoreSave(old), 'restore')
+    expect(restored.world.stateHash()).toBe(world.stateHash())
+    expect(restored.drift.map((entry) => entry.key)).toEqual([
+      'galaxy',
+      'galaxy-field',
+    ])
+  })
   /*
    * A save records two manifests — the generation versions and the catalog
    * version — and until `versionDrift` existed nothing compared them. The

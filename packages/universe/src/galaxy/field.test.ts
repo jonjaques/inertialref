@@ -22,7 +22,7 @@ describe('the stellar field', () => {
     expect(field.sample(SUN_POSITION).totalPerCubicParsec).toBeCloseTo(0.1, 14)
     expect(GALAXY_FIELD_VERSIONS).toEqual({ 'galaxy-field': 4 })
     expect(GENERATION_VERSIONS['galaxy-field']).toBe(4)
-    expect(GENERATION_VERSIONS['galaxy']).toBe(3)
+    expect(GENERATION_VERSIONS['galaxy']).toBe(4)
   })
   it('has finite nonnegative populations at every sampled position', () => {
     fc.assert(

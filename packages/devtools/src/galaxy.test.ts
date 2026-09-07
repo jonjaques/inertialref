@@ -26,8 +26,9 @@ it('makes repeatable CPU plates through a session without changing canonical sta
         observer: UV.fromMeters(0, 30000 * PARSEC, 0),
       }).rgb,
     )
-    expect(inspector.sample().generationVersions).not.toHaveProperty(
+    expect(inspector.sample().generationVersions).toHaveProperty(
       'galaxy-field',
+      4,
     )
   } finally {
     session.dispose()

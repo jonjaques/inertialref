@@ -111,9 +111,9 @@ it('keeps magnitude surveys and sprite selection bounded along both directions',
         run.mock.calls.filter(([task]) => task === surveySkyTask),
       ).toHaveLength(count)
       await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
-      expect(game.starSurvey.spriteCount).toBeLessThanOrEqual(20_000)
+      expect(game.starSurvey.spriteCount).toBeLessThanOrEqual(100_000)
       expect(game.starSurvey.cellCeiling).toBe(2000)
-      expect(game.starSurvey.candidateCeiling).toBe(200000)
+      expect(game.starSurvey.candidateCeiling).toBe(1000000)
       expect(game.starField.resolved).toBeDefined()
     }
     const requests = run.mock.calls.filter(([task]) => task === surveySkyTask)
@@ -121,8 +121,8 @@ it('keeps magnitude surveys and sprite selection bounded along both directions',
     for (const [, payload] of requests) {
       const request = payload as Parameters<typeof surveySkyTask.run>[0]
       expect(request.cellCeiling).toBe(2000)
-      expect(request.candidateCeiling).toBe(200000)
-      expect(request.spriteCeiling).toBe(20000)
+      expect(request.candidateCeiling).toBe(1000000)
+      expect(request.spriteCeiling).toBe(100000)
     }
   } finally {
     game.dispose()
