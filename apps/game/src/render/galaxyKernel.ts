@@ -484,7 +484,10 @@ const segmentTransmission = Fn(([q]: [Node<'vec3'>]) =>
 })
 
 /** Midpoint coefficients and front-to-back transport match integrateGalaxyRay. */
-function createIntegral(structureAt: (p: Node<'vec3'>) => Node<'vec3'>) {
+function createIntegral(
+  structureAt: (p: Node<'vec3'>) => Node<'vec3'>,
+  radianceDepth: boolean,
+) {
   return Fn(
     ([
       origin,
@@ -537,6 +540,7 @@ function createIntegral(structureAt: (p: Node<'vec3'>) => Node<'vec3'>) {
         })
       }
       const result = vec4(0).toVar()
+      const moment = float(0).toVar()
       const transmission = vec3(1).toVar()
       const t = near.toVar()
       Loop(GALAXY_MAX_STEPS, () => {
@@ -603,6 +607,14 @@ function createIntegral(structureAt: (p: Node<'vec3'>) => Node<'vec3'>) {
         If(transmissionOnly.not().and(illuminated.not()), () => {
           transmission.assign(0)
         })
+        if (radianceDepth)
+          moment.addAssign(
+            emitted.g
+              .mul(transmission.g)
+              .mul(segmentTransmission(q).g)
+              .mul(step)
+              .mul(t.add(step.mul(0.5))),
+          )
         result.addAssign(
           vec4(
             emitted.rgb.mul(transmission).mul(segmentTransmission(q)),
@@ -614,7 +626,10 @@ function createIntegral(structureAt: (p: Node<'vec3'>) => Node<'vec3'>) {
       })
       return transmissionOnly.select(
         vec4(transmission, 1),
-        vec4(result.rgb.mul(GALAXY_RADIANCE_FACTOR), result.a),
+        vec4(
+          result.rgb.mul(GALAXY_RADIANCE_FACTOR),
+          radianceDepth ? moment.div(result.g.max(1e-30)).min(65000) : result.a,
+        ),
       )
     },
   )
@@ -622,6 +637,8 @@ function createIntegral(structureAt: (p: Node<'vec3'>) => Node<'vec3'>) {
 
 export interface GalaxyKernelOptions {
   readonly structure?: (p: Node<'vec3'>) => Node<'vec3'>
+  /** Physical emission-weighted distance in alpha, for diffuse history only. */
+  readonly radianceDepth?: boolean
 }
 
 /** Height stays analytic so interpolating the arms cannot move the thin plane. */
@@ -634,7 +651,7 @@ export function createGalaxyKernel(
 ) {
   const structureAt =
     options.structure ?? ((p: Node<'vec3'>) => galaxyStructureAt(p))
-  const integrate = createIntegral(structureAt)
+  const integrate = createIntegral(structureAt, options.radianceDepth ?? false)
   const seed = uniform(
     deriveSeed(field.seed, 'galaxy-field:young-arms').a,
     'uint',

@@ -51,6 +51,17 @@ export interface GalaxyPlate {
 }
 
 export interface GalaxyRenderReport {
+  readonly temporal?: {
+    readonly stride: number
+    readonly refreshed: number
+    readonly resets: number
+    readonly phase: number
+    readonly width: number
+    readonly height: number
+    readonly rayWidth: number
+    readonly rayHeight: number
+    readonly bytes: number
+  }
   readonly cache?: {
     readonly faceSize: number
     readonly initialFaceSize: number

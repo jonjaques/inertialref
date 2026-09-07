@@ -14,6 +14,8 @@ export interface GalaxyCacheOptions {
   readonly tileSize?: number
   /** Publish this complete lower-resolution cube before refining the final tier. */
   readonly initialFaceSize?: number
+  readonly refinements?: readonly number[]
+  readonly tilesPerSubmission?: number
 }
 
 export interface GalaxyCacheEntry {
@@ -44,6 +46,7 @@ export class GalaxyCacheSchedule {
   readonly tileSize: number
   readonly initialFaceSize: number
   readonly totalTiles: number
+  readonly tiers: readonly number[]
   #generation = 0
   #completed: GalaxyCacheEntry[] = []
   #pending: GalaxyCacheEntry | null = null
@@ -79,11 +82,26 @@ export class GalaxyCacheSchedule {
         this.initialFaceSize <= this.faceSize,
       'The initial sky cube must be a power of two within the final tier',
     )
-    this.totalTiles =
-      this.#tileCount(this.faceSize) +
-      (this.initialFaceSize < this.faceSize
-        ? this.#tileCount(this.initialFaceSize)
-        : 0)
+    this.tiers = [
+      ...new Set([
+        this.initialFaceSize,
+        ...(options.refinements ?? []),
+        this.faceSize,
+      ]),
+    ].sort((a, b) => a - b)
+    invariant(
+      this.tiers.every(
+        (size) =>
+          Number.isInteger(Math.log2(size)) &&
+          size >= this.initialFaceSize &&
+          size <= this.faceSize,
+      ),
+      'Sky refinement tiers must be powers of two within the initial and final tiers',
+    )
+    this.totalTiles = this.tiers.reduce(
+      (total, size) => total + this.#tileCount(size),
+      0,
+    )
   }
 
   configure(position: UniverseVector | null, field: GalaxyField): void {
@@ -124,8 +142,14 @@ export class GalaxyCacheSchedule {
     this.#begin(
       selected?.position ?? position,
       field,
-      selected === null ? this.initialFaceSize : this.faceSize,
+      selected === null
+        ? this.initialFaceSize
+        : this.#nextTier(selected.faceSize),
     )
+  }
+
+  #nextTier(faceSize: number): number {
+    return this.tiers.find((size) => size > faceSize) ?? this.faceSize
   }
 
   #tileCount(faceSize: number): number {
@@ -208,7 +232,11 @@ export class GalaxyCacheSchedule {
       this.#pending = null
       this.#published++
       if (published.faceSize < this.faceSize)
-        this.#begin(published.position, published.field, this.faceSize)
+        this.#begin(
+          published.position,
+          published.field,
+          this.#nextTier(published.faceSize),
+        )
     }
     return true
   }

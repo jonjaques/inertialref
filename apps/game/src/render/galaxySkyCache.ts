@@ -16,7 +16,11 @@ import { cubeTexture, uniform, uv, vec3, vec4 } from 'three/tsl'
 import { PARSEC } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { GalaxyField } from '@inertialref/universe'
-import { createGalaxyKernel, GALAXY_MAX_STEP_PARSECS } from './galaxyKernel.ts'
+import {
+  createGalaxyKernel,
+  GALAXY_MAX_STEP_PARSECS,
+  type GalaxyKernelOptions,
+} from './galaxyKernel.ts'
 import {
   GALAXY_CACHE_RADIUS_PARSECS,
   GALAXY_CACHE_SLOTS,
@@ -80,6 +84,7 @@ export class GalaxySkyCache {
   readonly #map
   readonly #kernel: ReturnType<typeof createGalaxyKernel>
   readonly #pixelAngle = uniform(1)
+  readonly #tilesPerSubmission: number
   #field: GalaxyField
   #disposed = false
   #ready = false
@@ -87,17 +92,25 @@ export class GalaxySkyCache {
   #tracked = false
   #ticket: WarmTicket | null = null
 
-  constructor(field: GalaxyField, options: GalaxyCacheOptions = {}) {
+  constructor(
+    field: GalaxyField,
+    options: GalaxyCacheOptions = {},
+    kernelOptions: GalaxyKernelOptions = {},
+  ) {
     this.schedule = new GalaxyCacheSchedule({
       ...options,
       initialFaceSize:
         options.initialFaceSize ?? Math.min(32, options.faceSize ?? 128),
     })
+    this.#tilesPerSubmission = Math.max(
+      1,
+      Math.min(8, Math.floor(options.tilesPerSubmission ?? 1)),
+    )
     this.#field = field
-    this.#kernel = createGalaxyKernel(field)
+    this.#kernel = createGalaxyKernel(field, kernelOptions)
     this.#pixelAngle.value = Math.PI / 2 / this.schedule.faceSize
     this.#targets = Array.from({ length: GALAXY_CACHE_SLOTS }, (_, slot) =>
-      skyTarget(this.schedule.faceSize, slot),
+      skyTarget(this.schedule.initialFaceSize, slot),
     )
     this.#map = cubeTexture(this.#targets[0]!.texture)
     const screen = uv().mul(2).sub(1)
@@ -190,8 +203,17 @@ export class GalaxySkyCache {
     return this.#warm
   }
 
-  /** Returns whether this submission drew one tile. */
+  /** Each submission has a fixed dispatch ceiling, independent of unfinished work. */
   advance(renderer: Renderer): boolean {
+    let drawn = false
+    for (let i = 0; i < this.#tilesPerSubmission; i++) {
+      if (!this.#advanceTile(renderer)) break
+      drawn = true
+    }
+    return drawn
+  }
+
+  #advanceTile(renderer: Renderer): boolean {
     if (!this.#ready || this.#disposed) return false
     const tile = this.schedule.next()
     if (tile === null) return false

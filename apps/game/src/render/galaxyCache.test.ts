@@ -114,3 +114,23 @@ it('publishes a complete coarse sky while the final cube continues in the spare 
   })
   expect(cache.next()).toBeNull()
 })
+
+it('publishes a complete middle tier before the final tier', () => {
+  const schedule = new GalaxyCacheSchedule({
+    initialFaceSize: 32,
+    refinements: [128],
+    faceSize: 512,
+    tileSize: 32,
+  })
+  const field = createGalaxyField(rootSeed('inertialref'))
+  schedule.configure(SUN_POSITION, field)
+  for (const size of [32, 128, 512]) {
+    const count = 6 * (size / 32) ** 2
+    for (let i = 0; i < count; i++)
+      expect(schedule.complete(schedule.next()!)).toBe(true)
+    expect(schedule.selected?.faceSize).toBe(size)
+  }
+  expect(schedule.next()).toBe(null)
+  expect(schedule.report.tiles).toBe(6 + 96 + 1536)
+  schedule.dispose()
+})
