@@ -100,3 +100,34 @@ export class GalaxyStructureTable {
     this.#material.dispose()
   }
 }
+
+const sharedTables = new WeakMap<
+  WebGPURenderer,
+  { table: GalaxyStructureTable; users: number }
+>()
+
+/** A renderer's star transport and diffuse field share one immutable arm table. */
+export function acquireGalaxyStructure(renderer: WebGPURenderer): {
+  readonly table: GalaxyStructureTable
+  release(): void
+} {
+  let held = sharedTables.get(renderer)
+  if (held === undefined) {
+    held = { table: new GalaxyStructureTable(), users: 0 }
+    sharedTables.set(renderer, held)
+  }
+  held.users++
+  const lease = held
+  let released = false
+  return {
+    table: lease.table,
+    release() {
+      if (released) return
+      released = true
+      if (--lease.users === 0) {
+        lease.table.dispose()
+        sharedTables.delete(renderer)
+      }
+    },
+  }
+}

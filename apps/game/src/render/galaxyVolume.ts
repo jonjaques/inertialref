@@ -76,7 +76,7 @@ export interface GalaxyVolumeOptions {
   /** Diagnostic plates may request the live volume by omitting this. */
   readonly cache?: GalaxyCacheOptions
   readonly temporal?: GalaxyTemporalOptions
-  readonly structure?: boolean
+  readonly structure?: boolean | GalaxyStructureTable
 }
 
 /** Each draw is an entry on the Render track, so a trace says when the volume drew and at what quality. */
@@ -102,6 +102,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   readonly #cachedMaterial = new NodeMaterial()
   readonly #cache: GalaxySkyCache | null
   readonly #structure: GalaxyStructureTable | null
+  readonly #ownsStructure: boolean
   readonly #temporal: GalaxyTemporalVolume | null
   readonly #temporalMaterial = new NodeMaterial()
   #samplingDraws = 0
@@ -146,7 +147,13 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   constructor(field: GalaxyField, options: GalaxyVolumeOptions = {}) {
     super('vec4')
     this.#field = field
-    this.#structure = options.structure ? new GalaxyStructureTable() : null
+    this.#ownsStructure = options.structure === true
+    this.#structure =
+      options.structure instanceof GalaxyStructureTable
+        ? options.structure
+        : options.structure
+          ? new GalaxyStructureTable()
+          : null
     const kernelOptions =
       this.#structure === null
         ? {}
@@ -505,7 +512,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#cachedMaterial.dispose()
     this.#cache?.dispose()
     this.#temporal?.dispose()
-    this.#structure?.dispose()
+    if (this.#ownsStructure) this.#structure?.dispose()
     this.#temporalMaterial.dispose()
     super.dispose()
   }

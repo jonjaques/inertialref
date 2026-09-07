@@ -4,7 +4,10 @@ import { int, uniformArray, uv, vec3, vec4 } from 'three/tsl'
 import { rootSeed } from '@inertialref/procedural'
 import { createGalaxyField } from '@inertialref/universe'
 import { createGalaxyKernel } from './galaxyKernel.ts'
-import { GalaxyStructureTable } from './galaxyStructure.ts'
+import {
+  GalaxyStructureTable,
+  acquireGalaxyStructure,
+} from './galaxyStructure.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 
 let gpu: GpuSession
@@ -74,4 +77,21 @@ it('keeps interpolated structure rays within one percent of the analytic field',
   }
   expect(table.ready).toBe(false)
   expect(table.bytes).toBe(0)
+})
+
+it('shares one renderer table until its last lease is released', async () => {
+  const volume = acquireGalaxyStructure(gpu.renderer)
+  const stars = acquireGalaxyStructure(gpu.renderer)
+  expect(volume.table).toBe(stars.table)
+  await volume.table.warm(gpu.renderer)
+  volume.release()
+  volume.release()
+  expect(stars.table.ready).toBe(true)
+  expect(stars.table.bytes).toBe(16 * 1024 * 1024)
+  stars.release()
+  expect(stars.table.ready).toBe(false)
+  expect(stars.table.bytes).toBe(0)
+  const next = acquireGalaxyStructure(gpu.renderer)
+  expect(next.table).not.toBe(stars.table)
+  next.release()
 })

@@ -8,6 +8,7 @@ import {
   GalaxyVolumeNode,
 } from '../render/galaxyVolume.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { acquireGalaxyStructure } from '../render/galaxyStructure.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /** The effect owns GPU objects; StrictMode cleanup retires exactly the instance it creates. */
@@ -24,6 +25,7 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
 
   useEffect(() => {
     const field = createGalaxyField(engine.world.galaxySeed)
+    const structure = acquireGalaxyStructure(gl as unknown as WebGPURenderer)
     const volume = new GalaxyVolumeNode(field, {
       cache: {
         faceSize: 512,
@@ -32,7 +34,7 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
         tileSize: 32,
         tilesPerSubmission: 2,
       },
-      structure: true,
+      structure: structure.table,
       temporal: { stride: 4 },
     })
     const mesh = createGalaxyBackdrop(volume)
@@ -75,6 +77,7 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
       if (engine.galaxyRenderer === report) engine.galaxyRenderer = null
       scene.remove(mesh)
       volume.dispose()
+      structure.release()
       mesh.geometry.dispose()
       mesh.material.dispose()
     }
