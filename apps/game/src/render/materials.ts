@@ -1,4 +1,8 @@
-import { SURFACE_LUMINANCE } from '@inertialref/rendering'
+import {
+  STAR_VISIBILITY,
+  STELLAR_V_ZERO_ILLUMINANCE,
+  SURFACE_LUMINANCE,
+} from '@inertialref/rendering'
 import { integratedSkyGain, sensorRadiance } from './radiance.ts'
 import type { StarProjection } from './starProjection.ts'
 import {
@@ -31,6 +35,7 @@ import {
   instancedBufferAttribute,
   length,
   Loop,
+  log2,
   max,
   mix,
   mx_fractal_noise_float,
@@ -558,29 +563,54 @@ export function createStarfieldMaterial(
     positionPrevious.assign(projection?.previousPoint ?? point)
     return point
   })()
-  const visible =
+  const legacyVisibility =
     projection === undefined
       ? instancedBufferAttribute<'float'>(visibility, 'float')
       : varying(projection.visibility)
-  material.sizeNode = integrated
-    .greaterThan(0.5)
-    .select(visible.mul(0.55).add(0.45).mul(3.4), size)
+  const absolute = (projection?.absoluteVisibility ?? float(0)).greaterThan(0.5)
+  const transported =
+    transportedLight ?? instancedBufferAttribute<'vec3'>(transmission, 'vec3')
+  const magnitude = log2(
+    scale.mul(transported.g).max(1e-30).div(STELLAR_V_ZERO_ILLUMINANCE),
+  ).mul(-2.5 / Math.log2(10))
+  const amount = float(STAR_VISIBILITY.faintMagnitude)
+    .sub(magnitude)
+    .div(STAR_VISIBILITY.faintMagnitude - STAR_VISIBILITY.brightMagnitude)
+    .clamp(0, 1)
+  const absoluteVisibility = amount.mul(amount).mul(float(3).sub(amount.mul(2)))
+  const visible = absolute.select(absoluteVisibility, legacyVisibility)
+  const enhanced = integrated.greaterThan(0.5)
+  material.sizeNode = enhanced
+    .select(
+      absolute.select(
+        visible
+          .pow(STAR_VISIBILITY.sizeExponent)
+          .mul(STAR_VISIBILITY.maximumSize),
+        visible.mul(0.55).add(0.45).mul(3.4),
+      ),
+      size,
+    )
     .mul(instancedBufferAttribute<'float'>(enabled, 'float'))
     .mul(projection?.drawable ?? 1)
   material.sizeAttenuation = false
+  // Enhanced maps transported V flux through its declared response. Dividing
+  // the color by V keeps reddening without applying the dust column twice.
+  const colorTransport = enhanced
+    .and(absolute)
+    .select(transported.div(transported.g.max(1e-20)), transported)
   material.colorNode = instancedBufferAttribute<'vec3'>(colours, 'vec3')
-    .mul(
-      transportedLight ??
-        instancedBufferAttribute<'vec3'>(transmission, 'vec3'),
-    )
+    .mul(colorTransport)
     .mul(profile.mul(profile))
     .mul(
-      integrated
-        .greaterThan(0.5)
-        .select(
-          visible.mul(1.15).add(0.45).mul(integratedSkyGain),
-          scale.mul(angularDensity).div(SURFACE_LUMINANCE),
-        ),
+      enhanced.select(
+        absolute
+          .select(
+            visible.mul(STAR_VISIBILITY.peakRadiance),
+            visible.mul(1.15).add(0.45),
+          )
+          .mul(integratedSkyGain),
+        scale.mul(angularDensity).div(SURFACE_LUMINANCE),
+      ),
     )
   material.opacityNode = profile
   material.transparent = true

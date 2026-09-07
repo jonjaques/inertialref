@@ -12,6 +12,7 @@ import {
   STAR_POSITION_QUANTUM,
   STAR_SUBCELLS,
   stellarIlluminance,
+  stellarVisualIlluminance,
   writeStarCoordinates,
 } from '@inertialref/rendering'
 import {
@@ -42,6 +43,7 @@ import {
 interface Sources {
   readonly positions: readonly UniverseVector[]
   readonly luminosities: readonly number[]
+  readonly visualLuminosities?: readonly number[]
   readonly ids?: readonly string[]
 }
 
@@ -183,6 +185,8 @@ export function createStarProjection(
   const pose = observer()
   const previousPose = observer()
   const previousSources = uniform(0)
+  const absoluteVisibility = uniform(0)
+  const illuminanceUnit = uniform(stellarIlluminance(1, SECTOR_SIZE))
   const count = uniform(0, 'uint')
   const maximum = new StorageBufferAttribute(new Uint32Array(1), 1)
   const maximumWrite = storage(maximum, 'uint', 1).toAtomic()
@@ -217,9 +221,7 @@ export function createStarProjection(
     )
   const distanceSquared = offset.dot(offset).max((1 / SECTOR_SIZE) ** 2)
   const luminosity = current.offsetNode.element(instanceIndex).w
-  const illuminance = luminosity
-    .mul(stellarIlluminance(1, SECTOR_SIZE))
-    .div(distanceSquared)
+  const illuminance = luminosity.mul(illuminanceUnit).div(distanceSquared)
   const brightest = compute
     ? (bitcast(maximumRead.element(0), 'float') as unknown as Node<'float'>)
     : fallbackMaximum
@@ -251,6 +253,7 @@ export function createStarProjection(
     previousPoint: Fn(() => shell(previousOffset.toVar(), previousPose))(),
     illuminance,
     visibility,
+    absoluteVisibility,
     distance: offset.length().mul(SECTOR_SIZE),
     drawable: offset.dot(offset).greaterThan(0).select(1, 0),
     clear,
@@ -271,6 +274,12 @@ export function createStarProjection(
         for (let i = 0; i < held.ids.length; i++)
           old.set(held.ids[i]!, held.positions[i]!)
       count.value = Math.min(capacity, sources.positions.length)
+      absoluteVisibility.value =
+        sources.visualLuminosities === undefined ? 0 : 1
+      illuminanceUnit.value =
+        sources.visualLuminosities === undefined
+          ? stellarIlluminance(1, SECTOR_SIZE)
+          : stellarVisualIlluminance(1, SECTOR_SIZE)
       for (let i = 0; i < count.value; i++) {
         const position = sources.positions[i]!
         const before = old.get(sources.ids?.[i] ?? '') ?? position
@@ -288,7 +297,8 @@ export function createStarProjection(
           previous.subcells.array as Int32Array,
           i + previous.start,
         )
-        current.offsets.array[i * 4 + 3] = sources.luminosities[i] ?? 1
+        current.offsets.array[i * 4 + 3] =
+          sources.visualLuminosities?.[i] ?? sources.luminosities[i] ?? 1
       }
       for (const buffers of allocations)
         for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
@@ -320,7 +330,12 @@ export function createStarProjection(
         !UV.equals(position, before.position)
       )
         normalized = false
-      if (integrated && !normalized && count.value > 0) {
+      if (
+        integrated &&
+        absoluteVisibility.value < 0.5 &&
+        !normalized &&
+        count.value > 0
+      ) {
         if (compute) {
           renderer.compute(clear)
           renderer.compute(reduce, count.value)

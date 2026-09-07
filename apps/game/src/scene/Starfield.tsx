@@ -36,6 +36,7 @@ function createField(engine: GameEngine, renderer: WebGPURenderer) {
     varying(extinction.sample(instanceIndex)),
   )
   const sprite = new Sprite(material.material)
+  sprite.name = 'Starfield'
   sprite.count = 0
   // The unit quad's bounds cannot contain its instances on the star shell.
   sprite.frustumCulled = false
@@ -124,7 +125,12 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       sprite.count = Math.min(stars.positions.length, STAR_SPRITE_CEILING)
       for (let i = 0; i < sprite.count; i++) {
         const colour = stars.colours[i] ?? [1, 1, 1]
-        colours.set(colour, i * 3)
+        const luminance =
+          colour[0] * 0.2126 + colour[1] * 0.7152 + colour[2] * 0.0722
+        const normalization = luminance > 0 ? 1 / luminance : 0
+        colours[i * 3] = colour[0] * normalization
+        colours[i * 3 + 1] = colour[1] * normalization
+        colours[i * 3 + 2] = colour[2] * normalization
         const name = stars.names[i] ?? ''
         const indices = names.get(name) ?? []
         indices.push(i)
