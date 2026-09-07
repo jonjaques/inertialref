@@ -32,6 +32,8 @@ function record(origin: UniverseVector): GalaxySkyArchiveRecord {
 function database() {
   const rows = new Map<string, unknown>()
   let failTransaction = false
+  let holdCommits = false
+  const commits: (() => void)[] = []
   const close = vi.fn()
   const db = {
     objectStoreNames: { contains: () => false },
@@ -54,12 +56,16 @@ function database() {
             }
             queueMicrotask(() => {
               request.onsuccess?.()
-              if (failTransaction) transaction.onabort?.()
-              else {
-                rows.clear()
-                for (const [key, value] of pending) rows.set(key, value)
-                transaction.oncomplete?.()
+              const complete = () => {
+                if (failTransaction) transaction.onabort?.()
+                else {
+                  rows.clear()
+                  for (const [key, value] of pending) rows.set(key, value)
+                  transaction.oncomplete?.()
+                }
               }
+              if (holdCommits) commits.push(complete)
+              else complete()
             })
             return request
           },
@@ -94,11 +100,17 @@ function database() {
     failTransactions: () => {
       failTransaction = true
     },
+    holdCommits: () => {
+      holdCommits = true
+    },
+    commit: () => {
+      for (const commit of commits.splice(0)) commit()
+    },
   }
 }
 
 describe('IndexedDB physical sky cache', () => {
-  it('retains two records, touches a reused entry, and waits for commit', async () => {
+  it('retains two records and touches a reused entry', async () => {
     const db = database()
     const store = new IndexedDbGalaxySkyStore(db.factory)
     const a = record(UV.fromMeters(0, 0, 0))
@@ -114,6 +126,25 @@ describe('IndexedDB physical sky cache', () => {
     expect(await store.read(c)).not.toBeNull()
     expect(db.open.mock.calls[0]?.[0]).not.toBe('inertialref')
     expect(db.close).toHaveBeenCalledTimes(db.open.mock.calls.length)
+  })
+
+  it('does not report a successful request as a committed write', async () => {
+    const db = database()
+    const store = new IndexedDbGalaxySkyStore(db.factory)
+    db.holdCommits()
+    let finished = false
+    const writing = store.write(record(UV.fromMeters(0, 0, 0))).then(() => {
+      finished = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(finished).toBe(false)
+    expect(db.rows.size).toBe(0)
+    expect(db.close).not.toHaveBeenCalled()
+    db.commit()
+    await writing
+    expect(finished).toBe(true)
+    expect(db.rows.size).toBe(1)
+    expect(db.close).toHaveBeenCalledOnce()
   })
 
   it('finds a nearby record across a regional key boundary', async () => {
