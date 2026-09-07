@@ -126,7 +126,10 @@ destinations continue to use their exact legacy generator.
 
 Ordinary nearby views refine complete 32², 128² and 512² cubemaps. Two 32² tiles
 are submitted per frame; the boot census ends after the 128² tier, while the
-512² tier continues in the background. Three target slots retain two completed
+512² tier continues in the background. Each cube uses a conservative `2/N`
+radian angular texel footprint; the projection reaches that width at face
+centers. The archive fingerprint includes this filtering revision. Three
+target slots retain two completed
 locations and one replacement. Only six complete faces publish. Canceled work,
 changed fields or source partitions, renderer retirement and late storage
 reads cannot publish into a different generation.
@@ -149,6 +152,11 @@ and padded row strides; temporary transfer textures are disposed.
 Outside the nearby disk, or beyond a valid cube, live rays fill half-resolution
 physical history using an eight-by-eight interleaved pattern. At 1920×1080
 this traces 120×68 primary rays per submission and retains 960×540 history.
+Production caps the history's longest edge at 960 pixels, preserving aspect
+ratio and at least the half-resolution divisor on smaller displays. A
+2880×1800 drawing buffer therefore retains 960×600 and traces 120×75 rays.
+Reference instruments can leave this cap unset. Warmup and resize use the
+same sizing calculation.
 RGB remains V-anchored nW m⁻² sr⁻¹ divided by 1,000; alpha carries
 emission-weighted distance for reprojection. Foreground occlusion remains in
 the full-resolution scene.
