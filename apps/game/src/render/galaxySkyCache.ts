@@ -38,6 +38,10 @@ import {
 } from './galaxySkyArchive.ts'
 import { readGalaxyCube, restoreGalaxyCube } from './galaxySkyTransfer.ts'
 import { GALAXY_KERNEL_VERSION } from './galaxyKernel.ts'
+import {
+  GALAXY_CUBE_SAMPLING_VERSION,
+  galaxyCubePixelAngle,
+} from './galaxySkyProjection.ts'
 import { trackAtMount, warmSensorPass, type WarmTicket } from './warmup.ts'
 
 /** Linear RGB, nW m^-2 sr^-1 per stored unit. Green retains Johnson V radiance. */
@@ -129,7 +133,7 @@ export class GalaxySkyCache {
     this.#field = field
     this.#archive = archive
     this.#kernel = createGalaxyKernel(field, kernelOptions)
-    this.#pixelAngle.value = Math.PI / 2 / this.schedule.faceSize
+    this.#pixelAngle.value = galaxyCubePixelAngle(this.schedule.faceSize)
     this.#targets = Array.from({ length: GALAXY_CACHE_SLOTS }, (_, slot) =>
       skyTarget(this.schedule.initialFaceSize, slot),
     )
@@ -199,8 +203,8 @@ export class GalaxySkyCache {
   }
 
   get pixelAngle(): number {
-    return (
-      Math.PI / 2 / (this.schedule.selected?.faceSize ?? this.schedule.faceSize)
+    return galaxyCubePixelAngle(
+      this.schedule.selected?.faceSize ?? this.schedule.faceSize,
     )
   }
 
@@ -288,7 +292,7 @@ export class GalaxySkyCache {
       if (this.#map.value === previous.texture) this.#map.value = target.texture
       previous.dispose()
     }
-    this.#pixelAngle.value = Math.PI / 2 / tile.faceSize
+    this.#pixelAngle.value = galaxyCubePixelAngle(tile.faceSize)
     const previous = renderer.getRenderTarget()
     const face = renderer.getActiveCubeFace()
     const mip = renderer.getActiveMipmapLevel()
@@ -347,7 +351,7 @@ export class GalaxySkyCache {
       this.#field,
       request.position,
       this.schedule.faceSize,
-      GALAXY_KERNEL_VERSION,
+      `${GALAXY_KERNEL_VERSION}/${GALAXY_CUBE_SAMPLING_VERSION}`,
       this.#resolved,
     )
     const key = JSON.stringify(query)
@@ -416,7 +420,7 @@ export class GalaxySkyCache {
       entry.field,
       entry.position,
       entry.faceSize,
-      GALAXY_KERNEL_VERSION,
+      `${GALAXY_KERNEL_VERSION}/${GALAXY_CUBE_SAMPLING_VERSION}`,
       this.#resolved,
     )
     void readGalaxyCube(renderer, this.#targets[entry.slot]!)
