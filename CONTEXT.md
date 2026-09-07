@@ -8288,6 +8288,13 @@ surface endpoint, and the camera lands there. The browser projection check
 places the held end within 1e-8 pixels of the pointer at 1600 × 900, DPR 1.
 [ADR-0036](docs/adr/0036-the-pointer-holds-the-rope.md) records the gesture.
 
+The narrow-screen capture exposed a second rendering defect: `Line2NodeMaterial`
+expands instance endpoints in clip space, but its inherited logarithmic depth
+uses the ribbon template. Foreground rope disappeared over the planet. The
+aid now reconstructs view depth from its expanded clip position. A GPU fixture
+with a real depth attachment fails under the old material and verifies both
+foreground visibility and background occlusion under the corrected one.
+
 The first full check timed out after 300 seconds in the existing terrain
 fixture. With the browser rig closed, that fixture passed in 179 seconds.
 Browser work and verification run serially; the task's rig is closed after

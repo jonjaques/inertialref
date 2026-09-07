@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { OrthographicCamera, Scene } from 'three/webgpu'
+import {
+  FloatType,
+  Mesh,
+  MeshBasicNodeMaterial,
+  OrthographicCamera,
+  PerspectiveCamera,
+  PlaneGeometry,
+  RenderTarget,
+  Scene,
+} from 'three/webgpu'
 import { LineSegments2 } from 'three/addons/lines/webgpu/LineSegments2.js'
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 import { createEntryTraceMaterials } from './entryTrace.ts'
@@ -11,6 +20,43 @@ beforeAll(async () => {
   gpu = await openGpu(32, 32)
 })
 afterAll(() => gpu.dispose())
+
+it('depth-tests the rope endpoints rather than its ribbon template', async () => {
+  const materials = createEntryTraceMaterials()
+  const target = new RenderTarget(32, 32, {
+    type: FloatType,
+    depthBuffer: true,
+  })
+  const geometry = new LineSegmentsGeometry()
+  const line = new LineSegments2(geometry, materials.ring)
+  line.position.z = -4
+  line.renderOrder = 1
+  const ground = new Mesh(
+    new PlaneGeometry(10, 10),
+    new MeshBasicNodeMaterial({ color: 0xff0000 }),
+  )
+  ground.position.z = -3.5
+  const scene = new Scene()
+  scene.add(ground, line)
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+  camera.updateMatrixWorld()
+  try {
+    for (const endpointZ of [1, -1]) {
+      geometry.setPositions([-0.8, 0, endpointZ, 0.8, 0, endpointZ])
+      scene.updateMatrixWorld(true)
+      const pixels = await gpu.draw(scene, camera, { into: target })
+      const blue = pixels.at(16, 16)[2]
+      if (endpointZ > 0) expect(blue).toBeGreaterThan(0.5)
+      else expect(blue).toBeLessThan(0.1)
+    }
+  } finally {
+    geometry.dispose()
+    target.dispose()
+    ground.geometry.dispose()
+    ground.material.dispose()
+    for (const material of Object.values(materials)) material.dispose()
+  }
+})
 
 it('draws a two-pixel landing ring at the same radiance across exposures', async () => {
   const materials = createEntryTraceMaterials()
