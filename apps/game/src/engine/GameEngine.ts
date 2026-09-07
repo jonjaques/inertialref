@@ -410,9 +410,9 @@ export class GameEngine {
    * observatory, then the ship*; the optics follow the same order through the
    * same code, because a picture composed through one lens and measured through
    * another is exactly the class of bug this phase exists to close. The
-   * observatory has no lens of its own — it solves a standoff against whatever
-   * the camera panel is set to, which is the flight lens — so the order has two
-   * arms rather than three.
+   * ordinary observatory solves a standoff against the player's flight lens.
+   * A fixed galaxy instrument supplies its declared lens only while that
+   * instrument is active; entering and leaving it preserves the flight lens.
    *
    * A getter rather than a field: `this.cinematic` is written once per frame by
    * `#step`, and a mirrored copy would be a second thing to keep in step.

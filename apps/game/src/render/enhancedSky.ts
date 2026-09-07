@@ -3,7 +3,7 @@ import { vec3 } from 'three/tsl'
 import { enhancedSky } from './radiance.ts'
 
 /** The field retains nW m^-2 sr^-1. Only the composed view spends this gain. */
-export const ENHANCED_SKY_GAIN = 2 ** 21
+export const ENHANCED_SKY_GAIN = 2 ** 24
 export const ENHANCED_SKY_CEILING = 0.35
 
 /** Compress extended emission by luminance, retaining zero and chromaticity. */

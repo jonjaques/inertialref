@@ -42,8 +42,9 @@ import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
  * detector response and the canvas encode. MSAA belongs to the scene target;
  * the output triangle has no interior edge that needs multisampling.
  *
- * Every compile uses the pass's declared attachment shape. The two outputs
- * are pre-exposed radiance and velocity.xy / reciprocal view-space meters.
+ * Every compile uses the pass's declared attachment shape: pre-exposed
+ * radiance, velocity.xy / reciprocal view-space meters, and a meter-only
+ * instrument mask. The mask does not alter the presented image.
  * Internal optical quads read plain textures; the final dependency graph
  * schedules each pass exactly once per render call. ADR-0031.
  */
