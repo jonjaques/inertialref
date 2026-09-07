@@ -19,8 +19,19 @@ export function uploadStarfieldAppearance(
     previous?.positions.length ?? 0,
     material.enabled.count,
   )
-  for (let i = 0; i < Math.max(count, oldCount); i++) {
-    const oldName = previous?.names[i] ?? ''
+  const span = Math.max(count, oldCount)
+  let renamed = 0
+  for (let i = 0; i < span; i++)
+    if (
+      (previous?.names[i] ?? '') !== (i < count ? (stars.names[i] ?? '') : '')
+    )
+      renamed++
+  // A broad reorder otherwise creates temporary duplicate-name arrays while
+  // moving every index through the old map. Rebuild once when most slots move.
+  const remap = renamed > span / 2
+  if (remap) names.clear()
+  for (let i = 0; i < (remap ? count : span); i++) {
+    const oldName = remap ? '' : (previous?.names[i] ?? '')
     const name = i < count ? (stars.names[i] ?? '') : ''
     if (oldName !== name) {
       if (oldName !== '') {
