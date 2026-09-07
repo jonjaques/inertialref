@@ -2,9 +2,69 @@ import { expect, it } from 'vitest'
 import {
   decodePictures,
   encodePictures,
+  findPicture,
+  openSession,
 } from '../../packages/devtools/src/index.ts'
+import { LENS_PRESETS } from '../../packages/rendering/src/index.ts'
 import { readPictureLink } from '../../apps/game/src/planetarium/presetUrl.ts'
 import { cameraReviewPictures, reviewMarkdown } from './preview.mjs'
+
+it.each([
+  ['earth', 'blue-marble', null],
+  ['luna', 'blue-marble', 'Luna'],
+  ['night', 'night-side', null],
+  ['bennu', 'blue-marble', 'Bennu'],
+])(
+  'captures the completed %s recipe instead of its incoming camera pose',
+  (id, preset, body) => {
+    let lens = {
+      ...LENS_PRESETS.flight,
+      fStop: 2.8,
+      shutter: 1 / 3200,
+      iso: 100,
+      zoom: 1,
+    }
+    const session = openSession({
+      seed: 'inertialref',
+      workers: null,
+      render: {
+        framingLens: () => lens,
+        setFlightLens: (next) => {
+          lens = next
+        },
+      },
+    })
+    try {
+      const ir = session.harness
+      const before = session.world.stateHash()
+      const recipe = findPicture(preset)
+      ir.takePicture(
+        body === null
+          ? recipe
+          : {
+              ...recipe,
+              address: ir
+                .targets({ lightYears: 0 })
+                .find((one) => one.name === body).address,
+              framing: { kind: 'compose', composition: 'gibbous' },
+            },
+      )
+      // Ten presented seconds let this independent reference finish its ease.
+      for (let index = 0; index < 600; index++) ir.observerSample(1 / 60)
+      expect(ir.observerStatus().travelling).toBe(false)
+      const reference = ir.capturePicture('reference', 'Reference')
+      const picture = cameraReviewPictures().find(
+        (one) => one.id === `camera-review-${id}-enhanced`,
+      )
+      expect(picture.framing).toEqual(reference.framing)
+      expect(picture.lens).toEqual(reference.lens)
+      expect(picture.time).toBe(reference.time)
+      expect(session.world.stateHash()).toBe(before)
+    } finally {
+      session.dispose()
+    }
+  },
+)
 
 it('makes matched camera triplets and separately declared long exposures', () => {
   const pictures = cameraReviewPictures()
