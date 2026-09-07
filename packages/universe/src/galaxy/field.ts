@@ -11,10 +11,11 @@ import { SUN_POSITION } from '../catalog/astrometry.ts'
 import { blackbodyColour, type LinearRgb } from '../catalog/photometry.ts'
 import { LOCAL_DENSITY } from '../galaxy.ts'
 import { armStrength } from './arms.ts'
+import { localBubbleFactor, localCloudExtinction } from './localDust.ts'
 import { GALAXY_DUST, galaxyDustModulation, galaxyDustProfile } from './dust.ts'
 
 export const GALAXY_FIELD_ALGORITHM = Object.freeze(
-  algorithm('galaxy-field', 3),
+  algorithm('galaxy-field', 4),
 )
 /** Preview versions never enter GENERATION_VERSIONS until population activation. */
 export const GALAXY_FIELD_VERSIONS = Object.freeze(
@@ -172,7 +173,12 @@ export function createGalaxyField(
           ? 1
           : galaxyDustModulation(dustSeed, x, y, z, footprintParsecs)
       const extinction =
-        dustScale * dustNormalization * dust.density * dustModulation
+        dustScale *
+        (dustNormalization *
+          dust.density *
+          dustModulation *
+          localBubbleFactor(x, y, z) +
+          localCloudExtinction(x, y, z))
       const populations = {} as Record<GalaxyPopulation, number>
       let total = 0,
         emission = 0,

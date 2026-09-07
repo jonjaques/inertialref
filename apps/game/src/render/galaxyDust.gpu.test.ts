@@ -4,7 +4,11 @@ import { int, uniformArray, uv, vec4 } from 'three/tsl'
 import { PARSEC } from '@inertialref/shared'
 import { rootSeed } from '@inertialref/procedural'
 import { UV, vec3 } from '@inertialref/spatial'
-import { createGalaxyField, integrateGalaxyRay } from '@inertialref/universe'
+import {
+  createGalaxyField,
+  integrateGalaxyRay,
+  LOCAL_CLOUDS,
+} from '@inertialref/universe'
 import { createGalaxyKernel } from './galaxyKernel.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 
@@ -37,6 +41,8 @@ it('holds the seeded dust lattice to the CPU across seeds, negative cells and th
     new Vector3(0, 0, 0),
     new Vector3(30001, 0, 0),
   )
+  for (const cloud of LOCAL_CLOUDS)
+    points.push(new Vector3(cloud.center.x, cloud.center.y, cloud.center.z))
   const positions = uniformArray<'vec3'>(points, 'vec3')
   const kernel = createGalaxyKernel(createGalaxyField(rootSeed('inertialref')))
   const graph = vec4(
