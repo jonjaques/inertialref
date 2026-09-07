@@ -185,8 +185,8 @@ export interface PlanetMaterial {
    *
    * 1 for everything the renderer draws at a distance, and for every body
    * bright enough that the scene's own exposure already suits it. `Bodies.tsx`
-   * raises it only for a *dark* body *filling the frame* — see `adaptationFor`
-   * there for why that is an exposure decision rather than a lie about albedo.
+   * raises it only for a dark body filling the frame in Enhanced or explicit
+   * calibrated staging. `surfaceVisibilityGain` supplies both sphere and ground.
    */
   readonly albedoScale: { value: number }
   /** How much of the lunar-Lambert blend is Lommel-Seeliger. */
@@ -480,11 +480,11 @@ export function createPlanetMaterial(): PlanetMaterial {
     albedoMap.sample(flowUv).rgb.mul(baseColour),
     bakeSample.rgb,
     baked,
-  ).mul(albedoScale)
+  )
   // Chroma about the sample's own luminance; past 1 the mix extrapolates,
   // which is what a saturation boost is.
   const rich = mix(vec3(luminance(surfaceAlbedo)), surfaceAlbedo, saturation)
-  const albedo = mix(rich, oceanColour, ocean.mul(0.65))
+  const albedo = mix(rich, oceanColour, ocean.mul(0.65)).mul(albedoScale)
 
   // See `limbDarkening` on the interface. The exponent is gentle because the
   // aerial veil re-brightens the last few degrees on top of this.

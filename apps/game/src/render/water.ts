@@ -1,4 +1,8 @@
-import { sensorRadiance, sceneRadianceGain } from './radiance.ts'
+import {
+  sensorRadiance,
+  sceneRadianceGain,
+  visibilityAmbient,
+} from './radiance.ts'
 import { Color, MeshBasicNodeMaterial, Vector2, Vector3 } from 'three/webgpu'
 import {
   attribute,
@@ -42,13 +46,7 @@ import {
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import { seaWearOf } from './wear.ts'
 import { WAVE_OCTAVES } from './quality.ts'
-import {
-  AIR_SCALE_HEIGHT,
-  AMBIENT,
-  BLACK_RGB,
-  paint,
-  SKY_FRACTION,
-} from './terrain.ts'
+import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
 
 /*
  * The sea's own material.
@@ -353,15 +351,13 @@ export function createWaterMaterial(
      * and the shore agree about how bright the day is.
      */
     const skyView = float(1)
-    const bodyLight = liquid
-      .mul(
-        max(incidence, float(0))
-          .mul(daylight)
-          .mul(oneMinus(diffuse))
-          .add(skyColour.mul(diffuse).mul(saturate(incidence.add(0.25))))
-          .add(skyView.mul(float(AMBIENT))),
-      )
+    const diffuseLight = max(incidence, float(0))
+      .mul(daylight)
+      .mul(oneMinus(diffuse))
+      .add(skyColour.mul(diffuse).mul(saturate(incidence.add(0.25))))
+      .add(skyView.mul(visibilityAmbient))
       .mul(sunlight)
+    const bodyLight = liquid.mul(diffuseLight)
     const subsurface = mixPerChannel(
       bodyLight,
       mix(bodyLight, behind, refraction),
@@ -380,7 +376,7 @@ export function createWaterMaterial(
       .mul(skyStrength)
       .mul(saturate(incidence.add(0.15)))
       .mul(0.9)
-      .add(vec3(AMBIENT))
+      .add(vec3(visibilityAmbient))
       .mul(sunlight)
     const half = normalize(sun.add(view))
     const facing = max(dot(view, half), float(0))
@@ -408,7 +404,7 @@ export function createWaterMaterial(
     const foam = oneMinus(smoothstep(float(0.05), float(1.4), depth))
       .mul(foamNoise)
       .mul(daylight.mul(0.8).add(0.2))
-    colour = asVector(mix(colour, vec3(0.55).mul(sunlight), foam.mul(0.75)))
+    colour = asVector(mix(colour, vec3(0.55).mul(diffuseLight), foam.mul(0.75)))
 
     // A magma sea is its own light, and so much of it that the reflection
     // and the seabed are drowned; a water sea adds nothing here.

@@ -11,6 +11,12 @@ const enhanced = new WeakMap<Renderer, boolean>()
 export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
   renderer !== null && enhanced.get(renderer) === true ? 1 : 0,
 )
+/**
+ * Enhanced's three-percent night-side fill is legibility, not measured light.
+ * Ground and water share the resolved processing gate; photographic views and
+ * reflectance bakes receive none. Atmospheric scattering remains independent.
+ */
+export const visibilityAmbient = enhancedSky.mul(0.03)
 export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (gains.get(renderer) ?? 1),
 )

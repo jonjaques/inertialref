@@ -36,6 +36,30 @@ const grey = (m: SurfaceMaterial): number =>
   0.2126 * m.albedo.r + 0.7152 * m.albedo.g + 0.0722 * m.albedo.b
 
 describe('the terrain palette', () => {
+  it('leaves a mapped dark body’s brightness to its photograph and keeps its tint', () => {
+    for (const name of ['Bennu', 'Ceres', 'Phobos', 'Vesta']) {
+      const body = find(name)
+      const { colour } = body.appearance
+      const peak = Math.max(colour.r, colour.g, colour.b)
+      expect(terrainPalette(body).regolith.albedo, name).toEqual({
+        r: colour.r / peak,
+        g: colour.g / peak,
+        b: colour.b / peak,
+      })
+    }
+  })
+
+  it('keeps dark mapless reflectance physical for the ground and its orbital bake', () => {
+    const bennu = find('Bennu')
+    const mapless: Body = {
+      ...bennu,
+      appearance: { ...bennu.appearance, texture: null },
+    }
+    expect(terrainPalette(mapless).regolith.albedo).toEqual(
+      mapless.appearance.colour,
+    )
+  })
+
   /*
    * The one published ratio in the file, and the largest albedo contrast on any
    * airless body: lunar mare is 0.07 geometric albedo against 0.13 for the
