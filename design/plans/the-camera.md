@@ -209,7 +209,7 @@ identified as that earlier source.
 | `db34e2a` / 2880×1800   | Return  | 17.60 / 50.10 ms  | 30 / 2,365              | 5.33 ms                   |
 
 The Retina viewport is 1440×900 CSS at DPR 2. Held costs measure 60 complete
-sensor submissions across a drained queue, including submission cost; free
+sensor frames across a drained queue, including submission cost; free
 look restores its aim first, and the ground row owns descent's held cost.
 These measurements accept the bounded visible-sky and twelve-tap optical
 policy with a declared limit: dense ground at this native Retina point runs
@@ -230,9 +230,8 @@ visible. Raw records retain refinement submissions and cancellations.
 A separate held-frame audit at both sizes records eighteen renderer calls:
 one scene render, four defocus draws, twelve PSF draws and final output. The
 gathers report twelve samples. The intercepted WebGPU queue sees 22 / 18
-submissions and command buffers at 1080p / Retina; extra compute or asynchronous
-work is not classified as scene rendering. Timing probes exclude this
-instrumentation.
+submissions and command buffers at 1080p / Retina; the additional buffers are
+not attributed to a producer. Timing probes exclude this instrumentation.
 
 The current local evidence lives in `.scratch/camera-completion/`: `verified/`
 contains the final native plates and exact picture records, `transitions/` contains

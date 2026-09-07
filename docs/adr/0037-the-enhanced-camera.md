@@ -1,7 +1,8 @@
 # ADR-0037: Enhanced composes the default sky; Automatic and Manual expose it photographically
 
-Status: accepted · 7 Sep 2026. Camera policy and processing are implemented.
-Image acceptance awaits the preview review.
+Status: accepted · 7 Sep 2026. Camera policy, processing and surface-light
+separation are implemented and verified. The camera plan records image and
+runtime acceptance, including the limits of each measurement.
 Supersedes the default-image preservation requirement in
 [ADR-0031](0031-the-sensor-response.md), the ordinary-view daylight omission
 policy in [ADR-0032](0032-the-stellar-field.md), and the bible's two-mode
@@ -116,6 +117,13 @@ once, at the scene material. Its 3% terrain and water fill is also visibility
 processing. Photographic modes retain modeled atmospheric scattering but apply
 neither that floor nor the dark-body gain.
 
+Cloud maps remain thin weather shells. Their coverage clears continuously over
+the last quarter of a deck-altitude of view path before the eye crosses the
+shell; front-face culling cannot remove a bright veil in one frame. The interval
+uses view-space distance and follows render compression. Distant coverage is
+unchanged, and every camera mode uses the same approximation. This is not a
+volumetric cloud model.
+
 One sensor chain and the existing camera/lens producers remain in charge.
 Camera settings and adaptation are presentation state, outside the canonical
 world and its hash. [ADR-0029](0029-the-sensor-spine.md) continues to govern
@@ -200,12 +208,13 @@ pose, photographic time and lens; historical image equality is not promised.
 [ADR-0033](0033-presets-hold-a-photographic-instant.md) owns that portable format.
 
 Numerical tests establish exposure arithmetic, strict migration, histogram
-behavior and history reset. Image acceptance remains open for matched scene
-triplets and transitions in the preview build. Nonzero sky pixels alone do not
-establish foreground detail, dust contrast, occlusion or a useful composition.
-The [camera plan](../../design/plans/the-camera.md) and
+behavior, physical continuity and surface-light separation. The
+[camera completion record](../../design/plans/the-camera.md#camera-completion-record)
+combines inspected mode triplets with transition recordings, backend lifecycle
+checks and complete-frame costs. It distinguishes image acceptance from
+instrumented timing and preserves occasional long-frame limits. The source's
+smooth dust morphology remains an approximation; a camera response cannot
+recover missing structure. The
 [assembled galaxy record](../../design/plans/the-galaxy.md#assembled-image-and-motion-record)
-carry the sixteen repeated field@5 images, full journey recordings, and their
-remaining visual and frame-time limits. Those records do not assert artistic
-approval. [ADR-0038](0038-the-stars-and-the-diffuse-sky.md) owns the completed
-resolved-star and diffuse-sky implementation.
+retains the historical measurements. [ADR-0038](0038-the-stars-and-the-diffuse-sky.md)
+owns the resolved-star and diffuse-sky implementation.

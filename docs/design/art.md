@@ -6,7 +6,8 @@ The source data remains physically grounded in every mode.
 
 The three camera modes and their processing are implemented in
 [ADR-0037](../adr/0037-the-enhanced-camera.md). This page states the image goals;
-matched scenes and transitions await the preview review. The measured optical
+the [camera completion record](../../design/plans/the-camera.md#camera-completion-record)
+holds inspected scenes, transitions and their measured limits. The optical
 and ACES diagnostic baseline remains in
 [ADR-0031](../adr/0031-the-sensor-response.md).
 

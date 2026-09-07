@@ -8635,6 +8635,51 @@ does not supply its own nighttime light. Hull ambient and camera fill likewise
 follow resolved processing, with explicit cinematic calibration as the scoped
 exception. The readout distinguishes Calibrating, Metered and Held.
 
+The corrected sixteen-image set preserves the non-Bennu Enhanced and Manual
+pixels exactly. Bennu's Enhanced central-face median rises from 8.353 to
+116.412 encoded levels out of 255, with no full-white pixels; Manual rises
+from 1.928 to 60.774. Automatic compensates by changing EV from 8.507 to
+12.431 and keeps its image within three encoded levels of the earlier one.
+These are image comparisons, not calibrated radiance measurements. All five
+triplets and the long Manual frame pass inspection. The two transition casts
+show smooth adaptation, held Manual exposure and identical Enhanced frames
+before and after switching modes.
+
+The descent's last meter retains its approach bearing while the horizon turn
+finishes. A one-meter cutoff replaced that bearing with the final heading when
+the blend was only about 87% complete, producing a 24.493° frame turn without
+a corresponding position jump. Keeping the direction until actual coincidence
+reduces the reported turn to 1.125°. The exact eight-second fixture and variable
+cadence properties retain the same touchdown; a deterministic three-case replay
+also checks held and advancing photographic time and a motionless held endpoint.
+
+Crossing Earth's thin cloud shell removed its full front-facing alpha in one
+frame. In the Enhanced descent recording, the center patch fell from 129.780
+to 80.028 encoded luma; Automatic and Manual showed the same transition.
+Hiding only the cloud material removed that step. Cloud coverage now clears
+over the last quarter of the rendered deck altitude along the view path.
+View-space distance avoids subtracting planetary radii in float32; distant
+weather retains exactly the same coverage. A real-GPU shell-crossing test
+fails without the correction and passes with it.
+The final 600-frame Enhanced recast replaces the 49.75-level adjacent center
+change with a gradual crossing whose largest adjacent change is 4.26 levels.
+The photographic views clear the veil over fewer recorded frames while keeping
+terrain detail and alignment. The thin-shell culling step is absent in all
+three modes; those frame sequences do not establish identical capture timing.
+
+A shallow ground blur still paid for forty-eight samples in each half-resolution
+near/far gather. Circles through four pixels now use twelve samples distributed
+over the entire iris. Both variants warm in advance and share the existing four
+targets; large blur, the half-pixel bypass and normalized color keep their
+contracts. The four-pixel edge fixture stays within 0.01172 linear-channel
+difference and 0.00893% energy difference from the larger pattern. Six alternating
+sixty-frame GPU batches measure 0.931 versus 0.376 ms at 1080p and 2.259 versus
+0.921 ms at Retina for the isolated four-pass chain. The runtime reports the
+selected sample count. A separate aperture probe puts the full ground view at
+21.52 ms with the earlier defocus and 19.60 ms when it bypasses; its protocol and
+incomplete scene metadata do not explain the initial 37.13 ms ground measurement.
+The paired optical measurement establishes the saving; cross-run totals do not.
+
 A pending star survey keeps its completed field and the matching resolved
 envelope, including an empty exterior field. Falling back to the ambient
 catalog during every request changes the represented light and uploads source
@@ -8667,6 +8712,39 @@ by 4.833 microseconds; correcting only that accumulated phase difference
 reduces the discrepancy to 0.01078 meters. Physics and tolerances are
 untouched. The focused rerun and subsequent complete check pass; the boundary
 is retained here for a separate test-oracle correction.
+
+The assembled implementation passes 2,043 regular tests in 158 files,
+eight slow tests in four files and the complete `pnpm check` gate. The GPU
+suite passes 119 tests in 40 files, including physical reflectance/bake parity,
+unlit terrain/water, cloud crossing and both defocus variants; all twelve
+headless capability checks pass. The lifecycle test checks six warmed materials
+sharing four targets and one disposal per resource. The sixteen matched images
+use `4249c28`; the final motion and operating-point records use the fixed
+production build at `db34e2a` after the descent, cloud and defocus corrections.
+
+Quiet complete-frame probes at `db34e2a` keep the visible Enhanced sky at both
+native drawing-buffer sizes. At 1920×1080, the orbit, free-look, twelve-second
+descent and held ground samples contain no intervals above 25 ms; held orbit
+and ground GPU batches measure 4.28 and 12.39 ms. At 2880×1800, held orbit is
+7.66 ms, while dense ground is 26.20 ms with a 29.26 ms mean rAF interval and
+33.90 ms p95. Native Retina ground therefore remains about 30–34 fps in this
+scene. The separately measured small-gather saving is not an explanation for
+every change between complete-frame batches. The physical sky stays visible,
+with its 960-pixel history cap; the scene keeps native resolution. Retina
+outward and return probes have p95 intervals of 17.70 and 17.60 ms, with maxima
+of 66.80 and 50.10 ms. These are measured operating points, not a universal
+frame-rate guarantee.
+
+A held ground frame issues eighteen renderer calls at either size: one scene,
+four defocus draws, twelve PSF draws and one final output. Both gathers report
+twelve samples. The queue intercept observes additional command buffers whose
+producers remain unclassified. That instrumented audit is separate from the
+timing batches.
+All thirteen preset thumbnails are recaptured at standard sRGB / DPR 1 and
+pass image inspection and preset validation. The final matched Earth image is
+pixel-identical to the accepted surface checkpoint. The final WebGL smoke
+retains Enhanced SDR and the visible Automatic-to-Manual fallback at lens EV
+14.6147, with unit gain and no browser errors.
 
 ## Known gaps
 
@@ -8747,10 +8825,11 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   mean linear luminance ranges from 0.048 (Callisto) to 0.32 (the Moon) across
   the shipped set, against published geometric albedos that do not track it —
   Vesta's map is four times darker than Mercury's on a body three times brighter.
-  Each body's tint compensates by hand. The fix is for the texture ingest to
-  record each map's mean and the renderer to scale toward `1.5 p`, which would
-  change how every planet is lit and is therefore a deliberate pass rather than a
-  patch.
+  Mapped surfaces retain the map's reflectance and use a normalized hue tint.
+  That avoids multiplying albedo twice but does not calibrate the map's mean.
+  The remaining step is for the texture ingest to record each map's mean and
+  the renderer to scale toward `1.5 p`, which changes every mapped world's
+  illumination and needs its own calibration.
 - **Three of the four Galilean maps are monochrome.** That is how Voyager and
   Galileo returned them. They are tinted with published colors, which is a
   different and smaller lie than rendering them gray.
@@ -8798,16 +8877,10 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   pixel-ratio ceiling for a coarse pointer is reasoned about rather than
   profiled; so is the claim that the near-planet frame is fragment-bound on a
   tile-based GPU. `render/measure.ts` on the device is what settles both.
-- Every performance number recorded here is from an Apple M5 in a 1000×760
-  window. The target is a 2023-class laptop at 1920×1080 — roughly three times
-  the pixels on a much weaker GPU — so these establish that the instrument works,
-  not that the budget is met.
-- The tone curve has no test. It is a TSL node graph, and a scalar mirror of
-  the same arithmetic would pass while the graph drifted — which is the
-  failure the terrain-normals test is remembered for. Its home is a
-  `*.gpu.test.ts` under `pnpm test:gpu`, where `drawGraph` on a float target
-  returns the curve's own output for comparison against the published formula;
-  none is written yet.
+- Early performance records use an Apple M5 in a 1000×760 window. The camera
+  completion record adds native 1920×1080 and 2880×1800 operating points on
+  that M5. The 2023-class laptop target still needs measurements on its own
+  hardware; a larger drawing buffer does not establish that hardware budget.
 - `World.updateInterest` is the core's own system-streaming policy and has no
   production caller: both apps load one system and never stream another, and the
   client runs a separate starfield survey with its own radius and hysteresis.
