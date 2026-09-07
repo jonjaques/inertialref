@@ -97,3 +97,26 @@ it.each([SUN_POSITION, UV.fromMeters(0, 12000 * PARSEC, 0)])(
     }
   },
 )
+
+it('draws only the requested tile instead of evaluating the whole cube face', async () => {
+  const field = createGalaxyField(rootSeed('inertialref'))
+  const cache = new GalaxySkyCache(field, { faceSize: 16, tileSize: 8 })
+  cache.configure(SUN_POSITION, field)
+  try {
+    await cache.warm(gpu.renderer)
+    expect(cache.advance(gpu.renderer)).toBe(true)
+    const directions = uniformArray<'vec3'>(
+      [new Vector3(1, 0.4375, 0.4375), new Vector3(1, -0.4375, -0.4375)],
+      'vec3',
+    )
+    const pixels = await gpu.drawGraph(
+      cache.sample(directions.element(int(uv().x.mul(2)))),
+      { float: true, width: 2, height: 1 },
+    )
+    expect(pixels.at(0, 0)[1]).toBeGreaterThan(0)
+    expect(pixels.at(1, 0)[1]).toBe(0)
+    expect(cache.available).toBe(false)
+  } finally {
+    cache.dispose()
+  }
+})

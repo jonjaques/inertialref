@@ -207,6 +207,7 @@ export class GalaxySkyCache {
     const tone = renderer.toneMapping
     const color = renderer.outputColorSpace
     const clear = renderer.autoClear
+    const scissorTest = renderer.getScissorTest()
     target.scissor.set(tile.x, tile.y, tile.width, tile.height)
     target.scissorTest = true
     try {
@@ -216,6 +217,10 @@ export class GalaxySkyCache {
       // Each tile replaces every texel it covers. Clearing the attachment
       // would erase all preceding tiles, since GPU load clears ignore scissor.
       renderer.autoClear = false
+      // r185 reads the scissor rectangle from the target, but its enable
+      // flag from the renderer. Setting only target.scissorTest draws a full
+      // face for every tile; the coverage test observes that outside texel.
+      renderer.setScissorTest(true)
       renderer.setRenderTarget(target, tile.face)
       this.#quad.render(renderer)
       this.schedule.complete(tile)
@@ -229,6 +234,7 @@ export class GalaxySkyCache {
       renderer.toneMapping = tone
       renderer.outputColorSpace = color
       renderer.autoClear = clear
+      renderer.setScissorTest(scissorTest)
     }
     return true
   }

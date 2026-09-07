@@ -19,6 +19,7 @@ function recorder() {
   let mrt: object | null = {},
     face = 0,
     mip = 0
+  let scissorTest = false
   const size = new Vector2(1920, 1080)
   const renderer = {
     toneMapping: 4,
@@ -31,6 +32,10 @@ function recorder() {
       target = value
       face = f
       mip = m
+    },
+    getScissorTest: () => scissorTest,
+    setScissorTest: (value: boolean) => {
+      scissorTest = value
     },
     getActiveCubeFace: () => face,
     getActiveMipmapLevel: () => mip,
