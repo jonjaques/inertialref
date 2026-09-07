@@ -88,3 +88,29 @@ it('covers every texel exactly once without exceeding the tile budget', () => {
   expect(() => new GalaxyCacheSchedule({ faceSize: 0 })).toThrow()
   expect(() => new GalaxyCacheSchedule({ tileSize: 2048 })).toThrow()
 })
+
+it('publishes a complete coarse sky while the final cube continues in the spare slot', () => {
+  const cache = new GalaxyCacheSchedule({
+    faceSize: 128,
+    tileSize: 16,
+    initialFaceSize: 32,
+  })
+  cache.configure(SUN_POSITION, field)
+  for (let i = 0; i < 24; i++) cache.complete(cache.next()!)
+  const coarse = cache.selected
+  expect(coarse?.faceSize).toBe(32)
+  // Repeated camera frames keep the coarse cube selected and the refinement
+  // alive, including while the observer drifts inside the validity budget.
+  for (let i = 0; i < 384; i++) {
+    cache.configure(UV.translate(SUN_POSITION, vec3(i * 1000, 0, 0)), field)
+    expect(cache.selected).toBe(coarse)
+    cache.complete(cache.next()!)
+  }
+  expect(cache.selected?.faceSize).toBe(128)
+  expect(cache.report).toMatchObject({
+    tiles: 408,
+    published: 2,
+    pending: false,
+  })
+  expect(cache.next()).toBeNull()
+})

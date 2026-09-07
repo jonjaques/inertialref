@@ -96,6 +96,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   #samplingDraws = 0
   #liveDraws = 0
   #usedCache = false
+  #cacheRevision = 0
   readonly #size = new Vector2()
   readonly #origin = uniform(new Vector3())
   readonly #right = uniform(new Vector3(1, 0, 0))
@@ -313,7 +314,10 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     const size = renderer.getDrawingBufferSize(this.#size)
     if (this.#cache?.advance(renderer)) this.#draws++
     const cached = this.#cache?.available ?? false
-    if (cached !== this.#usedCache) this.#dirty = true
+    const revision = this.#cache?.revision ?? 0
+    if (cached !== this.#usedCache || revision !== this.#cacheRevision)
+      this.#dirty = true
+    this.#cacheRevision = revision
     this.#usedCache = cached
     const divisor =
       this.#cache === null || cached

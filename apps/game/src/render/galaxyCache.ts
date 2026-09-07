@@ -12,10 +12,13 @@ export const GALAXY_CACHE_SLOTS = 3
 export interface GalaxyCacheOptions {
   readonly faceSize?: number
   readonly tileSize?: number
+  /** Publish this complete lower-resolution cube before refining the final tier. */
+  readonly initialFaceSize?: number
 }
 
 export interface GalaxyCacheEntry {
   readonly slot: number
+  readonly faceSize: number
   readonly generation: number
   readonly position: UniverseVector
   readonly field: GalaxyField
@@ -39,6 +42,7 @@ export interface GalaxyCacheTile extends GalaxyCacheEntry {
 export class GalaxyCacheSchedule {
   readonly faceSize: number
   readonly tileSize: number
+  readonly initialFaceSize: number
   readonly totalTiles: number
   #generation = 0
   #completed: GalaxyCacheEntry[] = []
@@ -54,6 +58,7 @@ export class GalaxyCacheSchedule {
   constructor(options: GalaxyCacheOptions = {}) {
     this.faceSize = options.faceSize ?? GALAXY_CACHE_FACE_SIZE
     this.tileSize = options.tileSize ?? GALAXY_CACHE_TILE_SIZE
+    this.initialFaceSize = options.initialFaceSize ?? this.faceSize
     invariant(
       Number.isInteger(this.faceSize) &&
         this.faceSize >= 16 &&
@@ -68,7 +73,17 @@ export class GalaxyCacheSchedule {
         Number.isInteger(Math.log2(this.tileSize)),
       'Galaxy cache tiles must be powers of two from 8 through 64',
     )
-    this.totalTiles = 6 * Math.ceil(this.faceSize / this.tileSize) ** 2
+    invariant(
+      Number.isInteger(Math.log2(this.initialFaceSize)) &&
+        this.initialFaceSize >= 16 &&
+        this.initialFaceSize <= this.faceSize,
+      'The initial sky cube must be a power of two within the final tier',
+    )
+    this.totalTiles =
+      this.#tileCount(this.faceSize) +
+      (this.initialFaceSize < this.faceSize
+        ? this.#tileCount(this.initialFaceSize)
+        : 0)
   }
 
   configure(position: UniverseVector | null, field: GalaxyField): void {
@@ -87,24 +102,43 @@ export class GalaxyCacheSchedule {
     const valid = (entry: GalaxyCacheEntry) =>
       UV.distance(position, entry.position) <=
       GALAXY_CACHE_RADIUS_PARSECS * PARSEC
-    const selected = this.#completed.find(valid) ?? null
+    let selected: GalaxyCacheEntry | null = null
+    for (const entry of this.#completed)
+      if (
+        valid(entry) &&
+        (selected === null || entry.faceSize > selected.faceSize)
+      )
+        selected = entry
     this.#selected = selected
     if (selected !== null) {
-      this.#cancel()
+      if (selected.faceSize === this.faceSize) this.#cancel()
       if (this.#completed.at(-1) !== selected)
         this.#completed = [
           ...this.#completed.filter((entry) => entry !== selected),
           selected,
         ]
-      return
+      if (selected.faceSize === this.faceSize) return
     }
     if (this.#pending !== null && valid(this.#pending)) return
     this.#cancel()
+    this.#begin(
+      selected?.position ?? position,
+      field,
+      selected === null ? this.initialFaceSize : this.faceSize,
+    )
+  }
+
+  #tileCount(faceSize: number): number {
+    return 6 * Math.ceil(faceSize / this.tileSize) ** 2
+  }
+
+  #begin(position: UniverseVector, field: GalaxyField, faceSize: number): void {
     const occupied = new Set(this.#completed.map((entry) => entry.slot))
     let slot = 0
     while (occupied.has(slot)) slot++
     this.#pending = {
       slot,
+      faceSize,
       generation: ++this.#generation,
       position: { ...position },
       field,
@@ -119,6 +153,8 @@ export class GalaxyCacheSchedule {
   get report() {
     return {
       faceSize: this.faceSize,
+      selectedFaceSize: this.#selected?.faceSize ?? null,
+      initialFaceSize: this.initialFaceSize,
       tileSize: this.tileSize,
       totalTiles: this.totalTiles,
       completedTiles: this.#pending === null ? 0 : this.#tile,
@@ -133,7 +169,8 @@ export class GalaxyCacheSchedule {
 
   next(): GalaxyCacheTile | null {
     if (this.#pending === null || this.#disposed) return null
-    const across = Math.ceil(this.faceSize / this.tileSize)
+    const faceSize = this.#pending.faceSize
+    const across = Math.ceil(faceSize / this.tileSize)
     const inFace = this.#tile % (across * across)
     const x = (inFace % across) * this.tileSize
     const y = Math.floor(inFace / across) * this.tileSize
@@ -143,8 +180,8 @@ export class GalaxyCacheSchedule {
       face: Math.floor(this.#tile / (across * across)),
       x,
       y,
-      width: Math.min(this.tileSize, this.faceSize - x),
-      height: Math.min(this.tileSize, this.faceSize - y),
+      width: Math.min(this.tileSize, faceSize - x),
+      height: Math.min(this.tileSize, faceSize - y),
     }
   }
 
@@ -158,12 +195,20 @@ export class GalaxyCacheSchedule {
       return false
     this.#tiles++
     this.#tile++
-    if (this.#tile === this.totalTiles) {
-      this.#selected = this.#pending
-      this.#completed.push(this.#pending)
+    if (this.#tile === this.#tileCount(this.#pending.faceSize)) {
+      const published = this.#pending
+      this.#selected = published
+      this.#completed = this.#completed.filter(
+        (entry) =>
+          UV.distance(entry.position, published.position) >
+          GALAXY_CACHE_RADIUS_PARSECS * PARSEC,
+      )
+      this.#completed.push(published)
       this.#completed = this.#completed.slice(-(GALAXY_CACHE_SLOTS - 1))
       this.#pending = null
       this.#published++
+      if (published.faceSize < this.faceSize)
+        this.#begin(published.position, published.field, this.faceSize)
     }
     return true
   }

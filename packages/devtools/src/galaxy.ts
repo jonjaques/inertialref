@@ -53,6 +53,8 @@ export interface GalaxyPlate {
 export interface GalaxyRenderReport {
   readonly cache?: {
     readonly faceSize: number
+    readonly initialFaceSize: number
+    readonly selectedFaceSize: number | null
     readonly tileSize: number
     readonly totalTiles: number
     readonly completedTiles: number

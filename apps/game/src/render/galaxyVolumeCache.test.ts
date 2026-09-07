@@ -65,12 +65,12 @@ it('bounds a cold frame, then reuses the physical cube during free look and resi
   expect(volume.diagnostics.width).toBe(64)
   expect(volume.diagnostics.height).toBe(36)
   expect(volume.diagnostics.cache).toMatchObject({ tiles: 1, using: false })
-  for (let i = 1; i < 384; i++) volume.updateBefore(frame)
+  for (let i = 1; i < 408; i++) volume.updateBefore(frame)
   const baked = volume.diagnostics.cache!
   expect(baked).toMatchObject({
     ready: true,
-    tiles: 384,
-    published: 1,
+    tiles: 408,
+    published: 2,
     using: true,
   })
   expect(volume.diagnostics.width).toBe(480)
@@ -83,13 +83,13 @@ it('bounds a cold frame, then reuses the physical cube during free look and resi
     volume.updateBefore(frame)
   }
   expect(volume.diagnostics.cache).toMatchObject({
-    tiles: 384,
+    tiles: 408,
     liveDraws: baked.liveDraws,
     samplingDraws: baked.samplingDraws + 9,
   })
   size.set(2880, 1800)
   volume.updateBefore(frame)
-  expect(volume.diagnostics.cache!.tiles).toBe(384)
+  expect(volume.diagnostics.cache!.tiles).toBe(408)
   expect(volume.diagnostics.width).toBe(720)
   expect(renderer.getRenderTarget()).toBe(initial)
   expect(renderer.autoClear).toBe(true)

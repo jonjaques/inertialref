@@ -120,3 +120,57 @@ it('draws only the requested tile instead of evaluating the whole cube face', as
     cache.dispose()
   }
 })
+
+it('keeps a complete coarse sky visible while a different cube refines its radiance', async () => {
+  const field = createGalaxyField(rootSeed('inertialref'))
+  const cache = new GalaxySkyCache(field, {
+    faceSize: 64,
+    initialFaceSize: 16,
+    tileSize: 16,
+  })
+  cache.configure(SUN_POSITION, field)
+  try {
+    await cache.warm(gpu.renderer)
+    const kernel = createGalaxyKernel(field)
+    const p = UV.approxMeters(SUN_POSITION)
+    for (const size of [16, 64]) {
+      for (let i = 0; i < 6 * (size / 16) ** 2; i++) cache.advance(gpu.renderer)
+      expect(cache.diagnostics.selectedFaceSize).toBe(size)
+      expect(cache.available).toBe(true)
+      const a = (2 * (Math.floor(size * 0.3) + 0.5)) / size - 1
+      const b = (2 * (Math.floor(size * 0.7) + 0.5)) / size - 1
+      const directions = uniformArray<'vec3'>(
+        [
+          new Vector3(1, -b, -a),
+          new Vector3(-1, -b, a),
+          new Vector3(a, 1, b),
+          new Vector3(a, -1, -b),
+          new Vector3(a, -b, 1),
+          new Vector3(-a, -b, -1),
+        ],
+        'vec3',
+      )
+      const d = directions.element(int(uv().x.mul(6)))
+      const live = kernel
+        .integrate(
+          vec3(p.x / PARSEC, p.y / PARSEC, p.z / PARSEC),
+          d,
+          100000,
+          'settled',
+          GALAXY_MAX_STEP_PARSECS,
+          cache.pixelAngle,
+        )
+        .rgb.div(GALAXY_RADIANCE_UNIT)
+      const pixels = await gpu.drawGraph(
+        vec4(cache.sample(d).rgb.sub(live).abs().div(live.max(1e-10)), 1),
+        { float: true, width: 6, height: 1 },
+      )
+      for (let x = 0; x < 6; x++)
+        for (const error of pixels.at(x, 0).slice(0, 3))
+          expect(error).toBeLessThan(0.01)
+    }
+    expect(cache.diagnostics).toMatchObject({ published: 2, pending: false })
+  } finally {
+    cache.dispose()
+  }
+})

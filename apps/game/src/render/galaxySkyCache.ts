@@ -79,7 +79,7 @@ export class GalaxySkyCache {
   readonly #flip = uniform(1)
   readonly #map
   readonly #kernel: ReturnType<typeof createGalaxyKernel>
-  readonly pixelAngle: number
+  readonly #pixelAngle = uniform(1)
   #field: GalaxyField
   #disposed = false
   #ready = false
@@ -88,21 +88,17 @@ export class GalaxySkyCache {
   #ticket: WarmTicket | null = null
 
   constructor(field: GalaxyField, options: GalaxyCacheOptions = {}) {
-    this.schedule = new GalaxyCacheSchedule(options)
+    this.schedule = new GalaxyCacheSchedule({
+      ...options,
+      initialFaceSize:
+        options.initialFaceSize ?? Math.min(32, options.faceSize ?? 128),
+    })
     this.#field = field
     this.#kernel = createGalaxyKernel(field)
-    this.pixelAngle = Math.PI / 2 / this.schedule.faceSize
-    this.#targets = Array.from({ length: GALAXY_CACHE_SLOTS }, (_, slot) => {
-      const target = new CubeRenderTarget(this.schedule.faceSize, {
-        type: HalfFloatType,
-        minFilter: LinearFilter,
-        magFilter: LinearFilter,
-        generateMipmaps: false,
-        depthBuffer: false,
-      })
-      target.texture.name = `Galaxy physical sky ${slot}`
-      return target
-    })
+    this.#pixelAngle.value = Math.PI / 2 / this.schedule.faceSize
+    this.#targets = Array.from({ length: GALAXY_CACHE_SLOTS }, (_, slot) =>
+      skyTarget(this.schedule.faceSize, slot),
+    )
     this.#map = cubeTexture(this.#targets[0]!.texture)
     const screen = uv().mul(2).sub(1)
     const direction = this.#forward
@@ -116,7 +112,7 @@ export class GalaxySkyCache {
           100000,
           'settled',
           GALAXY_MAX_STEP_PARSECS,
-          this.pixelAngle,
+          this.#pixelAngle,
         )
         .rgb.div(GALAXY_RADIANCE_UNIT),
       1,
@@ -154,6 +150,16 @@ export class GalaxySkyCache {
       this.#map.value = this.#targets[selected.slot]!.texture
   }
 
+  get pixelAngle(): number {
+    return (
+      Math.PI / 2 / (this.schedule.selected?.faceSize ?? this.schedule.faceSize)
+    )
+  }
+
+  get revision(): number {
+    return this.schedule.selected?.generation ?? 0
+  }
+
   get available(): boolean {
     return this.#ready && !this.#disposed && this.schedule.selected !== null
   }
@@ -164,7 +170,10 @@ export class GalaxySkyCache {
       radiusParsecs: GALAXY_CACHE_RADIUS_PARSECS,
       bytes: this.#disposed
         ? 0
-        : GALAXY_CACHE_SLOTS * 6 * this.schedule.faceSize ** 2 * 8,
+        : this.#targets.reduce(
+            (sum, target) => sum + 6 * target.width * target.height * 8,
+            0,
+          ),
       units: 'RGB nW m^-2 sr^-1 / 1000' as const,
     }
   }
@@ -199,7 +208,17 @@ export class GalaxySkyCache {
     this.#forward.value.set(forward[0], forward[1], forward[2])
     this.#right.value.set(right[0], right[1], right[2])
     this.#down.value.set(down[0], down[1], down[2])
-    const target = this.#targets[tile.slot]!
+    let target = this.#targets[tile.slot]!
+    if (target.width !== tile.faceSize) {
+      // CubeRenderTarget inherits a resize that updates image.width, while
+      // its six images keep their old extent. Replace this free slot instead.
+      const previous = target
+      target = skyTarget(tile.faceSize, tile.slot)
+      this.#targets[tile.slot] = target
+      if (this.#map.value === previous.texture) this.#map.value = target.texture
+      previous.dispose()
+    }
+    this.#pixelAngle.value = Math.PI / 2 / tile.faceSize
     const previous = renderer.getRenderTarget()
     const face = renderer.getActiveCubeFace()
     const mip = renderer.getActiveMipmapLevel()
@@ -226,7 +245,7 @@ export class GalaxySkyCache {
       this.schedule.complete(tile)
       this.#ticket?.done()
       this.#select()
-      if (this.available) this.#finishTicket()
+      if (this.available && !this.schedule.report.pending) this.#finishTicket()
     } finally {
       target.scissorTest = false
       renderer.setRenderTarget(previous, face, mip)
@@ -252,4 +271,16 @@ export class GalaxySkyCache {
     for (const target of this.#targets) target.dispose()
     this.#material.dispose()
   }
+}
+
+function skyTarget(size: number, slot: number): CubeRenderTarget {
+  const target = new CubeRenderTarget(size, {
+    type: HalfFloatType,
+    minFilter: LinearFilter,
+    magFilter: LinearFilter,
+    generateMipmaps: false,
+    depthBuffer: false,
+  })
+  target.texture.name = `Galaxy physical sky ${slot}`
+  return target
 }
