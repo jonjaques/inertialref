@@ -42,7 +42,8 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
         .backend.isWebGPUBackend
         ? new IndexedDbGalaxySkyStore()
         : undefined,
-      temporal: { stride: 4 },
+      temporal: { stride: 8 },
+      resolutionDivisor: 2,
     })
     const mesh = createGalaxyBackdrop(volume)
     const held = { volume, mesh, field, world: engine.world }

@@ -78,6 +78,7 @@ export interface GalaxyVolumeOptions {
   readonly cache?: GalaxyCacheOptions
   readonly archive?: GalaxySkyStore
   readonly temporal?: GalaxyTemporalOptions
+  readonly resolutionDivisor?: 2 | 4
   readonly structure?: boolean | GalaxyStructureTable
 }
 
@@ -106,6 +107,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   readonly #structure: GalaxyStructureTable | null
   readonly #ownsStructure: boolean
   readonly #temporal: GalaxyTemporalVolume | null
+  readonly #resolutionDivisor: number
   readonly #temporalMaterial = new NodeMaterial()
   #samplingDraws = 0
   #liveDraws = 0
@@ -148,6 +150,8 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
 
   constructor(field: GalaxyField, options: GalaxyVolumeOptions = {}) {
     super('vec4')
+    this.#resolutionDivisor =
+      options.resolutionDivisor ?? GALAXY_RESOLUTION_DIVISOR
     this.#field = field
     this.#ownsStructure = options.structure === true
     this.#structure =
@@ -340,7 +344,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
               using: this.#usedCache,
             },
           }),
-      resolutionDivisor: GALAXY_RESOLUTION_DIVISOR,
+      resolutionDivisor: this.#resolutionDivisor,
       maxStepParsecs: GALAXY_MAX_STEP_PARSECS,
       dustStepParsecs:
         this.#sampling.value === 2 ? GALAXY_DUST_SETTLED_STEP_PARSECS : null,
@@ -363,9 +367,9 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     const size = renderer.getDrawingBufferSize(this.#size)
     const divisor =
       this.#cache === null || this.#temporal !== null
-        ? GALAXY_RESOLUTION_DIVISOR
+        ? this.#resolutionDivisor
         : Math.max(
-            GALAXY_RESOLUTION_DIVISOR,
+            this.#resolutionDivisor,
             Math.max(size.x, size.y) / COLD_LONG_EDGE,
           )
     this.#target.setSize(
@@ -413,9 +417,9 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#usedCache = cached
     const divisor =
       this.#cache === null || cached || this.#temporal !== null
-        ? GALAXY_RESOLUTION_DIVISOR
+        ? this.#resolutionDivisor
         : Math.max(
-            GALAXY_RESOLUTION_DIVISOR,
+            this.#resolutionDivisor,
             Math.max(size.x, size.y) / COLD_LONG_EDGE,
           )
     const width = Math.max(1, Math.ceil(size.x / divisor))
