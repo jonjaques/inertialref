@@ -5,10 +5,10 @@ planets, readable stars and a visible Milky Way. Automatic and Manual offer
 photographic exposure of the same scene. This is the implementation plan for
 [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md).
 
-Status: C1–C4 are complete. C5 has a new completion record on the branch
-created from PR #73 at `9e26512`; final low-albedo image review and the repeat
-gate remain pending. The [camera completion record](#camera-completion-record)
-contains the current evidence. M6's physical model, local dust and linear
+Status: C1–C5 are complete on the branch created from PR #73 at `9e26512`.
+The [camera completion record](#camera-completion-record) records accepted
+images and motion, passing implementation gates, measured costs and the
+native Retina ground limit. M6's physical model, local dust and linear
 photometry remain independently calibrated. The
 [assembled galaxy record](the-galaxy.md#assembled-image-and-motion-record)
 preserves the earlier measurements and remaining source-morphology limits.
@@ -17,13 +17,13 @@ The sections below retain the original implementation and acceptance criteria.
 The completion record distinguishes image inspection, runtime measurements and
 features outside this sequence.
 
-| Step | Result                                                                                        | Verification                                                                                 |
-| ---- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| C1   | Three-mode policy, strict compatibility parser and preference migration.                      | Integrated policy, migration and canonical-isolation checks pass.                            |
-| C2   | Physical sky storage, explicit Enhanced visibility processing and one final output transform. | Matched foreground/sky review passes for Earth and Luna; final Bennu review remains pending. |
-| C3   | Shared photographic processing, physical metering and explicit adaptation.                    | Manual isolation, held/clamped adaptation, continuous rebases and real WebGL fallback pass.  |
-| C4   | Camera Mode controls, version 2 pictures/URLs, scoped instruments and ordinary-view cache.    | Sixteen native SDR fixtures restore exact pose, time, lens and processing.                   |
-| C5   | Image review, transition recordings, display lifecycle and complete-frame measurements.       | Final low-albedo fixture and repeat gate remain pending; measured limits are recorded below. |
+| Step | Result                                                                                        | Verification                                                                                                               |
+| ---- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| C1   | Three-mode policy, strict compatibility parser and preference migration.                      | Integrated policy, migration and canonical-isolation checks pass.                                                          |
+| C2   | Physical sky storage, explicit Enhanced visibility processing and one final output transform. | All sixteen matched Earth, Earth-and-band, Luna, night-side and Bennu plates pass agent image review.                      |
+| C3   | Shared photographic processing, physical metering and explicit adaptation.                    | Manual isolation, held/clamped adaptation, continuous rebases and real WebGL fallback pass.                                |
+| C4   | Camera Mode controls, version 2 pictures/URLs, scoped instruments and ordinary-view cache.    | Sixteen native SDR fixtures restore exact pose, time, lens and processing; thirteen preset plates are regenerated.         |
+| C5   | Image review, transition recordings, display lifecycle and complete-frame measurements.       | Complete: assembled checks, four descent casts and complete-frame measurements pass with the declared Retina ground limit. |
 
 Generate matched Earth, Earth-and-band, Luna, night-side and Bennu review
 links against the Cloudflare version URL:
@@ -40,18 +40,27 @@ output capabilities remain the reviewer's choice.
 
 ## Camera completion record
 
-The implementation follows PR #73 at `9e26512`. The `bface6f` checkpoint has
-sixteen native SDR fixtures at 1920×1080 / DPR 1, reviewed through the complete
-WebGPU sensor chain on Apple M5 and Chrome 152. Agent inspection accepts the
-Earth, Earth-and-band, Luna and night-side triplets. Enhanced retains the
-subject and sky; Automatic and short Manual suppress faint light beside a
-sunlit subject. The long Manual exposure reveals the band and clips Earth.
+The implementation follows PR #73 at `9e26512`. Code at `4249c28` has
+sixteen native SDR fixtures at 1920×1080 / DPR 1 through the complete WebGPU
+sensor chain on Apple M5 and Chrome 152. Every fixture passes exact parameter
+restoration and renderer-readiness checks. Agent inspection accepts all sixteen
+Earth, Earth-and-band, Luna, night-side and Bennu plates. Enhanced retains the
+subject and sky. Automatic and short Manual
+suppress faint light beside a sunlit subject, while the long Manual exposure
+reveals the band and clips Earth.
 The surface correction at `4249c28` normalizes the tint of mapped bodies,
 keeps terrain palettes and orbital bakes in physical reflectance, and applies
 one Enhanced visibility gain across sphere and ground. The 3% terrain/water
 legibility floor belongs only to Enhanced; photographic surfaces retain the
-actual scattered atmospheric light. Final Bennu and terrain/sphere image
-review remains pending.
+actual scattered atmospheric light. Bennu's Enhanced view retains clear
+relief: the central face's encoded-luma median rises from 8.353 to 116.412/255
+without fully white clipping. Its Manual median rises from 1.928 to 60.774,
+below Luna's 96.770. These image statistics are not calibrated radiance.
+Automatic settles at EV 12.431 after the source correction,
+compared with the earlier EV 8.507, while its image remains within three
+channel levels of the earlier capture. This is the meter compensating for
+corrected source reflectance. The non-Bennu Enhanced and Manual images are
+byte-identical; their Automatic images differ by at most two channel levels.
 
 Earth's city-light mask excludes the blue background of its colorized night
 map. The night-side Automatic view now adapts to the source light without
@@ -78,6 +87,21 @@ and the final Enhanced frame reproduces its initial pixels. Paused ranges
 without an exposure jump. The initially suspected missing crescent is absent
 from the recorded-byte evidence and is not a confirmed product flicker.
 
+Four final 600-frame descent casts at `db34e2a` pass sampled visual review
+and decoded-pixel checks: Enhanced, Automatic and Manual at 1080p, plus
+Enhanced at Retina. Their cloud crossing clears continuously; the former
+whole-veil cull and late sideways camera turn do not recur. These recordings
+contain 1280×720 / 1280×800 JPEGs from the respective native buffers. Frame
+indices do not establish absolute crossing duration because the caster does
+not preserve per-frame timestamps.
+
+Held Enhanced frames 458–599, Manual frames 345–599 and Retina frames 236–599
+are byte-identical, with identical decoded endpoints. Automatic retains its
+ground bearing while exposure converges; its mean channel difference against
+the final frame falls from 2.56 at frame 323 to 0.025 at frame 598. All thirteen
+authored preset plates are regenerated from `db34e2a`; `presets:check` passes,
+and agent inspection accepts their contact sheet.
+
 Real WebGL renders Enhanced in sRGB and retains a requested
 Automatic preference while using lens-controlled Manual exposure. Its visible
 explanation is "Automatic needs WebGPU. This view uses the manual lens
@@ -86,17 +110,17 @@ Standard sRGB to negotiated Extended display-P3 and back, verify renderer
 retirement, resize to 1440×900 CSS / DPR 2, and reload the finished sky archive.
 The resulting 2880×1800 scene retains the bounded 960×600 physical history.
 
-At `bface6f`, the full `pnpm check` passes 2,031 regular tests and eight slow
-tests, including graph, formatting, lint, typechecks, documentation and builds.
-The GPU suite passes 109 tests in 37 files, and `pnpm sim --self-test` passes
-12/12. The verification log preserves an initial randomized ellipse-comparison
-failure, reproduced against unchanged PR #73 physics at seed `972706803`.
-Its state-derived period differs from the nominal elements by 4.833 μs; after
-nearly 50 revolutions, the relative velocity discrepancy exceeds that test's
-empirical bound by 3.674 parts per million. Physics and tolerances are unchanged.
-At `4249c28`, the surface correction passes 51 focused CPU tests and 27 GPU
-tests in three files, plus typechecks, lint and formatting. The complete
-repeat gate after that correction remains pending.
+Assembled code `db34e2a` passes the full `pnpm check`: 2,043 regular tests in
+158 files and eight slow tests in four files,
+plus graph, brand, presets, formatting, lint, all typechecks, documentation
+and production builds. The GPU suite passes 119 tests in 40 files on the
+identical renderer at `4b55d0c`, and
+`pnpm sim --self-test` passes 12/12. The verification log preserves an initial
+randomized ellipse-comparison failure, reproduced against unchanged PR #73
+physics at seed `972706803`. Its state-derived period differs from the nominal
+elements by 4.833 μs; after nearly 50 revolutions, the relative velocity
+discrepancy exceeds that test's empirical bound by 3.674 parts per million.
+Physics and tolerances are unchanged. The complete repeated gate passes.
 
 ### Return-frame costs
 
@@ -131,12 +155,95 @@ Morphology remains an approximate physical model, and sustained 60 fps is not
 a universal claim. The 960-pixel history cap and progressive cubes remain the
 bounded quality choices for the visible sky.
 
-The current local evidence lives in `.scratch/camera-completion/`: `final/`
-contains native plates and exact picture records, `transitions/` contains
+Small defocus has a separate bounded quality choice in assembled code
+`4b55d0c`. Circles up to four pixels in the drawing buffer use twelve samples
+of the flight iris per near/far layer; larger circles retain 48. Both variants
+are warmed against the same four textures, and the half-pixel bypass still
+submits no defocus work. `defocusSamples` reports 12, 48 or zero. GPU checks
+retain the 36.318-pixel result for the 35.834-pixel calibration circle and
+verify energy, hue, threshold continuity, shared targets and switching
+without a new pipeline. Per-glass iris sampling remains deferred.
+
+Six alternating batches of 60 drained, isolated defocus frames measure median
+costs of 0.931 → 0.376 ms at 1920×1080 and 2.259 → 0.921 ms at 2880×1800.
+At the four-pixel boundary, a striped near/far fixture differs from the legacy
+kernel by at most 0.01172 in a linear channel, with mean absolute difference
+0.00514 and relative energy change 0.00893%. This measures the optical pass,
+not the complete scene or presented frame rate.
+
+### Complete-frame operating points
+
+The final production batch at `db34e2a` runs on Apple M5, Chrome 152, WebGPU,
+Standard sRGB and Enhanced. Orbit, free look and ground use six-second rAF
+probes without screencasting. Descent records twelve seconds around an
+eight-second flight. Each probe holds its canonical hash, mode and lens;
+cold orbit starts with an empty regenerable archive after first light and
+excludes browser launch and shader boot.
+
+| Drawing buffer | Point      | rAF mean / p95 / maximum | Above 25 ms / intervals | Held complete-sensor cost |
+| -------------- | ---------- | ------------------------ | ----------------------- | ------------------------- |
+| 1920×1080      | Cold orbit | 16.67 / 17.60 / 17.70 ms | 0 / 360                 | —                         |
+| 1920×1080      | Warm orbit | 16.67 / 17.60 / 17.70 ms | 0 / 360                 | 4.28 ms                   |
+| 1920×1080      | Free look  | 16.67 / 17.60 / 17.80 ms | 0 / 360                 | 4.20 ms                   |
+| 1920×1080      | Descent    | 16.67 / 17.30 / 17.70 ms | 0 / 720                 | —                         |
+| 1920×1080      | Ground     | 16.67 / 17.40 / 17.60 ms | 0 / 360                 | 12.39 ms                  |
+| 2880×1800      | Cold orbit | 16.71 / 17.50 / 33.30 ms | 1 / 359                 | —                         |
+| 2880×1800      | Warm orbit | 16.67 / 17.40 / 17.70 ms | 0 / 360                 | 7.66 ms                   |
+| 2880×1800      | Free look  | 16.67 / 17.30 / 17.70 ms | 0 / 360                 | 7.09 ms                   |
+| 2880×1800      | Descent    | 23.90 / 34.40 / 50.70 ms | 192 / 502               | —                         |
+| 2880×1800      | Ground     | 29.26 / 33.90 / 34.40 ms | 155 / 205               | 26.20 ms                  |
+
+The two journey batches preserve their source revisions. Each travels for
+36 seconds and then holds the endpoint. The 1080p batch at `4249c28` includes
+2,400-frame compositor recordings, with independent rAF samples covering the
+first 40 seconds. The final Retina batch at `db34e2a` records the same path
+without screencasting. Later cloud, touchdown-heading and small-defocus fixes
+do not change the orbital infinity-focus route; the older recordings remain
+identified as that earlier source.
+
+| Source / drawing buffer | Journey | rAF p95 / maximum | Above 25 ms / intervals | Held complete-sensor cost |
+| ----------------------- | ------- | ----------------- | ----------------------- | ------------------------- |
+| `4249c28` / 1920×1080   | Outward | 18.70 / 52.00 ms  | 12 / 2,382              | 1.60 ms                   |
+| `4249c28` / 1920×1080   | Return  | 18.50 / 66.70 ms  | 12 / 2,375              | 2.54 ms                   |
+| `db34e2a` / 2880×1800   | Outward | 17.70 / 66.80 ms  | 20 / 2,372              | 4.51 ms                   |
+| `db34e2a` / 2880×1800   | Return  | 17.60 / 50.10 ms  | 30 / 2,365              | 5.33 ms                   |
+
+The Retina viewport is 1440×900 CSS at DPR 2. Held costs measure 60 complete
+sensor submissions across a drained queue, including submission cost; free
+look restores its aim first, and the ground row owns descent's held cost.
+These measurements accept the bounded visible-sky and twelve-tap optical
+policy with a declared limit: dense ground at this native Retina point runs
+around 30–34 fps. They do not claim sustained 60 fps. The earlier 37.13 ms
+Retina ground batch, the 21.52 ms aperture probe and this 26.20 ms batch have
+different scene/session details; their differences do not isolate the
+1.338 ms optical saving.
+
+The final ground records select 7,184,384 / 7,733,248 terrain triangles in
+877 / 944 patches at 1080p / Retina, with 380 / 388 scene calls before sensor
+passes. Declared galaxy targets occupy 42,702,592 / 44,091,712 bytes; star
+projection and extinction declare 9,600,004 and 13,204,096 bytes at both
+points. Sampled V8 heap maxima are 612.32 / 592.65 MiB. These are the named
+allocation and heap observations, not total GPU residency. The 512² cubes
+and 960-pixel physical history cap remain in effect with Enhanced's sky
+visible. Raw records retain refinement submissions and cancellations.
+
+A separate held-frame audit at both sizes records eighteen renderer calls:
+one scene render, four defocus draws, twelve PSF draws and final output. The
+gathers report twelve samples. The intercepted WebGPU queue sees 22 / 18
+submissions and command buffers at 1080p / Retina; extra compute or asynchronous
+work is not classified as scene rendering. Timing probes exclude this
+instrumentation.
+
+The current local evidence lives in `.scratch/camera-completion/`: `verified/`
+contains the final native plates and exact picture records, `transitions/` contains
 display and motion records, `live-rebases.json` records exposure continuity,
 and `perf/return-analysis.md` separates CPU spans, rAF intervals, allocations
-and transfer measurements. Final low-albedo plates and complete sensor costs
-are still being collected before this record is closed.
+and transfer measurements. `perf/small-defocus-evidence.json` records the
+isolated optical comparison. `operating-points.md` and `.json` separate the
+earlier `4249c28` batch from the final source and preserve pose, lens, terrain,
+cache and diagnostic records. `perf-final/motion-review.md` records the four
+accepted final descent casts and their review boundaries. This closes C5
+with the declared quality choices and measured limits above.
 
 ## The picture we are building
 

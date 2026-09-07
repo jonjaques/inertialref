@@ -8,7 +8,7 @@ sees that journey, following
 [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md).
 
 The M1–M6 planning baseline is [PR #70](https://github.com/jonjaques/inertialref/pull/70),
-`9911dd5`. The current completion branch is
+`9911dd5`. The galaxy completion branch is
 `codex/galaxy-the-sky-keeps-its-detail`, open as
 [PR #73](https://github.com/jonjaques/inertialref/pull/73), explicitly stacked on
 [PR #72](https://github.com/jonjaques/inertialref/pull/72),
@@ -20,7 +20,12 @@ M7–M11 are implemented and the assembled verification record follows below.
 PR #73 records verified implementation `ee0e9e1` and evidence commit `78e00dc`.
 The [camera completion record](the-camera.md#camera-completion-record) follows
 PR #73 at `9e26512` and records the current night emission, camera continuity
-and return-frame evidence. The historical record below retains its original
+and return-frame evidence. Its
+[complete-frame operating points](the-camera.md#complete-frame-operating-points)
+record the bounded optical choice and native Retina ground limit. The
+camera's C1–C5 sequence is complete at `db34e2a`, including matched stills,
+final descent review and measured full-frame costs. The
+historical record below retains its original
 source, images and measured limits. Source morphology remains approximate,
 and lower survey CPU cost does not establish sustained 60 fps.
 [ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md) records active
