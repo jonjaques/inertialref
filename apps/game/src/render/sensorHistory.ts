@@ -32,7 +32,16 @@ function sample(camera: SensorCamera): CameraSample {
         : fromRenderSpace(origin, camera.position),
     orientation:
       origin === null
-        ? { ...camera.orientation }
+        ? // Field by field, not a spread. A `THREE.Quaternion` carries x/y/z/w
+          // as prototype accessors over private `_x`…`_w`, so a spread retains
+          // no components, every dot product against the sample is NaN, and a
+          // NaN compares false — the orientation cut never fires.
+          {
+            x: camera.orientation.x,
+            y: camera.orientation.y,
+            z: camera.orientation.z,
+            w: camera.orientation.w,
+          }
         : Quaternion.multiply(origin.orientation, camera.orientation),
     origin,
   }
