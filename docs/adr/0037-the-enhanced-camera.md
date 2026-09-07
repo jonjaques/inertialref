@@ -1,6 +1,7 @@
 # ADR-0037: Enhanced composes the default sky; Automatic and Manual expose it photographically
 
-Status: accepted direction · 6 Sep 2026. Implementation is planned.
+Status: accepted · 7 Sep 2026. Camera policy and processing are implemented.
+Image acceptance awaits the preview review.
 Supersedes the default-image preservation requirement in
 [ADR-0031](0031-the-sensor-response.md), the ordinary-view daylight omission
 policy in [ADR-0032](0032-the-stellar-field.md), and the bible's two-mode
@@ -50,8 +51,9 @@ There are three separate choices:
 
 - Camera mode determines exposure and composite behavior.
 - A tone curve determines the rendering of that mode's image. Changing a curve
-  does not change metering, source light, or which mode is active. The first
-  release uses one authored Enhanced look and one shared photographic look.
+  does not change metering, source light, or which mode is active. The controls
+  expose one authored Enhanced look and the shared neutral photographic look.
+  Imported Gentle and Crisp settings retain their explicit photographic shoulders.
 - Display output determines gamut and available luminance headroom. Enhanced
   works on ordinary SDR sRGB displays. Display P3 is a gamut, and extended
   luminance is a separate capability, as distinguished by
@@ -63,6 +65,33 @@ readout states metered exposure; Manual states the lens exposure; Enhanced
 states its composite processing instead of claiming one physical EV describes
 the whole image. A fixed diagnostic or cinematic exposure identifies its
 override in the readout.
+
+`resolveCameraPolicy` in `packages/rendering` resolves selected mode, response
+style, effective exposure control and any staging override. `ExposureMeter`
+reports effective EV, gain relative to the lens, compensation and the override.
+A positive compensation brightens Automatic; it cannot add gain to Manual.
+Enhanced holds the 30,000 cd/m² surface calibration and declares its separate
+sky processing. Display peak and output negotiation do not select a mode.
+
+Enhanced compresses diffuse sky luminance before the scene's half-float
+conversion. The owned sky target retains physical V-anchored radiance in
+nW m⁻² sr⁻¹; the composition reads that radiance and applies a presentation
+gain followed by bounded luminance compression. Uniform RGB scaling preserves
+chromaticity, zero remains zero, and the physical target stays available for
+photographic views and diagnostics. The full-resolution scene applies depth
+and silhouette coverage before the composed sky enters the common optics.
+Atmospheric transmission and modeled dust attenuation remain upstream of this
+visibility treatment. The lifted sky feeds glare and detector noise in Enhanced.
+Automatic meters only its photographic inputs.
+
+Enhanced also owns the dark-body visibility lift, integrated star visibility
+and analytic solar core. Automatic and Manual use physical lighting and stellar
+flux with the same hue-preserving photographic response. A script can explicitly
+request calibrated lighting and the measured ACES staging look with
+`calibratedLight`; this is an authored override with a fixed exposure, and it
+releases when the script exits. Scripts do not rewrite the viewer's preference.
+Ordinary galaxy travel preserves the selected mode. Fixed photometric
+instruments request their stated photographic exposure explicitly.
 
 The source model stays calibrated independently of camera mode. Catalog
 luminosities, geometric albedos, dust columns and emitted radiance do not change
@@ -80,10 +109,39 @@ resource ownership, output negotiation and the numerical evidence in ADR-0031
 remain useful. Its Natural image is a reference, not a release constraint.
 
 Enhanced makes the diffuse sky part of ordinary gameplay cost. Eligibility
-cannot follow the Natural daylight predicate. A cache, bounded updates and
-measured quality tiers must make the visible sky affordable. Photographic
+cannot follow the Natural daylight predicate. The owned ordinary-view cache
+retains physical sky radiance and bounds its updates. Cache behavior and
+bake/live identity belong to [ADR-0032](0032-the-stellar-field.md). Photographic
 culling needs a conservative visibility bound through the actual optics and
 response, including glare, rather than an exposure label alone.
+
+Automatic samples every fourth pixel in each axis into 64 logarithmic bins.
+An R8 instrument mask excludes samples covered by labels, orbit traces, landing
+marks and other instruments. The reducer excludes empty bin zero, trims the
+40th–99.9th percentile interval and weights log luminance by light. A small lit
+disk can then dominate faint sky without an isolated hot pixel setting exposure.
+Comfort limits apply to retained physical luminance with the current settings,
+even when adaptation is held. Holding exposure leaves the mode Automatic.
+
+Adaptation uses the engine's accumulated `presentationTime`, with frame deltas
+bounded at 0.1 s and time constants of 0.4 s toward bright and 3.5 s toward dark.
+Photographic time still places bodies and controls motion and detector noise.
+Camera cuts, mode changes and photographic-time scrubs reset meter history;
+generation checks discard asynchronous results from an earlier history.
+Manual and pinned frames ignore meter gain and repeat at a held instant.
+
+The WebGL fallback supports Enhanced SDR and lens-controlled Manual. Automatic
+is visibly unavailable because that backend has no supported meter readback.
+A requested Automatic view uses a labeled Manual fallback while retaining the
+selected preference. A fixed calibration is never reported as metered exposure.
+
+The preference owner migrates valid Composite + Natural to Enhanced, the other
+Composite curves to Automatic, and Direct to Manual. Natural maps explicitly
+to the neutral photographic look; Gentle and Crisp preserve their shoulders.
+White balance, adaptation rate and comfort limits survive. The lens preference
+retains aperture, shutter and ISO. Migration is written through
+`state/preferences.ts`; malformed imports are rejected without resetting the
+current selection.
 
 ## Alternatives considered
 
@@ -107,18 +165,19 @@ explicit migration; linear clipping can remain a developer diagnostic.
 
 ## Consequences
 
-Default reference images and the ordinary-orbit performance gate change.
-Enhanced may require separate radiance storage or processing before a faint
-signal is lost in a half-float scene target. The implementation choice needs
-numerical evidence and matched image review; this ADR does not claim a global
-tone curve alone can preserve that range.
+Enhanced spends processing and cache memory to retain faint structure beside
+bright foregrounds. One global exposure cannot cover the 26.5165-stop M4
+comparison without losing either the galaxy or surface detail. The physical
+field remains independently calibrated, and its diagnostics bypass Enhanced.
 
-The settings migration, preset format and scripted exposures need deliberate
-handling. A rename cannot preserve the meaning of every saved shot.
-[ADR-0033](0033-presets-hold-a-photographic-instant.md) still owns photographic
-time and portable views; a versioned extension records camera processing.
+Version 2 pictures and `shot=2` URLs record camera processing without adaptation
+history or display hardware. Version 1 restores Enhanced while preserving its
+pose, photographic time and lens; historical image equality is not promised.
+[ADR-0033](0033-presets-hold-a-photographic-instant.md) owns that portable format.
 
-The [camera plan](../../design/plans/the-camera.md) owns the implementation
-sequence and image acceptance. Galaxy M6 retains physical calibration; M7
-provides the cached sky needed for everyday Enhanced views. Additional optical
-effects, spectral filters and photo export do not gate this camera change.
+Numerical tests establish exposure arithmetic, strict migration, histogram
+behavior and history reset. Image acceptance remains open for matched scene
+triplets and transitions in the preview build. Nonzero sky pixels alone do not
+establish foreground detail, dust contrast, occlusion or a useful composition.
+The [camera plan](../../design/plans/the-camera.md) records the remaining image
+and performance evidence; this decision does not claim M8–M10 galaxy acceptance.

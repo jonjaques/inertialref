@@ -2,9 +2,8 @@
 
 Status: accepted · 6 Sep 2026
 
-[ADR-0037](0037-the-enhanced-camera.md) adds accepted camera direction. Its
-planned preset extension records processing mode; this record describes the
-implemented version 1 format, which stores a lens but no camera response.
+[ADR-0037](0037-the-enhanced-camera.md) owns the three camera modes. Version 2
+pictures record that processing choice alongside pose, time and lens.
 
 ## Context
 
@@ -22,7 +21,7 @@ are analytic and can be evaluated at a chosen instant.
 **A preset is portable planetarium data; the observatory owns photographic
 time while the simulation keeps its own clock.**
 
-The version 1 JSON envelope has `format: "inertialref/presets"`, `version: 1`
+The JSON envelope has `format: "inertialref/presets"`, `version: 2`
 and a `pictures` array. One shot and a whole library use the same envelope.
 Each picture carries an ID, label, description, address, universe seed,
 generation manifest and time in seconds from the simulation's J2000 epoch.
@@ -30,6 +29,17 @@ A camera framing stores its orbit state, look offset and optional surface
 stance. Optional orbit-basis and tracking fields record a second body and the
 reference instant that fixes its composition. Its lens stores focal length, gauge, zoom, aperture, focus, shutter
 and ISO. JSON `null` represents infinite focus.
+
+Every version 2 picture also requires `processing`: camera mode, photographic
+look, compensation, adaptation rate, comfort range and white balance. Capture
+copies these selected controls. It excludes the current meter EV, adaptation
+history, display peak and output hardware. Applying a picture restores its
+processing without saving a transient cinematic override.
+
+Version 1 JSON remains readable. It must omit processing and receives the
+Enhanced defaults, preserving pose, time and lens without promising the same
+historical image. Version 2 requires a complete valid processing record;
+missing, extra or malformed processing fields reject the import.
 
 Bundled presets load from `packages/devtools/src/pictures.json` through the
 same decoder as imports. Composition and rise recipes are supported for
@@ -48,14 +58,16 @@ shots, with undo for deletion. It exports one shot, personal shots or the
 combined library. Its parent keeps the camera and clock mounted. The global
 dialog routes do not own this feature.
 
-A built-in is addressed by `?preset=earthrise`. A custom view uses `?shot=1`
+A built-in is addressed by `?preset=earthrise`. A custom view uses `?shot=2`
 and the picture's scalar fields as dotted query keys: `seed`, `time`,
-`address`, `framing.state.distance`, `lens.zoom`, and so on. The marker versions
-the URL format. `URLSearchParams` escapes text; numeric values retain their
+`address`, `framing.state.distance`, `lens.zoom`, `processing.mode`, and so on.
+The marker versions the URL format. `URLSearchParams` escapes text; numeric values retain their
 precision, and `null` represents infinite focus or an absent surface stance.
 The decoder assigns types by field path, rejects duplicate or unknown picture
 fields, and passes the reconstructed picture through the JSON validator.
-The seed is also the engine's ordinary boot parameter.
+A `shot=1` URL follows the same legacy Enhanced default as a version 1 file;
+`shot=2` requires its processing fields. The seed is also the engine's ordinary
+boot parameter.
 
 `save=1` opens a save prompt after restoring the shot; it never writes the
 library without a save action. Dialog and diagnostic parameters do not restore
@@ -76,6 +88,12 @@ instant before the engine builds its snapshot. The observatory, body snapshot,
 terrain, water, clouds, orbit traces and the object dossier all use that presentation instant.
 Canonical entities retain their simulation history. Returning to live time or
 leaving the planetarium releases the photographic clock.
+
+Camera adaptation has its own presentation clock. `engine.presentationTime`
+accumulates bounded frame deltas, so Automatic can settle on a held photograph
+without advancing its bodies. A photographic-time scrub changes sensor history
+and rejects pending meter readbacks. Manual and pinned exposure do not consume
+automatic gain. These camera controls do not enter the world's state hash.
 
 ## Alternatives considered
 

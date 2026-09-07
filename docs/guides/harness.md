@@ -118,7 +118,9 @@ same report without an exposure or display response; `localDust()` lists the
 Local Bubble approximation and nine source-derived cloud records. The reference
 sky includes diffuse Galactic and extragalactic light beyond the modeled stellar
 component. The report declares that limitation, its units, and the 0.3 mag bound.
-Natural-specific display treatment and final appearance acceptance remain deferred.
+Enhanced processing consumes that calibrated field separately from this report.
+Matched camera images and transitions remain subject to preview acceptance;
+passing the linear-light bounds does not establish their appearance.
 
 To regenerate the checked-in source manifest and runtime cloud/sky tables:
 
