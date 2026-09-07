@@ -6,6 +6,11 @@ import { meterOverlay, motionOverlay } from './sensorMrt.ts'
 /** Offscreen reflectance bakes remain reflectance; only the scene collects light. */
 const gains = new WeakMap<Renderer, number>()
 const integratedGains = new WeakMap<Renderer, number>()
+const enhanced = new WeakMap<Renderer, boolean>()
+/** Visibility processing happens before the scene's half-float conversion. */
+export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
+  renderer !== null && enhanced.get(renderer) === true ? 1 : 0,
+)
 export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (gains.get(renderer) ?? 1),
 )
@@ -18,7 +23,9 @@ export function setSceneExposure(
   renderer: Renderer,
   pre: number | null,
   total = pre,
+  processing: 'enhanced' | 'photographic' = 'photographic',
 ): void {
+  enhanced.set(renderer, pre !== null && processing === 'enhanced')
   gains.set(renderer, pre === null ? 1 : SURFACE_LUMINANCE * pre)
   integratedGains.set(
     renderer,

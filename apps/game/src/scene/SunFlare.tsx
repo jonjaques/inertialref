@@ -75,7 +75,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // The same decision the bodies and the key light make: Natural, or a
       // script that opted into calibrated staging — the intro's eclipse beats
       // are staged around this glow whatever response the player chose.
-      engine.calibratedLight,
+      engine.visibilityProcessing,
     )
   })
 

@@ -17,13 +17,15 @@ import {
   type Scene,
   type WebGPURenderer,
   Vector2,
+  Vector3,
+  Quaternion,
 } from 'three/webgpu'
 import { nodeObject, pass, renderOutput, texture, vec4 } from 'three/tsl'
 import {
   defocusParameters,
   ExposureMeter,
   GLASS_PRESETS,
-  RESPONSE_SHOULDERS,
+  LOOK_SHOULDERS,
   shutterFraction,
   type Exposure,
   type Lens,
@@ -33,6 +35,8 @@ import { createHistogramMeter } from './meter.ts'
 import { setSceneExposure } from './radiance.ts'
 import { toneCurveFor } from './tonemap.ts'
 import { warmPipeline } from './warmup.ts'
+import { SensorHistory } from './sensorHistory.ts'
+import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
 
 /* The sensor owns the only scene draw, then applies lens-side optics,
  * detector response and the canvas encode. MSAA belongs to the scene target;
@@ -137,6 +141,10 @@ function sceneTarget(
 }
 
 export interface SensorDiagnostics {
+  readonly automaticAvailable: boolean
+  readonly enhancedSkyGain: number
+  readonly enhancedSkyCeiling: number
+  readonly meterMaskBytes: number
   readonly maximumCircle: number
   readonly defocusPasses: number
   readonly motionPasses: number
@@ -170,6 +178,10 @@ export interface SensorFrame {
   readonly lens: Lens
   readonly settings: SensorSettings
   readonly time: number
+  readonly adaptationTime?: number
+  /** Identifies cuts and a held photographic-time scrub independently of adaptation. */
+  readonly historyKey?: string
+  readonly stagingLook?: boolean
   readonly pinned: number | null
   readonly headroom: number
   readonly motionBlur?: boolean
@@ -197,6 +209,9 @@ export function createSensor(
   frame?: () => SensorFrame,
 ): Sensor {
   const exposure = new ExposureMeter()
+  const history = new SensorHistory()
+  const automaticAvailable = 'isWebGPUBackend' in renderer.backend
+  let requestedMode: SensorSettings['mode'] | undefined
   const shape = sceneTargetShape(renderer)
   const scenePass = pass(scene, camera, { samples: shape.samples })
   if (shape.optics === true) {
@@ -228,7 +243,7 @@ export function createSensor(
   const motionTexture =
     shape.optics === true ? scenePass.getTextureNode('motion') : null
   const meter =
-    frame === undefined || !('isWebGPUBackend' in renderer.backend)
+    frame === undefined || !automaticAvailable
       ? null
       : createHistogramMeter(
           scenePass.renderTarget.texture,
@@ -261,6 +276,23 @@ export function createSensor(
     signature?.linear ?? vec4(scenePass.getTextureNode('output').rgb, 1)
   const size = new Vector2()
   let previousTime: number | null = null
+  let previousGeneration = 0
+  let cameraEpoch = 0
+  const previousPosition = new Vector3()
+  const previousOrientation = new Quaternion()
+  const keyFor = (state: SensorFrame): string =>
+    [
+      state.settings.mode,
+      state.pinned,
+      state.historyKey ?? '',
+      cameraEpoch,
+      state.lens.fStop,
+      state.lens.shutter,
+      state.lens.iso,
+      state.lens.focalLength,
+      state.lens.zoom,
+      state.lens.gauge,
+    ].join(':')
   let previousFocus = ''
   let maximumCircle = 40
   let builtToneMapping = renderer.toneMapping
@@ -299,10 +331,26 @@ export function createSensor(
       }
     },
     get exposure() {
-      return exposure.reading
+      return exposure.reading === null
+        ? null
+        : {
+            ...exposure.reading,
+            automaticAvailable,
+            ...(requestedMode === undefined ? {} : { requestedMode }),
+          }
     },
     get diagnostics() {
       return {
+        automaticAvailable,
+        enhancedSkyGain:
+          exposure.reading?.processing === 'enhanced' ? ENHANCED_SKY_GAIN : 1,
+        enhancedSkyCeiling: ENHANCED_SKY_CEILING,
+        meterMaskBytes:
+          shape.optics === true
+            ? scenePass.renderTarget.width *
+              scenePass.renderTarget.height *
+              (shape.samples + 1)
+            : 0,
         maximumCircle,
         defocusPasses: defocus?.passes ?? 0,
         motionPasses: motion?.passes ?? 0,
@@ -312,14 +360,41 @@ export function createSensor(
     sceneTarget: scenePass.renderTarget,
     render(target: RenderTarget | null = null) {
       const state = frame?.()
+      let generation = 0
       if (state !== undefined) {
+        requestedMode = state.settings.mode
+        const settings =
+          !automaticAvailable && state.settings.mode === 'automatic'
+            ? { ...state.settings, mode: 'manual' as const }
+            : state.settings
+        if (
+          previousTime !== null &&
+          (Math.abs(previousOrientation.dot(camera.quaternion)) <
+            Math.cos(Math.PI / 24) ||
+            previousPosition.distanceTo(camera.position) >
+              Math.max(1, previousPosition.length() * 0.25))
+        )
+          cameraEpoch++
+        previousPosition.copy(camera.position)
+        previousOrientation.copy(camera.quaternion)
+        generation = history.advance(
+          keyFor(state),
+          state.adaptationTime ?? state.time,
+        )
+        if (generation !== previousGeneration) exposure.reset()
+        previousGeneration = generation
         const reading = exposure.update(
           state.lens,
-          state.settings,
-          state.time,
+          settings,
+          state.adaptationTime ?? state.time,
           state.pinned,
         )
-        setSceneExposure(renderer, reading.pre, reading.total)
+        setSceneExposure(
+          renderer,
+          reading.pre,
+          reading.total,
+          reading.processing,
+        )
         renderer.getDrawingBufferSize(size)
         renderer.toneMappingExposure = signature === null ? reading.residual : 1
         const glass =
@@ -327,13 +402,14 @@ export function createSensor(
         signature?.update(
           state.lens,
           glass,
-          state.settings,
+          settings,
           size.x,
           size.y,
           state.noiseTick ?? Math.floor(state.time * 60),
           reading.residual,
           state.headroom <= 1,
           renderer.outputColorSpace === DISPLAY_P3,
+          reading.processing === 'photographic',
         )
         if (psf !== null) psf.scatter.value = glass.scatter
         const parameters = defocusParameters(state.lens, {
@@ -364,11 +440,11 @@ export function createSensor(
         previousTime = state.time
         const tone = toneCurveFor(renderer)
         if (tone !== undefined) {
-          tone.natural.value = state.settings.curve === 'natural' ? 1 : 0
-          tone.direct.value = state.settings.response === 'direct' ? 1 : 0
+          tone.natural.value = state.stagingLook === true ? 1 : 0
+          tone.direct.value = 0
           tone.wide.value = renderer.outputColorSpace === DISPLAY_P3 ? 1 : 0
           tone.headroom.value = Math.min(state.headroom, state.settings.peak)
-          tone.shoulder.value = RESPONSE_SHOULDERS[state.settings.curve]
+          tone.shoulder.value = LOOK_SHOULDERS[reading.look]
         }
       }
       // R3F sets `toneMapping` after the factory resolves and `commitToneCurve`
@@ -414,11 +490,19 @@ export function createSensor(
             scenePass.renderTarget.width,
             scenePass.renderTarget.height,
             (bins, circle) => {
+              const current = frame?.()
               if (
-                state.settings.response === 'composite' &&
-                state.pinned === null
+                current !== undefined &&
+                current.settings.mode === 'automatic' &&
+                current.pinned === null &&
+                history.accepts(
+                  generation,
+                  keyFor(current),
+                  current.adaptationTime ?? current.time,
+                  current.settings.rate === 0,
+                )
               )
-                exposure.measure(bins, pre, state.lens, state.settings)
+                exposure.measure(bins, pre, current.lens, current.settings)
               if (submitted === previousFocus) maximumCircle = circle
             },
           )
@@ -431,6 +515,7 @@ export function createSensor(
       }
     },
     dispose() {
+      history.retire()
       post.dispose()
       scenePass.dispose()
       meter?.dispose()

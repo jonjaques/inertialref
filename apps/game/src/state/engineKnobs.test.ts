@@ -57,7 +57,7 @@ describe('the engine knobs', () => {
     const lens = bound.flightLens
     const settings = {
       ...DEFAULT_SENSOR_SETTINGS,
-      response: 'direct' as const,
+      mode: 'manual' as const,
       peak: 1.2,
     }
     write(RENDER_SENSOR, settings)

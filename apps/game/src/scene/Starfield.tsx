@@ -119,7 +119,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     const disks = [...resolved].join('|')
     // The integrated ramp belongs to the calibrated look — Natural, or a script
     // staging against it — the same decision the bodies and the Sun glow make.
-    field.integrated.value = engine.calibratedLight ? 1 : 0
+    field.integrated.value = engine.visibilityProcessing ? 1 : 0
     const origin = scene.origin
     const held = written.current
     /*

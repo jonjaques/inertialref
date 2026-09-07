@@ -61,6 +61,7 @@ export function FlightMode({
         showShip: true,
         showOrbits: false,
         observatory: false,
+        diffuseGalaxy: true,
       }).release,
     [engine],
   )

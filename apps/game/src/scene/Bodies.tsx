@@ -546,7 +546,7 @@ export function Bodies({
           Math.max(0, (placement.angularRadius - 0.015) / 0.085),
         )
         visual.star.exposure.value =
-          body.sunlight * (engine.calibratedLight ? 1 - filling * 0.9 : 1)
+          body.sunlight * (engine.visibilityProcessing ? 1 - filling * 0.9 : 1)
       }
 
       const sun = scratch.sun
@@ -581,9 +581,9 @@ export function Bodies({
         )
         planet.sunDirection.value.copy(sun)
         planet.sunColour.value.setRGB(
-          keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
+          keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
+          keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
         )
         planet.spinAxis.value
           .set(0, 1, 0)
@@ -618,7 +618,7 @@ export function Bodies({
          */
         const liquid = appearance.liquid?.colour ?? OPEN_OCEAN
         planet.oceanColour.value.setRGB(liquid.r, liquid.g, liquid.b)
-        planet.albedoScale.value = engine.calibratedLight
+        planet.albedoScale.value = engine.visibilityProcessing
           ? calibratedAlbedo(body)
           : 1
         planet.lunarLambert.value = tuning.lunarLambert
@@ -719,9 +719,9 @@ export function Bodies({
           else material.baseColour.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(
-            keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
+            keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
+            keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
           )
           // The deck's dusk color is the body's authored sunset, so clouds
           // and air agree about what the low sun does here.
@@ -762,9 +762,9 @@ export function Bodies({
           )
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(
-            keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
+            keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
+            keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
           )
           material.innerFraction.value = ring.innerScale / ring.outerScale
           material.centre.value.copy(visual.mesh.position)
@@ -830,9 +830,9 @@ export function Bodies({
             )
         }
         air.sunColour.value.setRGB(
-          keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
+          keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
+          keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
         )
         if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
@@ -846,7 +846,7 @@ export function Bodies({
           address: `star:${star.system}`,
           name: star.name,
           kind: 'star',
-          sunlight: engine.calibratedLight
+          sunlight: engine.visibilityProcessing
             ? CALIBRATED_STAR_RADIANCE
             : star.luminance / SURFACE_LUMINANCE,
           placement: star.placement,

@@ -586,7 +586,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     const held = read(RENDER_SENSOR)
     write(RENDER_SENSOR, {
       ...held,
-      response: held.response === 'composite' ? 'direct' : 'composite',
+      mode:
+        held.mode === 'enhanced'
+          ? 'automatic'
+          : held.mode === 'automatic'
+            ? 'manual'
+            : 'enhanced',
     })
   })
   useAction('time.normal', commands.realTime)

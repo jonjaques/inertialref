@@ -1,23 +1,128 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import {
   FloatType,
+  HalfFloatType,
   Mesh,
   MeshBasicNodeMaterial,
   OrthographicCamera,
   PlaneGeometry,
   RenderTarget,
   Scene,
+  SphereGeometry,
+  PerspectiveCamera,
+  SRGBColorSpace,
+  QuadMesh,
+  NodeMaterial,
 } from 'three/webgpu'
-import { vec3 } from 'three/tsl'
-import { DEFAULT_SENSOR_SETTINGS } from '@inertialref/rendering'
+import { texture, vec3, vec4 } from 'three/tsl'
+import {
+  DEFAULT_SENSOR_SETTINGS,
+  GALAXY_VIEWS,
+  SURFACE_LUMINANCE,
+  type SensorSettings,
+} from '@inertialref/rendering'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { createSensor, declareSceneTarget } from './sensor.ts'
 import { sensorRadiance } from './radiance.ts'
 import { createHistogramMeter } from './meter.ts'
+import { composeSky } from './enhancedSky.ts'
+import { installToneCurve } from './tonemap.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
   gpu = await openGpu(32, 32)
+})
+
+it('retains faint radiance beside a bright silhouette before one output transform', async () => {
+  const renderer = gpu.renderer
+  renderer.setSize(32, 32, false)
+  renderer.outputColorSpace = SRGBColorSpace
+  declareSceneTarget(renderer, { samples: 4, optics: true })
+  installToneCurve(renderer, 1)
+  const retained = new RenderTarget(32, 32, {
+    type: HalfFloatType,
+    depthBuffer: false,
+  })
+  const sourceMaterial = new NodeMaterial()
+  sourceMaterial.fragmentNode = vec4(0.4, 0.3, 0.2, 1)
+  renderer.setRenderTarget(retained)
+  new QuadMesh(sourceMaterial).render(renderer)
+  renderer.setRenderTarget(null)
+  sourceMaterial.dispose()
+  const physical = texture(retained.texture).rgb.mul(1e-7)
+  const scene = new Scene()
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+  camera.updateMatrixWorld()
+  const backdrop = new Mesh(
+    new PlaneGeometry(20, 20),
+    sensorRadiance(new MeshBasicNodeMaterial(), true),
+  )
+  backdrop.position.z = -5
+  backdrop.material.colorNode = composeSky(physical)
+  const body = new Mesh(
+    new SphereGeometry(0.45, 24, 16),
+    sensorRadiance(new MeshBasicNodeMaterial()),
+  )
+  body.position.z = -2
+  body.material.colorNode = vec3(0.4, 0.3, 0.2)
+  scene.add(backdrop, body)
+  const lens = {
+    ...GALAXY_VIEWS['edge-on'].lens,
+    fStop: 2.8,
+    iso: 100,
+    shutter: 1 / 40_000,
+  }
+  let settings: SensorSettings = DEFAULT_SENSOR_SETTINGS
+  const sensor = createSensor(renderer, scene, camera, () => ({
+    lens,
+    settings,
+    time: 0,
+    headroom: 1,
+    pinned: null,
+    noiseTick: 0,
+  }))
+  const target = new RenderTarget(32, 32, {
+    type: FloatType,
+    depthBuffer: false,
+  })
+  try {
+    await sensor.warm()
+    sensor.render(target)
+    const enhanced = await gpu.read(target)
+    const scenePixels = await gpu.drawGraph(
+      texture(sensor.sceneTarget.texture),
+      { float: true },
+    )
+    expect(scenePixels.at(16, 16)[0]).toBeCloseTo(0.4, 3)
+    expect(scenePixels.at(3, 16)[0]).toBeGreaterThan(0.01)
+    expect(enhanced.at(3, 16)[0]).toBeGreaterThan(0.02)
+    expect(enhanced.at(16, 16)[0]).toBeLessThan(0.95)
+    settings = { ...settings, mode: 'manual' }
+    sensor.render(target)
+    const daylight = await gpu.read(target)
+    expect(daylight.at(3, 16)[0]).toBeLessThan(0.01)
+    expect(sensor.exposure!.total).toBeLessThan(1 / SURFACE_LUMINANCE)
+    lens.shutter = 2400
+    sensor.render(target)
+    const long = await gpu.read(target)
+    expect(Math.log2(2400 * 40_000)).toBeCloseTo(26.5165, 4)
+    expect(long.at(3, 16)[0]).toBeGreaterThan(0.05)
+    expect(long.at(16, 16)[0]).toBeGreaterThan(daylight.at(16, 16)[0])
+    const source = await gpu.drawGraph(texture(retained.texture), {
+      float: true,
+    })
+    expect(source.at(16, 16)[1]).toBeCloseTo(0.3, 3)
+    sensor.render(target)
+    expect((await gpu.read(target)).data).toEqual(long.data)
+  } finally {
+    sensor.dispose()
+    target.dispose()
+    retained.dispose()
+    for (const mesh of [backdrop, body]) {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+    }
+  }
 })
 afterAll(() => gpu.dispose())
 

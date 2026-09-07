@@ -316,7 +316,7 @@ export interface LensFlare {
      * picture any fixed angle describes.
      */
     lens: Lens,
-    /** Natural retains its calibrated core; other responses use the sensor PSF. */
+    /** Enhanced and calibrated scripts own the analytic core; photographs use the PSF. */
     natural?: boolean,
   ): void
   dispose(): void

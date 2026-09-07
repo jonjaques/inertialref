@@ -51,6 +51,7 @@ import {
   GALAXY_MAX_STEPS,
 } from './galaxyKernel.ts'
 import { sensorRadiance } from './radiance.ts'
+import { composeSky } from './enhancedSky.ts'
 import { warmSensorPass } from './warmup.ts'
 import { GalaxySkyCache, GALAXY_RADIANCE_UNIT } from './galaxySkyCache.ts'
 import type { GalaxyCacheOptions } from './galaxyCache.ts'
@@ -420,9 +421,13 @@ export function createGalaxyBackdrop(
   material.fog = false
   const rgb = nodeObject(volume).rgb
   const luminance = rgb.dot(vec3(0.2126, 0.7152, 0.0722))
-  material.colorNode = rgb
-    .mul(rgb.g.div(luminance.max(1e-30)))
-    .mul((RADIANCE_UNIT * 1e-9 * GALAXY_LUMINOUS_EFFICACY) / SURFACE_LUMINANCE)
+  material.colorNode = composeSky(
+    rgb
+      .mul(rgb.g.div(luminance.max(1e-30)))
+      .mul(
+        (RADIANCE_UNIT * 1e-9 * GALAXY_LUMINOUS_EFFICACY) / SURFACE_LUMINANCE,
+      ),
+  )
   const mesh = new Mesh(new PlaneGeometry(2, 2), material)
   mesh.name = 'Galaxy backdrop'
   mesh.frustumCulled = false

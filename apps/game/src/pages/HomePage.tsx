@@ -148,6 +148,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
       showShip: false,
       flareArtifacts: MENU_FLARE_ARTIFACTS,
       observatory: true,
+      diffuseGalaxy: true,
     })
     try {
       observatory.focus('s:SOL/b:2', { fill: FILL, ease: false })
