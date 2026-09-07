@@ -254,3 +254,35 @@ it('keeps paused and rebased sprites still while reporting observer and star mot
       a.dispose()
   }
 })
+
+it('uses a scalar normalization without compute on the compatibility path', async () => {
+  const projection = createStarProjection(1, { compute: false })
+  const start = UV.fromMeters(0, 0, 0)
+  projection.upload({
+    positions: [UV.fromMeters(0, 0, -LIGHT_YEAR)],
+    luminosities: [1],
+  })
+  const renderer = {
+    compute() {
+      throw new Error('Compatibility projection cannot dispatch compute')
+    },
+  } as unknown as typeof gpu.renderer
+  try {
+    projection.update(
+      renderer,
+      createRenderOrigin(start),
+      start,
+      vec3(0, 0, 0),
+      true,
+    )
+    const visible = await gpu.drawGraph(vec4(projection.visibility, 0, 0, 1), {
+      width: 1,
+      height: 1,
+      float: true,
+    })
+    expect(visible.at(0, 0)[0]).toBeCloseTo(1, 6)
+    expect(projection.diagnostics.reductions).toBe(0)
+  } finally {
+    projection.dispose()
+  }
+})

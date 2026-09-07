@@ -16,10 +16,18 @@ export function writeStarCoordinates(
   cells[base] = position.sx
   cells[base + 1] = position.sy
   cells[base + 2] = position.sz
-  const local = [position.ox, position.oy, position.oz]
-  for (let axis = 0; axis < 3; axis++) {
-    const cell = Math.floor(local[axis]! / STAR_POSITION_QUANTUM)
-    subcells[base + axis] = cell
-    offsets[base + axis] = local[axis]! / STAR_POSITION_QUANTUM - cell
-  }
+  writeLocal(position.ox, offsets, subcells, base)
+  writeLocal(position.oy, offsets, subcells, base + 1)
+  writeLocal(position.oz, offsets, subcells, base + 2)
+}
+
+function writeLocal(
+  value: number,
+  offsets: Float32Array,
+  subcells: Int32Array,
+  index: number,
+): void {
+  const cell = Math.floor(value / STAR_POSITION_QUANTUM)
+  subcells[index] = cell
+  offsets[index] = value / STAR_POSITION_QUANTUM - cell
 }

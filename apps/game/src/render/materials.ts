@@ -16,6 +16,7 @@ import {
   RGBAFormat,
   SrcAlphaFactor,
   type Texture,
+  type Node,
   Vector3,
   ZeroFactor,
 } from 'three/webgpu'
@@ -507,23 +508,31 @@ export interface StarfieldMaterial {
 export function createStarfieldMaterial(
   capacity: number,
   projection?: StarProjection,
+  transportedLight?: Node<'vec3'>,
 ): StarfieldMaterial {
+  const legacyCapacity = projection === undefined ? capacity : 0
   const positions = new InstancedBufferAttribute(
-    new Float32Array(capacity * 3),
+    new Float32Array(legacyCapacity * 3),
     3,
   )
   const colours = new InstancedBufferAttribute(
     new Float32Array(capacity * 3),
     3,
   )
-  const prominence = new InstancedBufferAttribute(new Float32Array(capacity), 1)
-  const visibility = new InstancedBufferAttribute(new Float32Array(capacity), 1)
+  const prominence = new InstancedBufferAttribute(
+    new Float32Array(legacyCapacity),
+    1,
+  )
+  const visibility = new InstancedBufferAttribute(
+    new Float32Array(legacyCapacity),
+    1,
+  )
   const enabled = new InstancedBufferAttribute(
     new Float32Array(capacity).fill(1),
     1,
   )
   const transmission = new InstancedBufferAttribute(
-    new Float32Array(capacity * 3).fill(1),
+    new Float32Array(transportedLight === undefined ? capacity * 3 : 0).fill(1),
     3,
   )
   const integrated = uniform(0)
@@ -560,7 +569,10 @@ export function createStarfieldMaterial(
     .mul(projection?.drawable ?? 1)
   material.sizeAttenuation = false
   material.colorNode = instancedBufferAttribute<'vec3'>(colours, 'vec3')
-    .mul(instancedBufferAttribute<'vec3'>(transmission, 'vec3'))
+    .mul(
+      transportedLight ??
+        instancedBufferAttribute<'vec3'>(transmission, 'vec3'),
+    )
     .mul(profile.mul(profile))
     .mul(
       integrated

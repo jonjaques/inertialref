@@ -16,6 +16,7 @@ import {
 } from '@inertialref/rendering'
 import {
   StorageBufferAttribute,
+  StorageInstancedBufferAttribute,
   Vector3,
   Vector4,
   type Node,
@@ -45,10 +46,20 @@ interface Sources {
 }
 
 function coordinates(capacity: number) {
-  const cells = new StorageBufferAttribute(new Int32Array(capacity * 4), 4)
-  const offsets = new StorageBufferAttribute(new Float32Array(capacity * 4), 4)
-  const subcells = new StorageBufferAttribute(new Int32Array(capacity * 4), 4)
+  const cells = new StorageInstancedBufferAttribute(
+    new Int32Array(capacity * 4),
+    4,
+  )
+  const offsets = new StorageInstancedBufferAttribute(
+    new Float32Array(capacity * 4),
+    4,
+  )
+  const subcells = new StorageInstancedBufferAttribute(
+    new Int32Array(capacity * 4),
+    4,
+  )
   return {
+    start: 0,
     cells,
     offsets,
     subcells,
@@ -103,6 +114,7 @@ function displacement(
   pose: Observer,
   index: Node<'uint'>,
 ) {
+  index = index.add(source.start)
   const cells = source.cellNode.element(index).xyz
   const subcells = source.subcellNode.element(index).xyz.sub(pose.subcells)
   const axis = (key: 'x' | 'y' | 'z') => {
@@ -156,15 +168,25 @@ function shell(offset: Node<'vec3'>, pose: Observer) {
 }
 
 /** The buffers change with selection; observer motion changes only these uniforms. */
-export function createStarProjection(capacity: number) {
-  const current = coordinates(capacity)
-  const previous = coordinates(capacity)
+export function createStarProjection(
+  capacity: number,
+  options: { compute?: boolean } = {},
+) {
+  const compute = options.compute ?? true
+  const current = coordinates(compute ? capacity * 2 : capacity)
+  // WebGL emulates storage as instance attributes, so previous records need
+  // their own attribute. WebGPU shares three bindings across both poses.
+  const previous = compute
+    ? { ...current, start: capacity }
+    : coordinates(capacity)
+  const allocations = compute ? [current] : [current, previous]
   const pose = observer()
   const previousPose = observer()
   const previousSources = uniform(0)
   const count = uniform(0, 'uint')
   const maximum = new StorageBufferAttribute(new Uint32Array(1), 1)
   const maximumWrite = storage(maximum, 'uint', 1).toAtomic()
+  const fallbackMaximum = uniform(0)
   const maximumRead = storage(maximum, 'uint', 1).toReadOnly()
   const clear = Fn(() => {
     atomicStore(maximumWrite.element(0), uint(0))
@@ -198,10 +220,9 @@ export function createStarProjection(capacity: number) {
   const illuminance = luminosity
     .mul(stellarIlluminance(1, SECTOR_SIZE))
     .div(distanceSquared)
-  const brightest = bitcast(
-    maximumRead.element(0),
-    'float',
-  ) as unknown as Node<'float'>
+  const brightest = compute
+    ? (bitcast(maximumRead.element(0), 'float') as unknown as Node<'float'>)
+    : fallbackMaximum
   const visibility = log2(
     flux(instanceIndex).max(1e-30).div(brightest.max(1e-30)),
   )
@@ -245,7 +266,10 @@ export function createStarProjection(capacity: number) {
     },
     upload(sources: Sources): void {
       if (disposed || sources === held) return
-      const old = new Map(held?.ids?.map((id, i) => [id, held!.positions[i]!]))
+      const old = new Map<string, UniverseVector>()
+      if (held?.ids !== undefined)
+        for (let i = 0; i < held.ids.length; i++)
+          old.set(held.ids[i]!, held.positions[i]!)
       count.value = Math.min(capacity, sources.positions.length)
       for (let i = 0; i < count.value; i++) {
         const position = sources.positions[i]!
@@ -262,11 +286,11 @@ export function createStarProjection(capacity: number) {
           previous.cells.array as Int32Array,
           previous.offsets.array as Float32Array,
           previous.subcells.array as Int32Array,
-          i,
+          i + previous.start,
         )
         current.offsets.array[i * 4 + 3] = sources.luminosities[i] ?? 1
       }
-      for (const buffers of [current, previous])
+      for (const buffers of allocations)
         for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
           buffer.needsUpdate = true
       held = sources
@@ -297,9 +321,23 @@ export function createStarProjection(capacity: number) {
       )
         normalized = false
       if (integrated && !normalized && count.value > 0) {
-        renderer.compute(clear)
-        renderer.compute(reduce, count.value)
-        reductions++
+        if (compute) {
+          renderer.compute(clear)
+          renderer.compute(reduce, count.value)
+          reductions++
+        } else if (changed || heldObserver === null) {
+          let maximum = 0
+          for (let i = 0; i < count.value; i++) {
+            const distance = UV.distance(held!.positions[i]!, position)
+            if (distance > 0)
+              maximum = Math.max(
+                maximum,
+                (held!.luminosities[i] ?? 1) /
+                  (Math.max(distance, LIGHT_YEAR) / SECTOR_SIZE) ** 2,
+              )
+          }
+          fallbackMaximum.value = maximum
+        }
         normalized = true
       }
       heldObserver = { origin, position, eye }
@@ -310,7 +348,7 @@ export function createStarProjection(capacity: number) {
       clear.dispose()
       reduce.dispose()
       maximum.dispose()
-      for (const buffers of [current, previous])
+      for (const buffers of allocations)
         for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
           buffer.dispose()
     },

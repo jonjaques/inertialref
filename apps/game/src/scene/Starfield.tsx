@@ -1,28 +1,63 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { useThree } from '@react-three/fiber'
+import { instanceIndex, varying } from 'three/tsl'
+import { createGalaxyField } from '@inertialref/universe'
 import { Group, Sprite, type WebGPURenderer } from 'three/webgpu'
 import { pixelsPerRadian } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { STAR_SPRITE_CEILING, type StarField } from '../engine/starSelection.ts'
 import { createStarfieldMaterial } from '../render/materials.ts'
 import { createStarProjection } from '../render/starProjection.ts'
+import { StarExtinctionCache } from '../render/starExtinctionCache.ts'
+import { acquireGalaxyStructure } from '../render/galaxyStructure.ts'
+import { createGalaxyKernel } from '../render/galaxyKernel.ts'
+import { warmAtMount } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
-function createField() {
-  const projection = createStarProjection(STAR_SPRITE_CEILING)
-  const material = createStarfieldMaterial(STAR_SPRITE_CEILING, projection)
+function createField(engine: GameEngine, renderer: WebGPURenderer) {
+  const galaxy = createGalaxyField(engine.world.galaxySeed)
+  const compute =
+    (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true
+  const structure = compute ? acquireGalaxyStructure(renderer) : null
+  const kernel =
+    structure === null
+      ? undefined
+      : createGalaxyKernel(galaxy, {
+          structure: (position) => structure.table.sample(position),
+        })
+  const extinction = new StarExtinctionCache(STAR_SPRITE_CEILING, galaxy, {
+    cpu: !compute,
+    kernel,
+  })
+  const projection = createStarProjection(STAR_SPRITE_CEILING, { compute })
+  const material = createStarfieldMaterial(
+    STAR_SPRITE_CEILING,
+    projection,
+    varying(extinction.sample(instanceIndex)),
+  )
   const sprite = new Sprite(material.material)
   sprite.count = 0
   // The unit quad's bounds cannot contain its instances on the star shell.
   sprite.frustumCulled = false
   sprite.renderOrder = -2
   sprite.userData.starProjection = projection
-  return { projection, material, sprite }
+  sprite.userData.starExtinction = extinction
+  return {
+    projection,
+    material,
+    sprite,
+    extinction,
+    structure,
+    galaxy,
+    world: engine.world,
+  }
 }
 
 type Field = ReturnType<typeof createField>
 
 /** One bounded instanced draw; selection owns uploads and the GPU owns parallax. */
 export function Starfield({ engine }: { engine: GameEngine }) {
+  const gl = useThree((state) => state.gl)
   const group = useMemo(() => new Group(), [])
   const field = useRef<Field | null>(null)
   const written = useRef<StarField | null>(null)
@@ -30,14 +65,28 @@ export function Starfield({ engine }: { engine: GameEngine }) {
   const hidden = useRef(new Set<number>())
 
   useEffect(() => {
-    const created = createField()
+    const created = createField(engine, gl as unknown as WebGPURenderer)
     field.current = created
     written.current = null
     group.add(created.sprite)
+    warmAtMount({
+      label: 'warming stellar extinction',
+      units: 1,
+      run: async (done) => {
+        const current = field.current
+        if (current !== null) {
+          await current.structure?.table.warm(gl as unknown as WebGPURenderer)
+          await current.extinction.warm(gl as unknown as WebGPURenderer)
+        }
+        done()
+      },
+    })
     return () => {
       group.remove(created.sprite)
       field.current = null
       created.projection.dispose()
+      created.extinction.dispose()
+      created.structure?.release()
       created.material.material.dispose()
       // A Sprite shares its quad geometry. Its instanced buffers belong here.
       for (const attribute of [
@@ -50,14 +99,24 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       ])
         attribute.dispose()
     }
-  }, [group])
+  }, [group, engine, gl])
 
-  useTimedFrame('starfield', ({ gl }) => {
+  useTimedFrame('starfield', () => {
     const scene = engine.scene()
     const current = field.current
     if (scene === null || current === null) return
     const { projection, material, sprite } = current
     const stars = engine.starField
+    if (current.world !== engine.world) {
+      current.world = engine.world
+      current.galaxy = createGalaxyField(engine.world.galaxySeed)
+    }
+    current.extinction.configure(
+      stars,
+      scene.camera.universePosition,
+      current.galaxy,
+    )
+    current.extinction.advance(gl as unknown as WebGPURenderer)
     if (written.current !== stars) {
       projection.upload(stars)
       const colours = material.colours.array as Float32Array
