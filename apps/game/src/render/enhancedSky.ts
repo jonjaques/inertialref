@@ -2,9 +2,13 @@ import type { Node } from 'three/webgpu'
 import { vec3 } from 'three/tsl'
 import { enhancedSky } from './radiance.ts'
 
-/** The field retains nW m^-2 sr^-1. Only the composed view spends this gain. */
-export const ENHANCED_SKY_GAIN = 2 ** 24
-export const ENHANCED_SKY_CEILING = 0.35
+/**
+ * The field retains nW m^-2 sr^-1. Only the composed view spends this gain.
+ * A lower gain and a wider shoulder keep dark lanes separated from bright
+ * star clouds instead of compressing both into the same luminous veil.
+ */
+export const ENHANCED_SKY_GAIN = 2 ** 23
+export const ENHANCED_SKY_CEILING = 0.5
 
 /** Compress extended emission by luminance, retaining zero and chromaticity. */
 export function composeSky(physical: Node<'vec3'>): Node<'vec3'> {
