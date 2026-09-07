@@ -289,18 +289,20 @@ export function coveredPopulationStar(
   )
 }
 
-interface CellPlan {
+/** Deterministic per-population counts and addressing layout for one level-owned cell. */
+export interface PopulationCellPlan {
   readonly level: number
   readonly cell: GalacticCell
   readonly counts: readonly number[]
   readonly count: number
-  readonly layouts: readonly PopulationLayout[]
+  readonly layouts: readonly PopulationCellLayout[]
   readonly seeds: readonly Seed[]
   readonly origin: UniverseVector
   readonly size: number
 }
 
-interface PopulationLayout {
+/** A reversible permutation places a population in bounded spatial strata. */
+export interface PopulationCellLayout {
   readonly grid: number
   readonly slots: number
   readonly shift: number
@@ -331,14 +333,14 @@ function inverseModulo(value: number, modulus: number): number {
 
 /** A query owns this bounded memo of quadrature and generated records. */
 export function createPopulationGenerator(field: GalaxyField) {
-  const plans = new Map<string, CellPlan>()
+  const plans = new Map<string, PopulationCellPlan>()
   const keyOf = (level: number, cell: GalacticCell) =>
     `${level}:${cellKey(cell)}`
   const plan = (
     level: number,
     cell: GalacticCell,
     coverage?: PopulationCoverage,
-  ): CellPlan => {
+  ): PopulationCellPlan => {
     const catalogued = coverage?.cataloguedByCell?.[keyOf(level, cell)] ?? 0
     const key = `${keyOf(level, cell)}:${catalogued}`
     const held = plans.get(key)
@@ -420,7 +422,7 @@ export function createPopulationGenerator(field: GalaxyField) {
     return result
   }
   const starAt = (
-    one: CellPlan,
+    one: PopulationCellPlan,
     index: number,
     accept?: (position: UniverseVector, solarV: number) => boolean,
   ): SystemStub | undefined => {
