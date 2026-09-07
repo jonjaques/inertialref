@@ -8,7 +8,8 @@ photographic exposure of the same scene. This is the implementation plan for
 Status: C1–C4 implementation is complete on the camera branch created from
 `codex/galaxy` at `b50a1f22df424e24a7165fa811374694221c6c98`. M6's physical
 model, local dust and linear photometry remain independently calibrated.
-C5 automated and technical verification is in progress. Manual visual
+C5 CPU/GPU verification passes, with matched SDR captures, real WebGL fallback
+and negotiated extended P3 checked. Manual visual
 acceptance is deferred to the user's feedback on the Cloudflare PR preview.
 C5 and galaxy M8–M11 are not complete.
 
@@ -16,13 +17,30 @@ The sections below retain the implementation and acceptance requirements.
 Implemented processing is not a claim that every matched image, transition or
 full-frame cost has passed review.
 
-| Step | Implementation status                                                                                    | Acceptance still open                                                             |
-| ---- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| C1   | Three-mode policy, strict compatibility parser and preference migration.                                 | Verification on the integrated implementation tip.                                |
-| C2   | Physical sky storage, explicit Enhanced visibility processing and one final output transform.            | Matched scene plates, limb/occlusion review and measured added cost through C5.   |
-| C3   | Shared photographic processing, physical metering, held/clamped adaptation and visible backend fallback. | Integrated technical checks and exposure-transition review through C5.            |
-| C4   | Camera Mode controls, version 2 pictures/URLs, scoped instruments and ordinary-view cache.               | Affected reference captures and user feedback through C5.                         |
-| C5   | Automated and technical verification in progress.                                                        | Cloudflare preview image feedback, transitions and complete performance evidence. |
+| Step | Implementation status                                                                                     | Acceptance still open                                                             |
+| ---- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| C1   | Three-mode policy, strict compatibility parser and preference migration; integrated checks pass.          | No separate implementation gate remains.                                          |
+| C2   | Physical sky storage, explicit Enhanced visibility processing and one final output transform.             | Matched scene plates, limb/occlusion review and measured added cost through C5.   |
+| C3   | Shared photographic processing, physical metering, held/clamped adaptation and verified backend fallback. | Exposure-transition review through C5.                                            |
+| C4   | Camera Mode controls, version 2 pictures/URLs, scoped instruments, ordinary-view cache and 13 SDR plates. | User feedback through C5.                                                         |
+| C5   | CPU/GPU suites pass; matched images, fallback, resize, frame costs and transitions recorded.              | Cloudflare preview image feedback, transitions and complete performance evidence. |
+
+Generate matched Earth, Earth-and-band, Luna, night-side and Bennu review
+links against the Cloudflare version URL:
+
+```sh
+node scripts/camera/preview.mjs --origin "$PREVIEW_URL"
+node scripts/camera/preview.mjs --json > /tmp/camera-review.json
+```
+
+Each mode triplet shares a complete pose, photographic time and lens. A
+separate long Manual view changes shutter only. The generated version 2
+library can also be imported into Presets. Display output remains the
+reviewer's choice; start in standard SDR. Measurements and their limits are
+recorded in [CONTEXT](../../CONTEXT.md#the-sky-had-to-survive-before-it-could-be-revealed-07-sep-2026).
+The 0.05 ms sampling target is narrowly missed, and moving cold blocks can
+exceed the 2 ms volume budget. The complete coarse cube is the initial quality
+fallback; full cold/descent/travel performance acceptance remains open.
 
 ## The picture we are building
 

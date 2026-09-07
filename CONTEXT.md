@@ -8408,6 +8408,14 @@ within 1%, which is a tested sample set, not a universal dust-error bound.
 An outside-disk visit followed by an early return canceled one incomplete
 generation and reused the completed home sky.
 
+With the capture browser stopped, the final cache's 408 submissions took
+619.80 ms across a drained queue, averaging 1.519 ms. Warm rotating projection
+cost 0.0602 ms at 1920×1080 and 0.0579 ms at 2880×1800, slightly above the
+0.05 ms target. Under continuous rotation, the first 16 cold frames averaged
+6.93 ms and subsequent 16-frame blocks 0.85–3.01 ms. The coarse cube bounds
+the initial quality cost; these measurements do not close the 2 ms live-volume
+budget or the full cold/descent/travel acceptance matrix.
+
 On Apple M5, Chrome 152, WebGPU, sRGB SDR and MSAA 4, the complete warm sensor
 frame averaged 4.02 ms at 1920×1080 DPR 1 and 8.09 ms at 1440×900 CSS / DPR 2,
 each across 80 submissions and a drained queue. The sky cache plus projected
@@ -8432,6 +8440,15 @@ an instrument lens into the preference. The new mode controls and these
 compatibility decisions are described in
 [ADR-0037](docs/adr/0037-the-enhanced-camera.md); the remaining image gate stays
 in [the camera plan](design/plans/the-camera.md).
+
+The existing drag-to-land browser fixture initially failed its strict
+longitude comparison because the preset camera was still easing. The ground
+point drifted by about 0.0059 radians over four frames with no pointer event,
+and by the same amount after a correctly rejected foreign pointer. Finishing
+the camera motion before the gesture preserves the strict assertion. The
+fixture then passed in Enhanced, Automatic and Manual, with a projected
+pointer error of 5.31e-11 pixels and a landing-coordinate error of 6.94e-18
+radians. Product input handling did not change.
 
 ## Known gaps
 
