@@ -108,17 +108,17 @@ Named because they are absent rather than decided.
 Numbers written from reasoning, awaiting evidence. Each is tagged `[PLAYTEST]` at
 its source.
 
-| Value                             | Written as                          | What the test is                                                                                                                                      |
-| --------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Burn plan legibility              | One bar, three numbers              | Can a new player read time-against-fuel off it without being told?                                                                                    |
-| Direct camera mode                | No interpretation, blown highlights | Does it read as "the hard mode" or "the broken mode"? If players try it once and never return, the fix is a better exposure control, not removing it. |
-| Jump range spread                 | 7.5 → 58 ly (~7.7×)                 | Does the early curve leave the cage fast enough?                                                                                                      |
-| Time to leave the cage            | 6–10 hours to reach ~18 ly          | The number that actually matters in progression                                                                                                       |
-| Jump range mass exponent          | 0.6                                 | Do players ever voluntarily fly empty?                                                                                                                |
-| Safe touchdown speed              | ≤ 3.0 m/s                           | May be too tight without a radar altimeter                                                                                                            |
-| Time to "can go anywhere"         | 40–60 hours                         | The core pacing target                                                                                                                                |
-| ~~Offline catalog cache, 150 ly~~ | ~~~2 MB~~ → **159 KB brotli**       | ✅ Measured, [spike 3](../spikes.md#3--catalog-bundle-size). The estimate was 12× too high                                                            |
-| Relay beacon cost                 | 1,200 units                         | High enough to be a decision, low enough to be carried                                                                                                |
+| Value                             | Written as                                                          | What the test is                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Burn plan legibility              | One bar, three numbers                                              | Can a new player read time-against-fuel off it without being told?                                               |
+| Camera mode clarity               | Enhanced by default; Automatic and Manual for photographic exposure | Can players predict when stars disappear, explain the exposure readout and distinguish Enhanced from HDR Output? |
+| Jump range spread                 | 7.5 → 58 ly (~7.7×)                                                 | Does the early curve leave the cage fast enough?                                                                 |
+| Time to leave the cage            | 6–10 hours to reach ~18 ly                                          | The number that actually matters in progression                                                                  |
+| Jump range mass exponent          | 0.6                                                                 | Do players ever voluntarily fly empty?                                                                           |
+| Safe touchdown speed              | ≤ 3.0 m/s                                                           | May be too tight without a radar altimeter                                                                       |
+| Time to "can go anywhere"         | 40–60 hours                                                         | The core pacing target                                                                                           |
+| ~~Offline catalog cache, 150 ly~~ | ~~~2 MB~~ → **159 KB brotli**                                       | ✅ Measured, [spike 3](../spikes.md#3--catalog-bundle-size). The estimate was 12× too high                       |
+| Relay beacon cost                 | 1,200 units                                                         | High enough to be a decision, low enough to be carried                                                           |
 
 ---
 
@@ -136,9 +136,9 @@ Terms specific to this design. Engine and architecture terms are in
 | **Banking**               | Uploading survey data at a station, converting it from provisional to real. Unbanked data is lost on death.                                                                                 |
 | **Catalog revision**      | A published update to the astronomical dataset, delivered in-fiction as a Survey revision. [galaxy](galaxy.md#catalog-revisions)                                                            |
 | **Canopy, the**           | The cockpit view. An image composited from hull sensors with gain, integration and a selectable response — not a window. The fiction that grants artistic license without falsifying data.  |
-| **Composite**             | The Canopy mode that integrates and tone-maps. The default, and the one the game is art-directed in.                                                                                        |
+| **Enhanced**              | The default camera direction: an HDR composite that shows bright worlds and faint space together. Three-mode implementation is planned in ADR-0037.                                         |
 | **Commission**            | An optional, generated directed goal issued by a research institution                                                                                                                       |
-| **Direct**                | The Canopy mode with no interpretation. Blown highlights, crushed shadows, no license.                                                                                                      |
+| **Automatic / Manual**    | The photographic camera modes. Automatic meters scene light; Manual uses the player’s aperture, shutter and ISO. Both share a photographic response.                                        |
 | **Flip, the**             | The mid-burn 180° rotation. ~4 s of freefall. The game's signature moment.                                                                                                                  |
 | **Detail scan**           | [Tier 2](exploration.md#tier-2--detail-scan): the scan that converts a projection into a surveyed body                                                                                      |
 | **Discovery credit**      | Permanent attribution of a body to the first player to survey and bank it                                                                                                                   |

@@ -7,6 +7,13 @@ measured finding or a named suspicion with the measurement that raised it.
 Operating points are named on every figure, because a figure measured at one is
 a figure about that point.
 
+[ADR-0037](../../docs/adr/0037-the-enhanced-camera.md) makes Enhanced's visible
+sky an ordinary gameplay requirement. The camera acceptance matrix is
+[camera C5](the-camera.md#c5-acceptance-through-the-actual-image). Natural
+measurements below retain their named response; they do not establish the cost
+of that default. Prioritize M7's cache, bounded cold work and moving-orbit cost
+with visible sky. Keep the upscaler and optional optical effects separate.
+
 **Where the numbers come from.** Two rigs. Stationary operating points — the
 flight start in Earth orbit at 27.6 km/s, the planetarium looking at Earth from
 14,400 km, arrival at Earth's summit site, and the converged summit stance —
@@ -212,18 +219,17 @@ on a 20 Mbit connection. If it needs shortening, this is the only line worth an
 hour: upload the loaded system's maps first and let the rest trail the reveal,
 or move the set to a GPU-compressed container so the decode disappears.
 
-### The galaxy volume is warmed and allocated on every boot, unmeasured
+### The default sky needs a bounded boot path
 
-`SceneView` mounts `GalaxyVolume` unconditionally, so `warmAtMount` registers
-two units and `warm()` compiles the 16,384-step ray-march pipeline and allocates
-a quarter-resolution `rgba16f` target — 480×270×8 B, about 1 MiB at 1080p — in
-every session. Flight, the front door and every capture rig pay it for a feature
-reachable only from the planetarium's Presets panel. Raised by reading the code
-during the review of PR 65, not by a profile: the census already reports its two
-units, so the cost is a subtraction from `preload` away, and `warming surface
-maps` at 1,569 ms says in advance which line still dominates. Mounting the
-volume with the first `galaxyView` would move both, at the price of a compile
-inside the first galaxy frame.
+`SceneView` mounts `GalaxyVolume` and registers its warm-up. PR #65 code review
+identified a quarter-resolution `rgba16f` target, about 1 MiB at 1080p, and two
+warm-up units; its added cold-load cost remains unmeasured.
+
+Enhanced needs visible sky at ordinary boot, so deferring everything until a
+planetarium instrument opens does not meet the direction. M7 owns a progressive
+cache, low-resolution first image and bounded queued work. Measure first useful
+sky, convergence, warm-up and peak memory before choosing a boot policy. The
+cached path must not introduce a blocking full-volume compile on first motion.
 
 One smaller thing in the same file, worth taking whenever that one is. The
 draw sets `renderer.autoClear = true` before a quad that covers every texel and
@@ -241,6 +247,10 @@ over `openGpu`), and the driver at 960×540, DPR 1, occluded, so a draw is a
 rig answers kernel questions at any size the machine can spare.
 
 ### Ordinary Earth orbit pays for a galaxy below its daylight response
+
+These are Natural baseline measurements. Its omission predicate is superseded
+as default-camera direction by ADR-0037. Retain the physical-GPU comparison as
+evidence for the tested response, not as permission to omit Enhanced's sky.
 
 6 September 2026, production build, Apple M5, occluded 1920×1080 at DPR 1:
 Earth-orbit rotation averages 62.47 ms per frame, free look 55.69 ms, and a

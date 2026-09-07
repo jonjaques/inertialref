@@ -54,9 +54,13 @@ The frame is drawn by a chain rather than by the renderer, since 2026-09-04:
 `render/sensor.ts` is one `RenderPipeline` around the scene pass and the tone
 curve, MSAA on the pass and the canvas single-sampled, measured level with the
 frame it replaced at five operating points
-([ADR-0029](../adr/0029-the-sensor-spine.md)). It is the spine
-[the sensor plan](../../design/plans/the-sensor.md) hangs exposure, glare and
-the rest from. It carries no patch to three: the renderer draws nothing for a
+([ADR-0029](../adr/0029-the-sensor-spine.md)). Lens exposure and the optical
+passes are implemented in [ADR-0031](../adr/0031-the-sensor-response.md).
+[ADR-0037](../adr/0037-the-enhanced-camera.md) accepts a three-mode camera
+direction, with implementation still planned. It preserves this chain and
+separates Enhanced processing, photographic exposure and display output.
+
+The chain carries no patch to three: the renderer draws nothing for a
 pipeline the warm-up is still building, because `Pipelines.isReady` gates the
 backend's draw, and `warmup.gpu.test.ts` holds that gate
 ([ADR-0030](../adr/0030-three-r185.md)).

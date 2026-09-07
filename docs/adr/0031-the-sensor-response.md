@@ -2,6 +2,11 @@
 
 Status: accepted · 4 Sep 2026
 
+The default-image preservation requirement is superseded by
+[ADR-0037](0037-the-enhanced-camera.md). Enhanced, Automatic and Manual are
+accepted direction with implementation planned. This record still describes
+the implemented chain, Natural baseline, measurements and optical ownership.
+
 ## Context
 
 [The sensor plan](../../design/plans/the-sensor.md) builds on

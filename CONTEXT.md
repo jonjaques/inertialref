@@ -8349,6 +8349,26 @@ that exposure. The 240×135 target draws twice per held view and keeps the
 canonical hash unchanged. These are integration plates, not Natural appearance
 acceptance. Captures and raw reports remain in `.scratch/galaxy-m6/`.
 
+## The default camera composes bright worlds and faint space (6 Sep 2026)
+
+The accepted direction is Enhanced by default, with Automatic and Manual for
+photographic exposure. [ADR-0037](docs/adr/0037-the-enhanced-camera.md) records
+why Natural's preserved daylight response is insufficient. The M4 exposure
+comparison remains useful physical evidence, but its clipped Earth is not the
+default image target. Display gamut and HDR output are separate choices.
+
+[The camera plan](design/plans/the-camera.md) owns the change, including
+radiance precision, preference and preset migration, and matched image gates.
+Galaxy M6 retains physical calibration independently; M7's visible cached sky
+is required before the production default changes. The galaxy plan drops its
+completed M1–M5 recipes and moves optional sensor work to the camera follow-ups.
+Natural's performance measurements stay labeled as that baseline. They cannot
+prove the cost of an Enhanced frame with its sky visible.
+
+The planning branch includes M6 from PR #70 at `9911dd5`, stacked on PR #69.
+Its physical calibration remains intact. The three camera modes and their
+images are not implemented by this entry.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
