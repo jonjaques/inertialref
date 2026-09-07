@@ -34,6 +34,7 @@ const sinh = (x: Node<'float'>): Node<'float'> =>
 export function createStarExtinction(
   field: GalaxyField,
   options: StarExtinctionOptions = {},
+  kernel = createGalaxyKernel(field),
 ) {
   const requested = options.samples
   invariant(
@@ -41,7 +42,6 @@ export function createStarExtinction(
       (Number.isInteger(requested) && requested >= 16 && requested <= 4096),
     'Star extinction needs 16 through 4096 samples',
   )
-  const kernel = createGalaxyKernel(field)
   const dust = uniform(field.dustScale)
   const along = Fn(([origin, displacement]: [Node<'vec3'>, Node<'vec3'>]) => {
     const distance = displacement.length().toVar()
@@ -105,7 +105,7 @@ export function createStarExtinction(
         },
       )
     })
-    return depth.negate().exp()
+    return depth
   })
   return {
     setField(next: GalaxyField) {
@@ -113,13 +113,18 @@ export function createStarExtinction(
       dust.value = next.dustScale
     },
     /** Preserve a short relative displacement instead of subtracting two distant float32 positions. */
-    along: (
+    opticalDepth: (
       originParsecs: Node<'vec3'>,
       displacementParsecs: Node<'vec3'>,
     ): Node<'vec3'> => along(originParsecs, displacementParsecs),
+    along: (
+      originParsecs: Node<'vec3'>,
+      displacementParsecs: Node<'vec3'>,
+    ): Node<'vec3'> => along(originParsecs, displacementParsecs).negate().exp(),
     transmittance: (
       originParsecs: Node<'vec3'>,
       starParsecs: Node<'vec3'>,
-    ): Node<'vec3'> => along(originParsecs, starParsecs.sub(originParsecs)),
+    ): Node<'vec3'> =>
+      along(originParsecs, starParsecs.sub(originParsecs)).negate().exp(),
   }
 }
