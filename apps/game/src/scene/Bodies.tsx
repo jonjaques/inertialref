@@ -682,6 +682,9 @@ export function Bodies({
           visual.clouds.scale.set(shell, shell * body.flattening, shell)
           visual.clouds.geometry = geometryFor(placement.angularRadius)
           const material = visual.cloudMaterial
+          // The shell is a thin weather image. Its final quarter-altitude of
+          // view path clears continuously before the eye enters the deck.
+          material.entryDistance.value = placement.scale * lift * 0.25
           const cloudMap = texturesFor(appearance.texture, anisotropy).clouds
           material.setTexture(cloudMap)
           // A deck with no map — Titan's, and every procedural world's — is

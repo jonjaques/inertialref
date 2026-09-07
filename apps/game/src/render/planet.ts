@@ -30,6 +30,7 @@ import {
   oneMinus,
   pow,
   positionLocal,
+  positionView,
   positionWorld,
   saturate,
   sin,
@@ -626,6 +627,8 @@ export interface CloudMaterial {
   readonly sunColour: { value: Color }
   readonly sunIntensity: { value: number }
   readonly opacity: { value: number }
+  /** View-path interval over which the thin deck clears, in render meters. */
+  readonly entryDistance: { value: number }
   /** Longitude offset in turns; the deck rotates against the surface. */
   readonly drift: { value: number }
   /** Tint for a deck with no map — Titan's, and every procedural world's. */
@@ -656,6 +659,7 @@ export function createCloudMaterial(): CloudMaterial {
   const sunColour = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const opacity = uniform(1)
+  const entryDistance = uniform(1)
   const drift = uniform(0)
   const baseColour = uniform(new Color(1, 1, 1))
   const sunsetColour = uniform(new Color(1, 0.55, 0.28))
@@ -693,7 +697,11 @@ export function createCloudMaterial(): CloudMaterial {
     .mul(glow)
     .mul(max(incidence, float(0)).mul(0.96).add(0.04))
     .mul(daylight)
-  material.opacityNode = cover.a.mul(opacity).mul(daylight)
+  // A surface has no volume: front-face culling otherwise removes its entire
+  // coverage when the eye crosses it. Clear the remaining view path before
+  // that boundary, in view space so planetary radii never cancel in float32.
+  const entry = smoothstep(float(0), entryDistance, length(positionView))
+  material.opacityNode = cover.a.mul(opacity).mul(daylight).mul(entry)
   material.transparent = true
   material.depthWrite = false
 
@@ -703,6 +711,7 @@ export function createCloudMaterial(): CloudMaterial {
     sunColour,
     sunIntensity,
     opacity,
+    entryDistance,
     drift,
     baseColour,
     sunsetColour,
