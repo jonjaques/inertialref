@@ -5,13 +5,24 @@ planets, readable stars and a visible Milky Way. Automatic and Manual offer
 photographic exposure of the same scene. This is the implementation plan for
 [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md).
 
-Status: planned. The direction is accepted; none of the milestones below claims
-to be implemented. This planning branch uses
-[PR #70](https://github.com/jonjaques/inertialref/pull/70),
-`codex/galaxy-the-calibrated-sky` at
-`9911dd5de49c34cebd6043cd9ec0a05679defebf`, as its base. That branch includes
-PR #69 and M6's physical model and linear photometry. Preserve that calibration
-independently of the camera presentation work.
+Status: C1–C4 implementation is complete on the camera branch created from
+`codex/galaxy` at `b50a1f22df424e24a7165fa811374694221c6c98`. M6's physical
+model, local dust and linear photometry remain independently calibrated.
+C5 automated and technical verification is in progress. Manual visual
+acceptance is deferred to the user's feedback on the Cloudflare PR preview.
+C5 and galaxy M8–M11 are not complete.
+
+The sections below retain the implementation and acceptance requirements.
+Implemented processing is not a claim that every matched image, transition or
+full-frame cost has passed review.
+
+| Step | Implementation status                                                                                    | Acceptance still open                                                             |
+| ---- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| C1   | Three-mode policy, strict compatibility parser and preference migration.                                 | Verification on the integrated implementation tip.                                |
+| C2   | Physical sky storage, explicit Enhanced visibility processing and one final output transform.            | Matched scene plates, limb/occlusion review and measured added cost through C5.   |
+| C3   | Shared photographic processing, physical metering, held/clamped adaptation and visible backend fallback. | Integrated technical checks and exposure-transition review through C5.            |
+| C4   | Camera Mode controls, version 2 pictures/URLs, scoped instruments and ordinary-view cache.               | Affected reference captures and user feedback through C5.                         |
+| C5   | Automated and technical verification in progress.                                                        | Cloudflare preview image feedback, transitions and complete performance evidence. |
 
 ## The picture we are building
 
@@ -43,14 +54,19 @@ Fewer bright sources in a night-side view can permit a longer automatic
 exposure. This depends on the framed light, including the atmosphere and glare,
 rather than a day/night flag or a universal claim about light pollution.
 
-## What exists and what changes
+## Implemented separation
 
-The baseline contains the lens, one sensor chain, histogram metering, optical
-passes and negotiated output, plus M6's local dust and calibrated V radiance. The baseline has `response: composite | direct` and
-`curve: natural | neutral | gentle | crisp` in
-`packages/rendering/src/exposure.ts`. `naturalResponse()` also changes source
-lighting and sky eligibility. Other Composite curves meter; Direct pins lens
-EV and clips. These are the couplings the camera work separates.
+The camera keeps the lens, one sensor chain, histogram metering, optical
+passes and negotiated output, plus M6's local dust and calibrated V radiance.
+`SensorSettings` declares `mode`, photographic `look`, compensation, adaptation
+rate, comfort range, white balance and the existing display peak. A look does
+not select exposure control or change source light. Composite/Direct and their
+curve names exist only at the strict compatibility boundary and in explicitly
+identified historical diagnostics. [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md)
+records the processing choice; [ADR-0033](../../docs/adr/0033-presets-hold-a-photographic-instant.md)
+records portable views.
+
+The following constraints remain the acceptance checklist for that separation.
 
 | Keep                                                                      | Replace or cut                                                               |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -71,7 +87,7 @@ there is one sequence for camera work.
 
 | Step | Result                                                                  | Dependency                                                                  |
 | ---- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| C1   | Camera policy and compatibility are explicit and testable.              | PR #70 baseline, including M6.                                              |
+| C1   | Camera policy and compatibility are explicit and testable.              | `codex/galaxy` at the implementation base, including M6.                    |
 | C2   | Enhanced preserves a bright foreground and faint sky in one image.      | C1; use the baseline M6 field and preserve its calibration checks.          |
 | C3   | Automatic and Manual share a photographic model with reliable metering. | C1 and C2's separation of source light from processing.                     |
 | C4   | Controls, presets and authored scenes use the three modes.              | C2 and C3; M7's ordinary-view cache before changing the production default. |
@@ -86,10 +102,41 @@ M8–M10 remain galaxy work. M11 needs C5 as well as those milestones before
 claiming the full journey is accepted. C5's review of the current star population
 does not claim that M10's resolved-star dust is implemented.
 
-Each implementation step gets a coherent local commit and focused evidence.
-If later requested, its PR names its exact base and dependencies. This plan
-does not authorize merging or rebasing another agent's branch. Reconcile the
-actual PR stack before implementation; PR #70 targets #69, which targets #68.
+Implementation steps are recorded as coherent local commits with focused
+evidence. The preview PR names the exact `codex/galaxy` base and its dependencies.
+This plan does not authorize merging or rebasing another agent's branch.
+
+### Ordinary-view cache and support contract
+
+The ordinary renderer retains physical V-anchored sky radiance, with each
+half-float unit representing 1,000 nW m⁻² sr⁻¹. It first publishes a complete
+32-pixel-face cube, then replaces it with a complete 128-pixel-face cube.
+Both use 16-pixel tiles; the tiers require 24 and 384 tile submissions.
+Three slots per tier retain completed locations and an incomplete replacement.
+Partial faces never publish, and canceled generations cannot publish into a
+reassigned slot. These are bounded work and allocation counts, not measured
+full-frame performance.
+
+A cache is eligible within 0.15 pc of its baked observer position. Beyond that
+ceiling the renderer replaces it, using a bounded live target until an eligible
+cube is ready. Rotation and lens changes sample the same physical directions.
+The physical GPU contract compares cache and live rays within 1% at the tested
+inside/outside positions, including a 0.14 pc offset within the reuse ceiling.
+That sampled-radiance bound does not establish coarse-tier image quality,
+dust-lane contrast or transition continuity; those remain C5 image gates.
+
+Enhanced compresses the retained sky's luminance before conversion to the
+scene's half-float target, preserving zero and hue while keeping foreground
+depth and the common optical chain. Its declared visibility gains do not alter
+the physical field. Automatic and Manual share photographic inputs and a
+neutral response; imported Gentle/Crisp shoulders remain explicit styling.
+
+Enhanced supports ordinary sRGB SDR. P3 gamut and negotiated extended output
+remain independent display capabilities. WebGPU supports physical Automatic
+metering. WebGL visibly marks Automatic unavailable and identifies the
+lens-controlled Manual fallback without rewriting the selected preference.
+Manual and pinned staging cannot consume automatic gain. Backend support does
+not close C5's image or performance gates.
 
 ## C1. Separate camera policy from style and output
 
@@ -158,9 +205,11 @@ is acceptable for this prototype; it is insufficient for a production default.
 
 Automatic meters scene radiance before Enhanced processing. Exclude labels,
 orbit traces, landing marks and other instrument overlays. Test a sparse sky,
-a small bright disk, empty pixels and an all-dark frame. The current
-40th–95th percentile reduction and bin-zero exclusion are a starting point,
-not proof that a bright Luna amid empty sky exposes correctly.
+a small bright disk, empty pixels and an all-dark frame. The implementation
+excludes empty bin zero and weights log luminance by light over the
+40th–99.9th percentile interval. Its sparse-disk and hot-pixel tests retain a
+subject while trimming isolated outliers; image review must still establish
+that a bright Luna amid empty sky exposes correctly.
 
 Keep adaptation and comfort clamps explicit. Tightening a range applies even
 when adaptation is held. A mode switch, camera cut or photographic-time scrub
@@ -174,10 +223,10 @@ reports the effective EV and compensation over the lens settings without
 secretly writing aperture, shutter or ISO. Holding Automatic holds its current
 exposure; it does not change the selected mode to Manual.
 
-The WebGL fallback requires an explicit contract. Implement metering from a
-bounded supported path or mark Automatic unavailable with a visible explanation
-and offer Manual. A fixed calibration must not be labeled Automatic. Enhanced
-still needs a supported SDR path at a measured quality level.
+The WebGL fallback marks Automatic unavailable with a visible explanation
+and identifies its lens-controlled Manual fallback. A fixed calibration must
+not be labeled Automatic. Verify Enhanced's supported SDR path at a measured
+quality level; backend support alone is not image acceptance.
 
 ## C4. Put the modes in the player's controls and saved views
 
@@ -212,6 +261,11 @@ view. Recapture affected reference plates and preset thumbnails with declared
 settings; do not rename legacy labels while silently retaining legacy lighting.
 
 ## C5. Acceptance through the actual image
+
+Automated and technical verification is in progress. The user will provide
+manual verification and feedback through the Cloudflare PR preview. Keep this
+step open until the image, transition and performance requirements below have
+their evidence; C1–C4 implementation does not complete C5 or galaxy M8–M11.
 
 Use identical pose, time, lens geometry and scene data across each mode triplet.
 Record mode, aperture, shutter, ISO, effective exposure or composite gains,
