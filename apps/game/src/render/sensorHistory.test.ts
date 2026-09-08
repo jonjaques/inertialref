@@ -104,9 +104,9 @@ it('rejects a true physical jump before readback and starts fresh motion after t
   const generation = history.advance('automatic', 0, camera(0))
   history.advance('automatic', 0.016, camera(10))
   history.advance('automatic', 0.032, camera(20))
-  expect(
-    history.accepts(generation, 'automatic', 0.048, false, camera(100_000)),
-  ).toBe(false)
+  expect(history.accepts(generation, 'automatic', 0.048, camera(100_000))).toBe(
+    false,
+  )
   const cut = history.advance('automatic', 0.048, camera(100_000))
   expect(cut).toBe(generation + 1)
   expect(history.motionReset).toBe(true)
@@ -123,13 +123,13 @@ it('rejects an orientation cut and explicit same-time photographic changes', () 
     ...camera,
     orientation: Quaternion.fromAxisAngle(vec3(0, 1, 0), Math.PI / 2),
   }
-  expect(
-    history.accepts(generation, 'automatic:held:10', 1, false, turned),
-  ).toBe(false)
+  expect(history.accepts(generation, 'automatic:held:10', 1, turned)).toBe(
+    false,
+  )
   const cut = history.advance('automatic:held:10', 1, turned)
   expect(cut).toBe(generation + 1)
   expect(history.advance('automatic:held:11', 1, turned)).toBe(cut + 1)
-  expect(history.motionReset).toBe(true)
+  expect(history.motionReset).toBe(false)
   expect(history.accepts(cut, 'automatic:held:11', 1)).toBe(false)
 })
 
@@ -150,12 +150,32 @@ it('rejects readings across a camera cut, mode switch, scrub and retirement', ()
   expect(history.accepts(fourth, 'automatic:luna', 1)).toBe(false)
 })
 
-it('allows a moving exposure to read back, but never mutates a held frame', () => {
+it('retains transform history across consecutive exposure and photographic keys', () => {
+  const history = new SensorHistory()
+  const camera = (x: number) => ({
+    position: vec3(x, 0, 0),
+    orientation: Quaternion.IDENTITY,
+  })
+  let generation = history.advance('aperture:2.8', 0, camera(0))
+  for (let i = 1; i <= 5; i++) {
+    const next = history.advance(
+      `aperture:${2.8 + i}:held:${i}`,
+      i / 60,
+      camera(i * 10),
+    )
+    expect(next).toBeGreaterThan(generation)
+    expect(history.motionReset).toBe(false)
+    generation = next
+  }
+  history.advance('another-key', 6 / 60, camera(100_000))
+  expect(history.motionReset).toBe(true)
+})
+
+it('allows a moving exposure to read back within the current history', () => {
   const history = new SensorHistory()
   const submitted = history.advance('automatic', 1)
   history.advance('automatic', 1.016)
   expect(history.accepts(submitted, 'automatic', 1.016)).toBe(true)
-  expect(history.accepts(submitted, 'automatic', 1.016, true)).toBe(false)
   expect(history.accepts(submitted, 'manual', 1.016)).toBe(false)
   expect(history.accepts(submitted, 'automatic', 9)).toBe(false)
 })

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it } from 'vitest'
+import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import {
   FloatType,
   HalfFloatType,
@@ -17,6 +17,7 @@ import {
 import { texture, vec3, vec4 } from 'three/tsl'
 import {
   DEFAULT_SENSOR_SETTINGS,
+  LENS_PRESETS,
   GALAXY_VIEWS,
   SURFACE_LUMINANCE,
   type SensorSettings,
@@ -126,6 +127,69 @@ it('retains faint radiance beside a bright silhouette before one output transfor
   }
 })
 afterAll(() => gpu.dispose())
+
+it.each(['scrub', 'focus', 'resize'] as const)(
+  'validates focus extent independently during %s',
+  async (change) => {
+    const renderer = gpu.renderer
+    declareSceneTarget(renderer, { samples: 0, optics: true })
+    const scene = new Scene()
+    const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+    const lens = { ...LENS_PRESETS.flight, focus: Infinity }
+    let time = 0
+    const sensor = createSensor(renderer, scene, camera, () => ({
+      lens,
+      settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'automatic' },
+      time,
+      adaptationTime: time,
+      historyKey: `scrub:${time}`,
+      headroom: 1,
+      pinned: null,
+      noiseTick: 0,
+    }))
+    const target = new RenderTarget(32, 32, {
+      type: FloatType,
+      depthBuffer: false,
+    })
+    const gate = Promise.withResolvers<void>()
+    const read = renderer.getArrayBufferAsync.bind(renderer)
+    const pending = vi
+      .spyOn(renderer, 'getArrayBufferAsync')
+      .mockImplementation(async (...args) => {
+        const buffer = await read(...args)
+        await gate.promise
+        return buffer
+      })
+    try {
+      await sensor.warm()
+      sensor.render(target)
+      expect(sensor.diagnostics.maximumCircle).toBe(40)
+      time = 1 / 60
+      if (change === 'focus') lens.focus = 100
+      if (change === 'resize') renderer.setSize(64, 64, false)
+      sensor.render(target)
+      gate.resolve()
+      await vi.waitFor(() =>
+        expect(
+          pending.mock.settledResults.every(
+            (result) => result.type !== 'incomplete',
+          ),
+        ).toBe(true),
+      )
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(sensor.diagnostics.maximumCircle).toBe(change === 'scrub' ? 0 : 40)
+      expect(sensor.exposure!.metered).toBe(false)
+      sensor.render(target)
+      expect(sensor.diagnostics.defocusPasses).toBe(change === 'scrub' ? 0 : 4)
+    } finally {
+      gate.resolve()
+      pending.mockRestore()
+      renderer.setSize(32, 32, false)
+      sensor.dispose()
+      target.dispose()
+    }
+  },
+)
 
 it('keeps metered exposure when continuous camera motion rebases the scene', async () => {
   const renderer = gpu.renderer

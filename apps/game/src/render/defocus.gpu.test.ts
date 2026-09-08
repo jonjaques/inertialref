@@ -13,7 +13,7 @@ import {
   RenderTarget,
   Scene,
 } from 'three/webgpu'
-import { nodeObject, texture } from 'three/tsl'
+import { nodeObject, texture, vec4 } from 'three/tsl'
 import { DefocusNode } from './defocus.ts'
 import { openGpu, type GpuSession, type Pixels } from './gpuHarness.ts'
 
@@ -81,6 +81,57 @@ it('warms both gather sizes, shares four targets, and reports the selected work'
   }
 })
 afterAll(() => gpu.dispose())
+
+it('uses the active gather count for partial far-layer coverage', async () => {
+  const source = image(new Float32Array([0, 0, 0, 1]))
+  const depth = image(new Float32Array([0, 0, 0.5, 1]))
+  const defocus = new DefocusNode(texture(source), texture(depth))
+  defocus.parameters.value.set(4, 1)
+  defocus.enabled.value = 1
+  const far = new NodeMaterial()
+  const near = new NodeMaterial()
+  near.fragmentNode = vec4(0)
+  const render = gpu.renderer.render.bind(gpu.renderer)
+  const spy = vi
+    .spyOn(gpu.renderer, 'render')
+    .mockImplementation((object, camera) => {
+      const mesh = object as Mesh
+      const original = mesh.material
+      if (
+        original instanceof NodeMaterial &&
+        /^Sensor Defocus [12]/.test(original.name)
+      ) {
+        mesh.material = original.name.startsWith('Sensor Defocus 1')
+          ? far
+          : near
+        try {
+          return render(object, camera)
+        } finally {
+          mesh.material = original
+        }
+      }
+      return render(object, camera)
+    })
+  try {
+    // A single source tap covers a quarter of the far layer. The gathered
+    // target stores that contribution divided by its number of samples.
+    for (const maximum of [4, 4.00001]) {
+      const count = maximum <= 4 ? 12 : 48
+      far.fragmentNode = vec4(0.25 / count)
+      far.needsUpdate = true
+      defocus.maximum.value = maximum
+      const result = await gpu.drawGraph(nodeObject(defocus), { float: true })
+      expect(result.at(64, 64)[0]).toBeCloseTo(0.25, 3)
+    }
+  } finally {
+    spy.mockRestore()
+    defocus.dispose()
+    source.dispose()
+    depth.dispose()
+    far.dispose()
+    near.dispose()
+  }
+})
 
 function image(data: Float32Array, size = 1): DataTexture {
   const value = new DataTexture(data, size, size, RGBAFormat, FloatType)

@@ -65,13 +65,18 @@ export class SensorHistory {
   advance(key: string, time: number, camera?: SensorCamera): number {
     const next = camera === undefined ? null : sample(camera)
     const dt = this.#time === null ? 0 : time - this.#time
-    const changed =
-      key !== this.#key || this.#time === null || dt < 0 || dt > 0.5
+    const discontinuousTime = this.#time === null || dt < 0 || dt > 0.5
+    const changed = key !== this.#key || discontinuousTime
     const cut = next !== null && this.#cameraCut(next, dt)
     if (changed || cut) this.#generation++
-    this.#motionReset = changed || cut || next?.origin !== this.#camera?.origin
+    this.#motionReset =
+      discontinuousTime || cut || next?.origin !== this.#camera?.origin
     this.#velocity =
-      changed || cut || next === null || this.#camera === null || dt <= 0
+      discontinuousTime ||
+      cut ||
+      next === null ||
+      this.#camera === null ||
+      dt <= 0
         ? null
         : Vec.scale(UV.difference(next.position, this.#camera.position), 1 / dt)
     this.#key = key
@@ -106,12 +111,10 @@ export class SensorHistory {
     generation: number,
     key: string,
     time: number,
-    held = false,
     camera?: SensorCamera,
   ): boolean {
     return (
       !this.#retired &&
-      !held &&
       generation === this.#generation &&
       key === this.#key &&
       this.#time !== null &&

@@ -107,7 +107,11 @@ it('bypasses optical motion at a rebase and resumes on the next physical frame',
     expect(origin.generation).toBe(1)
     expect(resumed.shutterFraction).toBeCloseTo(lens.shutter / dt, 12)
     expect(resumed.motionPasses).toBe(3)
-    expect(draws).toBe(4)
+    lens.fStop = 4
+    const aperture = await draw(4120, dt * 4)
+    expect(aperture.motionPasses).toBe(3)
+    expect(aperture.shutterFraction).toBeCloseTo(lens.shutter / dt, 12)
+    expect(draws).toBe(5)
   } finally {
     sensor.dispose()
     target.dispose()

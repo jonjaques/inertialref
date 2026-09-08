@@ -57,6 +57,7 @@ export class DefocusNode extends TempNode<'vec4'> {
   readonly enabled = uniform(0)
   readonly openness = uniform(0)
   readonly pixelStep = uniform(new Vector2(1, 1))
+  readonly #sampleCount = uniform(48)
   readonly #stages: readonly WarmPass[] = Array.from({ length: 4 }, () => ({
     target: new RenderTarget(1, 1, { type: HalfFloatType, depthBuffer: false }),
     material: new NodeMaterial(),
@@ -149,7 +150,10 @@ export class DefocusNode extends TempNode<'vec4'> {
     const coc = this.parameters.x.mul(
       this.parameters.y.sub(texture(this.motionNode.value).z),
     )
-    const farMix = coc.sub(0.5).clamp().mul(far.a.mul(48).clamp())
+    const farMix = coc
+      .sub(0.5)
+      .clamp()
+      .mul(far.a.mul(this.#sampleCount).clamp())
     const nearMix = coc.negate().sub(0.5).clamp()
     const base = mix(
       sharp.rgb.min(65_504),
@@ -193,6 +197,7 @@ export class DefocusNode extends TempNode<'vec4'> {
         : this.#stages[3]!.target.texture
     if (renderer === null || this.enabled.value < 0.5) return
     this.samples = this.maximum.value <= 4 ? 12 : 48
+    this.#sampleCount.value = this.samples
     const previous = renderer.getRenderTarget()
     const size = renderer.getDrawingBufferSize(this.#size)
     this.pixelStep.value.set(1 / size.x, 1 / size.y)
