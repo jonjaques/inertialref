@@ -61,7 +61,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
   const ambient = useRef<AmbientLight>(null)
   const fill = useRef<DirectionalLight>(null)
 
-  useTimedFrame('cameraRig', () => {
+  const updateCamera = () => {
     const scene = engine.scene()
     /*
      * Whoever owns the pose this frame owns all of it.
@@ -213,7 +213,9 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
       }
       fill.current.position.copy(FILL.normalize())
     }
-  })
+  }
+  // The engine samples at -1; every sky consumer reads this camera at 0.
+  useTimedFrame('cameraRig', updateCamera, -0.5)
 
   return (
     <>

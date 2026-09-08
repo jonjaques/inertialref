@@ -2,6 +2,7 @@ import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
 import { createGalaxyField, type GalaxyField } from '@inertialref/universe'
+import { fromRenderSpace, Quaternion as Q } from '@inertialref/spatial'
 import { IndexedDbGalaxySkyStore } from '../engine/galaxySkyStore.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
@@ -116,8 +117,18 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
       current.field = createGalaxyField(engine.world.galaxySeed)
     }
     const pose = engine.galaxyPose
+    const origin = engine.origin
+    // The backdrop casts its own universe-space rays. The flight camera can
+    // orbit the hull or look aside, so its drawn pose owns those rays too.
     current.volume.configure(
-      pose,
+      pose === null || origin === null
+        ? null
+        : {
+            position: fromRenderSpace(origin, camera.position),
+            orientation: Q.normalize(
+              Q.multiply(origin.orientation, camera.quaternion),
+            ),
+          },
       engine.lens,
       current.field,
       engine.starField.resolved,
