@@ -125,7 +125,7 @@ it('keeps a completed empty exterior sky while the next survey runs', async () =
   }
 })
 
-it('retains the completed sky after failure and retries at the current observer', async () => {
+it('retains the completed sky after failure and retries only after travel', async () => {
   const pending = controlledSurveys()
   const game = headlessEngine()
   try {
@@ -142,12 +142,40 @@ it('retains the completed sky after failure and retries at the current observer'
     pending[1]!.reject(new Error('survey unavailable'))
     await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
     expect(game.starField).toBe(completed)
+    for (let i = 0; i < 120; i++) game.frame(0)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(pending).toHaveLength(2)
+    game.harness.galaxyJourney(0.9)
     game.frame(0)
     await vi.waitFor(() => expect(pending).toHaveLength(3))
     expect(game.starField).toBe(completed)
     pending[2]!.resolve(response(pending[2]!.request, 'retry'))
     await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
     expect(game.starField.ids).toContain('retry')
+  } finally {
+    game.dispose()
+  }
+})
+
+it('reselects catalog sources during travel when no survey has completed', async () => {
+  const pending = controlledSurveys()
+  const game = headlessEngine()
+  try {
+    game.harness.pause()
+    game.harness.galaxyJourney(0)
+    game.frame(0)
+    await vi.waitFor(() => expect(pending).toHaveLength(1))
+    const first = game.starField
+    pending[0]!.reject(new Error('worker unavailable'))
+    await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
+    game.harness.galaxyJourney(0.8)
+    game.frame(0)
+    await vi.waitFor(() => expect(pending).toHaveLength(2))
+    expect(game.starField).not.toBe(first)
+    expect(game.starField.resolved).toBeUndefined()
+    pending[1]!.resolve(response(pending[1]!.request, 'recovered'))
+    await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
+    expect(game.starField.ids).toContain('recovered')
   } finally {
     game.dispose()
   }

@@ -34,6 +34,7 @@ import type {
 } from './catalog/starCatalog.ts'
 import { LOCAL_DENSITY } from './galaxy/constants.ts'
 import { createGalaxyField } from './galaxy/field.ts'
+import { GALAXY_SOLAR_V_MAGNITUDE } from './galaxy/photometry.ts'
 import {
   createPopulationGenerator,
   LUMINOSITY_BANDS,
@@ -345,7 +346,8 @@ export const catalogStub = (star: CatalogStar): SystemStub => ({
   visualLuminosities:
     star.physical.absoluteMagnitude === null
       ? undefined
-      : 10 ** ((4.81 - star.physical.absoluteMagnitude) / 2.5),
+      : 10 **
+        ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
   temperature: star.physical.temperature,
   colour: star.physical.colour,
   components: star.components,
