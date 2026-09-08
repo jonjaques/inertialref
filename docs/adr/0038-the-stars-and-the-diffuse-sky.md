@@ -212,8 +212,10 @@ remain resolvable, while new selection and portable-picture manifests identify
 the active algorithm. The source model and camera response remain independently
 inspectable and tested.
 
-The 100,000-source capacity reserves about 24.4 MB of GPU source, appearance and
-dust data, in addition to the shared 16 MiB arm table. A 512² physical cube is
+The 100,000-source capacity reserves about 21.2 MB of GPU source, appearance and
+dust data, in addition to the shared 16 MiB arm table. The dust cache allocates
+10,004,096 bytes on WebGPU or 3,200,000 attribute bytes on the CPU fallback,
+never both sets. These figures exclude the CPU slot lookup and scheduling maps. A 512² physical cube is
 12 MiB. Half-resolution temporal resources add 9.33 MB over the measured
 quarter-resolution alternative at 1080p. These are declared allocations,
 excluding driver overhead and temporary JavaScript generation memory.

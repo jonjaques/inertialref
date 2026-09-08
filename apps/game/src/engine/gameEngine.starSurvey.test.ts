@@ -212,3 +212,22 @@ it('drops the completed envelope on world replacement and rejects its late reply
     game.dispose()
   }
 })
+
+it('contains a synchronous survey failure when no worker pool is available', async () => {
+  const game = headlessEngine()
+  const run = vi.spyOn(surveySkyTask, 'run').mockImplementation(() => {
+    throw new Error('inline survey failed')
+  })
+  vi.spyOn(game, 'pool').mockReturnValue(null)
+  try {
+    game.harness.pause()
+    game.harness.galaxyJourney(0)
+    expect(() => game.frame(0)).not.toThrow()
+    await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
+    for (let frame = 0; frame < 120; frame++) game.frame(0)
+    expect(run).toHaveBeenCalledOnce()
+    expect(game.starField.ids.length).toBeGreaterThan(0)
+  } finally {
+    game.dispose()
+  }
+})

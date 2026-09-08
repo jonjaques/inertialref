@@ -1535,13 +1535,15 @@ export class GameEngine {
     // replies removes procedural sources and resets their dust and sky history.
     if (this.#starField.resolved === undefined)
       this.#starField = selectStars(centre, [known])
-    const run =
-      this.pool() === null
-        ? Promise.resolve(
-            surveySkyTask.run(payload, { cancelled: () => false }),
-          )
-        : (this.pool() as WorkerPool).run(surveySkyTask, payload)
-    void Promise.resolve(run)
+    const pool = this.pool()
+    // Inline execution can throw before returning a promise. Start it inside the
+    // chain so it has the same failure and pending-state lifetime as a worker.
+    void Promise.resolve()
+      .then(() =>
+        pool === null
+          ? surveySkyTask.run(payload, { cancelled: () => false })
+          : pool.run(surveySkyTask, payload),
+      )
       .then((selection) => {
         if (world !== this.#starFieldWorld) return
         const applying = timer.span('survey.apply', ENGINE_PHASE)
