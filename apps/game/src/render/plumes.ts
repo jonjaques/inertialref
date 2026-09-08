@@ -46,6 +46,7 @@ import {
 import type { ThrusterLayout } from '@inertialref/rendering'
 import { asField, asVector, noiseFetch, noiseSampler } from './noiseNodes.ts'
 import { noiseTexture } from './noiseTexture.ts'
+import { sensorRadiance } from './radiance.ts'
 
 /*
  * The plumes: what a maneuvering valve and the main drive leave behind.
@@ -224,7 +225,7 @@ function shellMaterial(
   const vFacing = varying(float(), 'vPlumeFacing')
   const vFire = varying(float(), 'vPlumeFire')
 
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.positionNode = Fn(() => {
     // The type argument is load-bearing, and it has to be the explicit
     // generic: inferred from the string it widens to `string`, and a node
@@ -369,7 +370,7 @@ function diskMaterial(
   clock: UniformNode<'float', number>,
 ): MeshBasicNodeMaterial {
   const noise = noiseSampler(noiseTexture())
-  const material = new MeshBasicNodeMaterial()
+  const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.colorNode = Fn(() => {
     const centred = uv().sub(0.5).mul(2)
     const r = length(centred)
