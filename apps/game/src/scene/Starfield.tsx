@@ -33,7 +33,10 @@ function createField(engine: GameEngine, renderer: WebGPURenderer) {
     cpu: !compute,
     kernel,
   })
-  const projection = createStarProjection(STAR_SPRITE_CEILING, { compute })
+  const projection = createStarProjection(STAR_SPRITE_CEILING, {
+    compute,
+    visual: true,
+  })
   const material = createStarfieldMaterial(
     STAR_SPRITE_CEILING,
     projection,

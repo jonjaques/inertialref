@@ -15,6 +15,21 @@ import {
   type StarExtinctionSelection,
 } from './starExtinctionCache.ts'
 const field = createGalaxyField(rootSeed('inertialref'))
+
+it.each([true, false])(
+  'allocates only the selected extinction backend (cpu=%s)',
+  (cpu) => {
+    const capacity = 100_000
+    const cache = new StarExtinctionCache(capacity, field, { cpu })
+    try {
+      expect(cache.diagnostics.bytes).toBe(
+        cpu ? capacity * 32 : capacity * 100 + 1024 * 4,
+      )
+    } finally {
+      cache.dispose()
+    }
+  },
+)
 const selection = (ids: readonly string[]): StarExtinctionSelection => ({
   ids,
   positions: ids.map((id) =>

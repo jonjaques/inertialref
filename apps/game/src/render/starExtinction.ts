@@ -13,7 +13,7 @@ import {
   type GalaxyField,
   type StarExtinctionOptions,
 } from '@inertialref/universe'
-import { createGalaxyKernel } from './galaxyKernel.ts'
+import { createGalaxyKernel, galaxyWarpElevation } from './galaxyKernel.ts'
 
 /** The galaxy field accepts galactocentric parsecs in its GPU boundary. */
 export function starExtinctionOrigin(position: UniverseVector): Vector3 {
@@ -72,7 +72,7 @@ export function createStarExtinction(
         for (let iteration = 0; iteration < 2; iteration++) {
           const crossing = origin.add(direction.mul(focus)).toVar()
           focus.assign(
-            kernel.structure(crossing).y.sub(origin.y).div(direction.y),
+            galaxyWarpElevation(crossing).sub(origin.y).div(direction.y),
           )
         }
       })

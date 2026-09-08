@@ -566,8 +566,14 @@ export function createStarfieldMaterial(
   const legacyVisibility =
     projection === undefined
       ? instancedBufferAttribute<'float'>(visibility, 'float')
-      : varying(projection.visibility)
-  const absolute = (projection?.absoluteVisibility ?? float(0)).greaterThan(0.5)
+      : projection.visual
+        ? float(0)
+        : varying(projection.visibility)
+  const absolute = (
+    projection?.visual === true
+      ? float(1)
+      : (projection?.absoluteVisibility ?? float(0))
+  ).greaterThan(0.5)
   const transported =
     transportedLight ?? instancedBufferAttribute<'vec3'>(transmission, 'vec3')
   const magnitude = log2(

@@ -14,7 +14,7 @@ beforeAll(async () => {
 afterAll(() => gpu.dispose())
 
 it('draws an absolute V hierarchy and leaves no remote or extinguished sprite floor', async () => {
-  const projection = createStarProjection(1)
+  const projection = createStarProjection(1, { visual: true })
   const transport = uniform(new Vector3(1, 1, 1))
   const field = createStarfieldMaterial(1, projection, transport)
   field.integrated.value = 1
@@ -55,6 +55,11 @@ it('draws an absolute V hierarchy and leaves no remote or extinguished sprite fl
     expect(light.slice(4)).toEqual([0, 0])
     expect((await render(-5, 30_000 * PARSEC))[1]).toBe(0)
     const clear = await render(1)
+    const { vertexShader } = await gpu.shader(sprite, camera, scene)
+    // The V draw reads the three packed source buffers; a brightest-source
+    // normalization buffer would be unused work in this absolute-light path.
+    expect((vertexShader.match(/var<storage, read>/g) ?? []).length).toBe(3)
+    expect(projection.maximum).toBeNull()
     transport.value.set(0.12, 0.1, 0.07)
     const dust = await render(1)
     expect(dust[1]).toBeGreaterThan(0)
