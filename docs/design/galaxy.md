@@ -9,26 +9,37 @@ lets published data change underneath a running game without breaking it.
 
 ---
 
-## The preview stellar field
+## The stellar field and its visible stars
 
-`packages/universe/src/galaxy/` contains a seeded field for the disk, arms,
-bar/bulge and halo. Its CPU integrator produces headless outside and
-observer-centered plates through the [harness](../guides/harness.md#measuring-the-stellar-field).
-The field has its own version and leaves active population generation
-unchanged. Its dust-attenuated radiance and parameter assumptions are recorded
-in [ADR-0032](../adr/0032-the-stellar-field.md). The planetarium also renders
-fixed face-on and edge-on views through the existing sensor, with one live
-quarter-size volume target. Open Presets → Milky Way, or call
-`ir.galaxyView('face-on')`. Earth Orbit and Travel Out trace a reversible journey
-to 30 kpc above the galactic center. `ir.galaxyJourney(1, 36)` makes that trip
-through the existing camera and lens; progress zero returns to Earth orbit.
-The live field also follows ordinary planetarium navigation. Seeded dust lanes
-dim and redden the diffuse light, with finer sampling after travel settles.
-Nine local cloud complexes and a Local Bubble approximation now shape the
-field. Linear V-band sky averages and external luminosity have source-based
-checks through `pnpm sim --galaxy-calibration --quiet`. Natural display treatment
-and appearance acceptance are deferred while its response is revised; extinction
-of resolved star sprites remains a separate milestone.
+One seeded field supplies the disk, arms, bar/bulge and halo, their resolved
+stars and the diffuse light between them. Its CPU integrator produces
+[headless plates](../guides/harness.md#measuring-the-stellar-field), while the
+GPU follows the same field through the camera. Nine local cloud complexes,
+a Local Bubble approximation and shared spiral dust dim and redden both
+representations. Linear V-band sky averages and external luminosity retain
+source-based checks through `pnpm sim --galaxy-calibration --quiet`.
+
+The sky selects disjoint luminosity levels within a V 8 request and a
+100,000-sprite ceiling. It remains independent of the travel survey. GPU
+projection follows the observer without rewriting all source positions; the
+shared field removes the expected emission represented by those sources.
+[ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records population
+activation, catalogue completeness, legacy addresses and the approximation
+limits of the resolved/diffuse partition.
+
+Open Presets → Milky Way, or call `ir.galaxyView('face-on')` for a fixed
+photographic instrument. Earth Orbit and Travel Out trace a reversible journey
+to 30 kpc above the galactic center; `ir.galaxyJourney(1, 36)` makes that trip
+through the existing camera and lens. Progress zero returns to Earth orbit.
+Ordinary navigation preserves the player's Enhanced, Automatic or Manual mode.
+Enhanced composes bright foregrounds and faint sky; the photographic modes
+expose the same physical light.
+
+Nearby views refine complete 32², 128² and 512² physical sky cubes. A separate
+regenerable disk cache retains finished skies across reloads. Moving beyond a
+valid sky uses live interleaved rays and owned physical history, with finer
+angular detail after the eye settles. Exposure and display changes do not
+change source light or require a physical rebake.
 
 ## The three-layer body model
 

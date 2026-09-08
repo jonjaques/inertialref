@@ -18,6 +18,7 @@ import {
   SOLAR_RADIUS,
   STEFAN_BOLTZMANN,
 } from '@inertialref/shared'
+import { GALAXY_FIELD_ALGORITHM } from './galaxy/field.ts'
 import {
   algorithm,
   deriveSeed,
@@ -169,7 +170,7 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  * `sketch.ts` carries both figures and the bodies they were measured on.
  */
 export const TERRAIN_ALGORITHM = algorithm('terrain', 4)
-export const GALAXY_ALGORITHM = algorithm('galaxy', 2)
+export const GALAXY_ALGORITHM = algorithm('galaxy', 5)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.
  *
@@ -181,6 +182,7 @@ export const PHOTOMETRY_ALGORITHM = algorithm('photometry', 1)
 
 export const GENERATION_VERSIONS = manifest([
   GALAXY_ALGORITHM,
+  GALAXY_FIELD_ALGORITHM,
   SYSTEM_ALGORITHM,
   TERRAIN_ALGORITHM,
   PHOTOMETRY_ALGORITHM,

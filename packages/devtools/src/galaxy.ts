@@ -17,6 +17,7 @@ import {
   type GalaxyField,
   type GalaxyPopulation,
   type GalaxyRayOptions,
+  type ResolvedPopulationSelection,
 } from '@inertialref/universe'
 import type { Lens, Exposure } from '@inertialref/rendering'
 import type { Quat } from '@inertialref/spatial'
@@ -51,7 +52,23 @@ export interface GalaxyPlate {
 }
 
 export interface GalaxyRenderReport {
+  readonly temporal?: {
+    readonly stride: number
+    readonly refreshed: number
+    readonly resets: number
+    readonly phase: number
+    readonly width: number
+    readonly height: number
+    readonly rayWidth: number
+    readonly rayHeight: number
+    readonly bytes: number
+  }
   readonly cache?: {
+    readonly archive?: {
+      readonly hits: number
+      readonly writes: number
+      readonly failures: number
+    }
     readonly faceSize: number
     readonly initialFaceSize: number
     readonly selectedFaceSize: number | null
@@ -81,6 +98,8 @@ export interface GalaxyRenderReport {
   readonly survey: {
     readonly radiusCells: number
     readonly cellCeiling: number
+    readonly candidateCeiling?: number
+    readonly resolved?: ResolvedPopulationSelection
     readonly spriteCount: number
     readonly spriteCeiling: number
     readonly pending: boolean
@@ -101,7 +120,7 @@ export interface GalaxyRenderReport {
   readonly maxSteps: number
   /** Scene submissions the volume was asked in, drawn or not. */
   readonly submissions: number
-  /** Volume draws. Less than `submissions` once the target is being reused. */
+  /** All diffuse GPU draws, including each tile, ray pass and history resolve. */
   readonly draws: number
   /** Whether the last submission reused the target rather than drawing. */
   readonly held: boolean
@@ -110,7 +129,25 @@ export interface GalaxyRenderReport {
   readonly emissionOnly: boolean
   readonly dustScale: number
   readonly dustNormalization: number
-  readonly resolvedStarExtinction: false
+  readonly resolvedStarExtinction: boolean
+  readonly stars?: {
+    readonly count: number
+    readonly uploads: number
+    readonly reductions: number
+    readonly bytes: number
+    readonly extinction: {
+      readonly ready: boolean
+      readonly backend: string
+      readonly pending: number
+      readonly completed: number
+      readonly cancellations: number
+      readonly batchSize: number
+      readonly draws: number
+      readonly bytes: number
+      readonly lagParsecs?: number
+      readonly reference?: string
+    }
+  }
   readonly originParsecs: readonly number[]
 }
 

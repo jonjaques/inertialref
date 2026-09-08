@@ -179,5 +179,9 @@ Numerical tests establish exposure arithmetic, strict migration, histogram
 behavior and history reset. Image acceptance remains open for matched scene
 triplets and transitions in the preview build. Nonzero sky pixels alone do not
 establish foreground detail, dust contrast, occlusion or a useful composition.
-The [camera plan](../../design/plans/the-camera.md) records the remaining image
-and performance evidence; this decision does not claim M8–M10 galaxy acceptance.
+The [camera plan](../../design/plans/the-camera.md) and
+[assembled galaxy record](../../design/plans/the-galaxy.md#assembled-image-and-motion-record)
+carry the sixteen repeated field@5 images, full journey recordings, and their
+remaining visual and frame-time limits. Those records do not assert artistic
+approval. [ADR-0038](0038-the-stars-and-the-diffuse-sky.md) owns the completed
+resolved-star and diffuse-sky implementation.

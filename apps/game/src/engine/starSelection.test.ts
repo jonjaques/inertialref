@@ -46,7 +46,7 @@ const selections = fc.array(fc.array(candidate, { maxLength: 60 }), {
 })
 
 const flux = (star: StarCandidate): number => {
-  const metres = Math.max(UV.distance(star.position, centre), LIGHT_YEAR)
+  const metres = Math.max(UV.distance(star.position, centre), 1)
   return star.solarLuminosities / (metres * metres)
 }
 
@@ -66,6 +66,34 @@ const firstPerId = (
 }
 
 describe('selecting the drawn stars', () => {
+  it('ranks V light and lowers the diffuse partition limit when catalog stars fill the buffer', () => {
+    const make = (id: string, visualLuminosities: number): StarCandidate => ({
+      id,
+      name: id,
+      position: UV.fromMeters(100 * LIGHT_YEAR, 0, 0),
+      colour: [1, 1, 1],
+      solarLuminosities: 100 - visualLuminosities,
+      visualLuminosities,
+      catalogued: id === 'known',
+    })
+    const stars = [make('faint', 1), make('bright', 10), make('known', 100)]
+    const result = selectStars(centre, [stars], 2, {
+      origin: centre,
+      apparentMagnitudeLimit: 10,
+      levelMask: 511,
+    })
+    expect(result.ids).toEqual(['known', 'bright'])
+    expect(result.catalogued).toEqual([true, false])
+    expect(result.visualLuminosities).toEqual([100, 10])
+    expect(result.resolved!.apparentMagnitudeLimit).toBeLessThan(10)
+    const repeated = selectStars(
+      centre,
+      [[...stars].reverse()],
+      2,
+      result.resolved,
+    )
+    expect(new Set(repeated.ids)).toEqual(new Set(result.ids))
+  })
   it('says each id once, in the order the selections are trusted', () => {
     fc.assert(
       fc.property(selections, (lists) => {

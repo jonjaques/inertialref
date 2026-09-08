@@ -6,6 +6,9 @@ import {
 import {
   type CatalogPlanet,
   type CellContext,
+  type PopulationCoverage,
+  createGalaxyField,
+  selectPopulationSky,
   cellKey,
   NO_CATALOGUE,
   type GalacticCell,
@@ -43,16 +46,8 @@ import { defineTask, TaskRegistry } from './task.ts'
  */
 
 /*
- * The catalog is not shipped to workers.
- *
- * Every task here used to take a system id and resolve it, which now needs the
- * 200 KB star catalog — in every worker, for every pool, to answer questions
- * the caller already knows the answer to. Instead the caller passes what it
- * resolved: a cell's cataloged *count* for generation, and a whole stub for a
- * survey. The count is the only thing procedural generation needs from the
- * catalog (see `proceduralCount`), and passing it makes the dependency an
- * argument rather than an ambient table that has to be kept in sync across a
- * thread boundary.
+ * Workers receive catalog coverage and sparse source counts, or a resolved stub
+ * for a system query. The full catalog remains with its host adapter.
  */
 export interface GenerateCellRequest {
   readonly seed: string
@@ -75,6 +70,7 @@ export interface GeneratedStar {
   readonly solarMasses: number
   readonly solarRadii: number
   readonly solarLuminosities: number
+  readonly visualLuminosities?: number
   readonly temperature: number
   readonly colour: readonly [number, number, number]
   readonly components: number
@@ -90,6 +86,7 @@ export const encodeStub = (stub: SystemStub): GeneratedStar => ({
   solarMasses: stub.solarMasses,
   solarRadii: stub.solarRadii,
   solarLuminosities: stub.solarLuminosities,
+  visualLuminosities: stub.visualLuminosities,
   temperature: stub.temperature,
   colour: [stub.colour.r, stub.colour.g, stub.colour.b],
   components: stub.components,
@@ -116,6 +113,7 @@ export const decodeStub = (wire: GeneratedStar): SystemStub => ({
   solarMasses: wire.solarMasses,
   solarRadii: wire.solarRadii,
   solarLuminosities: wire.solarLuminosities,
+  visualLuminosities: wire.visualLuminosities,
   temperature: wire.temperature,
   colour: { r: wire.colour[0], g: wire.colour[1], b: wire.colour[2] },
   components: wire.components,
@@ -133,7 +131,7 @@ export const generateCellTask = defineTask<
   GenerateCellResponse
 >({
   name: 'universe.generateCell',
-  version: 2,
+  version: 3,
   run({ seed, cell, context }) {
     return {
       cell,
@@ -153,6 +151,7 @@ export interface SurveyRegionRequest {
   readonly catalogued?: Readonly<Record<string, number>>
   /** Radius inside which the catalog is complete; see `CellContext`. */
   readonly completeRadius?: number
+  readonly magnitudeCoverage?: PopulationCoverage
 }
 
 export const surveyRegionTask = defineTask<
@@ -160,8 +159,11 @@ export const surveyRegionTask = defineTask<
   GenerateCellResponse[]
 >({
   name: 'universe.surveyRegion',
-  version: 2,
-  run({ seed, min, max, catalogued, completeRadius }, context) {
+  version: 3,
+  run(
+    { seed, min, max, catalogued, completeRadius, magnitudeCoverage },
+    context,
+  ) {
     const parsed = parseSeed(seed)
     const out: GenerateCellResponse[] = []
     for (let x = min.x; x <= max.x; x += 1) {
@@ -175,6 +177,7 @@ export const surveyRegionTask = defineTask<
           const stars = generateCell(parsed, cell, {
             catalogued: catalogued?.[cellKey(cell)] ?? 0,
             completeRadius: completeRadius ?? 0,
+            magnitudeCoverage,
           })
           if (stars.length === 0) continue
           out.push({ cell, stars: stars.map(encodeStub) })
@@ -182,6 +185,40 @@ export const surveyRegionTask = defineTask<
       }
     }
     return out
+  },
+})
+
+export interface SurveySkyRequest {
+  readonly seed: string
+  readonly origin: WireUniverseVector
+  readonly coverage: PopulationCoverage
+  readonly spriteCeiling: number
+  readonly candidateCeiling: number
+  readonly cellCeiling: number
+  readonly apparentMagnitudeLimit: number
+}
+export interface SurveySkyResponse {
+  readonly origin: WireUniverseVector
+  readonly stars: readonly GeneratedStar[]
+  readonly apparentMagnitudeLimit: number
+  readonly levelMask: number
+  readonly candidateCount: number
+  readonly cellsVisited: number
+}
+export const surveySkyTask = defineTask<SurveySkyRequest, SurveySkyResponse>({
+  name: 'universe.surveySky',
+  version: 1,
+  run(request, context) {
+    const result = selectPopulationSky(
+      createGalaxyField(parseSeed(request.seed)),
+      UV.universeVector(...request.origin),
+      { ...request, cancelled: context.cancelled },
+    )
+    return {
+      ...result,
+      origin: request.origin,
+      stars: result.stars.map(encodeStub),
+    }
   },
 })
 
@@ -525,6 +562,7 @@ export function createTaskRegistry(): TaskRegistry {
   const registry = new TaskRegistry()
   registry.register(generateCellTask)
   registry.register(surveyRegionTask)
+  registry.register(surveySkyTask)
   registry.register(generateHeightfieldTask)
   registry.register(surveySystemTask)
   registry.register(surfaceDetailFloorTask)

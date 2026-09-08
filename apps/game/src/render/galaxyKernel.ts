@@ -1,4 +1,6 @@
-import type { Node } from 'three/webgpu'
+import { Vector3, type Node } from 'three/webgpu'
+import { PARSEC } from '@inertialref/shared'
+import { UV } from '@inertialref/spatial'
 import {
   array,
   atan,
@@ -20,6 +22,10 @@ import { deriveSeed } from '@inertialref/procedural'
 import {
   blackbodyColour,
   GALAXY_ARMS,
+  LUMINOSITY_BANDS,
+  POPULATION_LUMINOSITY_WEIGHTS,
+  populationLimitingLuminosity,
+  type ResolvedPopulationSelection,
   GALAXY_DUST,
   LOCAL_BUBBLE,
   LOCAL_CLOUDS,
@@ -29,6 +35,7 @@ import {
   galaxyDustOctaveMean,
   GALAXY_HEIGHT_PARSECS,
   GALAXY_POPULATIONS,
+  GALAXY_YOUNG_HEIGHT,
   GALAXY_RADIUS_PARSECS,
   GALAXY_RADIANCE_FACTOR,
   GALAXY_OBSERVER_MIN_STEP_PARSECS,
@@ -39,10 +46,12 @@ import {
   type GalaxyField,
 } from '@inertialref/universe'
 
+import { coveredLuminosityCeiling } from './galaxyPopulationPartition.ts'
+
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@5'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@8'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
@@ -270,7 +279,7 @@ function armKernel(arm: GalaxyArm, index: number) {
   })
 }
 const arms = GALAXY_ARMS.map((arm, index) => armKernel(arm, index))
-const structureAt = Fn(([p]: [Node<'vec3'>]) => {
+export const galaxyStructureAt = Fn(([p]: [Node<'vec3'>]) => {
   const radius = p.xz.length().toVar(),
     beta = betaAt(p).toVar()
   const strength = vec2(0).toVar()
@@ -290,11 +299,14 @@ const emissionColors = POPULATION_NAMES.map((name) => {
 
 /** Galactic-center offsets in parsecs, packed from UniverseVector only at the host boundary. */
 const sample = Fn(
-  ([p, seed, normalization, structure]: [
+  ([p, seed, normalization, structure, threshold, levelMask, coveredCeiling]: [
     Node<'vec3'>,
     Node<'uint'>,
     Node<'float'>,
     Node<'vec3'>,
+    Node<'float'>,
+    Node<'uint'>,
+    Node<'float'>,
   ]) => {
     const radius = p.xz.length().toVar()
     const height = structure.z,
@@ -303,6 +315,20 @@ const sample = Fn(
       float(GALAXY_RADIUS_PARSECS).sub(radius).div(4000),
     ).toVar()
     const radial = float(8178).sub(radius).div(2600).exp().mul(edge).toVar()
+    const youngHeight = radius
+      .div(GALAXY_YOUNG_HEIGHT.innerRadiusParsecs)
+      .pow(GALAXY_YOUNG_HEIGHT.power)
+      .mul(
+        GALAXY_YOUNG_HEIGHT.innerParsecs - GALAXY_YOUNG_HEIGHT.centralParsecs,
+      )
+      .add(GALAXY_YOUNG_HEIGHT.centralParsecs)
+      .toVar()
+    // sech²(h/H), expressed with a nonpositive exponent to avoid overflow.
+    const youngTail = height.div(youngHeight).mul(-2).exp().toVar()
+    const youngVertical = youngTail
+      .mul(4)
+      .div(youngTail.add(1).pow(2))
+      .mul(float(GALAXY_YOUNG_HEIGHT.centralParsecs).div(youngHeight))
     const c = Math.cos(27 * DEG),
       s = Math.sin(27 * DEG)
     const along = p.x.mul(-c).sub(p.z.mul(s))
@@ -318,7 +344,7 @@ const sample = Fn(
         .mul(edge)
         .mul(0.04),
       radial
-        .mul(height.div(-19).exp())
+        .mul(youngVertical)
         .mul(strength)
         .mul(noise(seed, p.div(350)).mul(0.2).add(1))
         .mul(0.003),
@@ -338,9 +364,50 @@ const sample = Fn(
         .mul(0.001),
     ]
     const result = vec4(0).toVar()
-    populations.forEach((density, i) =>
-      result.addAssign(vec4(vec3(...emissionColors[i]!).mul(density), density)),
+    const fractions = populations.map(() => float(1).toVar())
+    // Finite luminosity bands cannot contribute resolved light beyond their
+    // brightest covered source. Exterior rays skip the entire partition;
+    // the near field retains the exact same first-moment arithmetic.
+    If(
+      levelMask.notEqual(uint(0)).and(threshold.lessThan(coveredCeiling)),
+      () => {
+        const light = LUMINOSITY_BANDS.map((band) =>
+          levelMask
+            .bitAnd(uint(1 << band.level))
+            .equal(uint(0))
+            .select(
+              float(1),
+              threshold
+                .sub(band.minSolarV)
+                .div(band.maxSolarV - band.minSolarV)
+                .clamp(),
+            )
+            .toVar(),
+        )
+        fractions.forEach((fraction, i) => {
+          const name = POPULATION_NAMES[i]!
+          fraction.assign(0)
+          LUMINOSITY_BANDS.forEach((band, j) =>
+            fraction.addAssign(
+              light[j]!.mul(
+                (POPULATION_LUMINOSITY_WEIGHTS[name][j]! * band.meanSolarV) /
+                  GALAXY_POPULATIONS[name].meanSolarLuminosities,
+              ),
+            ),
+          )
+        })
+      },
     )
+    populations.forEach((density, i) => {
+      result.addAssign(
+        vec4(
+          vec3(...emissionColors[i]!)
+            .mul(density)
+            .mul(fractions[i]!.clamp()),
+          density,
+        ),
+      )
+    })
     return result.mul(normalization)
   },
 ).setLayout({
@@ -351,6 +418,9 @@ const sample = Fn(
     { name: 'seed', type: 'uint' },
     { name: 'normalization', type: 'float' },
     { name: 'structure', type: 'vec3' },
+    { name: 'threshold', type: 'float' },
+    { name: 'levelMask', type: 'uint' },
+    { name: 'coveredCeiling', type: 'float' },
   ],
 })
 
@@ -484,156 +554,197 @@ const segmentTransmission = Fn(([q]: [Node<'vec3'>]) =>
 })
 
 /** Midpoint coefficients and front-to-back transport match integrateGalaxyRay. */
-const integrate = Fn(
-  ([
-    origin,
-    direction,
-    distance,
-    maxStep,
-    sampling,
-    seed,
-    normalization,
-    dustSeed,
-    dustNormalization,
-    dustScale,
-    transmissionOnly,
-    pixelAngle,
-  ]: [
-    Node<'vec3'>,
-    Node<'vec3'>,
-    Node<'float'>,
-    Node<'float'>,
-    Node<'uint'>,
-    Node<'uint'>,
-    Node<'float'>,
-    Node<'uint'>,
-    Node<'float'>,
-    Node<'float'>,
-    Node<'bool'>,
-    Node<'float'>,
-  ]) => {
-    const d = direction.normalize().toVar()
-    const near = float(0).toVar(),
-      far = distance.toVar()
-    const limits = [
-      GALAXY_RADIUS_PARSECS,
-      GALAXY_HEIGHT_PARSECS,
-      GALAXY_RADIUS_PARSECS,
-    ]
-    for (const [index, axis] of (['x', 'y', 'z'] as const).entries()) {
-      const o = origin[axis],
-        v = d[axis],
-        limit = limits[index]!
-      If(v.abs().lessThan(1e-15), () => {
-        If(o.abs().greaterThan(limit), () => {
-          far.assign(-1)
+function createIntegral(
+  structureAt: (p: Node<'vec3'>) => Node<'vec3'>,
+  radianceDepth: boolean,
+  resolvedOrigin: Node<'vec3'>,
+  resolvedLimit: Node<'float'>,
+  resolvedMask: Node<'uint'>,
+  resolvedCeiling: Node<'float'>,
+) {
+  return Fn(
+    ([
+      origin,
+      direction,
+      distance,
+      maxStep,
+      sampling,
+      seed,
+      normalization,
+      dustSeed,
+      dustNormalization,
+      dustScale,
+      transmissionOnly,
+      pixelAngle,
+    ]: [
+      Node<'vec3'>,
+      Node<'vec3'>,
+      Node<'float'>,
+      Node<'float'>,
+      Node<'uint'>,
+      Node<'uint'>,
+      Node<'float'>,
+      Node<'uint'>,
+      Node<'float'>,
+      Node<'float'>,
+      Node<'bool'>,
+      Node<'float'>,
+    ]) => {
+      const d = direction.normalize().toVar()
+      const near = float(0).toVar(),
+        far = distance.toVar()
+      const limits = [
+        GALAXY_RADIUS_PARSECS,
+        GALAXY_HEIGHT_PARSECS,
+        GALAXY_RADIUS_PARSECS,
+      ]
+      for (const [index, axis] of (['x', 'y', 'z'] as const).entries()) {
+        const o = origin[axis],
+          v = d[axis],
+          limit = limits[index]!
+        If(v.abs().lessThan(1e-15), () => {
+          If(o.abs().greaterThan(limit), () => {
+            far.assign(-1)
+          })
+        }).Else(() => {
+          const a = float(-limit).sub(o).div(v),
+            b = float(limit).sub(o).div(v)
+          near.assign(near.max(a.min(b)))
+          far.assign(far.min(a.max(b)))
         })
-      }).Else(() => {
-        const a = float(-limit).sub(o).div(v),
-          b = float(limit).sub(o).div(v)
-        near.assign(near.max(a.min(b)))
-        far.assign(far.min(a.max(b)))
-      })
-    }
-    const result = vec4(0).toVar()
-    const transmission = vec3(1).toVar()
-    const t = near.toVar()
-    Loop(GALAXY_MAX_STEPS, () => {
-      If(t.greaterThanEqual(far), () => {
-        Break()
-      })
-      const p = origin.add(d.mul(t)).toVar()
-      const height = p.y.sub(warp(p.xz.length(), betaAt(p))).abs()
-      const step = height
-        .mul(0.2)
-        .max(4)
-        .div(d.y.abs().add(0.1))
-        .min(maxStep)
-        .min(far.sub(t))
-        .toVar()
-      // The floor sits under the two live laws and never under the
-      // plane-crossing law above — `GALAXY_FOOTPRINT_STEP_FRACTION`.
-      const floor = pixelAngle.mul(t).mul(GALAXY_FOOTPRINT_STEP_FRACTION)
-      If(sampling.greaterThan(0), () => {
-        step.assign(
-          step.min(
-            t
-              .mul(GALAXY_OBSERVER_STEP_GROWTH)
-              .add(GALAXY_OBSERVER_MIN_STEP_PARSECS)
-              .max(floor),
-          ),
-        )
-      })
-      If(sampling.equal(2), () => {
-        step.assign(
-          step.min(
-            height
-              .mul(GALAXY_DUST_SETTLED_HEIGHT_FACTOR)
-              .max(GALAXY_DUST_SETTLED_STEP_PARSECS)
-              .max(floor),
-          ),
-        )
-      })
-      const midpoint = origin.add(d.mul(t.add(step.mul(0.5)))).toVar()
-      const structure = structureAt(midpoint).toVar()
-      const emitted = sample(midpoint, seed, normalization, structure).toVar()
-      const q = vec3(0).toVar()
-      const illuminated = transmission.r
-        .max(transmission.g)
-        .max(transmission.b)
-        .greaterThan(GALAXY_TRANSMITTANCE_FLOOR)
-      If(
-        dustNormalization.greaterThan(0).and(transmissionOnly.or(illuminated)),
-        () => {
-          q.assign(
-            extinction(
-              midpoint,
-              dustSeed,
-              dustNormalization,
-              structure,
-              pixelAngle.mul(t.add(step.mul(0.5))),
-              dustScale,
-            ).mul(step),
+      }
+      const result = vec4(0).toVar()
+      const moment = float(0).toVar()
+      const transmission = vec3(1).toVar()
+      const t = near.toVar()
+      Loop(GALAXY_MAX_STEPS, () => {
+        If(t.greaterThanEqual(far), () => {
+          Break()
+        })
+        const p = origin.add(d.mul(t)).toVar()
+        const height = p.y.sub(warp(p.xz.length(), betaAt(p))).abs()
+        const step = height
+          .mul(0.2)
+          .max(4)
+          .div(d.y.abs().add(0.1))
+          .min(maxStep)
+          .min(far.sub(t))
+          .toVar()
+        // The floor sits under the two live laws and never under the
+        // plane-crossing law above — `GALAXY_FOOTPRINT_STEP_FRACTION`.
+        const floor = pixelAngle.mul(t).mul(GALAXY_FOOTPRINT_STEP_FRACTION)
+        If(sampling.greaterThan(0), () => {
+          step.assign(
+            step.min(
+              t
+                .mul(GALAXY_OBSERVER_STEP_GROWTH)
+                .add(GALAXY_OBSERVER_MIN_STEP_PARSECS)
+                .max(floor),
+            ),
           )
-        },
-      )
-      If(transmissionOnly.not().and(illuminated.not()), () => {
-        transmission.assign(0)
+        })
+        If(sampling.equal(2), () => {
+          step.assign(
+            step.min(
+              height
+                .mul(GALAXY_DUST_SETTLED_HEIGHT_FACTOR)
+                .max(GALAXY_DUST_SETTLED_STEP_PARSECS)
+                .max(floor),
+            ),
+          )
+        })
+        const midpoint = origin.add(d.mul(t.add(step.mul(0.5)))).toVar()
+        const structure = structureAt(midpoint).toVar()
+        const emitted = sample(
+          midpoint,
+          seed,
+          normalization,
+          structure,
+          midpoint.sub(resolvedOrigin).lengthSq().mul(resolvedLimit),
+          resolvedMask,
+          resolvedCeiling,
+        ).toVar()
+        const q = vec3(0).toVar()
+        const illuminated = transmission.r
+          .max(transmission.g)
+          .max(transmission.b)
+          .greaterThan(GALAXY_TRANSMITTANCE_FLOOR)
+        If(
+          dustNormalization
+            .greaterThan(0)
+            .and(transmissionOnly.or(illuminated)),
+          () => {
+            q.assign(
+              extinction(
+                midpoint,
+                dustSeed,
+                dustNormalization,
+                structure,
+                pixelAngle.mul(t.add(step.mul(0.5))),
+                dustScale,
+              ).mul(step),
+            )
+          },
+        )
+        If(transmissionOnly.not().and(illuminated.not()), () => {
+          transmission.assign(0)
+        })
+        if (radianceDepth)
+          moment.addAssign(
+            emitted.g
+              .mul(transmission.g)
+              .mul(segmentTransmission(q).g)
+              .mul(step)
+              .mul(t.add(step.mul(0.5))),
+          )
+        result.addAssign(
+          vec4(
+            emitted.rgb.mul(transmission).mul(segmentTransmission(q)),
+            emitted.a,
+          ).mul(step),
+        )
+        transmission.mulAssign(q.negate().exp())
+        t.addAssign(step)
       })
-      result.addAssign(
+      return transmissionOnly.select(
+        vec4(transmission, 1),
         vec4(
-          emitted.rgb.mul(transmission).mul(segmentTransmission(q)),
-          emitted.a,
-        ).mul(step),
+          result.rgb.mul(GALAXY_RADIANCE_FACTOR),
+          radianceDepth ? moment.div(result.g.max(1e-30)).min(65000) : result.a,
+        ),
       )
-      transmission.mulAssign(q.negate().exp())
-      t.addAssign(step)
-    })
-    return transmissionOnly.select(
-      vec4(transmission, 1),
-      vec4(result.rgb.mul(GALAXY_RADIANCE_FACTOR), result.a),
-    )
-  },
-).setLayout({
-  name: 'galaxyIntegral',
-  type: 'vec4',
-  inputs: [
-    { name: 'origin', type: 'vec3' },
-    { name: 'direction', type: 'vec3' },
-    { name: 'distance', type: 'float' },
-    { name: 'maxStep', type: 'float' },
-    { name: 'sampling', type: 'uint' },
-    { name: 'seed', type: 'uint' },
-    { name: 'normalization', type: 'float' },
-    { name: 'dustSeed', type: 'uint' },
-    { name: 'dustNormalization', type: 'float' },
-    { name: 'dustScale', type: 'float' },
-    { name: 'transmissionOnly', type: 'bool' },
-    { name: 'pixelAngle', type: 'float' },
-  ],
-})
+    },
+  )
+}
 
-export function createGalaxyKernel(field: GalaxyField) {
+export interface GalaxyKernelOptions {
+  readonly structure?: (p: Node<'vec3'>) => Node<'vec3'>
+  /** Physical emission-weighted distance in alpha, for diffuse history only. */
+  readonly radianceDepth?: boolean
+}
+
+/** Height stays analytic so interpolating the arms cannot move the thin plane. */
+export const galaxyWarpHeight = (p: Node<'vec3'>): Node<'float'> =>
+  p.y.sub(warp(p.xz.length(), betaAt(p))).abs()
+
+export function createGalaxyKernel(
+  field: GalaxyField,
+  options: GalaxyKernelOptions = {},
+) {
+  const structureAt =
+    options.structure ?? ((p: Node<'vec3'>) => galaxyStructureAt(p))
+  const resolvedOrigin = uniform(new Vector3())
+  const resolvedLimit = uniform(0)
+  const resolvedMask = uniform(0, 'uint')
+  const resolvedCeiling = uniform(0)
+  const integrate = createIntegral(
+    structureAt,
+    options.radianceDepth ?? false,
+    resolvedOrigin,
+    resolvedLimit,
+    resolvedMask,
+    resolvedCeiling,
+  )
   const seed = uniform(
     deriveSeed(field.seed, 'galaxy-field:young-arms').a,
     'uint',
@@ -671,6 +782,18 @@ export function createGalaxyKernel(field: GalaxyField) {
       typeof pixelAngle === 'number' ? float(pixelAngle) : pixelAngle,
     )
   return {
+    setResolved(selection: ResolvedPopulationSelection | undefined) {
+      resolvedMask.value = selection?.levelMask ?? 0
+      resolvedCeiling.value = coveredLuminosityCeiling(resolvedMask.value)
+      resolvedLimit.value =
+        selection === undefined
+          ? 0
+          : populationLimitingLuminosity(1, selection.apparentMagnitudeLimit)
+      if (selection !== undefined) {
+        const p = UV.approxMeters(selection.origin)
+        resolvedOrigin.value.set(p.x / PARSEC, p.y / PARSEC, p.z / PARSEC)
+      }
+    },
     setField(next: GalaxyField) {
       seed.value = deriveSeed(next.seed, 'galaxy-field:young-arms').a
       normalization.value = next.normalization
@@ -687,7 +810,15 @@ export function createGalaxyKernel(field: GalaxyField) {
         return vec4(total, warp(radius, beta), 0, 1)
       })(),
     sample: (position: Node<'vec3'>): Node<'vec4'> =>
-      sample(position, seed, normalization, structureAt(position)),
+      sample(
+        position,
+        seed,
+        normalization,
+        structureAt(position),
+        position.sub(resolvedOrigin).lengthSq().mul(resolvedLimit),
+        resolvedMask,
+        resolvedCeiling,
+      ),
     extinction: (position: Node<'vec3'>): Node<'vec3'> =>
       extinction(
         position,

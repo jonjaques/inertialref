@@ -25,3 +25,5 @@ export * from './shape.ts'
 
 export * from './galaxyView.ts'
 export * from './galaxyJourney.ts'
+export * from './starCoordinates.ts'
+export * from './starVisibility.ts'

@@ -215,6 +215,69 @@ it('owns the same target for warming, quarter-size updates, resize, and retireme
   initial.dispose()
 })
 
+it('caps the physical history while preserving native scene size through Retina and portrait resizes', async () => {
+  const volume = new GalaxyVolumeNode(field, {
+    resolutionDivisor: 2,
+    maxLongEdge: 960,
+    temporal: { stride: 8 },
+  })
+  const { renderer, initial, size, compiled } = recorder()
+  const frame = { renderer } as unknown as NodeFrame
+  size.set(2880, 1800)
+  try {
+    await volume.warm(renderer as unknown as WebGPURenderer)
+    // Warming and drawing must agree before the first frame allocates history.
+    expect(compiled[0]!.target).toMatchObject({ width: 960, height: 600 })
+    volume.configure(view.pose, view.lens)
+    for (const [
+      nativeWidth,
+      nativeHeight,
+      width,
+      height,
+      rayWidth,
+      rayHeight,
+    ] of [
+      [2880, 1800, 960, 600, 120, 75],
+      [1920, 1080, 960, 540, 120, 68],
+      [1800, 2880, 600, 960, 75, 120],
+      [640, 360, 320, 180, 40, 23],
+    ] as const) {
+      size.set(nativeWidth, nativeHeight)
+      volume.updateBefore(frame)
+      const historyBytes = 8 * (2 * width * height + rayWidth * rayHeight)
+      expect(volume.diagnostics).toMatchObject({
+        width,
+        height,
+        resolutionDivisor: 2,
+        targetBytes: 8 * width * height + historyBytes,
+        temporal: { width, height, rayWidth, rayHeight, bytes: historyBytes },
+      })
+      expect(width / height).toBeCloseTo(nativeWidth / nativeHeight, 12)
+      expect(Math.max(width, height)).toBeLessThanOrEqual(960)
+      expect(size.toArray()).toEqual([nativeWidth, nativeHeight])
+    }
+  } finally {
+    volume.dispose()
+    initial.dispose()
+  }
+})
+
+it('leaves reference instruments uncapped unless they request a pixel budget', async () => {
+  const volume = new GalaxyVolumeNode(field, { resolutionDivisor: 2 })
+  const { renderer, initial, size, compiled } = recorder()
+  size.set(2880, 1800)
+  try {
+    await volume.warm(renderer as unknown as WebGPURenderer)
+    expect(compiled[0]!.target).toMatchObject({ width: 1440, height: 900 })
+    volume.configure(view.pose, view.lens)
+    volume.updateBefore({ renderer } as unknown as NodeFrame)
+    expect(volume.diagnostics).toMatchObject({ width: 1440, height: 900 })
+  } finally {
+    volume.dispose()
+    initial.dispose()
+  }
+})
+
 it('a failed volume draw restores scene attachments and renderer state', async () => {
   const volume = new GalaxyVolumeNode(field)
   const { renderer, initial } = recorder()

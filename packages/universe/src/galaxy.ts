@@ -32,34 +32,28 @@ import type {
   CatalogStar,
   StarCatalog,
 } from './catalog/starCatalog.ts'
+import { LOCAL_DENSITY } from './galaxy/constants.ts'
+import { createGalaxyField } from './galaxy/field.ts'
+import {
+  createPopulationGenerator,
+  LUMINOSITY_BANDS,
+  parsePopulationSystemId,
+  populationCellsWithin,
+  populationCoverage,
+  type PopulationCoverage,
+} from './galaxy/population.ts'
 
 /*
- * The galaxy: a catalog near the player and procedure everywhere else.
- *
- * Procedural stars are generated per *cell* — a fixed cube of space — and a
- * cell's contents depend only on (galaxy seed, cell coordinate, how many
- * cataloged stars are already in it). Nothing consults neighboring cells, so
- * the streaming layer can generate cells in any order, in any number of workers,
- * and get the same galaxy. This is the order-independence requirement made
- * concrete.
- *
- * A procedural star's id encodes the cell it lives in and its index within that
- * cell, which means resolving an id back to a star is a single cell generation
- * rather than a search of a galaxy-wide index that would have to exist
- * somewhere.
- *
- * **The catalog is a generation input, not ambient state.** Every function
- * here that can produce a cataloged system takes the catalog as an argument.
- * A module-level singleton would be smaller and would quietly break the one
- * property the whole project rests on: `docs/design/galaxy.md` Rule 1 says the
- * catalog version is an explicit input to generation, because the catalog
- * changes and a universe that silently changes with it invalidates every save.
+ * Catalog identities and deterministic luminosity populations share one address
+ * resolver. Q addresses own a luminosity level and spatial cell; P addresses
+ * retain their historical generator so existing saves keep their destinations.
+ * The catalog and its coverage are explicit inputs to every canonical query.
  */
 
 export const MILKY_WAY: GalaxyId = galaxyId('milky-way')
 
 /** Stellar number density in the solar neighborhood, stars per cubic meter. */
-export const LOCAL_DENSITY = 0.1 / PARSEC ** 3
+export { LOCAL_DENSITY }
 /** Exponential disk scale length and height (kpc-scale structure). */
 const DISK_SCALE_LENGTH: Meters = 2_600 * PARSEC
 const DISK_SCALE_HEIGHT: Meters = 300 * PARSEC
@@ -73,6 +67,8 @@ export interface SystemStub {
   readonly solarRadii: number
   /** Bolometric, in solar units. */
   readonly solarLuminosities: number
+  /** Johnson V luminosity in solar V units; catalog records derive it from measured M_V. */
+  readonly visualLuminosities?: number
   readonly temperature: Kelvin
   /** Linear sRGB of a blackbody at `temperature`. */
   readonly colour: LinearRgb
@@ -127,15 +123,8 @@ export function parseProceduralSystemId(
   }
 }
 
-/**
- * Stellar density at a point, from a standard double-exponential disk.
- *
- * Coarse on purpose: it exists so that leaving the galactic plane visibly
- * empties the sky and heading inward crowds it, which is the structural property
- * the streaming and LOD systems need to cope with. Spiral arms, the bar and the
- * halo are all future work that changes this function and nothing else.
- */
-export function stellarDensity(position: UniverseVector): number {
+/** The galaxy@2 disk remains solely to regenerate saved P addresses. */
+function legacyStellarDensity(position: UniverseVector): number {
   const m = UV.approxMeters(position)
   // Simulation axes: +Y is galactic north, so the disk lies in XZ.
   const radius = Math.hypot(m.x, m.z)
@@ -144,6 +133,17 @@ export function stellarDensity(position: UniverseVector): number {
     LOCAL_DENSITY *
     Math.exp(-(radius - SUN_GALACTOCENTRIC_RADIUS) / DISK_SCALE_LENGTH) *
     Math.exp(-height / DISK_SCALE_HEIGHT)
+  )
+}
+
+/** The calibrated number field is a generation input, including its seed. */
+export function stellarDensity(
+  position: UniverseVector,
+  galaxySeed: Seed,
+): number {
+  return (
+    createGalaxyField(galaxySeed).sample(position).totalPerCubicParsec /
+    PARSEC ** 3
   )
 }
 
@@ -186,13 +186,11 @@ export function mainSequenceProperties(solarMasses: number): {
 /**
  * What the catalog contributes to generating one cell.
  *
- * Two scalars rather than the catalog itself, because this crosses into a
- * worker that does not have one. Both are pure functions of the catalog
- * version, so a caller that passes the wrong values gets a visibly different
- * galaxy rather than a subtly wrong one.
+ * The magnitude envelope and sparse counts are derived from the catalog before
+ * crossing into a worker. Legacy addresses also retain their original cell count.
  */
 export interface CellContext {
-  /** Cataloged stars already in this cell. */
+  /** Cataloged stars already in this cell, for legacy P-address generation. */
   readonly catalogued: number
   /**
    * Distance from the Sun inside which the catalog is complete for the kind of
@@ -212,6 +210,8 @@ export interface CellContext {
    * that would be front-page news.
    */
   readonly completeRadius: Meters
+  /** The catalog's magnitude coverage, carried explicitly across a worker boundary. */
+  readonly magnitudeCoverage?: PopulationCoverage
 }
 
 /** No catalog at all: fill everything, suppress nothing. */
@@ -220,55 +220,39 @@ export const NO_CATALOGUE: CellContext = Object.freeze({
   completeRadius: 0,
 })
 
-/**
- * How many procedural stars belong in a cell, given what the catalog already
- * knows about it.
- *
- * The density model says how many stars are really there; the catalog says how
- * many of them somebody has already written down. Generating the full expected
- * count *on top of* the catalog would double the solar neighborhood — 7,529
- * real stars within 150 ly plus the ~40,000 the density model expects in the
- * same volume — and would scatter invented stars through a region the player can
- * check against Wikipedia.
- *
- * Subtracting instead is the honest reading of `docs/design/galaxy.md`: within
- * the catalog's reach the sky is a record where it is known and a projection
- * where it is not, and HYG is only about half complete at 25 pc. The gap between
- * the two numbers *is* the horizon of knowledge, and this is where it is drawn.
- */
+/** Expected count from the active field, after an explicit catalog contribution. */
 export function proceduralCount(
   rng: Rng,
   cell: GalacticCell,
   cataloguedCount: number,
+  galaxySeed: Seed,
 ): number {
-  const expected =
-    stellarDensity(cellCentre(cell)) * CELL_SIZE ** 3 - cataloguedCount
+  return roundedPopulationCount(
+    rng,
+    stellarDensity(cellCentre(cell), galaxySeed) * CELL_SIZE ** 3 -
+      cataloguedCount,
+  )
+}
+
+function roundedPopulationCount(rng: Rng, expected: number): number {
   if (expected <= 0) return 0
   const whole = Math.floor(expected)
-  // The fractional part is resolved by a draw rather than rounded, so a cell
-  // with an expectation of 0.3 stars contains one about 30% of the time instead
-  // of never.
   return whole + (rng.next() < expected - whole ? 1 : 0)
 }
 
-/**
- * Generate every procedural star in one cell.
- *
- * Pure in (seed, cell, cataloguedCount). The count is passed rather than looked
- * up because this runs in a worker that has no catalog: shipping a 200 KB
- * table to every worker so it can compute one integer would be the wrong trade,
- * and the integer is a pure function of the catalog version, so a caller that
- * passes the wrong one gets a different galaxy loudly rather than a subtly wrong
- * one.
- */
-export function generateCell(
+/** The galaxy@2 stream is an address compatibility path, never a source for new surveys. */
+function generateLegacyCell(
   galaxySeed: Seed,
   cell: GalacticCell,
   context: CellContext = NO_CATALOGUE,
 ): readonly SystemStub[] {
   const seed = derivePath(galaxySeed, ['cell', cellKey(cell)])
   const rng = new Rng(seed)
-  const count = proceduralCount(rng, cell, context.catalogued)
+  const count = roundedPopulationCount(
+    rng,
+    legacyStellarDensity(cellCentre(cell)) * CELL_SIZE ** 3 -
+      context.catalogued,
+  )
 
   const stars: SystemStub[] = []
   for (let index = 0; index < count; index += 1) {
@@ -312,6 +296,42 @@ export function generateCell(
   return stars
 }
 
+/** All luminosity levels contributing sources inside one ordinary travel cell. */
+export function generateCell(
+  galaxySeed: Seed,
+  cell: GalacticCell,
+  context: CellContext = NO_CATALOGUE,
+): readonly SystemStub[] {
+  const generator = createPopulationGenerator(createGalaxyField(galaxySeed))
+  const centre = cellCentre(cell)
+  const coverage = context.magnitudeCoverage ?? {
+    radiusParsecs: 0,
+    innerMagnitude: -Infinity,
+    outerMagnitude: -Infinity,
+    completeRadiusParsecs: context.completeRadius / PARSEC,
+  }
+  const result: SystemStub[] = []
+  const min = cellOrigin(cell),
+    max = UV.translate(min, vec3(CELL_SIZE, CELL_SIZE, CELL_SIZE))
+  for (const band of LUMINOSITY_BANDS) {
+    for (const coarse of populationCellsWithin(
+      centre,
+      CELL_SIZE / 2,
+      band.level,
+    )) {
+      for (const star of generator.cell(band.level, coarse, coverage, {
+        min,
+        max,
+      })) {
+        const owner = cellOf(star.position)
+        if (owner.x === cell.x && owner.y === cell.y && owner.z === cell.z)
+          result.push(star)
+      }
+    }
+  }
+  return result.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
 /** A cataloged star as the generator sees it. */
 export const catalogStub = (star: CatalogStar): SystemStub => ({
   id: star.id,
@@ -322,6 +342,10 @@ export const catalogStub = (star: CatalogStar): SystemStub => ({
   solarMasses: star.physical.solarMasses,
   solarRadii: star.physical.solarRadii,
   solarLuminosities: star.physical.solarLuminosities,
+  visualLuminosities:
+    star.physical.absoluteMagnitude === null
+      ? undefined
+      : 10 ** ((4.81 - star.physical.absoluteMagnitude) / 2.5),
   temperature: star.physical.temperature,
   colour: star.physical.colour,
   components: star.components,
@@ -343,12 +367,18 @@ export function resolveSystem(
 ): SystemStub | undefined {
   const catalogued = catalog.get(id)
   if (catalogued !== undefined) return catalogStub(catalogued)
+  const population = parsePopulationSystemId(id)
+  if (population !== null)
+    return createPopulationGenerator(createGalaxyField(galaxySeed)).star(
+      population,
+      populationCoverage(catalog),
+    )
   const ref = parseProceduralSystemId(id)
   if (ref === null) return undefined
   // By id, not by index. A star suppressed inside the catalog's complete
   // radius leaves a gap in the generation indices, and `[ref.index]` would
   // silently return the wrong star rather than none.
-  return generateCell(
+  return generateLegacyCell(
     galaxySeed,
     ref.cell,
     cellContext(catalog, ref.cell),
@@ -362,6 +392,7 @@ export const cellContext = (
 ): CellContext => ({
   catalogued: catalog.inCell(cell).length,
   completeRadius: catalog.completeRadius,
+  magnitudeCoverage: populationCoverage(catalog),
 })
 
 /**
@@ -383,13 +414,28 @@ export function systemsWithin(
     for (const star of catalog.inCell(cell))
       if (UV.distance(star.position, centre) <= radius)
         found.push(catalogStub(star))
-    for (const stub of generateCell(
-      galaxySeed,
-      cell,
-      cellContext(catalog, cell),
-    ))
-      if (UV.distance(stub.position, centre) <= radius) found.push(stub)
   }
+  const generator = createPopulationGenerator(createGalaxyField(galaxySeed))
+  const coverage = populationCoverage(catalog)
+  const box = {
+    min: UV.translate(centre, vec3(-radius, -radius, -radius)),
+    max: UV.translate(centre, vec3(radius, radius, radius)),
+  }
+  for (const band of LUMINOSITY_BANDS) {
+    const cells = populationCellsWithin(centre, radius, band.level)
+    invariant(
+      cells.length > 0,
+      'Travel query exceeds the population cell budget',
+    )
+    for (const cell of cells)
+      for (const stub of generator.cell(band.level, cell, coverage, box))
+        if (UV.distance(stub.position, centre) <= radius) found.push(stub)
+  }
+  // The bright catalog is deliberately outside the travel cell index. It still
+  // names real destinations when a local query reaches their actual positions.
+  for (const star of catalog.sky)
+    if (UV.distance(star.position, centre) <= radius)
+      found.push(catalogStub(star))
   // Sorted by id so the result is a pure function of the query, not of iteration
   // order — two clients asking the same question get the same list.
   return found.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))

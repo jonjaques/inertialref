@@ -49,16 +49,18 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
 
 The default Enhanced camera composes detailed worlds and faint sky; Automatic
-and Manual share photographic light and response. Ordinary views consume a
-physical sky cache, initially six 32² faces and then 128² refinement. Fixed
-face-on and edge-on galaxy instruments own scoped lenses and photographic
-exposure; the reversible Earth-to-disk journey keeps the player's mode and
-lens. Shared seeded dust dims and reddens the diffuse light. The field stays
-separate from active generation, with nine local clouds, a Local Bubble
-approximation and linear V-band photometric checks. Resolved-star extinction,
-the later galaxy milestones and manual appearance/performance acceptance remain
-open ([ADR-0032](docs/adr/0032-the-stellar-field.md),
-[ADR-0037](docs/adr/0037-the-enhanced-camera.md)).
+and Manual share photographic light and response. The active galaxy population
+and diffuse field share luminosity bands and dust transport. GPU star projection
+keeps ordinary camera motion to observer uniforms; a bounded V8 sky query is
+independent of travel selection. Physical sky cubes refine through 32², 128²
+and 512², with a separate regenerable disk cache and 0.15 pc shared reuse
+allowance. Live temporal history retains angular detail and caps its longest
+edge at 960 pixels. The reversible Earth-to-disk journey keeps the player's
+mode and lens. Field@5 replaces the maser-tracer height previously used for
+all young stellar light; its V-band calibration and local density remain
+within their original tests. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
+records the population, transport, versions and approximation limits;
+[ADR-0037](docs/adr/0037-the-enhanced-camera.md) owns camera processing.
 
 ## Decisions that are expensive to reverse
 
@@ -8449,6 +8451,143 @@ the camera motion before the gesture preserves the strict assertion. The
 fixture then passed in Enhanced, Automatic and Manual, with a projected
 pointer error of 5.31e-11 pixels and a landing-coordinate error of 6.94e-18
 radians. Product input handling did not change.
+
+## The sky keeps its detail, and the dust finishes its queue (07 Sep 2026)
+
+The M7–M11 completion branch is stacked on PR #72 at `2847688`, by Jon's
+explicit choice. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
+records the architecture; [the galaxy plan](design/plans/the-galaxy.md) carries
+the final evidence and quality budgets. The source model is now active
+`galaxy@5` / `galaxy-field@5`, with GPU port `galaxy-tsl@8`. Old `P` addresses
+still use the exact legacy generator. New `Q` addresses carry level, cell and
+ordinal; the saved manifest identifies generation drift rather than promising
+an ordinal survives a changed algorithm.
+
+The 19 pc young-star height was a maser-tracer measurement, not the optical
+population's geometry. The shared flaring sech² height now reaches 50 pc at
+the center, 67 pc at 4.5 kpc and 90 pc at the Sun, with conserved column
+normalization. Recalibration keeps the original 0.3 mag tolerances: Solar
+midlatitude, polar, Aquila and exterior V residuals are +0.0765, +0.1785,
+−0.2800 and +0.0325 mag. The reference cylinder holds 116.064 billion stars;
+local number density remains 0.1 star/pc³. Emergent young-cohort V at the
+Solar arm ridge rises from 0.66% to 15.31%. This improves the external arms,
+but does not turn the model's central V-light fraction or illustrative RGB
+colors into measured morphology. Bounded inner-disk and response-gain trials
+were rejected: the former missed the fixed sky constraints or softened the
+arms; the latter merely brightened the central lens. A published mass bulge
+fraction cannot substitute for a V-light constraint.
+
+At the production V8/100k-source/1m-candidate/2000-cell budgets, three repeated
+Node 26 queries return identical selections: Sol 29,257 sources, 1 kpc region
+37,423, and the dense center 16,004. Sol and the region retain all nine
+luminosity levels; the center keeps levels 0–1 and leaves the rest diffuse.
+Worker medians are 119.7/172.4/132.0 ms, with host application
+10.4/17.4/7.9 ms. A separate cell-boundary probe observes combined inline
+worker/host heaps of 139.7/180.9/158.6 MiB; these are sampled peaks, not an
+exact V8 maximum or browser IPC measurement. Solar counts inside 10/25/50 pc
+differ from integrated expectations by −7.14%/+3.64%/+2.73%. The split
+conserves expected luminosity; a finite stochastic sky still has sampling noise.
+
+Ordinary observer motion no longer rewrites source positions. At equal 20k
+load, measured CPU projection preparation falls from 0.8003 ms to 0.000656 ms
+and 640 kB per frame becomes observer uniforms. A controlled MSAA4 star draw
+at 1080p adds median 0.343/0.687/1.254 ms for 20k/100k/200k sources on Apple
+M5. The 100k ceiling is chosen for worker memory and cold preparation, rather
+than a supposed draw limit. A 90%-retained 28,942-source fixture improves
+combined projection, dust and appearance preparation from 9.80 to 3.00 ms;
+broad reorders take 4.88 ms median and cold all-new populations still exceed
+5 ms. Partial uploads and compact name rebuilding matter as much as the vertex
+math. These figures exclude driver work and use the preceding field@4 fixture.
+
+Sixteen dust samples missed nearby thin columns by as much as 0.82 in
+transmission. Distance-aware quadrature uses 32/64/512 samples and the shared
+16 MiB arm table. A frozen observer owns each finite queue: restarting on
+motion starves it forever. GPU batches of 1024 sources cost about 1.5–1.7 ms
+steady or 3.1 ms for cold catalogue reference plus current columns. Unchanged
+sources retain their last column through six-submission optical-depth blending;
+new sources begin hidden. The WebGL fallback computes one source per
+submission and exposes its slower convergence. Catalogue magnitudes receive
+an observer/Solar transmission ratio, so Sol does not count extinction twice.
+
+A 512² physical cube is 12 MiB. Its final 72-direction GPU comparison has
+median 0.0624%, p95 0.5115% and maximum 0.6292% error against live rays. The
+cube footprint must be `2/N`, the widest angular texel, rather than π/(2N):
+the smaller footprint admitted unresolved dust bands at face centers. Raising
+the cube to 1024² quadrupled memory and took 18.3 seconds in the earlier
+isolated bake trial without fixing that filtering error. The final 512² bake
+takes 3.83 seconds across a drained GPU queue; two tiles per submitted frame
+spread its final tier over about 12.8 seconds at 60 fps. Earlier complete tiers
+remain visible. Sampling costs roughly 0.03–0.05 ms in the isolated rig.
+
+The 0.15 pc reuse radius is a tested local approximation. The final field's
+21-origin cloud/rim/bulge check reaches 0.7096% coarse relative error, with
+finer worst-ray checks reaching 0.6604%. Archive source-envelope displacement
+and later eye displacement spend one combined allowance. Checking those two
+radii separately let a restored sky travel twice as far; forgetting the reduced
+allowance after upload reintroduced the same bug on the next frame. Metadata,
+all six faces, field/filter versions, transaction completion and renderer epochs
+are validated before publication. Cache misses remain recoverable.
+
+Stationary history must retain the fine sample a previous phase measured;
+clamping it to the current coarse neighbors erased its detail. Moving history
+still clamps and rejects disocclusions. Production retains half-resolution
+history, stride eight, with a 960-pixel longest-edge cap. On Apple M5 Metal,
+40 queued moving-volume draws average 2.23/4.50/6.30 ms for face/edge/interior
+at 1920×1080 and 2.46/5.53/7.40 ms at a 2880×1800 drawing buffer. The latter
+interior was 12.69 ms without the cap. Retina volume plus shared-table
+allocation falls 48.04 to 30.67 MB; native foreground rendering is unaffected.
+The original universal 2 ms live target is revised explicitly in the plan.
+These are volume costs, not a whole-app moving-frame claim.
+
+Two integration regressions only appeared through their real consumers. The
+WebGL builder rejected temporal-history variables captured outside an active
+TSL stack; a real GLSL compilation test now catches that. A cold public picture
+requested 1/3200 s but drew at 1/60 s because the parent's passive preference
+binding ran after the route restored its photograph. The same binding now runs
+in the layout phase, before route restoration, keeping its existing owner and
+cleanup. Camera fixtures compare actual pose, time, lens and processing after
+settling, rather than trusting their encoded URL.
+
+The assembled production check at `ee0e9e1` passes 2,010 regular tests and eight
+slow tests, plus all build, type and documentation gates. Sixteen exact public
+pictures pass in native 1920×1080 sRGB; source pose, time, lens and processing
+are compared after settling. The complete held sensor costs 4.257 ms for
+Enhanced Earth-band, 4.562 ms for Automatic Earth and 5.043 ms for the long
+Manual photograph. Those are 60 queued frames, not moving-app costs.
+
+The outward and return casts each contain 2,400 compositor frames and preserve
+canonical hash `98b5b2be`, mode and lens. Outward averages 59.7 fps with a
+18.0 ms frame-interval p95; return averages 52.8 fps with 32.5 ms p95 and a
+150 ms maximum. Both complete the same 36-second presentation journey. The
+return has visible performance headroom to recover; the held 2.765 ms returned
+orbit does not cancel those spikes. [The evidence](design/plans/the-galaxy.md#assembled-image-and-motion-record)
+links the public images and both recordings.
+
+Two limits are source findings. At the reviewed Earth-band pose, unfiltered
+versus 512-filtered radiance differs by at most 0.38% across two 81-ray patches;
+1024 faces would not recover the missing broad dust structure. The smooth
+Gaussian clouds and population profiles dominate. The night Automatic image
+also exposes the blue background of the colorized Black Marble map being
+emitted together with city lights. Its 238.94 cd/m² meter result is inside the
+comfort bounds; forcing more gain would amplify the source error. Neither was
+hidden by adjusting exposure or relaxing calibration.
+
+The final output lifecycle run negotiates Extended display-P3 at 2× headroom,
+then returns to Standard sRGB with renderer replacement. Native Retina
+2880×1800 retains 960×600 galaxy history and costs 6.410 ms across 60 held
+complete-sensor frames. Both resized and Extended views restore an archive
+with one hit and no write or failure. Mode-switch and photographic pause/resume
+casts contain 360 and 240 frames respectively, with no isolated-frame flags or
+browser errors. All owned Chrome rigs and preview servers are closed.
+
+The final physical GPU suite passes 107 tests in 36 files on source identical
+to `ee0e9e1`. Its first run returned zero light in two dust tests; a focused
+run also reproduced one zero readback. The cause remains unproven. Six focused
+reruns, a cold-program probe of 72 distinct shaders and 864 rays, then two full
+suite reruns pass the original bounds. No production, test or tolerance change
+was made, and the diagnostic branch did not execute on the successful run.
+The verification record preserves the transient failure rather than inventing
+a shader or driver fix. All owned GPU processes have exited.
 
 ## Known gaps
 

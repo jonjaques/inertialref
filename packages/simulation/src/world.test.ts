@@ -26,6 +26,7 @@ import {
   systemFrameId,
   systemId,
   walkBodies,
+  TEST_CATALOG,
 } from '@inertialref/universe'
 import {
   MAX_WARP_FRAME,
@@ -756,12 +757,12 @@ describe('rails', () => {
 
 describe('streaming', () => {
   it('loads and unloads systems as ordinary control flow', () => {
-    const world = new World({ seed: 'inertialref' })
+    const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
     const sol = world.loadSystem(SOL)
     const ship = world.spawnShip('scout', systemFrameId(SOL), vec3(1e9, 0, 0))
 
     const near = world.updateInterest(sol.position, 5 * LIGHT_YEAR)
-    expect(near.loaded.length).toBeGreaterThan(0)
+    expect(near.loaded).toContain(TEST_CATALOG.find('Proxima Centauri')!.id)
     expect(world.loadedSystems().length).toBeGreaterThan(1)
 
     // Move the interest center far away: everything unloads except the system

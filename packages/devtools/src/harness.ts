@@ -1968,7 +1968,7 @@ export class GameHarness {
     return this.#observatory.travelGalaxy(progress, seconds)
   }
 
-  /** Preview field diagnostics read the current session without activating generation. */
+  /** Field diagnostics read the current session without mutating generation. */
   galaxy(): GalaxyInspector {
     return new GalaxyInspector(this.world, () =>
       this.#host.render.galaxyRender(),

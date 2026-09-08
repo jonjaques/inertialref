@@ -82,7 +82,7 @@ circle of confusion is a claim about a display, and there is no display.
 seed. `sample(position?)` accepts a `UniverseVector`, defaults to the Sun, and
 reports population densities, Johnson V emission, RGB extinction per parsec,
 dust modulation, normalization, and both
-preview and active generation versions. `count(options?)` integrates the
+field and active generation versions. `count(options?)` integrates the
 reference cylinder; `tangencies()` reports the arm curve's tangent longitudes.
 `ray(direction, options?, origin?)` returns emergent RGB radiance, optical depth,
 and transmittance. Direction is a displacement in simulation axes; origin
@@ -153,7 +153,7 @@ composition. Entering a journey does not select a long-exposure instrument.
 `ir.galaxy().render()` returns the projected target's dimensions and bytes,
 field and kernel versions, normalization, galactic-center origin in parsecs,
 step bounds, dust scale, sampling profile, settled state, readiness, observer
-frame, sensor exposure and bounded local survey. `submissions` counts scene
+frame, sensor exposure and bounded sky selection. `submissions` counts scene
 submissions requested from the volume; `draws` includes integral tiles and
 projection draws; `held` says whether the projected target was reused on the
 last submission. A held projection may coexist with an advancing cache bake.
@@ -163,10 +163,18 @@ When the ordinary physical cache is enabled, `cache` reports `initialFaceSize`,
 counts, retained entries, the 0.15 pc reuse radius, allocated bytes and physical
 units. `using` identifies the selected cache path; `liveDraws` and
 `samplingDraws` distinguish integration from cache sampling. The first complete
-cube has 32-pixel faces; the next has 128-pixel faces. Both retain physical
+cube has 32-pixel faces, followed by 128 and 512 pixels. All retain physical
 V-anchored RGB in units of 1,000 nW m⁻² sr⁻¹ per stored unit. The display
 response is applied afterward. A bounded live target serves a cold or
 translated view while a replacement bakes; only complete cubes publish.
+
+`temporal` reports the live history dimensions, interleave stride, ray target,
+phase count, resets and owned bytes. `stars` reports source count, source
+uploads, maximum reductions, projection bytes and the resolved-star extinction
+cache. Its queue, lag and completed-source counts distinguish delayed physical
+refresh from an idle selection. `cache.archive` reports successful disk restores,
+completed writes and storage failures. A failed disk cache does not prevent a
+new bake.
 
 `--sample 12 --sample-js "ir.galaxy().render()"` records that state one frame
 at a time. Read cache publication and draw counters beside frame timings;

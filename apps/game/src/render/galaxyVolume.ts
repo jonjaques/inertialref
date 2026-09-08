@@ -28,7 +28,7 @@ import {
   vec4,
   vec3,
 } from 'three/tsl'
-import { getTimer, PARSEC } from '@inertialref/shared'
+import { getTimer, invariant, PARSEC } from '@inertialref/shared'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
 import {
   GALAXY_LUMINOUS_EFFICACY,
@@ -40,6 +40,7 @@ import {
   GALAXY_FIELD_VERSIONS,
   GALAXY_DUST_SETTLED_STEP_PARSECS,
   type GalaxyField,
+  type ResolvedPopulationSelection,
 } from '@inertialref/universe'
 import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
 import { timingDetailed } from '../engine/browserTiming.ts'
@@ -54,7 +55,13 @@ import { sensorRadiance } from './radiance.ts'
 import { composeSky } from './enhancedSky.ts'
 import { warmSensorPass } from './warmup.ts'
 import { GalaxySkyCache, GALAXY_RADIANCE_UNIT } from './galaxySkyCache.ts'
+import type { GalaxySkyStore } from './galaxySkyArchive.ts'
 import type { GalaxyCacheOptions } from './galaxyCache.ts'
+import { GalaxyStructureTable } from './galaxyStructure.ts'
+import {
+  GalaxyTemporalVolume,
+  type GalaxyTemporalOptions,
+} from './galaxyTemporal.ts'
 
 export const GALAXY_RESOLUTION_DIVISOR = 4
 export const GALAXY_SETTLE_SUBMISSIONS = 8
@@ -69,6 +76,12 @@ const COLD_LONG_EDGE = 64
 export interface GalaxyVolumeOptions {
   /** Diagnostic plates may request the live volume by omitting this. */
   readonly cache?: GalaxyCacheOptions
+  readonly archive?: GalaxySkyStore
+  readonly temporal?: GalaxyTemporalOptions
+  readonly resolutionDivisor?: 2 | 4
+  /** Bound physical history and live rays without resizing the scene or stars. */
+  readonly maxLongEdge?: number
+  readonly structure?: boolean | GalaxyStructureTable
 }
 
 /** Each draw is an entry on the Render track, so a trace says when the volume drew and at what quality. */
@@ -93,6 +106,12 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   readonly #quad = new QuadMesh(this.#material)
   readonly #cachedMaterial = new NodeMaterial()
   readonly #cache: GalaxySkyCache | null
+  readonly #structure: GalaxyStructureTable | null
+  readonly #ownsStructure: boolean
+  readonly #temporal: GalaxyTemporalVolume | null
+  readonly #resolutionDivisor: number
+  readonly #maxLongEdge: number
+  readonly #temporalMaterial = new NodeMaterial()
   #samplingDraws = 0
   #liveDraws = 0
   #usedCache = false
@@ -114,6 +133,8 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
   #pose: ObserverPose | null = null
   #lens: Lens | null = null
   #field: GalaxyField
+  #resolved: ResolvedPopulationSelection | undefined
+  #physicalVersion = {}
   #disposed = false
   #active = false
   #fov = 1
@@ -132,12 +153,55 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
 
   constructor(field: GalaxyField, options: GalaxyVolumeOptions = {}) {
     super('vec4')
+    this.#resolutionDivisor =
+      options.resolutionDivisor ?? GALAXY_RESOLUTION_DIVISOR
+    invariant(
+      options.maxLongEdge === undefined ||
+        (Number.isSafeInteger(options.maxLongEdge) && options.maxLongEdge > 0),
+      'Galaxy target maximum edge must be a positive integer',
+    )
+    this.#maxLongEdge = options.maxLongEdge ?? Infinity
     this.#field = field
-    this.#kernel = createGalaxyKernel(field)
+    this.#ownsStructure = options.structure === true
+    this.#structure =
+      options.structure instanceof GalaxyStructureTable
+        ? options.structure
+        : options.structure
+          ? new GalaxyStructureTable()
+          : null
+    const kernelOptions =
+      this.#structure === null
+        ? {}
+        : { structure: (p: Node<'vec3'>) => this.#structure!.sample(p) }
+    this.#kernel = createGalaxyKernel(field, {
+      ...kernelOptions,
+      radianceDepth: options.temporal !== undefined,
+    })
+    this.#temporal =
+      options.temporal === undefined
+        ? null
+        : new GalaxyTemporalVolume((origin, direction, angle) => {
+            const value = this.#kernel.integrate(
+              origin,
+              direction,
+              100000,
+              this.#sampling,
+              GALAXY_MAX_STEP_PARSECS,
+              angle,
+            )
+            return vec4(value.rgb.div(RADIANCE_UNIT), value.a)
+          }, options.temporal)
+    this.#temporalMaterial.fragmentNode = this.#temporal?.sample() ?? vec4(0)
+    this.#temporalMaterial.name = 'Galaxy temporal sampling'
     this.#cache =
       options.cache === undefined
         ? null
-        : new GalaxySkyCache(field, options.cache)
+        : new GalaxySkyCache(
+            field,
+            options.cache,
+            kernelOptions,
+            options.archive,
+          )
     this.updateBeforeType = NodeUpdateType.RENDER
     this.#target.texture.name = 'Galaxy radiance'
     this.#target.texture.minFilter = LinearFilter
@@ -177,7 +241,19 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     return this.outputTexture
   }
 
-  configure(pose: ObserverPose | null, lens: Lens, field = this.#field): void {
+  configure(
+    pose: ObserverPose | null,
+    lens: Lens,
+    field = this.#field,
+    resolved?: ResolvedPopulationSelection,
+  ): void {
+    if (field !== this.#field || resolved !== this.#resolved) {
+      this.#resolved = resolved
+      this.#physicalVersion = {}
+      this.#kernel.setResolved(resolved)
+      this.#stableSubmissions = 0
+      this.#dirty = true
+    }
     const previous = this.#samplingPose
     if (
       pose === null ||
@@ -205,7 +281,20 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
             }
       this.#samplingFov = verticalFov(lens)
     }
-    this.#cache?.configure(pose?.position ?? null, field)
+    // A cube spends most of its rays on empty space from outside the disk.
+    // The temporal viewport retains those views at the requested pixel density.
+    const cubePosition =
+      pose !== null &&
+      (this.#temporal === null ||
+        (Math.abs(UV.approxMeters(pose.position).y / PARSEC) < 1000 &&
+          Math.hypot(
+            UV.approxMeters(pose.position).x / PARSEC,
+            UV.approxMeters(pose.position).z / PARSEC,
+          ) < 30000))
+        ? pose.position
+        : null
+    this.#cache?.configure(cubePosition, field, resolved)
+    this.#temporal?.configure(pose, lens, this.#physicalVersion)
     this.#pose = pose
     this.#lens = lens
     this.#active = pose !== null && !this.#disposed
@@ -250,7 +339,10 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       targetBytes: this.#disposed
         ? 0
         : this.#target.width * this.#target.height * 8 +
-          (this.#cache?.diagnostics.bytes ?? 0),
+          (this.#cache?.diagnostics.bytes ?? 0) +
+          (this.#structure?.bytes ?? 0) +
+          (this.#temporal?.report.bytes ?? 0),
+      ...(this.#temporal === null ? {} : { temporal: this.#temporal.report }),
       ...(this.#cache === null
         ? {}
         : {
@@ -261,7 +353,7 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
               using: this.#usedCache,
             },
           }),
-      resolutionDivisor: GALAXY_RESOLUTION_DIVISOR,
+      resolutionDivisor: this.#resolutionDivisor,
       maxStepParsecs: GALAXY_MAX_STEP_PARSECS,
       dustStepParsecs:
         this.#sampling.value === 2 ? GALAXY_DUST_SETTLED_STEP_PARSECS : null,
@@ -281,17 +373,9 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
 
   warm(renderer: WebGPURenderer): Promise<void> {
     if (this.#disposed) return Promise.resolve()
-    const size = renderer.getDrawingBufferSize(this.#size)
-    const divisor =
-      this.#cache === null
-        ? GALAXY_RESOLUTION_DIVISOR
-        : Math.max(
-            GALAXY_RESOLUTION_DIVISOR,
-            Math.max(size.x, size.y) / COLD_LONG_EDGE,
-          )
-    this.#target.setSize(
-      Math.max(1, Math.ceil(size.x / divisor)),
-      Math.max(1, Math.ceil(size.y / divisor)),
+    this.#resizeTarget(
+      renderer.getDrawingBufferSize(this.#size),
+      this.#cache?.available ?? false,
     )
     this.#warm ??= Promise.all([
       warmSensorPass(renderer, this.#quad, [
@@ -299,12 +383,37 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
         ...(this.#cache === null
           ? []
           : [{ target: this.#target, material: this.#cachedMaterial }]),
+        ...(this.#temporal === null
+          ? []
+          : [{ target: this.#target, material: this.#temporalMaterial }]),
       ]),
       this.#cache?.warm(renderer),
+      this.#structure?.warm(renderer),
+      this.#temporal?.warm(renderer),
     ]).then(() => {
       if (!this.#disposed) this.#ready = true
     })
     return this.#warm
+  }
+
+  /** Warming, cache transitions and viewport resizes share one pixel budget. */
+  #resizeTarget(size: Vector2, cached: boolean): void {
+    const maximum =
+      this.#cache !== null && !cached && this.#temporal === null
+        ? Math.min(this.#maxLongEdge, COLD_LONG_EDGE)
+        : this.#maxLongEdge
+    const divisor = Math.max(
+      this.#resolutionDivisor,
+      Math.max(size.x, size.y) / maximum,
+    )
+    // Clamp after ceil as well: floating division must not grow the longest
+    // edge one texel beyond its budget. The other edge keeps the same scale.
+    const width = Math.max(1, Math.min(maximum, Math.ceil(size.x / divisor)))
+    const height = Math.max(1, Math.min(maximum, Math.ceil(size.y / divisor)))
+    if (width !== this.#target.width || height !== this.#target.height) {
+      this.#target.setSize(width, height)
+      this.#dirty = true
+    }
   }
 
   override updateBefore({ renderer }: NodeFrame): undefined {
@@ -312,27 +421,23 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#submissions++
     this.#stableSubmissions++
     const size = renderer.getDrawingBufferSize(this.#size)
-    if (this.#cache?.advance(renderer)) this.#draws++
+    if (
+      this.#cache !== null &&
+      (this.#temporal === null ||
+        this.#stableSubmissions > GALAXY_SETTLE_SUBMISSIONS)
+    ) {
+      const before = this.#cache.diagnostics.tiles
+      this.#cache.advance(renderer)
+      this.#draws += this.#cache.diagnostics.tiles - before
+    }
     const cached = this.#cache?.available ?? false
     const revision = this.#cache?.revision ?? 0
     if (cached !== this.#usedCache || revision !== this.#cacheRevision)
       this.#dirty = true
     this.#cacheRevision = revision
     this.#usedCache = cached
-    const divisor =
-      this.#cache === null || cached
-        ? GALAXY_RESOLUTION_DIVISOR
-        : Math.max(
-            GALAXY_RESOLUTION_DIVISOR,
-            Math.max(size.x, size.y) / COLD_LONG_EDGE,
-          )
-    const width = Math.max(1, Math.ceil(size.x / divisor))
-    const height = Math.max(1, Math.ceil(size.y / divisor))
-    if (width !== this.#target.width || height !== this.#target.height) {
-      // `setSize` replaces the texture, and whatever it held goes with it.
-      this.#target.setSize(width, height)
-      this.#dirty = true
-    }
+    this.#resizeTarget(size, cached)
+    const { width, height } = this.#target
     const sampling =
       cached || this.#stableSubmissions > GALAXY_SETTLE_SUBMISSIONS ? 2 : 1
     /*
@@ -344,7 +449,16 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
      * which at a stationary edge-on view is a GPU saturated at four frames a
      * second by a picture that is not changing.
      */
-    if (!this.#dirty && (sampling === 1 || this.#drawnSampling === 2)) {
+    const refining =
+      !cached &&
+      this.#temporal !== null &&
+      this.#stableSubmissions <=
+        GALAXY_SETTLE_SUBMISSIONS + this.#temporal.stride ** 2
+    if (
+      !this.#dirty &&
+      !refining &&
+      (sampling === 1 || this.#drawnSampling === 2)
+    ) {
       this.#held = true
       return
     }
@@ -365,8 +479,16 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       renderer.toneMapping = NoToneMapping
       renderer.outputColorSpace = ColorManagement.workingColorSpace
       renderer.autoClear = true
+      if (!cached && this.#temporal !== null) {
+        this.#temporal.render(renderer as WebGPURenderer, width, height)
+        this.#draws += 2
+      }
       renderer.setRenderTarget(this.#target)
-      this.#quad.material = cached ? this.#cachedMaterial : this.#material
+      this.#quad.material = cached
+        ? this.#cachedMaterial
+        : this.#temporal === null
+          ? this.#material
+          : this.#temporalMaterial
       this.#quad.render(renderer)
       if (cached) this.#samplingDraws++
       else this.#liveDraws++
@@ -409,6 +531,9 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
     this.#material.dispose()
     this.#cachedMaterial.dispose()
     this.#cache?.dispose()
+    this.#temporal?.dispose()
+    if (this.#ownsStructure) this.#structure?.dispose()
+    this.#temporalMaterial.dispose()
     super.dispose()
   }
 }

@@ -26,8 +26,9 @@ it('makes repeatable CPU plates through a session without changing canonical sta
         observer: UV.fromMeters(0, 30000 * PARSEC, 0),
       }).rgb,
     )
-    expect(inspector.sample().generationVersions).not.toHaveProperty(
+    expect(inspector.sample().generationVersions).toHaveProperty(
       'galaxy-field',
+      5,
     )
   } finally {
     session.dispose()
@@ -35,9 +36,9 @@ it('makes repeatable CPU plates through a session without changing canonical sta
 })
 
 it.each([
-  ['face-on', 674.2742416931517, 7127.818764144375],
-  ['edge-on', 1566.4262359487452, 21154.97651406909],
-  ['observer', 1162.1320960465246, 30079.319801786067],
+  ['face-on', 717.214480614703, 7487.652652469748],
+  ['edge-on', 1590.5710188003495, 21423.440947345145],
+  ['observer', 1181.1187820142607, 31539.958563673834],
 ] as const)(
   'retains the dust-free numeric plate reference for %s',
   (view, max, sum) => {
@@ -46,7 +47,7 @@ it.each([
       const plate = session.harness
         .galaxy()
         .plate({ view, width: 12, height: 8, dustScale: 0 })
-      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 4 })
+      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 5 })
       expect(plate.emissionOnly).toBe(true)
       expect(plate.maxRadiance).toBeCloseTo(max, 6)
       expect([...plate.rgb].reduce((a, b) => a + b, 0)).toBeCloseTo(sum, 6)
@@ -57,17 +58,17 @@ it.each([
 )
 
 it.each([
-  ['face-on', 541.3435738212103, 5973.8100010261],
-  ['edge-on', 1546.0116667278733, 20735.55752388157],
-  ['observer', 813.0269151818513, 24127.780183096],
+  ['face-on', 575.8589556097868, 6259.954182128778],
+  ['edge-on', 1571.0587561538625, 20997.910904522727],
+  ['observer', 827.2060659471728, 25474.868167374992],
 ] as const)(
-  'pins galaxy-field@4 dust transport plates for %s',
+  'pins galaxy-field@5 dust transport plates for %s',
   (view, max, sum) => {
     const session = openSession()
     try {
       const inspector = session.harness.galaxy()
       const plate = inspector.plate({ view, width: 12, height: 8 })
-      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 4 })
+      expect(plate.fieldVersions).toEqual({ 'galaxy-field': 5 })
       expect(plate.emissionOnly).toBe(false)
       expect(plate.maxStepParsecs).toBe(10)
       expect(plate.maxRadiance).toBeCloseTo(max, 6)

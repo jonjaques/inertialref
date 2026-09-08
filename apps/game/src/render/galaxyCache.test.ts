@@ -114,3 +114,77 @@ it('publishes a complete coarse sky while the final cube continues in the spare 
   })
   expect(cache.next()).toBeNull()
 })
+
+it('publishes a complete middle tier before the final tier', () => {
+  const schedule = new GalaxyCacheSchedule({
+    initialFaceSize: 32,
+    refinements: [128],
+    faceSize: 512,
+    tileSize: 32,
+  })
+  const field = createGalaxyField(rootSeed('inertialref'))
+  schedule.configure(SUN_POSITION, field)
+  for (const size of [32, 128, 512]) {
+    const count = 6 * (size / 32) ** 2
+    for (let i = 0; i < count; i++)
+      expect(schedule.complete(schedule.next()!)).toBe(true)
+    expect(schedule.selected?.faceSize).toBe(size)
+  }
+  expect(schedule.next()).toBe(null)
+  expect(schedule.report.tiles).toBe(6 + 96 + 1536)
+  schedule.dispose()
+})
+
+it('retires completed and pending light when the resolved selection changes', () => {
+  const cache = new GalaxyCacheSchedule({ faceSize: 32, tileSize: 16 })
+  const first = {
+    origin: SUN_POSITION,
+    apparentMagnitudeLimit: 8,
+    levelMask: 511,
+  }
+  cache.configure(SUN_POSITION, field, first)
+  finish(cache)
+  cache.configure(SUN_POSITION, field, { ...first, levelMask: 3 })
+  expect(cache.selected).toBeNull()
+  const canceled = cache.next()!
+  cache.configure(SUN_POSITION, field, first)
+  expect(cache.complete(canceled)).toBe(false)
+  finish(cache)
+  cache.configure(SUN_POSITION, field, first)
+  expect(cache.selected).not.toBeNull()
+  expect(cache.next()).toBeNull()
+})
+
+it('publishes an archived cube only into its still-current request', () => {
+  const cache = new GalaxyCacheSchedule({
+    initialFaceSize: 16,
+    faceSize: 32,
+    tileSize: 8,
+  })
+  cache.configure(SUN_POSITION, field)
+  const request = cache.next()!
+  expect(cache.restore(request, SUN_POSITION, 32)).toBe(true)
+  expect(cache.selected?.faceSize).toBe(32)
+  expect(cache.next()).toBeNull()
+  expect(cache.complete(request)).toBe(false)
+  cache.configure(UV.translate(SUN_POSITION, vec3(PARSEC, 0, 0)), field)
+  const canceled = cache.next()!
+  cache.configure(SUN_POSITION, field)
+  expect(cache.restore(canceled, canceled.position, 32)).toBe(false)
+  cache.dispose()
+  expect(cache.restore(request, SUN_POSITION, 32)).toBe(false)
+})
+
+it('keeps the reduced eye allowance of a restored source partition', () => {
+  const cache = new GalaxyCacheSchedule({ faceSize: 32 })
+  const at = (pc: number) => UV.translate(SUN_POSITION, vec3(pc * PARSEC, 0, 0))
+  cache.configure(at(0.07), field)
+  expect(cache.restore(cache.next()!, SUN_POSITION, 32, 0.08)).toBe(true)
+  cache.configure(at(0.079), field)
+  expect(cache.selected).not.toBeNull()
+  cache.configure(at(0.081), field)
+  expect(cache.selected).toBeNull()
+  cache.configure(at(0.07), field)
+  expect(cache.selected).not.toBeNull()
+  cache.dispose()
+})

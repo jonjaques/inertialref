@@ -1,6 +1,9 @@
 import { invariant, PARSEC } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
-import type { GalaxyField } from '@inertialref/universe'
+import type {
+  GalaxyField,
+  ResolvedPopulationSelection,
+} from '@inertialref/universe'
 
 /** A ceiling on reuse, in parsecs, including the observer's local dust. */
 export const GALAXY_CACHE_RADIUS_PARSECS = 0.15
@@ -14,6 +17,8 @@ export interface GalaxyCacheOptions {
   readonly tileSize?: number
   /** Publish this complete lower-resolution cube before refining the final tier. */
   readonly initialFaceSize?: number
+  readonly refinements?: readonly number[]
+  readonly tilesPerSubmission?: number
 }
 
 export interface GalaxyCacheEntry {
@@ -22,6 +27,7 @@ export interface GalaxyCacheEntry {
   readonly generation: number
   readonly position: UniverseVector
   readonly field: GalaxyField
+  readonly radiusParsecs: number
 }
 
 export interface GalaxyCacheTile extends GalaxyCacheEntry {
@@ -44,11 +50,13 @@ export class GalaxyCacheSchedule {
   readonly tileSize: number
   readonly initialFaceSize: number
   readonly totalTiles: number
+  readonly tiers: readonly number[]
   #generation = 0
   #completed: GalaxyCacheEntry[] = []
   #pending: GalaxyCacheEntry | null = null
   #selected: GalaxyCacheEntry | null = null
   #field: GalaxyField | null = null
+  #resolved: ResolvedPopulationSelection | undefined
   #tile = 0
   #tiles = 0
   #published = 0
@@ -79,20 +87,40 @@ export class GalaxyCacheSchedule {
         this.initialFaceSize <= this.faceSize,
       'The initial sky cube must be a power of two within the final tier',
     )
-    this.totalTiles =
-      this.#tileCount(this.faceSize) +
-      (this.initialFaceSize < this.faceSize
-        ? this.#tileCount(this.initialFaceSize)
-        : 0)
+    this.tiers = [
+      ...new Set([
+        this.initialFaceSize,
+        ...(options.refinements ?? []),
+        this.faceSize,
+      ]),
+    ].sort((a, b) => a - b)
+    invariant(
+      this.tiers.every(
+        (size) =>
+          Number.isInteger(Math.log2(size)) &&
+          size >= this.initialFaceSize &&
+          size <= this.faceSize,
+      ),
+      'Sky refinement tiers must be powers of two within the initial and final tiers',
+    )
+    this.totalTiles = this.tiers.reduce(
+      (total, size) => total + this.#tileCount(size),
+      0,
+    )
   }
 
-  configure(position: UniverseVector | null, field: GalaxyField): void {
+  configure(
+    position: UniverseVector | null,
+    field: GalaxyField,
+    resolved?: ResolvedPopulationSelection,
+  ): void {
     if (this.#disposed) return
-    if (field !== this.#field) {
+    if (field !== this.#field || resolved !== this.#resolved) {
       this.#cancel()
       this.#completed = []
       this.#selected = null
       this.#field = field
+      this.#resolved = resolved
     }
     if (position === null) {
       this.#cancel()
@@ -100,8 +128,7 @@ export class GalaxyCacheSchedule {
       return
     }
     const valid = (entry: GalaxyCacheEntry) =>
-      UV.distance(position, entry.position) <=
-      GALAXY_CACHE_RADIUS_PARSECS * PARSEC
+      UV.distance(position, entry.position) <= entry.radiusParsecs * PARSEC
     let selected: GalaxyCacheEntry | null = null
     for (const entry of this.#completed)
       if (
@@ -124,8 +151,14 @@ export class GalaxyCacheSchedule {
     this.#begin(
       selected?.position ?? position,
       field,
-      selected === null ? this.initialFaceSize : this.faceSize,
+      selected === null
+        ? this.initialFaceSize
+        : this.#nextTier(selected.faceSize),
     )
+  }
+
+  #nextTier(faceSize: number): number {
+    return this.tiers.find((size) => size > faceSize) ?? this.faceSize
   }
 
   #tileCount(faceSize: number): number {
@@ -142,6 +175,7 @@ export class GalaxyCacheSchedule {
       generation: ++this.#generation,
       position: { ...position },
       field,
+      radiusParsecs: GALAXY_CACHE_RADIUS_PARSECS,
     }
     this.#tile = 0
   }
@@ -208,8 +242,51 @@ export class GalaxyCacheSchedule {
       this.#pending = null
       this.#published++
       if (published.faceSize < this.faceSize)
-        this.#begin(published.position, published.field, this.faceSize)
+        this.#begin(
+          published.position,
+          published.field,
+          this.#nextTier(published.faceSize),
+        )
     }
+    return true
+  }
+
+  /** The caller uploads all faces before publication; an old request cannot take a reused slot. */
+  restore(
+    request: GalaxyCacheEntry,
+    position: UniverseVector,
+    faceSize: number,
+    radiusParsecs = GALAXY_CACHE_RADIUS_PARSECS,
+  ): boolean {
+    if (
+      this.#disposed ||
+      this.#pending?.generation !== request.generation ||
+      faceSize !== this.faceSize ||
+      !Number.isFinite(radiusParsecs) ||
+      radiusParsecs < 0 ||
+      radiusParsecs > GALAXY_CACHE_RADIUS_PARSECS ||
+      UV.distance(position, request.position) > radiusParsecs * PARSEC
+    )
+      return false
+    const entry = {
+      ...request,
+      position: { ...position },
+      faceSize,
+      radiusParsecs,
+      generation: ++this.#generation,
+    }
+    this.#pending = null
+    this.#tile = 0
+    this.#completed = this.#completed.filter(
+      (held) =>
+        held.slot !== entry.slot &&
+        UV.distance(held.position, entry.position) >
+          GALAXY_CACHE_RADIUS_PARSECS * PARSEC,
+    )
+    this.#completed.push(entry)
+    this.#completed = this.#completed.slice(-(GALAXY_CACHE_SLOTS - 1))
+    this.#selected = entry
+    this.#published++
     return true
   }
 

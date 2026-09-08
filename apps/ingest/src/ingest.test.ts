@@ -580,6 +580,18 @@ describe('confirmed exoplanets', () => {
 })
 
 describe('the galaxy the catalog produces', () => {
+  it('keeps measured catalog stars and the faint fill within the local density tolerance', () => {
+    const c = catalog()
+    const sol = c.get('SOL' as never)!
+    for (const radius of [10, 25, 50]) {
+      const stars = systemsWithin(GALAXY_SEED, c, sol.position, radius * PARSEC)
+      const expected = 0.1 * (4 / 3) * Math.PI * radius ** 3
+      expect(
+        Math.abs(stars.length / expected - 1),
+        `${radius} pc`,
+      ).toBeLessThan(0.15)
+    }
+  })
   it('invents no star closer than Proxima Centauri', () => {
     /*
      * The failure this exists for: the density model says how many stars there

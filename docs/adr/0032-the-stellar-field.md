@@ -1,6 +1,8 @@
 # ADR-0032: The stellar field is a versioned preview until population activation
 
-Status: accepted · 5 Sep 2026
+Status: accepted · 5 Sep 2026; population-preview restriction and initial cache
+configuration superseded by [ADR-0038](0038-the-stars-and-the-diffuse-sky.md).
+The body below retains the M1–M6 model and its recorded measurements.
 
 [ADR-0037](0037-the-enhanced-camera.md) governs the implemented Enhanced,
 Automatic and Manual camera modes. Field calibration, transport, versioning

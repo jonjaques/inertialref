@@ -1,6 +1,12 @@
 import { presentationClock } from './hud/time.ts'
 import { Canvas } from '@react-three/fiber'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
@@ -281,8 +287,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * `ir.rise`) goes into the preference through the same module, which is what
    * keeps the panel's sliders agreeing with the picture and the picture alive
    * across the next unrelated toggle.
+   *
+   * Bind before route effects restore a public picture. Passive effects run
+   * child-first: binding here in that phase overwrote the restored lens and
+   * camera mode with the stored preferences immediately after the URL applied.
    */
-  useEffect(() => bindEngineKnobs(engine), [engine])
+  useLayoutEffect(() => bindEngineKnobs(engine), [engine])
 
   useEffect(() => {
     const unsubscribe = monitor.subscribe(setConnection)

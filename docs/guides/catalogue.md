@@ -328,14 +328,18 @@ would drop procedural stars from the cells straddling the 150 ly edge — 190 sk
 stars sit in the 161 cells the sphere touches. `apps/ingest/src/ingest.test.ts` asserts every
 cell the 150 ly sphere touches answers the same with the sky loaded. The draw
 reaches the sky through `StarCatalog.sky`, and `apps/game/src/engine/starSelection.ts`
-joins it to the survey: one record per id, and the brightest from the survey's
-centre when the union exceeds the 20,000-sprite ceiling.
+joins it to the independent magnitude query: one record per id within the
+actual V threshold and a 100,000-sprite ceiling. The query uses catalogue
+completeness to bound procedural fill in each luminosity band. Travel queries
+retain their own spatial scope; they do not inherit a camera's sprite budget.
+[ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records the active
+population and its legacy address path.
 
-**Procedural fill subtracts, and stops.** The density model says how many stars
+**Procedural fill subtracts known sources.** The density model says how many stars
 there _are_, not how many are _unknown_. Generating the full expected count on top
 of the catalog would double the solar neighborhood; generating none would leave
-it five times too sparse. So the fill is the difference — and it is switched off
-entirely inside `completeRadiusLightYears` (25 ly), because the first version
+it five times too sparse. So the fill is the difference — and its known faint neighborhood remains protected
+inside `completeRadiusLightYears` (25 ly), because the first version
 without that put an invented M dwarf 3.4 light-years away, closer than Proxima
 Centauri and a discovery that would have made the news.
 
