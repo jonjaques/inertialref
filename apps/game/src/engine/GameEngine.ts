@@ -808,6 +808,8 @@ export class GameEngine {
   #fps = 60
   #ticksLastFrame = 0
   #starField: StarField = EMPTY_STAR_FIELD
+  #starFieldKnown: readonly StarCandidate[] | null = null
+  #starFieldCoverage: ReturnType<typeof populationCoverage> | null = null
   #starFieldCentre: UniverseVector | null = null
   #starFieldPending = false
   /*
@@ -1032,6 +1034,8 @@ export class GameEngine {
     this.snapshot = null
     this.#scene = null
     this.#starField = EMPTY_STAR_FIELD
+    this.#starFieldKnown = null
+    this.#starFieldCoverage = null
     this.#starFieldCentre = null
     this.#starFieldWorld += 1
     this.orbits = []
@@ -1514,19 +1518,21 @@ export class GameEngine {
     this.#starFieldPending = true
     const world = this.#starFieldWorld
     const catalog = this.world.catalog
-    const known = catalog.stars.map(asCandidate)
+    const known = (this.#starFieldKnown ??= catalog.stars.map(asCandidate))
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
       origin: encodeUniverseVector(centre),
-      coverage: populationCoverage(catalog),
+      coverage: (this.#starFieldCoverage ??= populationCoverage(catalog)),
       spriteCeiling: STAR_SPRITE_CEILING,
       cellCeiling: STARFIELD_CELL_CEILING,
       candidateCeiling: STARFIELD_CANDIDATE_CEILING,
       apparentMagnitudeLimit: 8,
     }
-    // Known stars arrive immediately. The completed worker reply supplies the
-    // fully covered magnitude envelope needed to partition diffuse emission.
-    this.#starField = selectStars(centre, [known])
+    // The retained sources and their original selection envelope describe the
+    // same light partition during travel. Publishing only the catalog between
+    // replies removes procedural sources and resets their dust and sky history.
+    if (this.#starField === EMPTY_STAR_FIELD)
+      this.#starField = selectStars(centre, [known])
     const run =
       this.pool() === null
         ? Promise.resolve(

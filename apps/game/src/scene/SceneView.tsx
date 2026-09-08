@@ -68,16 +68,6 @@ export function SceneView({ engine }: { engine: GameEngine }) {
   const water = useMemo(() => createWaterMaterial(), [])
   return (
     <>
-      {/* Space is genuinely high-contrast, but a debug build that renders its
-          own spacecraft as a black silhouette is not a debug build. Ambient
-          plus the camera-mounted fill in `CameraRig` keeps the near field
-          readable; the fill is what does the work, and it was a fixed world
-          direction pretending to be camera-mounted until the title sequence
-          caught it. Ambient stays small because it is the one term with no
-          direction, and it now reaches the ship and the near-field props
-          alone: planets, atmospheres and the streamed ground all shade from
-          their own `sunDirection` uniform and never see these lights. */}
-      <ambientLight intensity={0.16} />
       <EngineTick engine={engine} />
       <CameraRig engine={engine} />
       <Starfield engine={engine} />

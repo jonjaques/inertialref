@@ -1994,8 +1994,11 @@ export class Observatory {
     const here = Vec.scale(direction, groundRadius + height)
     const touchdown = Vec.scale(descent.ground, descent.arc.touchdown)
     const toGround = Vec.sub(touchdown, here)
+    // A nearby aim still has a bearing. Switching it at a distance threshold
+    // cuts the head before `dropLevel` has finished its turn to the horizon.
+    // Only coincident points lack a direction; the endpoint owns that pose.
     const aim =
-      Vec.length(toGround) > 1
+      Vec.length(toGround) > 0
         ? stanceToward(direction, toGround)
         : { heading: starHeading ?? 0, pitch: -PITCH_LIMIT }
     // Steepness in [0, 1]: 0 while the touchdown is within 60° of the

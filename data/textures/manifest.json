@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-26",
+  "generated": "2026-09-07",
   "attribution": [
     "Earth and Moon imagery: NASA Earth Observatory (Blue Marble Next Generation, Black Marble) and NASA Scientific Visualization Studio (LRO LROC color, LOLA topography). Public domain.",
     "Io, Europa, Ganymede and Callisto: NASA / JPL / USGS Astrogeology Science Center global mosaics, from Voyager and Galileo. Public domain.",
@@ -24,11 +24,11 @@
       "file": "earth_night.webp",
       "width": 4096,
       "height": 2048,
-      "bytes": 259990,
+      "bytes": 145144,
       "licence": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio",
-      "source": "https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_01deg.jpg",
-      "sha256": "681b75c8790c9765"
+      "source": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144897/BlackMarble_2016_01deg_gray.jpg",
+      "sha256": "ad1dcb5a0d970933"
     },
     {
       "body": "earth",

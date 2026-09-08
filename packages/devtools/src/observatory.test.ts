@@ -713,6 +713,111 @@ describe('the drag sensitivity', () => {
 })
 
 describe('a drop', () => {
+  /** The held Earth composition whose final turn crosses the one-meter range. */
+  function reportedDrop(ir: GameHarness, time: number, seconds: number): void {
+    ir.observatory.setTime(time)
+    ir.observatory.restore('g:milky-way/s:SOL/b:2', {
+      kind: 'camera',
+      state: {
+        azimuth: 0.2557423330548216,
+        elevation: 0.03611087242290408,
+        distance: 16059853.647480074,
+      },
+      look: { yaw: 0, pitch: 0 },
+      surface: null,
+    })
+    ir.drop(40.407718790723266, -85.18889809374942, { seconds })
+  }
+
+  function turnBetween(a: ObserverPose, b: ObserverPose): number {
+    const dot = Math.abs(
+      a.orientation.x * b.orientation.x +
+        a.orientation.y * b.orientation.y +
+        a.orientation.z * b.orientation.z +
+        a.orientation.w * b.orientation.w,
+    )
+    return 2 * Math.acos(Math.min(1, dot))
+  }
+
+  it('keeps turning continuously when the touchdown comes within one meter', () => {
+    const { harness: ir, session } = harness()
+    try {
+      reportedDrop(ir, 0, 8)
+      let previous = posed(ir.observerSample(0))
+      let largest = 0
+      for (let frame = 1; frame <= 480; frame += 1) {
+        const next = posed(ir.observerSample(1 / 60))
+        if (frame > 320)
+          largest = Math.max(largest, turnBetween(previous, next))
+        previous = next
+      }
+      // The eased half-turn takes the final third of eight seconds. Two
+      // degrees per frame allows 120°/s; a one-frame bearing cut exceeds it.
+      expect((largest * 180) / Math.PI).toBeLessThan(2)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('arrives continuously across frame cadences and photographic instants', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(0, 86_400, 1_000_000_000),
+        fc.integer({ min: 4, max: 12 }),
+        fc.array(fc.integer({ min: 8, max: 33 }), {
+          minLength: 2,
+          maxLength: 8,
+        }),
+        fc.boolean(),
+        (time, seconds, cadence, playing) => {
+          const { harness: ir, session } = harness()
+          try {
+            reportedDrop(ir, time, seconds)
+            ir.observatory.setTimePaused(!playing)
+            const hash = session.world.stateHash()
+            let expectedTime = time
+            let elapsed = 0
+            let frame = 0
+            let previous = posed(ir.observerSample(0))
+            while (elapsed <= seconds) {
+              const dt = cadence[frame++ % cadence.length]! / 1000
+              ir.observatory.advanceTime(dt)
+              if (playing) expectedTime += dt
+              const next = posed(ir.observerSample(dt))
+              if (elapsed > (seconds * 2) / 3) {
+                // A cubic half-turn over the final third peaks at 4.5π
+                // radians per unit progress. 8π leaves room for the moving
+                // ground aim and the body's rotation, while rejecting a cut.
+                expect(
+                  (turnBetween(previous, next) * seconds) / dt,
+                ).toBeLessThan(8 * Math.PI)
+              }
+              elapsed += dt
+              previous = next
+            }
+            const status = ir.observerStatus()!
+            expect(status.descent).toBeNull()
+            expect(status.surface?.stance.height).toBe(MIN_STANCE_HEIGHT)
+            expect(status.surface?.stance.latitude).toBe(
+              (40.407718790723266 * Math.PI) / 180,
+            )
+            expect(status.surface?.stance.longitude).toBe(
+              (-85.18889809374942 * Math.PI) / 180,
+            )
+            expect(ir.observatory.time).toBe(expectedTime)
+            expect(session.world.stateHash()).toBe(hash)
+            const held = posed(ir.observerSample(0))
+            expect(UV.distance(held.position, previous.position)).toBe(0)
+            expect(turnBetween(held, previous)).toBeLessThan(1e-7)
+          } finally {
+            session.dispose()
+          }
+        },
+      ),
+      { numRuns: 24 },
+    )
+  })
+
   /** Where a body's rotating frame is at the instant the picture depicts. */
   const spinOf = (session: Session, address: string) =>
     session.world.frames.pose(

@@ -41,6 +41,7 @@ export function Sensor({ engine }: { engine: GameEngine }) {
         settings: engine.sensorSettings,
         time: engine.snapshot?.renderTime ?? 0,
         adaptationTime: engine.presentationTime,
+        renderOrigin: engine.origin,
         historyKey: [
           String(engine.world.galaxySeed),
           engine.harness.observatory.target?.address ?? 'flight',

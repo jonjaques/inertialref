@@ -100,6 +100,17 @@ softening the reference hull. Coverage now fades through the subpixel interval.
 A large circle elsewhere in frame also cannot darken a nearer layer by reducing
 its gather coverage: normalized color and edge opacity have separate jobs.
 
+Small circles use twelve equal-area iris samples through a four-pixel diameter;
+larger circles retain forty-eight. Both gather variants warm before use, share
+the same four targets and submit the same four passes. The half-pixel bypass,
+subpixel coverage fade and color normalization remain in force. At four pixels,
+the striped near/far fixture differs from the forty-eight-sample reference by at
+most 0.01172 in a linear channel, with a 0.00893% energy difference. The existing
+large-blur diameter calibration is unchanged. Six alternating sixty-frame
+drained batches measure the isolated defocus chain at 0.931 versus 0.376 ms at
+1920×1080, and 2.259 versus 0.921 ms at 2880×1800 on Apple M5. These are optical
+pass measurements, not complete-scene frame rates.
+
 ## Consequences
 
 The default is visually close to production, not pixel-identical. Glare,

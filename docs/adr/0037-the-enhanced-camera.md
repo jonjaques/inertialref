@@ -1,7 +1,8 @@
 # ADR-0037: Enhanced composes the default sky; Automatic and Manual expose it photographically
 
-Status: accepted · 7 Sep 2026. Camera policy and processing are implemented.
-Image acceptance awaits the preview review.
+Status: accepted · 7 Sep 2026. Camera policy, processing and surface-light
+separation are implemented and verified. The camera plan records image and
+runtime acceptance, including the limits of each measurement.
 Supersedes the default-image preservation requirement in
 [ADR-0031](0031-the-sensor-response.md), the ordinary-view daylight omission
 policy in [ADR-0032](0032-the-stellar-field.md), and the bible's two-mode
@@ -84,8 +85,15 @@ Atmospheric transmission and modeled dust attenuation remain upstream of this
 visibility treatment. The lifted sky feeds glare and detector noise in Enhanced.
 Automatic meters only its photographic inputs.
 
+The diffuse gain is `2^23`, with a scene-luminance ceiling of `0.5` before the
+shared display response. The wider shoulder preserves contrast between faint
+background, dark lanes and bright star clouds. It changes no source radiance,
+physical cache or photographic exposure, and adds no passes or allocations.
+
 Enhanced also owns the dark-body visibility lift, integrated star visibility
-and analytic solar core. Automatic and Manual use physical lighting and stellar
+and analytic solar core. Its near-field ambient and camera fill reach the hull
+and props. Photographic views disable both; only a script's explicit
+`calibratedLight` staging can retain them. Automatic and Manual use physical lighting and stellar
 flux with the same hue-preserving photographic response. A script can explicitly
 request calibrated lighting and the measured ACES staging look with
 `calibratedLight`; this is an authored override with a fixed exposure, and it
@@ -100,6 +108,21 @@ chain and remains inspectable. It respects foreground occlusion, atmospheric
 transmission and dust extinction. It cannot paint a sky over a planet, restore
 stars hidden behind opaque dust, or manufacture illumination on an unlit body.
 Any dark-surface lift is an explicit Enhanced treatment.
+
+A mapped surface takes reflectance from its texture and hue from a normalized
+tint. A mapless surface takes reflectance from its physical palette. The sphere,
+streamed ground and orbital reflectance bake share that convention; a bake
+contains no camera visibility gain. Enhanced applies its bounded dark-body gain
+once, at the scene material. Its 3% terrain and water fill is also visibility
+processing. Photographic modes retain modeled atmospheric scattering but apply
+neither that floor nor the dark-body gain.
+
+Cloud maps remain thin weather shells. Their coverage clears continuously over
+the last quarter of a deck-altitude of view path before the eye crosses the
+shell; front-face culling cannot remove a bright veil in one frame. The interval
+uses view-space distance and follows render compression. Distant coverage is
+unchanged, and every camera mode uses the same approximation. This is not a
+volumetric cloud model.
 
 One sensor chain and the existing camera/lens producers remain in charge.
 Camera settings and adaptation are presentation state, outside the canonical
@@ -129,6 +152,15 @@ Photographic time still places bodies and controls motion and detector noise.
 Camera cuts, mode changes and photographic-time scrubs reset meter history;
 generation checks discard asynchronous results from an earlier history.
 Manual and pinned frames ignore meter gain and repeat at a held instant.
+
+Camera continuity is measured in universe coordinates with the render origin
+and its orientation. A 4,096 m origin rebase cannot become an exposure cut.
+The physical displacement and recent velocity distinguish a discontinuity from
+continuous travel; target, lens and held-time changes also invalidate history.
+Motion blur bypasses the origin-change frame independently and resumes with
+continuous transforms. Stale readbacks cannot update either exposure or the
+defocus extent. Automatic reports Calibrating until it has a meter reading,
+then Metered or Held according to the adaptation setting.
 
 The WebGL fallback supports Enhanced SDR and lens-controlled Manual. Automatic
 is visibly unavailable because that backend has no supported meter readback.
@@ -176,12 +208,13 @@ pose, photographic time and lens; historical image equality is not promised.
 [ADR-0033](0033-presets-hold-a-photographic-instant.md) owns that portable format.
 
 Numerical tests establish exposure arithmetic, strict migration, histogram
-behavior and history reset. Image acceptance remains open for matched scene
-triplets and transitions in the preview build. Nonzero sky pixels alone do not
-establish foreground detail, dust contrast, occlusion or a useful composition.
-The [camera plan](../../design/plans/the-camera.md) and
+behavior, physical continuity and surface-light separation. The
+[camera completion record](../../design/plans/the-camera.md#camera-completion-record)
+combines inspected mode triplets with transition recordings, backend lifecycle
+checks and complete-frame costs. It distinguishes image acceptance from
+instrumented timing and preserves occasional long-frame limits. The source's
+smooth dust morphology remains an approximation; a camera response cannot
+recover missing structure. The
 [assembled galaxy record](../../design/plans/the-galaxy.md#assembled-image-and-motion-record)
-carry the sixteen repeated field@5 images, full journey recordings, and their
-remaining visual and frame-time limits. Those records do not assert artistic
-approval. [ADR-0038](0038-the-stars-and-the-diffuse-sky.md) owns the completed
-resolved-star and diffuse-sky implementation.
+retains the historical measurements. [ADR-0038](0038-the-stars-and-the-diffuse-sky.md)
+owns the resolved-star and diffuse-sky implementation.

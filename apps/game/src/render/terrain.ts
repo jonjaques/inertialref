@@ -1,4 +1,4 @@
-import { sensorRadiance } from './radiance.ts'
+import { sensorRadiance, visibilityAmbient } from './radiance.ts'
 import {
   Color,
   DataTexture,
@@ -99,6 +99,8 @@ export interface TerrainMaterial {
   readonly sunDirection: { value: Vector3 }
   readonly sunColour: { value: Color }
   readonly sunIntensity: { value: number }
+  /** Enhanced visibility on the lit surface; orbital bakes remain physical. */
+  readonly albedoScale: { value: number }
   /** How much sky one display pixel subtends, radians. See `pixelAngle`. */
   setPixelAngle(radians: number): void
   /** Point the material at one body's surface appearance. Idempotent. */
@@ -204,6 +206,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
+  const albedoScale = uniform(1)
   const macroFrequency = uniform(1)
 
   /*
@@ -873,7 +876,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       mix(ground, oceanColour, water),
       riverColour,
       river.mul(seaSheet.add(oneMinus(seaEnabled))),
-    )
+    ).mul(albedoScale)
     // Water is smooth and rock is not; the glint below is what the roughness
     // is actually spent on.
     const surfaceRoughness = mix(roughness, float(0.06), water)
@@ -972,10 +975,9 @@ export function createTerrainMaterial(): TerrainMaterial {
       .mul(skyView)
       .mul(saturate(incidence.add(0.25)))
       .mul(sunlight)
-      // Through `skyView` as well, and not beside it: a floor added after the
-      // hemisphere term is a flat wash, which is the one thing `AMBIENT` says
-      // it is not. A crater floor sees half the sky a plain does.
-      .add(skyView.mul(float(AMBIENT)))
+      // A crater floor sees half the sky a plain does, including Enhanced's
+      // visibility fill. Photographic views retain only the scattered light.
+      .add(skyView.mul(visibilityAmbient))
     const indirect = surfaceAlbedo.mul(ambient)
 
     /*
@@ -1089,6 +1091,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     sunDirection,
     sunColour,
     sunIntensity,
+    albedoScale,
     setPixelAngle(radians) {
       pixelAngle.value = radians
     },
@@ -1214,28 +1217,6 @@ function write(into: Deposit, from: SurfaceMaterial): void {
 export function paint(into: { value: Color }, from: LinearRgb): void {
   into.value.setRGB(from.r, from.g, from.b)
 }
-
-/**
- * The floor no surface goes below, as a fraction of full illumination.
- *
- * **This one is legibility, not physics, and it is worth being clear about
- * which.** The night side of an airless body is lit by starlight and by
- * whatever else is in its sky, and both are far below this: earthshine on the
- * Moon is about 2.6 × 10⁻⁴ of sunlight — plainly visible to a dark-adapted eye
- * and nothing at all to a sensor exposed for daylight. Drawn at its own value
- * the night side is exactly black, which is true and is a hole in the frame.
- *
- * Three percent is where a night limb reads as a dark planet against darker
- * space. It is not the scene's own `ambientLight`, which this material does not
- * see: that one is a fill for the ship and the near-field props, and at 0.16 it
- * lights a night side to a tenth — bright enough to flatten the terminator,
- * which is what `SceneView` warns about.
- *
- * It is scaled by how much sky the point can see, so a crater floor is darker
- * at night than the plain around it rather than a flat wash. The sea keeps
- * the same floor, or the sheet and the shore differ at night.
- */
-export const AMBIENT = 0.03
 
 /**
  * The scale height the ground-level veil measures a path against, meters.

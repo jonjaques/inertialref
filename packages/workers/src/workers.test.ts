@@ -70,7 +70,15 @@ it('transfers the bounded sky and retains canonical source identities', async ()
         star.id as SystemId,
       )
       expect(resolved).toBeDefined()
-      expect(encodeStub(resolved!)).toEqual(star)
+      const source = encodeStub(resolved!)
+      expect(star).toEqual({
+        id: source.id,
+        name: source.name,
+        position: source.position,
+        colour: source.colour,
+        solarLuminosities: source.solarLuminosities,
+        visualLuminosities: source.visualLuminosities,
+      })
     }
   } finally {
     p.terminate()

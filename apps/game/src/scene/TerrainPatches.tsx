@@ -3,7 +3,11 @@ import { useEffect, useMemo, useRef } from 'react'
 import { BufferAttribute, type Group, Mesh, type Scene } from 'three/webgpu'
 import { Quaternion as Q, Vec } from '@inertialref/spatial'
 import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
-import { patchIndices, pixelAngle } from '@inertialref/rendering'
+import {
+  patchIndices,
+  pixelAngle,
+  surfaceVisibilityGain,
+} from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { texturesFor } from '../render/planetTextures.ts'
@@ -152,7 +156,19 @@ export function TerrainPatches({
         texturesFor(state.palette.textureKey, anisotropy).albedo,
         state.palette.textureKey !== null,
       )
-      const key = engine.scene()?.stars[0]
+      const frame = engine.scene()
+      const body = frame?.bodies.find(
+        (candidate) => candidate.address === state.bodyAddress,
+      )
+      terrain.albedoScale.value =
+        body === undefined
+          ? 1
+          : surfaceVisibilityGain(
+              body.appearance.geometricAlbedo,
+              body.placement.angularRadius,
+              engine.visibilityProcessing,
+            )
+      const key = frame?.stars[0]
       if (key !== undefined && state.centre !== null) {
         const toStar = Vec.sub(key.placement.position, state.centre)
         // A body sitting exactly on its star leaves this zero-length, and a
@@ -165,11 +181,7 @@ export function TerrainPatches({
           terrain.sunDirection.value.set(local.x, local.y, local.z)
         }
         terrain.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
-        const light =
-          engine
-            .scene()
-            ?.bodies.find((body) => body.address === state.bodyAddress)
-            ?.sunlight ?? key.sunlight
+        const light = body?.sunlight ?? key.sunlight
         terrain.sunIntensity.value = engine.visibilityProcessing ? 1 : light
       }
     }

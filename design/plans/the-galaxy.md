@@ -8,7 +8,7 @@ sees that journey, following
 [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md).
 
 The M1–M6 planning baseline is [PR #70](https://github.com/jonjaques/inertialref/pull/70),
-`9911dd5`. The current completion branch is
+`9911dd5`. The galaxy completion branch is
 `codex/galaxy-the-sky-keeps-its-detail`, open as
 [PR #73](https://github.com/jonjaques/inertialref/pull/73), explicitly stacked on
 [PR #72](https://github.com/jonjaques/inertialref/pull/72),
@@ -18,8 +18,16 @@ calibration remains independent of Enhanced image treatment.
 
 M7–M11 are implemented and the assembled verification record follows below.
 PR #73 records verified implementation `ee0e9e1` and evidence commit `78e00dc`.
-It is ready for image review; the measured return hitches and
-source-morphology limits remain explicit rather than being called acceptance.
+The [camera completion record](the-camera.md#camera-completion-record) follows
+PR #73 at `9e26512` and records the current night emission, camera continuity
+and return-frame evidence. Its
+[complete-frame operating points](the-camera.md#complete-frame-operating-points)
+record the bounded optical choice and native Retina ground limit. The
+camera's C1–C5 sequence is complete at `db34e2a`, including matched stills,
+final descent review and measured full-frame costs. The
+historical record below retains its original
+source, images and measured limits. Source morphology remains approximate,
+and lower survey CPU cost does not establish sustained 60 fps.
 [ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md) records active
 `galaxy@5`, physical `galaxy-field@5`, the resolved/diffuse partition, dust,
 cache and history contracts. Historical milestone rows retain their original
@@ -289,6 +297,11 @@ Source files: `cube-footprint-summary.json`, `cube-quality.log`,
 `population-height-plate.json` in that scratch directory.
 
 ### Assembled image and motion record
+
+This is the PR #73 record at `ee0e9e1`. The
+[camera completion record](the-camera.md#camera-completion-record) supersedes
+its night-emission and camera-continuity findings and adds matched return
+traces. The physical morphology and whole-frame caveats below remain applicable.
 
 All images use the production source at `ee0e9e1`, Apple M5, Chrome 152,
 WebGPU, sRGB SDR and MSAA 4. The sixteen camera fixtures use native

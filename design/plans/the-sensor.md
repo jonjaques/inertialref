@@ -4,7 +4,14 @@
 policy, sensor composition, controls, saved views and image acceptance.
 [The galaxy plan](the-galaxy.md) owns physical light, dust, star populations,
 cached skies and the continuous journey. Camera C5 and galaxy M11 share the
-final visible-sky acceptance gate.
+final visible-sky acceptance gate. The
+[camera completion record](the-camera.md#camera-completion-record) records the
+current image review, exposure continuity, real backend fallback, display
+lifecycle and measured return-frame costs. C1–C5 are complete: sixteen matched
+stills, four final descent casts, camera transitions and regenerated preset
+plates pass review. Assembled checks and complete-frame measurements record
+the bounded sky and optical quality choices plus the native Retina ground
+limit.
 
 The implemented chain is recorded in
 [ADR-0029](../../docs/adr/0029-the-sensor-spine.md) and

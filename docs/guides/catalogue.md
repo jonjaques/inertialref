@@ -404,9 +404,8 @@ data/textures/
   manifest.json      LICENSE.md
 ```
 
-**25 maps, 25.0 MB**, all 4096×2048 except the ones with no source that large.
-The six at the end arrived with the dwarf planets and the small bodies and are
-why the set went from 10.7 MB to 25.0 MB: Pluto and Charon are New Horizons at
+**25 maps, 24.9 MiB**, all 4096×2048 except the ones with no source that large.
+Pluto and Charon are New Horizons at
 300 m, Ceres and Vesta are Dawn, Phobos is Mars Express SRC, and Bennu is
 OSIRIS-REx OCAMS at **25 cm per pixel** — a global map with individual boulders
 in it, and the highest-resolution map of anything anywhere.
@@ -428,6 +427,15 @@ one particular week.
 
 Titan, Enceladus, Iapetus, Triton, Phobos, Deimos and the Uranian moons have no
 vendored map and render from their measured albedo and color.
+
+Earth's night emission uses NASA's [2016 grayscale Black Marble](https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/).
+Its dark regions emit zero, and city lights retain the image's relative
+intensity. The color illustration includes a Blue Marble background and cannot
+serve as an emission map. The grayscale JPEG is also an illustration: it
+supplies an emission pattern with an authored scale, without measured
+luminance or a recovered spectrum. The ingestion pipeline retains its neutral
+channels and checks unlit ocean, desert and Antarctic patches beside city
+samples.
 
 ### Two transforms that are not a resize
 

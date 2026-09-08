@@ -5,6 +5,7 @@ import {
   type LiquidAppearance,
   seaDatumElevation,
 } from '@inertialref/universe'
+import { surfaceColour } from './surfaceColour.ts'
 
 /*
  * What the six surface materials look like on one body.
@@ -191,60 +192,11 @@ const BASALT_RATIO = 0.07 / 0.13
 /** The brightest a surface may reflect. Fresh snow is 0.9 and nothing beats it. */
 export const REFLECTANCE_CEILING = 0.88
 
-/**
- * The albedo the scene's own exposure already suits.
- *
- * The same constant `Bodies.tsx` reads, and it has to be: a body dark enough
- * that its sphere is lifted while its ground is not draws a planet with two
- * exposures on it, along the line where the terrain stops.
- */
-const ADAPTED_ALBEDO = 0.12
-
-/**
- * What the reference deposit on this body reflects, and in what hue.
- *
- * **`BodyAppearance.colour` means two different things and the difference is a
- * factor of six.** Its own docstring says so — "used where there is no albedo
- * map, and to tint one that is grayscale" — so on Luna, Mars and every other
- * mapped body it is (1, 1, 1): a tint over a photograph that carries the
- * brightness itself. Read as a reflectance it makes lunar regolith 0.88 against
- * a published 0.136, which is a Moon that blows out to white on the lit side.
- *
- * So the two cases are separated the way the streaming carve-out separates
- * them, mechanically, on whether a texture resolves. A mapless body's colour
- * *is* what its sphere draws, and matching it is what keeps the ground and the
- * datum behind it the same object. A mapped body's brightness lives in the
- * archive instead, as the published geometric albedo.
- *
- * The dark-body exposure lift comes along for the same reason. `Bodies.tsx`
- * applies it to a body filling the frame — which is every frame terrain is
- * drawn in, since relief has to cover eight pixels before the streamer starts —
- * so a ground that skipped it would be a darker planet than the sphere it is
- * standing in front of.
- */
+/** Physical reference reflectance, or the tint over a published albedo map. */
 function referenceReflectance(body: Body): LinearRgb {
-  const appearance = body.appearance
-  const colour = appearance.colour
+  const colour = surfaceColour(body.appearance)
+  if (body.appearance.texture !== null) return colour
   const grey = luminance(colour)
-  const albedo = appearance.geometricAlbedo
-  const lift =
-    albedo >= ADAPTED_ALBEDO ? 1 : ADAPTED_ALBEDO / Math.max(albedo, 0.01)
-  /*
-   * A mapped body's reference is *white*, because its map is the reference.
-   *
-   * The archive's photograph carries both the brightness and the hue, and it
-   * carries them at ten kilometres a texel where nothing here has an opinion:
-   * Mars is butterscotch, Luna has maria, and neither fact belongs to a
-   * generator. So on those bodies every colour below is a *ratio* the material
-   * multiplies the map by — and `depositGain` takes those ratios to one, so
-   * what the deposits contribute there is their roughness, their grain and
-   * their bump rather than any brightness of their own. That is also what makes
-   * the descent hold together, because the sphere the approach view draws is
-   * the same photograph.
-   */
-  if (appearance.texture !== null) {
-    return { r: lift, g: lift, b: lift }
-  }
   // The hue is the colour's, normalized: a body whose swatch is warm grey stays
   // warm grey whatever its brightness turns out to be.
   /*
@@ -260,9 +212,7 @@ function referenceReflectance(body: Body): LinearRgb {
    * deposits above the brightest one this body can reach are truncated.
    */
   const gain =
-    grey > 0
-      ? Math.min(grey * lift, REFLECTANCE_CEILING / BRIGHTEST_RATIO) / grey
-      : 0
+    grey > 0 ? Math.min(1, REFLECTANCE_CEILING / BRIGHTEST_RATIO / grey) : 0
   return { r: colour.r * gain, g: colour.g * gain, b: colour.b * gain }
 }
 
