@@ -724,8 +724,12 @@ export interface GalaxyKernelOptions {
 }
 
 /** Height stays analytic so interpolating the arms cannot move the thin plane. */
+export const galaxyWarpElevation = (p: Node<'vec3'>): Node<'float'> =>
+  warp(p.xz.length(), betaAt(p))
+
+/** Absolute height above or below the warped plane. */
 export const galaxyWarpHeight = (p: Node<'vec3'>): Node<'float'> =>
-  p.y.sub(warp(p.xz.length(), betaAt(p))).abs()
+  p.y.sub(galaxyWarpElevation(p)).abs()
 
 export function createGalaxyKernel(
   field: GalaxyField,

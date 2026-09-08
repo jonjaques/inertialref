@@ -282,12 +282,11 @@ export interface TextureBuildOptions {
 }
 
 /** Build one source through the same transforms and provenance as the full set. */
-export async function buildTexture(
+async function buildTexture(
   source: TextureSource,
   options: TextureBuildOptions,
 ): Promise<TextureEntry> {
   const directory = join(options.root, options.outputDirectory)
-  mkdirSync(directory, { recursive: true })
   const raw = await download(source, options.root)
   const output =
     source.transform === 'elevation'

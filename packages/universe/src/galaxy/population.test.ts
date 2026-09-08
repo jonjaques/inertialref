@@ -1,11 +1,11 @@
 import fc from 'fast-check'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
 import { PARSEC } from '@inertialref/shared'
 import { UV, vec3 } from '@inertialref/spatial'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
 import { SOL_ONLY_CATALOG } from '../catalog/starCatalog.ts'
-import { resolveSystem, systemsWithin } from '../galaxy.ts'
+import { resolveSystem, systemsWithin, cellContext } from '../galaxy.ts'
 import {
   createGalaxyField,
   GALAXY_POPULATIONS,
@@ -21,12 +21,28 @@ import {
   selectPopulationSky,
   unresolvedPopulationFraction,
   partitionGalaxyEmission,
+  populationCoverage,
 } from './population.ts'
 import { integrateGalaxyRay } from './integral.ts'
 
 const seed = rootSeed('population-contract')
 const field = createGalaxyField(seed)
 const generator = createPopulationGenerator(field)
+
+it('shares immutable catalog coverage across cell and address queries', () => {
+  const catalog = Object.create(SOL_ONLY_CATALOG) as typeof SOL_ONLY_CATALOG
+  Object.defineProperty(catalog, 'inCell', {
+    value: SOL_ONLY_CATALOG.inCell.bind(SOL_ONLY_CATALOG),
+  })
+  const stars = vi.fn(() => SOL_ONLY_CATALOG.stars)
+  Object.defineProperty(catalog, 'stars', { get: stars })
+  const first = populationCoverage(catalog)
+  const cell = populationCellOf(SUN_POSITION, 0)
+  expect(cellContext(catalog, cell).magnitudeCoverage).toBe(first)
+  expect(populationCoverage(catalog)).toBe(first)
+  expect(stars).toHaveBeenCalledOnce()
+  expect(populationCoverage(SOL_ONLY_CATALOG)).not.toBe(first)
+})
 
 describe('the magnitude population', () => {
   it('conserves transported RGB moments and keeps total calibration independent of a draw ceiling', () => {

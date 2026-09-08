@@ -30,7 +30,6 @@ import {
   oneMinus,
   pow,
   positionLocal,
-  positionView,
   positionWorld,
   saturate,
   sin,
@@ -485,6 +484,8 @@ export function createPlanetMaterial(): PlanetMaterial {
   // Chroma about the sample's own luminance; past 1 the mix extrapolates,
   // which is what a saturation boost is.
   const rich = mix(vec3(luminance(surfaceAlbedo)), surfaceAlbedo, saturation)
+  // Enhanced lifts the whole surface, including measured ocean reflectance,
+  // once. The streamed ground applies the same gain after its land/sea mix.
   const albedo = mix(rich, oceanColour, ocean.mul(0.65)).mul(albedoScale)
 
   // See `limbDarkening` on the interface. The exponent is gentle because the
@@ -627,8 +628,10 @@ export interface CloudMaterial {
   readonly sunColour: { value: Color }
   readonly sunIntensity: { value: number }
   readonly opacity: { value: number }
-  /** View-path interval over which the thin deck clears, in render meters. */
+  /** Altitude interval over which the whole deck clears, in render meters. */
   readonly entryDistance: { value: number }
+  /** Camera height above the entire deck, resolved in float64 render space. */
+  readonly eyeAltitude: { value: number }
   /** Longitude offset in turns; the deck rotates against the surface. */
   readonly drift: { value: number }
   /** Tint for a deck with no map — Titan's, and every procedural world's. */
@@ -660,6 +663,7 @@ export function createCloudMaterial(): CloudMaterial {
   const sunIntensity = uniform(1)
   const opacity = uniform(1)
   const entryDistance = uniform(1)
+  const eyeAltitude = uniform(1)
   const drift = uniform(0)
   const baseColour = uniform(new Color(1, 1, 1))
   const sunsetColour = uniform(new Color(1, 0.55, 0.28))
@@ -698,9 +702,9 @@ export function createCloudMaterial(): CloudMaterial {
     .mul(max(incidence, float(0)).mul(0.96).add(0.04))
     .mul(daylight)
   // A surface has no volume: front-face culling otherwise removes its entire
-  // coverage when the eye crosses it. Clear the remaining view path before
-  // that boundary, in view space so planetary radii never cancel in float32.
-  const entry = smoothstep(float(0), entryDistance, length(positionView))
+  // coverage when the eye crosses it. The CPU supplies one shell-relative
+  // altitude so grazing fragments clear with the nadir, without float32 cancellation.
+  const entry = smoothstep(float(0), entryDistance, eyeAltitude)
   material.opacityNode = cover.a.mul(opacity).mul(daylight).mul(entry)
   material.transparent = true
   material.depthWrite = false
@@ -712,6 +716,7 @@ export function createCloudMaterial(): CloudMaterial {
     sunIntensity,
     opacity,
     entryDistance,
+    eyeAltitude,
     drift,
     baseColour,
     sunsetColour,

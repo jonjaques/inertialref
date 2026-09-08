@@ -1,7 +1,7 @@
 import { PARSEC } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import {
-  populationApparentMagnitude,
+  GALAXY_SOLAR_V_MAGNITUDE,
   type ResolvedPopulationSelection,
 } from '@inertialref/universe'
 
@@ -64,38 +64,32 @@ export function selectStars(
   resolved?: ResolvedPopulationSelection,
 ): StarField {
   const seen = new Set<string>()
-  let chosen: StarCandidate[] = []
+  const requestedMagnitude = resolved?.apparentMagnitudeLimit
+  let chosen: { star: StarCandidate; magnitude: number; flux: number }[] = []
   for (const selection of selections) {
     for (const star of selection) {
       if (seen.has(star.id)) continue
       seen.add(star.id)
-      chosen.push(star)
+      // A missing V measurement cannot be replaced by bolometric luminosity.
+      if (star.visualLuminosities === undefined) continue
+      // The same finite point-source distance sets both rank and admission.
+      const metres = Math.max(UV.distance(star.position, centre), 1)
+      const flux = star.visualLuminosities / (metres * metres)
+      const magnitude =
+        GALAXY_SOLAR_V_MAGNITUDE -
+        2.5 * Math.log10(flux) -
+        5 * Math.log10(10 * PARSEC)
+      if (requestedMagnitude !== undefined && magnitude > requestedMagnitude)
+        continue
+      chosen.push({ star, magnitude, flux })
     }
   }
 
-  const magnitude = (star: StarCandidate) =>
-    populationApparentMagnitude(
-      star.visualLuminosities ?? star.solarLuminosities,
-      UV.distance(star.position, centre) / PARSEC,
-    )
-  const requestedMagnitude = resolved?.apparentMagnitudeLimit
-  if (requestedMagnitude !== undefined)
-    chosen = chosen.filter((star) => magnitude(star) <= requestedMagnitude)
-
   if (chosen.length > ceiling) {
-    const flux = new Map<string, number>()
-    for (const star of chosen) {
-      // A coincident source has no finite point-source irradiance.
-      const metres = Math.max(UV.distance(star.position, centre), 1)
-      flux.set(
-        star.id,
-        (star.visualLuminosities ?? star.solarLuminosities) / (metres * metres),
-      )
-    }
-    chosen = chosen.sort(
+    chosen.sort(
       (a, b) =>
-        (flux.get(b.id) as number) - (flux.get(a.id) as number) ||
-        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+        b.flux - a.flux ||
+        (a.star.id < b.star.id ? -1 : a.star.id > b.star.id ? 1 : 0),
     )
     if (resolved === undefined) chosen = chosen.slice(0, ceiling)
     else {
@@ -103,11 +97,11 @@ export function selectStars(
         ...resolved,
         apparentMagnitudeLimit: Math.min(
           resolved.apparentMagnitudeLimit,
-          magnitude(chosen[ceiling]!) - 1e-10,
+          chosen[ceiling]!.magnitude - 1e-10,
         ),
       }
       chosen = chosen.filter(
-        (star) => magnitude(star) <= resolved!.apparentMagnitudeLimit,
+        ({ magnitude }) => magnitude <= resolved!.apparentMagnitudeLimit,
       )
     }
   }
@@ -120,14 +114,14 @@ export function selectStars(
   const luminosities: number[] = new Array(chosen.length)
   const visualLuminosities: number[] = new Array(chosen.length)
   for (let i = 0; i < chosen.length; i += 1) {
-    const star = chosen[i] as StarCandidate
+    const star = chosen[i]!.star
     ids[i] = star.id
     catalogued[i] = star.catalogued ?? false
     positions[i] = star.position
     names[i] = star.name
     colours[i] = [star.colour[0], star.colour[1], star.colour[2]]
     luminosities[i] = star.solarLuminosities
-    visualLuminosities[i] = star.visualLuminosities ?? star.solarLuminosities
+    visualLuminosities[i] = star.visualLuminosities!
   }
   return {
     ids,

@@ -310,18 +310,41 @@ function displayedColumn(
     .select(value, previous.w.greaterThan(0).select(blended, value.mul(alpha)))
 }
 
+function gpuColumns(capacity: number, batchSize: number) {
+  const floats = (count: number) =>
+    new StorageInstancedBufferAttribute(new Float32Array(count * 4), 4)
+  const uints = (count: number, stride: number) =>
+    new StorageInstancedBufferAttribute(new Uint32Array(count * stride), stride)
+  return {
+    transmission: floats(capacity * 2),
+    positions: floats(capacity),
+    versions: uints(capacity, 1),
+    mapping: uints(capacity, 4),
+    pending: uints(batchSize, 1),
+    reference: floats(capacity),
+    stamp: uints(capacity, 4),
+  }
+}
+
+function cpuColumns(capacity: number) {
+  return {
+    output: new StorageInstancedBufferAttribute(
+      new Float32Array(capacity * 4),
+      4,
+    ),
+    previous: new StorageInstancedBufferAttribute(
+      new Float32Array(capacity * 4),
+      4,
+    ),
+    instanceBySlot: new Int32Array(capacity),
+  }
+}
+
 /** Bounded retained RGB transport, with the catalogue calibrated at its actual observing origin. */
 export class StarExtinctionCache {
   readonly schedule: StarExtinctionSchedule
-  readonly transmission: StorageInstancedBufferAttribute
-  readonly #positions: StorageInstancedBufferAttribute
-  readonly #versions: StorageInstancedBufferAttribute
-  readonly #mapping: StorageInstancedBufferAttribute
-  readonly #pending: StorageInstancedBufferAttribute
-  readonly #reference: StorageInstancedBufferAttribute
-  readonly #stamp: StorageInstancedBufferAttribute
-  readonly #cpuOutput: StorageInstancedBufferAttribute
-  readonly #cpuPrevious: StorageInstancedBufferAttribute
+  readonly #gpu: ReturnType<typeof gpuColumns> | null
+  readonly #cpuColumns: ReturnType<typeof cpuColumns> | null
   readonly #buffers: StorageInstancedBufferAttribute[]
   readonly #generation = uniform(0, 'uint')
   readonly #frame = uniform(0)
@@ -336,7 +359,6 @@ export class StarExtinctionCache {
   readonly #cpu: boolean
   #field: GalaxyField
   #selection: StarExtinctionSelection | null = null
-  readonly #instanceBySlot: Int32Array
   #renderer: WebGPURenderer | null = null
   #disposed = false
   #ready = false
@@ -353,7 +375,6 @@ export class StarExtinctionCache {
   ) {
     this.schedule = new StarExtinctionSchedule(capacity)
     this.#field = field
-    this.#instanceBySlot = new Int32Array(capacity)
     this.#batchSize = options.batchSize ?? STAR_EXTINCTION_BATCH_SIZE
     this.#cpuBatchSize = options.cpuBatchSize ?? STAR_EXTINCTION_CPU_BATCH_SIZE
     this.#cpu = options.cpu ?? false
@@ -369,60 +390,24 @@ export class StarExtinctionCache {
         this.#cpuBatchSize <= 64,
       'CPU extinction batches must contain 1 through 64 sources',
     )
-    this.transmission = new StorageInstancedBufferAttribute(
-      new Float32Array(capacity * 8),
-      4,
-    )
-    this.#positions = new StorageInstancedBufferAttribute(
-      new Float32Array(capacity * 4),
-      4,
-    )
-    this.#versions = new StorageInstancedBufferAttribute(
-      new Uint32Array(capacity),
-      1,
-    )
-    this.#mapping = new StorageInstancedBufferAttribute(
-      new Uint32Array(capacity * 4),
-      4,
-    )
-    this.#pending = new StorageInstancedBufferAttribute(
-      new Uint32Array(this.#batchSize),
-      1,
-    )
-    this.#reference = new StorageInstancedBufferAttribute(
-      new Float32Array(capacity * 4),
-      4,
-    )
-    this.#stamp = new StorageInstancedBufferAttribute(
-      new Uint32Array(capacity * 4),
-      4,
-    )
-    this.#cpuOutput = new StorageInstancedBufferAttribute(
-      new Float32Array(capacity * 4),
-      4,
-    )
-    this.#cpuPrevious = new StorageInstancedBufferAttribute(
-      new Float32Array(capacity * 4),
-      4,
-    )
-    this.#buffers = [
-      this.transmission,
-      this.#positions,
-      this.#versions,
-      this.#mapping,
-      this.#pending,
-      this.#reference,
-      this.#stamp,
-      this.#cpuOutput,
-      this.#cpuPrevious,
-    ]
+    this.#gpu = this.#cpu ? null : gpuColumns(capacity, this.#batchSize)
+    this.#cpuColumns = this.#cpu ? cpuColumns(capacity) : null
+    this.#buffers =
+      this.#gpu === null
+        ? [this.#cpuColumns!.output, this.#cpuColumns!.previous]
+        : Object.values(this.#gpu)
+    if (this.#cpu) {
+      this.#extinction = null
+      this.#compute = null
+      return
+    }
     this.#extinction = createStarExtinction(field, {}, options.kernel)
-    const positions = storage(this.#positions, 'vec4', capacity),
-      versions = storage(this.#versions, 'uint', capacity),
-      pending = storage(this.#pending, 'uint', this.#batchSize),
-      reference = storage(this.#reference, 'vec4', capacity),
+    const positions = storage(this.#gpu!.positions, 'vec4', capacity),
+      versions = storage(this.#gpu!.versions, 'uint', capacity),
+      pending = storage(this.#gpu!.pending, 'uint', this.#batchSize),
+      reference = storage(this.#gpu!.reference, 'vec4', capacity),
       output = storage(this.transmission, 'vec4', capacity * 2),
-      stamp = storage(this.#stamp, 'uvec4', capacity)
+      stamp = storage(this.#gpu!.stamp, 'uvec4', capacity)
     this.#compute = Fn(() => {
       If(instanceIndex.lessThan(this.#count), () => {
         const index = pending.element(instanceIndex).toVar(),
@@ -433,17 +418,18 @@ export class StarExtinctionCache {
         const depth = vec3(0).toVar()
         If(catalogued.and(this.#atSol).not(), () => {
           depth.assign(
-            this.#extinction
-              .opticalDepth(this.#origin, source.xyz.sub(this.#origin))
-              .negate(),
+            this.#extinction!.opticalDepth(
+              this.#origin,
+              source.xyz.sub(this.#origin),
+            ).negate(),
           )
           If(catalogued, () => {
             const saved = reference.element(index).toVar()
             If(metadata.z.notEqual(version), () => {
-              const sol = vec3(-8178, 20.8, 0)
+              const sol = vec3(starExtinctionOrigin(SUN_POSITION))
               saved.assign(
                 vec4(
-                  this.#extinction.opticalDepth(sol, source.xyz.sub(sol)),
+                  this.#extinction!.opticalDepth(sol, source.xyz.sub(sol)),
                   float(version),
                 ),
               )
@@ -499,11 +485,23 @@ export class StarExtinctionCache {
     })().compute(this.#batchSize)
   }
 
+  /** GPU readback for physical-column diagnostics. CPU columns are instance attributes. */
+  get transmission(): StorageInstancedBufferAttribute {
+    invariant(
+      this.#gpu !== null,
+      'CPU extinction has no GPU transmission buffer',
+    )
+    return this.#gpu.transmission
+  }
+
   sample(index: Node<'uint'>): Node<'vec3'> {
     if (this.#cpu) {
-      const value = instancedBufferAttribute<'vec4'>(this.#cpuOutput, 'vec4')
+      const value = instancedBufferAttribute<'vec4'>(
+        this.#cpuColumns!.output,
+        'vec4',
+      )
       const previous = instancedBufferAttribute<'vec4'>(
-        this.#cpuPrevious,
+        this.#cpuColumns!.previous,
         'vec4',
       )
       const alpha = this.#frame
@@ -524,13 +522,13 @@ export class StarExtinctionCache {
       )
     }
     const capacity = this.schedule.capacity
-    const mapped = storage(this.#mapping, 'uvec4', capacity).element(index)
+    const mapped = storage(this.#gpu!.mapping, 'uvec4', capacity).element(index)
     const slot = mapped.x
     const columns = storage(this.transmission, 'vec4', capacity * 2)
     const value = columns.element(slot)
     const previous = columns.element(slot.add(capacity))
     const version = mapped.y
-    const stamp = storage(this.#stamp, 'uvec4', capacity).element(slot)
+    const stamp = storage(this.#gpu!.stamp, 'uvec4', capacity).element(slot)
     const valid = stamp.y.equal(version)
     const visibility = this.#frame
       .sub(float(stamp.w))
@@ -563,7 +561,7 @@ export class StarExtinctionCache {
       selection.catalogued !== this.#selection?.catalogued
     if (field !== this.#field) {
       this.#field = field
-      this.#extinction.setField(field)
+      this.#extinction?.setField(field)
     }
     const previousOrigin = this.schedule.origin
     if (!this.schedule.configure(selection, observer, field)) return
@@ -573,6 +571,13 @@ export class StarExtinctionCache {
     if (origin !== null) this.#origin.value.copy(starExtinctionOrigin(origin))
     this.#atSol.value =
       origin !== null && UV.distance(origin, SUN_POSITION) / PARSEC < 1e-6
+    if (this.#cpuColumns !== null) {
+      this.#selection = selection
+      for (const [index, source] of this.schedule.selected.entries())
+        this.#cpuColumns.instanceBySlot[source.slot] = index
+      this.#writeCpu()
+      return
+    }
     if (inputsChanged || previousOrigin !== origin) {
       this.#selection = selection
       let sourceLo = this.schedule.capacity,
@@ -581,16 +586,15 @@ export class StarExtinctionCache {
         versionHi = -1
       let mappingLo = this.schedule.capacity,
         mappingHi = -1
-      const positions = this.#positions.array,
-        versions = this.#versions.array,
-        mapping = this.#mapping.array
+      const positions = this.#gpu!.positions.array,
+        versions = this.#gpu!.versions.array,
+        mapping = this.#gpu!.mapping.array
       const selected = this.schedule.selected
       for (let index = 0; index < selected.length; index++) {
         const source = selected[index]!,
           slot = source.slot,
           offset = slot * 4,
           mapped = index * 4
-        this.#instanceBySlot[slot] = index
         const atSol = source.published === -1 ? 1 : 0
         const catalogued = source.catalogued ? 1 : 0
         const flag = catalogued + atSol
@@ -627,16 +631,15 @@ export class StarExtinctionCache {
         }
       }
       for (const [buffer, lo, hi, stride] of [
-        [this.#positions, sourceLo, sourceHi, 4],
-        [this.#versions, versionLo, versionHi, 1],
-        [this.#mapping, mappingLo, mappingHi, 4],
+        [this.#gpu!.positions, sourceLo, sourceHi, 4],
+        [this.#gpu!.versions, versionLo, versionHi, 1],
+        [this.#gpu!.mapping, mappingLo, mappingHi, 4],
       ] as const) {
         if (hi < lo) continue
         buffer.addUpdateRange(lo * stride, (hi - lo + 1) * stride)
         buffer.needsUpdate = true
       }
     }
-    if (this.#cpu) this.#writeCpu()
   }
 
   warm(renderer: WebGPURenderer): Promise<void> {
@@ -648,7 +651,7 @@ export class StarExtinctionCache {
     }
     this.#warm ??= (async () => {
       this.#count.value = 0
-      await renderer.computeAsync(this.#compute)
+      await renderer.computeAsync(this.#compute!)
       if (!this.#disposed) this.#ready = true
     })()
     return this.#warm
@@ -707,11 +710,11 @@ export class StarExtinctionCache {
       }
     } else {
       batch.sources.forEach((source, index) => {
-        this.#pending.array[index] = source.slot
+        this.#gpu!.pending.array[index] = source.slot
       })
-      this.#pending.needsUpdate = true
+      this.#gpu!.pending.needsUpdate = true
       this.#count.value = batch.sources.length
-      renderer.compute(this.#compute)
+      renderer.compute(this.#compute!)
       for (const source of batch.sources) source.published = this.#frame.value
     }
     this.schedule.complete(batch)
@@ -722,21 +725,21 @@ export class StarExtinctionCache {
 
   #writeCpu(sources = this.schedule.selected): void {
     sources.forEach((source) => {
-      const index = this.#instanceBySlot[source.slot]!
+      const index = this.#cpuColumns!.instanceBySlot[source.slot]!
       const valid = source.corrected !== undefined
-      this.#cpuOutput.addUpdateRange(index * 4, 4)
-      this.#cpuPrevious.addUpdateRange(index * 4, 4)
-      this.#cpuPrevious.array.set(
+      this.#cpuColumns!.output.addUpdateRange(index * 4, 4)
+      this.#cpuColumns!.previous.addUpdateRange(index * 4, 4)
+      this.#cpuColumns!.previous.array.set(
         source.previous === undefined ? [0, 0, 0, 0] : [...source.previous, 1],
         index * 4,
       )
-      this.#cpuOutput.array.set(
+      this.#cpuColumns!.output.array.set(
         valid ? [...source.corrected!, source.published!] : [0, 0, 0, 0],
         index * 4,
       )
     })
-    this.#cpuOutput.needsUpdate = true
-    this.#cpuPrevious.needsUpdate = true
+    this.#cpuColumns!.output.needsUpdate = true
+    this.#cpuColumns!.previous.needsUpdate = true
   }
 
   get diagnostics() {
@@ -769,7 +772,7 @@ export class StarExtinctionCache {
     this.#active.value = false
     this.schedule.dispose()
     this.#generation.value = this.schedule.generation
-    this.#compute.dispose()
+    this.#compute?.dispose()
     // Compute-node disposal releases bindings but Three retains storage
     // attributes. Their renderer owner must release those allocations too.
     const attributes = (

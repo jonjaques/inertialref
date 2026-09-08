@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { AU, err, ok } from '@inertialref/shared'
+import { describe, expect, it, vi } from 'vitest'
+import * as universe from '@inertialref/universe'
+import { AU, LIGHT_YEAR, err, ok } from '@inertialref/shared'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import type { AuthorityPort, ClientHello } from '@inertialref/net'
 import {
@@ -41,6 +42,23 @@ function harness(): { harness: GameHarness; session: Session } {
 }
 
 describe('capability checks', () => {
+  it('bounds caller-supplied travel radii and reports the applied radius', async () => {
+    const { harness: ir, session } = harness()
+    const query = vi.spyOn(universe, 'systemsWithin').mockReturnValue([])
+    try {
+      expect(ir.systemsNearby(600)).toEqual([])
+      await ir.findWorlds({}, { lightYears: 600 }).done
+      for (const call of query.mock.calls)
+        expect(call[3]).toBe(500 * LIGHT_YEAR)
+      expect(query).toHaveBeenCalledTimes(2)
+      expect(
+        ir.logs().some((record) => record.message.includes('radius')),
+      ).toBe(true)
+    } finally {
+      query.mockRestore()
+      session.dispose()
+    }
+  })
   it('proves all twelve milestone capabilities', async () => {
     // This is the milestone's definition of done, executable. It runs in Node
     // here and in the browser through the harness, against the same code.

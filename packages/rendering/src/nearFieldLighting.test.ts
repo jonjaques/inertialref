@@ -4,7 +4,7 @@ import {
   DEFAULT_SENSOR_SETTINGS,
   LENS_PRESETS,
   resolveCameraPolicy,
-} from '@inertialref/rendering'
+} from './index.ts'
 import { nearFieldLighting } from './nearFieldLighting.ts'
 
 it.each(CAMERA_MODES)(

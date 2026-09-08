@@ -1,5 +1,5 @@
 import fc from 'fast-check'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { LIGHT_YEAR } from '@inertialref/shared'
 import { UV } from '@inertialref/spatial'
 import { selectStars, type StarCandidate } from './starSelection.ts'
@@ -38,7 +38,11 @@ const candidate = fc
     ),
     solarLuminosities: fc.double({ min: 1e-3, max: 1e5, noNaN: true }),
   })
-  .map((star) => ({ ...star, name: star.id }))
+  .map((star) => ({
+    ...star,
+    name: star.id,
+    visualLuminosities: star.solarLuminosities,
+  }))
 
 const selections = fc.array(fc.array(candidate, { maxLength: 60 }), {
   minLength: 1,
@@ -66,6 +70,45 @@ const firstPerId = (
 }
 
 describe('selecting the drawn stars', () => {
+  it('does not substitute bolometric light for a missing catalog V measurement', () => {
+    const star: StarCandidate = {
+      id: 'unmeasured',
+      name: 'unmeasured',
+      position: UV.fromMeters(LIGHT_YEAR, 0, 0),
+      colour: [1, 0.5, 0.2],
+      solarLuminosities: 1,
+      catalogued: true,
+    }
+    expect(
+      selectStars(centre, [[star]], 10, {
+        origin: centre,
+        apparentMagnitudeLimit: 8,
+        levelMask: 511,
+      }).ids,
+    ).toEqual([])
+  })
+
+  it('measures each unique candidate once across the ceiling and magnitude cut', () => {
+    const stars: StarCandidate[] = Array.from({ length: 10 }, (_, i) => ({
+      id: String(i),
+      name: String(i),
+      position: UV.fromMeters((i + 1) * LIGHT_YEAR, 0, 0),
+      colour: [1, 1, 1],
+      solarLuminosities: 1,
+      visualLuminosities: 1,
+    }))
+    const distance = vi.spyOn(UV, 'distance')
+    try {
+      selectStars(centre, [stars, stars], 3, {
+        origin: centre,
+        apparentMagnitudeLimit: 8,
+        levelMask: 511,
+      })
+      expect(distance).toHaveBeenCalledTimes(stars.length)
+    } finally {
+      distance.mockRestore()
+    }
+  })
   it('ranks V light and lowers the diffuse partition limit when catalog stars fill the buffer', () => {
     const make = (id: string, visualLuminosities: number): StarCandidate => ({
       id,
@@ -161,6 +204,7 @@ describe('selecting the drawn stars', () => {
       position: UV.fromMeters(8.6 * LIGHT_YEAR, 0, 0),
       colour: [0.8, 0.9, 1],
       solarLuminosities: 25,
+      visualLuminosities: 25,
     }
     const betelgeuse: StarCandidate = {
       id: 'HIP27989',
@@ -168,6 +212,7 @@ describe('selecting the drawn stars', () => {
       position: UV.fromMeters(0, 498 * LIGHT_YEAR, 0),
       colour: [1, 0.6, 0.3],
       solarLuminosities: 31_700,
+      visualLuminosities: 31_700,
     }
     const field = selectStars(centre, [[sirius], [], [sirius, betelgeuse]])
     expect(field.names).toEqual(['Sirius', 'Betelgeuse'])

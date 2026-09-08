@@ -8746,6 +8746,54 @@ pixel-identical to the accepted surface checkpoint. The final WebGL smoke
 retains Enhanced SDR and the visible Automatic-to-Manual fallback at lens EV
 14.6147, with unit gain and no browser errors.
 
+## A review comment is about the tree it saw (07 Sep 2026)
+
+The camera branch already retains a completed survey and fixes the quaternion
+spread when the earlier galaxy review arrives. Reapplying those suggestions
+against the older tree would obscure the remaining defects. The follow-up keeps
+the camera branch as its base; `codex/galaxy` is already in that ancestry.
+
+Exposure invalidation was also invalidating focus readbacks and velocity
+history. Dragging aperture therefore removed motion blur, while scrubbing time
+could starve the measured focus extent. They now have separate validity checks.
+The twelve-sample defocus gather stored coverage divided by twelve, but its
+composite multiplied by forty-eight. A controlled quarter-covered gather was
+almost opaque, 0.99951, instead of 0.25. Both sample counts now use their own
+normalization. The old one-pixel cloud test missed the grazing rim. A 33-square
+wide-angle fixture measured nearly full alpha where the whole shell should be
+half faded. Body-local ellipsoid altitude, computed in float64, controls that
+fade without subtracting planetary radii in the shader.
+
+A stationary failed survey used to submit again every frame. Spatial hysteresis
+now bounds failures as well as successes, and a catalog-only fallback refreshes
+until the first completed survey arrives. The selector also exposed a rounding
+edge: adjacent linear fluxes can have equal logarithmic magnitudes. Ranking in
+linear flux preserves the ordering while deriving magnitude from the same
+single displacement. Unknown V-band luminosity does not become bolometric V.
+
+At 100,000 sources the CPU extinction backend owns 3,200,000 attribute bytes;
+the GPU backend owns 10,004,096. Previously each allocated the other's buffers.
+The production visual shader binds three source-storage buffers instead of four
+and builds no legacy brightest-star reduction. These are allocation and graph
+counts, not browser frame-time claims. LRU metadata now lives apart from the
+12 MiB sky cubes. A write reads no retained pixels and writes only the new cube;
+a hit touches only metadata. Pixel validation remains complete and yields every
+16,384 texels outside the database transaction. Restoration checks the request
+again after those yields.
+
+Matched production plates use `c18f744` and `9ce9e03`, WebGPU, standard sRGB,
+and a 1600×900 drawing buffer. At Iapetus's summit, two meters above the ground,
+a temporary missing-body lookup drops a central ground ROI from 219.42 to
+187.96 encoded luma on the base. The fixed normal and missing-body images have
+pixel-identical ground ROIs, at 219.38. Outside that region, 121 pixels differ
+by at most two encoded channel levels. Exposure stays fixed at EV 14.60964.
+A 120-frame photographic-time scrub retains a measured circle of 3.01953 to
+3.02344 pixels, with no 40-pixel fallback among the last ninety frames.
+The real IndexedDB reload reports version 2, one metadata row, one completed
+cube, one archive hit and zero archive failures. The star renderer reports
+zero legacy reductions. These checks exercise the shipped bundle through the
+repository driver; the temporary lookup and presentation overrides are released.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

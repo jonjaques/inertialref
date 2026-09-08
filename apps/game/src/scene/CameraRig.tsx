@@ -9,12 +9,12 @@ import type {
 import { Vector3 } from 'three/webgpu'
 import {
   chaseCameraPosition,
+  nearFieldLighting,
   chaseOffsetFor,
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
-import { nearFieldLighting } from '../render/nearFieldLighting.ts'
 
 /** Reused per frame; a light direction is not worth an allocation at 144 Hz. */
 const VIEW = /*@__PURE__*/ new Vector3()

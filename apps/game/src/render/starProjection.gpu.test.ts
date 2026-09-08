@@ -140,7 +140,7 @@ it('updates only uniforms during translation and reduces the brightest flux on t
     for (const offset of [0, 5, 8, 8]) {
       const eye = UV.fromMeters(offset * LIGHT_YEAR, 0, 0)
       projection.update(gpu.renderer, origin, eye, vec3(0, 0, 0), true)
-      const buffer = await gpu.renderer.getArrayBufferAsync(projection.maximum)
+      const buffer = await gpu.renderer.getArrayBufferAsync(projection.maximum!)
       const maximum = new Float32Array(buffer)[0]!
       const expected = Math.max(
         ...sources.positions.map(

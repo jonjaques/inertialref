@@ -31,49 +31,99 @@ function record(origin: UniverseVector): GalaxySkyArchiveRecord {
 /** A request/event boundary, including transaction commit and abort. No DOM is installed. */
 function database() {
   const rows = new Map<string, unknown>()
+  const metadata = new Map<string, unknown>()
+  const stores = new Map([
+    ['completed', rows],
+    ['metadata', metadata],
+  ])
+  const created = new Set<string>()
   let failTransaction = false
   let holdCommits = false
   const commits: (() => void)[] = []
+  const payloadReads = vi.fn()
+  const payloadWrites = vi.fn()
   const close = vi.fn()
   const db = {
-    objectStoreNames: { contains: () => false },
-    createObjectStore: vi.fn(),
+    objectStoreNames: { contains: (name: string) => created.has(name) },
+    createObjectStore: (name: string) => {
+      created.add(name)
+    },
+    deleteObjectStore: (name: string) => {
+      stores.get(name)?.clear()
+      created.delete(name)
+    },
     close,
     transaction: vi.fn(() => {
-      const pending = new Map(rows)
+      const pending = new Map(
+        [...stores].map(([name, values]) => [name, new Map(values)]),
+      )
+      let requests = 0
+      let aborted = false
+      let completed = false
       const transaction = {
         oncomplete: null as (() => void) | null,
         onabort: null as (() => void) | null,
         onerror: null as (() => void) | null,
         error: null,
-        abort: vi.fn(() => transaction.onabort?.()),
-        objectStore: () => ({
-          getAll: () => {
-            const request = {
-              result: [...pending.values()].map((row) => structuredClone(row)),
+        abort: vi.fn(() => {
+          aborted = true
+          transaction.onabort?.()
+        }),
+        objectStore: (name: string) => {
+          const values = pending.get(name)!
+          const request = (read: () => unknown) => {
+            requests++
+            const result = {
+              result: undefined as unknown,
               onsuccess: null as (() => void) | null,
               onerror: null as (() => void) | null,
             }
             queueMicrotask(() => {
-              request.onsuccess?.()
+              if (aborted) return
+              result.result = read()
+              result.onsuccess?.()
+              requests--
+              if (requests !== 0 || completed) return
+              completed = true
               const complete = () => {
-                if (failTransaction) transaction.onabort?.()
+                if (aborted) return
+                if (failTransaction) transaction.abort()
                 else {
-                  rows.clear()
-                  for (const [key, value] of pending) rows.set(key, value)
+                  for (const [store, values] of pending) {
+                    const target = stores.get(store)!
+                    target.clear()
+                    for (const [key, value] of values) target.set(key, value)
+                  }
                   transaction.oncomplete?.()
                 }
               }
               if (holdCommits) commits.push(complete)
               else complete()
             })
-            return request
-          },
-          put: (value: { key: string }) =>
-            pending.set(value.key, structuredClone(value)),
-          clear: () => pending.clear(),
-          delete: (key: string) => pending.delete(key),
-        }),
+            return result
+          }
+          return {
+            getAll: () =>
+              request(() => {
+                if (name === 'completed') payloadReads()
+                return [...values.values()].map((value) =>
+                  structuredClone(value),
+                )
+              }),
+            getAllKeys: () => request(() => [...values.keys()]),
+            get: (key: string) =>
+              request(() => {
+                if (name === 'completed') payloadReads()
+                return structuredClone(values.get(key))
+              }),
+            put: (value: { key: string }) => {
+              if (name === 'completed') payloadWrites()
+              values.set(value.key, structuredClone(value))
+            },
+            clear: () => values.clear(),
+            delete: (key: string) => values.delete(key),
+          }
+        },
       }
       return transaction
     }),
@@ -96,7 +146,10 @@ function database() {
     factory: { open } as unknown as IDBFactory,
     open,
     rows,
+    metadata,
     close,
+    payloadReads,
+    payloadWrites,
     failTransactions: () => {
       failTransaction = true
     },
@@ -110,6 +163,26 @@ function database() {
 }
 
 describe('IndexedDB physical sky cache', () => {
+  it('evicts by metadata without reading or rewriting retained pixels', async () => {
+    const db = database()
+    const store = new IndexedDbGalaxySkyStore(db.factory)
+    const a = record(UV.fromMeters(0, 0, 0))
+    const b = record(UV.fromMeters(PARSEC, 0, 0))
+    const c = record(UV.fromMeters(2 * PARSEC, 0, 0))
+    await store.write(a)
+    await store.write(b)
+    const retained = db.rows.get(galaxySkyArchiveKey(b))
+    db.payloadReads.mockClear()
+    db.payloadWrites.mockClear()
+    await store.write(c)
+    expect(db.payloadReads).not.toHaveBeenCalled()
+    expect(db.payloadWrites).toHaveBeenCalledOnce()
+    expect(db.rows.get(galaxySkyArchiveKey(b))).toBe(retained)
+    db.payloadWrites.mockClear()
+    expect(await store.read(b)).not.toBeNull()
+    expect(db.payloadWrites).not.toHaveBeenCalled()
+  })
+
   it('retains two records and touches a reused entry', async () => {
     const db = database()
     const store = new IndexedDbGalaxySkyStore(db.factory)

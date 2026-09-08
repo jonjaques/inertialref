@@ -26,11 +26,12 @@ interface Scheduler {
 }
 
 /** One turn of the event loop, on a channel nothing throttles. */
-const yieldToMain = (): Promise<void> =>
+export const yieldToMain = (): Promise<void> =>
   new Promise((resolve) => {
     const { port1, port2 } = new MessageChannel()
     port1.onmessage = () => {
       port1.close()
+      port2.close()
       resolve()
     }
     port2.postMessage(null)

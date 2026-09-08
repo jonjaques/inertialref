@@ -34,6 +34,7 @@ import type {
 } from './catalog/starCatalog.ts'
 import { LOCAL_DENSITY } from './galaxy/constants.ts'
 import { createGalaxyField } from './galaxy/field.ts'
+import { GALAXY_SOLAR_V_MAGNITUDE } from './galaxy/photometry.ts'
 import {
   createPopulationGenerator,
   LUMINOSITY_BANDS,
@@ -42,6 +43,21 @@ import {
   populationCoverage,
   type PopulationCoverage,
 } from './galaxy/population.ts'
+
+// Seeds and catalogs stay explicit inputs. Each immutable seed owns one
+// field and the generator's bounded cell-plan cache, released with the seed.
+const generators = new WeakMap<
+  Seed,
+  ReturnType<typeof createPopulationGenerator>
+>()
+function populationGenerator(seed: Seed) {
+  let generator = generators.get(seed)
+  if (generator === undefined) {
+    generator = createPopulationGenerator(createGalaxyField(seed))
+    generators.set(seed, generator)
+  }
+  return generator
+}
 
 /*
  * Catalog identities and deterministic luminosity populations share one address
@@ -302,7 +318,7 @@ export function generateCell(
   cell: GalacticCell,
   context: CellContext = NO_CATALOGUE,
 ): readonly SystemStub[] {
-  const generator = createPopulationGenerator(createGalaxyField(galaxySeed))
+  const generator = populationGenerator(galaxySeed)
   const centre = cellCentre(cell)
   const coverage = context.magnitudeCoverage ?? {
     radiusParsecs: 0,
@@ -345,7 +361,8 @@ export const catalogStub = (star: CatalogStar): SystemStub => ({
   visualLuminosities:
     star.physical.absoluteMagnitude === null
       ? undefined
-      : 10 ** ((4.81 - star.physical.absoluteMagnitude) / 2.5),
+      : 10 **
+        ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
   temperature: star.physical.temperature,
   colour: star.physical.colour,
   components: star.components,
@@ -369,7 +386,7 @@ export function resolveSystem(
   if (catalogued !== undefined) return catalogStub(catalogued)
   const population = parsePopulationSystemId(id)
   if (population !== null)
-    return createPopulationGenerator(createGalaxyField(galaxySeed)).star(
+    return populationGenerator(galaxySeed).star(
       population,
       populationCoverage(catalog),
     )
@@ -415,7 +432,7 @@ export function systemsWithin(
       if (UV.distance(star.position, centre) <= radius)
         found.push(catalogStub(star))
   }
-  const generator = createPopulationGenerator(createGalaxyField(galaxySeed))
+  const generator = populationGenerator(galaxySeed)
   const coverage = populationCoverage(catalog)
   const box = {
     min: UV.translate(centre, vec3(-radius, -radius, -radius)),
@@ -425,7 +442,7 @@ export function systemsWithin(
     const cells = populationCellsWithin(centre, radius, band.level)
     invariant(
       cells.length > 0,
-      'Travel query exceeds the population cell budget',
+      `Travel query radius ${radius / PARSEC} pc exceeds the population cell budget at level ${band.level}`,
     )
     for (const cell of cells)
       for (const stub of generator.cell(band.level, cell, coverage, box))

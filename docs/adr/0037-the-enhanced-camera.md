@@ -118,9 +118,10 @@ processing. Photographic modes retain modeled atmospheric scattering but apply
 neither that floor nor the dark-body gain.
 
 Cloud maps remain thin weather shells. Their coverage clears continuously over
-the last quarter of a deck-altitude of view path before the eye crosses the
-shell; front-face culling cannot remove a bright veil in one frame. The interval
-uses view-space distance and follows render compression. Distant coverage is
+the last quarter of a deck-altitude before the eye crosses the shell. One
+float64 eye altitude fades the entire oblate deck, including grazing rays,
+and follows render compression. Front-face culling cannot remove a bright
+veil in one frame. Distant coverage is
 unchanged, and every camera mode uses the same approximation. This is not a
 volumetric cloud model.
 
@@ -157,9 +158,10 @@ Camera continuity is measured in universe coordinates with the render origin
 and its orientation. A 4,096 m origin rebase cannot become an exposure cut.
 The physical displacement and recent velocity distinguish a discontinuity from
 continuous travel; target, lens and held-time changes also invalidate history.
-Motion blur bypasses the origin-change frame independently and resumes with
-continuous transforms. Stale readbacks cannot update either exposure or the
-defocus extent. Automatic reports Calibrating until it has a meter reading,
+Motion blur bypasses origin changes, camera cuts and time discontinuities,
+then resumes with continuous transforms. Exposure-key changes alone preserve
+that transform history. Defocus readbacks require the submitted lens and
+viewport, independently of exposure generations changed by a photographic scrub. Automatic reports Calibrating until it has a meter reading,
 then Metered or Held according to the adaptation setting.
 
 The WebGL fallback supports Enhanced SDR and lens-controlled Manual. Automatic

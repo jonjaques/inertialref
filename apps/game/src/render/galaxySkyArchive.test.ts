@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { yieldToMain } from './schedulerYield.ts'
+
+vi.mock('./schedulerYield.ts', () => ({ yieldToMain: vi.fn(async () => {}) }))
 import { PARSEC } from '@inertialref/shared'
 import { rootSeed } from '@inertialref/procedural'
 import { UV } from '@inertialref/spatial'
@@ -8,6 +11,7 @@ import {
   galaxySkyArchiveKey,
   galaxySkyQuery,
   validateGalaxySkyArchive,
+  validateGalaxySkyArchiveAsync,
   type GalaxySkyArchiveRecord,
 } from './galaxySkyArchive.ts'
 
@@ -162,4 +166,21 @@ it('spends one displacement budget on the eye and its resolved envelope together
       },
     }),
   ).toBeNull()
+})
+
+it('yields during large pixel validation and still checks the final texel', async () => {
+  const archived = record()
+  const large = {
+    ...archived,
+    faceSize: 512,
+    faces: Array.from({ length: 6 }, () => {
+      const face = new Uint16Array(512 * 512 * 4)
+      for (let i = 3; i < face.length; i += 4) face[i] = 0x3c00
+      return face
+    }),
+  }
+  expect(await validateGalaxySkyArchiveAsync(large, large)).toBe(large)
+  expect(yieldToMain).toHaveBeenCalled()
+  large.faces[5]![large.faces[5]!.length - 2] = 0x7e00
+  expect(await validateGalaxySkyArchiveAsync(large, large)).toBeNull()
 })

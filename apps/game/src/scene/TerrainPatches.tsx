@@ -95,6 +95,7 @@ export function TerrainPatches({
   }, [gl, camera, scene, material])
 
   useTimedFrame('terrainPatches', () => {
+    const visibility = engine.visibilityProcessing
     const container = group.current
     if (container === null) return
     /*
@@ -160,14 +161,13 @@ export function TerrainPatches({
       const body = frame?.bodies.find(
         (candidate) => candidate.address === state.bodyAddress,
       )
-      terrain.albedoScale.value =
-        body === undefined
-          ? 1
-          : surfaceVisibilityGain(
-              body.appearance.geometricAlbedo,
-              body.placement.angularRadius,
-              engine.visibilityProcessing,
-            )
+      if (!visibility) terrain.albedoScale.value = 1
+      else if (body !== undefined)
+        terrain.albedoScale.value = surfaceVisibilityGain(
+          body.appearance.geometricAlbedo,
+          body.placement.angularRadius,
+          visibility,
+        )
       const key = frame?.stars[0]
       if (key !== undefined && state.centre !== null) {
         const toStar = Vec.sub(key.placement.position, state.centre)
@@ -182,7 +182,7 @@ export function TerrainPatches({
         }
         terrain.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
         const light = body?.sunlight ?? key.sunlight
-        terrain.sunIntensity.value = engine.visibilityProcessing ? 1 : light
+        terrain.sunIntensity.value = visibility ? 1 : light
       }
     }
     const seen = new Set<string>()

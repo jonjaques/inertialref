@@ -1,4 +1,4 @@
-import { LIGHT_YEAR } from '@inertialref/shared'
+import { invariant, LIGHT_YEAR } from '@inertialref/shared'
 import {
   SECTOR_SIZE,
   UV,
@@ -172,9 +172,10 @@ function shell(offset: Node<'vec3'>, pose: Observer) {
 /** The buffers change with selection; observer motion changes only these uniforms. */
 export function createStarProjection(
   capacity: number,
-  options: { compute?: boolean } = {},
+  options: { compute?: boolean; visual?: boolean } = {},
 ) {
   const compute = options.compute ?? true
+  const visual = options.visual ?? false
   const current = coordinates(compute ? capacity * 2 : capacity)
   // WebGL emulates storage as instance attributes, so previous records need
   // their own attribute. WebGPU shares three bindings across both poses.
@@ -188,30 +189,45 @@ export function createStarProjection(
   const absoluteVisibility = uniform(0)
   const illuminanceUnit = uniform(stellarIlluminance(1, SECTOR_SIZE))
   const count = uniform(0, 'uint')
-  const maximum = new StorageBufferAttribute(new Uint32Array(1), 1)
-  const maximumWrite = storage(maximum, 'uint', 1).toAtomic()
+  const maximum =
+    visual || !compute
+      ? null
+      : new StorageBufferAttribute(new Uint32Array(1), 1)
+  const maximumWrite =
+    maximum === null ? null : storage(maximum, 'uint', 1).toAtomic()
   const fallbackMaximum = uniform(0)
-  const maximumRead = storage(maximum, 'uint', 1).toReadOnly()
-  const clear = Fn(() => {
-    atomicStore(maximumWrite.element(0), uint(0))
-  })().compute(1)
-  const flux = (index: Node<'uint'>) => {
-    const distance = displacement(current, pose, index)
-      .length()
-      .max(LIGHT_YEAR / SECTOR_SIZE)
-    return displacement(current, pose, index)
-      .dot(displacement(current, pose, index))
-      .greaterThan(0)
-      .select(
-        current.offsetNode.element(index).w.div(distance.mul(distance)),
-        float(0),
-      )
-  }
-  const reduce = Fn(() => {
-    If(instanceIndex.lessThan(count), () => {
-      atomicMax(maximumWrite.element(0), bitcast(flux(instanceIndex), 'uint'))
-    })
-  })().compute(capacity)
+  const maximumRead =
+    maximum === null ? null : storage(maximum, 'uint', 1).toReadOnly()
+  const clear =
+    maximumWrite === null
+      ? null
+      : Fn(() => {
+          atomicStore(maximumWrite.element(0), uint(0))
+        })().compute(1)
+  const flux = (index: Node<'uint'>) =>
+    Fn(() => {
+      const offset = displacement(current, pose, index).toVar()
+      const squared = offset.dot(offset)
+      return squared
+        .greaterThan(0)
+        .select(
+          current.offsetNode
+            .element(index)
+            .w.div(squared.max((LIGHT_YEAR / SECTOR_SIZE) ** 2)),
+          float(0),
+        )
+    })()
+  const reduce =
+    maximumWrite === null
+      ? null
+      : Fn(() => {
+          If(instanceIndex.lessThan(count), () => {
+            atomicMax(
+              maximumWrite.element(0),
+              bitcast(flux(instanceIndex), 'uint'),
+            )
+          })
+        })().compute(capacity)
   const offset = displacement(current, pose, instanceIndex)
   const previousOffset = previousSources
     .greaterThan(0.5)
@@ -223,15 +239,16 @@ export function createStarProjection(
   const distanceSquared = offset.dot(offset).max((1 / SECTOR_SIZE) ** 2)
   const luminosity = current.offsetNode.element(instanceIndex).w
   const illuminance = luminosity.mul(illuminanceUnit).div(distanceSquared)
-  const brightest = compute
-    ? (bitcast(maximumRead.element(0), 'float') as unknown as Node<'float'>)
-    : fallbackMaximum
-  const visibility = log2(
-    flux(instanceIndex).max(1e-30).div(brightest.max(1e-30)),
-  )
-    .mul(2.5 / (17 * Math.log2(10)))
-    .add(1)
-    .clamp(0, 1)
+  const brightest =
+    maximumRead !== null
+      ? (bitcast(maximumRead.element(0), 'float') as unknown as Node<'float'>)
+      : fallbackMaximum
+  const visibility = visual
+    ? float(0)
+    : log2(flux(instanceIndex).max(1e-30).div(brightest.max(1e-30)))
+        .mul(2.5 / (17 * Math.log2(10)))
+        .add(1)
+        .clamp(0, 1)
   let held: Sources | null = null
   let heldObserver: {
     origin: RenderOrigin
@@ -245,6 +262,7 @@ export function createStarProjection(
   let normalized = false
 
   return {
+    visual,
     current,
     previous,
     pose,
@@ -265,11 +283,15 @@ export function createStarProjection(
         count: count.value,
         uploads,
         reductions,
-        bytes: capacity * 4 * 4 * 6 + 4,
+        bytes: capacity * 4 * 4 * 6 + (maximum?.array.byteLength ?? 0),
       }
     },
     upload(sources: Sources): void {
       if (disposed || sources === held) return
+      invariant(
+        !visual || sources.visualLuminosities !== undefined,
+        'A visual projection requires V luminosities',
+      )
       const priorCount = count.value
       let old: Map<string, UniverseVector> | null = null
       count.value = Math.min(capacity, sources.positions.length)
@@ -390,8 +412,8 @@ export function createStarProjection(
         count.value > 0
       ) {
         if (compute) {
-          renderer.compute(clear)
-          renderer.compute(reduce, count.value)
+          renderer.compute(clear!)
+          renderer.compute(reduce!, count.value)
           reductions++
         } else if (changed || heldObserver === null) {
           let maximum = 0
@@ -413,9 +435,9 @@ export function createStarProjection(
     },
     dispose(): void {
       disposed = true
-      clear.dispose()
-      reduce.dispose()
-      maximum.dispose()
+      clear?.dispose()
+      reduce?.dispose()
+      maximum?.dispose()
       for (const buffers of allocations)
         for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
           buffer.dispose()

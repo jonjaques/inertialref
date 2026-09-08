@@ -307,9 +307,8 @@ All images use the production source at `ee0e9e1`, Apple M5, Chrome 152,
 WebGPU, sRGB SDR and MSAA 4. The sixteen camera fixtures use native
 1920×1080 / DPR 1, with identical pose, time and lens in each Enhanced /
 Automatic / Manual triplet. Public URL restoration preserves every encoded
-field. This repeats the cold-restore regression that previously replaced
-1/3200 s with 1/60 s. The parent preference binding now runs before the route
-restores its photograph.
+field, including the 1/3200 s shutter. The parent preference binding runs
+before the route restores its photograph.
 
 [Earth and band](https://agentic-media-dumpster.jonjaques.com/2026/09/h7ufhup55u/triplet-earth-band.jpg),
 [Luna](https://agentic-media-dumpster.jonjaques.com/2026/09/r4rakwrbnu/triplet-luna.jpg),
@@ -663,8 +662,7 @@ does not claim every magnitude level is drawable in the densest region.
 
 GPU projection reads stable source positions from integer sectors and relative
 offsets. Observer motion updates uniforms; survey changes upload source data,
-with retained identities and partial updates. The historical 0.62–0.79 ms CPU
-rewrite under warp is no longer the active projection path.
+with retained identities and partial updates.
 
 Resolved dust uses retained physical columns with 32/64/512 distance-tier
 samples, ending at each star. A catalog Solar-reference correction preserves
