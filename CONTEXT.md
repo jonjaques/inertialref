@@ -8977,6 +8977,22 @@ still. `universal.test.ts`'s ellipse property failed once at a bound of
 2.55e-7 against 2.5499e-7 and passed three runs after; it is a pre-existing
 razor and worth a measured tolerance.
 
+## The Roci exhaust follows the sensor (08 Sep 2026)
+
+The Rocinante's plume materials bypassed the sensor's radiance conversion.
+Rebasing the ship onto the galaxy camera kept the hull's conversion but left
+its exhaust outside it. A fourfold exposure change produced identical plume
+RGB. The exhaust also wrote its own inverse depth, 0.5 in the GPU fixture,
+over a surface whose inverse depth was 1/3, and the shells contributed motion.
+That gives the optical passes a nearby surface where there is only light.
+
+Both plume material constructors use `sensorRadiance(material, true)`, the
+same exposure and motion-overlay path as the flare. The GPU regression draws
+the production RCS jets, pods, drive shell and drive disk separately. Each must
+emit nonzero RGB, follow a fourfold exposure change and preserve the motion
+and depth behind it. All four variants fail before the fix and pass after it;
+the related optics and orbit-trace checks pass with them.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
