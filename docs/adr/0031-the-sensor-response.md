@@ -1,11 +1,14 @@
 # ADR-0031: The sensor reads the lens, and Natural preserves the production response
 
-Status: accepted · 4 Sep 2026
+Status: accepted calibration record · 4 Sep 2026. Camera-mode policy is superseded.
 
-The default-image preservation requirement is superseded by
-[ADR-0037](0037-the-enhanced-camera.md). Enhanced, Automatic and Manual are
-accepted direction with implementation planned. This record still describes
-the implemented chain, Natural baseline, measurements and optical ownership.
+[ADR-0037](0037-the-enhanced-camera.md) governs the implemented Enhanced,
+Automatic and Manual modes. This record preserves the measured Natural,
+Composite and Direct baseline, including ACES diagnostics, optical calibration
+and resource ownership. Those response names below identify that baseline;
+they are not additional player modes. Explicit cinematic `calibratedLight`
+staging retains the measured ACES look. Ordinary photographic views share the
+neutral response and do not use Direct channel clipping.
 
 ## Context
 

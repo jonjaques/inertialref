@@ -216,7 +216,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     const star = scene.stars[0]
     if (light.current !== null)
       light.current.intensity =
-        4 * (engine.calibratedLight ? 1 : (star?.sunlight ?? 0))
+        4 * (engine.visibilityProcessing ? 1 : (star?.sunlight ?? 0))
     if (star !== undefined && light.current !== null) {
       light.current.position.set(
         star.placement.position.x,

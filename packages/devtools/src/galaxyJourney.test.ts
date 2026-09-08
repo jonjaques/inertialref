@@ -1,8 +1,78 @@
 import { expect, it } from 'vitest'
 import { PARSEC } from '@inertialref/shared'
 import { UV, Vec, Quaternion as Q } from '@inertialref/spatial'
-import { isUsableLens, LENS_PRESETS, type Lens } from '@inertialref/rendering'
+import {
+  CAMERA_MODES,
+  isUsableLens,
+  LENS_PRESETS,
+  type Lens,
+} from '@inertialref/rendering'
 import { openSession } from './session.ts'
+import {
+  DEFAULT_PICTURE_PROCESSING,
+  type PictureProcessing,
+} from './pictures.ts'
+
+it.each(CAMERA_MODES)(
+  'keeps the %s camera and lens through an outward and return journey',
+  (mode) => {
+    const selectedLens = {
+      ...LENS_PRESETS.flight,
+      fStop: 8,
+      shutter: 1 / 250,
+      iso: 400,
+      zoom: 2,
+    }
+    const selectedProcessing = {
+      ...DEFAULT_PICTURE_PROCESSING,
+      mode,
+      compensation: 1.5,
+      rate: 0.5,
+    }
+    let lens: Lens = selectedLens
+    let processing: PictureProcessing = selectedProcessing
+    let lensWrites = 0
+    let processingWrites = 0
+    const session = openSession({
+      workers: null,
+      render: {
+        framingLens: () => lens,
+        setFlightLens: (next) => {
+          lens = next
+          lensWrites++
+        },
+        cameraProcessing: () => processing,
+        setCameraProcessing: (next) => {
+          processing = next
+          processingWrites++
+        },
+      },
+    })
+    try {
+      const ir = session.harness
+      const before = session.world.stateHash()
+      ir.galaxyJourney(0)
+      for (const destination of [1, 0]) {
+        expect(lens).toEqual(selectedLens)
+        expect(processing).toEqual(selectedProcessing)
+        ir.galaxyJourney(destination, 12)
+        for (let step = 0; step < 12; step++) {
+          ir.observerSample(1)
+          expect(lens).toEqual(selectedLens)
+          expect(processing).toEqual(selectedProcessing)
+          expect(session.world.stateHash()).toBe(before)
+        }
+        expect(ir.observerStatus()!.journey!.progress).toBe(destination)
+      }
+      ir.look('s:SOL/b:2', { ease: false })
+      expect(lensWrites).toBe(0)
+      expect(processingWrites).toBe(0)
+      expect(session.world.stateHash()).toBe(before)
+    } finally {
+      session.dispose()
+    }
+  },
+)
 
 it('travels from Earth orbit to 30 kpc above the center and returns without canonical writes', () => {
   let lens: Lens = LENS_PRESETS.flight

@@ -2,10 +2,10 @@ import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
-  exposureForLuminance,
-  exposureValue,
-  naturalResponse,
-  SURFACE_LUMINANCE,
+  GALAXY_VIEWS,
+  exposurePinnedToLens,
+  resolveCameraPolicy,
+  isSensorSettings,
   type SensorSettings,
   type Exposure,
 } from '@inertialref/rendering'
@@ -410,15 +410,20 @@ export class GameEngine {
    * observatory, then the ship*; the optics follow the same order through the
    * same code, because a picture composed through one lens and measured through
    * another is exactly the class of bug this phase exists to close. The
-   * observatory has no lens of its own — it solves a standoff against whatever
-   * the camera panel is set to, which is the flight lens — so the order has two
-   * arms rather than three.
+   * ordinary observatory solves a standoff against the player's flight lens.
+   * A fixed galaxy instrument supplies its declared lens only while that
+   * instrument is active; entering and leaving it preserves the flight lens.
    *
    * A getter rather than a field: `this.cinematic` is written once per frame by
    * `#step`, and a mirrored copy would be a second thing to keep in step.
    */
   get lens(): Lens {
-    return this.cinematic?.lens ?? this.#flightLens
+    return (
+      this.cinematic?.lens ??
+      (this.galaxyView === null
+        ? this.#flightLens
+        : GALAXY_VIEWS[this.galaxyView].lens)
+    )
   }
 
   /**
@@ -557,26 +562,19 @@ export class GameEngine {
   flareArtifacts = 1
 
   sensorSettings: SensorSettings = DEFAULT_SENSOR_SETTINGS
+  onSensorRequest: ((settings: SensorSettings) => void) | null = null
+  /** Adaptation follows presentation, including a held photographic instant. */
+  presentationTime = 0
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
   galaxyRenderer: (() => GalaxyRenderReport) | null = null
-  #observedPose: ObserverPose | null = null
+  #presentedPose: ObserverPose | null = null
 
   /** The pose already sampled for this scene, never a second camera update. */
   get galaxyPose(): ObserverPose | null {
-    // Natural holds terrestrial daylight unless its exposure range excludes
-    // that calibration. The diffuse sky is below its response at daylight;
-    // marching it on every camera turn buys no visible sky. Read the current
-    // lens and range, since `exposure` still describes the preceding frame.
-    const daylight =
-      !this.galaxyInstrument &&
-      naturalResponse(this.sensorSettings) &&
-      exposureValue(this.lens) + this.sensorSettings.range.bright >=
-        exposureForLuminance(SURFACE_LUMINANCE)
     return this.cinematic === null &&
-      !daylight &&
       (this.presentation.resolved().diffuseGalaxy || this.galaxyInstrument)
-      ? this.#observedPose
+      ? this.#presentedPose
       : null
   }
 
@@ -606,11 +604,33 @@ export class GameEngine {
       : null
   }
 
-  get calibratedLight(): boolean {
+  get pinnedExposure(): number | null {
     return (
-      (!this.galaxyInstrument && naturalResponse(this.sensorSettings)) ||
+      this.cinematic?.effects.exposure ??
+      (this.galaxyView === null ? null : exposurePinnedToLens(this.lens))
+    )
+  }
+
+  get cameraPolicy() {
+    return resolveCameraPolicy(
+      this.sensorSettings,
+      this.lens,
+      this.pinnedExposure,
+    )
+  }
+
+  /** Enhanced visibility and declared cinematic lighting own these source-side gains. */
+  get visibilityProcessing(): boolean {
+    return (
+      this.cameraPolicy.processing === 'enhanced' ||
       (this.cinematic?.effects.calibratedLight ?? 0) > 0
     )
+  }
+
+  requestSensorSettings(settings: SensorSettings): void {
+    if (!isSensorSettings(settings)) throw new Error('Invalid camera settings.')
+    this.sensorSettings = settings
+    this.onSensorRequest?.(settings)
   }
 
   /**
@@ -812,6 +832,15 @@ export class GameEngine {
         galaxyRender: () => this.galaxyRenderer?.() ?? null,
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
+        cameraProcessing: () => {
+          const { peak: _peak, ...processing } = this.sensorSettings
+          return { ...processing, range: { ...processing.range } }
+        },
+        setCameraProcessing: (processing) =>
+          this.requestSensorSettings({
+            ...processing,
+            peak: this.sensorSettings.peak,
+          }),
         pixelRatio: () => this.displayRatio,
         setFlightLens: (lens) => this.requestLens(lens),
         timing: () => browserTimingPort,
@@ -1155,6 +1184,7 @@ export class GameEngine {
    * in the trace during a load is information.
    */
   #step(delta: Seconds, started: number): void {
+    this.presentationTime += Math.max(0, Math.min(0.1, delta))
     this.#phases.open(started)
     this.#ticksLastFrame = this.world.advance(delta)
     /*
@@ -1238,7 +1268,6 @@ export class GameEngine {
      */
     const observed =
       cinematic === null ? this.harness.observerSample(delta) : null
-    this.#observedPose = observed
     this.#phases.step('observatory', ENGINE_PHASE)
 
     // The one precedence order, unchanged: cutscene, then observatory, then
@@ -1251,6 +1280,12 @@ export class GameEngine {
 
     const eye =
       cinematic?.camera.position ?? observed?.position ?? camera?.position
+    this.#presentedPose =
+      cinematic?.camera ??
+      observed ??
+      (camera === undefined
+        ? null
+        : { position: camera.position, orientation: camera.orientation })
     if (eye === undefined) {
       // Nothing owns the camera this frame. Publishing the two presentation
       // eyes as null anyway is the point: a stale one held across a frame is

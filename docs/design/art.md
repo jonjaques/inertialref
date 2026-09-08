@@ -4,9 +4,10 @@ The Canopy presents a composed universe through three camera modes. Enhanced
 is the default art direction; Automatic and Manual offer photographic exposure.
 The source data remains physically grounded in every mode.
 
-This is accepted design direction. The three-mode camera is planned in
-[ADR-0037](../adr/0037-the-enhanced-camera.md); the implemented Natural,
-Composite and Direct responses are recorded in
+The three camera modes and their processing are implemented in
+[ADR-0037](../adr/0037-the-enhanced-camera.md). This page states the image goals;
+matched scenes and transitions await the preview review. The measured optical
+and ACES diagnostic baseline remains in
 [ADR-0031](../adr/0031-the-sensor-response.md).
 
 ---
@@ -22,12 +23,12 @@ The single idea this page turns on.
 This resolves four problems at once, which is how you know it is the right
 fiction rather than a convenient one:
 
-| Problem                                                 | How the sensor fiction resolves it                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Beauty vs honesty**                                   | Almost everything that would make space more beautiful is _already true_ and merely below the threshold of dark-adapted human vision. A sensor integrating over seconds sees the galactic plane, the zodiacal light, the airglow layer and a nebula's real color. Rendering them is not license — it is a longer exposure. |
-| **Eleven orders of magnitude of luminance**             | A camera has gain and a response curve, and both are things a pilot adjusts. Exposure becomes a _control_ rather than an invisible automatic that fights the player.                                                                                                                                                       |
-| **The flip problem**                                    | After the flip you are pointed backwards, engine-toward-destination — and the emotional core of the game is looking at the thing you are approaching. A composited view can face any direction without breaking first person, because you are looking at a screen, not out of a hole.                                      |
-| **[Pillar 4](charter.md#pillar-4--you-are-one-person)** | Still one person, one seat, one viewpoint. The camera moves; the head does not.                                                                                                                                                                                                                                            |
+| Problem                                                 | How the sensor fiction resolves it                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Beauty vs honesty**                                   | Physical light includes structure below human visual thresholds. A long photographic exposure can reveal it; Enhanced instead compresses brightness differences to compose that light beside bright worlds. Its displayed shutter does not promise literal accumulation over that duration. |
+| **Eleven orders of magnitude of luminance**             | A camera has gain and a response curve, and both are things a pilot adjusts. Exposure becomes a _control_ rather than an invisible automatic that fights the player.                                                                                                                        |
+| **The flip problem**                                    | After the flip you are pointed backwards, engine-toward-destination — and the emotional core of the game is looking at the thing you are approaching. A composited view can face any direction without breaking first person, because you are looking at a screen, not out of a hole.       |
+| **[Pillar 4](charter.md#pillar-4--you-are-one-person)** | Still one person, one seat, one viewpoint. The camera moves; the head does not.                                                                                                                                                                                                             |
 
 **There is also a real window.** A physical viewport, smaller, off to one side,
 showing the actual direction with no processing at all — dim, high-contrast,
@@ -75,9 +76,12 @@ the player's comfort limits. Looking from a planet's night side does not itself
 force a brighter sky; a bright limb, planetshine, atmosphere or glare still
 contributes light.
 
-Adaptation is bounded and can be held. Exposure compensation lets the player
-bias the meter without changing mode. Automatic shares its photographic tone
-response with Manual and applies none of Enhanced's selective visibility lift.
+Adaptation is bounded and can be held. Holding exposure leaves the mode
+Automatic, and tightened comfort limits still apply. Exposure compensation lets
+the player bias the meter without changing the lens. Automatic shares its
+photographic tone response with Manual and applies none of Enhanced's selective
+visibility lift. On WebGL, the controls explain that Automatic is unavailable
+and identify the lens-controlled Manual fallback.
 
 ### Manual
 
@@ -91,9 +95,10 @@ It has a display response, rather than requiring raw channel clipping to prove
 physical intent. Its readout names the actual exposure.
 
 Camera mode, tone styling and display output have separate jobs. A tone-curve
-change cannot enable metering or alter physical source light. The first camera
-release uses one authored Enhanced look and one shared photographic look;
-additional styles are optional follow-ups.
+change cannot enable metering or alter physical source light. The controls use
+one authored Enhanced look and one shared neutral photographic look. Imported
+Gentle and Crisp settings retain their photographic shoulders; tone variants
+are outside the initial controls.
 
 ---
 
@@ -278,13 +283,12 @@ browser. It has to be genuinely good.
 
 | Requirement              | Specification                                                                                                                                                                |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Internal pipeline        | Retain physical radiance with declared units and sufficient precision for Enhanced; one final output encoding. Camera C2 proves the faint-light storage path.                |
+| Internal pipeline        | Retain physical sky radiance in its owned target; apply Enhanced luminance compression before the scene half-float conversion; one final output encoding.                    |
 | Output                   | Extended range when the browser and canvas support it; a useful SDR rendering of the selected camera mode otherwise.                                                         |
 | The two paths must agree | The SDR render is a _tonemapped version of the same image_, never a differently-authored one                                                                                 |
 | Peak luminance           | An authored cap on available output headroom, independent of camera exposure. The current chain supports up to 2× white; broader headroom is a separate capability question. |
 | Tonemapper               | One authored Enhanced look and one photographic look shared by Automatic and Manual. Tone styling does not choose exposure policy.                                           |
-| Adaptation               | Automatic starts from the implemented 0.4 s toward bright and 3.5 s toward dark time constants, subject to scene tests. Manual adds no automatic gain.                       |
-| Adaptation               | Automatic starts from the implemented 0.4 s toward bright and 3.5 s toward dark time constants, subject to scene tests. Manual adds no automatic gain.                       |
+| Adaptation               | Automatic uses 0.4 s toward bright and 3.5 s toward dark on bounded presentation time, separate from photographic time. Manual adds no automatic gain.                       |
 | HUD                      | Composited _after_ tonemapping at fixed luminance, so it stays legible against a star                                                                                        |
 
 > 🎮 Designer's Note: HDR output is also the strongest possible answer to
@@ -316,7 +320,8 @@ distance, shutter and gain — and the camera panel already drives all of it and
 prints what it implies: the sharp band, the blur circle against the pixel it has
 to hide inside, the Airy disk against the f-number where it stops fitting, and
 the exposure in stops. What photo mode adds is the tether, spectral filters and export. The lens-derived blur and the sensor response
-are implemented by [ADR-0031](../adr/0031-the-sensor-response.md).
+follow [ADR-0037](../adr/0037-the-enhanced-camera.md), with the optical
+calibration recorded in [ADR-0031](../adr/0031-the-sensor-response.md).
 
 The numbers are why that split is safe rather than a deferral. At the flight
 lens the hyperfocal distance is 5.37 m over a 1520 px buffer — it is a claim

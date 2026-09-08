@@ -1,0 +1,180 @@
+import { afterAll, beforeAll, expect, it } from 'vitest'
+import {
+  FloatType,
+  HalfFloatType,
+  Mesh,
+  MeshBasicNodeMaterial,
+  OrthographicCamera,
+  PlaneGeometry,
+  RenderTarget,
+  Scene,
+  SphereGeometry,
+  PerspectiveCamera,
+  SRGBColorSpace,
+  QuadMesh,
+  NodeMaterial,
+} from 'three/webgpu'
+import { texture, vec3, vec4 } from 'three/tsl'
+import {
+  DEFAULT_SENSOR_SETTINGS,
+  GALAXY_VIEWS,
+  SURFACE_LUMINANCE,
+  type SensorSettings,
+} from '@inertialref/rendering'
+import { openGpu, type GpuSession } from './gpuHarness.ts'
+import { createSensor, declareSceneTarget } from './sensor.ts'
+import { sensorRadiance } from './radiance.ts'
+import { createHistogramMeter } from './meter.ts'
+import { composeSky } from './enhancedSky.ts'
+import { installToneCurve } from './tonemap.ts'
+
+let gpu: GpuSession
+beforeAll(async () => {
+  gpu = await openGpu(32, 32)
+})
+
+it('retains faint radiance beside a bright silhouette before one output transform', async () => {
+  const renderer = gpu.renderer
+  renderer.setSize(32, 32, false)
+  renderer.outputColorSpace = SRGBColorSpace
+  declareSceneTarget(renderer, { samples: 4, optics: true })
+  installToneCurve(renderer, 1)
+  const retained = new RenderTarget(32, 32, {
+    type: HalfFloatType,
+    depthBuffer: false,
+  })
+  const sourceMaterial = new NodeMaterial()
+  sourceMaterial.fragmentNode = vec4(0.4, 0.3, 0.2, 1)
+  renderer.setRenderTarget(retained)
+  new QuadMesh(sourceMaterial).render(renderer)
+  renderer.setRenderTarget(null)
+  sourceMaterial.dispose()
+  const physical = texture(retained.texture).rgb.mul(1e-7)
+  const scene = new Scene()
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+  camera.updateMatrixWorld()
+  const backdrop = new Mesh(
+    new PlaneGeometry(20, 20),
+    sensorRadiance(new MeshBasicNodeMaterial(), true),
+  )
+  backdrop.position.z = -5
+  backdrop.material.colorNode = composeSky(physical)
+  const body = new Mesh(
+    new SphereGeometry(0.45, 24, 16),
+    sensorRadiance(new MeshBasicNodeMaterial()),
+  )
+  body.position.z = -2
+  body.material.colorNode = vec3(0.4, 0.3, 0.2)
+  scene.add(backdrop, body)
+  const lens = {
+    ...GALAXY_VIEWS['edge-on'].lens,
+    fStop: 2.8,
+    iso: 100,
+    shutter: 1 / 40_000,
+  }
+  let settings: SensorSettings = DEFAULT_SENSOR_SETTINGS
+  const sensor = createSensor(renderer, scene, camera, () => ({
+    lens,
+    settings,
+    time: 0,
+    headroom: 1,
+    pinned: null,
+    noiseTick: 0,
+  }))
+  const target = new RenderTarget(32, 32, {
+    type: FloatType,
+    depthBuffer: false,
+  })
+  try {
+    await sensor.warm()
+    sensor.render(target)
+    const enhanced = await gpu.read(target)
+    const scenePixels = await gpu.drawGraph(
+      texture(sensor.sceneTarget.texture),
+      { float: true },
+    )
+    expect(scenePixels.at(16, 16)[0]).toBeCloseTo(0.4, 3)
+    expect(scenePixels.at(3, 16)[0]).toBeGreaterThan(0.01)
+    expect(enhanced.at(3, 16)[0]).toBeGreaterThan(0.02)
+    expect(enhanced.at(16, 16)[0]).toBeLessThan(0.95)
+    settings = { ...settings, mode: 'manual' }
+    sensor.render(target)
+    const daylight = await gpu.read(target)
+    expect(daylight.at(3, 16)[0]).toBeLessThan(0.01)
+    expect(sensor.exposure!.total).toBeLessThan(1 / SURFACE_LUMINANCE)
+    lens.shutter = 2400
+    sensor.render(target)
+    const long = await gpu.read(target)
+    expect(Math.log2(2400 * 40_000)).toBeCloseTo(26.5165, 4)
+    expect(long.at(3, 16)[0]).toBeGreaterThan(0.05)
+    expect(long.at(16, 16)[0]).toBeGreaterThan(daylight.at(16, 16)[0])
+    const source = await gpu.drawGraph(texture(retained.texture), {
+      float: true,
+    })
+    expect(source.at(16, 16)[1]).toBeCloseTo(0.3, 3)
+    sensor.render(target)
+    expect((await gpu.read(target)).data).toEqual(long.data)
+  } finally {
+    sensor.dispose()
+    target.dispose()
+    retained.dispose()
+    for (const mesh of [backdrop, body]) {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+    }
+  }
+})
+afterAll(() => gpu.dispose())
+
+it('excludes visible instrument pixels from the physical histogram', async () => {
+  declareSceneTarget(gpu.renderer, { samples: 0, optics: true })
+  const scene = new Scene()
+  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 10)
+  camera.position.z = 2
+  camera.updateMatrixWorld()
+  const ground = new Mesh(
+    new PlaneGeometry(2, 2),
+    sensorRadiance(new MeshBasicNodeMaterial()),
+  )
+  ground.material.colorNode = vec3(0.3)
+  const ink = new Mesh(
+    new PlaneGeometry(1, 2),
+    sensorRadiance(new MeshBasicNodeMaterial(), true, true),
+  )
+  ink.material.colorNode = vec3(10)
+  ink.position.set(-0.5, 0, 0.1)
+  ink.renderOrder = 2
+  scene.add(ground, ink)
+  const sensor = createSensor(gpu.renderer, scene, camera)
+  const target = new RenderTarget(32, 32, { type: FloatType })
+  try {
+    sensor.render(target)
+    const mask = sensor.sceneTarget.textures.find((t) => t.name === 'meterMask')
+    expect(mask).toBeDefined()
+    const meter = createHistogramMeter(
+      sensor.sceneTarget.texture,
+      undefined,
+      mask,
+    )
+    try {
+      meter.width.value = 8
+      meter.height.value = 8
+      meter.count.count = 64
+      await gpu.compute(meter.clear)
+      await gpu.compute(meter.count)
+      const bins = new Uint32Array(await gpu.readBuffer(meter.bins))
+      expect(bins.reduce((sum, count) => sum + count, 0)).toBe(32)
+    } finally {
+      meter.dispose()
+    }
+    const image = await gpu.read(target)
+    expect(image.at(4, 16)[0]).toBeGreaterThan(image.at(28, 16)[0])
+  } finally {
+    sensor.dispose()
+    target.dispose()
+    for (const mesh of [ground, ink]) {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+    }
+  }
+})

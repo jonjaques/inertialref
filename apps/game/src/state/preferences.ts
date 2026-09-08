@@ -8,6 +8,7 @@ import {
   FOV_MIN,
   DEFAULT_SENSOR_SETTINGS,
   isSensorSettings,
+  parseSensorSettings,
 } from '@inertialref/rendering'
 import {
   type Accept,
@@ -108,6 +109,8 @@ export interface Preference<T> {
   readonly what: string
   readonly initial: T
   readonly accept: Accept<T>
+  /** Convert a validated older value stored under the same key. */
+  readonly migrateValue?: (value: unknown) => T | null
   /**
    * What a believed stored value is put back through before it is used.
    *
@@ -155,6 +158,7 @@ export interface AnyPreference {
   readonly what: string
   readonly initial: unknown
   readonly accept: Accept<unknown>
+  readonly migrateValue?: (value: unknown) => unknown
   readonly revive?: (value: never) => unknown
   readonly migrate?: () => unknown
 }
@@ -235,9 +239,10 @@ export const RENDER_HDR = define<OutputPreference>({
 export const RENDER_SENSOR = define({
   key: 'render.sensor',
   group: 'display',
-  what: 'canopy response, exposure comfort clamps, peak luminance and white balance',
+  what: 'camera mode, exposure compensation, comfort clamps, peak luminance and white balance',
   initial: DEFAULT_SENSOR_SETTINGS,
   accept: isSensorSettings,
+  migrateValue: parseSensorSettings,
 })
 
 export const RENDER_AA = define<AaLevel>({
@@ -716,12 +721,25 @@ export const read = <T>(preference: Preference<T>): T =>
 /** The same, for a definition whose value type the caller does not know. */
 export function resolve(definition: AnyPreference): unknown {
   const stored = readRaw(definition.key)
-  if (stored !== MISSING && definition.accept(stored)) {
+  const accepted = acceptedValue(definition, stored)
+  if (accepted !== MISSING) {
+    if (accepted !== stored) writeRaw(definition.key, accepted)
     const revive = definition.revive as
       ((value: unknown) => unknown) | undefined
-    return revive === undefined ? stored : revive(stored)
+    return revive === undefined ? accepted : revive(accepted)
   }
   return definition.migrate?.() ?? definition.initial
+}
+
+function acceptedValue(definition: AnyPreference, value: unknown): unknown {
+  if (value === MISSING) return MISSING
+  if (definition.accept(value)) return value
+  const migrated = definition.migrateValue?.(value)
+  return migrated !== undefined &&
+    migrated !== null &&
+    definition.accept(migrated)
+    ? migrated
+    : MISSING
 }
 
 /**
@@ -905,8 +923,10 @@ export function exportPreferences(now: string): PreferenceExport {
     const definition = definitionFor(key)
     if (definition === null) continue
     const stored = readRaw(key)
-    if (stored === MISSING || !definition.accept(stored)) continue
-    preferences[key] = stored
+    const accepted = acceptedValue(definition, stored)
+    if (accepted === MISSING) continue
+    if (accepted !== stored) writeRaw(key, accepted)
+    preferences[key] = accepted
   }
   return {
     app: EXPORT_APP,
@@ -958,7 +978,7 @@ export function planImport(data: unknown): ImportPlan {
       })
       continue
     }
-    if (!definition.accept(value)) {
+    if (acceptedValue(definition, value) === MISSING) {
       entries.push({
         key,
         group: definition.group,
@@ -995,7 +1015,10 @@ export function importPreferences(data: unknown): ImportPlan {
   if (preferences === null) return plan
   for (const entry of plan.entries) {
     if (!entry.applied) continue
-    const value = preferences[entry.key]
+    const definition = definitionFor(entry.key)
+    if (definition === null) continue
+    const value = acceptedValue(definition, preferences[entry.key])
+    if (value === MISSING) continue
     writeRaw(entry.key, value)
     announce(entry.key, believe(entry.key))
   }

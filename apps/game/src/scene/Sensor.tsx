@@ -1,4 +1,3 @@
-import { exposurePinnedToLens } from '@inertialref/rendering'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
@@ -41,9 +40,17 @@ export function Sensor({ engine }: { engine: GameEngine }) {
         lens: engine.lens,
         settings: engine.sensorSettings,
         time: engine.snapshot?.renderTime ?? 0,
-        pinned:
-          engine.cinematic?.effects.exposure ??
-          (!engine.galaxyInstrument ? null : exposurePinnedToLens(engine.lens)),
+        adaptationTime: engine.presentationTime,
+        historyKey: [
+          String(engine.world.galaxySeed),
+          engine.harness.observatory.target?.address ?? 'flight',
+          engine.galaxyView ?? '',
+          engine.harness.observatory.timePaused
+            ? engine.harness.observatory.heldTime
+            : '',
+        ].join(':'),
+        pinned: engine.pinnedExposure,
+        stagingLook: (engine.cinematic?.effects.calibratedLight ?? 0) > 0,
         headroom: engine.gl?.description.headroom ?? 1,
         motionBlur: engine.presentation.resolved().motionBlur,
         noiseTick: Math.floor(

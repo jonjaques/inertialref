@@ -99,7 +99,7 @@ export function WaterPatches({
             .scene()
             ?.bodies.find((body) => body.address === state.bodyAddress)
             ?.sunlight ?? key.sunlight
-        water.sunIntensity.value = engine.calibratedLight ? 1 : light
+        water.sunIntensity.value = engine.visibilityProcessing ? 1 : light
       }
       water.time.value = engine.snapshot?.renderTime ?? 0
     }

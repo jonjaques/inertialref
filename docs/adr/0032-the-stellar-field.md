@@ -2,10 +2,11 @@
 
 Status: accepted · 5 Sep 2026
 
-The ordinary-view daylight omission policy is superseded as product direction
-by [ADR-0037](0037-the-enhanced-camera.md). Its implementation and measurements
-below describe Natural; they do not satisfy Enhanced's visible-sky requirement.
-Field calibration, transport, versioning and cache ownership remain in force.
+[ADR-0037](0037-the-enhanced-camera.md) governs the implemented Enhanced,
+Automatic and Manual camera modes. Field calibration, transport, versioning
+and physical-cache ownership remain in force. Response-specific M1–M6 images
+and timing numbers below are recorded diagnostics, separate from acceptance
+of the current Enhanced default.
 
 ## Context
 
@@ -216,11 +217,10 @@ cannot stand for a Galactic mid-latitude stellar sky. Table 3 does not supply
 the plan's proposed generic 22.3–23.4 range either. The directly averaged
 supplemental map replaces both targets without relaxing the tolerance.
 
-**Natural-specific display treatment and final appearance acceptance are on
-hold while the response is revised.** M6 changes the physical V-band units,
-local dust and calibration. It leaves the Natural response and daylight
-submission policy unchanged. Fixed-exposure Direct plates are integration
-checks; they do not accept Natural's appearance. Active generation and saved
+M6 establishes physical V-band units, local dust and linear-light calibration.
+Its fixed-exposure Direct plates are recorded integration diagnostics; they do
+not establish the appearance of Enhanced, Automatic or Manual. Current camera
+image acceptance remains open for preview review. Active generation and saved
 addresses remain unchanged at this preview revision.
 
 ## The live galaxy instruments
@@ -235,39 +235,69 @@ Explicit axial azimuths avoid Metal's fast `atan2` sign reversal at an exact
 zero denominator; the warp and arms otherwise disagree at +Z.
 
 The planetarium's Presets panel offers face-on and edge-on instruments.
-`ir.galaxyView(view)` sets the existing observatory and requests its lens through
-the existing host port. The camera remains cinematic → observatory → ship;
-no canonical position or clock changes. Face-on is 30 kpc above the plane at
+`ir.galaxyView(view)` sets the existing observatory. While that fixed
+instrument owns the view, the lens producer resolves its recipe under
+cinematic precedence. Leaving the instrument releases that scope and restores
+the player's lens; it does not rewrite a global lens or mode preference.
+No canonical position or clock changes. Face-on is 30 kpc above the plane at
 90° vertical FOV, f/2, 2,400 s, ISO 400. Edge-on is at +Z 40 kpc, 55°, f/2,
-600 s, ISO 400. Exposure is pinned to the instrument, independent of automatic
-metering. These are instantaneous previews at a declared exposure, not a
-simulation accumulating photons over those durations.
+600 s, ISO 400. The explicit staging override pins photographic exposure to
+that lens, independent of automatic metering. These are instantaneous previews
+at a declared exposure, not accumulated photons over those durations.
 
-The live target has one quarter of the drawing buffer's width and height,
+The direct live target has one quarter of the drawing buffer's width and height,
 rounded up. Each rgba16f texel stores V-anchored RGB divided by 1,000
 nW m⁻² sr⁻¹. At the scene boundary RGB is normalized so its linear Rec.709
 luminance equals the green V radiance. A fixed photopic/V ratio of 1.25 and
 683 lm/W then convert to cd/m². The ratio is a declared spectral approximation:
 the three source regions span 1.20–1.40. This conversion does not depend on
-exposure, Natural's response, or whether the galaxy is visible on screen.
+camera mode, exposure, or whether the galaxy is visible on screen.
 The target feeds a background-depth surface through the scene's pre-exposure,
 optics and response. Foreground geometry occludes it at full scene resolution.
 Geometry masks the background integral; transport does not stop partway
 through a ray at an object inside the stellar volume. Diffuse light between
 the eye and that object is therefore omitted at its silhouette.
 
-Ordinary Natural views omit the diffuse volume when the resolved exposure is
-terrestrial daylight or darker. Natural clamps the surface calibration to the
-lens's exposure range, so this holds exactly when the lens EV plus the bright
-range reaches the surface-calibration EV. The engine reads the current lens
-and settings; the sensor's published exposure describes the preceding frame
-and cannot decide whether a changed setting reveals the sky. Brighter Natural
-exposures, metered responses, Direct, and explicitly staged galaxy instruments
-retain the volume. This is a presentation policy for light below the daylight
-response, not a change to the field or its radiance. The physical-GPU daylight
-comparison includes foreground PSF mixing and fixed sensor noise, stays below
-one 8-bit display code at the tested solar viewpoints with and without dust,
-and keeps a visible long-exposure control.
+### Ordinary views and the physical sky cache
+
+Flight, the homepage and the planetarium request diffuse sky in ordinary
+Enhanced views. Eligibility does not depend on terrestrial daylight exposure.
+Automatic and Manual use the same field and physical source light without
+Enhanced's visibility gains; their exposure decides whether faint emission is
+visible. Enhanced's declared sky compression happens at the scene boundary,
+after reading retained physical radiance and before the scene's half-float
+conversion. The cache stores no camera mode, exposure or display response.
+
+The renderer owns a physical cube cache with 128-pixel faces and a 0.15 pc
+reuse ceiling around each baked observer position. Rotation and lens changes
+sample the same physical directions. Each tier owns three slots, retaining two
+completed locations and one incomplete replacement. Work advances in 16-pixel
+tiles. Only a complete six-face cube can publish; canceled generations cannot
+publish into a slot reassigned to another observer or field. Renderer disposal
+retires its targets, pending work and warm-up registration together.
+
+A 32-pixel coarse tier supplies the first complete cube before the 128-pixel
+tier finishes. With 16-pixel tiles, those publication boundaries require 24 and
+384 tile submissions respectively. These are work counts, not measured frame
+costs. A bounded live target supplies the cold or translated view until an
+eligible cache publishes. Coarse-to-fine publication, cache/live identity,
+translation transitions and full-frame cost remain under image and performance
+verification; the counts alone do not establish their acceptance.
+
+### Recorded M1–M6 live-target measurements
+
+This subsection records the Natural/daylight and direct live-target baseline.
+Its timings and image comparisons do not measure the ordinary Enhanced cache.
+
+Ordinary Natural views omitted the diffuse volume when the resolved exposure
+was terrestrial daylight or darker. Natural clamped the surface calibration
+to the lens's exposure range, so the lens EV plus the bright range decided
+eligibility. Brighter Natural exposures, metered responses, Direct and fixed
+galaxy instruments retained the volume. The physical-GPU daylight comparison
+included foreground PSF mixing and fixed sensor noise, stayed below one 8-bit
+display code at the tested solar viewpoints with and without dust, and kept a
+visible long-exposure control. This establishes the recorded Natural bound,
+not an omission rule for Enhanced.
 
 The render node draws when the view, the field or the target's size changes —
 at once, with the observer profile — and once more with the settled profile
@@ -291,11 +321,14 @@ retires the same instance, and a late warm-up cannot revive it. Diagnostics
 report dimensions, bytes, versions, the pixel angle, and three counters:
 submissions asked in, draws made, and whether the last submission held.
 
-The fixed instruments and the Earth-to-disk journey use physical resolved-star flux and the sensor PSF.
-Natural's relative-brightness star ramp and analytic solar glare are bypassed
-while this camera owns the frame: their local-scene normalization otherwise
-puts a bright Sun over the disk even from 30 kpc away. Ordinary views and
-cinematic staging keep their existing behavior.
+### Camera processing
+
+Fixed instruments use physical resolved-star flux and the photographic sensor
+PSF. Their explicit staging override bypasses Enhanced's integrated star
+visibility and analytic solar treatment, whose local normalization cannot
+serve a view 30 kpc away. Ordinary travel follows the player's selected mode;
+Automatic and Manual receive no calibrated source gains. Cinematic scripts
+can separately request declared calibrated-light staging under ADR-0037.
 
 ## Earth to the disk (M4)
 
@@ -312,10 +345,10 @@ The ordinary camera ceiling is 110,000 ly. The centered endpoint is about
 101,400 ly from Earth, so a literal 100,000 ly cap clips the journey. Positions
 remain sector coordinates, and target positions resolve at `renderTime`.
 The engine publishes its sampled universe pose for eligible volume draws; a
-component never advances the observatory a second time. The planetarium requests
-the volume through its presentation stance and the Natural daylight policy
-decides whether it contributes. The homepage's decorative observatory
-does not request it. Named galaxy instruments also enable it explicitly.
+component never advances the observatory a second time. Flight, the homepage
+and the planetarium request the ordinary diffuse sky through their presentation
+stances. Named galaxy instruments also enable it explicitly. Camera mode and
+staging decide processing; entering a journey does not force a lens or exposure.
 
 The live quadrature uses the CPU integrator's `observer` sampling profile.
 Its steps are bounded by the warped-plane rule, 100 pc, and `1 pc + 0.1 t`,
@@ -334,14 +367,15 @@ GPU output on the measured rig, so fine intervals are concentrated around the
 dust plane. CPU convergence checks retain the complete quarter-parsec reference. Sampling profiles describe quadrature; the field manifest identifies the
 stellar and dust coefficients independently of active population generation.
 
-The journey enters with the face-on lens and keeps exposure pinned to the
-resolved lens in Direct, Neutral, and Natural. The shared shutter control and
-persistence guard admit exposures through 3,600 s, so the 2,400 s instrument
-reaches the panel and survives a new preference binding. A person may change that lens
-through the existing camera controls. The long exposure can clip a bright body
-while revealing the disk; the instrument does not separately expose the galaxy
-or accumulate photons over its stated shutter duration. Resolved-light
-subtraction remains later work; M6 measures the diffuse field in linear light.
+The journey preserves the player's selected mode and lens. Automatic adapts
+to the framed light on presentation time, Manual retains the chosen lens
+exposure, and Enhanced applies its declared composition. Only a named fixed
+instrument requests its recipe and photographic pin. The shared shutter
+control and persistence guard admit exposures through 3,600 s. Long Manual
+exposures can clip bright bodies while revealing the disk; neither the journey
+nor a fixed instrument accumulates photons over the displayed duration.
+Resolved-light subtraction remains later work; M6 measures the diffuse field
+in linear light.
 
 `ir.galaxy().render()` reports the galactocentric observer, orientation,
 lens and effective exposure, field and kernel revisions, sampling profile,
@@ -378,11 +412,15 @@ Population plates reveal faint structures without changing their physical
 amplitudes to make a composite attractive. The same dust attenuates every
 population and produces dark lanes in inside and outside views. V-band
 radiance has explicit broad-region and external-light checks; RGB color and the
-photopic conversion retain their spectral approximations. Natural appearance,
-resolved-star extinction, population activation and angular caching remain open. A held view costs the
-backdrop's composite, 0.17 ms a frame at 960×540; a moving one costs a draw a
-frame, 10.8 to 17 ms at a 240×135 target with the dust filtered, which is
-still above the 2 ms target the plan sets for 1080p. `CONTEXT.md` and
+photopic conversion retain their spectral approximations. Enhanced image
+acceptance, resolved-star extinction and population activation remain open.
+The physical angular cache is implemented; its current publication quality
+and full-frame cost require their own evidence.
+
+The M1–M6 direct live-target baseline measured 0.17 ms a frame at 960×540 for
+a held backdrop and 10.8 to 17 ms for a moving 240×135 target with filtered
+dust. That moving baseline exceeds the plan's 2 ms target for 1080p and does
+not establish the current cache's cost. `CONTEXT.md` and
 [the performance plan](../../design/plans/perf.md#the-galaxy) record the
 conditions and results. Three.js r185 also rebuilds one first-use integral
 pipeline as its cached function ordering changes, then reuses it on

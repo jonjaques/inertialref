@@ -170,7 +170,7 @@ export function TerrainPatches({
             .scene()
             ?.bodies.find((body) => body.address === state.bodyAddress)
             ?.sunlight ?? key.sunlight
-        terrain.sunIntensity.value = engine.calibratedLight ? 1 : light
+        terrain.sunIntensity.value = engine.visibilityProcessing ? 1 : light
       }
     }
     const seen = new Set<string>()

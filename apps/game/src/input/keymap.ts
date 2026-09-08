@@ -280,7 +280,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'sensor.response',
-    'Canopy Response',
+    'Camera Mode',
     'Screen',
     'global',
     chord('KeyV', { shift: true }),

@@ -1,11 +1,16 @@
 import { SURFACE_LUMINANCE } from '@inertialref/rendering'
 import type { NodeMaterial, Renderer } from 'three/webgpu'
 import { Fn, output, uniform, vec4 } from 'three/tsl'
-import { motionOverlay } from './sensorMrt.ts'
+import { meterOverlay, motionOverlay } from './sensorMrt.ts'
 
 /** Offscreen reflectance bakes remain reflectance; only the scene collects light. */
 const gains = new WeakMap<Renderer, number>()
 const integratedGains = new WeakMap<Renderer, number>()
+const enhanced = new WeakMap<Renderer, boolean>()
+/** Visibility processing happens before the scene's half-float conversion. */
+export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
+  renderer !== null && enhanced.get(renderer) === true ? 1 : 0,
+)
 export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (gains.get(renderer) ?? 1),
 )
@@ -18,7 +23,9 @@ export function setSceneExposure(
   renderer: Renderer,
   pre: number | null,
   total = pre,
+  processing: 'enhanced' | 'photographic' = 'photographic',
 ): void {
+  enhanced.set(renderer, pre !== null && processing === 'enhanced')
   gains.set(renderer, pre === null ? 1 : SURFACE_LUMINANCE * pre)
   integratedGains.set(
     renderer,
@@ -36,13 +43,16 @@ export function setSceneExposure(
 export function sensorRadiance<T extends NodeMaterial>(
   material: T,
   overlay = false,
+  instrument = false,
 ): T {
   const radiance = vec4(output.rgb.mul(sceneRadianceGain).min(65_504), output.a)
-  material.outputNode = overlay
-    ? Fn(() => {
-        motionOverlay.assign(1)
-        return radiance
-      })()
-    : radiance
+  material.outputNode =
+    overlay || instrument
+      ? Fn(() => {
+          if (overlay) motionOverlay.assign(1)
+          if (instrument) meterOverlay.assign(1)
+          return radiance
+        })()
+      : radiance
   return material
 }

@@ -748,10 +748,10 @@ matters here is the shape.
 **WebGL is a backend, not a second renderer.** `WebGPURenderer` carries its own
 WebGL 2 backend and swaps to it when the device request fails. So the fallback
 runs the same node graphs, and there is no second set of materials to keep in
-sync — which is what "retained as a reduced-fidelity fallback" has to mean if it
-is to survive contact with a deadline. What the fallback loses is extended-range
-output, because that is `rgba16float` canvas configuration and WebGL 2 has no
-equivalent.
+sync. The fallback loses extended-range output because WebGL 2 has no
+`rgba16float` canvas equivalent. It also lacks the supported histogram readback
+path. Enhanced works in SDR; Automatic visibly falls back to lens-controlled
+Manual while preserving the selected preference.
 
 ```mermaid
 flowchart TB
@@ -761,7 +761,7 @@ flowchart TB
     Q3{"rgba16float canvas<br/>configures?"}
     PREF["three-state preference"]
     EXT["<b>extended</b><br/>outputType: HalfFloatType<br/>tone curve headroom 2×"]
-    STD["<b>sRGB</b><br/>tone curve headroom 1×<br/><i>= stock ACES, exactly</i>"]
+    STD["<b>sRGB</b><br/>tone curve headroom 1×"]
 
     PROBE --> Q1 --> Q2 --> Q3
     Q3 --> PREF
@@ -782,17 +782,18 @@ cannot tell a 2×-EDR laptop from an XDR display. The `configure()` probe is the
 only signal that cannot be argued with, which is why `extended` may overrule the
 media query and may not overrule the probe.
 
-### One curve, two ranges
+### Camera processing and output range
 
-Natural's tone curve is three's `acesFilmicToneMapping` exactly, up to its final clamp,
-and the _only_ difference between the two paths is how far that clamp goes. At
-headroom 1 it is bit-identical to the stock tonemapper; above 1, values the sRGB
-path would have clipped are re-expanded and nothing below the shoulder moves.
-That is the mechanism behind [art](../design/art.md#hdr)'s requirement that the
-SDR render be _a tonemapped version of the same image_, never a differently
-authored one — and it is why the stock tonemapper could not simply be selected:
-it ends in `color.clamp()`, which throws away exactly the range extended output
-exists to carry.
+Enhanced composes bright surfaces and faint sky with an authored visibility
+response. Automatic and Manual share the hue-preserving photographic response;
+Automatic meters, and Manual uses the lens. A photographic look changes the
+response shoulder without changing source light or exposure policy. The ACES
+fit remains a measured diagnostic and an explicit cinematic staging choice.
+
+Every mode reaches the same output owner. SDR bounds luminance at display
+white; negotiated extended output permits the authored headroom up to the
+player's peak cap. P3 identifies gamut and does not imply HDR output. Changing
+gamut or headroom preserves the selected mode and physical field calibration.
 
 ### The frame is the sensor's
 
@@ -803,15 +804,30 @@ with the house curve and the canvas's color space baked in, writing opaque
 alpha. The scene is multisampled where it has edges — on the pass target — and
 the canvas is single-sampled, because what reaches it is one full-screen quad.
 The chain applies pre-exposure, near/far defocus, shutter motion, a threshold-free
-PSF halo, detector noise, white balance and the selected response. Natural keeps
-the production lighting calibration, ACES fit, integrated sky, and analytic
-Sun glow and streak; Neutral
-meters the scene and preserves highlight hue,
-and Direct uses the lens's exposure and channel clip. P3 output requires matching
-canvas and encoder declarations. The live exposure and optical pass counts are
-available as `engine.exposure` and `engine.sensorDiagnostics`.
-[ADR-0031](../adr/0031-the-sensor-response.md) records the calibration,
-measurements and remaining work.
+PSF halo, detector noise, white balance and the selected response. Enhanced
+reads retained physical sky radiance and compresses its luminance before the
+half-float scene target can lose the faint signal. That composed light enters
+the common glare and noise stages. Enhanced owns dark-body lift, integrated
+star visibility and analytic solar-core treatment. Automatic and Manual keep
+the physical inputs and the same photographic response.
+
+Automatic meters physical scene radiance with instrument-covered samples
+excluded by an R8 mask. It weights log luminance by light over the 40th–99.9th
+percentile interval after excluding empty bin zero, so a small lit disk is
+not discarded with the brightest five percent. The retained physical reading
+receives the current compensation and comfort clamps. Holding adaptation keeps
+the current exposure and the Automatic mode.
+
+Adaptation runs on `engine.presentationTime`, accumulated with bounded frame
+deltas, separately from the photographic instant that places bodies and seeds
+noise. Camera cuts, mode changes and time scrubs invalidate meter history and
+pending asynchronous readbacks. Manual and pinned staging add no automatic gain.
+The live effective EV, gain, selected mode, staging override and optical pass
+counts are available as `engine.exposure` and `engine.sensorDiagnostics`.
+
+[ADR-0037](../adr/0037-the-enhanced-camera.md) records the current processing
+policy and remaining image acceptance. [ADR-0031](../adr/0031-the-sensor-response.md)
+retains the measured optical and ACES diagnostic baseline.
 
 Two things the chain has to do that a reader would not guess, both measured
 rather than argued in [ADR-0029](../adr/0029-the-sensor-spine.md). The pass is

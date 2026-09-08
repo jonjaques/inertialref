@@ -20,17 +20,14 @@ import { integratedSkyGain, sensorRadiance } from './radiance.ts'
  * bodies and blended over the sky, which a pass after the response could
  * not be.
  *
- * What it does not do is leave the meter: the histogram counts every fourth
- * pixel of the scene target and a trace is a one-pixel line, so under a
- * metered response a frame of nothing but traces is metered on them. A
- * mask channel would fix that; no plate has needed it yet.
+ * The sensor's instrument mask excludes covered pixels from metering.
  */
 
 /** The trace's color on screen, at every exposure. */
 const TRACE_COLOR = { r: 0.35, g: 0.62, b: 0.85 }
 
 export function createOrbitTraceMaterial(): LineBasicNodeMaterial {
-  const line = sensorRadiance(new LineBasicNodeMaterial())
+  const line = sensorRadiance(new LineBasicNodeMaterial(), true, true)
   line.colorNode = vec3(TRACE_COLOR.r, TRACE_COLOR.g, TRACE_COLOR.b).mul(
     integratedSkyGain,
   )

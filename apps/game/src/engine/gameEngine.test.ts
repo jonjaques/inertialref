@@ -251,17 +251,17 @@ it('the external instrument uses physical starlight only while its camera owns t
   const game = headlessEngine()
   try {
     game.frame(1 / 60)
-    expect(game.calibratedLight).toBe(true)
+    expect(game.visibilityProcessing).toBe(true)
     game.harness.galaxyView('face-on')
     game.frame(1 / 60)
-    expect(game.calibratedLight).toBe(false)
+    expect(game.visibilityProcessing).toBe(false)
     game.harness.play('tng-intro')
     game.frame(1 / 60)
-    expect(game.calibratedLight).toBe(true)
+    expect(game.visibilityProcessing).toBe(true)
     game.harness.stopCutscene()
     game.harness.look('s:SOL/b:2', { ease: false })
     game.frame(1 / 60)
-    expect(game.calibratedLight).toBe(true)
+    expect(game.visibilityProcessing).toBe(true)
   } finally {
     game.dispose()
   }

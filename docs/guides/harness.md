@@ -118,7 +118,9 @@ same report without an exposure or display response; `localDust()` lists the
 Local Bubble approximation and nine source-derived cloud records. The reference
 sky includes diffuse Galactic and extragalactic light beyond the modeled stellar
 component. The report declares that limitation, its units, and the 0.3 mag bound.
-Natural-specific display treatment and final appearance acceptance remain deferred.
+Enhanced processing consumes that calibrated field separately from this report.
+Matched camera images and transitions remain subject to preview acceptance;
+passing the linear-light bounds does not establish their appearance.
 
 To regenerate the checked-in source manifest and runtime cloud/sky tables:
 
@@ -133,35 +135,51 @@ sky map; source links, hashes and exact selection windows accompany the output i
 
 In the browser's planetarium, `ir.galaxyView('face-on')` and
 `ir.galaxyView('edge-on')` select the fixed external instruments also available
-under Presets → Milky Way. They change the observatory and lens, leaving the
-world unchanged. `ir.look('s:SOL/b:2')` returns to an Earth view.
+under Presets → Milky Way. Each scopes its recipe lens and photographic
+exposure while it owns the view. Leaving it releases that scope and restores
+the player's lens and mode; no world state or global preference is rewritten.
+`ir.look('s:SOL/b:2')` returns to an Earth view.
 
-`ir.galaxyJourney(0)` holds 64,000 km above Earth through the long-exposure
-galaxy instrument. `ir.galaxyJourney(1, 36)` travels to 30 kpc above the galactic
-center over 36 presentation seconds; `ir.galaxyJourney(0, 36)` returns. The
-first argument is progress from zero to one, and an omitted duration holds the
-requested view immediately. `ir.observerStatus().journey` reads progress,
+`ir.galaxyJourney(0)` holds 64,000 km above Earth with the player's lens and
+selected camera mode. `ir.galaxyJourney(1, 36)` travels to 30 kpc above the
+galactic center over 36 presentation seconds; `ir.galaxyJourney(0, 36)` returns.
+The first argument is progress from zero to one, and an omitted duration holds
+the requested view immediately. `ir.observerStatus().journey` reads progress,
 destination and remaining duration without moving the camera. The Milky Way
-controls expose the same trip and a slider. Bright bodies can clip at the
-instrument's f/2, 2,400 s, ISO 400 exposure; the Camera panel still owns the lens.
-The live renderer's diagnostics include the observer frame, sensor exposure,
-sampling profile, and bounded local survey.
+controls expose the same trip and a slider. Automatic adapts to the framed
+light, Manual retains the chosen lens exposure, and Enhanced keeps its declared
+composition. Entering a journey does not select a long-exposure instrument.
 
-`ir.galaxy().render()` returns the live target's dimensions and bytes, field
-and kernel versions, normalization, galactic-center origin in parsecs, step
-bounds, dust scale, sampling profile, settled state, readiness, and three
-counters: `submissions`, the scene submissions the volume was asked in;
-`draws`, the times it drew; and `held`, whether the last submission reused
-the target. The volume draws when the view, field or size changes and once
-more, with the settled profile, after eight unchanged submissions; between
-those the target is held and a submission costs the backdrop's composite.
-`--sample 12 --sample-js "ir.galaxy().render()"` shows that cadence one frame
-at a time, and `ir.gpu()` holds the loop while it measures, so its frame
-count and these counters agree. It returns `null` without a renderer. `ir.lens()` gives the actual instrument exposure. The face-on view
-uses f/2, 2,400 s, ISO 400; edge-on uses f/2, 600 s, ISO 400. Both contain
-stellar emission transported through the shared dust field. A declared photopic/V
-ratio of 1.25 converts V power to luminance; color remains illustrative. `resolvedStarExtinction: false`
-records the temporary mismatch between attenuated diffuse light and star sprites.
+`ir.galaxy().render()` returns the projected target's dimensions and bytes,
+field and kernel versions, normalization, galactic-center origin in parsecs,
+step bounds, dust scale, sampling profile, settled state, readiness, observer
+frame, sensor exposure and bounded local survey. `submissions` counts scene
+submissions requested from the volume; `draws` includes integral tiles and
+projection draws; `held` says whether the projected target was reused on the
+last submission. A held projection may coexist with an advancing cache bake.
+
+When the ordinary physical cache is enabled, `cache` reports `initialFaceSize`,
+`faceSize` and `selectedFaceSize`, tile progress, publication and cancellation
+counts, retained entries, the 0.15 pc reuse radius, allocated bytes and physical
+units. `using` identifies the selected cache path; `liveDraws` and
+`samplingDraws` distinguish integration from cache sampling. The first complete
+cube has 32-pixel faces; the next has 128-pixel faces. Both retain physical
+V-anchored RGB in units of 1,000 nW m⁻² sr⁻¹ per stored unit. The display
+response is applied afterward. A bounded live target serves a cold or
+translated view while a replacement bakes; only complete cubes publish.
+
+`--sample 12 --sample-js "ir.galaxy().render()"` records that state one frame
+at a time. Read cache publication and draw counters beside frame timings;
+submission counts alone do not measure cost. The report is `null` without a
+renderer. `ir.lens()` gives the resolved optics and exposure. The fixed face-on
+instrument uses f/2, 2,400 s, ISO 400; edge-on uses f/2, 600 s, ISO 400. These
+recipes apply only while the named instrument owns the view.
+
+The field transports stellar emission through the shared dust model. A declared
+photopic/V ratio of 1.25 converts V power to luminance; color remains
+illustrative. `resolvedStarExtinction: false` records the temporary mismatch
+between attenuated diffuse light and star sprites. The cache and camera
+processing do not establish that deferred population work.
 
 ```sh
 node scripts/drive.mjs --url http://localhost:5173/planetarium \

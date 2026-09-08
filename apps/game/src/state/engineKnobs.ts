@@ -47,6 +47,7 @@ export interface EngineKnobs {
   surfaceQuality: SurfaceQuality
   supersample: number
   onLensRequest: ((lens: Lens) => void) | null
+  onSensorRequest?: ((settings: SensorSettings) => void) | null
 }
 
 /** One row: apply the stored value now, then follow the key. */
@@ -104,8 +105,10 @@ export function bindEngineKnobs(engine: EngineKnobs): () => void {
   engine.onLensRequest = (lens) => {
     if (CAMERA_LENS.accept(lens)) write(CAMERA_LENS, lens)
   }
+  engine.onSensorRequest = (settings) => write(RENDER_SENSOR, settings)
   return () => {
     for (const release of releases) release()
     engine.onLensRequest = null
+    engine.onSensorRequest = null
   }
 }

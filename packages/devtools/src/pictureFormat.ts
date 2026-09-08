@@ -5,6 +5,11 @@ import {
 } from '@inertialref/rendering'
 import { parseAddress } from '@inertialref/universe'
 import type { Picture } from './pictures.ts'
+import {
+  captureCameraProcessing,
+  DEFAULT_PICTURE_PROCESSING,
+  isPictureProcessing,
+} from './pictureProcessing.ts'
 
 export const MAX_PICTURES = 500
 export const MAX_FILE_PICTURES = 1000
@@ -50,6 +55,8 @@ export function isPicture(value: unknown): value is Picture {
     return false
   }
   if (value.fovDeg !== undefined && !number(value.fovDeg, 0.1, 150))
+    return false
+  if (value.processing !== undefined && !isPictureProcessing(value.processing))
     return false
   if (value.lens !== undefined) {
     const lens = value.lens
@@ -143,32 +150,45 @@ export function decodePictures(data: unknown): readonly Picture[] {
   if (
     !record(data) ||
     data.format !== 'inertialref/presets' ||
-    data.version !== 1 ||
+    (data.version !== 1 && data.version !== 2) ||
     !Array.isArray(data.pictures) ||
     data.pictures.length > MAX_FILE_PICTURES
   )
     throw new Error(
-      'Expected an InertialRef presets file, version 1 (up to 1,000 shots).',
+      'Expected an InertialRef presets file, version 1 or 2 (up to 1,000 shots).',
     )
   const ids = new Set<string>()
   for (const [index, picture] of data.pictures.entries()) {
-    if (!isPicture(picture))
+    if (
+      !isPicture(picture) ||
+      (data.version === 1
+        ? picture.processing !== undefined
+        : picture.processing === undefined)
+    )
       throw new Error(`Invalid preset at position ${index + 1}.`)
     if (ids.has(picture.id))
       throw new Error(`Duplicate preset ID: ${picture.id}`)
     ids.add(picture.id)
   }
-  return data.pictures as Picture[]
+  return (data.pictures as Picture[]).map((picture) => ({
+    ...picture,
+    processing: captureCameraProcessing(
+      picture.processing ?? DEFAULT_PICTURE_PROCESSING,
+    ),
+  }))
 }
 
 export function encodePictures(pictures: readonly Picture[]): string {
-  return (
-    JSON.stringify(
-      { format: 'inertialref/presets', version: 1, pictures },
-      null,
-      2,
-    ) + '\n'
-  )
+  const envelope = {
+    format: 'inertialref/presets',
+    version: 2,
+    pictures: pictures.map((picture) => ({
+      ...picture,
+      processing: picture.processing ?? DEFAULT_PICTURE_PROCESSING,
+    })),
+  }
+  decodePictures(envelope)
+  return JSON.stringify(envelope, null, 2) + '\n'
 }
 
 /** Importing the same file again is harmless. ID conflicts preserve both shots. */
@@ -192,13 +212,19 @@ export function mergePictures(
 }
 
 function signature(picture: Picture): string {
-  return JSON.stringify({ ...picture, id: '' }, (_key, value: unknown) =>
-    record(value)
-      ? Object.fromEntries(
-          Object.keys(value)
-            .sort()
-            .map((key) => [key, value[key]]),
-        )
-      : value,
+  return JSON.stringify(
+    {
+      ...picture,
+      processing: picture.processing ?? DEFAULT_PICTURE_PROCESSING,
+      id: '',
+    },
+    (_key, value: unknown) =>
+      record(value)
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, value[key]]),
+          )
+        : value,
   )
 }

@@ -24,7 +24,7 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
 
   useEffect(() => {
     const field = createGalaxyField(engine.world.galaxySeed)
-    const volume = new GalaxyVolumeNode(field)
+    const volume = new GalaxyVolumeNode(field, { cache: {} })
     const mesh = createGalaxyBackdrop(volume)
     const held = { volume, mesh, field, world: engine.world }
     live.current = held

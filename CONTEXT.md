@@ -48,17 +48,17 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
 
-The galaxy preview has fixed face-on and edge-on instruments and a reversible
-Earth-to-disk journey. Its live volume follows the planetarium observer through
-the scene and sensor when the response admits diffuse light; ordinary Natural
-views at daylight calibration omit the volume. Shared seeded dust dims and reddens the diffuse light,
-with finer sampling after the camera settles. The field stays separate from
-active generation. Nine local clouds and a Local Bubble approximation now have
-source records, and V-band radiance has linear photometric checks. Natural
-treatment and appearance acceptance, resolved-star extinction, and angular
-caching remain open. The live dust rendering
-saturates the GPU in the full-resolution rig; performance acceptance is open
-([ADR-0032](docs/adr/0032-the-stellar-field.md)).
+The default Enhanced camera composes detailed worlds and faint sky; Automatic
+and Manual share photographic light and response. Ordinary views consume a
+physical sky cache, initially six 32² faces and then 128² refinement. Fixed
+face-on and edge-on galaxy instruments own scoped lenses and photographic
+exposure; the reversible Earth-to-disk journey keeps the player's mode and
+lens. Shared seeded dust dims and reddens the diffuse light. The field stays
+separate from active generation, with nine local clouds, a Local Bubble
+approximation and linear V-band photometric checks. Resolved-star extinction,
+the later galaxy milestones and manual appearance/performance acceptance remain
+open ([ADR-0032](docs/adr/0032-the-stellar-field.md),
+[ADR-0037](docs/adr/0037-the-enhanced-camera.md)).
 
 ## Decisions that are expensive to reverse
 
@@ -8368,6 +8368,87 @@ prove the cost of an Enhanced frame with its sky visible.
 The planning branch includes M6 from PR #70 at `9911dd5`, stacked on PR #69.
 Its physical calibration remains intact. The three camera modes and their
 images are not implemented by this entry.
+
+## The sky had to survive before it could be revealed (07 Sep 2026)
+
+The camera implementation starts from `codex/galaxy` at
+`b50a1f22df424e24a7165fa811374694221c6c98`. Physical galaxy-field@4 and
+galaxy-tsl@5 remain the source of the image. A half-float scene attachment at
+daylight exposure cannot carry all the faint sky that a later tone curve would
+need. The sky therefore stays in its owned physical RGB target, in
+`nW m^-2 sr^-1 / 1000`, until backdrop composition. Enhanced applies a declared
+24-stop gain and a luminance shoulder bounded at 0.35 surface-relative units;
+photographic modes bypass it. The GPU precision test spans 26.5165 stops,
+retains the source, and checks foreground coverage through the real sensor.
+Returning unprocessed radiance from composition makes that regression fail.
+The first 21-stop gain passed the numerical gate but left the band barely
+visible beside Earth in SDR. Matched sRGB captures settled the initial
+24-stop choice; the Cloudflare preview remains the user's visual acceptance
+gate, including composition, dust contrast and star hierarchy.
+
+A count-weighted histogram let faint occupied pixels overpower a small bright
+disk. The replacement weights by luminance after trimming the highest 0.1%
+of occupied samples. Empty pixels contribute nothing. A separate R8 mask
+excludes orbit and landing ink without erasing those instruments from the
+image. Held adaptation still obeys newly tightened comfort limits. Readback
+generations reject old mode, pose and photographic-time samples; adaptation
+uses presentation time while a photographic instant is held. Manual never
+consumes meter gain. WebGL explicitly reports Automatic unavailable and offers
+Manual; Enhanced SDR rendered the matched Earth-and-band view on that backend.
+
+Two cache implementation details needed real GPU regressions. Assigning a
+target's scissor rectangle does not enable scissoring in three r185: without
+`renderer.setScissorTest(true)`, a claimed 16² tile draws an entire face.
+Changing a cube target's size also leaves its six image extents stale; a tier
+change replaces only the free target. Both fixes preserve the published cube.
+A complete 32² sky publishes after 24 bounded tile submissions and stays
+available through the following 384 refinement submissions. Camera rotation
+only resamples it. A 0.15 pc radius bounds reuse; sampled 0.14 pc probes agree
+within 1%, which is a tested sample set, not a universal dust-error bound.
+An outside-disk visit followed by an early return canceled one incomplete
+generation and reused the completed home sky.
+
+With the capture browser stopped, the final cache's 408 submissions took
+619.80 ms across a drained queue, averaging 1.519 ms. Warm rotating projection
+cost 0.0602 ms at 1920×1080 and 0.0579 ms at 2880×1800, slightly above the
+0.05 ms target. Under continuous rotation, the first 16 cold frames averaged
+6.93 ms and subsequent 16-frame blocks 0.85–3.01 ms. The coarse cube bounds
+the initial quality cost; these measurements do not close the 2 ms live-volume
+budget or the full cold/descent/travel acceptance matrix.
+
+On Apple M5, Chrome 152, WebGPU, sRGB SDR and MSAA 4, the complete warm sensor
+frame averaged 4.02 ms at 1920×1080 DPR 1 and 8.09 ms at 1440×900 CSS / DPR 2,
+each across 80 submissions and a drained queue. The sky cache plus projected
+target used 2,658,816 and 4,214,016 bytes respectively. The added meter mask,
+including its multisample attachment and resolve, used 10,368,000 and
+25,920,000 bytes. A separate two-second free-look recording at DPR 2 presented
+121 frames, with 17.6 ms frame-interval p95 and none over 25 ms. These are
+different measurements: the drained submission batch is sensor cost, while
+the paced recording includes the complete moving app. A first profile begun
+immediately after the drained batch included its deliberate queue hold; the
+recorded free-look run begins after settling. The Enhanced descent capture
+contains 90 presented frames and no isolated-frame strobe detection, which
+does not establish visual acceptance of a moving shot. WebGL's settled SDR
+recording presented 120 frames in two seconds, p95 17.1 ms. Extended P3 is a
+separate supported output, not a requirement for the SDR picture.
+
+Version 2 pictures carry selected camera processing and never carry adaptation
+history or display hardware. Version 1 restores Enhanced defaults while
+retaining the lens, pose and photographic time it actually recorded; it cannot
+promise its historical appearance. Ordinary galaxy travel no longer writes
+an instrument lens into the preference. The new mode controls and these
+compatibility decisions are described in
+[ADR-0037](docs/adr/0037-the-enhanced-camera.md); the remaining image gate stays
+in [the camera plan](design/plans/the-camera.md).
+
+The existing drag-to-land browser fixture initially failed its strict
+longitude comparison because the preset camera was still easing. The ground
+point drifted by about 0.0059 radians over four frames with no pointer event,
+and by the same amount after a correctly rejected foreign pointer. Finishing
+the camera motion before the gesture preserves the strict assertion. The
+fixture then passed in Enhanced, Automatic and Manual, with a projected
+pointer error of 5.31e-11 pixels and a landing-coordinate error of 6.94e-18
+radians. Product input handling did not change.
 
 ## Known gaps
 

@@ -1,12 +1,13 @@
 import {
   decodePictures,
+  DEFAULT_PICTURE_PROCESSING,
   findPicture,
   type Picture,
 } from '@inertialref/devtools'
 import { PLANETARIUM, QUERY } from '../pages/paths.ts'
 
 const MAX_SHOT_LENGTH = 16_000
-const SHOT_VERSION = '1'
+const SHOT_VERSION = '2'
 
 // Query values have no types. These leaf types keep a seed like "123" a string
 // and distinguish infinite focus from a label whose text happens to be "null".
@@ -44,6 +45,13 @@ const FIELD_TYPES = {
   'lens.focus': 'nullable-number',
   'lens.shutter': 'number',
   'lens.iso': 'number',
+  'processing.mode': 'string',
+  'processing.look': 'string',
+  'processing.compensation': 'number',
+  'processing.rate': 'number',
+  'processing.range.bright': 'number',
+  'processing.range.dark': 'number',
+  'processing.balance': 'number',
 } as const
 const SHOT_ROOTS = new Set([
   ...Object.keys(FIELD_TYPES).map((key) => key.split('.')[0]),
@@ -119,13 +127,18 @@ export function presetLink(id: string): string {
 
 /** Dotted keys mirror the picture object; URLSearchParams owns text escaping. */
 export function pictureLink(picture: Picture, save = false): string {
-  decodePictures({
+  const [portable] = decodePictures({
     format: 'inertialref/presets',
-    version: 1,
-    pictures: [picture],
+    version: 2,
+    pictures: [
+      {
+        ...picture,
+        processing: picture.processing ?? DEFAULT_PICTURE_PROCESSING,
+      },
+    ],
   })
   const params = new URLSearchParams({ [QUERY.shot]: SHOT_VERSION })
-  flatten(picture, params)
+  flatten(portable, params)
   if (save) params.set(QUERY.save, '1')
   if (params.toString().length > MAX_SHOT_LENGTH)
     throw new Error(
@@ -154,11 +167,11 @@ export function readPictureLink(params: URLSearchParams): {
   if (id !== null)
     return { picture: findPicture(id), save: params.get(QUERY.save) === '1' }
   if (shot === null && !hasFields) return { picture: null, save: false }
-  if (shot !== SHOT_VERSION)
-    throw new Error('Expected a shot link with shot=1.')
+  if (shot !== '1' && shot !== SHOT_VERSION)
+    throw new Error('Expected a shot link with shot=1 or shot=2.')
   const pictures = decodePictures({
     format: 'inertialref/presets',
-    version: 1,
+    version: Number(shot),
     pictures: [expand(params)],
   })
   return { picture: pictures[0]!, save: params.get(QUERY.save) === '1' }

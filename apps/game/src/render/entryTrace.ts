@@ -19,7 +19,7 @@ function ink(
   width: number,
   depthTest = true,
 ): Line2NodeMaterial {
-  const line = sensorRadiance(new Line2NodeMaterial())
+  const line = sensorRadiance(new Line2NodeMaterial(), true, true)
   line.colorNode = vec3(...color).mul(integratedSkyGain)
   line.linewidth = width
   line.depthWrite = false
@@ -37,7 +37,7 @@ function ink(
 }
 
 export function createEntryTraceMaterials() {
-  const through = sensorRadiance(new LineBasicNodeMaterial())
+  const through = sensorRadiance(new LineBasicNodeMaterial(), true, true)
   through.colorNode = vec3(0.25, 0.55, 0.8).mul(integratedSkyGain)
   through.transparent = true
   through.opacity = 0.25

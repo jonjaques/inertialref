@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { PICTURES, type Picture } from '@inertialref/devtools'
+import {
+  DEFAULT_PICTURE_PROCESSING,
+  PICTURES,
+  type Picture,
+} from '@inertialref/devtools'
 import {
   pictureLink,
   readPictureLink,
@@ -15,6 +19,82 @@ const query = (path: string) =>
 const camera = PICTURES.find((one) => one.framing.kind === 'camera')!
 
 describe('preset URLs', () => {
+  it('restores an old dotted URL with Enhanced processing and its stated camera', () => {
+    const params = new URLSearchParams({
+      shot: '1',
+      id: 'old-camera',
+      label: 'Old camera',
+      why: '',
+      seed: 'inertialref',
+      'generation.galaxy': '1',
+      time: '123456.75',
+      address: 's:SOL/b:2',
+      'framing.kind': 'camera',
+      'framing.state.azimuth': '0.25',
+      'framing.state.elevation': '0.5',
+      'framing.state.distance': '20000000',
+      'framing.look.yaw': '-0.125',
+      'framing.look.pitch': '0.0625',
+      'framing.surface': 'null',
+      'lens.focalLength': '50',
+      'lens.gauge': '24',
+      'lens.zoom': '2',
+      'lens.fStop': '8',
+      'lens.focus': 'null',
+      'lens.shutter': '0.004',
+      'lens.iso': '400',
+    })
+    const picture = readPictureLink(params).picture!
+    expect(picture.processing).toEqual(DEFAULT_PICTURE_PROCESSING)
+    expect(picture.time).toBe(123456.75)
+    expect(picture.framing).toEqual({
+      kind: 'camera',
+      state: { azimuth: 0.25, elevation: 0.5, distance: 20_000_000 },
+      look: { yaw: -0.125, pitch: 0.0625 },
+      surface: null,
+    })
+    expect(picture.lens).toEqual({
+      focalLength: 50,
+      gauge: 24,
+      zoom: 2,
+      fStop: 8,
+      focus: null,
+      shutter: 0.004,
+      iso: 400,
+    })
+    params.set('processing.mode', 'automatic')
+    expect(() => readPictureLink(params)).toThrow()
+  })
+  it('round trips every mode and its finite processing settings', () => {
+    const finite = (min: number, max: number) =>
+      fc.double({ min, max, noNaN: true, noDefaultInfinity: true })
+    fc.assert(
+      fc.property(
+        fc.record({
+          mode: fc.constantFrom(
+            'enhanced' as const,
+            'automatic' as const,
+            'manual' as const,
+          ),
+          look: fc.constantFrom(
+            'neutral' as const,
+            'gentle' as const,
+            'crisp' as const,
+          ),
+          compensation: finite(-8, 8),
+          rate: finite(0, 4),
+          range: fc.record({ bright: finite(0, 32), dark: finite(0, 24) }),
+          balance: finite(2000, 12_000),
+        }),
+        (processing) => {
+          const picture: Picture = { ...camera, processing }
+          const params = query(pictureLink(picture))
+          expect(params.get('processing.mode')).toBe(processing.mode)
+          expect(readPictureLink(params).picture).toEqual(picture)
+        },
+      ),
+    )
+  })
   it('opens a built-in by its stable ID', () => {
     expect(presetLink('earthrise')).toBe('/planetarium?preset=earthrise')
     expect(readPictureLink(query(presetLink('earthrise'))).picture?.id).toBe(
@@ -36,7 +116,7 @@ describe('preset URLs', () => {
     const params = query(
       pictureLink({ ...camera, label: 'Sea + sky & ice = 夜' }),
     )
-    expect(params.get('shot')).toBe('1')
+    expect(params.get('shot')).toBe('2')
     expect(params.get('label')).toBe('Sea + sky & ice = 夜')
     expect(params.get('framing.kind')).toBe('camera')
     expect(params.get('lens.focus')).toBe('null')
@@ -108,7 +188,7 @@ describe('preset URLs', () => {
   })
   it('rejects missing versions, repeated fields, unknown paths and invalid types', () => {
     for (const [key, value] of [
-      ['shot', '2'],
+      ['shot', '3'],
       ['shot', ''],
       ['time', ''],
       ['time', 'NaN'],
@@ -118,6 +198,17 @@ describe('preset URLs', () => {
       ['lens.zoom', '-1'],
       ['lens.zoon', '2'],
       ['lens', '{}'],
+      ['processing.mode', 'direct'],
+      ['processing.look', 'natural'],
+      ['processing.rate', '-1'],
+      ['processing.compensation', '9'],
+      ['processing.range.bright', '33'],
+      ['processing.range.dark', '25'],
+      ['processing.balance', '12001'],
+      ['processing.peak', '2'],
+      ['processing.ev', '12'],
+      ['processing.output', 'display-p3'],
+      ['processing.__proto__.polluted', '1'],
       ['framing.state', 'null'],
       ['framing.surface.extra', '0'],
       ['generation.__proto__', '1'],
@@ -131,7 +222,14 @@ describe('preset URLs', () => {
       params.set(key!, value!)
       expect(() => readPictureLink(params), `${key}=${value}`).toThrow()
     }
-    for (const key of ['shot', 'seed', 'time', 'lens.zoom', 'save']) {
+    for (const key of [
+      'shot',
+      'seed',
+      'time',
+      'lens.zoom',
+      'processing.mode',
+      'save',
+    ]) {
       const params = query(pictureLink(camera, true))
       params.append(key, params.get(key)!)
       expect(() => readPictureLink(params), `duplicate ${key}`).toThrow()
@@ -139,6 +237,10 @@ describe('preset URLs', () => {
     const missingVersion = query(pictureLink(camera))
     missingVersion.delete('shot')
     expect(() => readPictureLink(missingVersion)).toThrow()
+    const missingProcessing = query(pictureLink(camera))
+    for (const key of [...missingProcessing.keys()])
+      if (key.startsWith('processing.')) missingProcessing.delete(key)
+    expect(() => readPictureLink(missingProcessing)).toThrow()
   })
   it('replaces every shot field while preserving world and diagnostic settings', () => {
     const current = query(pictureLink(camera, true))
