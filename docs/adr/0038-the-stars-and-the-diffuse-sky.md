@@ -153,6 +153,10 @@ The regenerable IndexedDB store retains at most two finished cubes in a
 separate database. Records contain a versioned field fingerprint, kernel and
 backend, quality, observer and source envelope, and all six physical RGBA16F
 faces. Reads validate metadata, finite nonnegative radiance and complete faces.
+Pixel validation yields every 16,384 texels; restoration checks its request
+identity again after validation. Database version 2 separates small LRU metadata
+from pixel payloads: eviction enumerates keys, and a hit touches metadata without
+rewriting its cube. Upgrading retires the regenerable version 1 cache once.
 Writes wait for transaction completion. Unsupported, blocked or failed storage
 is a cache miss. GPU readback and upload preserve native cube-face orientation
 and padded row strides; temporary transfer textures are disposed.

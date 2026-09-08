@@ -53,8 +53,7 @@ it('restores physical rays after retirement and rejects a late archive from anot
     restored.configure(SUN_POSITION, field)
     await restored.warm(gpu.renderer)
     restored.advance(gpu.renderer)
-    await Promise.resolve()
-    expect(restored.diagnostics.archive.hits).toBe(1)
+    await expect.poll(() => restored.diagnostics.archive.hits).toBe(1)
     expect(restored.diagnostics.tiles).toBe(1)
     expect(restored.available).toBe(true)
     const actual = (

@@ -6,6 +6,7 @@ import {
   type GalaxyField,
   type ResolvedPopulationSelection,
 } from '@inertialref/universe'
+import { yieldToMain } from './schedulerYield.ts'
 import { GALAXY_CACHE_RADIUS_PARSECS } from './galaxyCache.ts'
 
 export const GALAXY_SKY_ARCHIVE_VERSION = 1
@@ -94,30 +95,42 @@ export function galaxySkyArchiveKey(query: GalaxySkyQuery): string {
   ])
 }
 
-/**
- * Disk data is untrusted. A cache miss costs a bake; accepting another field,
- * source partition, or incomplete cube changes the physical sky.
- */
-export function validateGalaxySkyArchive(
+/** Metadata is cheap to inspect before IndexedDB clones any pixel payload. */
+export function galaxySkyArchiveMatches(
   value: unknown,
   query: unknown,
-): GalaxySkyArchiveRecord | null {
+): value is GalaxySkyQuery & { version: typeof GALAXY_SKY_ARCHIVE_VERSION } {
+  return (
+    isQuery(query) &&
+    isQuery(value) &&
+    object(value) &&
+    value.version === GALAXY_SKY_ARCHIVE_VERSION &&
+    value.backend === query.backend &&
+    value.kernelVersion === query.kernelVersion &&
+    value.faceSize === query.faceSize &&
+    fieldKey(value.field) === fieldKey(query.field) &&
+    UV.distance(value.origin, query.origin) <=
+      galaxySkyReuseRadius(value, query) * PARSEC
+  )
+}
+
+/**
+ * Disk data is untrusted. Validate every pixel, in chunks small enough to yield
+ * before the next animation/input task. Both entry points share this scanner.
+ */
+function* scanArchive(
+  value: unknown,
+  query: unknown,
+): Generator<void, GalaxySkyArchiveRecord | null> {
   if (
-    !isQuery(query) ||
-    !isQuery(value) ||
+    !galaxySkyArchiveMatches(value, query) ||
     !object(value) ||
-    value.version !== GALAXY_SKY_ARCHIVE_VERSION ||
-    value.backend !== query.backend ||
-    value.kernelVersion !== query.kernelVersion ||
-    value.faceSize !== query.faceSize ||
-    fieldKey(value.field) !== fieldKey(query.field) ||
-    UV.distance(value.origin, query.origin) >
-      galaxySkyReuseRadius(value, query) * PARSEC ||
     !Array.isArray(value.faces) ||
     value.faces.length !== 6
   )
     return null
   const length = value.faceSize * value.faceSize * 4
+  let pixels = 0
   for (const face of value.faces) {
     if (!(face instanceof Uint16Array) || face.length !== length) return null
     for (let i = 0; i < length; i += 4) {
@@ -131,9 +144,35 @@ export function validateGalaxySkyArchive(
         )
           return null
       }
+      if (++pixels % 16384 === 0) yield
     }
   }
   return value as unknown as GalaxySkyArchiveRecord
+}
+
+/** Synchronous validation for headless callers and small fixtures. */
+export function validateGalaxySkyArchive(
+  value: unknown,
+  query: unknown,
+): GalaxySkyArchiveRecord | null {
+  const scan = scanArchive(value, query)
+  let step = scan.next()
+  while (!step.done) step = scan.next()
+  return step.value
+}
+
+/** Browser storage and restoration must not scan a whole cube in one task. */
+export async function validateGalaxySkyArchiveAsync(
+  value: unknown,
+  query: unknown,
+): Promise<GalaxySkyArchiveRecord | null> {
+  const scan = scanArchive(value, query)
+  let step = scan.next()
+  while (!step.done) {
+    await yieldToMain()
+    step = scan.next()
+  }
+  return step.value
 }
 
 /** The source envelope and future eye motion spend one physical reuse budget. */

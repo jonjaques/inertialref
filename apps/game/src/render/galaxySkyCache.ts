@@ -33,7 +33,7 @@ import {
 import {
   galaxySkyQuery,
   galaxySkyReuseRadius,
-  validateGalaxySkyArchive,
+  validateGalaxySkyArchiveAsync,
   type GalaxySkyStore,
 } from './galaxySkyArchive.ts'
 import { readGalaxyCube, restoreGalaxyCube } from './galaxySkyTransfer.ts'
@@ -360,14 +360,21 @@ export class GalaxySkyCache {
     const id = ++this.#archiveRequest
     void this.#archive
       .read(query)
-      .then((value) => {
+      .then(async (value) => {
         if (
           this.#disposed ||
           id !== this.#archiveRequest ||
           key !== this.#archiveKey
         )
           return
-        const record = validateGalaxySkyArchive(value, query)
+        const record = await validateGalaxySkyArchiveAsync(value, query)
+        // Validation yields: disposal or a newer request may have won meanwhile.
+        if (
+          this.#disposed ||
+          id !== this.#archiveRequest ||
+          key !== this.#archiveKey
+        )
+          return
         const current = this.schedule.next()
         if (
           record === null ||
