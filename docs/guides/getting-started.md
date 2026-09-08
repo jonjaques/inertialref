@@ -85,6 +85,12 @@ twentieth at a time, `Shift+T` and `Shift+G` slam it, and it stays where it
 is put through a save. A retro is not the drive run backwards: it is the bow
 thrusters, or a flip and a burn.
 
+Killing rotation stops the spin immediately and shows a short counter-thrust
+burst. **Thruster variation** in Display settings adds uneven valve timing and
+tiny, occasional settling puffs while assist holds a stopped ship, or for eight
+seconds after a rotation kill. This is visual only: it changes neither the
+trajectory nor the controls. Turn it off for uniform valve timing.
+
 The navigation cluster at the bottom of the frame is the instrument the ship
 is flown by. The ball in the middle is the horizon of the nearest body seen
 from inside the hull — sky over ground, a pitch ladder, the compass along the

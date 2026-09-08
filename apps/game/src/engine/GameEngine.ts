@@ -5,6 +5,8 @@ import {
   GALAXY_VIEWS,
   exposurePinnedToLens,
   resolveCameraPolicy,
+  rotationStopCue,
+  type RotationStopCue,
   isSensorSettings,
   type SensorSettings,
   type Exposure,
@@ -573,6 +575,8 @@ export class GameEngine {
   onSensorRequest: ((settings: SensorSettings) => void) | null = null
   /** Adaptation follows presentation, including a held photographic instant. */
   presentationTime = 0
+  /** A brief counter-thrust picture, captured before the world stops the spin. */
+  rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
   galaxyRenderer: (() => GalaxyRenderReport) | null = null
@@ -1032,6 +1036,7 @@ export class GameEngine {
    * and `load` is how the starfield came to survive a jump of four light years.
    */
   #invalidateDerived(): void {
+    this.rotationStop = null
     this.origin = null
     this.snapshot = null
     this.#scene = null
@@ -1626,6 +1631,13 @@ export class GameEngine {
   killRotation(): void {
     const player = this.session.player()
     if (player === null) return
+    const entity = this.world.entities.require(player)
+    const cue = rotationStopCue(
+      entity.state.angularVelocity,
+      entity.thrusters?.torque ?? 0,
+      this.presentationTime,
+    )
+    if (cue !== null) this.rotationStop = { ...cue, entity: player }
     this.world.killRotation(player)
   }
 

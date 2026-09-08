@@ -67,13 +67,16 @@ export interface EntitySnapshot {
   /** Position within its own frame — the small numbers gameplay works in. */
   readonly localPosition: Vec3
   readonly localVelocity: Vec3
+  /** Current spin in hull axes, radians per second, for presentation. */
+  readonly angularVelocity: Vec3
+  readonly flightAssist: boolean
   readonly speed: number
   readonly landed: boolean
   readonly altitude: Meters | null
   /**
-   * What the thrusters are firing this tick, as fractions of their authority
-   * in body axes — the assist's damping included, so a spin being nulled draws
-   * the nozzles nulling it. Null for anything that cannot maneuver.
+   * Current maneuvering demand, as fractions of authority in body axes,
+   * including assist damping. Presentation can add brief valve cues without
+   * changing this demand. Null for anything that cannot maneuver.
    */
   readonly thrust: ThrustDemand | null
 }
@@ -185,12 +188,12 @@ export function entitySnapshot(
       : state.velocity,
     localPosition: state.position,
     localVelocity: state.velocity,
+    angularVelocity: entity.state.angularVelocity,
+    flightAssist: entity.flightAssist,
     speed: Vec.length(state.velocity),
     landed: world.isLanded(entity.id),
     altitude: world.altitudeOf(entity.id),
-    // The current tick's command, not an interpolation: a valve is open or it
-    // is not, and the assist term is a function of the spin the tick started
-    // with, which is the one the entity holds.
+    // Resolve demand from the current entity, not the interpolated pose.
     thrust: thrustDemand(entity, TICK_DURATION),
   }
 }

@@ -8993,6 +8993,31 @@ emit nonzero RGB, follow a fourfold exposure change and preserve the motion
 and depth behind it. All four variants fail before the fix and pass after it;
 the related optics and orbit-trace checks pass with them.
 
+## The stop has a plume, and the sky follows the eye (08 Sep 2026)
+
+Killing rotation goes straight through the world's verb and clears angular
+velocity before another frame can observe it. Recomputing demand from that
+stopped ship therefore produced no counter-thrust picture. The engine now
+captures the opposing direction before the stop as an expiring presentation cue;
+world replacement discards it. The cue stays out of the snapshot's demand, the
+control loop, state hashes and saves. A paired headless flight takes 600 more
+ticks with and without valve presentation and ends with identical hashes and
+serialized saves.
+
+The default-on Thruster variation preference adds small unequal response times
+and sparse 25–50 ms hold pulses, at no more than eight percent demand. These are
+art settings, not measurements of hardware. A pulse is shorter as well as dimmer;
+a GPU silhouette regression failed at a small/full length ratio of 1 with the
+old geometry. Variation can be disabled while the rotation-stop burst remains.
+
+The galaxy disk followed hull rotation in the orbit camera because its pose
+came from the raw player, before the flight camera applied orbit or head turn.
+Earth already used the rendered camera. The background now reads that camera
+through the floating origin, and the camera callback runs between the engine
+and its consumers. The regression turns the ship under a fixed camera, then
+turns the camera, with a nonidentity origin so an inverted basis cannot pass.
+No second camera producer and no new architectural boundary.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

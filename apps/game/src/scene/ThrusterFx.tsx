@@ -1,17 +1,18 @@
 import { useThree } from '@react-three/fiber'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Group, Scene } from 'three/webgpu'
-import {
-  driveThrottle,
-  type NozzleAllocation,
-  nozzleFiring,
-  prepareNozzles,
-} from '@inertialref/rendering'
+import { driveThrottle, ThrusterVisuals } from '@inertialref/rendering'
+import { Vec } from '@inertialref/spatial'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createThrusterPlumes, type ThrusterPlumes } from '../render/plumes.ts'
 import { thrusterLayoutFor } from '../render/thrusterLayouts.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
-import { read, RENDER_SHIP } from '../state/preferences.ts'
+import {
+  read,
+  RENDER_SHIP,
+  RENDER_THRUSTER_VARIATION,
+  usePersistentState,
+} from '../state/preferences.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
@@ -19,8 +20,8 @@ import { useTimedFrame } from './useTimedFrame.ts'
  *
  * Its own component rather than a child of `ShipModel`, because it consumes a
  * different thing: the model consumes a hull, this consumes the entity's
- * thrust demand — `RenderEntity.thrust`, the fraction of each axis the tick
- * integrated — and maps it onto the valves the hull's layout names. It rides
+ * thrust demand and the presentation-only stop and settling cues, mapped onto
+ * the valves the hull's layout names. It rides
  * the same pose as the hull, written here rather than by parenting into the
  * loader's group, so a hull switch swaps one child and disposes nothing that
  * the loader owns.
@@ -34,6 +35,7 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const group = useRef<Group>(null)
+  const [variation] = usePersistentState(RENDER_THRUSTER_VARIATION)
 
   /*
    * One set of plumes per hull, kept for the renderer's life the way the
@@ -50,7 +52,7 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
         const layout = thrusterLayoutFor(id)
         staged = {
           plumes: createThrusterPlumes(layout),
-          allocation: prepareNozzles(layout),
+          visuals: new ThrusterVisuals(layout),
           firing: new Float32Array(layout.nozzles.length),
         }
         built.set(id, staged)
@@ -102,12 +104,16 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
      */
     const hull = engine.hull
     if (hull === null || engine.cinematic !== null || !engine.showShip) {
+      if (root.visible) {
+        for (const held of built.values()) held.plumes.update(null, 0, 10)
+      }
       root.visible = false
       return
     }
     const staged = stageFor(hull.id)
     if (mounted.current !== hull.id) {
       root.clear()
+      staged.plumes.update(null, 0, 10)
       root.add(staged.plumes.group)
       mounted.current = hull.id
     }
@@ -131,8 +137,25 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
       staged.plumes.update(null, 0, delta)
       return
     }
-    nozzleFiring(staged.allocation, demand, staged.firing)
-    staged.plumes.update(staged.firing, driveThrottle(demand), delta)
+    const state = engine.snapshot?.entities.find(
+      (entity) => entity.id === ship.id,
+    )
+    const stop =
+      engine.rotationStop?.entity === ship.id ? engine.rotationStop : null
+    const holding =
+      state !== undefined &&
+      !state.landed &&
+      Vec.length(state.angularVelocity) < 1e-3 &&
+      (state.flightAssist ||
+        (stop !== null && engine.presentationTime - stop.at < 8))
+    const firing = staged.visuals.sample(
+      demand,
+      engine.presentationTime,
+      stop,
+      holding,
+      variation,
+    )
+    staged.plumes.update(firing, driveThrottle(demand), delta, variation)
   })
 
   // Empty until the first frame mounts a hull's plumes under it.
@@ -141,6 +164,6 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
 
 interface Staged {
   readonly plumes: ThrusterPlumes
-  readonly allocation: NozzleAllocation
+  readonly visuals: ThrusterVisuals
   readonly firing: Float32Array
 }

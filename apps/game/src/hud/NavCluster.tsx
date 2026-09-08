@@ -178,7 +178,7 @@ export function NavCluster({
                   ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
                   : 'border-slate-700/60 bg-slate-950/85 text-slate-400'
               }`}
-              title="Lit while any thruster valve is open"
+              title="Lit while maneuvering thrust is commanded"
             >
               Thrusters
             </span>

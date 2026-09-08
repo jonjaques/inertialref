@@ -43,7 +43,11 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import type { ThrusterLayout } from '@inertialref/rendering'
+import {
+  type ThrusterLayout,
+  nozzleValveSeed,
+  valveOpening,
+} from '@inertialref/rendering'
 import { asField, asVector, noiseFetch, noiseSampler } from './noiseNodes.ts'
 import { noiseTexture } from './noiseTexture.ts'
 import { sensorRadiance } from './radiance.ts'
@@ -75,7 +79,7 @@ import { sensorRadiance } from './radiance.ts'
  * boot warm-up compiles the one it has.
  *
  * Nothing here decides *whether* a valve fires — `packages/rendering`'s
- * `nozzleFiring` does, from the demand the tick integrated — and nothing
+ * `ThrusterVisuals` does, from the demand and presentation cues — and nothing
  * here reads the clock: the flicker runs on the frame's own delta, which is
  * a presentation filter like the observatory's ease, so a paused tick with
  * a held key still shows a burning drive rather than a frozen one.
@@ -91,7 +95,12 @@ export interface ThrusterPlumes {
    * null for none; `throttle` is the drive's 0..1; `delta` is the frame's
    * seconds, which drives the flicker and the valves' own rise and fall.
    */
-  update(firing: Float32Array | null, throttle: number, delta: number): void
+  update(
+    firing: Float32Array | null,
+    throttle: number,
+    delta: number,
+    variation?: boolean,
+  ): void
   dispose(): void
 }
 
@@ -108,9 +117,6 @@ const JET_LENGTH = 14
 const POD_LENGTH = 9
 const DRIVE_LENGTH = 9
 
-/** Seconds to close 63% of the gap: valves snap open and linger shut. */
-const VALVE_RISE = 0.03
-const VALVE_FALL = 0.09
 /** The drive lights over a quarter second and dies over a third. */
 const DRIVE_RISE = 0.25
 const DRIVE_FALL = 0.35
@@ -245,17 +251,24 @@ function shellMaterial(
     const u = normalize(cross(helper, along))
     const w = cross(along, u)
     const p = positionLocal
+    const opening = instancedBufferAttribute<'float'>(fire, 'float')
+    // A settling puff is short as well as faint; the drive has its own profile.
+    const stretch =
+      shading === 'drive' ? float(1) : opening.sqrt().mul(0.85).add(0.15)
     const radius = extent.x
     const local = mouth
       .add(u.mul(p.x.mul(radius)))
       .add(w.mul(p.z.mul(radius)))
-      .add(along.mul(p.y.mul(extent.y)))
+      .add(along.mul(p.y.mul(extent.y).mul(stretch)))
     const n = normalLocal
-    const normal = u.mul(n.x).add(w.mul(n.z)).add(along.mul(n.y))
+    const normal = u
+      .mul(n.x)
+      .add(w.mul(n.z))
+      .add(along.mul(n.y.div(stretch)))
     const normalView = normalize(modelNormalMatrix.mul(normal))
     const view = normalize(modelViewMatrix.mul(vec4(local, 1)).xyz)
     vFacing.assign(abs(dot(normalView, view)))
-    vFire.assign(instancedBufferAttribute<'float'>(fire, 'float'))
+    vFire.assign(opening)
     return local
   })()
 
@@ -445,6 +458,7 @@ export function createThrusterPlumes(layout: ThrusterLayout): ThrusterPlumes {
   group.name = 'plumes'
   group.renderOrder = 10
   const clock = uniform(0)
+  const valveSeeds = layout.nozzles.map(nozzleValveSeed)
   const disposers: (() => void)[] = []
 
   /*
@@ -546,18 +560,19 @@ export function createThrusterPlumes(layout: ThrusterLayout): ThrusterPlumes {
   return {
     group,
     nozzleCount: layout.nozzles.length,
-    update(firing, target, delta) {
+    update(firing, target, delta, variation = false) {
       clock.value += delta
       for (const kind of kinds) {
         let brightest = 0
         kind.indices.forEach((n, i) => {
           const want = firing === null ? 0 : (firing[n] ?? 0)
           const had = kind.held[i] ?? 0
-          const now = approach(
+          const now = valveOpening(
             had,
             want,
             delta,
-            want > had ? VALVE_RISE : VALVE_FALL,
+            valveSeeds[n] ?? 0,
+            variation,
           )
           kind.held[i] = now
           kind.fire.setX(i, now)

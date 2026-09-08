@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { SURFACE_LUMINANCE, type ThrusterLayout } from '@inertialref/rendering'
 import {
+  type BufferGeometry,
   Mesh,
   MeshBasicNodeMaterial,
   NodeUpdateType,
+  OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
   Scene,
@@ -94,6 +96,59 @@ it.each(['rcs', 'pod', 'drive shell', 'drive disk'] as const)(
       plumes.dispose()
       surface.geometry.dispose()
       surface.material.dispose()
+    }
+  },
+)
+
+it.each(['rcs', 'pod'] as const)(
+  'draws a short %s settling puff at low opening',
+  async (kind) => {
+    const camera = new OrthographicCamera(-2, 2, 2, -2, 0.01, 100)
+    camera.position.z = 5
+    const scene = new Scene()
+    const plumes = createThrusterPlumes({
+      nozzles: [
+        {
+          position: { x: -1, y: 0, z: 0 },
+          exhaust: { x: 1, y: 0, z: 0 },
+          radius: 0.1,
+          kind,
+        },
+      ],
+      drive: null,
+    })
+    // Keep the production vertex graph. A white silhouette isolates its length
+    // from the plume's noise, brightness falloff and sensor exposure.
+    const mesh = plumes.group.children[0] as Mesh<
+      BufferGeometry,
+      MeshBasicNodeMaterial
+    >
+    mesh.material.colorNode = vec3(1)
+    scene.add(plumes.group)
+    const scenePass = pass(scene, camera)
+    scenePass.updateBeforeType = NodeUpdateType.RENDER
+    const span = (pixels: Pixels) => {
+      let first = pixels.width
+      let last = -1
+      for (let y = 0; y < pixels.height; y += 1)
+        for (let x = 0; x < pixels.width; x += 1)
+          if (pixels.at(x, y)[0] > 0.1) {
+            first = Math.min(first, x)
+            last = Math.max(last, x)
+          }
+      return last - first + 1
+    }
+    try {
+      plumes.update(new Float32Array([1]), 0, 10)
+      const full = span(await gpu.drawGraph(scenePass, { float: true }))
+      plumes.update(new Float32Array([0.08]), 0, 10)
+      const small = span(await gpu.drawGraph(scenePass, { float: true }))
+      expect(full).toBeGreaterThan(8)
+      expect(small).toBeGreaterThan(2)
+      expect(small / full).toBeLessThan(0.6)
+    } finally {
+      scenePass.dispose()
+      plumes.dispose()
     }
   },
 )
