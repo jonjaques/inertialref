@@ -28,3 +28,6 @@ export * from './galaxyView.ts'
 export * from './galaxyJourney.ts'
 export * from './starCoordinates.ts'
 export * from './starVisibility.ts'
+export * from './cloudShell.ts'
+
+export * from './nearFieldLighting.ts'

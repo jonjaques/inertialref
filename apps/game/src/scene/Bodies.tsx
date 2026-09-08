@@ -1,5 +1,6 @@
 import {
   SURFACE_LUMINANCE,
+  cloudShellAltitude,
   surfaceColour,
   surfaceVisibilityGain,
 } from '@inertialref/rendering'
@@ -16,6 +17,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
+import { Vec } from '@inertialref/spatial'
 import { OPEN_OCEAN, type RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -360,6 +362,7 @@ export function Bodies({
   useTimedFrame('bodies', () => {
     const scene = engine.scene()
     const container = group.current
+    const visibility = engine.visibilityProcessing
     if (scene === null || container === null) return
 
     // Render-space position of the key light. `stars[0]` is documented as
@@ -524,7 +527,7 @@ export function Bodies({
           Math.max(0, (placement.angularRadius - 0.015) / 0.085),
         )
         visual.star.exposure.value =
-          body.sunlight * (engine.visibilityProcessing ? 1 - filling * 0.9 : 1)
+          body.sunlight * (visibility ? 1 - filling * 0.9 : 1)
       }
 
       const sun = scratch.sun
@@ -559,9 +562,9 @@ export function Bodies({
         )
         planet.sunDirection.value.copy(sun)
         planet.sunColour.value.setRGB(
-          keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
-          keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
-          keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
+          keyColour.r * (visibility ? 1 : body.sunlight),
+          keyColour.g * (visibility ? 1 : body.sunlight),
+          keyColour.b * (visibility ? 1 : body.sunlight),
         )
         planet.spinAxis.value
           .set(0, 1, 0)
@@ -596,7 +599,7 @@ export function Bodies({
         planet.albedoScale.value = surfaceVisibilityGain(
           appearance.geometricAlbedo,
           placement.angularRadius,
-          engine.visibilityProcessing,
+          visibility,
         )
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
@@ -683,8 +686,14 @@ export function Bodies({
           visual.clouds.geometry = geometryFor(placement.angularRadius)
           const material = visual.cloudMaterial
           // The shell is a thin weather image. Its final quarter-altitude of
-          // view path clears continuously before the eye enters the deck.
+          // height clears continuously before the eye enters the deck.
           material.entryDistance.value = placement.scale * lift * 0.25
+          material.eyeAltitude.value = cloudShellAltitude(
+            Vec.sub(scene.camera.position, placement.position),
+            orientation,
+            shell,
+            body.flattening,
+          )
           const cloudMap = texturesFor(appearance.texture, anisotropy).clouds
           material.setTexture(cloudMap)
           // A deck with no map — Titan's, and every procedural world's — is
@@ -699,9 +708,9 @@ export function Bodies({
           else material.baseColour.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(
-            keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
-            keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
-            keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
+            keyColour.r * (visibility ? 1 : body.sunlight),
+            keyColour.g * (visibility ? 1 : body.sunlight),
+            keyColour.b * (visibility ? 1 : body.sunlight),
           )
           // The deck's dusk color is the body's authored sunset, so clouds
           // and air agree about what the low sun does here.
@@ -742,9 +751,9 @@ export function Bodies({
           )
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(
-            keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
-            keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
-            keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
+            keyColour.r * (visibility ? 1 : body.sunlight),
+            keyColour.g * (visibility ? 1 : body.sunlight),
+            keyColour.b * (visibility ? 1 : body.sunlight),
           )
           material.innerFraction.value = ring.innerScale / ring.outerScale
           material.centre.value.copy(visual.mesh.position)
@@ -810,9 +819,9 @@ export function Bodies({
             )
         }
         air.sunColour.value.setRGB(
-          keyColour.r * (engine.visibilityProcessing ? 1 : body.sunlight),
-          keyColour.g * (engine.visibilityProcessing ? 1 : body.sunlight),
-          keyColour.b * (engine.visibilityProcessing ? 1 : body.sunlight),
+          keyColour.r * (visibility ? 1 : body.sunlight),
+          keyColour.g * (visibility ? 1 : body.sunlight),
+          keyColour.b * (visibility ? 1 : body.sunlight),
         )
         if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
@@ -826,7 +835,7 @@ export function Bodies({
           address: `star:${star.system}`,
           name: star.name,
           kind: 'star',
-          sunlight: engine.visibilityProcessing
+          sunlight: visibility
             ? CALIBRATED_STAR_RADIANCE
             : star.luminance / SURFACE_LUMINANCE,
           placement: star.placement,

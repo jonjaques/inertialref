@@ -151,7 +151,13 @@ it.each(['scrub', 'focus', 'resize'] as const)(
       type: FloatType,
       depthBuffer: false,
     })
-    const gate = Promise.withResolvers<void>()
+    let release!: () => void
+    const gate = {
+      promise: new Promise<void>((resolve) => {
+        release = resolve
+      }),
+      resolve: () => release(),
+    }
     const read = renderer.getArrayBufferAsync.bind(renderer)
     const pending = vi
       .spyOn(renderer, 'getArrayBufferAsync')

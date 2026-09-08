@@ -109,6 +109,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
   }, [group, engine, gl])
 
   useTimedFrame('starfield', () => {
+    const visibility = engine.visibilityProcessing
     const scene = engine.scene()
     const current = field.current
     if (scene === null || current === null) return
@@ -142,7 +143,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     material.angularDensity.value =
       (ppr * ppr) /
       (0.14661573215518503 * (material.size.value * engine.displayRatio) ** 2)
-    material.integrated.value = engine.visibilityProcessing ? 1 : 0
+    material.integrated.value = visibility ? 1 : 0
     const resolved = new Set<number>()
     for (const star of scene.stars)
       if (star.placement.angularRadius * ppr > 0.75) {
@@ -168,7 +169,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       scene.origin,
       scene.camera.universePosition,
       scene.camera.position,
-      engine.visibilityProcessing,
+      visibility,
     )
   })
 

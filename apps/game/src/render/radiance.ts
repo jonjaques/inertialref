@@ -15,6 +15,9 @@ export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
  * Enhanced's three-percent night-side fill is legibility, not measured light.
  * Ground and water share the resolved processing gate; photographic views and
  * reflectance bakes receive none. Atmospheric scattering remains independent.
+ * Earthshine on Luna is about 2.6 × 10⁻⁴ of sunlight; three percent is an
+ * authored floor that lets a night limb read against space at daylight exposure.
+ * The scene's 0.16 ambient reaches hulls and props through different materials.
  */
 export const visibilityAmbient = enhancedSky.mul(0.03)
 export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
