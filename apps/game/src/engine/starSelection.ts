@@ -1,7 +1,7 @@
 import { PARSEC } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import {
-  populationApparentMagnitude,
+  GALAXY_SOLAR_V_MAGNITUDE,
   type ResolvedPopulationSelection,
 } from '@inertialref/universe'
 
@@ -65,27 +65,30 @@ export function selectStars(
 ): StarField {
   const seen = new Set<string>()
   const requestedMagnitude = resolved?.apparentMagnitudeLimit
-  let chosen: { star: StarCandidate; magnitude: number }[] = []
+  let chosen: { star: StarCandidate; magnitude: number; flux: number }[] = []
   for (const selection of selections) {
     for (const star of selection) {
       if (seen.has(star.id)) continue
       seen.add(star.id)
       // A missing V measurement cannot be replaced by bolometric luminosity.
       if (star.visualLuminosities === undefined) continue
-      const magnitude = populationApparentMagnitude(
-        star.visualLuminosities,
-        UV.distance(star.position, centre) / PARSEC,
-      )
+      // The same finite point-source distance sets both rank and admission.
+      const metres = Math.max(UV.distance(star.position, centre), 1)
+      const flux = star.visualLuminosities / (metres * metres)
+      const magnitude =
+        GALAXY_SOLAR_V_MAGNITUDE -
+        2.5 * Math.log10(flux) -
+        5 * Math.log10(10 * PARSEC)
       if (requestedMagnitude !== undefined && magnitude > requestedMagnitude)
         continue
-      chosen.push({ star, magnitude })
+      chosen.push({ star, magnitude, flux })
     }
   }
 
   if (chosen.length > ceiling) {
     chosen.sort(
       (a, b) =>
-        a.magnitude - b.magnitude ||
+        b.flux - a.flux ||
         (a.star.id < b.star.id ? -1 : a.star.id > b.star.id ? 1 : 0),
     )
     if (resolved === undefined) chosen = chosen.slice(0, ceiling)
