@@ -295,6 +295,14 @@ export const RENDER_SHIP = define<string>({
   accept: oneOf(SHIP_IDS),
 })
 
+export const RENDER_THRUSTER_VARIATION = define({
+  key: 'render.thrusterVariation',
+  group: 'display',
+  what: 'uneven valve timing and tiny settling puffs; visual only',
+  initial: true,
+  accept: isBoolean,
+})
+
 /* ------------------------------------------------------------------------ */
 /* camera                                                                    */
 /* ------------------------------------------------------------------------ */
@@ -558,6 +566,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
   RENDER_SHIP,
+  RENDER_THRUSTER_VARIATION,
   CAMERA_LENS,
   PERSONAL_PICTURES,
   CONTROLS_KEYMAP,

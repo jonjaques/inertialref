@@ -12,6 +12,7 @@ import {
   RENDER_SHIP,
   RENDER_SURFACE,
   RENDER_SENSOR,
+  RENDER_THRUSTER_VARIATION,
   usePersistentState,
 } from '../state/preferences.ts'
 import { SHIP_IDS, SHIP_LABELS } from '../render/ships.ts'
@@ -59,6 +60,9 @@ export function GraphicsPanel({
   const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
   const [sensor, setSensor] = usePersistentState(RENDER_SENSOR)
   const [ship, setShip] = usePersistentState(RENDER_SHIP)
+  const [thrusterVariation, setThrusterVariation] = usePersistentState(
+    RENDER_THRUSTER_VARIATION,
+  )
   const mode = render.output?.mode ?? null
   /*
    * Whether `auto` guessed something other than the obvious.
@@ -94,6 +98,13 @@ export function GraphicsPanel({
             onChange={setShip}
           />
         </div>
+        <SwitchRow
+          bordered
+          label="Thruster variation"
+          detail="Uneven valve timing and tiny settling puffs. Visual only."
+          on={thrusterVariation}
+          onChange={setThrusterVariation}
+        />
       </Section>
 
       <Section id="graphics.features" title="Features">

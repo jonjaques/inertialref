@@ -18,6 +18,7 @@ import {
   PREFERENCE_GROUPS,
   read,
   RENDER_SENSOR,
+  RENDER_THRUSTER_VARIATION,
   REGISTRY,
   resetPreferences,
   SECTION_OPEN,
@@ -44,6 +45,40 @@ const stamp = '2026-08-28T00:00:00.000Z'
 
 beforeEach(() => {
   resetPreferences()
+})
+
+describe('thruster variation', () => {
+  it('defaults to enabled without storing a choice', () => {
+    expect(read(RENDER_THRUSTER_VARIATION)).toBe(true)
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.thrusterVariation',
+    )
+  })
+
+  for (const enabled of [true, false]) {
+    it(`keeps an explicit ${enabled} choice through export and import`, () => {
+      write(RENDER_THRUSTER_VARIATION, enabled)
+      const file = JSON.parse(JSON.stringify(exportPreferences(stamp)))
+      resetPreferences()
+      expect(importPreferences(file).applied).toBe(1)
+      expect(read(RENDER_THRUSTER_VARIATION)).toBe(enabled)
+    })
+  }
+
+  it('rejects non-boolean imports without changing the choice', () => {
+    write(RENDER_THRUSTER_VARIATION, false)
+    for (const invalid of [0, 1, 'true', null, {}, []]) {
+      const plan = importPreferences({
+        app: EXPORT_APP,
+        version: 1,
+        exported: stamp,
+        preferences: { 'render.thrusterVariation': invalid },
+      })
+      expect(plan.applied).toBe(0)
+      expect(plan.dropped).toBe(1)
+      expect(read(RENDER_THRUSTER_VARIATION)).toBe(false)
+    }
+  })
 })
 
 describe('camera settings migration', () => {

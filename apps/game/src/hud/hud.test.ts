@@ -7,6 +7,7 @@ import {
   CAMERA_LENS,
   RENDER_LENS_FLARE,
   RENDER_SENSOR,
+  RENDER_THRUSTER_VARIATION,
   write,
 } from '../state/preferences.ts'
 import { LensSection } from './LensSection.tsx'
@@ -256,6 +257,7 @@ describe('the author’s instruments', () => {
      * is worse than no test, so it now names the control it means.
      */
     write(RENDER_LENS_FLARE, false)
+    write(RENDER_THRUSTER_VARIATION, false)
     const graphics = renderToStaticMarkup(
       createElement(GraphicsPanel, {
         render: {
@@ -267,10 +269,17 @@ describe('the author’s instruments', () => {
       }),
     )
     write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
+    write(RENDER_THRUSTER_VARIATION, RENDER_THRUSTER_VARIATION.initial)
     expect(graphics).toContain('Lens Flare')
-    // The lens-flare switch, off, and the rocks switch, on: no other switch
-    // on this panel.
-    expect(graphics.match(/role="switch"/g)).toHaveLength(2)
+    const variation = graphics
+      .split('<label')
+      .find((row) => row.includes('Thruster variation'))
+    expect(variation).toContain('role="switch" aria-checked="false"')
+    expect(variation).toContain(
+      'Uneven valve timing and tiny settling puffs. Visual only.',
+    )
+    // Lens flare and thruster variation are off; rocks are on.
+    expect(graphics.match(/role="switch"/g)).toHaveLength(3)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
     // Ship, output and surface choices stay visible as radio groups.
