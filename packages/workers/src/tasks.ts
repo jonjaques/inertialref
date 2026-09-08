@@ -78,17 +78,33 @@ export interface GeneratedStar {
   readonly planets: readonly CatalogPlanet[]
 }
 
-export const encodeStub = (stub: SystemStub): GeneratedStar => ({
+type SkyStar = Pick<
+  GeneratedStar,
+  | 'id'
+  | 'name'
+  | 'position'
+  | 'colour'
+  | 'solarLuminosities'
+  | 'visualLuminosities'
+>
+
+// Encode the hot sky payload directly; full stubs add their cold fields to
+// the same mapping without making a throwaway full record for every sprite.
+const encodeSkyStar = (stub: SystemStub): SkyStar => ({
   id: stub.id as string,
   name: stub.name,
   position: encodeUniverseVector(stub.position),
+  solarLuminosities: stub.solarLuminosities,
+  visualLuminosities: stub.visualLuminosities,
+  colour: [stub.colour.r, stub.colour.g, stub.colour.b],
+})
+
+export const encodeStub = (stub: SystemStub): GeneratedStar => ({
+  ...encodeSkyStar(stub),
   spectralType: stub.spectralType,
   solarMasses: stub.solarMasses,
   solarRadii: stub.solarRadii,
-  solarLuminosities: stub.solarLuminosities,
-  visualLuminosities: stub.visualLuminosities,
   temperature: stub.temperature,
-  colour: [stub.colour.r, stub.colour.g, stub.colour.b],
   components: stub.components,
   catalogued: stub.catalogued,
   planets: stub.planets,
@@ -199,15 +215,7 @@ export interface SurveySkyRequest {
 }
 export interface SurveySkyResponse {
   readonly origin: WireUniverseVector
-  readonly stars: readonly Pick<
-    GeneratedStar,
-    | 'id'
-    | 'name'
-    | 'position'
-    | 'colour'
-    | 'solarLuminosities'
-    | 'visualLuminosities'
-  >[]
+  readonly stars: readonly SkyStar[]
   readonly apparentMagnitudeLimit: number
   readonly levelMask: number
   readonly candidateCount: number
@@ -227,14 +235,7 @@ export const surveySkyTask = defineTask<SurveySkyRequest, SurveySkyResponse>({
       origin: request.origin,
       // The sky consumes light and position. Cloning full system stubs also
       // sends masses, radii and planet records that this draw never reads.
-      stars: result.stars.map((star) => ({
-        id: star.id as string,
-        name: star.name,
-        position: encodeUniverseVector(star.position),
-        colour: [star.colour.r, star.colour.g, star.colour.b] as const,
-        solarLuminosities: star.solarLuminosities,
-        visualLuminosities: star.visualLuminosities,
-      })),
+      stars: result.stars.map(encodeSkyStar),
     }
   },
 })

@@ -504,3 +504,10 @@ not a reference. Re-run it when JPL publishes; the diff is the news.
 - [spikes 3 and 4](../spikes.md) — the measurements that chose HYG and ruled out Gaia
 - [determinism](../concepts/determinism.md) — why the catalog version is a generation input
 - [ADR-0004](../adr/0004-entity-addressing.md), [ADR-0009](../adr/0009-issue-ordinal-addressing.md) — the addressing rules the issue ordinals extend
+
+Travel sweeps through `ir.systemsNearby` and `ir.findWorlds` bound their radius
+to 0–500 light-years and report a clamped request in `ir.logs()`. The bound
+keeps every grid alignment within the 200,000-cell budget. Catalog name search
+remains independent of this local sweep. Resolved sky selection requires V
+luminosity; a catalog source without an absolute V magnitude remains a named
+travel destination but does not substitute bolometric light in the sky draw.

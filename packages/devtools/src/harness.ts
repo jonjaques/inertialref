@@ -401,6 +401,19 @@ export interface LoadOutcome {
 
 const log = getLogger('devtools.harness')
 
+/** A 500 ly box fits the 200,000-cell travel budget at every grid alignment. */
+function boundedTravelRadius(lightYears: number): number {
+  const bounded = Number.isNaN(lightYears)
+    ? 0
+    : Math.max(0, Math.min(500, lightYears))
+  if (bounded !== lightYears)
+    log.warn('Travel query radius is bounded to 0–500 light-years', {
+      requested: lightYears,
+      applied: bounded,
+    })
+  return bounded * LIGHT_YEAR
+}
+
 export class GameHarness {
   readonly #host: Host
   readonly #logSink = new RingBufferSink(256)
@@ -506,7 +519,7 @@ export class GameHarness {
       this.world.galaxySeed,
       this.world.catalog,
       centre,
-      lightYears * LIGHT_YEAR,
+      boundedTravelRadius(lightYears),
     )
       .map((stub) => ({
         id: stub.id as string,
@@ -664,7 +677,7 @@ export class GameHarness {
       this.world.galaxySeed,
       this.world.catalog,
       from,
-      (options.lightYears ?? DEFAULT_SEARCH_LIGHT_YEARS) * LIGHT_YEAR,
+      boundedTravelRadius(options.lightYears ?? DEFAULT_SEARCH_LIGHT_YEARS),
     )
     /*
      * Nearest first, so the batches that answer first are the ones a reader

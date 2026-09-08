@@ -81,6 +81,8 @@ export interface PopulationCoverage {
   readonly cataloguedByCell?: Readonly<Record<string, number>>
 }
 
+const coverageByCatalog = new WeakMap<StarCatalog, PopulationCoverage>()
+
 /**
  * ESA SP-1200, volume 1: Hipparcos is largely complete to V 7.3
  * or deeper, depending on latitude and spectral class. 7.3 uses the shallowest
@@ -89,6 +91,8 @@ export interface PopulationCoverage {
  * https://www.cosmos.esa.int/documents/532822/552851/vol1_all.pdf
  */
 export function populationCoverage(catalog: StarCatalog): PopulationCoverage {
+  const held = coverageByCatalog.get(catalog)
+  if (held !== undefined) return held
   const coverage = {
     radiusParsecs: catalog.radius / PARSEC,
     innerMagnitude: catalog.radius > 0 ? 7.3 : -Infinity,
@@ -116,7 +120,12 @@ export function populationCoverage(catalog: StarCatalog): PopulationCoverage {
     const key = `${band.level}:${cellKey(populationCellOf(star.position, band.level))}`
     cataloguedByCell[key] = (cataloguedByCell[key] ?? 0) + 1
   }
-  return { ...coverage, cataloguedByCell }
+  const result = Object.freeze({
+    ...coverage,
+    cataloguedByCell: Object.freeze(cataloguedByCell),
+  })
+  coverageByCatalog.set(catalog, result)
+  return result
 }
 
 export const populationApparentMagnitude = (
