@@ -78,7 +78,8 @@ export interface GeneratedStar {
   readonly planets: readonly CatalogPlanet[]
 }
 
-type SkyStar = Pick<
+/** The source fields consumed by the bounded visual sky. */
+export type SkyStar = Pick<
   GeneratedStar,
   | 'id'
   | 'name'
