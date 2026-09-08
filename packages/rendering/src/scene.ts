@@ -1,5 +1,6 @@
 import { type Meters, invariant } from '@inertialref/shared'
 import {
+  Quaternion as Q,
   createRenderOrigin,
   directionToRenderSpace,
   maintainOrigin,
@@ -16,6 +17,7 @@ import {
 import type {
   BodySnapshot,
   EntitySnapshot,
+  ThrustDemand,
   WorldSnapshot,
 } from '@inertialref/simulation'
 import type { BodyAppearance, EntityId } from '@inertialref/universe'
@@ -120,7 +122,43 @@ export interface RenderEntity {
   readonly kind: string
   readonly position: Vec3
   readonly orientation: Quat
+  /**
+   * Velocity relative to its own frame, in render axes, m/s — the snapshot's
+   * `frameVelocity` turned, so a "where am I going" mark points along the
+   * orbit rather than along the planet's year.
+   */
+  readonly velocity: Vec3
   readonly isCamera: boolean
+  /**
+   * What its thrusters are firing, as the snapshot states it, so the plumes
+   * are drawn from the same command the tick integrated. Null for anything
+   * that cannot maneuver.
+   */
+  readonly thrust: ThrustDemand | null
+}
+
+/**
+ * The horizon under the eye: which way is up, which way is north, and how
+ * fast the ground beneath is moving. Measured against the nearest body by
+ * surface distance, in render axes, and null with no body in reach.
+ *
+ * An attitude indicator is a picture of this frame from inside the hull, and
+ * a surface speed is the ship's velocity with `groundVelocity` taken out. Both
+ * are drawn from here rather than from the world because they are questions
+ * about the frame the eye is presented in, and the snapshot has already
+ * settled that.
+ */
+export interface RenderHorizon {
+  /** The address of the body it is measured against. */
+  readonly body: string
+  /** Away from the body's centre, unit. */
+  readonly up: Vec3
+  /** The body's pole, flattened onto the horizon, unit. */
+  readonly north: Vec3
+  /** `north × up`, unit — the way the ground turns on a prograde body. */
+  readonly east: Vec3
+  /** The velocity of the ground under the eye from the body's spin, m/s. */
+  readonly groundVelocity: Vec3
 }
 
 export interface RenderScene {
@@ -140,6 +178,8 @@ export interface RenderScene {
     /** Height above the terrain, or null away from any body. */
     readonly altitude: Meters | null
   }
+  /** The nearest body's horizon under the eye, or null clear of every body. */
+  readonly horizon: RenderHorizon | null
   readonly bodies: readonly RenderBody[]
   /** Brightest apparent first: `stars[0]` is the scene's key light. */
   readonly stars: readonly RenderStar[]
@@ -346,9 +386,16 @@ export function buildScene(
       kind: entity.kind,
       position: toRenderSpace(origin, entity.position),
       orientation: orientationToRenderSpace(origin, entity.orientation),
+      velocity: directionToRenderSpace(origin, entity.frameVelocity),
       isCamera: entity.id === cameraEntity,
+      thrust: entity.thrust,
     }),
   )
+
+  // From the *snapshot's* body positions, not the placed ones: placement
+  // compresses distance, and while that leaves the direction intact it is
+  // not a property worth depending on from over here.
+  const horizon = horizonFrom(snapshot, origin, camera.position)
 
   /*
    * `sphere` as well as `surface`, which is the whole "one field at every
@@ -375,12 +422,10 @@ export function buildScene(
       position: eyeRender,
       orientation: orientationToRenderSpace(origin, camera.orientation),
       universePosition: camera.position,
-      // From the *snapshot's* body positions, not the placed ones: placement
-      // compresses distance, and while that leaves the direction intact it is
-      // not a property worth depending on from over here.
-      up: upFrom(snapshot, origin, camera.position),
+      up: horizon === null ? vec3(0, 1, 0) : horizon.up,
       altitude: camera.altitude,
     },
+    horizon,
     bodies,
     stars,
     entities,
@@ -388,12 +433,12 @@ export function buildScene(
   }
 }
 
-/** Which way is away from the ground, in render axes. */
-function upFrom(
+/** The nearest body's horizon under the eye, in render axes. */
+function horizonFrom(
   snapshot: WorldSnapshot,
   origin: RenderOrigin,
   camera: UniverseVector,
-): Vec3 {
+): RenderHorizon | null {
   let nearest: BodySnapshot | null = null
   let best = Infinity
   for (const body of snapshot.bodies) {
@@ -403,13 +448,41 @@ function upFrom(
       nearest = body
     }
   }
-  if (nearest === null) return vec3(0, 1, 0)
+  if (nearest === null) return null
   const radial = UV.difference(camera, nearest.position)
   const length = Vec.length(radial)
   // Dead center of a body has no up. Nothing can be there, but the normalize
   // would produce NaN and every consumer would inherit it.
-  if (length === 0) return vec3(0, 1, 0)
-  return directionToRenderSpace(origin, Vec.scale(radial, 1 / length))
+  if (length === 0) return null
+  const up = Vec.scale(radial, 1 / length)
+  /*
+   * The pole is the rotating frame's +Y — the spin evaluator turns about it,
+   * so the axis survives the turn — and north is that pole laid flat on the
+   * horizon. Over a pole itself there is no north, and any perpendicular is
+   * as good: the heading a compass reads there is a convention, not a fact.
+   */
+  const pole = Q.rotate(nearest.orientation, vec3(0, 1, 0))
+  let north = Vec.sub(pole, Vec.scale(up, Vec.dot(pole, up)))
+  if (Vec.length(north) < 1e-6) {
+    const seed = Math.abs(up.x) < 0.9 ? vec3(1, 0, 0) : vec3(0, 0, 1)
+    north = Vec.sub(seed, Vec.scale(up, Vec.dot(seed, up)))
+  }
+  north = Vec.normalize(north)
+  const east = Vec.cross(north, up)
+  // The ground's own motion: ω × r about the pole. A body with no period
+  // does not turn, and neither does one whose period is not a number.
+  const period = nearest.rotationPeriod
+  const turning = Number.isFinite(period) && period !== 0
+  const groundVelocity = turning
+    ? Vec.cross(Vec.scale(pole, (2 * Math.PI) / period), radial)
+    : Vec.ZERO
+  return {
+    body: nearest.address,
+    up: directionToRenderSpace(origin, up),
+    north: directionToRenderSpace(origin, north),
+    east: directionToRenderSpace(origin, east),
+    groundVelocity: directionToRenderSpace(origin, groundVelocity),
+  }
 }
 
 /** Nearest body, for HUD readouts and for deciding what to stream. */

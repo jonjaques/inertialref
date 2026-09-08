@@ -61,6 +61,7 @@ import {
 } from '@inertialref/persistence'
 import {
   FLIGHT_FOV,
+  type FlightView,
   type Lens,
   LENS_PRESETS,
   lensForFov,
@@ -130,6 +131,7 @@ import {
   type ObserverPose,
   type ObserverStatus,
 } from './observatory.ts'
+import { FlightCamera, type FlightCameraStatus } from './flightCamera.ts'
 import {
   type DescentOptions,
   type DescentReport,
@@ -379,6 +381,12 @@ export interface HarnessStatus {
    * record the photo-mode metadata seam eventually stamps.
    */
   readonly lens: LensReadout | null
+  /**
+   * Which view the ship arm stands in, and where — so a plate taken beside
+   * the hull records the orbit it was taken from, the way `lens` records the
+   * optics.
+   */
+  readonly flightCamera: FlightCameraStatus
 }
 
 export interface ScenarioResult {
@@ -419,6 +427,7 @@ export class GameHarness {
   readonly #logSink = new RingBufferSink(256)
   readonly #cutscenes: CutsceneDirector
   readonly #observatory: Observatory
+  readonly #flightCamera: FlightCamera
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
 
@@ -429,6 +438,7 @@ export class GameHarness {
       ENTERPRISE_PORTRAITS,
     ])
     this.#observatory = new Observatory(host)
+    this.#flightCamera = new FlightCamera(host)
     logHub.addSink(this.#logSink)
   }
 
@@ -452,6 +462,7 @@ export class GameHarness {
       frame: this.#host.render.frameStats(),
       authority: this.#host.authority().status(),
       lens: this.lens(),
+      flightCamera: this.#flightCamera.status(),
     }
   }
 
@@ -852,10 +863,14 @@ export class GameHarness {
     this.world.clock.setTimeScale(scale)
   }
 
-  /** Set the player's control input directly, as the keyboard would. */
+  /**
+   * Set the player's control input directly, as the keyboard would: the
+   * thrusters, the attitude, and the drive's throttle, each only if given.
+   */
   control(input: {
     translation?: [number, number, number]
     rotation?: [number, number, number]
+    throttle?: number
   }): void {
     const player = this.#requirePlayer()
     const entity = this.world.entities.require(player)
@@ -868,10 +883,31 @@ export class GameHarness {
         ? entity.control.rotation
         : vec3(...input.rotation),
     )
+    if (input.throttle !== undefined)
+      this.world.setThrottle(player, input.throttle)
   }
 
+  /** The main drive, 0..1. Returns the setting the world kept. */
+  throttle(fraction: number): number {
+    return this.world.setThrottle(this.#requirePlayer(), fraction).control
+      .throttle
+  }
+
+  /** Hands off everything: thrusters neutral, attitude neutral, drive cold. */
   hold(): void {
-    this.control({ translation: [0, 0, 0], rotation: [0, 0, 0] })
+    this.control({ translation: [0, 0, 0], rotation: [0, 0, 0], throttle: 0 })
+  }
+
+  /**
+   * Neutral input after a teleport, drive included.
+   *
+   * Every placement verb ends here: a ship put into a circular orbit with
+   * its drive still lit is not in that orbit on the next tick, and a
+   * composition framed with the throttle open drifts out of its own picture.
+   */
+  #handsOff(player: EntityId): void {
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.world.setThrottle(player, 0)
   }
 
   flightAssist(enabled: boolean): void {
@@ -918,7 +954,7 @@ export class GameHarness {
       velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     log.info('placed in orbit', { address, altitudeKm, speed })
     return this.status()
   }
@@ -1004,7 +1040,7 @@ export class GameHarness {
       velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     log.info('placed in orbit of the star', { system: target.id, speed })
     return this.status()
   }
@@ -1074,7 +1110,7 @@ export class GameHarness {
       velocity: Vec.scale(placement.along, circularSpeed(body.mu, distance)),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     this.#trackOrbit()
     log.info('framed shot', { shot: name, address: target.text, distance })
     return this.status()
@@ -1119,7 +1155,7 @@ export class GameHarness {
       velocity: Vec.ZERO,
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     return this.status()
   }
 
@@ -1220,7 +1256,7 @@ export class GameHarness {
       velocity: Vec.ZERO,
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     return this.status()
   }
 
@@ -1239,7 +1275,7 @@ export class GameHarness {
   /** Aim the ship at a body and light the main drive. */
   burnToward(address: string, throttle = 1): HarnessStatus {
     this.#lookAt(this.#bodyPosition(address))
-    this.world.setControl(this.#requirePlayer(), vec3(0, 0, throttle), Vec.ZERO)
+    this.world.setThrottle(this.#requirePlayer(), throttle)
     return this.status()
   }
 
@@ -1497,6 +1533,28 @@ export class GameHarness {
    */
   get observatory(): Observatory {
     return this.#observatory
+  }
+
+  /**
+   * The ship arm's own camera: which view it stands in, and where.
+   *
+   * The object, for the same reason the observatory is: a drag is forty
+   * calls a second. `ir.view` below is the verb worth typing.
+   */
+  get flightCamera(): FlightCamera {
+    return this.#flightCamera
+  }
+
+  /**
+   * Stand the flight camera in a view — `chase`, which flight is played in,
+   * or `orbit`, which the hull is looked at in — or cycle to the next with no
+   * argument. Nothing canonical moves: the ship is where it was, and only the
+   * eye beside it changes.
+   */
+  view(view?: FlightView): FlightCameraStatus {
+    return view === undefined
+      ? this.#flightCamera.cycleView()
+      : this.#flightCamera.setView(view)
   }
 
   /**
@@ -2109,7 +2167,7 @@ export class GameHarness {
       '  ir.dossier(address)           one star or body, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
-      '  ir.control({translation,rotation}) / ir.hold()',
+      '  ir.control({translation,rotation,throttle}) / ir.throttle(0..1) / ir.hold()',
       '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
@@ -2140,6 +2198,8 @@ export class GameHarness {
       '  ir.chrome(false)              clear the interface — the plate state',
       '  ir.layers(false)              names and traces off, for a plate',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
+      "  ir.view('orbit' | 'chase')     stand the flight camera beside the hull, or behind it",
+      '  ir.flightCamera               that camera itself — drag, turn, zoom, recentre',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',

@@ -283,8 +283,9 @@ flowchart TB
     subgraph AIM["aim and burn"]
         F["ir.face(address)<br/><i>free — changes nothing else</i>"]
         BT["ir.burnToward(address, throttle)"]
-        C["ir.control({translation, rotation})"]
-        HOLD["ir.hold()"]
+        T["ir.throttle(0..1)<br/><i>the main drive — a setting,<br/>not a held key</i>"]
+        C["ir.control({translation, rotation, throttle})<br/><i>the thrusters, the attitude,<br/>and the drive if given</i>"]
+        HOLD["ir.hold()<br/><i>hands off everything,<br/>drive included</i>"]
     end
     POS --> AIM
 ```
@@ -298,6 +299,13 @@ Two notes worth internalising:
   and useless.
 - **`face` and `burnToward` are separate** because looking and accelerating are
   different acts. `face` costs nothing and does not perturb the trajectory.
+- **The thrusters and the drive are two controls.** `translation` is the
+  reaction-control system, six ways at under a g, and holds only while it is
+  set; `throttle` is the main drive, ahead only, at three g, and stays where
+  it is put — through `control` calls that do not mention it, and through a
+  save. `burnToward` sets the throttle, and every placement verb cuts it,
+  because a ship put into a circular orbit with its drive lit is not in that
+  orbit on the next tick.
 - **`land` does not land you.** It puts the ship on the pad — local `y = 0` in a
   surface frame _is_ the ground — and the contact test makes it landed on the
   next tick, so `ir.land(...).player.landed` is `false` and one `ir.step()`
@@ -335,6 +343,23 @@ ir.observatory.clear()
 the subject; it survives a drag, a dolly and a wheel notch, and is cleared by
 whatever replaces the pose — a focus, a frame, a stance, a composition. Standing,
 it drives the stance's own heading and pitch.
+
+In flight the ship arm has a camera of its own, with two views. `ir.view('orbit')`
+stands it off the hull and looks at the ship while it maneuvers — the view the
+thrusters and the drive are watched from — and `ir.view('chase')` puts it back
+behind the hull; `ir.view()` cycles. `ir.flightCamera` is the camera itself:
+
+```js
+ir.flightCamera.drag(dx, dy) // orbit, or turn the head in the chase
+ir.flightCamera.turn(dx, dy) // turn the head in either view
+ir.flightCamera.zoom(factor) // dolly the orbit; above 1 retreats
+ir.flightCamera.recentre() // look where the view aims again
+```
+
+The orbit is measured in hull lengths about the ship in the world's own axes,
+pole on the local up, and tethered at eight lengths; it opens where the chase was
+standing. `ir.status().flightCamera` reports the view, the orbit and the look,
+so a plate taken beside the hull records the camera it was taken from.
 
 ### Compositions
 

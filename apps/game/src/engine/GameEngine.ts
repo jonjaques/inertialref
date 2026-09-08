@@ -5,6 +5,8 @@ import {
   GALAXY_VIEWS,
   exposurePinnedToLens,
   resolveCameraPolicy,
+  rotationStopCue,
+  type RotationStopCue,
   isSensorSettings,
   type SensorSettings,
   type Exposure,
@@ -573,6 +575,8 @@ export class GameEngine {
   onSensorRequest: ((settings: SensorSettings) => void) | null = null
   /** Adaptation follows presentation, including a held photographic instant. */
   presentationTime = 0
+  /** A brief counter-thrust picture, captured before the world stops the spin. */
+  rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
   galaxyRenderer: (() => GalaxyRenderReport) | null = null
@@ -1032,6 +1036,7 @@ export class GameEngine {
    * and `load` is how the starfield came to survive a jump of four light years.
    */
   #invalidateDerived(): void {
+    this.rotationStop = null
     this.origin = null
     this.snapshot = null
     this.#scene = null
@@ -1599,6 +1604,21 @@ export class GameEngine {
     this.world.setControl(player, vec3(...translation), vec3(...rotation))
   }
 
+  /** The main drive, 0..1. Returns the setting the world kept. */
+  setThrottle(fraction: number): number {
+    const player = this.session.player()
+    if (player === null) return 0
+    return this.world.setThrottle(player, fraction).control.throttle
+  }
+
+  /** Walk the throttle by a step, from wherever it is. */
+  nudgeThrottle(delta: number): number {
+    const player = this.session.player()
+    if (player === null) return 0
+    const held = this.world.entities.require(player).control.throttle
+    return this.world.setThrottle(player, held + delta).control.throttle
+  }
+
   toggleFlightAssist(): boolean {
     const player = this.session.player()
     if (player === null) return false
@@ -1611,6 +1631,13 @@ export class GameEngine {
   killRotation(): void {
     const player = this.session.player()
     if (player === null) return
+    const entity = this.world.entities.require(player)
+    const cue = rotationStopCue(
+      entity.state.angularVelocity,
+      entity.thrusters?.torque ?? 0,
+      this.presentationTime,
+    )
+    if (cue !== null) this.rotationStop = { ...cue, entity: player }
     this.world.killRotation(player)
   }
 

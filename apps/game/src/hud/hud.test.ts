@@ -7,6 +7,7 @@ import {
   CAMERA_LENS,
   RENDER_LENS_FLARE,
   RENDER_SENSOR,
+  RENDER_THRUSTER_VARIATION,
   write,
 } from '../state/preferences.ts'
 import { LensSection } from './LensSection.tsx'
@@ -16,8 +17,11 @@ import { GraphicsPanel } from './GraphicsPanel.tsx'
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { devPanels } from './registry.tsx'
 import { TargetRow } from './TargetRow.tsx'
+import { NavCluster } from './NavCluster.tsx'
+import { formatSpeed } from './navCluster.ts'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
+import { SHIP_IDS } from '../render/ships.ts'
 import {
   GROUND_DETAILS,
   SEA_DETAILS,
@@ -253,6 +257,7 @@ describe('the author’s instruments', () => {
      * is worse than no test, so it now names the control it means.
      */
     write(RENDER_LENS_FLARE, false)
+    write(RENDER_THRUSTER_VARIATION, false)
     const graphics = renderToStaticMarkup(
       createElement(GraphicsPanel, {
         render: {
@@ -264,24 +269,31 @@ describe('the author’s instruments', () => {
       }),
     )
     write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
+    write(RENDER_THRUSTER_VARIATION, RENDER_THRUSTER_VARIATION.initial)
     expect(graphics).toContain('Lens Flare')
-    // The lens-flare switch, off, and the rocks switch, on: no other switch
-    // on this panel.
-    expect(graphics.match(/role="switch"/g)).toHaveLength(2)
+    const variation = graphics
+      .split('<label')
+      .find((row) => row.includes('Thruster variation'))
+    expect(variation).toContain('role="switch" aria-checked="false"')
+    expect(variation).toContain(
+      'Uneven valve timing and tiny settling puffs. Visual only.',
+    )
+    // Lens flare and thruster variation are off; rocks are on.
+    expect(graphics.match(/role="switch"/g)).toHaveLength(3)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
-    // The output and surface choices are radio groups. A radio group rather than a button that
-    // cycles, so the states you are not on have a representation in the tree.
-    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(5)
+    // Ship, output and surface choices stay visible as radio groups.
+    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(6)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
-      AA_LEVELS.length +
+      SHIP_IDS.length +
+        AA_LEVELS.length +
         OUTPUT_PREFERENCES.length +
         TERRAIN_DETAILS.length +
         GROUND_DETAILS.length +
         SEA_DETAILS.length,
     )
     // One checked per group.
-    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(5)
+    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(6)
     expect(graphics).toMatch(/aria-checked="true"[^>]*>2x</)
     for (const level of AA_LEVELS) expect(graphics).toContain(`>${level}<`)
     // The extended-range override moved here from the transport strip. It is a
@@ -463,5 +475,50 @@ describe('the author’s instruments', () => {
       ErrorBoundary.getDerivedStateFromError(new RangeError('out')).error
         .message,
     ).toBe('out')
+  })
+})
+
+describe('the navigation cluster', () => {
+  afterEach(() => engineStore.setState({ status: null }))
+
+  it('renders the ship’s figures from a real status', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const ir = session.harness
+    const status = ir.status()
+    engineStore.setState({ status })
+    // The ball reads the scene in an animation frame, which static markup
+    // never runs; what this proves is that the readouts around it come from
+    // the same status the strip reads, and that nothing throws on the way.
+    const markup = renderToStaticMarkup(
+      createElement(
+        KeymapProvider,
+        null,
+        createElement(NavCluster, {
+          engine: { harness: ir, scene: () => null } as never,
+          onNotice: () => {},
+        }),
+      ),
+    )
+    expect(markup).toContain('Attitude indicator')
+    expect(markup).toContain(formatSpeed(status.player?.localSpeed ?? null))
+    expect(markup).toContain('Thrusters')
+    expect(markup).toContain('Cut')
+    session.dispose()
+  })
+
+  it('draws nothing before the first sample lands', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const markup = renderToStaticMarkup(
+      createElement(
+        KeymapProvider,
+        null,
+        createElement(NavCluster, {
+          engine: { harness: session.harness, scene: () => null } as never,
+          onNotice: () => {},
+        }),
+      ),
+    )
+    expect(markup).toBe('')
+    session.dispose()
   })
 })

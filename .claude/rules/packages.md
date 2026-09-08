@@ -27,7 +27,7 @@ Reasoning: `docs/guides/development.md`, `pnpm graph`.
   because a global is not an import and `pnpm graph` cannot see one. ADR-0022.
 - **Entity state is written through the world's verbs, never around them.** `world.entities`
   is `EntityView`, the store's read half; `spawnShip` takes a velocity, `teleport`,
-  `setControl`, `setFlightAssist` and `killRotation` carry the interpolation, landed-set
+  `setControl`, `setThrottle`, `setFlightAssist` and `killRotation` carry the interpolation, landed-set
   and rails bookkeeping a write needs. The full rule is `.claude/rules/determinism.md`.
 - **Imports carry their `.ts` extension.** `allowImportingTsExtensions` is on and Node
   runs the sources directly.

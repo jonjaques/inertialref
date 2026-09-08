@@ -512,6 +512,16 @@ again in a neighboring system.
   happens to be near the origin and facing it. The dresser's dummies set
   `frustumCulled = false`; `warmup.gpu.test.ts` compiles one behind the
   camera beside a plain mesh that builds nothing.
+- **An orbit camera's basis mirrored through its own east–up plane.** Every
+  orthonormality and round-trip property passes on a frame whose azimuth runs
+  the other way about the pole; only a test that compares the _sign_ of a
+  drag's swing with the other camera's catches it. `orbitOffset` is the
+  planetarium's `observerOffset` in a local frame now, and `camera.test.ts`
+  holds the sign for any up.
+- **A bank measured against the wrong up.** `attitudeOf` read the roll's sine
+  off the horizon's up, which is the level up only at zero pitch; the error
+  is the cosine of the pitch and a round-trip property found it by failing
+  at its own tolerance boundary. The level triad is built about the nose.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -7241,7 +7251,6 @@ move every body in the galaxy, including the ones the change never touched, and
 the loader could no longer distinguish "this save's ground moved" from
 "everything moved". So a bump moves nothing by itself. It is the honest half of a
 change that already happened, and it has to be spent by hand.
-||||||| parent of 9aa5891 (docs(adr): the sensor spine gets a record, and the plan keeps only what is open)
 
 ## The sensor owns the frame, and the picture that was one transfer too dark (4 Sep 2026)
 
@@ -7465,6 +7474,44 @@ exceptions live in `docs/agents/invariants.md`. The shorter startup card points
 to that record before work in a governed area. Claude's rule extracts and
 Cursor's references retain their paths, so reducing startup text does not
 remove the reasoning or require maintaining a second set of constraints.
+
+## A second hull, a ship the player picks, and solo behind a dev flag (4 Sep 2026)
+
+`data/models/` now holds two hulls. The Rocinante — the _Corvette_-class light
+frigate of _The Expanse_, in its MCRN _Tachi_ livery — joins the Enterprise-D,
+CC BY 4.0 by Jakub.Vildomec, ~141k triangles against the Enterprise's ~50k, with
+four 1K PBR material sets and the same `asset.extras` attribution block the
+Enterprise carries, so the credit travels with the file. **Scaled to 46 m**, the
+length the Expanse wiki and the official _Ships of the Expanse_ RPG both give;
+the loader divides that by the model's own nose-axis extent exactly as it does
+for the Enterprise's 642.5 m, so `engine.hull` reads length 46, beam 16 in
+flight, and 642.5, 467 when the Enterprise is chosen back. The bow is +Z — the
+drive cone sits at the model's −Z, the antennas at its +Z — which the loader's
+half-turn faces to the game's −Z.
+
+Two changes made the manifest a chooser rather than a constant:
+
+- **The manifest is a data module now, `render/ships.ts`, holding no Three.js.**
+  `state/preferences.ts` needs the set of ship ids to guard the stored choice,
+  and it is imported by the Node preferences suite; `shipModels.ts` imports
+  `three/webgpu`, the `GLTFLoader` and an `import.meta.glob` of the `.glb` files,
+  none of which can load in Node. So the JSON lives in a leaf both import, and
+  the loader is the only thing that pulls the renderer in.
+- **`render.ship` is a preference like any other** — a string id into the
+  manifest, guarded by `oneOf(SHIP_IDS)`, defaulting to the Enterprise so every
+  screenshot and the reference cutscene keep their framing. `ShipModel` reads it
+  live and reloads the hull without a page reload, which here rebuilds the
+  renderer and loses the camera; the boot warm-up reads it too, so the compiled
+  hull is the one that will be drawn. The chooser is an `OptionGroup` at the top
+  of Display settings, the label a short chip and the value the id, so a saved
+  ship survives a name reword. A stored id this build cannot load degrades to the
+  default the same way a missing hull degrades to the debug cone.
+
+Solo flight is offered from the menu **in development builds only**:
+`isEnterable` now returns true for a `built` mode when `import.meta.env.DEV` is,
+which Vite folds away in a production bundle. The routes stay mounted regardless,
+so a pasted `/play/solo` still resolves in every build — the gate is about what a
+visitor is invited into, not what the build can do.
 
 ## The sensor keeps its default sky, and half a pixel is not half resolution (4 Sep 2026)
 
@@ -8793,6 +8840,183 @@ The real IndexedDB reload reports version 2, one metadata row, one completed
 cube, one archive hit and zero archive failures. The star renderer reports
 zero legacy reductions. These checks exercise the shipped bundle through the
 repository driver; the temporary lookup and presentation overrides are released.
+
+## The valves fire, the drive burns, and the ship arm has an orbit (4 Sep 2026)
+
+The Rocinante maneuvers with its thrusters drawn firing, and its Epstein drive
+burns when it burns. Three layers, each testable without the one above it:
+
+- **The snapshot states the thrust demand.** `thrustDemand(entity, dt)` in
+  `packages/simulation/src/flight.ts` is the commanded acceleration as
+  fractions of the thruster profile's authority, in body axes, with the
+  assist's damping torque included — and it is computed by the same
+  `commandedAcceleration` the two integrators call, so a spin being nulled
+  draws the nozzles nulling it and a plume can never light while the hull does
+  not turn. `EntitySnapshot.thrust` carries it, `RenderEntity.thrust` passes it
+  through. A forward burn arrives as `linear.z = −1`, and a zero is a zero: the
+  sign flip in `resolveThrust` produces `−0`, and `flight.test.ts` found it.
+- **`packages/rendering/src/thrusters.ts` maps a demand onto valves.** A
+  projection, not an allocation: a valve opens in proportion to its thrust
+  against the linear demand plus its torque _direction_ against the angular
+  one, clamped to 0..1, and the physics — which applied the demand exactly —
+  makes the ship move as if the set were perfect. Torque is by direction and
+  not by lever so a pitch is drawn as a couple rather than as the nose alone,
+  with `TORQUE_LEVER` (2 m) scaling only valves near the centre of mass. A
+  hull with a drive burns ahead on the drive alone; the valves never see the
+  forward half of the demand, or a stern pod leaning aft would glow through
+  every burn. `thrusters.test.ts` holds it to nine properties, the mirror
+  symmetry among them: a mirrored hull under a mirrored demand fires the
+  mirrored set, which is the cross product's handedness checked by
+  `fast-check` rather than by eye.
+- **The layout is measured, never drawn.** `scripts/nozzles.mjs` parses the
+  GLB itself and walks each matching mesh into shells, reporting centroids,
+  mean face normals and boundary loops in the game's hull axes — recentred,
+  scaled, bow turned — so a number it prints is copied into
+  `render/thrusterLayouts.ts` as it stands. The reading found that these
+  nozzles are capped bumps whose open loop is the _attachment_: the exhaust
+  axis is the shell's mean normal, and the loop's normal points into the hull.
+  The Rocinante has fourteen bow jets in ten `thruster_N` shells, six belly
+  pods with a round lip at the tip of a hexagonal housing, and one stern pod
+  modeled at one corner with holes in `hull_rear` at all four, so the corners
+  are that pod mirrored twice. The drive's exit plane sits at z 21.0 between
+  the throat piece and the 3.70 m mouth, so the rim stands in front of it from
+  every angle but dead astern. `thrusterLayouts.test.ts` holds the table to
+  the hull's extent, unit exhausts, mirror symmetry, a valve for every
+  half-axis, and the couples a pitch and a retro should light.
+
+`render/plumes.ts` draws it in five draws for the whole hull: the jets and the
+pods are each one shell instanced by four attributes — mouth, axis, size,
+firing — of which only the last is written per frame; the drive is the same
+shell at a torch's profile with filaments scrolling aft and a crown of spikes
+at the rim, plus a disk at the exit plane carrying the turbulent core the
+reference plates show filling the cone. Additive in colour and silent in
+alpha on the flare's discipline, depth-tested against the hull, with the
+facing term carried down from the vertex stage so a shell seen edge-on
+softens and one seen down its axis shows the cap as a burning disk. No
+light: a point light on the skirt would be a second program for every
+material in the scene. `materials.gpu.test.ts` compiles all four.
+
+The ship arm of the camera precedence has two views. **Chase** is what it
+was, exactly — `flightCameraPose` with the head centred reproduces
+`chaseCameraPosition` and the ship's orientation bit for bit, and
+`camera.test.ts` says so — with a drag now turning the head. **Orbit** stands
+off in the world's own axes, pole on the scene's local up, distance in hull
+lengths and tethered at eight, looking at the ship while it turns: the only
+way to watch a maneuvering system fire, since a camera bolted to the hull
+shows every plume in the same place on screen whatever the ship does. Entering
+it seeds the angles from where the chase was standing, so the switch is a
+change of what the camera does next rather than a jump. The state lives in
+`packages/devtools/src/flightCamera.ts` beside the observatory, is reachable
+as `ir.view('orbit')` and `ir.flightCamera`, and rides `HarnessStatus` so a
+plate beside the hull records the orbit it was taken from. `V` cycles the
+views, `Home` levels the head, and the drag sensitivity is the one number
+every draggable camera now reads, `dragSensitivityOf`.
+
+## The two engines, the throttle, the navigation cluster, and the mirrored orbit (4 Sep 2026)
+
+The second pass over the Rocinante's flight model, and the instrument that
+made the first pass's defects visible.
+
+**The forward translation axis fired the main drive at 3 g both ways.** A
+retro was the drive run backwards — fourteen bow jets the size of a fist
+drawn decelerating a frigate at three g — and a nudge ahead for docking was
+a transit burn for as long as W was down. `docs/design/flight.md` is built on
+the drive being one throttle a pilot sets and leaves, so `ControlInput` now
+carries the thrusters (`translation`, six ways at 8 m/s² on the debug hull)
+and the drive (`throttle`, 0..1 at 30 m/s², ahead only) apart, and
+`resolveThrust` hands back both shares beside their sum. The throttle is
+canonical: hashed, saved with a decoder that bounds it to a fraction and
+reads an older save as a cold drive, and a term the rails refuse. It has its
+own verb, `setThrottle`, because a key edge writes the thrusters forty times
+a burn and never means to touch the drive; `setControl` leaves it where it
+is, and every placement verb in the harness cuts it — a ship put into a
+circular orbit with its drive lit is not in that orbit on the next tick. The
+self-test's movement check burns on the drive now: on the thrusters alone
+the probe crossed 400 m of its 1 km floor in ten seconds, against 6.81 km.
+Keys: W/S are the thrusters; T and G walk the throttle a twentieth at a time
+on the operating system's repeat, Shift+T and Shift+G slam it.
+
+**The orbit beside the hull was mirrored.** `orbitFrame` built its basis as
+(east, pole × east), the right-handed geographic frame whose azimuth runs
+counter-clockwise from above, while `observerOffset` swings from +X toward
++Z, clockwise — and both cameras share `applyDrag`, whose sign was settled
+against the planetarium. Every property in `camera.test.ts` held, because
+the frame was orthonormal and consistent with its own inverse; what nothing
+asserted was the sense of the swing. The orbit is now `observerOffset`
+carried into a local frame whose y is the scene's up, and the test that
+holds it compares the sign of a rightward drag's swing about the pole with
+the planetarium's, for any up.
+
+**The navigation cluster.** A navball drawn on a canvas in an animation-frame
+loop from `engine.scene()`, because eight poses a second of a hull rolling
+through a flip is a ball that jumps rather than turns; the readings beside
+it — speed against the ground within ten kilometers of it and in the frame
+beyond, the throttle on a ring, the altitude, the rate of climb on a
+symmetric log ring that spends a tenth of its needle on the first meter a
+second, the thrusters' state, the assist, the conic — off the 8 Hz sampler
+through `EntityInspection`. The scene carries the horizon (`RenderScene.horizon`:
+the nearest body's up, its pole laid flat for north, and the ground's own
+velocity under the eye) and the frame-relative velocity per entity, because
+a prograde mark taken from the universe velocity of a ship in low Earth orbit
+points along the ecliptic — thirty kilometers a second of Earth's year —
+whatever the orbit does. Below the compact breakpoint it is not drawn.
+
+**The bank was scaled by the cosine of the pitch.** The first `attitudeOf`
+took the sine of the roll against the horizon's up rather than the level up
+that goes with the nose, so a hull banked a radian while pitched to 86° read
+a quarter of it. A round-trip property with a six-digit tolerance failed
+intermittently and shrank to the boundary, which is the signature of a
+region of the input space losing far more than rounding; a 200,000-sample
+probe put the worst case at 1.05 rad, and the fix took it to 2e-14. The
+example test pins the steep case so shrinking cannot hide it again.
+
+**Seen and left.** Flight opens with the assist off: the boot frames the menu
+through `shot('gibbous')`, which switches the assist off to hold the
+composition, and solo inherits that ship. The Enterprise draws no plumes
+still. `universal.test.ts`'s ellipse property failed once at a bound of
+2.55e-7 against 2.5499e-7 and passed three runs after; it is a pre-existing
+razor and worth a measured tolerance.
+
+## The Roci exhaust follows the sensor (08 Sep 2026)
+
+The Rocinante's plume materials bypassed the sensor's radiance conversion.
+Rebasing the ship onto the galaxy camera kept the hull's conversion but left
+its exhaust outside it. A fourfold exposure change produced identical plume
+RGB. The exhaust also wrote its own inverse depth, 0.5 in the GPU fixture,
+over a surface whose inverse depth was 1/3, and the shells contributed motion.
+That gives the optical passes a nearby surface where there is only light.
+
+Both plume material constructors use `sensorRadiance(material, true)`, the
+same exposure and motion-overlay path as the flare. The GPU regression draws
+the production RCS jets, pods, drive shell and drive disk separately. Each must
+emit nonzero RGB, follow a fourfold exposure change and preserve the motion
+and depth behind it. All four variants fail before the fix and pass after it;
+the related optics and orbit-trace checks pass with them.
+
+## The stop has a plume, and the sky follows the eye (08 Sep 2026)
+
+Killing rotation goes straight through the world's verb and clears angular
+velocity before another frame can observe it. Recomputing demand from that
+stopped ship therefore produced no counter-thrust picture. The engine now
+captures the opposing direction before the stop as an expiring presentation cue;
+world replacement discards it. The cue stays out of the snapshot's demand, the
+control loop, state hashes and saves. A paired headless flight takes 600 more
+ticks with and without valve presentation and ends with identical hashes and
+serialized saves.
+
+The default-on Thruster variation preference adds small unequal response times
+and sparse 25–50 ms hold pulses, at no more than eight percent demand. These are
+art settings, not measurements of hardware. A pulse is shorter as well as dimmer;
+a GPU silhouette regression failed at a small/full length ratio of 1 with the
+old geometry. Variation can be disabled while the rotation-stop burst remains.
+
+The galaxy disk followed hull rotation in the orbit camera because its pose
+came from the raw player, before the flight camera applied orbit or head turn.
+Earth already used the rendered camera. The background now reads that camera
+through the floating origin, and the camera callback runs between the engine
+and its consumers. The regression turns the ship under a fixed camera, then
+turns the camera, with a nonidentity origin so an inverted basis cannot pass.
+No second camera producer and no new architectural boundary.
 
 ## Known gaps
 

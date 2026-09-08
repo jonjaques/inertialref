@@ -20,7 +20,8 @@ import {
 import { preloadAllTextures, SHIPPED_TEXTURE_COUNT } from './planetTextures.ts'
 import { preloadAllShapes, SHIPPED_SHAPE_COUNT } from './shapeModels.ts'
 import { scatteringBakes } from './preloadPlan.ts'
-import { DEFAULT_SHIP, loadShipModel } from './shipModels.ts'
+import { loadShipModel } from './shipModels.ts'
+import { read, RENDER_SHIP } from '../state/preferences.ts'
 import {
   beginWarmup,
   breathe,
@@ -244,7 +245,10 @@ async function warm(
     run: async (done) => {
       const view = await sceneView(engine)
       if (view === null) return
-      const hull = await loadShipModel(DEFAULT_SHIP, anisotropy)
+      // The chosen hull, so the compile-ahead warms the ship that will be
+      // drawn rather than always the default. A later switch pays its own
+      // first compile — the same degradation a mapless body's first frame is.
+      const hull = await loadShipModel(read(RENDER_SHIP), anisotropy)
       if (hull === null) return
       await warmCompile(warmRenderer(renderer), {
         object: hull.group,

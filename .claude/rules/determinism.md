@@ -33,7 +33,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
 - **Never write entity state around the world's verbs.** `world.entities` is the read
   half of the store. A ship that starts moving is spawned moving (`spawnShip` takes the
   velocity); after that, `teleport` for a discontinuous move, `setControl` /
-  `setFlightAssist` / `killRotation` for input — each carries the interpolation, landed-set
+  `setThrottle` / `setFlightAssist` / `killRotation` for input — each carries the interpolation, landed-set
   and rails bookkeeping a write needs.
 - **Never assert that something is landed.** Landedness is a consequence of the contact
   test, owned by `World.#land`.

@@ -2,11 +2,8 @@ import { useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import type { Group } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import {
-  DEFAULT_SHIP,
-  type LoadedShip,
-  loadShipModel,
-} from '../render/shipModels.ts'
+import { type LoadedShip, loadShipModel } from '../render/shipModels.ts'
+import { RENDER_SHIP, usePersistentState } from '../state/preferences.ts'
 import { debugMaterials } from './debugMaterials.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -21,6 +18,10 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
   const anisotropy = useThree(
     (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
   )
+  // The chosen hull, live: changing it in settings reloads the ship without a
+  // reload of the page, which here would rebuild the renderer and lose the
+  // camera. The loader caches by id, so switching back is instant.
+  const [shipId] = usePersistentState(RENDER_SHIP)
   // Seeded from the engine so a Fast Refresh remount, whose effect may not
   // re-run, still renders the hull the session already loaded.
   const [hull, setHull] = useState<LoadedShip | null>(engine.hull)
@@ -29,7 +30,11 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     // The loader caches by id, so StrictMode's double-mount and the canvas
     // remount on an HDR change reuse the same fetch and the same meshes.
     let mounted = true
-    void loadShipModel(DEFAULT_SHIP, anisotropy).then((ship) => {
+    void loadShipModel(shipId, anisotropy).then((ship) => {
+      // Only apply if this is still the wanted hull: a fast switch resolves two
+      // cached promises and the last requested id must win, not the last to
+      // land. The old hull stays on stage until the new one is ready, so a
+      // switch never flashes the debug cone.
       if (mounted && ship !== null) {
         engine.hull = ship
         setHull(ship)
@@ -38,7 +43,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     return () => {
       mounted = false
     }
-  }, [engine, anisotropy])
+  }, [engine, anisotropy, shipId])
 
   useTimedFrame('shipModel', () => {
     const scene = engine.scene()

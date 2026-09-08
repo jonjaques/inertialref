@@ -6,6 +6,7 @@ import {
   type FrameId,
   type FrameState,
   type Quat,
+  Quaternion as Q,
   type UniverseVector,
   Vec,
   type Vec3,
@@ -19,7 +20,9 @@ import {
   formatAddress,
   type UniverseAddress,
 } from '@inertialref/universe'
+import { TICK_DURATION } from './clock.ts'
 import type { Entity, EntityKind } from './entity.ts'
+import { type ThrustDemand, thrustDemand } from './flight.ts'
 import type { World, WorldEvent } from './world.ts'
 
 /*
@@ -51,12 +54,31 @@ export interface EntitySnapshot {
   readonly orientation: Quat
   /** Velocity in universe axes, m/s. */
   readonly velocity: Vec3
+  /**
+   * Velocity relative to its own frame, in universe axes, m/s — what the
+   * frame's body sees, rather than what an outside observer measures.
+   *
+   * The one a "where am I going" mark has to be drawn from. A ship in low
+   * Earth orbit has a universe velocity of thirty kilometers a second, almost
+   * all of it Earth's own year, and a prograde mark taken from it points
+   * along the ecliptic whatever the orbit does.
+   */
+  readonly frameVelocity: Vec3
   /** Position within its own frame — the small numbers gameplay works in. */
   readonly localPosition: Vec3
   readonly localVelocity: Vec3
+  /** Current spin in hull axes, radians per second, for presentation. */
+  readonly angularVelocity: Vec3
+  readonly flightAssist: boolean
   readonly speed: number
   readonly landed: boolean
   readonly altitude: Meters | null
+  /**
+   * Current maneuvering demand, as fractions of authority in body axes,
+   * including assist damping. Presentation can add brief valve cues without
+   * changing this demand. Null for anything that cannot maneuver.
+   */
+  readonly thrust: ThrustDemand | null
 }
 
 export interface BodySnapshot {
@@ -158,11 +180,21 @@ export function entitySnapshot(
     position: canonicalPosition(world.frames, state, renderTime),
     orientation: canonicalOrientation(world.frames, state, renderTime),
     velocity: canonicalVelocity(world.frames, state, renderTime),
+    frameVelocity: world.frames.has(state.frame)
+      ? Q.rotate(
+          world.frames.pose(state.frame, renderTime).orientation,
+          state.velocity,
+        )
+      : state.velocity,
     localPosition: state.position,
     localVelocity: state.velocity,
+    angularVelocity: entity.state.angularVelocity,
+    flightAssist: entity.flightAssist,
     speed: Vec.length(state.velocity),
     landed: world.isLanded(entity.id),
     altitude: world.altitudeOf(entity.id),
+    // Resolve demand from the current entity, not the interpolated pose.
+    thrust: thrustDemand(entity, TICK_DURATION),
   }
 }
 
