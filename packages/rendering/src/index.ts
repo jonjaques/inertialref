@@ -24,6 +24,7 @@ export * from './terrainMesh.ts'
 export * from './terrainPalette.ts'
 export * from './terrainSelect.ts'
 export * from './thrusters.ts'
+export * from './thrusterVisuals.ts'
 export * from './shape.ts'
 
 export * from './galaxyView.ts'
