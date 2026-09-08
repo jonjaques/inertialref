@@ -8781,6 +8781,18 @@ a hit touches only metadata. Pixel validation remains complete and yields every
 16,384 texels outside the database transaction. Restoration checks the request
 again after those yields.
 
+Matched production plates use `c18f744` and `9ce9e03`, WebGPU, standard sRGB,
+and a 1600×900 drawing buffer. At Iapetus's summit, two meters above the ground,
+a temporary missing-body lookup drops a central ground ROI from 219.42 to
+187.96 encoded luma on the base. The fixed normal and missing-body images are
+pixel-identical, at 219.38 in that ROI. Exposure stays fixed at EV 14.60964.
+A 120-frame photographic-time scrub retains a measured circle of 3.01953 to
+3.02344 pixels, with no 40-pixel fallback among the last ninety frames.
+The real IndexedDB reload reports version 2, one metadata row, one completed
+cube, one archive hit and zero archive failures. The star renderer reports
+zero legacy reductions. These checks exercise the shipped bundle through the
+repository driver; the temporary lookup and presentation overrides are released.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
