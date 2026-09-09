@@ -46,7 +46,9 @@ over stored values.
 React Router continues to handle navigation after hydration. There is no
 second client router and no document swap around the canvas. `GameLoader`
 loads browser services, then starts the App import and catalog request
-concurrently. `App` remains outside every route and owns the engine, canvas,
+concurrently. Direct interactive visits also preload their selected mode during
+hydration, sharing the same import promise with the lazy route. `App` remains
+outside every route and owns the engine, canvas,
 frame loop and renderer warm-up. A contained runtime failure leaves the
 reading shell mounted. The home/docs boot cover stays behind readable content;
 game modes retain their first-light admission cover.

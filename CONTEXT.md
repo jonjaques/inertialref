@@ -62,6 +62,11 @@ within their original tests. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-
 records the population, transport, versions and approximation limits;
 [ADR-0037](docs/adr/0037-the-enhanced-camera.md) owns camera processing.
 
+Astro pre-renders the public shell and documentation before the persistent
+React runtime adds the live scene. Public content remains readable without
+JavaScript; request-time rendering can use the same shell when needed.
+[ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
+
 ## Decisions that are expensive to reverse
 
 Full reasoning is in `docs/adr/`. The short version:

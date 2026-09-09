@@ -93,7 +93,7 @@ pnpm install
 pnpm dev                 # → http://localhost:5173
 ```
 
-One command starts both halves — Vite on 5173 and the Cloudflare Worker on 8787,
+One command starts both halves — Astro on 5173 and the Cloudflare Worker on 8787,
 with `/api` and `/ws` proxied to it. `pnpm dev:client` and `pnpm dev:server` are
 the halves if you want one without the other, and `pnpm preview` builds and then
 serves the result through the real Worker, which is the closest thing to
@@ -310,24 +310,24 @@ in `packages/*`.
 
 ### Commands
 
-| Command                       | What it does                                                                      |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| `pnpm dev`                    | Vite on :5173 **and** the Worker on :8787, in one terminal                        |
-| `pnpm dev:client`             | Just Vite — keeps its interactive `r` / `o` / `q` keys                            |
-| `pnpm dev:server`             | Just `wrangler dev`                                                               |
-| `pnpm preview`                | Build, then serve it through the real Worker on :8787                             |
-| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                         |
-| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`              |
-| `pnpm typecheck`              | Five independent tsconfig projects; see below                                     |
-| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                         |
-| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                           |
-| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                        |
-| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`           |
-| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then `vite build`                 |
-| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → build.** |
-| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                    |
-| `pnpm vitest run <substring>` | A single test file                                                                |
-| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`            |
+| Command                       | What it does                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------- |
+| `pnpm dev`                    | Astro on :5173 **and** the Worker on :8787, in one terminal                        |
+| `pnpm dev:client`             | Just the Astro development server on :5173                                         |
+| `pnpm dev:server`             | Just `wrangler dev`                                                                |
+| `pnpm preview`                | Build, then serve it through the real Worker on :8787                              |
+| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                          |
+| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`               |
+| `pnpm typecheck`              | Five independent tsconfig projects and Astro templates; see below                  |
+| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                          |
+| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                            |
+| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                         |
+| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`            |
+| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then Astro and emitted HTML checks |
+| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → build.**  |
+| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                     |
+| `pnpm vitest run <substring>` | A single test file                                                                 |
+| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`             |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.
@@ -344,7 +344,7 @@ that command, so there is no separate list of CI stages to drift out of step.
   `verbatimModuleSyntax` are all on.** So: no `enum`, no parameter properties,
   `import type` for type-only imports, and **local imports carry their `.ts`
   extension** — Node runs the sources directly.
-- **Vite 8 with the Oxc transform, and React Compiler is on.** Do not hand-write
+- **Astro 7 with React, Vite 8, and React Compiler.** Do not hand-write
   `useMemo`/`useCallback` memoization. (`useMemo` for a stable Three.js object is
   a different thing and is fine.)
 - **Tests live beside the code and run in plain Node.** That is the check that the
