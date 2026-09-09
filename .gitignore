@@ -96,3 +96,6 @@ apps/game/public/media/
 # `/impeccable` writes here every run; only a curated critique is checked in,
 # and it goes to `design/reports/` like every other working review.
 .impeccable/
+
+# Astro generated type declarations and build cache.
+apps/game/.astro/

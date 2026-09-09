@@ -18,5 +18,11 @@
        patterns resolve relative to this file, which is what was wanted. */
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "vite.config.ts", "vitest.gpu.config.ts"]
+  "include": [
+    "src",
+    "astro",
+    "astro.config.ts",
+    "vite.config.ts",
+    "vitest.gpu.config.ts"
+  ]
 }
