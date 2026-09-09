@@ -1,6 +1,5 @@
-import { useContext, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useContext, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
-import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { resolvedLocation } from '../pages/paths.ts'
@@ -14,6 +13,12 @@ import { DocContents } from './DocContents.tsx'
 import { wingFor } from './docsNav.ts'
 import { useDocsFraming } from './useDocsFraming.ts'
 import { DocsContentContext } from './initialDocs.ts'
+
+const Workspace = lazy(() =>
+  import('../dock/Workspace.tsx').then((module) => ({
+    default: module.Workspace,
+  })),
+)
 
 /*
  * The reading room.
@@ -226,12 +231,14 @@ export function DocsMode({
       {engine === null ? (
         <DocsNavigation />
       ) : (
-        <Workspace
-          id="docs"
-          title="Documentation"
-          panels={NO_PANELS}
-          dev={dev}
-        />
+        <Suspense fallback={<DocsNavigation />}>
+          <Workspace
+            id="docs"
+            title="Documentation"
+            panels={NO_PANELS}
+            dev={dev}
+          />
+        </Suspense>
       )}
     </>
   )
