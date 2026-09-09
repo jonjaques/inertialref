@@ -9199,7 +9199,8 @@ control. Buffered resource timing reports those URLs to the worker for serial
 caching, including requests that finish after claim. Caching is demand-driven;
 installing a worker alone does not mean all modes or models are available offline.
 The [hosting policy](docs/hosting.md#service-worker-storage-and-updates) records
-the distinction between downloaded files, runtime/GPU caches and IndexedDB saves.
+the distinction between downloaded files, runtime/GPU caches, the separate
+IndexedDB sky archive and IndexedDB saves.
 
 ## Known gaps
 

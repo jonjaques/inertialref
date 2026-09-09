@@ -661,8 +661,11 @@ are stored. HTML never occupies a data-file key. Storage denial and quota errors
 leave online requests usable. Fetch events retain background work from dispatch
 through the last cache write, including stale revalidation.
 
-This policy manages downloaded files, not generated terrain or sky data. Those
-caches live in the runtime and GPU; saves live separately in IndexedDB. Cache
+This policy manages downloaded files, not generated terrain or sky data.
+Terrain and active sky caches live in the runtime and GPU. Completed sky cubes
+also persist in the separate `inertialref-galaxy-sky` IndexedDB database, whose
+archive policy retains two entries. Saves use the `inertialref` IndexedDB
+database. Service-worker cleanup touches neither database. Cache
 Storage can be evicted by the browser, and the two-build retention policy is not
 a fixed byte quota. The previous cache protects assets used during a deployment;
 it cannot provide an old tab's lazy chunk that neither the tab nor its worker
