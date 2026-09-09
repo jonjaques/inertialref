@@ -13,6 +13,7 @@ import { DocContents } from './DocContents.tsx'
 import { wingFor } from './docsNav.ts'
 import { useDocsFraming } from './useDocsFraming.ts'
 import { DocsContentContext } from './initialDocs.ts'
+import { docRoute } from './content.ts'
 
 const Workspace = lazy(() =>
   import('../dock/Workspace.tsx').then((module) => ({
@@ -83,13 +84,13 @@ export function DocsMode({
    * back to the top behind the scrim.
    */
   const here = resolvedLocation(useLocation())
-  const route = normalize(here.pathname)
   const hash = here.hash
 
   const content = useContext(DocsContentContext)
   if (content === null)
     throw new Error('Documentation requires PageShell content')
   const { manifest, page } = content
+  const route = docRoute(manifest.value, normalize(here.pathname))
   const wing =
     manifest.value === null ? undefined : wingFor(manifest.value, route)
   const framed = useDocsFraming(engine, wing?.framing)

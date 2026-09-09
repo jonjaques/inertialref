@@ -1,6 +1,8 @@
-import { useLocation } from 'react-router'
+import { useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import { DocsContentContext, type InitialDocs } from '../docs/initialDocs.ts'
+import { docRoute } from '../docs/content.ts'
 import { useManifest, usePage } from '../docs/useDocs.ts'
 import { ChromeContext } from '../hud/chrome.ts'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
@@ -22,18 +24,31 @@ const ignoreNotice = (): void => {}
 /** Readable pages exist before the catalog, workers, or renderer have started. */
 export function PageShell({ initialDocs }: { initialDocs?: InitialDocs }) {
   const runtime = useRuntime()
-  const location = resolvedLocation(useLocation())
-  const route =
+  const address = useLocation()
+  const location = resolvedLocation(address)
+  const navigate = useNavigate()
+  const pathname =
     location.pathname.length > 1
       ? location.pathname.replace(/\/+$/, '')
       : location.pathname
-  const mode = modeForPath(route)
+  const mode = modeForPath(pathname)
   const cinema = useEngine((snapshot) => snapshot.cinema)
   const chrome = useEngine((snapshot) => snapshot.presentation.chrome)
   const [hdr, setHdr] = usePersistentState(RENDER_HDR)
   const manifest = useManifest(initialDocs?.manifest, mode === 'docs')
+  const route = docRoute(manifest.value, pathname)
   const page = usePage(manifest.value, route, initialDocs?.page)
   const visible = runtime === null || !cinema || mode === 'cinema'
+
+  useEffect(() => {
+    // A dialog resolves against the document behind it. Redirecting that
+    // background would close the dialog, so only replace the actual address.
+    if (route === pathname || address !== location) return
+    void navigate(
+      { pathname: route, search: location.search, hash: location.hash },
+      { replace: true, state: location.state },
+    )
+  }, [route, pathname, address, location, navigate])
 
   return (
     <DocsContentContext value={{ manifest, page }}>

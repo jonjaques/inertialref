@@ -99,7 +99,18 @@ export interface DocManifest {
   readonly version: string
   readonly wings: readonly DocWing[]
   readonly pages: Readonly<Record<string, DocEntry>>
+  /** Published spellings that redirect to a canonical page route. */
+  readonly aliases?: Readonly<Record<string, string>>
   readonly counts: DocCounts
+}
+
+/** An exact page wins when a published alias collides with its spelling. */
+export function docRoute(
+  manifest: DocManifest | null,
+  pathname: string,
+): string {
+  if (manifest?.pages[pathname] !== undefined) return pathname
+  return manifest?.aliases?.[pathname] ?? pathname
 }
 
 export interface DocPage {
