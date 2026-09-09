@@ -10,13 +10,15 @@ all.
 
 | Mode                                                  | What it is                                 | Status |
 | ----------------------------------------------------- | ------------------------------------------ | ------ |
-| [Solo offline](#solo-offline)                         | The complete game, no network of any kind  | ✅     |
+| [Solo offline](#solo-offline)                         | Solo simulation with locally cached assets | ✅     |
 | [Solo online](#solo-online)                           | The same game, plus other people's records | ⬜     |
 | [Persistent universe](#persistent-universe--deferred) | Other players, present                     | ⛔     |
 | [Planetarium](planetarium.md)                         | Free navigation. No ship, no fuel          | ✅     |
 | [Cinema](cinema.md)                                   | A player for scripted scenes               | ✅     |
 
-The first three are the game and differ only by what a server adds. The last two
+The checkmarks describe implemented modes, not completion of the designed
+exploration game. Solo online and multiplayer remain future additions.
+The first three differ by what a server adds. The last two
 are the same universe with the ship taken away, and they share a build with the
 first three for exactly the reason the first three share one: **the world is
 derived, so there is only ever one of it.** You can leave a ship in orbit, spend

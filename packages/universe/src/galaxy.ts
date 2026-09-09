@@ -121,7 +121,7 @@ export interface ProceduralSystemRef {
   readonly index: number
 }
 
-/** Decode a procedural system id, or null if it is a catalog designation. */
+/** Decode a legacy P system id; Q ids and catalog designations return null. */
 export function parseProceduralSystemId(
   id: SystemId,
 ): ProceduralSystemRef | null {

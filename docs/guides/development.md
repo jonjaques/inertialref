@@ -71,7 +71,7 @@ is easy to read as a broken checkout.
 Two ways out, and which one you want depends on why you are serving:
 
 ```bash
-pnpm dev:client   # Astro alone on 5173 — everything except the Worker's routes
+pnpm docs:build && pnpm dev:client   # Astro only, with its documentation manifest
 pnpm build        # once, then `pnpm dev` works for the life of the worktree
 ```
 
@@ -79,7 +79,7 @@ pnpm build        # once, then `pnpm dev` works for the life of the worktree
 once is already fixed. **`pnpm drive` walks into this**: `--serve` is on by
 default and starts `scripts/dev.mjs`, so on a fresh worktree it reports that
 `pnpm dev` exited without serving, a few seconds in, and the reason is in
-`.data/drive/dev.log`. Serve with `pnpm dev:client` yourself and pass
+`.data/drive/dev.log`. Generate the docs, serve with `pnpm dev:client`, and pass
 `--no-serve`, or build once.
 
 **Astro daemonizes itself when it detects a coding agent.** Astro 7 sniffs the

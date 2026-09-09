@@ -353,8 +353,8 @@ photographic clock stay mounted beneath it. The dialog has Included, Saved,
 and Current view tabs. Composition tools and galaxy views are collapsed in
 the dock until requested.
 
-Current view captures the camera, orbit anchor, target, time, and full lens
-when the tab opens. Name and save it, copy its JSON, copy a link, or download
+Current view captures the camera, orbit anchor, target, photographic time,
+full lens and camera processing when the tab opens. Name and save it, copy its JSON, copy a link, or download
 its file. Recapture refreshes the shot from the view behind the dialog. Saved
 holds rename, replace, share, delete, and undo controls. It accepts a JSON
 file or pasted JSON and exports saved shots or the combined library.
@@ -362,9 +362,9 @@ file or pasted JSON and exports saved shots or the combined library.
 Included shots use the same validated JSON format as personal shots. Each
 has a thumbnail captured through the renderer. Selecting a built-in writes
 `/planetarium?preset=earthrise`, with that shot's ID. A custom link starts with
-`shot=1` and flattens the picture into named query parameters: `seed`, `label`,
-`address`, `time`, `framing.state.azimuth`, `lens.zoom`, and the remaining
-fields. Text is ordinary URL-escaped text; numbers keep their full precision.
+`shot=2` and flattens the picture into named query parameters: `seed`, `label`,
+`address`, `time`, `framing.state.azimuth`, `lens.zoom`, `processing.mode`, and
+the remaining fields. Version 1 links retain their legacy Enhanced defaults. Text is ordinary URL-escaped text; numbers keep their full precision.
 Adding `save=1` opens the restored view with the save dialog and a suggested name.
 Opening a link never saves to the library automatically.
 

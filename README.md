@@ -456,21 +456,21 @@ Stated plainly, because discovering these by surprise is worse than reading them
   producer but the pool and pays its figure in full.
   `pnpm sim --terrain-baseline` prints all of it; the
   [roadmap](docs/roadmap.md#terrain) has the seams.
-- **Almost nothing is measured on the target machine.** The dev dock's perf panel
-  (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
-  time GPU frames properly — but every number recorded so far is from an Apple M5
-  at 1000×760, not the 2023-class laptop at 1920×1080 the budgets are written
-  for. Cold load to interactive is still unmeasured.
-- **The graphics are primitives.** The renderer is WebGPU and TSL and the HDR
-  output path is real, but what it draws is spheres, radius-grid bodies, cones
-  and boxes. GPU-driven instancing and Bruneton atmosphere LUTs are the
-  [migration's](docs/design/technical.md#the-webgpu-migration) remaining half;
-  terrain tiles are the half that is built, a TSL compute kernel held to the
-  CPU field by a stated bound — measured by `pnpm test:gpu` on a physical
-  adapter, which CI does not have.
-- **The atmosphere is an analytic shell, not scattering.** Uniform density and a
-  path length, standing in for the precomputed LUTs that
-  [spike 2](docs/spikes.md#2--tsl-and-the-atmosphere-integral) made a requirement.
+- **Target-laptop acceptance remains open.** The Perf panel and timeline record
+  frame, engine, worker, memory and GPU work. Measurements include M5 runs at
+  1080p and retina resolutions and cold/warm startup; they do not establish the
+  2023-class laptop budget. [Technical requirements](docs/design/technical.md)
+  separates budgets from historical operating points.
+- **Rendering has explicit approximation limits.** Measured maps and figures,
+  modeled hulls, GPU terrain, instanced stars and rock scatter are implemented.
+  The galaxy has calibrated V-band light, illustrative RGB stellar colors and
+  absorption-only dust. Scattering by interstellar dust, H II emission,
+  globular clusters and neighboring galaxies remain separate additions.
+  [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md).
+- **Atmospheric scattering uses precomputed tables.** The shared CPU bake and
+  client worker path provide transmittance and multiple-scattering tables.
+  Cloud maps are thin weather shells, and weather dynamics remain unbuilt.
+  [ADR-0028](docs/adr/0028-client-tasks.md) records task ownership.
 
 ---
 

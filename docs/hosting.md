@@ -5,8 +5,8 @@ behind that URL before the persistent universe is possible.
 
 > **H0, H1, H3, H7 and H8 are built and deployed; H2 is half done. Everything from
 > H4 onward is still a plan.** The client is live at
-> <https://inertialref.app> — a Cloudflare custom domain, and the only
-> one it answers on. It is served by `apps/server`: one Worker, the
+> <https://inertialref.app>, the canonical Cloudflare custom domain, and the
+> retained `inertialref.jonjaques.com` origin. It is served by `apps/server`: one Worker, the
 > static bundle, `/api/health`, and `/ws` reserved behind a deliberate 501. `packages/net` holds the authority port and the local
 > implementation of it that every solo player runs. There is no Durable Object,
 > no D1 and no socket yet, and the sections below still describe those in the
@@ -415,7 +415,9 @@ gate, and the one asset the repository will not carry.
 deployment under a different name — useful for checking a build, and wrong to
 count as visits or to let a crawler index as a duplicate site. The Worker's own
 `workers.dev` route is off (`workers_dev: false` in `wrangler.jsonc`), so there
-is no second address that tracks the tip; a preview URL names one version.
+is no additional `workers.dev` address tracking production. Both custom
+origins remain live so installed apps keep their storage; a preview URL names
+one version.
 
 **Every public route arrives as HTML.** Astro prerenders the React shell,
 documentation body and navigation at build time. `src/documentHead.ts` renders
@@ -903,7 +905,7 @@ is why it won out over a deploy workflow in Actions.
 
 | Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                             |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                     |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workers_dev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                   |
 | Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                                |
 | The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                           |
 | Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
