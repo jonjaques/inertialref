@@ -3,8 +3,9 @@
 How InertialRef gets from a `dist/` directory to a URL, and what has to exist
 behind that URL before the persistent universe is possible.
 
-> **H0, H1, H3, H7 and H8 are built and deployed; H2 is half done. Everything from
-> H4 onward is still a plan.** The client is live at
+> **Static hosting, the local authority port, metadata and reference media are
+> implemented. The API is partial; remote authority and persistent mutations
+> remain planned.** The client is live at
 > <https://inertialref.app>, the canonical Cloudflare custom domain, and the
 > retained `inertialref.jonjaques.com` origin. It is served by `apps/server`: one Worker, the
 > static bundle, `/api/health`, and `/ws` reserved behind a deliberate 501. `packages/net` holds the authority port and the local
@@ -844,18 +845,15 @@ put it on the debug overlay, and look at it for a phase before trusting it.
 | **H4**    | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction                       |
 | **H5**    | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                                        |
 
-H4 is the milestone the request actually asks for: everything stood up, nothing
-load-bearing.
+H4 introduces remote presence; the current solo runtime uses local authority.
 
-**Where this actually stands.** H0 and H3 are done. H1 is done apart from the
-custom domain — the client is live, the prerendered route HTML and 404s work, and the
-service worker excludes both live paths. H2 is half done from the other end than
-planned: `wrangler types` output is committed and the fourth tsconfig project is
-green, but the endpoint that exists is `/api/health` rather than `/api/version`,
-and there is no D1 yet. Health turned out to be the more useful of the two to
-build first, because it is the one the client has a reason to call on a
-schedule — and it carries `GENERATION_VERSIONS` anyway, so `/api/version` is now
-a rename away rather than a build.
+**Current implementation.** H0, H1 and H3 are complete. Both custom domains serve
+the client, prerendered route HTML and 404s work, and the service worker excludes
+the live API and socket paths. H2 is partial: generated Worker types and type
+checks exist, and `/api/health` reports protocol, generation and catalog
+identity. There is no `/api/version` endpoint or D1 binding. H4 presence and H5
+discovery mutations remain unbuilt. Public metadata and R2 media delivery are
+implemented separately, as described in H-7 and H-8 above.
 
 The client shows the result in the telemetry tab under **network**, in five
 states: `checking`, `online`, `offline` (the browser says there is no network),
