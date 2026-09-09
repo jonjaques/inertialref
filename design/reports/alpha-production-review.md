@@ -109,7 +109,7 @@ is cached before the first-ever offline restart; this policy also exists on
 `origin/main`. Miniflare retains a separate dev-only sharp 0.35.2 dependency;
 the production audit and direct image-tool dependencies are clean.
 
-Changes remain local commits on `codex/galaxy` until pushed. The review does
+The pull request carries current CI and deployment status. The review does
 not merge #77 or deploy production. Production custom-domain provisioning,
 the old hostname's redirect policy, and production smoke checks belong to the
 deployment step.
