@@ -63,6 +63,7 @@ it.each([SRGBColorSpace, DISPLAY_P3, LINEAR_P3])(
       const final = compile.mock.calls.find(
         ([object]) =>
           object instanceof QuadMesh &&
+          !Array.isArray(object.material) &&
           object.material.name === 'RenderPipeline',
       )
       expect(
