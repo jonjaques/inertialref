@@ -31,6 +31,11 @@ server and to subsequent client navigation. `Root` receives the initial URL
 and documentation through props. Its content belongs to that render, never to
 a mutable module-global current page.
 
+API exports whose paths differ only in case receive stable suffixes derived
+from their exact original paths. Case-insensitive filesystems must not let
+one exported symbol overwrite another's document. Generated links use the
+canonical paths; the manifest and hosting redirects retain the old addresses.
+
 `Root` renders `PageShell` on the server and hydrates it with `client:load`.
 Home, docs, navigation and dialogs are visible without JavaScript. Game modes
 render an admission message and navigation while their live controls await

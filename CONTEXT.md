@@ -226,6 +226,16 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **Case-only export paths overwrite each other on macOS.** The first Astro
+  corpus build generated `BayerName.html` and `bayerName.html` into the same
+  file. All 47 colliding pairs now have stable, distinct canonical paths;
+  redirects and the client manifest preserve existing links. The site check
+  reads each emitted document and compares its actual heading and metadata.
+- **A rendered head can still contain no metadata.** Astro's special `head`
+  handling dropped `set:html` on the element. A child `Fragment` renders the
+  tags correctly. Testing only the string helper missed it; checking the
+  production HTML caught it.
+
 - **An axial GPU azimuth had the wrong sign.** On Metal, fast `atan2(-z, -x)`
   at exactly x = 0 reversed the warp at +Z and shifted the arm strength from
   0.064 to 0.98. Explicit axial values hold the TSL field and clipped rays to
@@ -9018,6 +9028,33 @@ and its consumers. The regression turns the ship under a fixed camera, then
 turns the camera, with a nonidentity origin so an inverted basis cannot pass.
 No second camera producer and no new architectural boundary.
 
+## The document arrives before the universe (08 Sep 2026)
+
+The Astro migration uses `codex/galaxy` at `f0d09b5` as its base. The old
+client-only-island proposal did not supply the requested shell: docs still
+depended on browser startup. [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md)
+records the replacement. Astro 7.3.2 emits 1,576 documents, including 1,554
+documentation pages, with their article, navigation and metadata already in
+the response. Public pages are pre-rendered; request rendering remains a
+possible adapter choice rather than a running server requirement.
+
+Chrome at 1600×900, DPR 1, against local production builds gave the unchanged
+base and the Astro flight route the same 4.9 s renderer readiness. Separate
+2.5 s samples each contained 150 frames, mean 16.67 ms, with none over 25 ms.
+Frame p95 was 17.70 ms before and 17.90 ms after; sensor p95 was 1.20 ms in
+both. These are local desktop observations, not a network or handheld budget.
+The engine, renderer and canvas identities survived flight, home, docs,
+settings, planetarium and cinema links, including Back from settings to the
+article underneath.
+
+Docs remained readable with JavaScript disabled, including navigation at
+390×844, and with the runtime chunk deliberately blocked. Home and docs still
+acquire the existing sky after hydration. With the local server stopped, a
+cached deep article reloaded with its own title and content. A settings value
+import had pulled the engine into the shell's static bundle; reading the pure
+camera configuration instead keeps that dependency deferred. Public reading
+must not wait on a catalog or graphics device to succeed.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -9138,13 +9175,10 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   LUTs spike 2 made a requirement remain the specified replacement.
 - No indirect draw or GPU-driven culling yet: the heightfield producer is the one
   compute pass (ADR-0023); selection and the mesh are CPU-side.
-- Cold load to interactive is still unmeasured, and it is the budget most likely
-  to be missed: the bundle is **663.3 KB gzip — 511.0 KB brotli — in a single
-  chunk** with no code splitting and no `React.lazy` anywhere in `src`, of which
-  67 KB arrived with the UI foundations on 22 Aug. `main.tsx` then awaits a
-  469 KB catalog before the first render, correctly (it is a generation input)
-  but on top of that. Three of the four modes are not the first viewport and are
-  the obvious thing to split out.
+- Cold network startup still needs a budget on representative connections.
+  The Astro shell, game runtime and modes now load separately, and the catalog
+  loads alongside the runtime. Local production startup measurements do not
+  establish how quickly the game starts on a constrained network.
 - **No performance number in this file was measured on a handheld.** The
   pixel-ratio ceiling for a coarse pointer is reasoned about rather than
   profiled; so is the claim that the near-planet frame is fragment-bound on a

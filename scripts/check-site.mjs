@@ -18,6 +18,21 @@ const escape = (value) =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
+const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
+const visibleText = (html) =>
+  html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, entity) =>
+      entity.startsWith('#')
+        ? String.fromCodePoint(
+            entity[1].toLowerCase() === 'x'
+              ? Number.parseInt(entity.slice(2), 16)
+              : Number(entity.slice(1)),
+          )
+        : entities[entity.toLowerCase()],
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
 let checked = 0
 
 for (const file of await readdir(root, { recursive: true })) {
@@ -54,10 +69,10 @@ for (const file of await readdir(root, { recursive: true })) {
   if (page !== undefined) {
     assert(/<article\b/.test(body), `${route}: missing article HTML`)
     assert(/<nav\b/.test(body), `${route}: missing documentation navigation`)
-    const text = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')
+    const heading = body.match(/<h1\b[^>]*>[\s\S]*?<\/h1>/)?.[0] ?? ''
     assert(
-      text.includes(escape(page.title)),
-      `${route}: title exists only in island props`,
+      visibleText(heading) === page.title.replace(/\s+/g, ' ').trim(),
+      `${route}: missing visible document title`,
     )
   }
   checked += 1
