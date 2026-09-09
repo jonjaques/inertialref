@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { renderFragment } from './markdown.mjs'
 import { escapeAttribute } from './highlight.mjs'
 import { DOCS } from './routes.mjs'
@@ -100,6 +101,38 @@ export function buildReference(project, described = new Map()) {
       description: described.get(module.name) ?? '',
     }))
 
+  const exports = packages.flatMap((entry) =>
+    (entry.module.children ?? []).map((child) => ({
+      child,
+      route: `${entry.route}/${child.name}`,
+    })),
+  )
+  // Astro writes these route names as HTML filenames. A case-only pair has
+  // one filename on APFS or NTFS, even though the URLs are distinct. Hash only
+  // those groups, using the complete case-sensitive path rather than visit order.
+  const folded = new Map()
+  for (const { route } of exports) {
+    const key = route.toLowerCase()
+    folded.set(key, (folded.get(key) ?? 0) + 1)
+  }
+  const aliases = Object.fromEntries(
+    exports
+      .filter(({ route }) => folded.get(route.toLowerCase()) > 1)
+      .map(({ route }) => [
+        route,
+        `${route}-${createHash('sha256').update(route).digest('hex').slice(0, 10)}`,
+      ])
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  )
+  const routeForExport = ({ route }) => aliases[route] ?? route
+  const filenames = [
+    `${DOCS}/api`,
+    ...packages.map(({ route }) => route),
+    ...exports.map(routeForExport),
+  ].map((route) => route.toLowerCase())
+  if (new Set(filenames).size !== filenames.length)
+    throw new Error('API routes collide on a case-insensitive filesystem')
+
   /*
    * Where every documented reflection lives, resolved before anything is
    * rendered.
@@ -124,31 +157,29 @@ export function buildReference(project, described = new Map()) {
    * at somebody else's page.
    */
   const addresses = new Map()
-  for (const { module, route } of packages) {
-    addresses.set(module.id, route)
-    for (const child of module.children ?? [])
-      addresses.set(child.id, `${route}/${child.name}`)
+  for (const { module, route } of packages) addresses.set(module.id, route)
+  for (const entry of exports)
+    addresses.set(entry.child.id, routeForExport(entry))
+
+  // A declaration without a top-level export can have several re-exports.
+  // Resolve that tie by address so TypeDoc traversal cannot change its links.
+  const ordered = exports
+    .slice()
+    .sort((a, b) => (a.route < b.route ? -1 : a.route > b.route ? 1 : 0))
+  for (const entry of ordered) {
+    const target = resolveReference(entry.child, { byId })
+    if (!addresses.has(target.id))
+      addresses.set(target.id, routeForExport(entry))
   }
-  for (const { module, route } of packages)
-    for (const child of module.children ?? []) {
-      const target = resolveReference(child, { byId })
-      if (!addresses.has(target.id))
-        addresses.set(target.id, `${route}/${child.name}`)
-    }
-  for (const { module, route } of packages)
-    for (const child of module.children ?? []) {
-      // A member — a method, a property, an accessor — is an anchor on its
-      // owner's page rather than a page of its own. There are 1,063 properties
-      // in this tree, and a page each is a reference nobody can hold in their
-      // head and eight hundred more files to fetch one at a time.
-      const target = resolveReference(child, { byId })
-      for (const member of target.children ?? [])
-        if (!addresses.has(member.id))
-          addresses.set(
-            member.id,
-            `${route}/${child.name}#${anchorFor(member)}`,
-          )
-    }
+  for (const { child } of ordered) {
+    const target = resolveReference(child, { byId })
+    for (const member of target.children ?? [])
+      if (!addresses.has(member.id))
+        addresses.set(
+          member.id,
+          `${addresses.get(target.id)}#${anchorFor(member)}`,
+        )
+  }
 
   const context = { byId, addresses }
   const pages = []
@@ -165,13 +196,29 @@ export function buildReference(project, described = new Map()) {
     pages: (entry.module.children ?? [])
       .slice()
       .sort(byKindThenName)
-      .map((child) => `${entry.route}/${child.name}`),
+      .map((child) => addresses.get(child.id)),
     /* The package's own page heads its group in the rail — it is the thing the
        group is named after, not a sibling of its exports. */
     head: entry.route,
   }))
 
-  return { pages, groups }
+  return {
+    pages: pages.map((page) => ({
+      ...page,
+      html: canonicalReferenceLinks(page.html, aliases),
+    })),
+    groups,
+    aliases,
+  }
+}
+
+/** Canonicalize explicit Markdown links as well as TypeDoc's resolved links. */
+export function canonicalReferenceLinks(html, aliases) {
+  return html.replace(/href="([^"#?]+)([^"]*)"/g, (attribute, route, suffix) =>
+    aliases[route] === undefined
+      ? attribute
+      : `href="${aliases[route]}${suffix}"`,
+  )
 }
 
 /* ------------------------------------------------------------------------- */
@@ -243,7 +290,7 @@ function packagePage({ module, short, route, description }, context) {
       `<div class="api-rows">` +
       members
         .map((member) => {
-          const target = `${route}/${member.name}`
+          const target = context.addresses.get(member.id)
           const line = firstSentence(member.comment)
           /* No kind on the row: it is grouped under a heading that says
              `Interfaces`, and a column repeating `INTERFACE` fourteen times
@@ -276,7 +323,7 @@ function packagePage({ module, short, route, description }, context) {
   }
 }
 
-function memberPage({ short, route }, reflection, context) {
+function memberPage({ short }, reflection, context) {
   const target = resolveReference(reflection, context)
   const headings = []
   const parts = []
@@ -312,7 +359,7 @@ function memberPage({ short, route }, reflection, context) {
   }
 
   return {
-    route: `${route}/${reflection.name}`,
+    route: context.addresses.get(reflection.id),
     title: reflection.name,
     lead:
       plainSummary(target.comment) ||
