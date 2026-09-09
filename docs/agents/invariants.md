@@ -345,10 +345,13 @@ order may depend on a later one resolving. Only the last needs a player.
 ### Rule 32
 
 **Never add a second producer of the lens.** It follows the camera's own
-precedence through the same code — a `CinematicSample` carries a `Lens`, the
-observatory reads `framingLens()` — the flight lens alone, because it is the
-arm that only produces a camera when the cutscene arm is null — and the flight
-lens is the fallback.
+precedence through `engine.lens`: the cinematic lens wins, an active fixed
+galaxy instrument supplies its declared lens within the observatory arm, and
+the flight lens is the fallback. Ordinary observatory framing reads
+`framingLens()`, the flight lens alone; a fixed galaxy instrument owns its
+pose and optics together. Entering or leaving that instrument preserves the
+flight lens. [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records
+the active galaxy view.
 The field of view is _derived_ from focal length, gauge and zoom and is never
 stored beside them; `CameraRig` writes `camera.fov` and nothing else does —
 the aspect it writes beside it is the viewport's, not the lens's — never

@@ -447,7 +447,8 @@ export function createPopulationGenerator(field: GalaxyField) {
       offset -= one.counts[populationIndex++]!
     const population = POPULATION_NAMES[populationIndex]!
     // Population and its own index are the seed, so another population's count
-    // cannot move this source. The address stores both without a global index.
+    // cannot move this source's seed. The address uses the combined cell ordinal;
+    // changes to preceding counts can therefore move it and spend a version.
     const seed = deriveSeed(one.seeds[populationIndex]!, `star:${offset}`)
     const rng = new Rng(seed)
     const band = LUMINOSITY_BANDS[one.level]!

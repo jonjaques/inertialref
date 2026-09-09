@@ -50,7 +50,11 @@ The decoder validates the complete file before the host changes its library.
 Imports preserve existing shots, allocate a new ID on a collision and ignore
 an identical repeat. Personal libraries hold at most 500 shots. Browser file
 imports are limited to 2 MB. A different seed or generation manifest refuses
-to open with an explanation; it does not silently produce a different world.
+to open with an explanation. The picture format does not record or compare a
+catalog version. A shot restored against a changed catalog can therefore move
+with its target without a compatibility warning. This is a current format
+limitation; this ADR does not settle whether future catalog changes should
+refuse restoration or preserve a catalog-relative view.
 
 Personal shots live in the preference registry under `planetarium.pictures`.
 They are camera preferences, not canonical saves. The `/planetarium/presets` child route saves, renames, updates and deletes
@@ -88,6 +92,12 @@ instant before the engine builds its snapshot. The observatory, body snapshot,
 terrain, water, clouds, orbit traces and the object dossier all use that presentation instant.
 Canonical entities retain their simulation history. Returning to live time or
 leaving the planetarium releases the photographic clock.
+
+The Navigator has a known gap in that contract. Its observer-centered survey
+and fuzzy-search rows measure body distances at `world.clock.time` while the
+eye can belong to the held photograph. After a date change, those distances
+can disagree with the picture. The rendering invariant still requires one
+presentation instant; this is a consumer defect, not an exception to it.
 
 Camera adaptation has its own presentation clock. `engine.presentationTime`
 accumulates bounded frame deltas, so Automatic can settle on a held photograph

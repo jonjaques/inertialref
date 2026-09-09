@@ -171,6 +171,20 @@ coordinates are incomparable, so presentation snaps to the newer frame for one
 frame. Interpolating across a frame change would fling the entity across the
 system.
 
+### A photographic instant is presentation time
+
+The planetarium can hold a date independently of the simulation clock. The
+engine snapshots analytic bodies at that instant while canonical ships retain
+their simulation history. Camera, ground, orbit traces and body records must
+read the same instant. Returning to live time releases the held date.
+[ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md) describes portable
+pictures and the two clocks.
+
+Navigator body-distance rows are a known incomplete consumer. Survey and fuzzy
+search currently pair an observer eye with bodies at `world.clock.time`, so a
+held photograph can show a different distance than its row reports. This does
+not relax [Rule 38](../agents/invariants.md#rule-38).
+
 ---
 
 ## Analytic orbits

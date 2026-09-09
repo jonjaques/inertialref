@@ -60,9 +60,10 @@ last worker holds the whole answer.
 
 ### The star class is checked against the stub before the system is built
 
-Generating a system is milliseconds and reading a letter off a stub is nothing,
-so a search for M dwarfs skips nine systems in ten before paying for any of
-them. `matchSystem` asks the real question afterwards against the parsed class.
+The stub permits rejecting a nonmatching host class before generating its
+system. The share of work avoided depends on the selected population and
+query; there is no fixed rejection ratio. `matchSystem` checks the generated
+star against its parsed class afterwards.
 
 ### The nearest thousand are kept, and the rest are counted
 

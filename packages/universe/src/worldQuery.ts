@@ -225,8 +225,8 @@ export function findWorlds(
     /*
      * The star's class is checked before the system is built, which is where
      * the whole cost of this is: generating a system is milliseconds and
-     * reading a letter off a stub is nothing. A search for M dwarfs skips
-     * nine systems in ten before paying for any of them.
+     * reading a letter off a stub is cheap. Rejecting nonmatching classes here
+     * avoids generating those systems; the saving depends on the selected volume.
      */
     if (!matchesStubStar(stub, query)) continue
     let system: StarSystem

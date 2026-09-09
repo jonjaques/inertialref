@@ -135,7 +135,7 @@ remain useful. Its Natural image is a reference, not a release constraint.
 Enhanced makes the diffuse sky part of ordinary gameplay cost. Eligibility
 cannot follow the Natural daylight predicate. The owned ordinary-view cache
 retains physical sky radiance and bounds its updates. Cache behavior and
-bake/live identity belong to [ADR-0032](0032-the-stellar-field.md). Photographic
+bake/live identity belong to [ADR-0038](0038-the-stars-and-the-diffuse-sky.md). Photographic
 culling needs a conservative visibility bound through the actual optics and
 response, including glare, rather than an exposure label alone.
 
