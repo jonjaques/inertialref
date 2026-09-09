@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 const { config } = parseConfigFileTextToJson(
   'wrangler.jsonc',
-  readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'),
+  readFileSync(
+    new URL('../apps/server/wrangler.jsonc', import.meta.url),
+    'utf8',
+  ),
 )
 
 describe('the static hosting boundary', () => {

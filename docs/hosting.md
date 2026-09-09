@@ -435,7 +435,8 @@ from the network first and stores successful HTML by pathname. Camera and seed
 queries keep their meaning in the browser while sharing the route's document.
 An uncached article receives a clear offline response rather than home-page
 markup that cannot hydrate at that address. Installation precaches the home,
-solo flight, planetarium and cinema shells. Hashed assets remain cache-first,
+solo flight, planetarium and cinema shells, plus the currently open documents.
+Hashed assets remain cache-first,
 and activation carries them forward before deleting an earlier build's cache.
 
 **The brand is generated.** `design/brand/brandmark.svg` supplies the mark.

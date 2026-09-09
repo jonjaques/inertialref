@@ -99,14 +99,33 @@ const isImmutable = (pathname) =>
  */
 const isSourceMap = (pathname) => pathname.endsWith('.map')
 
+/** Queries select client state; each pathname has one prerendered document. */
+const navigationKey = (url) =>
+  `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      // Individually, so one missing optional file cannot fail the whole install.
-      .then((cache) =>
-        Promise.allSettled(PRECACHE.map((url) => cache.add(url))),
-      )
+      .then(async (cache) => {
+        // The first document loads before a worker controls its navigation.
+        // Cache it during installation, including when a deploy replaces the
+        // worker that handled that document's first request.
+        const clients = await self.clients.matchAll({
+          type: 'window',
+          includeUncontrolled: true,
+        })
+        const current = clients
+          .map((client) => new URL(client.url))
+          .filter(
+            (url) =>
+              url.origin === self.location.origin && !isLive(url.pathname),
+          )
+          .map(navigationKey)
+        const urls = new Set([...PRECACHE, ...current])
+        // One absent page must not fail the whole install.
+        await Promise.allSettled([...urls].map((url) => cache.add(url)))
+      })
       .then(() => self.skipWaiting()),
   )
 })
@@ -172,7 +191,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     // Astro renders one document per pathname. Queries select browser state,
     // so the cached HTML can be shared without changing the address bar.
-    const key = `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`
+    const key = navigationKey(url)
     event.respondWith(
       fetch(request)
         .then((response) => {

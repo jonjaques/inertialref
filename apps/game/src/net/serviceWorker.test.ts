@@ -70,6 +70,7 @@ interface Harness {
   readonly deleted: string[]
   readonly put: string[]
   cacheKeys: string[]
+  clientUrls: string[]
   /** Per-cache contents, keyed by cache name then request URL. */
   readonly stores: Map<string, Map<string, unknown>>
 }
@@ -84,6 +85,7 @@ function loadServiceWorker(
     deleted: [],
     put: [],
     cacheKeys: [],
+    clientUrls: [],
     stores: new Map(),
   }
 
@@ -92,7 +94,11 @@ function loadServiceWorker(
     addEventListener: (type: string, fn: (event: unknown) => void) =>
       listeners.set(type, fn),
     skipWaiting: () => Promise.resolve(),
-    clients: { claim: () => Promise.resolve() },
+    clients: {
+      claim: () => Promise.resolve(),
+      matchAll: () =>
+        Promise.resolve(harness.clientUrls.map((url) => ({ url }))),
+    },
   }
 
   const caches = {
@@ -329,6 +335,23 @@ describe('the service worker', () => {
     expect(sw.opened).toContain(`inertialref-${BUILD}`)
     // Precaching an /api path would defeat the bypass above at install time.
     for (const url of sw.put) expect(url.startsWith('/api')).toBe(false)
+  })
+
+  it('caches the first open document before it controls any navigation', async () => {
+    const sw = loadServiceWorker()
+    sw.clientUrls = [
+      `${ORIGIN}/docs/concepts/coordinates?reader=1`,
+      `${ORIGIN}/api/health`,
+      'https://elsewhere.test/docs',
+    ]
+    const install = sw.listeners.get('install')
+    if (install === undefined) throw new Error('no install listener')
+    let pending: Promise<unknown> = Promise.resolve()
+    install({ waitUntil: (p: Promise<unknown>) => (pending = p) })
+    await pending
+    expect(sw.put).toContain(`${ORIGIN}/docs/concepts/coordinates`)
+    expect(sw.put).not.toContain(`${ORIGIN}/api/health`)
+    expect(sw.put).not.toContain('https://elsewhere.test/docs')
   })
 
   it('evicts its own past builds and nothing else', async () => {
