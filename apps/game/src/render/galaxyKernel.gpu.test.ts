@@ -1,5 +1,12 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { Vector3 } from 'three/webgpu'
+import {
+  Mesh,
+  MeshBasicNodeMaterial,
+  OrthographicCamera,
+  PlaneGeometry,
+  Scene,
+  Vector3,
+} from 'three/webgpu'
 import { int, uniformArray, uv } from 'three/tsl'
 import { PARSEC } from '@inertialref/shared'
 import { rootSeed } from '@inertialref/procedural'
@@ -27,6 +34,62 @@ function within(actual: number, expected: number, absolute: number) {
     Math.max(absolute, Math.abs(expected) * 0.01),
   )
 }
+
+it('keeps the bar fourth powers defined in every signed quadrant', async () => {
+  const field = createGalaxyField(rootSeed('inertialref'))
+  const kernel = createGalaxyKernel(field)
+  const angle = (27 * Math.PI) / 180
+  const c = Math.cos(angle),
+    s = Math.sin(angle)
+  const points = [-1, 1].flatMap((along) =>
+    [-1, 1].map(
+      (across) =>
+        new Vector3(
+          -c * along * 1500 + s * across * 750,
+          0,
+          -s * along * 1500 - c * across * 750,
+        ),
+    ),
+  )
+  points.push(new Vector3(-8178, 20.8, 0))
+  const positions = uniformArray<'vec3'>(points, 'vec3')
+  const graph = kernel.sample(positions.element(int(uv().x.mul(points.length))))
+  const material = new MeshBasicNodeMaterial()
+  material.fragmentNode = graph
+  const mesh = new Mesh(new PlaneGeometry(2, 2), material)
+  const scene = new Scene()
+  scene.add(mesh)
+  const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 2)
+  try {
+    const { fragmentShader } = await gpu.shader(mesh, camera, scene)
+    const sample = fragmentShader.match(/fn galaxySample\b[\s\S]*?\n}/)?.[0]
+    expect(sample).toBeDefined()
+    // WGSL pow excludes negative bases even for integer exponents. Metal
+    // can optimize these successfully, so finite readback alone cannot guard it.
+    expect(sample).not.toMatch(/pow\([^\n]*,\s*4\.0\s*\)/)
+    const pixels = await gpu.drawGraph(graph, {
+      width: points.length,
+      height: 1,
+      float: true,
+    })
+    points.forEach((p, i) => {
+      const expected = field.sample(
+        UV.fromMeters(p.x * PARSEC, p.y * PARSEC, p.z * PARSEC),
+      )
+      const actual = pixels.at(i, 0)
+      const values = [
+        expected.emissionRgb.r,
+        expected.emissionRgb.g,
+        expected.emissionRgb.b,
+        expected.totalPerCubicParsec,
+      ]
+      values.forEach((value, channel) => within(actual[channel]!, value, 1e-8))
+    })
+  } finally {
+    mesh.geometry.dispose()
+    material.dispose()
+  }
+})
 
 it.each(['inertialref', 'another-galaxy'])(
   'matches nonzero CPU emission and density, including the arm kinks: %s',
