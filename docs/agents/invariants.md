@@ -81,7 +81,7 @@ table is one of those three, not drift.
 | Compile-ahead goes through one recipe                                                         | [Rendering](../concepts/rendering.md)                                                                                  |
 | Do not edit files `pnpm brand` writes                                                         | [Development](../guides/development.md)                                                                                |
 | Site metadata is duplicated on purpose                                                        | [Hosting](../hosting.md) · [Development](../guides/development.md)                                                     |
-| Third-party tags load from a module, not `index.html`                                         | [Hosting](../hosting.md)                                                                                               |
+| Third-party tags load through the analytics module                                            | [Hosting](../hosting.md)                                                                                               |
 
 When a defect exposes a missing invariant, add the rule to `AGENTS.md`, a
 one-liner under `.claude/rules/`, a row here, and a regression test that can
@@ -254,8 +254,9 @@ not license to hand-write `useMemo`.
 ### Rule 22
 
 **Never put the `<Canvas>` inside a route,** and never let a mode assume it
-owns the page. `App` owns the canvas and `.hud-layer` for the life of the
-session. [ADR-0011](../adr/0011-application-shell-and-modes.md).
+owns the page. `Root` keeps the browser runtime and server-rendered page shell
+outside every route. `App` owns the persistent canvas; `PageShell` owns routed
+chrome. [ADR-0039](../adr/0039-the-shell-before-the-scene.md).
 
 ### Rule 23
 
@@ -685,10 +686,11 @@ is idempotent by label, because StrictMode does everything twice.
 ### Rule 63
 
 **Never change what the site says about itself in only one place.**
-`src/site.ts` supplies shared values, `index.html` is what a scraper reads,
-and `pages/DocumentMeta.tsx` applies route-specific browser metadata.
+`src/site.ts` supplies route metadata to the server-rendered head and to
+`pages/DocumentMeta.tsx` for client navigation. `documentHead.ts` emits the
+shared head that scrapers read.
 
 ### Rule 64
 
-**Never load a third-party tag from `index.html`.** `src/analytics.ts` is
+**Never load a third-party tag from the document head.** `src/analytics.ts` is
 the gate: production build, canonical host, no Global Privacy Control.

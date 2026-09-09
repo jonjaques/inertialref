@@ -130,6 +130,15 @@ For anything about how the app is _served_ — asset headers, the SPA fallback, 
 worker — point the driver at `pnpm preview` on 8787 instead: `pnpm preview` in one shell,
 then `--url http://localhost:8787/`.
 
+## Documents before enhancement
+
+`--document` waits for HTML readiness instead of `engine.gl`.
+`--no-javascript` implies document mode and disables scripts before navigation.
+`--block-url '*App*.js'` can keep runtime chunks from arriving while the shell
+hydrates. The flags apply only to the isolated rig and reset on its next call.
+Use `--js` to inspect document content and `--shot` to capture it. A document
+capture does not wait for first light or activate the renderer.
+
 ## Presets as reproducible browser fixtures
 
 **Use the public URL restore path when the setup is a photograph.** `--preset <id>`

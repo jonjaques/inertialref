@@ -14,7 +14,7 @@ bun to change dependencies.
 
 ```bash
 pnpm install
-pnpm dev              # Vite on 5173 and wrangler on 8787
+pnpm dev              # Astro on 5173 and wrangler on 8787
 pnpm preview          # production build, served by the real Worker on 8787
 pnpm test             # Vitest, Node environment only
 pnpm test:gpu         # the shader suite on the real GPU via Dawn; not in check
@@ -26,7 +26,7 @@ pnpm brand            # regenerate brand artifacts from design/brand/brandmark.s
 pnpm presets:plates   # recapture the seven preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
 pnpm docs:build       # render docs/ and packages/* into the documentation site
-pnpm build            # optional media pull, docs, typecheck, then Vite build
+pnpm build            # optional media pull, docs, typecheck, then Astro build
 pnpm check            # graph, brand, presets, format, lint, typecheck, test, test:slow, build
 
 # The four instruments. They read the tree; none of them gates it.
@@ -53,7 +53,7 @@ pnpm textures:build            # surface maps into data/textures (1.5 GB in, 25 
 pnpm shapes:build              # measured shape models into data/shapes
 pnpm solar:fetch               # data/reference/solar-system.json, from JPL
 
-pnpm dev:client                # Vite only
+pnpm dev:client                # Astro only
 pnpm dev:server                # wrangler on 127.0.0.1:8787
 pnpm run deploy:worker         # build, then wrangler deploy
 pnpm media:pull                # reference audio from R2; not in git
@@ -65,13 +65,13 @@ pnpm media:push
 dev` refuses to start when that directory is absent — so in a worktree created
 by [`/parallel`](../../.claude/skills/parallel/SKILL.md), or in any clone that
 has never built, the Worker half exits immediately and `scripts/dev.mjs` stops
-the Vite half with it. The failure names the directory and nothing else, and it
+the Astro half with it. The failure names the directory and nothing else, and it
 is easy to read as a broken checkout.
 
 Two ways out, and which one you want depends on why you are serving:
 
 ```bash
-pnpm dev:client   # Vite alone on 5173 — everything except the Worker's routes
+pnpm dev:client   # Astro alone on 5173 — everything except the Worker's routes
 pnpm build        # once, then `pnpm dev` works for the life of the worktree
 ```
 
@@ -176,8 +176,9 @@ by an in-process fake in Node tests.
 
 ## Toolchain
 
-**Vite 8** with `@vitejs/plugin-react` (Oxc transform) and
-`@rolldown/plugin-babel` running `reactCompilerPreset()`. React Compiler is
+**Astro 7** with `@astrojs/react` over Vite 8 and
+`@rolldown/plugin-babel` running `reactCompilerPreset()`. The standalone Vite
+config remains available for focused build tests. React Compiler is
 on: do not hand-write `useMemo` / `useCallback` memoization. `useMemo` for a
 stable Three.js object is a different thing and is fine.
 
@@ -281,12 +282,11 @@ from a published page into a plan resolves to GitHub rather than to a route
 that does not exist. Brand sources and the reference imagery are there for the
 same reason: they are inputs, not pages.
 
-**Site metadata** is duplicated on purpose: `src/site.ts` for the running
-client, `index.html` for scrapers that do not run JavaScript, and
-`pages/DocumentMeta.tsx` for per-route title, description, and canonical URL.
-Change all affected copies together.
-[`docs/hosting.md`](../hosting.md) records why they are not a single Worker
-render.
+**Site metadata** comes from `src/site.ts`. `documentHead.ts` renders it into
+every Astro document, and `pages/DocumentMeta.tsx` updates it on client
+navigation. The sitemap comes from the emitted routes. Public pages are
+pre-rendered; the Worker serves their HTML as static assets.
+[ADR-0039](../adr/0039-the-shell-before-the-scene.md) records the boundary.
 
 **Analytics** loads from `src/analytics.ts`, only in a production build, only
 on the canonical host, and only without Global Privacy Control. The
@@ -323,12 +323,12 @@ Four configurations in [`.vscode/launch.json`](../../.vscode/launch.json),
 shared by VS Code and Cursor. The play button on **Launch Browser** starts
 the game.
 
-| Configuration      | Debuggee                                      | Port |
-| ------------------ | --------------------------------------------- | ---- |
-| **Launch Browser** | the client; the editor starts Vite + wrangler | 5173 |
-| **Attach Browser** | Chrome already running with remote debugging  | 9222 |
-| **Launch Node**    | `apps/headless` (`--self-test`)               | —    |
-| **Attach Node**    | `pnpm sim` (`node --inspect=127.0.0.1:9229`)  | 9229 |
+| Configuration      | Debuggee                                       | Port |
+| ------------------ | ---------------------------------------------- | ---- |
+| **Launch Browser** | the client; the editor starts Astro + wrangler | 5173 |
+| **Attach Browser** | Chrome already running with remote debugging   | 9222 |
+| **Launch Node**    | `apps/headless` (`--self-test`)                | —    |
+| **Attach Node**    | `pnpm sim` (`node --inspect=127.0.0.1:9229`)   | 9229 |
 
 Launch Browser runs `node scripts/dev.mjs --ensure` as a background task. If
 5173 is already up, it reuses that process and does not kill it when debugging

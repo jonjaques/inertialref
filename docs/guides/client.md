@@ -9,9 +9,16 @@ The decisions are [ADR-0011](../adr/0011-application-shell-and-modes.md) and
 
 ## One canvas, for the life of the session
 
-`App` owns the `<Canvas>` and `.hud-layer`. Every route renders _inside_ that
-layer as a sibling of the canvas. A router over the whole tree rebuilds a
-`WebGPURenderer` on every navigation.
+`Root` is a server-rendered shell hydrated by Astro. `PageShell` renders the
+mode and overlay routes inside its `.hud-layer`; `GameLoader` adds the
+persistent `App` beside it. `App` owns the canvas, engine and visual overlays
+outside every route. React Router handles links after hydration, so navigation
+preserves the renderer. [ADR-0039](../adr/0039-the-shell-before-the-scene.md).
+
+Home and docs are readable before the runtime starts. Initial documentation
+arrives through request-scoped props; subsequent links fetch the existing JSON
+content. A graphics failure stays inside the runtime boundary and leaves the
+page shell usable.
 
 `.hud-layer` is `pointer-events: none` so the scene stays reachable. Mode
 chrome opts back in with `pointer-events-auto`. `ErrorBoundary`'s `className`

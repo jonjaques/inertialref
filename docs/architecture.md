@@ -371,19 +371,19 @@ unreachable rather than merely discouraged.
 ## Verification
 
 ```bash
-pnpm check   # graph → brand → presets → format → lint → typecheck (5 projects) → tests → build
+pnpm check   # graph → brand → presets → format → lint → typecheck (5 projects and Astro templates) → tests → build
 ```
 
-| Stage           | What it proves                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------- |
-| `graph`         | layering intact, no cycles                                                                  |
-| `brand:check`   | generated brand artifacts match their source                                                |
-| `presets:check` | every picture still has a plate, and every composition it names still resolves              |
-| `format:check`  | committed files match Prettier                                                              |
-| `lint`          | oxlint across the workspace                                                                 |
-| `typecheck`     | five tsconfig projects — portable packages, client, Node runner, Worker, and offline ingest |
-| `test`          | the full Vitest suite runs in plain Node — `packages/*` and `apps/*` alike                  |
-| `build`         | the client actually bundles, workers included                                               |
+| Stage           | What it proves                                                                 |
+| --------------- | ------------------------------------------------------------------------------ |
+| `graph`         | layering intact, no cycles                                                     |
+| `brand:check`   | generated brand artifacts match their source                                   |
+| `presets:check` | every picture still has a plate, and every composition it names still resolves |
+| `format:check`  | committed files match Prettier                                                 |
+| `lint`          | oxlint across the workspace                                                    |
+| `typecheck`     | five tsconfig projects plus Astro templates                                    |
+| `test`          | the full Vitest suite runs in plain Node — `packages/*` and `apps/*` alike     |
+| `build`         | the server renders every public route and bundles the client and workers       |
 
 On top of that, twelve **capability checks** execute the milestone's claims
 against the live build — in Node via `pnpm sim --self-test`, and in the browser
