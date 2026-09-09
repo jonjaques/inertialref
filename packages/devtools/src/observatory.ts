@@ -81,6 +81,7 @@ import {
   launchArc,
   type LookOffset,
   NO_LOOK,
+  MIN_DISTANCE_RADII,
   MIN_STANCE_HEIGHT,
   type ObserverState,
   observerPose,
@@ -411,6 +412,25 @@ export class Observatory {
 
   validatePicture(address: string, framing: PictureFraming): void {
     const target = this.#resolve(address)
+    if (framing.kind !== 'camera') {
+      const body = this.#bodyOf(target)
+      if (body === null)
+        throw new Error(
+          'This preset needs a planet or moon to compose against.',
+        )
+      const standoff =
+        framing.kind === 'compose'
+          ? findComposition(framing.composition).standoff
+          : null
+      // Fill framings clamp to the orbit floor; only authored radii request a stance.
+      const surface =
+        standoff === null ||
+        (standoff.kind === 'radii' && standoff.radii < MIN_DISTANCE_RADII)
+      if (surface && !hasSolidSurface(body))
+        throw new Error('This preset has no solid surface to stand on.')
+      if (framing.kind === 'rise' && this.#parentBody(body) === null)
+        throw new Error(`Nothing for ${body.name} to see rise`)
+    }
     if (framing.kind === 'camera') {
       if (framing.tracking !== undefined) {
         const tracked = this.#resolve(framing.tracking.address)

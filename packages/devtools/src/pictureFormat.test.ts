@@ -8,7 +8,7 @@ import {
   encodePictures,
   mergePictures,
 } from './pictureFormat.ts'
-import { PICTURES, type PictureProcessing } from './pictures.ts'
+import { PICTURES, type Picture, type PictureProcessing } from './pictures.ts'
 import { snapshot } from '@inertialref/simulation'
 import { UV, Vec, Quaternion as Q } from '@inertialref/spatial'
 import bundledPictures from './pictures.json' with { type: 'json' }
@@ -337,6 +337,39 @@ describe('portable pictures', () => {
       session.dispose()
     }
   })
+  it.each<Pick<Picture, 'address' | 'framing' | 'fovDeg'>>([
+    { address: 's:SOL/b:2', framing: { kind: 'rise' } },
+    {
+      address: 's:SOL',
+      framing: { kind: 'compose', composition: 'portrait' },
+    },
+    {
+      address: 's:SOL/b:4',
+      framing: { kind: 'compose', composition: 'sunset' },
+    },
+  ])(
+    'refuses incompatible framing before changing the picture: %j',
+    (invalid) => {
+      const session = rig()
+      try {
+        const ir = session.harness
+        ir.look('s:SOL/b:2.0', { ease: false })
+        ir.observatory.setTime(123)
+        const saved = ir.capturePicture('test', 'Test')
+        expect(() =>
+          ir.takePicture({
+            ...saved,
+            ...invalid,
+            time: 456,
+            processing: { ...enhanced, mode: 'manual', balance: 4800 },
+          }),
+        ).toThrow()
+        expect(ir.capturePicture('test', 'Test')).toEqual(saved)
+      } finally {
+        session.dispose()
+      }
+    },
+  )
   it('refuses a different universe seed before moving the camera', () => {
     const session = rig()
     try {
