@@ -21,6 +21,8 @@ content. Renderer startup, pipeline and device failures show a graphics notice
 and stop the interactive runtime while leaving the page shell usable. WebGPU
 is preferred; WebGL is attempted with floating-point render-target support.
 Standard output remains available when extended output is unsupported.
+The notice can be dismissed until the page reloads. Dismissal leaves graphics
+stopped and does not write a preference.
 
 A tab that restarts with an unfinished graphics-session marker shows the same
 notice before loading the engine. An orderly navigation clears the marker;
