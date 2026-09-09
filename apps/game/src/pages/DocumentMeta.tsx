@@ -2,6 +2,7 @@ import { useContext, useEffect } from 'react'
 import { useLocation } from 'react-router'
 import { recordPageView, startAnalytics } from '../analytics.ts'
 import { DocsContentContext } from '../docs/initialDocs.ts'
+import { docRoute } from '../docs/content.ts'
 import {
   canonicalUrl,
   documentTitle,
@@ -14,7 +15,10 @@ import { DOCS } from './paths.ts'
 export function DocumentMeta() {
   const { pathname } = useLocation()
   const docs = useContext(DocsContentContext)
-  const path = pathname.replace(/\/+$/, '') || '/'
+  const path = docRoute(
+    docs?.manifest.value ?? null,
+    pathname.replace(/\/+$/, '') || '/',
+  )
   const article = docs?.page.value
   const isArticle = path.startsWith(`${DOCS}/`)
   const pending =
