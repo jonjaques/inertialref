@@ -62,7 +62,14 @@ export function useWorldSearch(engine: GameEngine): WorldSearch {
 
   // A sweep that outlived its panel is worker time nobody will read. The
   // pool has no idea the dialog closed; this is what tells it.
-  useEffect(() => () => live.current?.cancel(), [])
+  useEffect(
+    () => () => {
+      const held = live.current
+      live.current = null
+      held?.cancel()
+    },
+    [],
+  )
 
   const run = useCallback(
     (query: WorldQuery, lightYears: number) => {
@@ -97,10 +104,10 @@ export function useWorldSearch(engine: GameEngine): WorldSearch {
         running: search.systems > 0,
         asked: query,
       })
-      void search.done.then(() => {
+      void search.done.then((matches) => {
         if (live.current !== handle) return
         live.current = null
-        setState((held) => ({ ...held, running: false, progress: 1 }))
+        setState((held) => ({ ...held, matches, running: false, progress: 1 }))
       })
     },
     [engine],
