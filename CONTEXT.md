@@ -9052,6 +9052,14 @@ The engine, renderer and canvas identities survived flight, home, docs,
 settings, planetarium and cinema links, including Back from settings to the
 article underneath.
 
+With selected-mode preloading in place, the final fresh-profile flight run
+reached renderer readiness in 4.6 s. FlightMode's request began at 71.3 ms and
+App's at 74.5 ms, so the controls no longer wait for runtime publication to
+start downloading. The same 2.5 s sample again contained 150 frames, mean
+16.67 ms, p95 17.60 ms, none over 25 ms. A saved false Thruster variation
+preference survived a full settings-page hydration as false, with no hydration
+errors; the HTML response still supplies the server default.
+
 Docs remained readable with JavaScript disabled, including navigation at
 390×844, and with the runtime chunk deliberately blocked. Home and docs still
 acquire the existing sky after hydration. With the local server stopped, a
