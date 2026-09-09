@@ -9068,6 +9068,28 @@ import had pulled the engine into the shell's static bundle; reading the pure
 camera configuration instead keeps that dependency deferred. Public reading
 must not wait on a catalog or graphics device to succeed.
 
+## The signed bar and the tab that restarts (08 Sep 2026)
+
+The galaxy bar evaluated fourth powers of signed coordinates through native
+shader `pow`. WGSL leaves negative bases outside its defined domain. The Apple
+GPU returned finite values here, so a numerical test on that adapter passed
+while the emitted program remained nonportable. The regression inspects
+compiled WGSL as well as sampling four signed bar quadrants and Sol against
+the CPU field. Multiplication removes the undefined operation;
+`galaxy-tsl@9` retires physical cubes computed by the affected kernel. The
+reported Windows/Chrome/RTX 2070 missing background still needs confirmation
+on that device.
+
+Mobile Safari's reported crash followed by repeated automatic reloads is a
+separate failure. JavaScript cannot show a notice after its process is killed.
+A session marker set before runtime loading and cleared on `pagehide` lets the
+replacement document stop before repeating the graphics work. The marker is
+evidence of an interrupted session, not a diagnosis; explicit retry clears it.
+Device loss and ordinary rendering failures use the live shell notice. The
+browser rig verifies simulated device loss removes the canvas and retains
+navigation. [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records the
+ownership and storage limitation.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

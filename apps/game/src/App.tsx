@@ -51,6 +51,7 @@ import {
   type CanvasProps,
   commitToneCurve,
   createRenderer,
+  releaseRenderer,
   type RendererHandle,
 } from './render/createRenderer.ts'
 import {
@@ -69,6 +70,7 @@ import {
 } from './pages/paths.ts'
 import { SceneView } from './scene/SceneView.tsx'
 import { publishRuntime } from './runtimeState.ts'
+import { runtimeFailure } from './runtimeFailure.ts'
 import {
   engineStore,
   startEngineSampler,
@@ -302,15 +304,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }, [monitor])
 
   /*
-   * No release-on-unmount effect here, deliberately — the factory is the
-   * *sole* owner of renderer disposal. An effect keyed on the canvas string
-   * used to call `releaseRenderer()` in its cleanup, and under StrictMode
-   * that cleanup fires once between the doubled mounts: it could dispose the
-   * very renderer the surviving mount had adopted, whose animation loop died
-   * with it — a black canvas, a healthy HUD, and nothing in the console.
-   * R3F's unmount cannot release a `WebGPURenderer` either way; the factory
-   * releases the previous build before starting the next, which covers the
-   * one real replacement path (the HDR preference remounting the canvas).
+   * The factory owns renderer replacement. StrictMode cleanup must leave a
+   * healthy device alive for the surviving mount. Only terminal failure
+   * permits the unmount cleanup to release the device and engine workers.
    */
   // MSAA joins the key because it is a constructor fact; the `2x`↔`4x` step
   // only changes the drawing-buffer scale, which R3F applies live via `dpr`.
@@ -354,6 +350,22 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     producer.current = null
     engine.setHeightfieldSource(null)
   }
+
+  useEffect(
+    () => () => {
+      // StrictMode's ordinary replay keeps the device; a terminal failure retires it.
+      if (runtimeFailure.getSnapshot() === null) return
+      producer.current?.dispose()
+      producer.current = null
+      engine.setHeightfieldSource(null)
+      engine.gl = null
+      engine.view = null
+      releaseRenderer()
+      engine.dispose()
+      singleton = null
+    },
+    [engine],
+  )
 
   /*
    * Which ceiling the drawing buffer gets. Deliberately *not* in the key above:
@@ -403,7 +415,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     if (output === null) return
     const handle = renderer.current
     if (handle === null) return
-    void warmScene(handle, engine, firstLight.progress).then(firstLight.warmed)
+    void warmScene(handle, engine, firstLight.progress).then(
+      firstLight.warmed,
+      (cause: unknown) => runtimeFailure.report('graphics', cause),
+    )
     // After `warmScene`, which is what opens the session this registers with.
     // See the note at `retireProducer`.
     if (producer.current !== null) return

@@ -2,6 +2,7 @@ import { type RootState, useFrame } from '@react-three/fiber'
 import { getTimer } from '@inertialref/shared'
 import { framesHeld } from '../engine/frameHold.ts'
 import { RENDER_PHASE } from '../engine/frameTiming.ts'
+import { runGraphicsFrame } from '../runtimeFailure.ts'
 
 /*
  * `useFrame`, with the callback's own time on the Render track.
@@ -39,11 +40,11 @@ export function useTimedFrame(
   useFrame((state, delta) => {
     if (framesHeld()) return
     if (!timer.on) {
-      callback(state, delta)
+      runGraphicsFrame(() => callback(state, delta))
       return
     }
     const started = performance.now()
-    callback(state, delta)
+    runGraphicsFrame(() => callback(state, delta))
     timer.measure(name, started, performance.now(), RENDER_PHASE)
   }, priority)
 }

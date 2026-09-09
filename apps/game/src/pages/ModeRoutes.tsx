@@ -5,6 +5,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { DocsMode } from '../docs/DocsMode.tsx'
 import { HomePage } from './HomePage.tsx'
 import { modeLoaders, preloadMode } from './modeLoader.ts'
+import { useRuntimeFailure } from '../runtimeFailure.ts'
 import {
   CINEMA,
   DOCS,
@@ -91,6 +92,7 @@ export function ModeRoutes(props: ModeRouteProps) {
   // two cannot answer differently about what is on screen.
   const at = resolvedLocation(useLocation())
   const mode = modeForPath(at.pathname)
+  const failure = useRuntimeFailure()
   useEffect(() => {
     // Begin alongside GameLoader, while the engine is still absent. Waiting
     // for its publication adds a network round trip before this mode mounts.
@@ -114,7 +116,9 @@ export function ModeRoutes(props: ModeRouteProps) {
             : 'Fly through a universe simulated in this browser.'}
       </p>
       <p className="type-ui text-slate-400">
-        The interactive experience starts when graphics are ready.
+        {failure === null
+          ? 'The interactive experience starts when graphics are ready.'
+          : 'The interactive experience is unavailable. Home and documentation remain available.'}
       </p>
       <noscript>
         <p className="type-body text-slate-300">
