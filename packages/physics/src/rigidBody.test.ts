@@ -92,20 +92,37 @@ describe('rigid body integration', () => {
   })
 
   it('resolves control input into body-axis acceleration', () => {
-    const { linear, angular } = resolveThrust(SHIP, {
+    // A push ahead on the thrusters is thruster authority along −Z, and the
+    // drive is not in it.
+    const ahead = resolveThrust(SHIP, {
       translation: vec3(0, 0, 1),
       rotation: vec3(0, 0, 0),
+      throttle: 0,
     })
-    // Full forward throttle is main-drive thrust along −Z.
-    expect(linear.z).toBeCloseTo(-30, 9)
-    expect(angular).toEqual(vec3(0, 0, 0))
+    expect(ahead.linear.z).toBeCloseTo(-8, 9)
+    expect(ahead.thrusters.z).toBeCloseTo(-8, 9)
+    expect(ahead.drive).toBe(0)
+    expect(ahead.angular).toEqual(vec3(0, 0, 0))
+
+    // A full throttle is main-drive thrust along −Z, and the thrusters are
+    // not in it; the sum is what the integrator applies.
+    const burn = resolveThrust(SHIP, {
+      translation: vec3(0, 0, 1),
+      rotation: vec3(0, 0, 0),
+      throttle: 1,
+    })
+    expect(burn.drive).toBeCloseTo(30, 9)
+    expect(burn.thrusters.z).toBeCloseTo(-8, 9)
+    expect(burn.linear.z).toBeCloseTo(-38, 9)
 
     const clamped = resolveThrust(SHIP, {
       translation: vec3(5, 0, 0),
       rotation: vec3(-9, 0, 0),
+      throttle: 7,
     })
     expect(clamped.linear.x).toBeCloseTo(8, 9)
     expect(clamped.angular.x).toBeCloseTo(-1.2, 9)
+    expect(clamped.drive).toBeCloseTo(30, 9)
   })
 
   it('damps rotation without overshooting the available torque', () => {

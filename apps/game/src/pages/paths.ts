@@ -36,6 +36,19 @@ export const PLAY_MULTIPLAYER = '/play/multiplayer'
 /** Free navigation of the galaxy. No ship, no fuel, nowhere you cannot go. */
 export const PLANETARIUM = '/planetarium'
 
+/** Preset library, over the current planetarium view. */
+export const PRESETS = `${PLANETARIUM}/presets`
+
+/**
+ * The deep catalog, over the current planetarium view.
+ *
+ * A child of the mode for the reason the preset library is one: the search is
+ * a way of *getting somewhere*, and the camera, the clock and the pose have to
+ * still be there when a result is pressed. A global dialog route would unmount
+ * the planetarium behind it.
+ */
+export const CATALOG = `${PLANETARIUM}/catalog`
+
 /** The scene library. */
 export const CINEMA = '/cinema'
 
@@ -137,6 +150,8 @@ export function modeForPath(pathname: string): AppMode {
 /** Whether a path is a dialog that opens over a mode rather than replacing it. */
 export function isOverlayPath(pathname: string): boolean {
   return (
+    pathname === PRESETS ||
+    pathname === CATALOG ||
     pathname === SETTINGS ||
     pathname.startsWith(`${SETTINGS}/`) ||
     pathname === ABOUT ||
@@ -245,6 +260,10 @@ export const QUERY = {
   autoplay: 'play',
   /** Planetarium: the address the observatory opens on. */
   at: 'at',
+  preset: 'preset',
+  /** Planetarium: URL format version; picture fields use dotted query keys. */
+  shot: 'shot',
+  save: 'save',
   /** Every mode: the world seed, which `GameEngine` already reads. */
   seed: 'seed',
   /**

@@ -2,6 +2,9 @@
 
 Status: accepted · 2026-08-22
 
+Document and startup ownership is superseded by
+[ADR-0039](0039-the-shell-before-the-scene.md).
+
 ## Context
 
 Until this decision the client was one screen: a `<Canvas>`, a HUD layer over

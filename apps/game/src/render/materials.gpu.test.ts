@@ -53,6 +53,8 @@ import {
   wearGround,
   wearSea,
 } from './groundWear.ts'
+import { createThrusterPlumes } from './plumes.ts'
+import { thrusterLayoutFor } from './thrusterLayouts.ts'
 import { createWarpEffects } from './warpEffects.ts'
 
 /*
@@ -170,6 +172,18 @@ describe('every production material compiles', () => {
     warp.group.visible = true
     await gpu.compile(warp.group, camera, staged(warp.group))
     warp.dispose()
+  })
+
+  it('the plumes: the jets, the pods, the drive and its disk', async () => {
+    // The measured hull, so every one of the three shell shadings and the
+    // disk is in the group; the debug layout would compile only the drive.
+    const plumes = createThrusterPlumes(thrusterLayoutFor('rocinante'))
+    // Lit, so the visibility gate below `DARK` does not hide them from the
+    // compile — `compileAsync` skips what is invisible.
+    const firing = new Float32Array(plumes.nozzleCount).fill(1)
+    plumes.update(firing, 1, 1)
+    await gpu.compile(plumes.group, camera, staged(plumes.group))
+    plumes.dispose()
   })
 })
 

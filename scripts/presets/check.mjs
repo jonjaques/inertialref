@@ -23,11 +23,14 @@
  * needs a world, so it is `observatory.test.ts`. Splitting them by what they
  * need rather than by what they are about keeps this script free of a session.
  */
-import { readdir, stat } from 'node:fs/promises'
+import { readdir } from 'node:fs/promises'
+import sharp from 'sharp'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
   PICTURES,
+  PLATE_WIDTH,
+  PLATE_HEIGHT,
   plateName,
   unresolvedCompositions,
 } from '../../packages/devtools/src/pictures.ts'
@@ -42,9 +45,6 @@ export const PLATES = path.join(ROOT, 'apps/game/public/presets')
  * go stale.
  */
 export { plateName }
-
-/** The smallest a real capture can plausibly be. Below this it is a failure. */
-const MIN_BYTES = 4096
 
 async function main() {
   const problems = [...unresolvedCompositions()]
@@ -64,13 +64,22 @@ async function main() {
       problems.push(`${picture.id} has no plate (${name})`)
       continue
     }
-    const info = await stat(path.join(PLATES, name))
-    // A zero-byte or near-empty file is what a capture that failed halfway
-    // leaves behind, and it renders as a broken image rather than as an error.
-    if (info.size < MIN_BYTES) {
-      problems.push(
-        `${picture.id}'s plate is ${info.size} bytes — a capture that did not finish`,
+    try {
+      const plate = sharp(path.join(PLATES, name), { failOn: 'warning' })
+      const metadata = await plate.metadata()
+      if (
+        metadata.format !== 'jpeg' ||
+        metadata.width !== PLATE_WIDTH ||
+        metadata.height !== PLATE_HEIGHT
       )
+        problems.push(
+          `${picture.id}'s plate must be a ${PLATE_WIDTH}×${PLATE_HEIGHT} JPEG`,
+        )
+      // Sparse eclipse plates compress below 4 KB. Decode the pixels rather
+      // than inferring a completed capture from its file size.
+      await plate.raw().toBuffer()
+    } catch (cause) {
+      problems.push(`${picture.id}'s plate cannot be decoded: ${String(cause)}`)
     }
   }
 

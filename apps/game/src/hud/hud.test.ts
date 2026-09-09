@@ -1,9 +1,15 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openSession } from '@inertialref/devtools'
 import { engineStore } from '../state/engineStore.ts'
-import { CAMERA_LENS, RENDER_LENS_FLARE, write } from '../state/preferences.ts'
+import {
+  CAMERA_LENS,
+  RENDER_LENS_FLARE,
+  RENDER_SENSOR,
+  RENDER_THRUSTER_VARIATION,
+  write,
+} from '../state/preferences.ts'
 import { LensSection } from './LensSection.tsx'
 import type { DevContext } from './context.ts'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
@@ -11,8 +17,11 @@ import { GraphicsPanel } from './GraphicsPanel.tsx'
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { devPanels } from './registry.tsx'
 import { TargetRow } from './TargetRow.tsx'
+import { NavCluster } from './NavCluster.tsx'
+import { formatSpeed } from './navCluster.ts'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
+import { SHIP_IDS } from '../render/ships.ts'
 import {
   GROUND_DETAILS,
   SEA_DETAILS,
@@ -20,10 +29,16 @@ import {
 } from '../render/quality.ts'
 import {
   lensForFov,
-  SENSOR_RESPONSES,
-  RESPONSE_PRESETS,
+  CAMERA_MODES,
+  ExposureMeter,
+  histogram,
 } from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
+
+// Static markup is the DOM-free renderer for these mounted client instruments.
+// Their saved preferences and published engine samples belong after hydration;
+// state/hydration.test.ts separately verifies the server's default preferences.
+vi.mock('../state/hydration.ts', () => ({ useHydrated: () => true }))
 
 /*
  * A smoke test for the author's instruments, in Node, with no DOM.
@@ -107,7 +122,10 @@ describe('the author’s instruments', () => {
   // status as a prop, so a test that wants one showing data publishes a sample
   // the way `startEngineSampler` would — and clears it, so the tests that
   // assert the pre-first-frame rendering keep meaning what they say.
-  afterEach(() => engineStore.setState({ status: null }))
+  afterEach(() => {
+    engineStore.setState({ status: null, exposure: null })
+    write(RENDER_SENSOR, RENDER_SENSOR.initial)
+  })
 
   it('renders the universe it is pointed at', () => {
     const session = openSession({ seed: 'inertialref', workers: null })
@@ -244,6 +262,7 @@ describe('the author’s instruments', () => {
      * is worse than no test, so it now names the control it means.
      */
     write(RENDER_LENS_FLARE, false)
+    write(RENDER_THRUSTER_VARIATION, false)
     const graphics = renderToStaticMarkup(
       createElement(GraphicsPanel, {
         render: {
@@ -255,26 +274,31 @@ describe('the author’s instruments', () => {
       }),
     )
     write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
+    write(RENDER_THRUSTER_VARIATION, RENDER_THRUSTER_VARIATION.initial)
     expect(graphics).toContain('Lens Flare')
-    // The lens-flare switch, off, and the rocks switch, on: no other switch
-    // on this panel.
-    expect(graphics.match(/role="switch"/g)).toHaveLength(2)
+    const variation = graphics
+      .split('<label')
+      .find((row) => row.includes('Thruster variation'))
+    expect(variation).toContain('role="switch" aria-checked="false"')
+    expect(variation).toContain(
+      'Uneven valve timing and tiny settling puffs. Visual only.',
+    )
+    // Lens flare and thruster variation are off; rocks are on.
+    expect(graphics.match(/role="switch"/g)).toHaveLength(3)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
-    // The output, surface and sensor choices are radio groups. A radio group rather than a button that
-    // cycles, so the states you are not on have a representation in the tree.
-    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(7)
+    // Ship, output and surface choices stay visible as radio groups.
+    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(6)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
-      AA_LEVELS.length +
+      SHIP_IDS.length +
+        AA_LEVELS.length +
         OUTPUT_PREFERENCES.length +
         TERRAIN_DETAILS.length +
         GROUND_DETAILS.length +
-        SEA_DETAILS.length +
-        SENSOR_RESPONSES.length +
-        RESPONSE_PRESETS.length,
+        SEA_DETAILS.length,
     )
     // One checked per group.
-    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(7)
+    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(6)
     expect(graphics).toMatch(/aria-checked="true"[^>]*>2x</)
     for (const level of AA_LEVELS) expect(graphics).toContain(`>${level}<`)
     // The extended-range override moved here from the transport strip. It is a
@@ -303,6 +327,9 @@ describe('the author’s instruments', () => {
     expect(camera).toContain('31.3 mm')
     expect(camera).toContain('42°')
     expect(camera).toContain('Reset')
+    expect(camera.match(/role="radio"/g)).toHaveLength(CAMERA_MODES.length)
+    expect(camera).toContain('aria-label="Camera mode"')
+    expect(camera).not.toContain('aria-label="Peak luminance"')
     // All four channels are drawn, not just the focal length: an aperture the
     // depth-of-field readout depends on and no control for it is a readout
     // nobody can move.
@@ -315,6 +342,89 @@ describe('the author’s instruments', () => {
     expect(camera).toContain('aria-valuemax="1000"')
     expect(FOCAL_MIN).toBeCloseTo(8.4, 1)
     expect(FOCAL_MAX).toBeCloseTo(68.06, 1)
+  })
+
+  it.each(CAMERA_MODES)('shows the controls for the %s camera', (mode) => {
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode })
+    const markup = renderToStaticMarkup(
+      createElement(KeymapProvider, null, createElement(LensSection)),
+    )
+    expect(markup.includes('aria-label="Exposure time, seconds"')).toBe(
+      mode === 'manual',
+    )
+    expect(markup.includes('aria-label="Sensor gain, ISO"')).toBe(
+      mode === 'manual',
+    )
+    expect(markup.includes('aria-label="Exposure compensation"')).toBe(
+      mode === 'automatic',
+    )
+    expect(markup.includes('aria-label="Adaptation rate"')).toBe(
+      mode === 'automatic',
+    )
+    expect(markup).toContain('aria-label="White balance"')
+  })
+
+  it('explains unavailable Automatic and exposes its manual fallback controls', () => {
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode: 'automatic' })
+    const exposure = new ExposureMeter().update(
+      CAMERA_LENS.initial,
+      { ...RENDER_SENSOR.initial, mode: 'manual' },
+      0,
+    )
+    engineStore.setState({
+      exposure: {
+        ...exposure,
+        requestedMode: 'automatic',
+        automaticAvailable: false,
+      },
+    })
+    const markup = renderToStaticMarkup(
+      createElement(KeymapProvider, null, createElement(LensSection)),
+    )
+    expect(markup).toContain('Automatic needs WebGPU')
+    expect(markup).toContain('Use Manual')
+    expect(markup).toContain('aria-label="Exposure time, seconds"')
+    expect(markup).toContain('aria-label="Sensor gain, ISO"')
+    expect(markup).not.toContain('aria-label="Adaptation rate"')
+  })
+
+  it('labels Automatic calibration, a measured exposure, hold, and a reset truthfully', () => {
+    const settings = { ...RENDER_SENSOR.initial, mode: 'automatic' as const }
+    write(RENDER_SENSOR, settings)
+    const meter = new ExposureMeter()
+    const renderExposure = (time: number, expected: string) => {
+      engineStore.setState({
+        exposure: meter.update(CAMERA_LENS.initial, settings, time),
+      })
+      const markup = renderToStaticMarkup(
+        createElement(KeymapProvider, null, createElement(LensSection)),
+      )
+      expect(markup).toContain(`· ${expected}`)
+    }
+    renderExposure(0, 'Calibrating')
+    meter.measure(histogram([0.3]), 1, CAMERA_LENS.initial, settings)
+    renderExposure(1, 'Metered')
+    write(RENDER_SENSOR, { ...settings, rate: 0 })
+    renderExposure(1, 'Held')
+    write(RENDER_SENSOR, settings)
+    meter.reset()
+    renderExposure(1, 'Calibrating')
+  })
+
+  it('reports an authored photographic exposure over an Enhanced preference', () => {
+    engineStore.setState({
+      exposure: new ExposureMeter().update(
+        CAMERA_LENS.initial,
+        RENDER_SENSOR.initial,
+        0,
+        1,
+      ),
+    })
+    const markup = renderToStaticMarkup(
+      createElement(KeymapProvider, null, createElement(LensSection)),
+    )
+    expect(markup).toContain('· Authored')
+    expect(markup).not.toContain('title="HDR composite"')
   })
 
   it('renders every destination the harness offers', () => {
@@ -370,5 +480,50 @@ describe('the author’s instruments', () => {
       ErrorBoundary.getDerivedStateFromError(new RangeError('out')).error
         .message,
     ).toBe('out')
+  })
+})
+
+describe('the navigation cluster', () => {
+  afterEach(() => engineStore.setState({ status: null }))
+
+  it('renders the ship’s figures from a real status', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const ir = session.harness
+    const status = ir.status()
+    engineStore.setState({ status })
+    // The ball reads the scene in an animation frame, which static markup
+    // never runs; what this proves is that the readouts around it come from
+    // the same status the strip reads, and that nothing throws on the way.
+    const markup = renderToStaticMarkup(
+      createElement(
+        KeymapProvider,
+        null,
+        createElement(NavCluster, {
+          engine: { harness: ir, scene: () => null } as never,
+          onNotice: () => {},
+        }),
+      ),
+    )
+    expect(markup).toContain('Attitude indicator')
+    expect(markup).toContain(formatSpeed(status.player?.localSpeed ?? null))
+    expect(markup).toContain('Thrusters')
+    expect(markup).toContain('Cut')
+    session.dispose()
+  })
+
+  it('draws nothing before the first sample lands', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const markup = renderToStaticMarkup(
+      createElement(
+        KeymapProvider,
+        null,
+        createElement(NavCluster, {
+          engine: { harness: session.harness, scene: () => null } as never,
+          onNotice: () => {},
+        }),
+      ),
+    )
+    expect(markup).toBe('')
+    session.dispose()
   })
 })

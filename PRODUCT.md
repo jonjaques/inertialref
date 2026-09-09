@@ -35,7 +35,7 @@ web
    under debugging outranks polish, and every control has a harness equivalent
    so that anything doable by clicking is reproducible in a test.
 2. **People sent the link.** The build is deployed at
-   <https://inertialref.jonjaques.com>, which is the only address it answers on
+   <https://inertialref.app>, which is the only address it answers on
    — `workers_dev` is off. They form an impression in about a minute, from a
    first viewport, with no context and no instructions.
 
@@ -216,7 +216,8 @@ in the browser. Twelve capability checks, each reporting a measurement rather
 than a tick, run by CI on every pull request alongside `pnpm check`.
 
 **Real data**, in `data/`: 7,123 real star systems out to 150 light-years from
-HYG v4.4 converted through ICRS → galactic coordinates; 702 confirmed exoplanets
+HYG v4.4 converted through ICRS → galactic coordinates, and the 7,514 naked-eye
+stars beyond that radius so the constellations are the real ones; 702 confirmed exoplanets
 around 443 of them with published orbits, masses and radii; and **129 Solar
 System bodies** — eight planets, nine dwarf planets, fifty asteroids and comets
 and sixty-two moons — with measured radii, oblateness, axial tilts,

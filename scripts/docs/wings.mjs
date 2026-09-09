@@ -83,7 +83,7 @@ export const WINGS = [
     id: 'concepts',
     label: 'Concepts',
     blurb:
-      'The ten mechanisms that carry the architecture, and the twenty-six decisions underneath them.',
+      'The mechanisms that carry the architecture, and the decisions underneath them.',
     framing: { address: 's:SOL/b:5', phase: -122, tilt: -26, fill: 1.5 },
     groups: [
       {
@@ -139,6 +139,26 @@ export const WINGS = [
           ['docs/adr/0029-the-sensor-spine.md', 'The Sensor Spine'],
           ['docs/adr/0030-three-r185.md', 'three r185'],
           ['docs/adr/0031-the-sensor-response.md', 'The sensor response'],
+          ['docs/adr/0032-the-stellar-field.md', 'The stellar field'],
+          [
+            'docs/adr/0033-presets-hold-a-photographic-instant.md',
+            'Portable presets',
+          ],
+          ['docs/adr/0034-the-drop.md', 'The drop'],
+          ['docs/adr/0035-searching-the-volume.md', 'Searching the volume'],
+          [
+            'docs/adr/0036-the-pointer-holds-the-rope.md',
+            'The pointer holds the rope',
+          ],
+          ['docs/adr/0037-the-enhanced-camera.md', 'The Enhanced camera'],
+          [
+            'docs/adr/0038-the-stars-and-the-diffuse-sky.md',
+            'Stars and diffuse sky',
+          ],
+          [
+            'docs/adr/0039-the-shell-before-the-scene.md',
+            'The shell before the scene',
+          ],
         ],
       },
     ],

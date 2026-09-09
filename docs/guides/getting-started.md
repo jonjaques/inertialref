@@ -22,7 +22,8 @@ and attaches the debugger. Attach/Launch Node target the headless runner.
 [Development](development.md#debugging) has the four configurations.
 
 The client opens on Earth, three-quarter lit, with the ship — a CC-BY
-USS Enterprise-D hull, or the debug cone while it loads — framed in the
+USS Enterprise-D hull by default, a CC-BY Rocinante if you choose it in
+Display settings, or the debug cone while either loads — framed in the
 foreground of a Solar System built from measurements rather than from a seed.
 
 ```mermaid
@@ -47,13 +48,18 @@ front of Vite and turn every edit into a caching investigation. See
 
 | Key         | Action                             |
 | ----------- | ---------------------------------- |
-| `W` / `S`   | main drive fore / aft              |
-| `A` / `D`   | translate left / right             |
-| `R` / `F`   | translate up / down                |
+| `W` / `S`   | thrusters ahead / astern           |
+| `A` / `D`   | thrusters left / right             |
+| `R` / `F`   | thrusters up / down                |
 | `↑ ↓ ← →`   | pitch / yaw                        |
 | `Q` / `E`   | roll                               |
+| `T` / `G`   | throttle the main drive up / down  |
+| `Shift+T`   | full burn                          |
+| `Shift+G`   | cut the drive                      |
 | `Z`         | flight assist (rotational damping) |
 | `X`         | kill rotation                      |
+| `V`         | camera view: chase, or orbit       |
+| `Home`      | look where the view aims again     |
 | `Space`     | pause                              |
 | `[` / `]`   | time warp down / up                |
 | `\`         | back to real time                  |
@@ -69,6 +75,39 @@ front of Vite and turn every edit into a caching investigation. See
 
 Flight is full 6-DoF with no artificial "space mode" — the same controls fly
 between stars, into orbit, and down to a landing.
+
+A ship has two kinds of engine. The **thrusters** push it any of six ways and
+turn it about any of three axes, at under a g: the keys above hold a valve
+open for as long as they are down, for docking, station-keeping and a nudge
+off the pad. The **main drive** pushes ahead and nowhere else, at three g,
+and its throttle is a setting rather than a held key — `T` and `G` walk it a
+twentieth at a time, `Shift+T` and `Shift+G` slam it, and it stays where it
+is put through a save. A retro is not the drive run backwards: it is the bow
+thrusters, or a flip and a burn.
+
+Killing rotation stops the spin immediately and shows a short counter-thrust
+burst. **Thruster variation** in Display settings adds uneven valve timing and
+tiny, occasional settling puffs while assist holds a stopped ship, or for eight
+seconds after a rotation kill. This is visual only: it changes neither the
+trajectory nor the controls. Turn it off for uniform valve timing.
+
+The navigation cluster at the bottom of the frame is the instrument the ship
+is flown by. The ball in the middle is the horizon of the nearest body seen
+from inside the hull — sky over ground, a pitch ladder, the compass along the
+horizon, a mark for where the ship is going and a crossed one for where it
+came from — with the heading over it and the pitch and bank under it. Left of
+it the speed, against the ground near one and in the frame away from it (press
+the readout to insist on either), and the drive's throttle on the ring up the
+ball's side; right of it the altitude and the rate of climb on the mirrored
+ring. Under it all, the high point, the low point and the lap of the orbit.
+Clear of every body the ball shows the inertial reference itself and says so.
+
+The camera has two views. The **chase** sits behind the hull and swings with
+it; a drag turns your head from there, and `Home` levels it again. The
+**orbit** stands off and looks at the ship while it maneuvers — drag to orbit,
+wheel or pinch to dolly, the secondary button to look — which is the view to
+watch the maneuvering thrusters and the drive from. `V` moves between them,
+and the orbit opens where the chase was standing, so the switch is not a jump.
 
 These are the **defaults**. Every act is rebindable at `/settings/controls`, and
 `?` prints the live chords rather than this table — a label that names a key
@@ -136,7 +175,7 @@ of kilometers per second.
 ```js
 const target = ir.bodies().find((b) => b.kind === 'rocky')
 ir.orbit(target.address, 100000) // inside the sphere of influence
-ir.control({ translation: [0, 0, 1] }) // burn prograde
+ir.throttle(1) // burn prograde on the main drive; ir.throttle(0) cuts it
 for (let i = 0; i < 30; i++) ir.step(20000)
 ir.status().world.events.at(-1) // → { tick, kind: 'frame-change', detail: 'left sphere of influence' }
 ```

@@ -1,0 +1,39 @@
+---
+import type { GetStaticPaths } from 'astro'
+import Base from '../layouts/Base.astro'
+import { stagedManifest, stagedPage } from '../docsContent.ts'
+import { shellPaths } from '../siteRoutes.ts'
+import Root from '../../src/Root.tsx'
+import { metadataForPath } from '../../src/site.ts'
+import type { InitialDocs } from '../../src/docs/initialDocs.ts'
+import {
+  docHtmlRoutes,
+  isApiRoute,
+} from '../../../../scripts/docs/prerender.mjs'
+
+export const getStaticPaths = (async () => {
+  const manifest = await stagedManifest()
+  const docs = import.meta.env.DEV
+    ? Object.keys(manifest.pages)
+    : docHtmlRoutes(manifest)
+  return [...new Set([...shellPaths, ...docs])].map((route) => ({
+    params: { path: route === '/' ? undefined : route.slice(1) },
+    props: { route },
+  }))
+}) satisfies GetStaticPaths
+
+const { route } = Astro.props
+let initialDocs: InitialDocs | undefined
+let asyncDocs = false
+if (route === '/docs' || route.startsWith('/docs/')) {
+  const manifest = await stagedManifest()
+  asyncDocs = manifest.prerenderApi === false && isApiRoute(route)
+  if (!asyncDocs)
+    initialDocs = { manifest, page: await stagedPage(manifest, route) }
+}
+const meta = metadataForPath(route, initialDocs?.page)
+---
+
+<Base meta={meta} asyncDocs={asyncDocs}>
+  <Root url={route} initialDocs={initialDocs} client:load />
+</Base>

@@ -67,6 +67,8 @@ export type OrbitScope = 'context' | 'all'
 
 /** What a layer asks to be drawn. Anything omitted is left to the layer below. */
 export interface Stance {
+  /** Draw the live diffuse stellar field for this observing mode. */
+  readonly diffuseGalaxy?: boolean
   /** Integrate image motion over the lens's shutter. */
   readonly motionBlur?: boolean
   /** The debug ship and the meter-scale reference props. */
@@ -123,6 +125,7 @@ export interface Stance {
 
 /** What is actually drawn, once every layer has had its say. */
 export interface Presentation {
+  readonly diffuseGalaxy: boolean
   readonly motionBlur: boolean
   readonly showShip: boolean
   readonly showOrbits: boolean
@@ -135,6 +138,7 @@ export interface Presentation {
 
 /** The stance with nothing pushed: a flight camera on a visible ship. */
 export const GROUND_STANCE: Presentation = {
+  diffuseGalaxy: false,
   motionBlur: true,
   showShip: true,
   showOrbits: false,
@@ -173,6 +177,7 @@ export function resolveStances(layers: readonly Stance[]): Presentation {
   let resolved = GROUND_STANCE
   for (const layer of layers) {
     resolved = {
+      diffuseGalaxy: layer.diffuseGalaxy ?? resolved.diffuseGalaxy,
       motionBlur: layer.motionBlur ?? resolved.motionBlur,
       showShip: layer.showShip ?? resolved.showShip,
       showOrbits: layer.showOrbits ?? resolved.showOrbits,
@@ -203,6 +208,7 @@ export function createPresentationStack(
   const settle = (): void => {
     const next = resolveStances(layers.map((one) => one.stance))
     if (
+      next.diffuseGalaxy === last.diffuseGalaxy &&
       next.motionBlur === last.motionBlur &&
       next.showShip === last.showShip &&
       next.showOrbits === last.showOrbits &&

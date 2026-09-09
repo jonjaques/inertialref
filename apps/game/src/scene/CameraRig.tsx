@@ -1,14 +1,16 @@
 import { useThree } from '@react-three/fiber'
 import { useRef } from 'react'
 import type {
+  AmbientLight,
   DirectionalLight,
   PerspectiveCamera,
   PointLight,
 } from 'three/webgpu'
 import { Vector3 } from 'three/webgpu'
 import {
-  chaseCameraPosition,
-  chaseOffsetFor,
+  CHASE_OFFSET,
+  flightCameraPose,
+  nearFieldLighting,
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -51,63 +53,15 @@ const FILL = /*@__PURE__*/ new Vector3()
  */
 const FILL_OFF_AXIS = 0.85
 
-/**
- * Fill strength in flight, as irradiance against the star's 4.
- *
- * Unchanged in value from the constant-direction light this replaced: what was
- * wrong with that one was where it pointed, not how bright it was, and a
- * simulator whose selling point is a real sky does not get a second sun. Aimed,
- * the same 0.35 is worth more than it was — it now lands on the face turned
- * toward the lens instead of on whatever the render axes happened to favor.
- */
-const FILL_INTENSITY = 0.35
-
-/**
- * Fill strength while a cutscene owns the camera, against the star's 4.
- *
- * A shot can put the camera on the side of the hull the star does not reach,
- * and a title sequence cannot answer that with "space is high-contrast" — the
- * subject of the piece has to read. `.claude/rules/cutscenes.md` says light is
- * staging; this is the staged half of the same rig, sized so a face with no
- * key at all comes out
- * near a face with one (4.2 × 0.68 ≈ 2.9 against the key's 4 × 0.9 ≈ 3.6).
- *
- * It is not a general brightening and cannot become one: `FILL_OFF_AXIS` zeroes
- * it wherever the key is already doing the work, so raising it only ever
- * rescues a face that would otherwise be a silhouette.
- *
- * 1.6 rather than the 4.2 this was first metered at, and the difference is
- * where it was metered. 4.2 was fitted on the fly-through wipes, where the hull
- * is a small shape on an empty starfield and the fill is the only thing
- * lighting the face turned toward the lens. It is far too much once that hull
- * *is* the frame: through `tng-intro`'s skim the camera rides the saucer's own
- * surface, `FILL_OFF_AXIS` leaves a tenth of the fill on a face the key already
- * reaches, and a tenth of 4.2 spread over the whole picture measured **22.3**
- * of mean-luminance error against the reference across f2100–2360. At 1.6 the
- * same band measures **8.0**. The cost is four or five frames at each wipe
- * entry where the hull drops back under the reference tracker's floor, on a
- * criterion that is missed by nine frames either way; the skim's is not.
- *
- * The response is steeply non-linear through the tone curve's shoulder, which
- * is why this was found by capture rather than by arithmetic — 2.6 measured
- * 21.0 on the same band, almost all of the error still there, while costing
- * *more* wipe frames than 4.2. In flight the same light stays at
- * `FILL_INTENSITY`, and the reason is the hull's own read rather than anything
- * else in the frame: nothing these lights reach is at risk. Planets,
- * atmospheres, rings and the streamed ground all shade from their own
- * `sunDirection` uniform — `render/terrain.ts` is a `MeshBasicNodeMaterial`
- * and carries its own night floor — so none of them sees a scene light at all.
- */
-const STAGE_FILL_INTENSITY = 1.6
-
 /** Drives the real camera from the ship's canonical state, once per frame. */
 export function CameraRig({ engine }: { engine: GameEngine }) {
   const camera = useThree((state) => state.camera)
   const size = useThree((state) => state.size)
   const light = useRef<PointLight>(null)
+  const ambient = useRef<AmbientLight>(null)
   const fill = useRef<DirectionalLight>(null)
 
-  useTimedFrame('cameraRig', () => {
+  const updateCamera = () => {
     const scene = engine.scene()
     /*
      * Whoever owns the pose this frame owns all of it.
@@ -123,21 +77,13 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
      */
     const cinematic = engine.cinematic
 
-    /*
-     * The fill's *strength* is settled before the guard below, and its aim
-     * after it, because only the aim needs a scene.
-     *
-     * `engine.scene()` is null at boot before the first present and again
-     * after any `replaceWorld`. The light this replaced was a static
-     * `<directionalLight>` with nothing to go stale; this one is written every
-     * frame, and behind an early return it holds whatever the last scene left
-     * — which, if a cutscene was running when the world went away, is
-     * `STAGE_FILL_INTENSITY`: 4.6x the flight value, on flight geometry, until
-     * a scene comes back.
-     */
-    if (fill.current !== null)
-      fill.current.intensity =
-        cinematic === null ? FILL_INTENSITY : STAGE_FILL_INTENSITY
+    // A missing scene must still release authored lighting when staging ends.
+    const lighting = nearFieldLighting(
+      engine.cameraPolicy,
+      (cinematic?.effects.calibratedLight ?? 0) > 0,
+    )
+    if (ambient.current !== null) ambient.current.intensity = lighting.ambient
+    if (fill.current !== null) fill.current.intensity = lighting.fill
     if (scene === null) return
 
     const override = cinematic ?? engine.observer
@@ -186,29 +132,35 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
       perspective.updateProjectionMatrix()
     }
 
-    camera.quaternion.set(
-      scene.camera.orientation.x,
-      scene.camera.orientation.y,
-      scene.camera.orientation.z,
-      scene.camera.orientation.w,
-    )
-    // Offset and ground clearance both come from `chaseCameraPosition`. They
-    // were three lines of vector arithmetic here, which is exactly where a rule
-    // goes to become untestable: nothing in Node could see that pitching up on
-    // the pad put the camera under the crust.
-    // The offset scales with the modeled hull once one is mounted; the
-    // hand-tuned 6 m default covers the debug cone. `engine.hull` rather than
-    // anything module-scoped here — see the field's comment in `GameEngine`.
-    const eye =
+    /*
+     * The ship arm's pose comes from `flightCameraPose`: the chase behind the
+     * hull or the orbit beside it, each with the head turned as the flight
+     * camera says, and the ground clearance under both. It was three lines
+     * of vector arithmetic here, which is exactly where a rule goes to become
+     * untestable: nothing in Node could see that pitching up on the pad put
+     * the camera under the crust.
+     *
+     * The offset scales with the modeled hull once one is mounted; the
+     * hand-tuned 6 m default covers the debug cone, whose orbit is measured
+     * against the same length. `engine.hull` rather than anything
+     * module-scoped here — see the field's comment in `GameEngine`.
+     */
+    const pose =
       override === null
-        ? chaseCameraPosition(
+        ? flightCameraPose(
             scene,
-            engine.hull === null
-              ? undefined
-              : chaseOffsetFor(engine.hull.lengthMetres),
+            engine.harness.flightCamera.state,
+            engine.hull === null ? 6 : engine.hull.lengthMetres,
+            engine.hull === null ? CHASE_OFFSET : undefined,
           )
-        : override.camera.position
-    camera.position.set(eye.x, eye.y, eye.z)
+        : override.camera
+    camera.quaternion.set(
+      pose.orientation.x,
+      pose.orientation.y,
+      pose.orientation.z,
+      pose.orientation.w,
+    )
+    camera.position.set(pose.position.x, pose.position.y, pose.position.z)
     camera.updateMatrixWorld()
 
     // Sunlight comes from the nearest star's rendered position, so shadows and
@@ -216,7 +168,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     const star = scene.stars[0]
     if (light.current !== null)
       light.current.intensity =
-        4 * (engine.calibratedLight ? 1 : (star?.sunlight ?? 0))
+        4 * (engine.visibilityProcessing ? 1 : (star?.sunlight ?? 0))
     if (star !== undefined && light.current !== null) {
       light.current.position.set(
         star.placement.position.x,
@@ -261,21 +213,20 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
       }
       fill.current.position.copy(FILL.normalize())
     }
-  })
+  }
+  // The engine samples at -1; every sky consumer reads this camera at 0.
+  useTimedFrame('cameraRig', updateCamera, -0.5)
 
   return (
     <>
+      <ambientLight ref={ambient} intensity={0} />
       {/* decay 0: the star is tens of millions of render-meters away after
           compression, so physical falloff would make it useless as a light. */}
-      <pointLight ref={light} intensity={4} distance={0} decay={0} />
+      <pointLight ref={light} intensity={0} distance={0} decay={0} />
       {/* Aimed every frame above; the initial direction only has to be
           non-degenerate, because `DirectionalLight` normalizes nothing and a
           zero vector renders as a light pointing everywhere and nowhere. */}
-      <directionalLight
-        ref={fill}
-        position={[0, 0, 1]}
-        intensity={FILL_INTENSITY}
-      />
+      <directionalLight ref={fill} position={[0, 0, 1]} intensity={0} />
     </>
   )
 }

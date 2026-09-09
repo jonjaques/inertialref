@@ -1,0 +1,388 @@
+import { describe, expect, it } from 'vitest'
+import { LENS_PRESETS } from '@inertialref/rendering'
+import { TEST_CATALOG } from '@inertialref/universe'
+import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import { openSession } from './session.ts'
+import {
+  decodePictures,
+  encodePictures,
+  mergePictures,
+} from './pictureFormat.ts'
+import { PICTURES, type Picture, type PictureProcessing } from './pictures.ts'
+import { snapshot } from '@inertialref/simulation'
+import { UV, Vec, Quaternion as Q } from '@inertialref/spatial'
+import bundledPictures from './pictures.json' with { type: 'json' }
+
+const enhanced = {
+  mode: 'enhanced' as const,
+  look: 'neutral' as const,
+  compensation: 0,
+  rate: 1,
+  range: { bright: 24, dark: 16 },
+  balance: 6500,
+}
+
+function rig() {
+  let lens = LENS_PRESETS.flight
+  const session = openSession({
+    seed: 'inertialref',
+    catalog: TEST_CATALOG,
+    workers: () => createInlineWorker(createTaskRegistry()),
+    render: {
+      framingLens: () => lens,
+      setFlightLens: (next) => {
+        lens = next
+      },
+    },
+  })
+  return session
+}
+
+describe('portable pictures', () => {
+  it('maps version 1 to Enhanced while preserving its pose, time and lens', () => {
+    const decoded = decodePictures(bundledPictures)
+    expect(decoded).toEqual(
+      bundledPictures.pictures.map((picture) => ({
+        ...picture,
+        processing: enhanced,
+      })),
+    )
+  })
+  it('writes version 2 with processing and rejects invalid processing before import', () => {
+    const picture = { ...PICTURES[0]!, processing: enhanced }
+    const encoded = JSON.parse(encodePictures([picture]))
+    expect(encoded.version).toBe(2)
+    expect(decodePictures(encoded)).toEqual([picture])
+    for (const processing of [
+      undefined,
+      null,
+      { ...enhanced, mode: 'composite' },
+      { ...enhanced, look: 'natural' },
+      { ...enhanced, compensation: NaN },
+      { ...enhanced, compensation: 8.1 },
+      { ...enhanced, rate: -1 },
+      { ...enhanced, rate: 4.1 },
+      { ...enhanced, balance: 1999 },
+      { ...enhanced, range: { bright: 33, dark: 16 } },
+      { ...enhanced, range: { bright: 24, dark: -1 } },
+      { ...enhanced, range: { bright: 24, dark: 16, history: 1 } },
+      { ...enhanced, peak: 2 },
+      { ...enhanced, ev: 12 },
+      { ...enhanced, output: 'display-p3' },
+    ]) {
+      expect(() =>
+        decodePictures({
+          ...encoded,
+          pictures: [{ ...picture, processing }],
+        }),
+      ).toThrow(/Invalid preset/)
+    }
+    expect(() => decodePictures({ ...encoded, version: 1 })).toThrow()
+  })
+  it('captures and restores selected processing without changing canonical state', () => {
+    const liveRange = { bright: 10, dark: 12 }
+    let processing: PictureProcessing = {
+      ...enhanced,
+      mode: 'automatic',
+      compensation: 1.5,
+      rate: 0.5,
+      range: liveRange,
+      balance: 4800,
+    }
+    const session = openSession({
+      seed: 'inertialref',
+      catalog: TEST_CATALOG,
+      workers: () => createInlineWorker(createTaskRegistry()),
+      render: {
+        cameraProcessing: () => processing,
+        setCameraProcessing: (next) => {
+          processing = next
+        },
+      },
+    })
+    try {
+      session.harness.look('s:SOL/b:2', { ease: false })
+      const hash = session.world.stateHash()
+      const picture = session.harness.capturePicture('automatic', 'Automatic')
+      expect(picture.processing).toEqual(processing)
+      const saved = { ...processing, range: { ...processing.range } }
+      liveRange.bright = 0
+      expect(picture.processing).toEqual(saved)
+      processing = { ...processing, mode: 'manual', balance: 6500 }
+      session.harness.takePicture(picture)
+      expect(processing).toEqual(saved)
+      expect(session.world.stateHash()).toBe(hash)
+      const invalid = { ...picture, address: 's:SOL/b:999' }
+      expect(() => session.harness.takePicture(invalid)).toThrow()
+      expect(processing).toEqual(saved)
+    } finally {
+      session.dispose()
+    }
+  })
+  it('retains restored processing in a headless host', () => {
+    const session = rig()
+    try {
+      session.harness.look('s:SOL/b:2', { ease: false })
+      const picture = session.harness.capturePicture('manual', 'Manual')
+      const processing = { ...enhanced, mode: 'manual' as const, balance: 4800 }
+      session.harness.takePicture({ ...picture, processing })
+      expect(session.harness.capturePicture('copy', 'Copy').processing).toEqual(
+        processing,
+      )
+    } finally {
+      session.dispose()
+    }
+  })
+  it('keeps an orbit camera beside the drawn body across date changes and navigation', () => {
+    const session = rig()
+    try {
+      const observer = session.harness.observatory
+      const hash = session.world.stateHash()
+      for (const time of [842011200, -86400, 123456, null]) {
+        observer.setTime(time)
+        for (const address of ['s:SOL/b:2', 's:SOL/b:2.0', 's:SOL/b:2']) {
+          observer.focus(address, { ease: false })
+          const pose = observer.sample(0)!
+          const shot = snapshot(session.world, undefined, observer.time)
+          const body = shot.bodies.find(
+            (one) => one.address === observer.target!.address,
+          )!
+          const distance = UV.distance(pose.position, body.position)
+          expect(distance).toBeCloseTo(observer.state.distance, 2)
+          expect(observer.eye).toEqual(pose.position)
+        }
+      }
+      expect(session.world.stateHash()).toBe(hash)
+    } finally {
+      session.dispose()
+    }
+  })
+  it('holds Earth and Luna in the same eye directions through a year of time warp', () => {
+    const session = rig()
+    try {
+      const observer = session.harness.observatory
+      observer.setTime(842011200)
+      observer.focus('s:SOL/b:2', { ease: false })
+      observer.setDistance(5e8, false)
+      const initial = observer.sample(0)!
+      observer.track('s:SOL/b:2.0')
+      expect(observer.sample(0)).toEqual(initial)
+      const hash = session.world.stateHash()
+      const directions = () => {
+        const pose = observer.sample(0)!
+        const shot = snapshot(session.world, undefined, observer.time)
+        return ['g:milky-way/s:SOL/b:2', 'g:milky-way/s:SOL/b:2.0'].map(
+          (address) => {
+            const body = shot.bodies.find((one) => one.address === address)!
+            return Vec.normalize(
+              Q.rotateInverse(
+                pose.orientation,
+                UV.difference(body.position, pose.position),
+              ),
+            )
+          },
+        )
+      }
+      const original = directions()
+      for (const day of [1, 7, 14, 28, 91, 182, 365, -365]) {
+        observer.setTime(842011200 + day * 86400)
+        directions().forEach((direction, i) =>
+          expect(Vec.length(Vec.sub(direction, original[i]!))).toBeLessThan(
+            1e-7,
+          ),
+        )
+      }
+      const saved = session.harness.capturePicture('pair', 'Earth and Luna')
+      const pose = observer.sample(0)!
+      observer.track(null)
+      expect(
+        UV.distance(observer.sample(0)!.position, pose.position),
+      ).toBeLessThan(0.001)
+      session.harness.look('s:SOL/b:3')
+      session.harness.takePicture(
+        decodePictures(JSON.parse(encodePictures([saved])))[0]!,
+      )
+      const restoredPose = observer.sample(0)!
+      expect(UV.distance(restoredPose.position, pose.position)).toBeLessThan(
+        0.001,
+      )
+      expect(
+        Vec.length(
+          Vec.sub(
+            Q.rotate(restoredPose.orientation, { x: 0, y: 0, z: -1 }),
+            Q.rotate(pose.orientation, { x: 0, y: 0, z: -1 }),
+          ),
+        ),
+      ).toBeLessThan(1e-12)
+      expect(session.world.stateHash()).toBe(hash)
+      observer.focus('s:SOL/b:2.0')
+      expect(observer.status().tracking).toBeNull()
+    } finally {
+      session.dispose()
+    }
+  })
+  it('round trips every bundled picture through the public format', () => {
+    expect(decodePictures(JSON.parse(encodePictures(PICTURES)))).toEqual(
+      PICTURES,
+    )
+  })
+  it('captures and restores a hand-composed surface shot, time and infinite focus without touching the simulation', () => {
+    const session = rig()
+    try {
+      const ir = session.harness
+      ir.look('s:SOL/b:2.0', { ease: false })
+      ir.observatory.setTime(123456)
+      ir.visit('s:SOL/b:2.0', { latitude: 0.2, longitude: -0.5, height: 2000 })
+      ir.aim(24, -8)
+      const pose = ir.observatory.sample(0)
+      const hash = session.world.stateHash()
+      const saved = ir.capturePicture('my-shot', 'My Shot')
+      const restored = decodePictures(JSON.parse(encodePictures([saved])))[0]!
+      ir.look('s:SOL/b:3', { ease: false })
+      ir.observatory.setTime(987654)
+      ir.takePicture(restored)
+      expect(ir.observatory.sample(0)).toEqual(pose)
+      expect(ir.observatory.time).toBe(123456)
+      expect(ir.capturePicture('my-shot', 'My Shot')).toEqual(saved)
+      expect(session.world.stateHash()).toBe(hash)
+      const shot = snapshot(session.world, undefined, ir.observatory.time)
+      expect(shot.renderTime).toBe(123456)
+      const moon = shot.bodies.find((body) => body.address.endsWith('/b:2.0'))!
+      expect(moon.position).toEqual(
+        session.world.frames.pose(moon.frame, 123456).position,
+      )
+    } finally {
+      session.dispose()
+    }
+  })
+  it('rejects bad versions, duplicate IDs and nonfinite camera numbers', () => {
+    expect(() => decodePictures({ version: 99, pictures: [] })).toThrow()
+    expect(() =>
+      decodePictures(JSON.parse(encodePictures([PICTURES[0]!, PICTURES[0]!]))),
+    ).toThrow()
+    const session = rig()
+    try {
+      session.harness.look('s:SOL/b:2')
+      const shot = session.harness.capturePicture('test', 'Test')
+      const data = JSON.parse(encodePictures([shot]))
+      data.pictures[0].framing.state.distance = null
+      expect(() => decodePictures(data)).toThrow()
+    } finally {
+      session.dispose()
+    }
+  })
+  it('keeps cinematic recipes out of planetarium imports', () => {
+    const picture = {
+      ...PICTURES[0]!,
+      framing: { kind: 'cinematic', script: 'enterprise-portraits', frame: 0 },
+    }
+    expect(() =>
+      decodePictures({
+        format: 'inertialref/presets',
+        version: 1,
+        pictures: [picture],
+      }),
+    ).toThrow()
+  })
+  it('imports collisions without replacing shots and is idempotent', () => {
+    const first = PICTURES[0]!
+    const second = { ...first, label: 'Another Shot' }
+    const merged = mergePictures([first], [second])
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toEqual(first)
+    expect(merged[1]!.id).not.toBe(first.id)
+    expect(mergePictures(merged, [second])).toEqual(merged)
+    const reordered = Object.fromEntries(
+      Object.entries(second).reverse(),
+    ) as typeof second
+    expect(mergePictures(merged, [reordered])).toEqual(merged)
+  })
+  it('plays photographic time without advancing canonical state and releases it on clear', () => {
+    const session = rig()
+    try {
+      const observer = session.harness.observatory
+      const hash = session.world.stateHash()
+      observer.setTime(100)
+      observer.advanceTime(2)
+      expect(observer.time).toBe(100)
+      observer.setTimeScale(10)
+      observer.setTimePaused(false)
+      observer.advanceTime(2)
+      expect(observer.time).toBe(120)
+      expect(session.world.stateHash()).toBe(hash)
+      observer.clear()
+      expect(observer.heldTime).toBeNull()
+      expect(observer.time).toBe(session.world.clock.renderTime)
+    } finally {
+      session.dispose()
+    }
+  })
+  it('refuses a surface shot on a gas giant before changing the view', () => {
+    const session = rig()
+    try {
+      const ir = session.harness
+      ir.visit('s:SOL/b:2.0', { height: 200 })
+      ir.observatory.setTime(123)
+      const saved = ir.capturePicture('test', 'Test')
+      const before = ir.observatory.status()
+      expect(() =>
+        ir.takePicture({ ...saved, address: 's:SOL/b:4', time: 456 }),
+      ).toThrow(/surface/)
+      expect(ir.observatory.status()).toEqual(before)
+      expect(() =>
+        ir.takePicture({ ...saved, generation: { galaxy: 999 } }),
+      ).toThrow(/generation/)
+      expect(ir.observatory.status()).toEqual(before)
+    } finally {
+      session.dispose()
+    }
+  })
+  it.each<Pick<Picture, 'address' | 'framing' | 'fovDeg'>>([
+    { address: 's:SOL/b:2', framing: { kind: 'rise' } },
+    {
+      address: 's:SOL',
+      framing: { kind: 'compose', composition: 'portrait' },
+    },
+    {
+      address: 's:SOL/b:4',
+      framing: { kind: 'compose', composition: 'sunset' },
+    },
+  ])(
+    'refuses incompatible framing before changing the picture: %j',
+    (invalid) => {
+      const session = rig()
+      try {
+        const ir = session.harness
+        ir.look('s:SOL/b:2.0', { ease: false })
+        ir.observatory.setTime(123)
+        const saved = ir.capturePicture('test', 'Test')
+        expect(() =>
+          ir.takePicture({
+            ...saved,
+            ...invalid,
+            time: 456,
+            processing: { ...enhanced, mode: 'manual', balance: 4800 },
+          }),
+        ).toThrow()
+        expect(ir.capturePicture('test', 'Test')).toEqual(saved)
+      } finally {
+        session.dispose()
+      }
+    },
+  )
+  it('refuses a different universe seed before moving the camera', () => {
+    const session = rig()
+    try {
+      const ir = session.harness
+      ir.look('s:SOL/b:2')
+      const saved = ir.capturePicture('test', 'Test')
+      const before = ir.observatory.status()
+      expect(() =>
+        ir.takePicture({ ...saved, seed: 'another universe' }),
+      ).toThrow(/seed/i)
+      expect(ir.observatory.status()).toEqual(before)
+    } finally {
+      session.dispose()
+    }
+  })
+})

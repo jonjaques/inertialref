@@ -1,0 +1,40 @@
+---
+import '../../src/index.css'
+import { renderDocumentHead } from '../../src/documentHead.ts'
+import type { PageMeta } from '../../src/site.ts'
+
+interface Props {
+  meta: PageMeta
+  asyncDocs?: boolean
+}
+const { meta, asyncDocs = false } = Astro.props
+---
+
+<!doctype html>
+<html lang="en">
+  <head><Fragment set:html={renderDocumentHead(meta)} /></head>
+  <body>
+    <div id="root"><slot /></div>
+    <noscript>
+      {
+        asyncDocs && (
+          <p class="absolute inset-x-0 top-0 z-50 bg-slate-950 p-6 text-slate-100">
+            This build loads API reference pages with JavaScript. Enable it to
+            read the reference, or <a href="/docs">browse the documentation</a>.
+          </p>
+        )
+      }
+      <style>
+        .doc-rail {
+          display: block;
+        }
+        .doc-rail-group > div {
+          display: block;
+        }
+        button {
+          cursor: default;
+        }
+      </style>
+    </noscript>
+  </body>
+</html>

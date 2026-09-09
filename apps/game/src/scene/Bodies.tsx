@@ -1,4 +1,9 @@
-import { SURFACE_LUMINANCE } from '@inertialref/rendering'
+import {
+  SURFACE_LUMINANCE,
+  cloudShellAltitude,
+  surfaceColour,
+  surfaceVisibilityGain,
+} from '@inertialref/rendering'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -12,6 +17,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
+import { Vec } from '@inertialref/spatial'
 import { OPEN_OCEAN, type RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -191,37 +197,11 @@ interface PlanetTuning {
 }
 
 /**
- * The albedo the calibrated exposure already suits.
- *
- * One constant, read twice, because the two readings are only correct together:
- * it is both the cut-off and the target the lift aims at, so `lift` is exactly
- * 1 just below the threshold and the function is continuous there. Written as
- * two literals, moving only the guard leaves it discontinuous *and inverted*:
- * at a guard of 0.15 a body at albedo 0.149 gets `lift = 0.8`, so filling the
- * frame would darken it.
- */
-const ADAPTED_ALBEDO = 0.12
-/** Angular radius at which the lift starts, and the span over which it completes. */
-const ADAPT_FROM = 0.02
-const ADAPT_SPAN = 0.2
-
-/**
  * The calibrated star disk, in multiples of diffuse white: the radiance the
  * tone curve's ceiling and the granulation are tuned against. `materials.ts`
  * draws the disk at unit radiance and takes this through `exposure`.
  */
 const CALIBRATED_STAR_RADIANCE = 8
-
-/** The calibrated look opens up for a dark body filling the picture. */
-function calibratedAlbedo(body: RenderBody): number {
-  const albedo = body.appearance.geometricAlbedo
-  if (albedo >= ADAPTED_ALBEDO) return 1
-  const filling = Math.min(
-    1,
-    Math.max(0, (body.placement.angularRadius - ADAPT_FROM) / ADAPT_SPAN),
-  )
-  return 1 + (ADAPTED_ALBEDO / Math.max(albedo, 0.01) - 1) * filling
-}
 
 function tuningFor(body: RenderBody): PlanetTuning {
   const air = body.hasAtmosphere
@@ -382,6 +362,7 @@ export function Bodies({
   useTimedFrame('bodies', () => {
     const scene = engine.scene()
     const container = group.current
+    const visibility = engine.visibilityProcessing
     if (scene === null || container === null) return
 
     // Render-space position of the key light. `stars[0]` is documented as
@@ -546,7 +527,7 @@ export function Bodies({
           Math.max(0, (placement.angularRadius - 0.015) / 0.085),
         )
         visual.star.exposure.value =
-          body.sunlight * (engine.calibratedLight ? 1 - filling * 0.9 : 1)
+          body.sunlight * (visibility ? 1 - filling * 0.9 : 1)
       }
 
       const sun = scratch.sun
@@ -581,20 +562,17 @@ export function Bodies({
         )
         planet.sunDirection.value.copy(sun)
         planet.sunColour.value.setRGB(
-          keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.r * (visibility ? 1 : body.sunlight),
+          keyColour.g * (visibility ? 1 : body.sunlight),
+          keyColour.b * (visibility ? 1 : body.sunlight),
         )
         planet.spinAxis.value
           .set(0, 1, 0)
           .applyQuaternion(quaternion)
           .normalize()
         planet.centre.value.copy(visual.mesh.position)
-        planet.baseColour.value.setRGB(
-          appearance.colour.r,
-          appearance.colour.g,
-          appearance.colour.b,
-        )
+        const colour = surfaceColour(appearance)
+        planet.baseColour.value.setRGB(colour.r, colour.g, colour.b)
         /*
          * A generated body wears its bake once one is ready, and asking is
          * what starts it. Only where the archive has no photograph — a
@@ -618,9 +596,11 @@ export function Bodies({
          */
         const liquid = appearance.liquid?.colour ?? OPEN_OCEAN
         planet.oceanColour.value.setRGB(liquid.r, liquid.g, liquid.b)
-        planet.albedoScale.value = engine.calibratedLight
-          ? calibratedAlbedo(body)
-          : 1
+        planet.albedoScale.value = surfaceVisibilityGain(
+          appearance.geometricAlbedo,
+          placement.angularRadius,
+          visibility,
+        )
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
         /*
@@ -705,6 +685,15 @@ export function Bodies({
           visual.clouds.scale.set(shell, shell * body.flattening, shell)
           visual.clouds.geometry = geometryFor(placement.angularRadius)
           const material = visual.cloudMaterial
+          // The shell is a thin weather image. Its final quarter-altitude of
+          // height clears continuously before the eye enters the deck.
+          material.entryDistance.value = placement.scale * lift * 0.25
+          material.eyeAltitude.value = cloudShellAltitude(
+            Vec.sub(scene.camera.position, placement.position),
+            orientation,
+            shell,
+            body.flattening,
+          )
           const cloudMap = texturesFor(appearance.texture, anisotropy).clouds
           material.setTexture(cloudMap)
           // A deck with no map — Titan's, and every procedural world's — is
@@ -719,9 +708,9 @@ export function Bodies({
           else material.baseColour.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(
-            keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.r * (visibility ? 1 : body.sunlight),
+            keyColour.g * (visibility ? 1 : body.sunlight),
+            keyColour.b * (visibility ? 1 : body.sunlight),
           )
           // The deck's dusk color is the body's authored sunset, so clouds
           // and air agree about what the low sun does here.
@@ -762,9 +751,9 @@ export function Bodies({
           )
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(
-            keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-            keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+            keyColour.r * (visibility ? 1 : body.sunlight),
+            keyColour.g * (visibility ? 1 : body.sunlight),
+            keyColour.b * (visibility ? 1 : body.sunlight),
           )
           material.innerFraction.value = ring.innerScale / ring.outerScale
           material.centre.value.copy(visual.mesh.position)
@@ -830,9 +819,9 @@ export function Bodies({
             )
         }
         air.sunColour.value.setRGB(
-          keyColour.r * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.g * (engine.calibratedLight ? 1 : body.sunlight),
-          keyColour.b * (engine.calibratedLight ? 1 : body.sunlight),
+          keyColour.r * (visibility ? 1 : body.sunlight),
+          keyColour.g * (visibility ? 1 : body.sunlight),
+          keyColour.b * (visibility ? 1 : body.sunlight),
         )
         if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
@@ -846,7 +835,7 @@ export function Bodies({
           address: `star:${star.system}`,
           name: star.name,
           kind: 'star',
-          sunlight: engine.calibratedLight
+          sunlight: visibility
             ? CALIBRATED_STAR_RADIANCE
             : star.luminance / SURFACE_LUMINANCE,
           placement: star.placement,

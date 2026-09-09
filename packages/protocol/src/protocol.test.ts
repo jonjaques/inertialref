@@ -62,7 +62,7 @@ const sampleSave: SaveGame = {
       landed: false,
       hasThrusters: true,
       ballisticCoefficient: 320,
-      control: { translation: [0, 0, 1], rotation: [0, 0, 0] },
+      control: { translation: [0, 0, 1], rotation: [0, 0, 0], throttle: 0.5 },
       flightAssist: true,
       rails: null,
     },

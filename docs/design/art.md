@@ -1,14 +1,15 @@
 # Art direction
 
-The Canopy, HDR output, the two camera modes, and a precise line between where
-artistic license is granted and where it is forbidden.
+The Canopy presents a composed universe through three camera modes. Enhanced
+is the default art direction; Automatic and Manual offer photographic exposure.
+The source data remains physically grounded in every mode.
 
-> **Changed in v0.2.** The previous edition said "physically grounded, not
-> photoreal" and treated beauty with suspicion — _"if a red dwarf system feels
-> drab, the answer is better exposure, not a warmer star."_ The instinct behind
-> that was right and the conclusion was too austere. This edition keeps the rule
-> that **the data is never falsified** and adds the fiction that makes the game
-> as beautiful as the cosmos actually is.
+The three camera modes and their processing are implemented in
+[ADR-0037](../adr/0037-the-enhanced-camera.md). This page states the image goals;
+the [camera completion record](../../design/plans/the-camera.md#camera-completion-record)
+holds inspected scenes, transitions and their measured limits. The optical
+and ACES diagnostic baseline remains in
+[ADR-0031](../adr/0031-the-sensor-response.md).
 
 ---
 
@@ -23,12 +24,12 @@ The single idea this page turns on.
 This resolves four problems at once, which is how you know it is the right
 fiction rather than a convenient one:
 
-| Problem                                                 | How the sensor fiction resolves it                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Beauty vs honesty**                                   | Almost everything that would make space more beautiful is _already true_ and merely below the threshold of dark-adapted human vision. A sensor integrating over seconds sees the galactic plane, the zodiacal light, the airglow layer and a nebula's real color. Rendering them is not license — it is a longer exposure. |
-| **Eleven orders of magnitude of luminance**             | A camera has gain and a response curve, and both are things a pilot adjusts. Exposure becomes a _control_ rather than an invisible automatic that fights the player.                                                                                                                                                       |
-| **The flip problem**                                    | After the flip you are pointed backwards, engine-toward-destination — and the emotional core of the game is looking at the thing you are approaching. A composited view can face any direction without breaking first person, because you are looking at a screen, not out of a hole.                                      |
-| **[Pillar 4](charter.md#pillar-4--you-are-one-person)** | Still one person, one seat, one viewpoint. The camera moves; the head does not.                                                                                                                                                                                                                                            |
+| Problem                                                 | How the sensor fiction resolves it                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Beauty vs honesty**                                   | Physical light includes structure below human visual thresholds. A long photographic exposure can reveal it; Enhanced instead compresses brightness differences to compose that light beside bright worlds. Its displayed shutter does not promise literal accumulation over that duration. |
+| **Eleven orders of magnitude of luminance**             | A camera has gain and a response curve, and both are things a pilot adjusts. Exposure becomes a _control_ rather than an invisible automatic that fights the player.                                                                                                                        |
+| **The flip problem**                                    | After the flip you are pointed backwards, engine-toward-destination — and the emotional core of the game is looking at the thing you are approaching. A composited view can face any direction without breaking first person, because you are looking at a screen, not out of a hole.       |
+| **[Pillar 4](charter.md#pillar-4--you-are-one-person)** | Still one person, one seat, one viewpoint. The camera moves; the head does not.                                                                                                                                                                                                             |
 
 **There is also a real window.** A physical viewport, smaller, off to one side,
 showing the actual direction with no processing at all — dim, high-contrast,
@@ -43,45 +44,62 @@ players look through when they want to know what it really looks like out there.
 
 ---
 
-## The two camera modes
+## The three camera modes
 
-Both are diegetic controls on the canopy, with a physical switch, and the player
-can move between them at any time.
+The player can select any mode from the Canopy controls. The same camera
+policy applies in flight, the planetarium and photo controls; authored cinema
+and fixed diagnostic instruments identify their exposure overrides.
 
-### Direct
+### Enhanced
 
-The sensor behaves like a real imaging system with no interpretation.
+Enhanced is the default, described as an HDR composite. A sunlit Earth keeps
+cloud detail, oceans and a readable terminator while stars and the diffuse
+Milky Way remain visible around it. Luna keeps its relief. Dust lanes remain
+darker than the star clouds beside them. The image has depth and a foreground
+subject, rather than a uniform lift of every shadow.
 
-|                  |                                                                         |
-| ---------------- | ----------------------------------------------------------------------- |
-| Exposure         | Physical: aperture, integration time, sensor gain, quoted in real units |
-| Response         | Near-linear to the clip point, then it clips                            |
-| Highlights       | **Blow out.** A star in frame destroys the frame.                       |
-| Shadows          | **Crush.** An unlit surface is black, not "dark".                       |
-| Glare            | The sensor's true point-spread function and aperture diffraction spikes |
-| Faint structure  | Invisible, unless you dwell long enough to integrate it                 |
-| Artistic license | **None.**                                                               |
+The sensor deliberately compresses brightness differences to produce this
+image. It can treat faint space and bright surfaces differently, with that
+processing declared and inspectable. The underlying light, geometry and
+extinction remain calibrated. A longer shutter alone cannot reveal the galaxy
+beside a correctly exposed sunlit world.
 
-Direct is what the simulation-literate half of the audience will fly in, and it
-is the mode in which the game's claim about physical correctness is checkable.
+Enhanced works on ordinary sRGB SDR displays. It uses additional gamut and
+luminance headroom when output supports them. Its name does not depend on the
+monitor, and its readout does not pretend the composite has one photographic EV.
 
-### Composite
+### Automatic
 
-The imaging system doing its job: integrating, mapping, and rendering a scene a
-human can read.
+Automatic uses physical source brightness and meters a photographic exposure.
+A view exposed for sunlit Earth or Luna loses faint background stars. When
+little bright light remains in frame, exposure can rise and stars emerge within
+the player's comfort limits. Looking from a planet's night side does not itself
+force a brighter sky; a bright limb, planetshine, atmosphere or glare still
+contributes light.
 
-|                  |                                                                                                    |
-| ---------------- | -------------------------------------------------------------------------------------------------- |
-| Exposure         | Auto, with a filmic response and a configurable shoulder                                           |
-| Highlights       | Roll off; a star has structure rather than a white disk                                            |
-| Shadows          | Lifted to the sensor's noise floor, with real noise                                                |
-| Faint structure  | **Integrated and visible** — the galactic plane, zodiacal light, airglow, nebulosity, ring shadows |
-| Color            | Mapped, not invented; saturation follows the sensor's response, not a mood                         |
-| Artistic license | **Granted, within the boundary below**                                                             |
+Adaptation is bounded and can be held. Holding exposure leaves the mode
+Automatic, and tightened comfort limits still apply. Exposure compensation lets
+the player bias the meter without changing the lens. Automatic shares its
+photographic tone response with Manual and applies none of Enhanced's selective
+visibility lift. On WebGL, the controls explain that Automatic is unavailable
+and identify the lens-controlled Manual fallback.
 
-Composite is the default and it is the mode the game is art-directed in.
+### Manual
 
-`[PLAYTEST: does Direct read as "the hard mode" or as "the broken mode"? If new players try it once and never return, the fix is a Direct-mode exposure control good enough to be enjoyable, not removing it.]`
+Manual uses the same photographic image model, with aperture, shutter and ISO
+under the player's control. A long exposure reveals faint space and can clip a
+sunlit world; a short one preserves the world and loses the faint light. The
+meter cannot undo the player's setting.
+
+Manual remains accessible for photographs and comparisons at known settings.
+It has a display response, rather than requiring raw channel clipping to prove
+physical intent. Its readout names the actual exposure.
+
+Camera mode, tone styling and display output have separate jobs. A tone-curve
+change cannot enable metering or alter physical source light. The controls use
+one authored Enhanced look and one shared neutral photographic look. Imported
+Gentle and Crisp settings retain their photographic shoulders; tone variants
+are outside the initial controls.
 
 ---
 
@@ -117,31 +135,28 @@ half-extent in `packages/universe/src/solar/` is a published number. See
 Everything downstream of the physics, where a real imaging system would also be
 making choices:
 
-| Licensed                                     | Bounded by                                                                                                                                                                  |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Exposure, tone curve, highlight rolloff      | It is a camera. There is no "correct" curve.                                                                                                                                |
-| Integration time — making the faint visible  | The structure must actually be there                                                                                                                                        |
-| Saturation and color mapping                 | Hue is fixed by physics; how vividly it is rendered is a sensor choice                                                                                                      |
-| Atmospheric scattering coefficients          | Tuned within the real range for the modeled composition                                                                                                                     |
-| Aurora intensity and occurrence              | Requires a magnetic field and an atmosphere, both of which are generated properties                                                                                         |
-| Ring particle albedo and phase function      | Within the range Cassini actually measured                                                                                                                                  |
-| Dust, nebulosity, zodiacal light brightness  | Present where it is present; brightness is integration                                                                                                                      |
-| Glare, bloom, diffraction spikes             | A property of the aperture, which is a designed object                                                                                                                      |
-| Surface material response                    | Albedo comes from the biome; roughness and detail are art                                                                                                                   |
-| The shape _below_ the published half-extents | The extents are measured; what happens between the samples of a model, or in place of one, is generated. Volume is preserved exactly, so the body is never a different size |
-| Per-body exposure at close range             | Only opens up, only for a body under 0.12 geometric albedo, only as it fills the frame. The albedo is unchanged and the body stays the darkest thing in the picture         |
+| Licensed                                           | Bounded by                                                                                                                                                                        |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exposure, composite compression, highlight rolloff | It is a camera. There is no "correct" curve.                                                                                                                                      |
+| Integration time — making the faint visible        | The structure must actually be there                                                                                                                                              |
+| Saturation and color mapping                       | Hue is fixed by physics; how vividly it is rendered is a sensor choice                                                                                                            |
+| Atmospheric scattering coefficients                | Tuned within the real range for the modeled composition                                                                                                                           |
+| Aurora intensity and occurrence                    | Requires a magnetic field and an atmosphere, both of which are generated properties                                                                                               |
+| Ring particle albedo and phase function            | Within the range Cassini actually measured                                                                                                                                        |
+| Dust, nebulosity, zodiacal light brightness        | Present where it is present; source brightness is calibrated; Enhanced controls its presentation                                                                                  |
+| Glare, bloom, diffraction spikes                   | A property of the aperture, which is a designed object                                                                                                                            |
+| Surface material response                          | Albedo comes from the biome; roughness and detail are art                                                                                                                         |
+| The shape _below_ the published half-extents       | The extents are measured; what happens between the samples of a model, or in place of one, is generated. Volume is preserved exactly, so the body is never a different size       |
+| Per-body exposure at close range                   | Enhanced only, as a declared presentation lift. The geometric albedo stays unchanged and the body retains its dark character; Automatic and Manual have no hidden body correction |
 
-Those last two are the same rule the star already follows in reverse — a sun
-that fills the frame is exposed for its surface — and the same rule the terrain
-follows, where the published elevation is used verbatim and the shape below the
-map's resolution is drawn from a seed. **What is measured is used; what nobody
-has measured is generated and says so.**
+Source radiance and image processing have separate acceptance checks. Catalog
+measurements, geometric albedo and dust columns are never tuned to make the
+composite work. Enhanced may reveal existing light, but it cannot draw stars
+through a planet, undo an opaque dust lane, or invent an illuminated night side.
 
-> 🎮 Designer's Note: The test for any proposed visual flourish is one question:
-> **would a good camera pointed at this actually record it?** If yes, render it
-> as beautifully as you can and the pillar is untouched. If no, it is a lie and
-> it does not go in. That question has an answer almost every time, which is why
-> this framing is worth more than a style guide.
+The test for a visual flourish is whether the light or structure exists in the
+model and whether the declared processing explains the picture. A single
+photographic exposure need not contain the whole Enhanced composition.
 
 ---
 
@@ -169,8 +184,9 @@ rendered properly and integrated long enough to see.
 **None of that requires a single falsified number.** It requires a good
 atmosphere shader, a good phase function, and the willingness to integrate.
 
-**Resolved: narrowband composite, declared.** Nebulae render as a false-color
-narrowband composite, the canopy readout says so, and **the filter is selectable**
+**Deferred direction: narrowband composite, declared.** Once line emission and
+spectral filters exist, the canopy identifies the false-color mapping and lets
+the player select a filter
 — switch to broadband and watch the nebula almost vanish into the noise floor.
 
 This is exactly what a real observatory does, it makes the largest license in the
@@ -182,6 +198,11 @@ processing.
 ---
 
 ## HDR
+
+HDR output is a display option, independent of Enhanced, Automatic and Manual.
+sRGB and Display P3 describe color spaces; extended luminance describes output
+headroom. Every camera mode needs a useful SDR image. Extra headroom serves
+highlights without changing physical calibration or the selected camera mode.
 
 **The game renders and outputs in HDR.** Not merely an HDR internal pipeline that
 tonemaps to SDR at the end — actual extended-range output to displays that can
@@ -261,16 +282,15 @@ rather than reading it once — a window can move between displays.
 so the SDR path is not a fallback for weak hardware; it is the path for an entire
 browser. It has to be genuinely good.
 
-| Requirement              | Specification                                                                                                                                                                                                                                |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Internal pipeline        | HDR throughout; `rgba16float` targets; tonemap once, at the end                                                                                                                                                                              |
-| Output                   | Extended range when the browser can produce it — **capability probe, not media query alone**; ACES-derived tonemap to SDR otherwise                                                                                                          |
-| The two paths must agree | The SDR render is a _tonemapped version of the same image_, never a differently-authored one                                                                                                                                                 |
-| Peak luminance           | Mapped so a G star's disk reaches display peak and everything else sits below it — the star is the reference white, always. **Peak is unknowable from the page**, so the mapping is relative and the curve must hold from 2× to 16× headroom |
-| Tonemapper               | ACES-derived, configurable shoulder, exposed as the Composite mode's response curve                                                                                                                                                          |
-| Adaptation               | Asymmetric: 0.4 s to bright, 3.5 s to dark, qualitatively matching human dark adaptation                                                                                                                                                     |
-| Adaptation clamp         | User-settable rate and range. **Mandatory.** See [ux](ux.md#accessibility).                                                                                                                                                                  |
-| HUD                      | Composited _after_ tonemapping at fixed luminance, so it stays legible against a star                                                                                                                                                        |
+| Requirement              | Specification                                                                                                                                                                |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Internal pipeline        | Retain physical sky radiance in its owned target; apply Enhanced luminance compression before the scene half-float conversion; one final output encoding.                    |
+| Output                   | Extended range when the browser and canvas support it; a useful SDR rendering of the selected camera mode otherwise.                                                         |
+| The two paths must agree | The SDR render is a _tonemapped version of the same image_, never a differently-authored one                                                                                 |
+| Peak luminance           | An authored cap on available output headroom, independent of camera exposure. The current chain supports up to 2× white; broader headroom is a separate capability question. |
+| Tonemapper               | One authored Enhanced look and one photographic look shared by Automatic and Manual. Tone styling does not choose exposure policy.                                           |
+| Adaptation               | Automatic uses 0.4 s toward bright and 3.5 s toward dark on bounded presentation time, separate from photographic time. Manual adds no automatic gain.                       |
+| HUD                      | Composited _after_ tonemapping at fixed luminance, so it stays legible against a star                                                                                        |
 
 > 🎮 Designer's Note: HDR output is also the strongest possible answer to
 > [risk #4 — nobody finds it](risk.md). A browser tab that makes an HDR display
@@ -301,7 +321,8 @@ distance, shutter and gain — and the camera panel already drives all of it and
 prints what it implies: the sharp band, the blur circle against the pixel it has
 to hide inside, the Airy disk against the f-number where it stops fitting, and
 the exposure in stops. What photo mode adds is the tether, spectral filters and export. The lens-derived blur and the sensor response
-are implemented by [ADR-0031](../adr/0031-the-sensor-response.md).
+follow [ADR-0037](../adr/0037-the-enhanced-camera.md), with the optical
+calibration recorded in [ADR-0031](../adr/0031-the-sensor-response.md).
 
 The numbers are why that split is safe rather than a deferral. At the flight
 lens the hyperfocal distance is 5.37 m over a 1520 px buffer — it is a claim
@@ -324,9 +345,10 @@ coordinate.
 | Source                                | What is taken                                                                                                                                   |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Cassini, Juno and Voyager imaging** | The primary reference. Rings backlit, Saturn's terminator, Jupiter's poles. Real photographs of real things, and better than anything invented. |
+| **SpaceEngine**                       | Bright planets and faint space together in the default view, with separate automatic and manual photographic exposure.                          |
 | _Interstellar_ (2014)                 | Physically-derived spectacle; the practical, unglamorous cockpit                                                                                |
 | _2001: A Space Odyssey_               | Restraint. Hard shadows, no fill light, silence. One light source.                                                                              |
-| **Astrophotography**                  | The integrated look — what a sensor sees that an eye does not. The visual thesis of Composite mode.                                             |
+| **Astrophotography**                  | The integrated look — what a sensor sees that an eye does not. The faint structure and color Enhanced reveals through declared processing.      |
 | **Elite Dangerous**                   | Cockpit HUD legibility; holographic instrument language                                                                                         |
 | **Hardspace: Shipbreaker**            | Industrial, worn, legibly functional hardware                                                                                                   |
 
@@ -468,7 +490,7 @@ Very little, all of it in service of continuity.
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **The flip**             | The signature image. Freefall, silence, the ship rotating, the destination swinging into view, the drive relighting and the floor arriving the other way. Everything unsecured floats and then falls. |
 | **Seat entry / exit**    | One continuous first-person move from standing to seated. The world never cuts.                                                                                                                       |
-| **Canopy power-up**      | Direct → Composite, resolving in front of you. Establishes the whole visual thesis.                                                                                                                   |
+| **Canopy power-up**      | A constrained photographic view resolves into Enhanced, revealing the sky while retaining bright-world detail. This is authored staging, with the player’s mode restored afterward.                   |
 | **Airlock cycle**        | 6 s, with a real pressure gauge on a physical door                                                                                                                                                    |
 | **Hardpoint deploy**     | 1.2 s, mechanical, with drag and signature changing on the same timeline                                                                                                                              |
 | **Suit and ship gauges** | Never instant. A gauge that snaps reads as UI; one that moves reads as an instrument.                                                                                                                 |

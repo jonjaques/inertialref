@@ -33,15 +33,16 @@
  *
  * The expensive thing here is boot — about five seconds of shader warm and body
  * build, on top of the dev server's own start. So Chrome is left running
- * between invocations and a second call attaches to the booted page instead of
- * reloading it: measured, 6 s cold against 80 ms warm. Most of that cold figure
+ * between invocations. Each call starts with clean local storage and cookies;
+ * --keep-storage opts into attaching to the booted page instead of reloading
+ * it: measured, 6 s cold against 80 ms warm. Most of that cold figure
  * is the dev server and Chrome rather than the page — `?presentation=occluded`
  * below is what keeps the page's own boot to one warm-up census. That is what
  * makes a batch of steps worth writing on one command line:
  *
  *     node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:2')" \
  *                            --wait 2000 --shot earth.jpg
- *     node scripts/drive.mjs --js "ir.terrain()"        # 70 ms, page still hot
+ *     node scripts/drive.mjs --keep-storage --js "ir.terrain()" # page still hot
  *     node scripts/drive.mjs --down                     # when finished
  *
  * Steps run in the order they are written, so one process does a whole
@@ -54,12 +55,7 @@ import { parseArgs, promisify } from 'node:util'
 import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-// The key table itself, not a copy of one of its values. Node strips the types
-// on the way in — `paths.ts` imports nothing at runtime — and `scripts/brand/`
-// already reaches into `apps/game/src` this way. A literal here is a twin of
-// `QUERY.presentation` that nothing holds to it, and the rename that broke it
-// would show up as a slow boot rather than as an error.
-import { QUERY } from '../apps/game/src/pages/paths.ts'
+import { driveUrl } from './driveUrl.mjs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -73,6 +69,10 @@ const CAST_PX = 1280
 const OPTIONS = {
   /* Session — these describe the browser, not a step. */
   url: { type: 'string', default: 'http://localhost:5173/' },
+  /** Planetarium fixtures use the public URL codec and the page's restore path. */
+  preset: { type: 'string' },
+  picture: { type: 'string' },
+  query: { type: 'string', multiple: true },
   /** Keys the Chrome profile directory as well as the debugging port, so two
    *  agents on different ports cannot fight over one profile. */
   port: { type: 'string', default: '9333' },
@@ -81,6 +81,12 @@ const OPTIONS = {
   dpr: { type: 'string', default: '1' },
   /** Reload and re-boot even when the attached page is already rendering. */
   fresh: { type: 'boolean', default: false },
+  /** Preserve local storage and cookies, and permit a warm attach. */
+  'keep-storage': { type: 'boolean', default: false },
+  /** Public HTML can be inspected before a runtime exists or when it fails. */
+  document: { type: 'boolean', default: false },
+  javascript: { type: 'boolean', default: true },
+  'block-url': { type: 'string', multiple: true },
   /** Start `pnpm dev` when nothing answers `--url`; `--no-serve` to fail
    *  instead, which `allowNegative` gives for free. */
   serve: { type: 'boolean', default: true },
@@ -92,6 +98,7 @@ const OPTIONS = {
   /* Lifecycle — each exits without running steps. */
   down: { type: 'boolean', default: false },
   status: { type: 'boolean', default: false },
+  'print-url': { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
 
   /* Steps, in the order written. */
@@ -154,16 +161,28 @@ Steps run in the order they are written, in one browser session:
                      --url, or ir.timing('trace'), or the tracks are empty.
                      Read it back with: node scripts/timing.mjs
   --logs             console output and page errors buffered so far
-  --reload           hard reload, then wait for the renderer
+  --reload           hard reload, then wait for the selected readiness mode
 
 Session flags:
 
   --url <url>        default http://localhost:5173/
+  --preset <id>      bundled planetarium shot, expanded into a full shot URL
+  --picture <path>   JSON export containing one planetarium shot; excludes --preset
+  --query <key=value> override a query field; repeat for more fields, last wins.
+                     Quote raw text, without URL encoding: --query 'label=Sea + sky'
+                     Applied after --preset/--picture; presentation stays occluded.
   --port <n>         default 9333; also keys the Chrome profile, so parallel
                      agents must differ
   --width/--height   viewport, default 1600x900
   --dpr <n>          device scale factor, default 1
   --fresh            re-boot even if the attached page is already rendering
+  --keep-storage     retain local storage/cookies and allow a warm attach;
+                     default clears both before booting the requested page
+  --document         wait for HTML readiness, without waiting for the renderer
+  --no-javascript    disable page scripts before navigation; implies --document.
+                     --js still evaluates inspection expressions through CDP.
+  --block-url <glob> block matching requests before navigation; repeat for more.
+                     Pair with --document to inspect a failed runtime startup.
   --no-serve         fail instead of starting \`pnpm dev\` when nothing answers
   --max-px <n>       longest edge of a written shot, default 1568; 0 for native
   --quality <n>      JPEG quality, default 88
@@ -173,10 +192,20 @@ Session flags:
 Lifecycle:
 
   --status           what this rig has running
+  --print-url        print the resolved URL without starting Chrome or a server
   --down             close the Chrome and the dev server this rig started
 
-Chrome stays up between invocations and the next call attaches to the booted
-page: 6 s cold, 80 ms warm. --down when you are finished.`
+Chrome stays up between invocations. Each call clears local storage and cookies
+and reboots the page unless --keep-storage is given. --down when finished.
+
+Photographic fixtures (session flags, before all measurement steps):
+
+  node scripts/drive.mjs --preset earthrise --wait 2000 --shot earthrise.jpg
+  node scripts/drive.mjs --picture shot.json --query 'lens.zoom=2' --shot detail.jpg
+  node scripts/drive.mjs --picture shot.json --query 'save=1' --logs
+
+--preset and --picture select /planetarium on --url's host. To test the built-in
+alias itself, use --url 'http://localhost:5173/planetarium?preset=earthrise'.`
 
 const { values, tokens } = parseArgs({
   options: OPTIONS,
@@ -209,17 +238,28 @@ const PORT = Number(values.port)
  * argument. It is added to whatever `--url` asks for, and the attach check
  * below compares asked-for keys only, so it does not disturb the match.
  */
-const URL_ = (() => {
-  const url = new URL(String(values.url))
-  url.searchParams.set(QUERY.presentation, 'occluded')
-  return url.toString()
-})()
+const URL_ = driveUrl({
+  url: values.url,
+  preset: values.preset,
+  picture:
+    values.picture === undefined
+      ? undefined
+      : JSON.parse(await readFile(values.picture, 'utf8')),
+  query: values.query,
+})
+if (values['print-url'] === true) {
+  console.log(URL_)
+  process.exit(0)
+}
 const WIDTH = Number(values.width)
 const HEIGHT = Number(values.height)
 const DPR = Number(values.dpr)
 const MAX_PX = Number(values['max-px'])
 const QUALITY = Number(values.quality)
 const SERVE = values.serve === true
+const JAVASCRIPT = values.javascript === true
+const DOCUMENT = values.document === true || !JAVASCRIPT
+const BLOCKED_URLS = values['block-url'] ?? []
 const STATE = path.join(RIG, `session-${PORT}.json`)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -270,6 +310,8 @@ const count = (arg, flag, least) => {
  *  whole start-up it sits behind. */
 function checkScript() {
   for (const { step, arg } of script) {
+    if (!JAVASCRIPT && (step === 'sample' || step === 'cast'))
+      throw new Error(`--${step} needs page scripts; omit --no-javascript`)
     if (step === 'wait') count(arg, 'wait', 0)
     if (step === 'sample') count(arg, 'sample', 1)
     if (step === 'trace') count(arg, 'trace', 100)
@@ -355,7 +397,9 @@ async function launchChrome(state) {
       // rendering, and a window nobody can see is a window nobody clicks in.
       `--window-size=${WIDTH},${HEIGHT + 120}`,
       '--window-position=2400,60',
-      URL_,
+      // A proof with scripts disabled or requests blocked must not execute
+      // the requested page before the DevTools controls reach this target.
+      DOCUMENT || BLOCKED_URLS.length > 0 ? 'about:blank' : URL_,
     ],
     { stdio: 'ignore', detached: true },
   )
@@ -378,9 +422,9 @@ async function pageTarget() {
     const list = await fetch(`http://127.0.0.1:${PORT}/json/list`)
       .then((r) => r.json())
       .catch(() => [])
-    const page = list.find(
-      (t) => t.type === 'page' && String(t.url).startsWith('http'),
-    )
+    const page =
+      list.find((t) => t.type === 'page' && String(t.url).startsWith('http')) ??
+      list.find((t) => t.type === 'page' && t.url === 'about:blank')
     if (page?.webSocketDebuggerUrl) return page.webSocketDebuggerUrl
     await sleep(500)
   }
@@ -481,7 +525,40 @@ async function evaluate(send, expression) {
   return result.result.value
 }
 
-const READY = 'return Boolean(window.ir && window.engine && window.engine.gl)'
+/** Clear this rig's cookies and local storage before the app can read them.
+ * Navigating away first also discards in-memory preferences from a warm page.
+ * IndexedDB saves, asset caches and service workers are outside this reset. */
+async function clearStorage(send) {
+  // Guarded like every probe in `boot`: a page mid-navigation, or one whose
+  // renderer died since the last invocation, answers `Runtime.evaluate` with
+  // "Cannot find context with specified id" — and the origin is only used to
+  // widen the clear beyond the one this call is about to boot.
+  const current = await evaluate(send, 'location.origin').catch(() => 'null')
+  await send('Page.navigate', { url: 'about:blank' })
+  // Page.navigate acknowledges the navigation before the new document is
+  // necessarily committed. Wait until the old app can no longer write back.
+  for (let i = 0; ; i++) {
+    const blank = await evaluate(send, "location.href === 'about:blank'").catch(
+      () => false,
+    )
+    if (blank) break
+    if (i === 100) throw new Error('page did not leave before clearing storage')
+    await sleep(50)
+  }
+  await send('Network.clearBrowserCookies')
+  for (const origin of new Set([current, new URL(URL_).origin])) {
+    if (origin === 'null') continue
+    await send('Storage.clearDataForOrigin', {
+      origin,
+      storageTypes: 'local_storage',
+    })
+  }
+  note('cleared local storage and cookies')
+}
+
+const READY = DOCUMENT
+  ? "return document.readyState !== 'loading'"
+  : 'return Boolean(window.ir && window.engine && window.engine.gl)'
 
 async function boot(send, { force }) {
   const ready = await evaluate(send, READY).catch(() => false)
@@ -508,18 +585,35 @@ async function boot(send, { force }) {
       ([key, value]) => at.searchParams.get(key) === value,
     )
   if (ready && !force && showing) {
-    note('attached to a booted page')
+    note(
+      DOCUMENT ? 'attached to a ready document' : 'attached to a booted page',
+    )
     return
   }
   // Always a full navigate, never HMR: a WebGPURenderer does not survive a
   // dozen hot reloads, and a tab that has had them draws its HUD with
   // `engine.gl` null — which reads as a rendering bug and is not one.
-  await send('Page.navigate', { url: URL_ })
+  const navigation = await send('Page.navigate', { url: URL_ })
+  if (navigation.errorText) throw new Error(navigation.errorText)
   const started = Date.now()
   for (let i = 0; ; i += 1) {
     await sleep(500)
-    if (await evaluate(send, READY).catch(() => false)) break
-    if (i === 200) throw new Error('renderer never became ready')
+    // navigate acknowledges before the new document commits. The old page's
+    // readyState can still be complete, so match the navigation's loader first.
+    const committed =
+      !DOCUMENT ||
+      navigation.loaderId === undefined ||
+      (await send('Page.getFrameTree')).frameTree.frame.loaderId ===
+        navigation.loaderId
+    if (committed && (await evaluate(send, READY).catch(() => false))) break
+    if (i === 200)
+      throw new Error(
+        `${DOCUMENT ? 'document' : 'renderer'} never became ready`,
+      )
+  }
+  if (DOCUMENT) {
+    note(`document ready in ${((Date.now() - started) / 1000).toFixed(1)} s`)
+    return
   }
   // The boot cover lifts on the presentation watchdog, which needs a frame
   // after `engine.gl` appears. Poll for its removal rather than sleeping a
@@ -545,8 +639,10 @@ async function capture(send, target) {
   // Twice, with a pause. The first capture is what activates the page and
   // draws the frame; taken alone it shows whatever was on screen before the
   // step that preceded it. The second one is the evidence.
-  await send('Page.captureScreenshot', format)
-  await sleep(700)
+  if (!DOCUMENT) {
+    await send('Page.captureScreenshot', format)
+    await sleep(700)
+  }
   const shot = await send('Page.captureScreenshot', format)
   let bytes = Buffer.from(shot.data, 'base64')
   if (MAX_PX > 0 && Math.max(WIDTH, HEIGHT) * DPR > MAX_PX) {
@@ -860,6 +956,14 @@ async function main() {
   const { send, events, subscribe } = connect(ws)
   await send('Page.enable')
   await send('Runtime.enable')
+  await send('Emulation.setScriptExecutionDisabled', { value: !JAVASCRIPT })
+  await send('Network.enable')
+  await send('Network.setBlockedURLs', { urls: BLOCKED_URLS })
+  // A service worker can satisfy a request without the network blocker seeing
+  // it. Failure proofs bypass it; ordinary runs restore its offline behavior.
+  await send('Network.setBypassServiceWorker', {
+    bypass: BLOCKED_URLS.length > 0,
+  })
   await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', {
     width: WIDTH,
@@ -868,7 +972,16 @@ async function main() {
     mobile: false,
   })
   await send('Page.bringToFront')
-  await boot(send, { force: values.fresh === true })
+  if (values['keep-storage'] !== true) await clearStorage(send)
+  await boot(send, {
+    force:
+      values.fresh === true ||
+      (prior.javascript ?? true) !== JAVASCRIPT ||
+      JSON.stringify(prior.blockedUrls ?? []) !== JSON.stringify(BLOCKED_URLS),
+  })
+  // Record the controls only once this navigation succeeds. A failed boot
+  // must not make the next warm attach trust a page from a different mode.
+  await writeState({ javascript: JAVASCRIPT, blockedUrls: BLOCKED_URLS })
 
   const results = []
   for (const { step, arg } of script) {

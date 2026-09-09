@@ -96,31 +96,81 @@ describe('universal-variable propagation', () => {
           const expected = stateVectorAt(elements, SUN_MU, t0 + dt)
           const got = propagateTwoBody(from, SUN_MU, dt)
           /*
-           * The bound grows with the revolutions, and the growth is measured
-           * rather than chosen. The state vector the elements produce is
-           * rounded onto an ellipse whose period differs from the nominal one
-           * by parts in 10¹³, and this propagator follows the state it was
-           * given — so the two drift apart along track by about 0.3 m per
-           * revolution at e = 0.98, linearly, with the energy agreeing to
-           * every printed digit. That is the element solution's rounding, not
-           * this one's; the properties below are what check this one.
+           * Converting elements to a rounded state changes its energy and
+           * period. After many revolutions the two ellipses differ in phase;
+           * near periapsis, a small time shift changes velocity rapidly.
+           * Bound that drift by the measured period difference, the maximum
+           * orbital speed, and the maximum gravitational acceleration. This
+           * allowance depends only on the inputs, never the returned state.
            */
+          const roundedAxis = -SUN_MU / (2 * specificEnergy(from, SUN_MU))
+          const roundedPeriod = orbitalPeriod(SUN_MU, roundedAxis)
+          const phaseDrift = Math.abs(dt * (period / roundedPeriod - 1))
+          const periapsis = elements.semiMajorAxis * (1 - elements.eccentricity)
+          const periapsisSpeed = Math.sqrt(
+            (SUN_MU * (1 + elements.eccentricity)) / periapsis,
+          )
+          const periapsisAcceleration = SUN_MU / (periapsis * periapsis)
           const bound = 5e-9 * (1 + Math.abs(periods))
           expect(
             Vec.distance(got.position, expected.position) /
               elements.semiMajorAxis,
-          ).toBeLessThan(bound)
+          ).toBeLessThan(
+            bound + (periapsisSpeed * phaseDrift) / elements.semiMajorAxis,
+          )
           const speed = Math.max(
             Vec.length(expected.velocity),
             Vec.length(got.velocity),
           )
           expect(
             Vec.distance(got.velocity, expected.velocity) / speed,
-          ).toBeLessThan(bound)
+          ).toBeLessThan(bound + (periapsisAcceleration * phaseDrift) / speed)
         },
       ),
-      { numRuns: 300 },
+      {
+        numRuns: 300,
+        examples: [
+          [
+            {
+              semiMajorAxis: 29919574140,
+              eccentricity: 0.9869367908579146,
+              inclination: 0,
+              longitudeOfAscendingNode: 0,
+              argumentOfPeriapsis: 0,
+              meanAnomalyAtEpoch: 5.651560917228563e-7,
+              epoch: 0,
+            },
+            0.000010904388673871746,
+            49.99995691723958,
+          ],
+        ],
+      },
     )
+  })
+
+  it('follows the rounded epoch state over fifty eccentric revolutions', () => {
+    // Independent eccentricity-vector and Kepler evaluation at 90 decimal
+    // digits, using the exact binary64 inputs. The original element ellipse
+    // is 201 m away here; the rounded state's period is 4.885 µs shorter.
+    const from: StateVector = {
+      position: vec3(390845626.43025607, 0, -208549.68990665735),
+      velocity: vec3(-220.5796166155192, 0, -821381.9743113458),
+    }
+    const expected: StateVector = {
+      position: vec3(384516510.80552685, 0, 99142342.09384993),
+      velocity: vec3(103211.7290999238, 0, -808290.2476266291),
+    }
+    const got = propagateTwoBody(from, SUN_MU, 141132421.48050964)
+    // Binary64 period reconstruction contributes 2.2 m across fifty turns.
+    // One part in 10⁸ covers it while rejecting the original-element answer.
+    expect(
+      Vec.distance(got.position, expected.position) /
+        Vec.length(expected.position),
+    ).toBeLessThan(1e-8)
+    expect(
+      Vec.distance(got.velocity, expected.velocity) /
+        Vec.length(expected.velocity),
+    ).toBeLessThan(1e-8)
   })
 
   it('holds a low orbit to the millimeter across a year of revolutions', () => {

@@ -4,6 +4,7 @@ export * from './cutscenes/tngIntro.ts'
 export * from './cutscenes/enterprisePortraits.ts'
 export * from './descent.ts'
 export * from './dossier.ts'
+export * from './flightCamera.ts'
 export * from './pictures.ts'
 export * from './shots.ts'
 export * from './harness.ts'
@@ -16,3 +17,14 @@ export * from './session.ts'
 export * from './terrainBaseline.ts'
 export * from './terrainZoo.ts'
 export * from './travel.ts'
+
+export * from './galaxy.ts'
+export {
+  decodePictures,
+  encodePictures,
+  isPicture,
+  mergePictures,
+  MAX_PICTURES,
+  MAX_FILE_PICTURES,
+  MAX_PICTURE_BYTES,
+} from './pictureFormat.ts'

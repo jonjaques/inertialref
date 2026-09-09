@@ -56,7 +56,7 @@ interface OverlayRouteProps {
 export function OverlayRoutes({ render, onNotice }: OverlayRouteProps) {
   const location = useLocation()
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       <Routes location={location} key={overlaySurface(location.pathname)}>
         <Route
           path={SETTINGS}

@@ -1,18 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useContext, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
-import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { resolvedLocation } from '../pages/paths.ts'
 import { DocsBar } from './DocsBar.tsx'
 import { DocsHorizon } from './DocsHorizon.tsx'
 import { DocsMasthead } from './DocsMasthead.tsx'
+import { DocsNavigation } from './DocsNavigation.tsx'
 import { DocsRail } from './DocsRail.tsx'
 import { DocArticle } from './DocArticle.tsx'
 import { DocContents } from './DocContents.tsx'
 import { wingFor } from './docsNav.ts'
 import { useDocsFraming } from './useDocsFraming.ts'
-import { useManifest, usePage } from './useDocs.ts'
+import { DocsContentContext } from './initialDocs.ts'
+import { docRoute } from './content.ts'
+
+const Workspace = lazy(() =>
+  import('../dock/Workspace.tsx').then((module) => ({
+    default: module.Workspace,
+  })),
+)
 
 /*
  * The reading room.
@@ -61,7 +68,7 @@ export function DocsMode({
   engine,
   dev,
 }: {
-  engine: GameEngine
+  engine: GameEngine | null
   dev: DevWorkspace
 }) {
   /*
@@ -77,13 +84,15 @@ export function DocsMode({
    * back to the top behind the scrim.
    */
   const here = resolvedLocation(useLocation())
-  const route = normalize(here.pathname)
   const hash = here.hash
 
-  const manifest = useManifest()
+  const content = useContext(DocsContentContext)
+  if (content === null)
+    throw new Error('Documentation requires PageShell content')
+  const { manifest, page } = content
+  const route = docRoute(manifest.value, normalize(here.pathname))
   const wing =
     manifest.value === null ? undefined : wingFor(manifest.value, route)
-  const page = usePage(manifest.value, route)
   const framed = useDocsFraming(engine, wing?.framing)
 
   const room = useRef<HTMLDivElement | null>(null)
@@ -220,7 +229,18 @@ export function DocsMode({
        * The article's last line clears it: `.doc-article` carries the padding,
        * because the menu is drawn by a sibling and cannot push anything.
        */}
-      <Workspace id="docs" title="Documentation" panels={NO_PANELS} dev={dev} />
+      {engine === null ? (
+        <DocsNavigation />
+      ) : (
+        <Suspense fallback={<DocsNavigation />}>
+          <Workspace
+            id="docs"
+            title="Documentation"
+            panels={NO_PANELS}
+            dev={dev}
+          />
+        </Suspense>
+      )}
     </>
   )
 }

@@ -14,10 +14,10 @@
    * orange-clouded record pointing at nothing to hang itself on.
    *
    * The first deploy after adding this creates the record. It needs the
-   * `jonjaques.com` zone on the same account; Wrangler fails loudly if it is
+   * `inertialref.app` zone on the same account; Wrangler fails loudly if it is
    * not there, which is the right failure.
    */
-  "routes": [{ "pattern": "inertialref.jonjaques.com", "custom_domain": true }],
+  "routes": [{ "pattern": "inertialref.app", "custom_domain": true }],
 
   /*
    * One front door, and a per-version side door.
@@ -58,23 +58,14 @@
   "assets": {
     "directory": "../game/dist",
     "binding": "ASSETS",
-    // The client is a single page; an unmatched path is index.html, not a 404.
-    "not_found_handling": "single-page-application",
+    // Astro writes one HTML file per route. Unknown paths serve 404.html with
+    // a 404 status; the home document cannot hydrate another page's address.
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash",
     /*
-     * The only paths that wake the script. Everything else is served straight
-     * from the asset store.
-     *
-     * `/api` is listed separately because `/api/*` does not match it, and the
-     * SPA fallback above would otherwise answer a bare `/api` with index.html —
-     * a 200 full of HTML is the single most confusing thing an API can return.
-     * `/ws` is listed before it exists for the same reason.
-     *
-     * `/media/*` is here so the script can fall back to R2 for an object the
-     * bundle does not have, and so an unknown name 404s instead of getting the
-     * SPA fallback — an `<audio>` element handed `index.html` fails as if it
-     * could not decode the file. It costs an invocation on a path that is
-     * otherwise free; the response is `immutable`, so it is about one
-     * invocation per client rather than one per play. `src/media.ts`.
+     * Static pages and assets never invoke the script. Only the live API,
+     * reserved socket and media allow-list need the host adapter. `/api` is
+     * separate because `/api/*` does not match the bare path.
      */
     "run_worker_first": ["/api", "/api/*", "/ws", "/media/*"],
   },

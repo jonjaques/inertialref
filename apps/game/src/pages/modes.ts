@@ -95,10 +95,17 @@ export const MODES: readonly ModeCard[] = [
  * mounted, so a pasted `/play/solo` still resolves and the author still has a
  * way into flight. That is a deliberate split: this is a decision about what a
  * visitor is invited into, not about what the build can do, and the URL is the
- * product's public surface (ADR-0011). Re-enabling a mode is a one-word edit to
- * its `status` above.
+ * product's public surface (ADR-0011).
+ *
+ * A `ready` mode is a door in every build. A `built` mode — solo flight, which
+ * works but is held out of the shipped menu — is a door only in a **development
+ * build**: the person building the game is an audience the menu can be honest
+ * with, and offering the flyable-but-unfinished flight to them is the point of
+ * the status. `import.meta.env.DEV` is replaced at build time, so a production
+ * bundle folds this to `status === 'ready'` and never links solo from the menu.
  */
-export const isEnterable = (mode: ModeCard): boolean => mode.status === 'ready'
+export const isEnterable = (mode: ModeCard): boolean =>
+  mode.status === 'ready' || (import.meta.env.DEV && mode.status === 'built')
 
 export const ENTERABLE = MODES.filter(isEnterable)
 export const WITHHELD = MODES.filter((mode) => !isEnterable(mode))

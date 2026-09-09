@@ -9,6 +9,38 @@ lets published data change underneath a running game without breaking it.
 
 ---
 
+## The stellar field and its visible stars
+
+One seeded field supplies the disk, arms, bar/bulge and halo, their resolved
+stars and the diffuse light between them. Its CPU integrator produces
+[headless plates](../guides/harness.md#measuring-the-stellar-field), while the
+GPU follows the same field through the camera. Nine local cloud complexes,
+a Local Bubble approximation and shared spiral dust dim and redden both
+representations. Linear V-band sky averages and external luminosity retain
+source-based checks through `pnpm sim --galaxy-calibration --quiet`.
+
+The sky selects disjoint luminosity levels within a V 8 request and a
+100,000-sprite ceiling. It remains independent of the travel survey. GPU
+projection follows the observer without rewriting all source positions; the
+shared field removes the expected emission represented by those sources.
+[ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records population
+activation, catalogue completeness, legacy addresses and the approximation
+limits of the resolved/diffuse partition.
+
+Open Presets → Milky Way, or call `ir.galaxyView('face-on')` for a fixed
+photographic instrument. Earth Orbit and Travel Out trace a reversible journey
+to 30 kpc above the galactic center; `ir.galaxyJourney(1, 36)` makes that trip
+through the existing camera and lens. Progress zero returns to Earth orbit.
+Ordinary navigation preserves the player's Enhanced, Automatic or Manual mode.
+Enhanced composes bright foregrounds and faint sky; the photographic modes
+expose the same physical light.
+
+Nearby views refine complete 32², 128² and 512² physical sky cubes. A separate
+regenerable disk cache retains finished skies across reloads. Moving beyond a
+valid sky uses live interleaved rays and owned physical history, with finer
+angular detail after the eye settles. Exposure and display changes do not
+change source light or require a physical rebake.
+
 ## The three-layer body model
 
 Every object in the galaxy is exactly one of three things, and the player can
@@ -85,10 +117,14 @@ numbers beside it, not a blanket claim about the object.
 The catalog is an **ingest**, not a hand-transcription. ✅ **Built** — see
 [`docs/guides/catalogue.md`](../guides/catalogue.md) for how to operate it.
 `data/catalog/stars-150ly.irsc` holds **7,123 systems and 702 confirmed
-planets**, 179 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
+planets**, 178 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
 Exoplanet Archive and committed. It replaced 18 hand-entered stars, which is the
 swap that file's comment promised would change nothing downstream — it changed
-three signatures and no architecture.
+three signatures and no architecture. Beside it, `stars-sky.irsc` holds the
+**naked-eye sky beyond 150 ly**: 7,514 systems at apparent V ≤ 6.5, 188 KB
+brotli, the farthest at 3,198 ly. The two load as one catalog; the sky's stars
+resolve by id and are drawn from anywhere in the volume, and they stay out of
+the cell index so the procedural fill is the same galaxy with or without them.
 
 | Dataset                    | Provides                                                  | Scale                                                                                                                                                           | License posture                                                                                                                                                                                                    |
 | -------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

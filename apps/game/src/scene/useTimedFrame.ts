@@ -1,6 +1,8 @@
 import { type RootState, useFrame } from '@react-three/fiber'
 import { getTimer } from '@inertialref/shared'
+import { framesHeld } from '../engine/frameHold.ts'
 import { RENDER_PHASE } from '../engine/frameTiming.ts'
+import { runGraphicsFrame } from '../runtimeFailure.ts'
 
 /*
  * `useFrame`, with the callback's own time on the Render track.
@@ -23,6 +25,10 @@ import { RENDER_PHASE } from '../engine/frameTiming.ts'
  * not adjacent: R3F interleaves them with its own work and each has to stand on
  * its own start. Off, this is one property read and a direct call — no closure
  * allocated, no clock read, and `NO_SPAN` never even reached.
+ *
+ * Every consumer goes through here, which is what makes `frameHold.ts` one
+ * check rather than fourteen: a measurement that has taken the loop gets a
+ * frame in which no consumer writes a uniform, hides a mesh or presents.
  */
 const timer = getTimer('game.render')
 
@@ -32,12 +38,13 @@ export function useTimedFrame(
   priority = 0,
 ): void {
   useFrame((state, delta) => {
+    if (framesHeld()) return
     if (!timer.on) {
-      callback(state, delta)
+      runGraphicsFrame(() => callback(state, delta))
       return
     }
     const started = performance.now()
-    callback(state, delta)
+    runGraphicsFrame(() => callback(state, delta))
     timer.measure(name, started, performance.now(), RENDER_PHASE)
   }, priority)
 }

@@ -1,0 +1,396 @@
+{
+  "format": "inertialref/presets",
+  "version": 1,
+  "pictures": [
+    {
+      "id": "earthrise",
+      "label": "Earthrise",
+      "why": "Earth over the lunar limb, the horizon in the lower third",
+      "address": "s:SOL/b:2.0",
+      "framing": {
+        "kind": "rise"
+      },
+      "seed": "inertialref",
+      "time": 0,
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      }
+    },
+    {
+      "id": "blue-marble",
+      "label": "Blue Marble",
+      "why": "the whole lit face, north a little high — the Apollo framing",
+      "address": "s:SOL/b:2",
+      "framing": {
+        "kind": "compose",
+        "composition": "blue-marble"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0,
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      }
+    },
+    {
+      "id": "night-side",
+      "label": "Night Side",
+      "why": "the dark disk inside its own airglow, the cities showing",
+      "address": "s:SOL/b:2",
+      "framing": {
+        "kind": "compose",
+        "composition": "backlit"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0,
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      }
+    },
+    {
+      "id": "the-rings",
+      "label": "The Rings",
+      "why": "up over the plane, gibbous, the rings open across the frame",
+      "address": "s:SOL/b:5",
+      "framing": {
+        "kind": "compose",
+        "composition": "high-angle"
+      },
+      "fovDeg": 80,
+      "seed": "inertialref",
+      "time": 0,
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      }
+    },
+    {
+      "id": "titans-haze",
+      "label": "Titan’s Haze",
+      "why": "a rim-lit crescent — the thickest atmosphere in the model",
+      "address": "s:SOL/b:5.5",
+      "framing": {
+        "kind": "compose",
+        "composition": "crescent"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0,
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      }
+    },
+    {
+      "id": "raking-mars",
+      "label": "Raking Mars",
+      "why": "light along the surface at its lowest, where relief is longest",
+      "address": "s:SOL/b:3",
+      "framing": {
+        "kind": "compose",
+        "composition": "raking"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0,
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      }
+    },
+    {
+      "id": "jupiter-and-company",
+      "label": "Jupiter and Company",
+      "why": "the planet small and the Galileans strung out beside it",
+      "address": "s:SOL/b:4",
+      "framing": {
+        "kind": "compose",
+        "composition": "wide"
+      },
+      "fovDeg": 65,
+      "seed": "inertialref",
+      "time": 0,
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      }
+    },
+    {
+      "id": "centauri-daybreak",
+      "label": "Centauri Daybreak",
+      "why": "A low sun over the blue rim of Alpha Centauri II, 4.4 light-years from home.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      },
+      "time": 0,
+      "address": "g:milky-way/s:HIP71683/b:1",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0.6,
+          "elevation": 0.25,
+          "distance": 30023111.049223922
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": 0.4238033388727188,
+          "longitude": -0.8365993879712973,
+          "height": 313352.1115994742,
+          "heading": -0.9811724869066305,
+          "pitch": -0.08122700537703054
+        }
+      },
+      "lens": {
+        "focalLength": 23.051785523653994,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.016666666666666666,
+        "iso": 100
+      }
+    },
+    {
+      "id": "tau-ceti-moonrise",
+      "label": "Under Tau Ceti III",
+      "why": "Tau Ceti III hangs above its moon’s ridges, 12 light-years from Sol.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      },
+      "time": 0,
+      "address": "g:milky-way/s:HIP8102/b:2.1",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0.6,
+          "elevation": 0.25,
+          "distance": 1783447.9755610581
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.01728890429003285,
+          "longitude": 1.6289236273404726,
+          "height": 60000,
+          "heading": -1.4120114809751079,
+          "pitch": -0.30829890339149124
+        }
+      },
+      "lens": {
+        "focalLength": 31.26106877632562,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.016666666666666666,
+        "iso": 100
+      }
+    },
+    {
+      "id": "far-ringrise",
+      "label": "Rings Beyond the Center",
+      "why": "A ringed giant rises over its moon, across the galaxy from Sol.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      },
+      "time": 0,
+      "address": "g:milky-way/s:P222_0_0_6/b:7.2",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0.6,
+          "elevation": 0.25,
+          "distance": 597445.8581287251
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.005076365431754169,
+          "longitude": 1.062960426120977,
+          "height": 70000,
+          "heading": -1.7854179607868113,
+          "pitch": -0.6606565343270134
+        }
+      },
+      "lens": {
+        "focalLength": 28.970562748477143,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.016666666666666666,
+        "iso": 100
+      }
+    },
+    {
+      "id": "far-shore",
+      "label": "The Far Shore",
+      "why": "Low sunlight over an ocean shore, 53,350 light-years from Sol.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      },
+      "time": 100331.9499824278,
+      "address": "g:milky-way/s:P222_1_0_9/b:4",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0.6,
+          "elevation": 0.25,
+          "distance": 14011579.929208199
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": 0.2536578006467303,
+          "longitude": 0.5979225244025556,
+          "height": 80,
+          "heading": 1.8077856665421312,
+          "pitch": -0.13
+        }
+      },
+      "lens": {
+        "focalLength": 20.784609690826528,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      }
+    },
+    {
+      "id": "tau-ceti-dusk",
+      "label": "Tau Ceti Dusk",
+      "why": "Low sunlight across the summit ridges of Tau Ceti II.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      },
+      "time": 120049.62267576344,
+      "address": "g:milky-way/s:HIP8102/b:1",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0.6,
+          "elevation": 0.25,
+          "distance": 26469624.990384966
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.7463223204803676,
+          "longitude": -0.9929848321363809,
+          "height": 120,
+          "heading": 1.48422749951265,
+          "pitch": -0.13
+        }
+      },
+      "lens": {
+        "focalLength": 20.784609690826528,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      }
+    },
+    {
+      "id": "solar-crescent",
+      "label": "Solar Crescent",
+      "why": "The Moon masks most of the Sun, seen from a camera beyond the lunar orbit.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "system": 4,
+        "terrain": 4,
+        "photometry": 1,
+        "galaxy-field": 5
+      },
+      "time": 0,
+      "address": "g:milky-way/s:SOL/b:2.0",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": -2.6791046963098264,
+          "elevation": -8.542698856200834e-5,
+          "distance": 391192170.62511927
+        },
+        "look": {
+          "yaw": 0.009,
+          "pitch": 0.004
+        },
+        "surface": null
+      },
+      "lens": {
+        "focalLength": 68.05538183541252,
+        "gauge": 24,
+        "zoom": 8,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.016666666666666666,
+        "iso": 100
+      }
+    }
+  ]
+}

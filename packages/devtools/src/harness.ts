@@ -1,4 +1,16 @@
 import {
+  GENERATION_VERSIONS,
+  type WorldMatch,
+  type WorldQuery,
+} from '@inertialref/universe'
+import { isPicture } from './pictureFormat.ts'
+import {
+  validateGalaxyJourney,
+  type GalaxyView,
+  isGalaxyView,
+} from '@inertialref/rendering'
+import { GalaxyInspector, type GalaxyRenderReport } from './galaxy.ts'
+import {
   AU,
   getLogger,
   LIGHT_YEAR,
@@ -8,6 +20,7 @@ import {
   RingBufferSink,
 } from '@inertialref/shared'
 import { circularSpeed } from '@inertialref/physics'
+import { formatSeed } from '@inertialref/procedural'
 import {
   type FrameId,
   Quaternion as Q,
@@ -35,6 +48,7 @@ import {
   systemFrameId,
   systemId,
   type SystemId,
+  type SystemStub,
   surveySites,
   systemsWithin,
   walkBodies,
@@ -47,6 +61,7 @@ import {
 } from '@inertialref/persistence'
 import {
   FLIGHT_FOV,
+  type FlightView,
   type Lens,
   LENS_PRESETS,
   lensForFov,
@@ -57,9 +72,18 @@ import {
   type RenderScene,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import type { PoolStats, WorkerPool } from '@inertialref/workers'
+import {
+  encodeStub,
+  findWorldsTask,
+  type PoolStats,
+  type WorkerPool,
+} from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
-import { describeDrift, type VersionDrift } from '@inertialref/protocol'
+import {
+  describeDrift,
+  encodeUniverseVector,
+  type VersionDrift,
+} from '@inertialref/protocol'
 import {
   runCapabilityChecks,
   summarizeCapabilities,
@@ -75,15 +99,27 @@ import {
   type WorldInspection,
 } from './inspect.ts'
 import {
+  DEFAULT_SEARCH_LIGHT_YEARS,
+  DEFAULT_SEARCH_LIMIT,
+  SEARCH_BATCH,
   currentSystemOf,
   resolveDestination,
+  type SearchEntry,
+  searchEntries,
+  searchIndexVersion,
   searchTargets,
+  targetsFor,
   type TravelTarget,
   type TravelTargetOptions,
   travelTargets,
   viewingAltitudeKm,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
+import {
+  captureCameraProcessing,
+  DEFAULT_PICTURE_PROCESSING,
+  type PictureProcessing,
+} from './pictureProcessing.ts'
 import { findShot, placeShot, SHOTS } from './shots.ts'
 import {
   CutsceneDirector,
@@ -95,6 +131,7 @@ import {
   type ObserverPose,
   type ObserverStatus,
 } from './observatory.ts'
+import { FlightCamera, type FlightCameraStatus } from './flightCamera.ts'
 import {
   type DescentOptions,
   type DescentReport,
@@ -165,6 +202,8 @@ export interface RenderHost {
    * whether the cache is holding. The two disagreeing is the interesting case.
    */
   terrain(): TerrainReport | null
+  /** The live volume, if a renderer is attached. */
+  galaxyRender(): GalaxyRenderReport | null
   /**
    * The lens the picture is being taken with, and the pixels it lands on.
    *
@@ -203,6 +242,10 @@ export interface RenderHost {
    * camera to fit it to and the arithmetic is worth running anyway.
    */
   setFlightLens(lens: Lens): void
+  /** The player's settings, independent of cinematic and instrument staging. */
+  cameraProcessing(): PictureProcessing
+  /** Restore processing through the same preference owner as the camera panel. */
+  setCameraProcessing(processing: PictureProcessing): void
   /**
    * How many display pixels one CSS pixel is, on this host.
    *
@@ -262,13 +305,21 @@ export interface RenderHost {
  * otherwise win over the default and put a `?.` back into every reader.
  */
 export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
+  let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
   return {
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
+    galaxyRender: overrides.galaxyRender ?? (() => null),
     terrain: overrides.terrain ?? (() => null),
     lensView: overrides.lensView ?? (() => null),
     framingLens: overrides.framingLens ?? (() => LENS_PRESETS.flight),
     setFlightLens: overrides.setFlightLens ?? (() => {}),
+    cameraProcessing: overrides.cameraProcessing ?? (() => processing),
+    setCameraProcessing:
+      overrides.setCameraProcessing ??
+      ((next) => {
+        processing = captureCameraProcessing(next)
+      }),
     pixelRatio: overrides.pixelRatio ?? (() => 1),
     setChrome: overrides.setChrome ?? (() => {}),
     setLayers: overrides.setLayers ?? (() => {}),
@@ -330,6 +381,12 @@ export interface HarnessStatus {
    * record the photo-mode metadata seam eventually stamps.
    */
   readonly lens: LensReadout | null
+  /**
+   * Which view the ship arm stands in, and where — so a plate taken beside
+   * the hull records the orbit it was taken from, the way `lens` records the
+   * optics.
+   */
+  readonly flightCamera: FlightCameraStatus
 }
 
 export interface ScenarioResult {
@@ -352,11 +409,25 @@ export interface LoadOutcome {
 
 const log = getLogger('devtools.harness')
 
+/** A 500 ly box fits the 200,000-cell travel budget at every grid alignment. */
+function boundedTravelRadius(lightYears: number): number {
+  const bounded = Number.isNaN(lightYears)
+    ? 0
+    : Math.max(0, Math.min(500, lightYears))
+  if (bounded !== lightYears)
+    log.warn('Travel query radius is bounded to 0–500 light-years', {
+      requested: lightYears,
+      applied: bounded,
+    })
+  return bounded * LIGHT_YEAR
+}
+
 export class GameHarness {
   readonly #host: Host
   readonly #logSink = new RingBufferSink(256)
   readonly #cutscenes: CutsceneDirector
   readonly #observatory: Observatory
+  readonly #flightCamera: FlightCamera
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
 
@@ -367,6 +438,7 @@ export class GameHarness {
       ENTERPRISE_PORTRAITS,
     ])
     this.#observatory = new Observatory(host)
+    this.#flightCamera = new FlightCamera(host)
     logHub.addSink(this.#logSink)
   }
 
@@ -390,6 +462,7 @@ export class GameHarness {
       frame: this.#host.render.frameStats(),
       authority: this.#host.authority().status(),
       lens: this.lens(),
+      flightCamera: this.#flightCamera.status(),
     }
   }
 
@@ -457,7 +530,7 @@ export class GameHarness {
       this.world.galaxySeed,
       this.world.catalog,
       centre,
-      lightYears * LIGHT_YEAR,
+      boundedTravelRadius(lightYears),
     )
       .map((stub) => ({
         id: stub.id as string,
@@ -510,6 +583,200 @@ export class GameHarness {
   }
 
   /**
+   * Rows for addresses the caller already holds, nearest first not implied —
+   * the order is the caller's.
+   *
+   * The third question, after `targets` and `search`: a fuzzy index in the
+   * navigator answers with addresses, and this turns them back into the rows
+   * the survey draws, measured from the same eye. `b:2` and friends resolve
+   * against the system the player is in, exactly as `goTo` reads them; an
+   * address that names nothing is dropped rather than thrown, so one stale
+   * entry cannot empty the list.
+   */
+  rowsFor(
+    addresses: readonly string[],
+    options: TravelTargetOptions = {},
+  ): readonly TravelTarget[] {
+    const from =
+      (options.origin === 'observer' ? this.observatory.eye : null) ??
+      this.#here()
+    return targetsFor(
+      this.world,
+      from,
+      addresses,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+  }
+
+  /**
+   * Every string a place can be found by, paired with its address.
+   *
+   * What a fuzzy matcher indexes. The matcher itself lives in the client — it
+   * is a third-party dependency, which `packages/*` may not carry — so the
+   * boundary is this list: names out, addresses back in through `rowsFor`.
+   * `searchIndexVersion` says when the list has changed.
+   */
+  searchEntries(): readonly SearchEntry[] {
+    return searchEntries(this.world)
+  }
+
+  searchIndexVersion(): string {
+    return searchIndexVersion(this.world)
+  }
+
+  /**
+   * Search the volume for bodies that answer a query, in batches.
+   *
+   * The other question a catalog can be asked. `search` answers "what is
+   * called this" from an index; this answers "what is out there *like* this",
+   * and it cannot come from an index because the bodies do not exist until
+   * they are generated. So it is a sweep, and the sweep is the cost: a system
+   * is milliseconds to build and a body is microseconds to test.
+   *
+   * **It answers in batches rather than once.** The volume is cut into jobs
+   * and each is submitted separately, so rows arrive while the search is still
+   * running and a fifty-light-year question is not a blank panel for two
+   * seconds. That shape is forced as well as chosen: a job is one request and
+   * one response, with no partial-result message in the protocol, so streaming
+   * has to be several jobs rather than one job that reports as it goes.
+   *
+   * `cancel` stops it — the queued jobs are dropped and the running ones are
+   * told through `TaskContext.cancelled`, which `findWorlds` polls once per
+   * system. A second question therefore does not wait behind the first one's
+   * whole volume.
+   *
+   * With no pool the batches run inline, on this thread, in order. That is the
+   * headless runner and it is slow rather than wrong, which is the same
+   * bargain every other task here makes.
+   */
+  findWorlds(
+    query: WorldQuery,
+    options: {
+      lightYears?: number
+      /**
+       * How many of the nearest matches to keep.
+       *
+       * A sweep is bounded by the volume, and the volume is not bounded by
+       * anything a reader will read: "rocky, within 150 light years" answers
+       * with over a hundred thousand bodies. Keeping them all is twenty
+       * megabytes of records nobody scrolls to, and re-sorting them on every
+       * batch is the main thread's whole budget — measured, it dropped the
+       * simulation clock to a fifth of real time while the sweep ran. So the
+       * nearest are kept and the rest are counted.
+       */
+      limit?: number
+      /**
+       * Called as each batch answers: the nearest matches so far, how far
+       * through the sweep it is, and how many were found in total — which is
+       * not `found.length` once the cap has bitten, and saying so is the
+       * difference between a list that is short and a search that found little.
+       */
+      onBatch?: (
+        found: readonly WorldMatch[],
+        progress: number,
+        total: number,
+      ) => void
+    } = {},
+  ): {
+    /** How many systems the sweep will walk. Zero means there is nothing to do. */
+    readonly systems: number
+    readonly cancel: () => void
+    readonly done: Promise<readonly WorldMatch[]>
+  } {
+    const from = this.observatory.eye ?? this.#here()
+    const stubs = systemsWithin(
+      this.world.galaxySeed,
+      this.world.catalog,
+      from,
+      boundedTravelRadius(options.lightYears ?? DEFAULT_SEARCH_LIGHT_YEARS),
+    )
+    /*
+     * Nearest first, so the batches that answer first are the ones a reader
+     * cares about most. `systemsWithin` sorts by id to stay a pure function of
+     * its query; the ordering that matters *here* is a display decision and is
+     * made here, which is the same split `orbitalOrder` makes.
+     */
+    const ordered = [...stubs].sort(
+      (a, b) => UV.distance(a.position, from) - UV.distance(b.position, from),
+    )
+    const pool = this.#host.pool()
+    const jobs: {
+      readonly result: Promise<{ readonly matches: readonly WorldMatch[] }>
+      readonly cancel: () => void
+    }[] = []
+    const limit = Math.max(1, options.limit ?? DEFAULT_SEARCH_LIMIT)
+    let stopped = false
+    let total = 0
+    let found: WorldMatch[] = []
+    const wire = encodeUniverseVector(from)
+    const seed = formatSeed(this.world.rootSeed)
+
+    const batches: (readonly SystemStub[])[] = []
+    for (let at = 0; at < ordered.length; at += SEARCH_BATCH)
+      batches.push(ordered.slice(at, at + SEARCH_BATCH))
+
+    let answered = 0
+    const run = async (): Promise<readonly WorldMatch[]> => {
+      for (const batch of batches) {
+        if (stopped) break
+        const payload = {
+          seed,
+          galaxy: this.world.galaxy as string,
+          stubs: batch.map(encodeStub),
+          query,
+          from: wire,
+        }
+        const job =
+          pool === null
+            ? {
+                result: Promise.resolve(
+                  findWorldsTask.run(payload, {
+                    cancelled: () => stopped,
+                  }),
+                ),
+                cancel: () => {},
+              }
+            : pool.submit(findWorldsTask, payload)
+        jobs.push(job)
+        void Promise.resolve(job.result)
+          .then((answer) => {
+            if (stopped) return
+            total += answer.matches.length
+            found.push(...answer.matches)
+            /*
+             * Trimmed at twice the cap rather than at the cap, so the sort is
+             * amortized: cutting on every batch would sort a nearly-full array
+             * every time, and cutting at twice it sorts once per capful.
+             */
+            if (found.length > limit * 2) {
+              found.sort((a, b) => a.lightYears - b.lightYears)
+              found = found.slice(0, limit)
+            }
+            answered += 1
+            options.onBatch?.(found, answered / batches.length, total)
+          })
+          .catch(() => {
+            // A batch that failed is a gap in an answer, not a failed search.
+            // Counting it keeps the progress honest about being finished.
+            answered += 1
+          })
+      }
+      await Promise.allSettled(jobs.map((job) => job.result))
+      found.sort((a, b) => a.lightYears - b.lightYears)
+      return found.slice(0, limit)
+    }
+
+    return {
+      systems: ordered.length,
+      cancel: () => {
+        stopped = true
+        for (const job of jobs) job.cancel()
+      },
+      done: run(),
+    }
+  }
+
+  /**
    * Everything known about one star or one body, as a page of astronomy.
    *
    * The object panel's whole source. Split from `inspect` — which is an
@@ -517,7 +784,13 @@ export class GameHarness {
    * and the question "what is Europa" has no answer in the entity store.
    */
   dossier(address: string): Dossier | null {
-    return dossier(this.#host, address)
+    return dossier(
+      this.#host,
+      address,
+      this.#observatory.target === null
+        ? this.world.clock.renderTime
+        : this.#observatory.time,
+    )
   }
 
   /**
@@ -590,10 +863,14 @@ export class GameHarness {
     this.world.clock.setTimeScale(scale)
   }
 
-  /** Set the player's control input directly, as the keyboard would. */
+  /**
+   * Set the player's control input directly, as the keyboard would: the
+   * thrusters, the attitude, and the drive's throttle, each only if given.
+   */
   control(input: {
     translation?: [number, number, number]
     rotation?: [number, number, number]
+    throttle?: number
   }): void {
     const player = this.#requirePlayer()
     const entity = this.world.entities.require(player)
@@ -606,10 +883,31 @@ export class GameHarness {
         ? entity.control.rotation
         : vec3(...input.rotation),
     )
+    if (input.throttle !== undefined)
+      this.world.setThrottle(player, input.throttle)
   }
 
+  /** The main drive, 0..1. Returns the setting the world kept. */
+  throttle(fraction: number): number {
+    return this.world.setThrottle(this.#requirePlayer(), fraction).control
+      .throttle
+  }
+
+  /** Hands off everything: thrusters neutral, attitude neutral, drive cold. */
   hold(): void {
-    this.control({ translation: [0, 0, 0], rotation: [0, 0, 0] })
+    this.control({ translation: [0, 0, 0], rotation: [0, 0, 0], throttle: 0 })
+  }
+
+  /**
+   * Neutral input after a teleport, drive included.
+   *
+   * Every placement verb ends here: a ship put into a circular orbit with
+   * its drive still lit is not in that orbit on the next tick, and a
+   * composition framed with the throttle open drifts out of its own picture.
+   */
+  #handsOff(player: EntityId): void {
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.world.setThrottle(player, 0)
   }
 
   flightAssist(enabled: boolean): void {
@@ -656,7 +954,7 @@ export class GameHarness {
       velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     log.info('placed in orbit', { address, altitudeKm, speed })
     return this.status()
   }
@@ -742,7 +1040,7 @@ export class GameHarness {
       velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     log.info('placed in orbit of the star', { system: target.id, speed })
     return this.status()
   }
@@ -812,7 +1110,7 @@ export class GameHarness {
       velocity: Vec.scale(placement.along, circularSpeed(body.mu, distance)),
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     this.#trackOrbit()
     log.info('framed shot', { shot: name, address: target.text, distance })
     return this.status()
@@ -857,7 +1155,7 @@ export class GameHarness {
       velocity: Vec.ZERO,
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     return this.status()
   }
 
@@ -958,7 +1256,7 @@ export class GameHarness {
       velocity: Vec.ZERO,
       angularVelocity: Vec.ZERO,
     })
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#handsOff(player)
     return this.status()
   }
 
@@ -977,7 +1275,7 @@ export class GameHarness {
   /** Aim the ship at a body and light the main drive. */
   burnToward(address: string, throttle = 1): HarnessStatus {
     this.#lookAt(this.#bodyPosition(address))
-    this.world.setControl(this.#requirePlayer(), vec3(0, 0, throttle), Vec.ZERO)
+    this.world.setThrottle(this.#requirePlayer(), throttle)
     return this.status()
   }
 
@@ -1238,6 +1536,28 @@ export class GameHarness {
   }
 
   /**
+   * The ship arm's own camera: which view it stands in, and where.
+   *
+   * The object, for the same reason the observatory is: a drag is forty
+   * calls a second. `ir.view` below is the verb worth typing.
+   */
+  get flightCamera(): FlightCamera {
+    return this.#flightCamera
+  }
+
+  /**
+   * Stand the flight camera in a view — `chase`, which flight is played in,
+   * or `orbit`, which the hull is looked at in — or cycle to the next with no
+   * argument. Nothing canonical moves: the ship is where it was, and only the
+   * eye beside it changes.
+   */
+  view(view?: FlightView): FlightCameraStatus {
+    return view === undefined
+      ? this.#flightCamera.cycleView()
+      : this.#flightCamera.setView(view)
+  }
+
+  /**
    * Look at something without going there.
    *
    * The planetarium's whole verb, and the difference from `goTo` is the point:
@@ -1330,19 +1650,79 @@ export class GameHarness {
     fovDeg: number
     picture: Picture
   } {
-    const picture = findPicture(id)
+    return this.takePicture(findPicture(id))
+  }
+
+  /** Keep a companion in the composition while orbiting the current body. */
+  target(address: string | null): ObserverStatus {
+    return this.#observatory.track(address)
+  }
+
+  capturePicture(id: string, label: string, why = ''): Picture {
+    if (this.cutsceneStatus() !== null)
+      throw new Error('Stop the cinematic before saving a camera shot.')
+    const framing = this.#observatory.capture()
+    const lens = this.#host.render.framingLens()
+    const picture: Picture = {
+      id,
+      label: label.trim(),
+      why,
+      seed: this.world.seedText,
+      generation: { ...GENERATION_VERSIONS },
+      time: this.#observatory.time,
+      address: this.#observatory.target!.address,
+      framing,
+      lens: { ...lens, focus: Number.isFinite(lens.focus) ? lens.focus : null },
+      processing: captureCameraProcessing(this.#host.render.cameraProcessing()),
+    }
+    if (!isPicture(picture))
+      throw new Error('The shot needs a name and a valid camera and lens.')
+    return picture
+  }
+
+  takePicture(picture: Picture): {
+    status: ObserverStatus
+    fovDeg: number
+    picture: Picture
+  } {
+    if (!isPicture(picture)) throw new Error('Invalid preset.')
+    if (
+      Object.keys(picture.generation).length !==
+        Object.keys(GENERATION_VERSIONS).length ||
+      Object.entries(GENERATION_VERSIONS).some(
+        ([key, version]) => picture.generation[key] !== version,
+      )
+    )
+      throw new Error(
+        'This preset uses a different universe generation version.',
+      )
+    if (picture.seed !== this.world.seedText)
+      throw new Error(`This preset needs universe seed "${picture.seed}".`)
+    // Resolve before changing the held time or lens, so a missing address leaves the picture intact.
+    resolveDestination(
+      picture.address,
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+    this.#observatory.validatePicture(picture.address, picture.framing)
     this.stopCutscene()
-    this.#observatory.focus(picture.address, { ease: false })
-    if (picture.framing.kind === 'cinematic') {
-      this.play(picture.framing.script)
-      this.pause()
-      this.seekCutscene(picture.framing.frame)
+    this.#host.render.setCameraProcessing(
+      captureCameraProcessing(picture.processing ?? DEFAULT_PICTURE_PROCESSING),
+    )
+    this.#observatory.setTime(picture.time)
+    if (picture.framing.kind === 'camera') {
+      const lens = picture.lens!
+      this.#host.render.setFlightLens({
+        ...lens,
+        focus: lens.focus ?? Infinity,
+      })
       return {
-        status: this.#observatory.status(),
-        fovDeg: picture.fovDeg ?? FLIGHT_FOV,
+        status: this.#observatory.restore(picture.address, picture.framing),
+        fovDeg: verticalFovDegrees({ ...lens, focus: lens.focus ?? Infinity }),
         picture,
       }
     }
+    this.#observatory.focus(picture.address, { ease: false })
     if (picture.framing.kind === 'rise') {
       /*
        * The rise solves its own lens from the geometry, so the stance comes
@@ -1522,6 +1902,30 @@ export class GameHarness {
   }
 
   /**
+   * Fly the camera from orbit down to a point on the ground, and stand there
+   * facing the star.
+   *
+   * The eased entry `visit` is not: the camera flies the ballistic arc over
+   * `seconds` of wall clock and the frame after this returns is the first
+   * frame of the descent, not the last. `ir.ascend()` abandons one in flight.
+   * Degrees at this boundary, radians below it, like `visit`.
+   */
+  drop(
+    latitude: number,
+    longitude: number,
+    options: { address?: string; seconds?: number } = {},
+  ): ObserverStatus {
+    return this.observatory.drop(
+      options.address,
+      {
+        latitude: (latitude * Math.PI) / 180,
+        longitude: (longitude * Math.PI) / 180,
+      },
+      options.seconds === undefined ? {} : { seconds: options.seconds },
+    )
+  }
+
+  /**
    * Fly a descent on paper and report what the streamer would be asked for.
    *
    * The unit of terrain measurement. Pure arithmetic — no world state changes,
@@ -1621,6 +2025,27 @@ export class GameHarness {
     return terrainZoo(this.world)
   }
 
+  /** Select a fixed external instrument without moving anything in the world. */
+  galaxyView(view: GalaxyView): ObserverStatus {
+    if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
+    this.stopCutscene()
+    return this.#observatory.viewGalaxy(view)
+  }
+
+  /** Travel from Earth to the disk with the player's camera and presentation time. */
+  galaxyJourney(progress = 0, seconds = 0): ObserverStatus {
+    validateGalaxyJourney(progress, seconds)
+    this.stopCutscene()
+    return this.#observatory.travelGalaxy(progress, seconds)
+  }
+
+  /** Field diagnostics read the current session without mutating generation. */
+  galaxy(): GalaxyInspector {
+    return new GalaxyInspector(this.world, () =>
+      this.#host.render.galaxyRender(),
+    )
+  }
+
   /**
    * The Phase 0 baseline: the zoo, a descent over each member, and the measured
    * cost of generating the patches those descents ask for.
@@ -1716,7 +2141,10 @@ export class GameHarness {
 
   /** The observatory's camera, or null when it has no target. */
   observerStatus(): ObserverStatus | null {
-    return this.#observatory.target === null ? null : this.#observatory.status()
+    return this.#observatory.target === null &&
+      this.#observatory.galaxyView === null
+      ? null
+      : this.#observatory.status()
   }
 
   /**
@@ -1739,9 +2167,11 @@ export class GameHarness {
       '  ir.dossier(address)           one star or body, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
-      '  ir.control({translation,rotation}) / ir.hold()',
+      '  ir.control({translation,rotation,throttle}) / ir.throttle(0..1) / ir.hold()',
+      '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
+      '  ir.rowsFor([address, …])      those places, as listing rows',
       '  ir.goTo(target)               a system id or a body address; does the right thing',
       '  ir.loadSystem(id)             generate a system without traveling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',
@@ -1768,15 +2198,21 @@ export class GameHarness {
       '  ir.chrome(false)              clear the interface — the plate state',
       '  ir.layers(false)              names and traces off, for a plate',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
+      "  ir.view('orbit' | 'chase')     stand the flight camera beside the hull, or behind it",
+      '  ir.flightCamera               that camera itself — drag, turn, zoom, recentre',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',
       '  ir.ascend()                   back to orbit, at the framing you left',
+      '  ir.drop(latDeg, lonDeg, {address, seconds})  fly from orbit down to the ground, facing the star',
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  the live streamer, and the rocks on it',
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
+      '  ir.galaxyJourney(p, seconds)  Earth orbit to 30 kpc above the disk, progress 0–1',
+      '  ir.galaxyView(view)           fixed face-on or edge-on planetarium instrument',
+      '  ir.galaxy()                   stellar field samples, counts, and CPU plates',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.timing(level?)             off | trace | full — what reaches the timeline',
       '  ir.timing.tracks() / .mark(name) / .drain()',

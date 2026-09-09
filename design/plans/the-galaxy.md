@@ -1,36 +1,57 @@
-# The galaxy and the sensor: Earth to the whole Milky Way
+# The galaxy: Earth to the whole Milky Way
 
 Build a continuous journey from Earth orbit to 30 kpc above the galactic plane,
-using one versioned model for the sky, resolved stars and the view of the whole
-disk. This is the single implementation plan for the galaxy and the sensor work
-it needs. Each milestone is one session's target: **Milestone → Implement →
-Verify → PR**. The outside view arrives early, before local-sky caching and
-population refinement.
+using one versioned model for the sky, resolved stars and the whole disk.
+This plan owns physical light, dust, populations, cached-sky rendering and
+travel. [The camera plan](the-camera.md) owns the image through which the player
+sees that journey, following
+[ADR-0037](../../docs/adr/0037-the-enhanced-camera.md).
 
-The working base includes the sensor response and the terrain/optics lifetime
-branch, assuming its review completes and it merges to `main`. The
-implementation record is [ADR-0031](../../docs/adr/0031-the-sensor-response.md).
-This plan does not claim that branch has merged or that any milestone below is
-implemented.
+The M1–M6 planning baseline is [PR #70](https://github.com/jonjaques/inertialref/pull/70),
+`9911dd5`. The galaxy completion branch is
+`codex/galaxy-the-sky-keeps-its-detail`, open as
+[PR #73](https://github.com/jonjaques/inertialref/pull/73), explicitly stacked on
+[PR #72](https://github.com/jonjaques/inertialref/pull/72),
+`codex/the-camera-reveals-the-sky` at `2847688`. The user's selected base
+supersedes the older session-branch sketch below for this PR. Physical
+calibration remains independent of Enhanced image treatment.
 
-## What already works
+M7–M11 are implemented and the assembled verification record follows below.
+PR #73 records verified implementation `ee0e9e1` and evidence commit `78e00dc`.
+The [camera completion record](the-camera.md#camera-completion-record) follows
+PR #73 at `9e26512` and records the current night emission, camera continuity
+and return-frame evidence. Its
+[complete-frame operating points](the-camera.md#complete-frame-operating-points)
+record the bounded optical choice and native Retina ground limit. The
+camera's C1–C5 sequence is complete at `db34e2a`, including matched stills,
+final descent review and measured full-frame costs. The
+historical record below retains its original
+source, images and measured limits. Source morphology remains approximate,
+and lower survey CPU cost does not establish sustained 60 fps.
+[ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md) records active
+`galaxy@5`, physical `galaxy-field@5`, the resolved/diffuse partition, dust,
+cache and history contracts. Historical milestone rows retain their original
+verification and do not assert that an earlier PR has merged.
 
-| Area              | Implemented baseline                                                                                                                                                                  | Remaining work for this plan                                                                         |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Coordinates       | Galactocentric coordinates, the Sun's measured position, catalog astrometry and stable addresses.                                                                                     | Use the same frame throughout the volume, star field and camera journey.                             |
-| Local stars       | 7,123 catalog systems within 150 ly; deterministic stars in 20 ly cells; a 100 ly survey cube; up to 20,000 sprites.                                                                  | Distant bright stars, magnitude completeness, larger-scale population selection and dust extinction. |
-| Galaxy            | A simple double-exponential stellar density.                                                                                                                                          | Arms, bar, halo, dust, diffuse emission and a visible disk.                                          |
-| Sensor            | Lens exposure, pre-exposure, histogram metering and clamps, glare halo, defocus, motion, noise, vignetting, lateral color, SDR dither, white balance, response presets and P3 output. | Measure the faint galaxy through those responses and the complete frame cost.                        |
-| Resource lifetime | The reviewed branch gives heightfields fallback ownership, orbital bakes body-identity validity, live canvas-gamut negotiation and optical-pass warm/disposal ownership.              | Apply those contracts to volume targets, cached skies and their retirement.                          |
+## Implemented and measured
 
-Natural retains the production ACES fit, integrated star visibility, and
-analytic Sun glow and streak. Direct uses the lens exposure; the other Composite
-presets use physical stellar flux and a hue-preserving response. A calibrated
-diffuse galaxy must pass through the actual chain. Do not assume Natural's star
-treatment already makes the band visible, or rebuild the implemented sensor
-phases.
+| Area                    | Current implementation                                                                                             | Open acceptance or limit                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Coordinates and catalog | Shared galactocentric coordinates, measured Sun position, stable catalog addresses and distant bright stars.       | Q addresses require the recorded generation manifest.                                                 |
+| Field and transport     | `galaxy-field@5` / `galaxy-tsl@9`, shared dust, flared young population and calibrated V light.                    | Central morphology remains an approximation; photometry alone does not establish exterior appearance. |
+| Star population         | `galaxy@5`, magnitude levels, GPU shell projection, bounded selection, ensemble light partition and resolved dust. | Dense regions may omit whole levels; WebGL completes one source extinction column per submission.     |
+| Sensor                  | Enhanced, Automatic and Manual responses, with physical caches independent of presentation.                        | Sixteen matched C5 plates verified; appearance limits are recorded below.                             |
+| Resource lifetime       | Progressive cubes, a separate two-entry disk cache, temporal history and stale-work retirement.                    | Outward/return recordings and assembled gate pass; return hitches remain measurable.                  |
+
+Physical calibration and the displayed image have separate acceptance checks.
+Enhanced must show bright worlds and faint galactic structure together; its
+appearance is not an input to the field calibration.
 
 ## The galaxy integration PR
+
+The following is the original milestone workflow. The current completion PR
+uses the explicit PR #72 base recorded above; it does not rebase to `main` or
+create the historical integration branch as part of this completion.
 
 Use `codex/galaxy` as the cumulative integration branch and open its **Galaxy**
 PR against `main` once it contains the first verified milestone. Each session
@@ -59,7 +80,7 @@ main
 4. Every PR names its milestone, exact base, observable result, commands and
    measurements, known limitations, and the next milestone. Record its URL and
    verified commit in the ledger below. Passing tests do not mark a PR merged.
-5. Keep the integration PR's checklist current as milestones land. M11 is the
+5. Keep the integration PR's checklist current as milestones land. M11, including camera C5, is the
    release gate for merging it to `main`. Additional sensor effects and nearby
    galaxies are follow-up PRs and do not hold this integration open.
 
@@ -90,330 +111,335 @@ integration branch; M11 decides whether the assembled picture is ready for main.
 
 ## Milestones
 
-All rows start **planned**. Fill the evidence columns as work completes.
+M1–M6 retain their recorded physical implementation evidence. The completion
+record below covers the assembled M7–M11 implementation on the PR #72 base;
+its final images repeat camera C5 with the active population.
 
-| Milestone | Session result                                                     | Depends on        | PR / verified commit / evidence |
-| --------- | ------------------------------------------------------------------ | ----------------- | ------------------------------- |
-| M1        | The distant bright sky is cataloged and drawn.                     | Reviewed baseline | Planned                         |
-| M2        | The stellar field has a measurable shape from outside.             | M1                | Planned                         |
-| M3        | The planetarium renders the whole stellar disk.                    | M2                | Planned                         |
-| M4        | The camera travels from Earth to the disk through the sensor.      | M3                | Planned                         |
-| M5        | Shared dust transport dims and reddens the volume.                 | M4                | Planned                         |
-| M6        | Local clouds and photometric checks constrain the sky.             | M5                | Planned                         |
-| M7        | A progressive cached sky replaces the local live march.            | M6                | Planned                         |
-| M8        | Observer motion projects the star shell on the GPU.                | M7                | Planned                         |
-| M9        | Magnitude levels extend the population within a bounded draw.      | M8                | Planned                         |
-| M10       | Resolved stars receive the same dust extinction.                   | M9                | Planned                         |
-| M11       | Temporal rendering and the full journey pass the integration gate. | M10               | Planned                         |
+| Milestone | Session result                                                     | Depends on                     | PR / verified commit / evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------- | ------------------------------------------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1        | The distant bright sky is cataloged and drawn.                     | Reviewed baseline              | [PR #62](https://github.com/jonjaques/inertialref/pull/62) → `codex/galaxy`, from `codex/galaxy-the-bright-sky`; verified commit `1da7335` (gate green locally, 110 files, 1,671 tests). 7,515 systems at V ≤ 6.5 beyond 150 ly, 188 KB brotli; Orion's seven held to published directions within 0.02° and [drawn from 64,000 km above Earth](https://agentic-media-dumpster.jonjaques.com/2026/09/3u9ffd27xa/orion-3-marked.jpg); every cell inside 150 ly unchanged. Measurements in `CONTEXT.md`, 5 Sep 2026.                                                                                                                                                                                                                                                                                                                             |
+| M2        | The stellar field has a measurable shape from outside.             | M1                             | Open in [PR #63](https://github.com/jonjaques/inertialref/pull/63) on `codex/galaxy-the-stellar-field`, based on PR #62 at `76cef98`. `galaxy-field@2`; 0.1 star/pc³ at the Sun; 116.185 billion stars in the reference cylinder; six tangencies within 3°. CPU plates and report through `pnpm sim --galaxy-plates .scratch/galaxy-m2/plates-v2 --galaxy-width 384`. Initial v1 gate at `3936e35` passed; PR review adds runtime input guards, width-derived plate heights, and continuous width projection at arm kinks. The full count runs in the slow suite. `VITEST_MAX_WORKERS=2 pnpm check` passes at `33f50fb`: 1,717 regular tests, five slow tests, docs and production builds. Headless self-test passes 12/12. Targets PR #62’s branch.                                                                                          |
+| M3        | The planetarium renders the whole stellar disk.                    | M2                             | Open [PR #65](https://github.com/jonjaques/inertialref/pull/65) on `codex/galaxy-the-disk-is-visible`, targeting PR #63’s branch at `bdbfd93`; verified implementation `dfe75a2`. Fixed face-on/edge-on instruments, `galaxy-tsl@1`, full scene-depth composition and an owned rgba16f quarter-size target. CPU/GPU fields and 33 rays stay within 1%; all 69 GPU tests pass. At 1920×1080 on Apple M5: 0.989 MiB target, 10.58–10.61 ms added face-on and 23.14–23.31 ms edge-on. The 2 ms target, dust, continuous travel and temporal reuse remain open. Full gate: 1,723 regular tests and five slow tests; headless self-test 12/12. Captures are attached to PR #65; measurements and lifecycle evidence are in `CONTEXT.md`.                                                                                                           |
+| M4        | The camera travels from Earth to the disk through the sensor.      | M3                             | Open in [PR #66](https://github.com/jonjaques/inertialref/pull/66), `codex/galaxy-earth-to-the-disk` → PR #65’s branch at `d980228`; verified implementation `7b612a1`, complete evidence ledger `8235d85`. [Execution plan](galaxy-m4-earth-to-the-disk.md); full outward/return capture and matched response plates in `.scratch/galaxy-m4/`. `pnpm check`: 1,742 regular tests, five slow tests, docs and build; physical GPU: 71 tests; headless: 12/12. Exposure clipping and 11–38 ms added volume cost remain explicit limits. [Journey recording](https://agentic-media-dumpster.jonjaques.com/2026/09/qxvm25qiw7/journey.mp4) and response plates are attached to PR #66.                                                                                                                                                            |
+| M5        | Shared dust transport dims and reddens the volume.                 | M4                             | Feature implementation verified locally at `1d12369` on `codex/galaxy-light-through-dust`, from PR #66 at `837be56`. `galaxy-field@3`, `galaxy-tsl@3`; 1,784 regular tests, five slow tests, 74 GPU tests, headless 12/12. Inside/outside captures in `.scratch/galaxy-m5/`. **Performance run the same day:** the volume holds its target between changes of view (0.17 ms a frame at rest in the browser, against 113–357 ms a draw before), the dust texture is filtered to what a texel resolves (edge-on 53 → 10.8 ms a moving draw at 240×135), `galaxy-tsl@4`, orbit traces present at one brightness at every exposure. [Handoff and record](galaxy-performance-handoff.md). Open [PR #67](https://github.com/jonjaques/inertialref/pull/67), targeting M4; the daylight orbit follow-up and current verification are recorded there. |
+| M6        | Local clouds and photometric checks constrain the sky.             | M5                             | [PR #70](https://github.com/jonjaques/inertialref/pull/70), `9911dd5`: physical model and linear photometry implemented, `galaxy-field@4` / `galaxy-tsl@5`. Source conventions and verification are recorded in ADR-0032. Enhanced treatment and final appearance acceptance belong to camera C2/C5.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| M7        | A progressive cached sky serves ordinary Enhanced views.           | M6 baseline; C2 for acceptance | Implemented: shared arm table, progressive physical cubes, measured 0.15 pc reuse, independent disk archive and lifecycle regressions. Final quality measurements below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| M8        | Observer motion projects the star shell on the GPU.                | M7                             | Implemented: integer sector/subcell GPU projection, stable motion IDs, partial source uploads and absolute-V visibility. Equal-load CPU preparation and 20k/100k/200k GPU measurements below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| M9        | Magnitude levels extend the population within a bounded draw.      | M8                             | Implemented: galaxy@5 magnitude levels, V8/100k/1m/2000 budgets, catalogue completeness, ensemble light partition and legacy P/Q manifest tests. Ten-thousand-cell slow property passes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| M10       | Resolved stars receive the same dust extinction.                   | M9                             | Implemented: shared observer-to-source dust, catalogue Solar correction, 1024-source GPU cycles and bounded WebGL fallback. Physical CPU/GPU columns and continuous-travel queue tests pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| M11       | Temporal rendering and the full journey pass the integration gate. | M10 + C5                       | Renderer implemented: interleaved physical history, cut/disocclusion/resize/version retirement, stationary detail retention and WebGL shader regression. Sixteen C5 plates and two 2,400-frame journeys recorded; exact state/lens/mode invariants pass. The completion record retains image and return-frame limits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
-### M1. The distant bright sky
+### M1–M5. Implemented foundation
 
-**Milestone.** Orion's brightest stars appear at their catalog directions from
-Earth. This is the first session and the first implementation PR.
+[ADR-0032](../../docs/adr/0032-the-stellar-field.md) records the distant bright
+catalog, versioned field, live volume, travel and dust transport. The ledger
+above carries the verification references. Those implementation recipes are
+complete and are not a second backlog.
 
-**Implement.** Extend `apps/ingest` with `stars-sky.irsc`, starting with HYG
-sources of apparent V ≤ 6.5 beyond 150 ly. Load and resolve those identities
-alongside the local catalog. Add a sky selection path that reaches them without
-expanding the travel survey. Deduplicate the two selections by identity and
-measure the magnitude distribution for the later completeness rule. Keep the
-current sprite ceiling; use a stable brightness selection if the union exceeds
-it. Rebuild assets through the ingest, with the existing attribution contract.
-
-**Verify.** Assert Orion's seven brightest catalog directions and capture them
-from Earth orbit. Check duplicate IDs, catalog resolution, and unchanged survey
-counts inside 150 ly. Measure the actual asset bytes and cold-load impact
-against the 4 s download budget; the reference's 60 KB estimate is not a result.
-
-**PR.** `codex/galaxy-the-bright-sky` → `codex/galaxy`. Include the catalog
-report, sky capture and download measurement. No dust or new population levels.
-
-### M2. The stellar field and CPU reference
-
-**Milestone.** CPU plates show the bar, arms, disk and halo from outside.
-
-**Implement.** Introduce the pure, seeded, versioned field in
-`packages/universe/src/galaxy/`: stellar populations, arm geometry, bar/bulge,
-thick disk, halo and warp. Add a CPU emission integrator and headless face-on,
-edge-on and observer-centered plates through `openSession`/`pnpm sim`. Expose
-sample values and the field version for inspection. Keep the existing active
-population generator until calibration is complete and M9 activates the field.
-
-**Verify.** Hold the Sun's density to `LOCAL_DENSITY`, arm tangencies within 3°,
-finite nonnegative samples, order independence and total stellar count in the
-reference range. Compare plates at fixed seeds and expose the integral and
-normalization numbers. The observer-centered plate is emission-only at this
-milestone, so it cannot pass a dust-calibrated sky test yet.
-
-**PR.** `codex/galaxy-the-stellar-field` → `codex/galaxy`. Include plates and
-field checks. Record the field version separately from the active generation
-version so the preview cannot silently regenerate existing systems.
-
-### M3. The first live whole-disk view
-
-**Milestone.** The planetarium can display the galaxy face-on and edge-on.
-
-**Implement.** Port M2's field and ray integral to one TSL kernel. Draw a
-bounded live volume at quarter resolution from fixed galactic viewpoints, using
-the existing scene and sensor chain. Add depth composition, warm-up
-registration, resize and disposal ownership, and diagnostics. Start with
-deterministic full updates of the low-resolution target; temporal history
-belongs to M11. Use an explicit instrument exposure for these initial views.
-
-**Verify.** Compare CPU and GPU field samples and complete rays within 1% using
-nonzero cases plus absolute tolerances near zero. Capture face-on and edge-on
-views, a foreground body's occlusion, and resize/remount behavior. Measure GPU
-cost and memory on the stated rig. The 2 ms target is still open, and dust is
-visibly absent.
-
-**PR.** `codex/galaxy-the-visible-disk` → `codex/galaxy`. This is the first
-whole-galaxy result. Include the two views and a measured cost, with the omitted
-dust and temporal work stated explicitly.
-
-### M4. Earth to the galaxy through the sensor
-
-**Milestone.** One camera travels from Earth orbit to 30 kpc above the plane.
-
-**Implement.** Raise the planetarium ceiling from 100 ly toward 100 kly, through
-its existing camera and lens producers. Extend the live integrator to interior
-observers with distance-appropriate sampling. Route diffuse emission through
-pre-exposure and the implemented response modes. Give the galaxy instrument a
-stated exposure; measure Direct, Neutral and Natural separately. Expose the
-observer frame, exposure and field version in diagnostics. Keep the local survey
-bounded as the camera moves; the disk never requests every cell it sees.
-
-**Verify.** Record the complete outward and return journey as a `--cast`. Check
-orientation, finite camera/lens values, foreground occlusion and absence of
-black frames or camera jumps. Confirm a frozen camera cannot write canonical
-world state. Capture identical views through the three responses, including a
-bright body beside the faint field. Record exposure limitations here; final
-photometric acceptance waits for M6.
-
-**PR.** `codex/galaxy-earth-to-the-disk` → `codex/galaxy`. Include the cast and
-response comparison. The game now demonstrates its largest scale before sky
-caching, population expansion or temporal optimization.
-
-### M5. Dust transport
-
-**Milestone.** The same dust field shapes the view from inside and outside.
-
-**Implement.** Add the smooth dust disk, seeded small-scale structure, arm-lane
-offsets and wavelength-dependent extinction to the CPU field and TSL kernel.
-Integrate emission and transmittance front to back. Keep the field and CPU/GPU
-versions explicit. Named local clouds belong to M6.
-
-**Verify.** Properties cover zero-dust identity, bounded transmittance,
-increasing attenuation with column depth, and seed/order independence. Hold GPU
-rays to the CPU and test numerical convergence with increased sample counts.
-Capture a dusty edge-on disk and an interior band at the same field version.
-Measure the extra frame cost.
-
-**PR.** `codex/galaxy-light-through-dust` → `codex/galaxy`. Include matched
-inside/outside plates, transport checks and cost. Resolved-star extinction
-remains M10; note that temporary mismatch in the integration checklist.
+[M4's execution record](galaxy-m4-earth-to-the-disk.md) retains the exposure
+comparison: 2,400 s clips Earth while 1/40,000 s loses the galaxy, 26.5165 stops
+apart at the same aperture and ISO. This remains photographic evidence.
+Enhanced has a different acceptance requirement under camera C2 and C5.
+[The M5 performance record](galaxy-performance-handoff.md) and
+[performance findings](perf.md#the-galaxy) retain measured costs and sampling
+constraints. Natural daylight omission is baseline evidence only.
 
 ### M6. The local sky and calibration
 
-**Milestone.** Earth sees a sky whose orientation, dust landmarks and brightness
-can be checked.
+The physical model and linear photometry are implemented in
+[PR #70](https://github.com/jonjaques/inertialref/pull/70), based on PR #69.
+[ADR-0032](../../docs/adr/0032-the-stellar-field.md#the-local-sky-and-linear-calibration-m6)
+records the nine local cloud approximations, Local Bubble, source conventions,
+calibration residuals and verification. That milestone used
+`galaxy-field@4` with port `galaxy-tsl@5` and left active generation unchanged.
+The completion record below supersedes those versions.
 
-**Implement.** Add the Local Bubble and the named local clouds from the
-reference, with source records for their positions, extents and columns. Fit
-emission and population constants against the supported photometric checks.
-Verify source conventions before transcribing arm fits or adopting a numerical
-target. Record how Natural displays the calibrated diffuse sky; any declared
-processing follows ADR-0031 and gets an explicit decision if its behavior
-changes.
-
-**Verify.** Check the galactic center and pole, the Aquila Rift's direction, CPU
-and GPU sky brightness within 0.3 mag of supported targets, total luminosity,
-and local population normalization together. Freeman's central brightness is a
-model comparison until its applicability is established; an unread source is an
-open gate, not permission to tune toward it. Repeat M4's exposure plates with
-dust. Update constants and their version together.
-
-**PR.** `codex/galaxy-the-calibrated-sky` → `codex/galaxy`. Include source
-provenance, calibration residuals and a reference comparison. If evidence
-requires revising a target, document the reason rather than widening tolerance.
+The V-band checks use linear radiance, and fixed-exposure Direct plates verify
+renderer integration. Neither Natural visibility nor Enhanced appearance is a
+calibration input. Source corrections in the reference below replace
+unsupported targets without widening the 0.3 mag tolerance. Camera C2 owns
+visibility processing and C5 owns the final default image; those are the
+remaining presentation requirements, rather than unfinished physical M6 work.
 
 ### M7. A cached sky with an owned lifetime
 
-**Milestone.** Flight inside a system samples a cached version of the live sky.
+Implemented. A shared 2048² arm table serves both cube and live kernels. The
+physical sky refines through 32², 128² and 512² faces in bounded tile batches.
+A written observer and field/selection fingerprint governs reuse; response and
+display-gamut changes reuse the physical cache. Canceled work, jumps, renderer
+retirement and stale asynchronous loads cannot publish into a newer selection.
 
-**Implement.** Bake the same kernel progressively into a cubemap, beginning at
-128² and measuring 512²/1024² tiers. Tile dispatches, register boot progress,
-and cache by field version and observer location. A written record owns the
-observer/parallax validity budget and resources. Moving beyond that budget uses
-the live volume until a valid bake is ready; cancellation, version changes,
-resize and renderer retirement cannot publish stale results.
-
-**Verify.** Compare baked and live rays at several directions and observer
-positions within 1%. Prove stale/canceled bakes cannot publish. Measure cold
-bake, warm cache, peak memory and steady sampling cost against the reference
-budgets. Record outward and return crossings of the 0.15 pc proposed boundary as
-a cast, including a jump or remount during a bake.
-
-**PR.** `codex/galaxy-the-cached-sky` → `codex/galaxy`. Include lifecycle
-regressions, the crossing cast and measured budgets. A blend cannot conceal a
-CPU/GPU or bake/live disagreement.
+Completed WebGPU cubes can survive reload in a separate, regenerable IndexedDB
+cache. Its two entries contain physical half-float faces, exact observer,
+field/kernel/quality versions and the resolved envelope. Reads validate content
+and the actual 0.15 pc displacement; failed storage is a cache miss. The save
+database carries no sky pixels. Measured quality and costs follow below; final
+crossing and reload behavior in the assembled journey remain part of M11.
 
 ### M8. The star shell follows the observer on the GPU
 
-**Milestone.** Translation stops rewriting every star position on the CPU.
+Implemented. Integer sectors, cell-relative source positions and observer
+uniforms replace per-frame CPU shell projection. Stable IDs carry motion across
+source replacement; partial uploads update changed sources. Absolute V
+luminosity drives physical flux and the authored visibility response.
 
-**Implement.** Upload cell-relative star positions and cell offsets when the
-selection changes. Project onto the shell in the vertex stage from an observer
-uniform. Preserve star identity, existing visibility and correct velocity data.
-Retain the current population and sprite ceiling for a comparable measurement.
-
-**Verify.** Compare CPU reference and GPU projected directions across observer
-translations and anchor changes. Check rebasing, paused motion and real star
-velocity. Measure upload counts and `Render/starfield` during the same warp
-scenario as the perf reference, whose 0.62–0.79 ms is the comparison baseline.
-
-**PR.** `codex/galaxy-the-gpu-star-shell` → `codex/galaxy`. Include projection
-checks, a sky capture and before/after measurements at equal star counts.
+Projection, rebasing, stable identity and motion regressions pass. The equal-load
+preparation comparison and 20k/100k/200k draw measurements are recorded below.
+New-selection and broad-reorder work still have measurable CPU tails.
 
 ### M9. Magnitude levels and the population version
 
-**Milestone.** The sky reaches beyond local cells without unbounded generation.
+Implemented in `galaxy@5`. Nine disjoint luminosity bands have level-owned cells
+and seeded bounded selection. The production request is V8 with ceilings of
+100,000 sprites, 1,000,000 candidates and 2,000 cells. Recorded catalog coverage
+replaces the old spherical completeness assumption. Travel queries resolve and
+find coarse-level identities independently of the sky selection.
 
-**Implement.** Activate the calibrated density field for the population, with an
-explicit generation-version change. Introduce disjoint luminosity bands on cells
-seeded by `(level, cell)` and the catalog-derived magnitude completeness rule.
-Select by observable brightness with a measured ceiling up to 200,000 sprites.
-Remove those resolved sources from diffuse emission so their light is counted
-once. Keep travel queries independent of sky selection.
+The resolved envelope carries its actual origin, retained magnitude threshold
+and level mask. A source ceiling tightens the threshold; omitted bands remain
+diffuse. Integrating the resolved and diffuse luminosity moments reconstructs
+the calibrated total exactly in the ensemble. A finite catalog and procedural
+realization has a sampling residual; it is not an atom-by-atom subtraction from
+the smooth field.
 
-**Verify.** Sample ten thousand cells for completeness violations, duplicates,
-order independence and stable identities. Verify band ownership, bounded work at
-local/regional/galactic scales and conservation across the resolved/diffuse
-split. Compare expected counts around Sol with the agreed local tolerance.
-Measure memory and frame cost at the proposed ceiling; lower it explicitly if it
-fails. Record manifest and save-compatibility consequences.
-
-**PR.** `codex/galaxy-the-magnitude-population` → `codex/galaxy`. Include
-properties, version changes and performance evidence. This is the one activation
-step for the calibrated population, not an unrecorded density replacement.
+The ten-thousand-cell slow property covers completeness, duplicates and order
+independence. Manifest regressions preserve legacy P generation and report Q
+version drift. Q addresses depend on the recorded generation manifest; an old
+high index can fail explicit resolution after a population change rather than
+silently naming a different index. Final field@5 operating points follow below.
 
 ### M10. Extinction on resolved stars
 
-**Milestone.** Stars behind a dark lane dim and redden with the surrounding sky.
+Implemented. The same dust field integrates only to the source distance, with
+32/64/512 samples selected by distance and spacing concentrated near the disk
+crossing. Catalog stars receive a Solar-reference correction so already
+observed photometry is not attenuated twice.
 
-**Implement.** Integrate the shared dust between the observer and each resolved
-star, bounded by the star's actual distance. Apply per-channel extinction to its
-flux. Start with the proposed sixteen samples and measure error against the CPU
-reference before choosing a final sampling or caching strategy.
-
-**Verify.** Stars in front of a cloud remain unaffected by dust behind them;
-background stars follow the expected attenuation. Test transparent rays and
-strong columns on CPU and GPU, and inspect the Aquila Rift with the expanded
-population. Recheck the resolved/diffuse split and measure the added cost at the
-selected sprite ceiling.
-
-**PR.** `codex/galaxy-the-obscured-stars` → `codex/galaxy`. Include foreground
-and background cases, sky plates and the measured extinction budget.
+Retained GPU columns update in cycles of at most 1,024 sources. Travel does not
+restart every pending cycle. CPU/GPU column, foreground/background and queue
+regressions pass. WebGL uses one CPU source column per submission; unresolved
+columns converge progressively, so its first complete star field is slower.
 
 ### M11. Temporal volume and integration acceptance
 
-**Milestone.** The assembled Earth-to-galaxy journey is ready for the Galaxy PR.
+The renderer is implemented. Physical temporal history retains fine stationary
+detail and retires on cuts, disocclusion, resize, version changes and renderer
+retirement. Production uses a half-resolution target with stride 8 and a
+960-pixel maximum long edge. The scene and resolved stars retain their own
+resolution. The measured live-volume budget revision follows below.
 
-**Implement.** Add quarter-resolution temporal reprojection to the measured live
-volume. Own history validity across camera cuts, disocclusion, field versions,
-exposure changes, resolution changes and renderer retirement. Tune sample
-spacing and cache transitions from measurements. Add the small-angular-size
-fallback only if the measured operating points need it.
+The production build at `ee0e9e1` passes the assembled repository gate and
+sixteen exact public-picture checks. Outward and return recordings cover the
+full route with unchanged canonical hash, camera mode and lens. This is author
+verification for a ready PR; it is not a claim of the user's artistic approval.
+The return's frame-time spikes and the model's smooth morphology remain visible
+in the attached evidence.
 
-**Verify.** Run the full repository gate at the rebased integration tip and
-repeat CPU/GPU agreement and calibration. Record outward and return travel
-through local, regional and galactic scales with no visible representation
-switch, ghost trails or blank frames. Capture face-on, edge-on and Earth-orbit
-views. Measure live volume against **2 ms at 1080p**, cached sampling against
-**0.05 ms**, memory, cold boot and the complete sensor/atmosphere/galaxy frame.
-State GPU, backend, dimensions and DPR for every result. Document a deliberate
-budget revision or a tested quality fallback if a target cannot be met; an
-unmeasured target remains open.
+### Completion measurements, 7 September 2026
 
-**PR.** `codex/galaxy-the-continuous-journey` → `codex/galaxy`, followed by the
-final update to **Galaxy** → `main`. The integration description carries the
-cast, plates, calibration results, performance table, shipped quality levels and
-remaining follow-ups. Verify the cumulative tip after the last child merge.
+The source record is `.scratch/galaxy-finish/` on the completion branch. GPU
+figures use the Apple M5 and WebGPU; they measure isolated work through the
+repository GPU timestamp helper, not the complete presented frame. Node 26.5
+population figures run the production worker task and host selection inline,
+with the default session seed and shipped catalog. They exclude IPC and dust.
+
+| Physical sky measurement                 | Result and scope                                                                                                                                                                                            |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 512² cube, corrected `cube@2` footprint  | 3.829 s drained cold bake; isolated three-target allocation 36 MiB; maximum relative RGB error 0.629% across 72 arbitrary directions and 0.086% at 12 texel centers.                                        |
+| Cube sampling                            | 0.030–0.047 ms across the measured 960×540 and 1440×900 sampling targets.                                                                                                                                   |
+| 0.15 pc reuse at field@5                 | 3,120 translated rays from 21 origins; worst coarse error 0.710%, with 0.25 pc-step rechecks below 0.661%. The 1% budget is unchanged.                                                                      |
+| 100k star draw                           | 0.687 ms median added GPU time at 1920×1080, 4× MSAA, sensor MRT, downstream optics bypassed and retained transparent extinction. The 20k and 200k controls add 0.343 and 1.254 ms.                         |
+| Replacing 10% of a 28,942-source fixture | CPU preparation median 9.802 → 3.000 ms; p95 11.747 → 4.419 ms. Broad reordering is 4.877 ms median, 8.261 ms p95 after the change. These are earlier fixed-population comparisons, not new field@5 counts. |
+
+The original live-volume **2 ms at 1080p** budget is deliberately revised.
+The uncapped half-resolution/stride-8 inside view measures **6.366 ms** at
+1920×1080, and 12.693 ms at 2880×1800. The chosen spatial detail costs more
+than that original target; cached ordinary views stay near 0.03–0.05 ms. The
+production 960-pixel cap bounds target/history growth while retaining that
+sampling detail. It does not establish a universal 2 ms live path.
+
+| Moving live volume, production half resolution / stride 8 / cap 960 |  Face-on |  Edge-on |   Inside | Volume + shared-table bytes |
+| ------------------------------------------------------------------- | -------: | -------: | -------: | --------------------------: |
+| 1920×1080 drawing buffer                                            | 2.225 ms | 4.501 ms | 6.296 ms |                  29,284,096 |
+| 2880×1800 drawing buffer                                            | 2.460 ms | 5.525 ms | 7.399 ms |                  30,673,216 |
+
+Each result measures 40 moving draws with 0.2 pc translation per draw and a
+V8/mask-511 envelope. The 1080p target is 960×540; the larger buffer uses
+960×600. These are physical volume costs, excluding the native scene, stars and
+sensor. `capped-galaxy-summary.json` records the verified cap at `434009f`.
+
+| Field@5 V8 observer     | Procedural + catalog | Candidates / cells | Retained levels | Worker median | Host apply median | Observed peak heap |
+| ----------------------- | -------------------: | -----------------: | --------------- | ------------: | ----------------: | -----------------: |
+| Sol                     |      19,243 + 10,014 |      213,380 / 544 | 0–8             |    119.722 ms |         10.443 ms |         139.69 MiB |
+| 1 kpc toward the center |         36,634 + 789 |      322,669 / 512 | 0–8             |    172.355 ms |         17.415 ms |         180.87 MiB |
+| Galactic center         |           16,001 + 3 |      287,681 / 576 | 0–1             |    132.045 ms |          7.892 ms |         158.60 MiB |
+
+All retain V8, stay inside the three ceilings and repeat without duplicate IDs.
+At the center, the remaining levels cannot fit the candidate budget and stay
+fully diffuse. Generation runs off the main thread in production; **it does not
+meet a five-millisecond CPU-query target**. Host application occurs per survey,
+not per frame. Heap figures are sampled combined inline worker/host peaks from
+a separate pass, not exact V8 maxima or isolated browser-worker memory. The
+serialized worker payloads are 5.05–11.64 MiB.
+
+Solar 10/25/50 pc balls contain 389/6,788/53,532 catalog-plus-procedural stars,
+against field integrals of 418.924/6,549.357/52,109.668: −7.14%, +3.64%, +2.73%.
+The local density remains 0.1 star/pc³ and the integrated reference count is
+116.064 billion. The four V calibration residuals are +0.077, +0.178, −0.280
+and +0.033 mag, inside the unchanged 0.3 mag tolerance. The young-height
+correction shares one density profile with diffuse and resolved light; it does
+not independently validate the approximate central morphology.
+
+Source files: `cube-footprint-summary.json`, `cube-quality.log`,
+`cache-radius-field5-summary.json`, `starShell-gpu-benchmark.jsonl`,
+`star-replacement-pair*.json`, `final-quality-bench.log`,
+`capped-galaxy-summary.json`, `field5-operating-summary.json` and
+`population-height-plate.json` in that scratch directory.
+
+### Assembled image and motion record
+
+This is the PR #73 record at `ee0e9e1`. The
+[camera completion record](the-camera.md#camera-completion-record) supersedes
+its night-emission and camera-continuity findings and adds matched return
+traces. The physical morphology and whole-frame caveats below remain applicable.
+
+All images use the production source at `ee0e9e1`, Apple M5, Chrome 152,
+WebGPU, sRGB SDR and MSAA 4. The sixteen camera fixtures use native
+1920×1080 / DPR 1, with identical pose, time and lens in each Enhanced /
+Automatic / Manual triplet. Public URL restoration preserves every encoded
+field, including the 1/3200 s shutter. The parent preference binding runs
+before the route restores its photograph.
+
+[Earth and band](https://agentic-media-dumpster.jonjaques.com/2026/09/h7ufhup55u/triplet-earth-band.jpg),
+[Luna](https://agentic-media-dumpster.jonjaques.com/2026/09/r4rakwrbnu/triplet-luna.jpg),
+[night side](https://agentic-media-dumpster.jonjaques.com/2026/09/fqbc4tqrdx/triplet-night.jpg)
+and [Bennu](https://agentic-media-dumpster.jonjaques.com/2026/09/x3az4a68s7/triplet-bennu.jpg)
+show the matched modes. Enhanced retains foreground relief and the sky;
+Automatic and short Manual suppress faint sky beside a lit subject. The
+[2,400 s Manual exposure](https://agentic-media-dumpster.jonjaques.com/2026/09/749er9thf4/camera-review-earth-band-manual-long.png)
+reveals the band and clips Earth. Bodies occlude the band and stars, with no
+observed sky-through-disk or reversed dust lane.
+
+The [outward cast](https://agentic-media-dumpster.jonjaques.com/2026/09/f654hxpc66/cast.mp4)
+and [return cast](https://agentic-media-dumpster.jonjaques.com/2026/09/yrbzpaa8yy/cast.mp4)
+each contain 2,400 compositor frames. Both finish the 36-second presentation
+journey, preserve canonical hash `98b5b2be` and retain the same Enhanced mode
+and lens. Sampling includes a short held tail. Neither cast reports isolated
+frames; because the camera moves, that detector alone does not prove an absence
+of every artifact. Reviewed scale samples retain the sky and show no blank
+representation switch. [Earth orbit](https://agentic-media-dumpster.jonjaques.com/2026/09/nxjjmbizyx/orbit.png),
+[exterior](https://agentic-media-dumpster.jonjaques.com/2026/09/9xd33s2t35/exterior.png)
+and [edge-on instrument](https://agentic-media-dumpster.jonjaques.com/2026/09/9tfs94rja4/edge-on.png)
+are full-size plates from that run.
+
+| Complete app / sensor operating point, 1920×1080 DPR 1   | Measured result                                                               |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Outward compositor cast                                  | 59.7 fps over 40.21 s; rAF interval p95 18.0 ms, p99 18.7 ms, maximum 50.9 ms |
+| Return compositor cast                                   | 52.8 fps over 45.49 s; rAF interval p95 32.5 ms, p99 50.2 ms, maximum 150 ms  |
+| Held Enhanced Earth-band                                 | 4.257 ms / 60 queued complete sensor frames                                   |
+| Held Automatic Earth                                     | 4.562 ms / 60 queued complete sensor frames                                   |
+| Held Manual Earth-band, 2400 s                           | 5.043 ms / 60 queued complete sensor frames                                   |
+| Held journey exterior / returned orbit / edge instrument | 2.868 / 2.765 / 2.513 ms / 60 queued complete sensor frames each              |
+
+Compositor rates, paced frame intervals and drained GPU submissions measure
+different things. The return has 113 intervals above 25 ms and 26 above 50 ms
+among 2,209 sampled intervals; it does **not** establish sustained 60 fps.
+Most sampled slow frames occur while returning from outside the disk. The
+held GPU result is not a substitute for this moving-app limit.
+
+The visual limits are also measurable. At the Earth-band pose, removing cube
+filtering changes physical RGB by at most 0.38% across two 81-ray patches;
+broad RMS contrast remains about 13.1% at 512, 1024 or unfiltered resolution.
+Enhanced compresses that to about 10.0%. The smooth disks and Gaussian local
+clouds dominate the broad brown lobes; a larger cube would not create the
+missing projected structure. The exterior's central light fraction remains
+an approximate population model. Reference-matched dust morphology is further
+physical-model work, not a hidden quality setting.
+
+The night Automatic plate exposes an existing Earth source issue: the colorized
+Black Marble map contains blue land/ocean background, and the body shader emits
+that background together with city lights. The meter settles inside its comfort
+bounds at EV 8.388 and amplifies the hemisphere while stars remain below
+visibility. This fixture does not meet the proposed star-dominated night image;
+forcing more gain would amplify the source error. The galaxy PR does not alter
+Earth's night-emission material.
+
+The full `pnpm check` passes 2,010 regular tests in 153 files and eight slow
+tests, plus graph, presets, formatting, lint, all typechecks, documentation and
+production builds. `pnpm sim --self-test` passes 12/12. The final physical GPU suite passes 107 tests in 36 files on byte-identical
+`ee0e9e1` source. An initial run returned zero light in two dust tests; the
+cause remains unproven. Six focused reruns, 72 distinct freshly compiled
+shaders covering 864 rays, and two complete suite reruns pass without any
+production, test or tolerance change. The record retains that initial failure
+instead of claiming a diagnosed fix. The additional lifecycle
+run uses public mode changes and photographic pause/resume, then negotiates
+Extended display-P3 at 2× headroom through the real settings UI and returns to
+Standard sRGB with verified renderer replacement. At 1440×900 CSS / DPR 2,
+the native scene is 2880×1800, the physical history is 960×600, and 60 queued
+complete sensor frames average 6.410 ms. Extended and resized views restore
+one finished archive, with zero writes or failures.
+
+The [mode-switch recording](https://agentic-media-dumpster.jonjaques.com/2026/09/h8uwsrmxbk/cast.mp4)
+contains 360 compositor frames; the
+[pause/resume recording](https://agentic-media-dumpster.jonjaques.com/2026/09/kibamqkipn/cast.mp4)
+contains 240. Both have no isolated-frame flags or browser errors. Real WebGL
+orbit and external-instrument captures also render without errors; Automatic
+remains explicitly unsupported on that backend. Every owned Chrome rig and
+preview server is closed. No tolerances
+were relaxed to obtain these results. The detailed local records are
+`camera-acceptance/final-fixed/`, `journey-final/` and
+`earth-band-contrast-summary.json` under `.scratch/galaxy-finish/`.
 
 ## Follow-up sessions after the integration
 
-These retain the open galaxy and sensor work without making the first complete
-journey depend on it. Each row is a separate Milestone → Implement → Verify → PR
+These retain galaxy follow-ups without making the first complete journey
+depend on them. Deferred optics, spectral response and photo workflow live in
+[the camera plan](the-camera.md#scope-that-waits). Each row is a separate Milestone → Implement → Verify → PR
 cycle; split a row further if its measured work exceeds one session.
 
 | Milestone            | Implement                                                                                       | Verify                                                                                                   | PR and dependency                                                     |
 | -------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | H II knots           | Seed arm-bound emission clumps and OB light from the shared field; carry line emission as data. | Determinism, arm/height placement, CPU/GPU emission agreement, luminosity budget and outside-view plate. | Galaxy follow-up after M11; enables spectral filters.                 |
 | Globular clusters    | Ingest a cited cluster catalog and render measured positions, magnitudes and half-light radii.  | Catalog round trip, identity, Omega Centauri and 47 Tucanae positions, halo plate and draw budget.       | Independent galaxy follow-up after M11.                               |
-| Iris sampling        | Use each glass record's blades and rotation in the existing defocus pass.                       | Blur shape for each glass and the half-pixel circle-of-confusion gate.                                   | Sensor follow-up; no galaxy dependency.                               |
-| FFT kernel           | Bake a diffraction kernel from the iris and expose its energy and orientation diagnostics.      | Energy conservation, spike symmetry, aperture scaling and kernel rebuild cost.                           | Sensor follow-up after iris sampling.                                 |
-| FFT convolution      | Convolve the bright-source image at the selected quality tier and own its warm/disposal paths.  | Whole-chain energy, captures, bypass behavior and the proposed 1.5 ms budget at 1080p.                   | Dependent PR on the FFT kernel.                                       |
-| Spectral attachment  | Carry Hα/OIII/SII through a spectral emission attachment with explicit units.                   | CPU/GPU line values and broadband output equivalence with the attachment disabled.                       | Dependent on H II emission.                                           |
-| Narrowband response  | Map the line channels through a declared filter and instrument readout.                         | Filter channels, exposure, P3/sRGB output and a nebular-knot comparison.                                 | Dependent on the spectral attachment.                                 |
-| Photo export         | Export a held frame with the selected output encoding and recorded camera settings.             | Dimensions, color declaration, paused-frame repeatability and chrome-free output.                        | Sensor follow-up; uses the implemented camera controls.               |
-| Tether controls      | Define and implement the photo control workflow through existing lens and camera producers.     | Control/readout agreement and a complete held-shot interaction.                                          | Separate photo PR; settle its UI scope before implementation.         |
-| Display headroom     | Recheck the browser capability and implement discovery only if a measured signal exists.        | Explicit peak cap, unsupported-browser behavior and real canvas/encoder agreement.                       | Optional sensor follow-up; the authored cap remains supported.        |
 | Neighboring galaxies | Add one parameter record at a time for the LMC, SMC and M31, including representation limits.   | Direction, angular size, brightness, coordinate range and culling.                                       | One PR per neighbor; M31 needs a far-field addressing decision first. |
 | Horizon of knowledge | Derive the galaxy map's coverage surface from the catalog completeness record.                  | Per-class coverage and observed/projected labeling.                                                      | Separate map interaction plan and PR.                                 |
 | Zodiacal light       | Specify the solar-system dust field and integrate it at AU scale.                               | A separate calibration and sampling plan.                                                                | Separate emitter plan; reuses the sensor contract.                    |
 
 ## Sensor contract and remaining specifications
 
-The implemented chain and its deliberate departures from the proposal live in
-[ADR-0029](../../docs/adr/0029-the-sensor-spine.md) and
-[ADR-0031](../../docs/adr/0031-the-sensor-response.md). Those records govern
-exposure, pre-exposure, the CPU reduction after asynchronous histogram readback,
-packed velocity/reciprocal depth, Natural's production response, and owned
-optical resources. The phase lists from the sensor proposal are not outstanding
-implementation work.
+[ADR-0029](../../docs/adr/0029-the-sensor-spine.md) owns the chain, and
+[ADR-0037](../../docs/adr/0037-the-enhanced-camera.md) owns camera direction.
+The implementation sequence and deferred sensor work live in
+[the camera plan](the-camera.md). Exposure, pre-exposure, optical resource
+ownership and output negotiation in ADR-0031 remain the implemented baseline.
 
-For the galaxy, diffuse radiance stays in stated physical units until the sensor
-response. The bake may store nW m⁻² sr⁻¹ to preserve half-float precision, but
-the scene conversion must state its spectral assumptions before producing cd/m².
-A global exposure has to preserve the faint sky when it is the subject and avoid
-claiming it remains physically visible beside a sunlit hull. Natural's declared
-integration and the map's stated fixed gain are distinct contracts. M4 and M6
-measure both rather than inferring behavior from a formula.
+Diffuse radiance stays in stated physical units until presentation. A bake can
+store nW m⁻² sr⁻¹ to preserve half-float precision, but its conversion to cd/m²
+must state its spectral assumptions. The response consumes calibrated input;
+it cannot alter field constants to make the image work. Enhanced's declared
+compression, Automatic's meter and Manual's lens exposure have separate image
+checks. Fixed galaxy instruments remain useful for photometry without forcing
+ordinary travel into a long exposure.
 
-The full performance matrix remains open. Record the scene/resolve/output,
-histogram/readback, glare, defocus, motion, detector/output, atmosphere, star
-field, live volume and cached-sky costs at the same operating points. The sensor
-proposal assigns 0.15 ms to spine/resolve/blit, 0.05 ms to metering, 0.40 ms to
-the halo, 0.80 ms to active defocus, 0.60 ms to active motion and 0.20 ms to
-detector/output at 1080p on the target laptop. These are budgets, not measured
-headroom for adding a 2 ms galaxy pass. Measure overlapping GPU work through the
-actual chain instead of adding incompatible span timings.
+The complete sensor/atmosphere/galaxy performance matrix remains open. The
+sensor budgets at 1080p are 0.15 ms for spine/resolve/blit, 0.05 ms for metering,
+0.40 ms for the halo, 0.80 ms for active defocus, 0.60 ms for active motion and
+0.20 ms for detector/output. These are targets, not measured room for a 2 ms
+volume. Camera C5 measures the real chain with the default sky visible.
 
-The FFT follow-ups retain the proposed 512² quarter-resolution kernel, rebuilt
-on aperture or focal-length changes, with a **1 ms rebuild budget** and **1.5 ms
-per-frame convolution budget**. Its source is the iris polygon and its energy
-comes from the image. Natural's analytic solar glow and streak remain until a
-measured replacement preserves their intended response. Internal reflection
-ghosts and occluder-anchored corona are separate effects.
-
-Spectral filters require actual line emission before a channel mapping exists.
-Hα, OIII and SII map to declared channels and the readout states the processing.
-No authored mood LUT, extra effect-strength slider, or second producer of the
-lens enters the chain. Noise and exposure adaptation follow simulation time;
-paused pinned frames remain repeatable.
-
-Temporal reprojection in M11 belongs to the diffuse volume. It does not turn on
-whole-scene temporal anti-aliasing or place the star shell in that history. The
-star-shell changes, subpixel sources and discontinuous selections require
-separate evidence before a whole-scene history can be justified.
+M11's temporal history belongs to the diffuse volume. Whole-scene temporal
+anti-aliasing and the star shell are outside that history. Cache identity and
+physical-light tests remain independent of presentation response; exposure or
+mode changes invalidate or rescale display history according to its stored
+units. [The upscaler](the-upscaler.md) does not gate the galaxy integration.
 
 ## Technical reference
 
-A **published** figure carries its source. A **measurement** is from
-`design/plans/perf.md`'s rig, an Apple M5 at 1600×900 DPR 1. A **budget** is a
-claim a milestone measures. The following reference retains the proposed model,
-literature attributions and budgets. Source verification and calibration are
-implementation gates in M2 and M6; these values are not new measurements. The
-milestone sequence above governs which parts enter the integration PR. H II
-regions, clusters and neighboring galaxies remain follow-ups.
+Published figures carry sources; measured figures name their rig and operating
+point. The completion record above supersedes the original unmeasured timing,
+quality and sprite budgets. The reference below describes the implemented field
+and marks deferred features. [ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md)
+records active generation, calibration assumptions and renderer contracts.
 
 The frame is already right, which is the fact this plan stands on. The universe
 origin is the galactic center; `heliocentricToUniverse` puts the Sun at (−8,178
@@ -427,8 +453,8 @@ is what lets the band and Sirius agree by construction rather than by alignment.
 ### Shared model and generation
 
 **One field, every consumer.** `packages/universe/src/galaxy/` holds a pure,
-seeded, versioned field over galactocentric parsecs; number density per stellar
-population, dust density, H II emission; and three consumers read it: the sky
+seeded, versioned field over galactocentric parsecs; number density and emission
+per stellar population, plus dust density; and three consumers read it: the sky
 bake from inside, the volume from outside, and the population sampler. The CPU
 is the reference; the GPU kernel is a port held to a measured bound, the way
 [ADR-0023](../../docs/adr/0023-the-gpu-producer.md) holds the terrain producer.
@@ -447,28 +473,28 @@ it.
 use published parameters. Named clouds include the Aquila and Cygnus rifts,
 Ophiuchus, Taurus, Perseus, Orion and the Coalsack. Their ellipsoids come from
 3D dust maps; below that resolution the dust uses seeded noise. Globular
-clusters use a catalog in a follow-up session. The Local Bubble also requires a
-published geometry.
+clusters use a catalog in a follow-up session. The Local Bubble uses a declared
+solar-centered approximation informed by its published radius.
 
 **Brightness is integration.** The field emits in physical units, calibrated
 against the integrated starlight the sky actually has, so the band's visibility
 depends on the sensor response and exposure. A shutter value alone cannot
-establish visibility without aperture and ISO. M4 and M6 verify Direct at stated
-lens settings and each Composite response separately.
+establish photographic visibility without aperture and ISO. M6 verifies raw
+radiance and fixed photographic exposure; camera C5 compares Enhanced,
+Automatic and Manual without feeding their appearance back into calibration.
 
-**Continuity is a cache, not a cross-fade.** The sky from inside is the same
-march as the view from outside, cached at the observer's position while the
-observer is within a parallax budget and evaluated live otherwise; the pattern
-`Starfield.tsx` already uses for its shell. There is no second representation to
-fade to. One field at two costs.
+**One integral through travel.** Inside and outside views use the same field
+and transport. A cube caches that integral at the observer while its written
+parallax and selection envelope remain valid. Live rendering takes over outside
+that budget, and a new valid cube can replace the work without changing models.
 
 ---
 
 ### Stellar populations, dust and calibration
 
-The field lives in `packages/universe/src/galaxy/`. The existing
-`stellarDensity` delegates to the calibrated field when M9 activates it for
-population generation. Coordinates are galactocentric parsecs in simulation
+The field lives in `packages/universe/src/galaxy/`. The active
+`stellarDensity` and magnitude-level population use the calibrated field at
+`galaxy@5` / `galaxy-field@5`. Coordinates are galactocentric parsecs in simulation
 axes; `R` is the in-plane radius, `z` the height, `β` the azimuth from the Sun's
 direction, increasing with rotation.
 
@@ -476,19 +502,21 @@ direction, increasing with rotation.
 and a color temperature, so emission per unit volume is a product and the
 population mix is what colors the picture.
 
-| Population | Density and published parameters                                                                                                               | Color target     |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| Thin disk  | Double exponential; radial scale 2.6 ± 0.5 kpc, height 300 ± 50 pc; arm modulation. Bland-Hawthorn & Gerhard 2016.                             | 5,000 K          |
-| Thick disk | Radial scale 2.0 kpc, height 900 pc; 4% of local thin-disk density and 12% of its column.                                                      | 4,600 K          |
-| Young arms | Gaussian arm ridges, height 19 pc; width `336 + 36 (R/kpc − 8.15)` pc; contrast about 3 in young stars and 0.2 in old stars. Reid et al. 2019. | 12,000 K plus Hα |
-| Bar/bulge  | Boxy triaxial profile, angle 27° ± 2°, half-length 5.0 kpc, axis ratios 0.5 and 0.26, height 180 pc, mass 1.84 × 10¹⁰ solar masses.            | 4,300 K          |
-| Halo       | Spheroidal profile proportional to `(1 + r/r_h)^−3.5`, flattening 0.6; Harris globular distribution.                                           | 4,800 K          |
+| Population | Density and published parameters                                                                                                                                                                                                                         | Color target |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| Thin disk  | Double exponential; radial scale 2.6 ± 0.5 kpc, height 300 ± 50 pc; arm modulation. Bland-Hawthorn & Gerhard 2016.                                                                                                                                       | 5,000 K      |
+| Thick disk | Radial scale 2.0 kpc, height 900 pc; 4% of local thin-disk density and 12% of its column.                                                                                                                                                                | 4,600 K      |
+| Young arms | Gaussian ridges with the shared flared `sech²` profile: heights 50/67/90 pc at the center/4.5 kpc/Sun, preserving the vertical column. Natale et al. geometry is an explicit arm-population assumption; Reid's 19 pc describes very young maser tracers. | 12,000 K     |
+| Bar/bulge  | Boxy profile at 27°; 1.5/0.75 kpc in-plane scales, 390 pc exponential height and a 5 kpc radial taper. These are the calibrated approximation, not a measured V-light decomposition.                                                                     | 4,300 K      |
+| Halo       | Spheroidal profile proportional to `(1 + r/r_h)^−3.5`, flattening 0.6; Harris globular distribution.                                                                                                                                                     | 4,800 K      |
 
-Normalized so that `stellarDensity(SUN_POSITION)` is exactly `LOCAL_DENSITY`,
-0.1 star/pc³, which keeps `generateCell`'s expected counts around Sol where they
-are at the baseline; the Local arm's width is 310 pc, so its modulation across
-the 100 ly survey cube is under 0.1%. Total integrated count lands between 10¹¹
-and 4 × 10¹¹, the published range, and a test says so.
+The field is normalized to 0.1 star/pc³ at the Sun. Its reference cylinder
+contains 116.064 billion stars, inside the published 10¹¹–4 × 10¹¹ range.
+Catalog-plus-procedural counts are compared with actual field integrals in the
+completion record, rather than assumed constant throughout the old survey cube.
+Mean solar V luminosities per star are 0.204/0.35/100/0.7725/0.1 for the five
+rows above. The young-height law is shared by number density and emission;
+`H(0) / H(R)` preserves its column as the profile flares.
 
 **Arms.** Reid et al. 2019, Table 2: log-periodic with one kink, `ln(R/R_kink) =
 −(β − β_kink) tan ψ`, with a pitch angle on each side of the kink and a Gaussian
@@ -498,28 +526,30 @@ Scutum–Centaurus–OSC are single wrapped arms. The test that this is right is
 a picture: from the Sun, the arm tangencies fall at the longitudes Hou & Han
 2014 measure from 815 H II regions; **Scutum 30.5°, Sagittarius 49.3°, Carina
 282°, Centaurus 310°, Norma 328°**, the near 3 kpc arm at 24°. and
-`arms.test.ts` asserts each within 3°. Beyond 20 kpc the disk warps: `z = a (R −
+`arms.test.ts` asserts each within 3°. The Chen et al. power-law fit begins at 7.72 kpc and the disk warps: `z = a (R −
 R_w)^b sin(φ − φ_w)`, line of nodes 17.5° from the Sun–center line (Chen et al.
 2019), which is what makes the outside view's rim lift the way the real one
 does.
 
 **Dust.** An exponential disk with two vertical components; scale heights **81
-and 152 pc**, scale length 2.26 kpc (the 2025 two-component fit; Drimmel &
-Spergel's single 134 pc disk is the alternative); normalized to about 1 V
+and 152 pc**, scale length 2.26 kpc. The heights are Guo et al. 2025's means over 6–12 kpc;
+the radial length is Drimmel & Spergel 2001's. Their combination is an explicit
+preview assumption, recorded in [ADR-0032](../../docs/adr/0032-the-stellar-field.md#dust-transport-m5); normalized to about 1 V
 magnitude of extinction per kiloparsec in the plane, with the arm lanes offset
 inward of the stellar ridges, and a log-normal multiplicative noise term of four
-octaves down to about 1 pc (the GAMER recipe, Groeneboom & Dahle 2014).
+bands down to about 1 pc (following the noise approach in GAMER, Groeneboom & Dahle 2014).
 Reddening is `τ ∝ λ⁻¹`, three coefficients, so the band goes brown behind the
 rift and the bulge reads warm through its foreground. On top of the field, a
-table of **local clouds** as ellipsoids with published centers, extents and
-column densities, from the Lallement 2022 and Edenhofer 2023 maps: the Aquila
-Rift at 225–500 pc, the Cygnus Rift, Ophiuchus at 130, Taurus at 140, Perseus,
-Orion, Chamaeleon, Lupus, the Coalsack at 180. And the **Local Bubble**: the Sun
-sits inside a cavity about 165 pc across with almost no dust (Zucker et al.
-2022), which is why the first ten parsecs of every ray can be skipped and why
-the nearest dust anything sees is a hundred parsecs off.
+table of **local clouds** approximates nine complexes in the Lallement 2022
+map: Aquila, Cygnus, Ophiuchus, Taurus, Perseus, Orion, Chamaeleon, Lupus and the
+Coalsack. M6 records the selection windows and fits Gaussian moments and excess
+columns from the actual 25 pc resolution cube; the compact ellipsoids are model
+approximations. Zucker et al. 2022 gives the **Local Bubble's radius** as
+165 ± 6 pc, not its diameter. M6 uses a declared solar-centered approximation
+with residual dust. It does not skip nearby emission or assume an empty first
+ten parsecs.
 
-**H II regions.** Along the young-arm ridges only, within 40 pc of the plane,
+**H II regions, follow-up only.** Proposed along the young-arm ridges only, within 40 pc of the plane,
 Poisson-disc clumps seeded from the arm coordinate, each a small Gaussian
 emitter at Hα's 656 nm and a shell of OB light. They are the pink knots along
 the arms in every photograph of a spiral, they are the primary arm tracer in the
@@ -527,7 +557,7 @@ literature (Anderson et al. 2014, over 8,000 of them), and they are the first
 thing in the game that emits a narrowband line; which is what the sensor's
 filter seam is waiting for.
 
-**Globular clusters.** Not modeled: **cataloged**. Harris 2010 lists 157 with
+**Globular clusters, follow-up only.** The proposed source is a catalog. Harris 2010 lists 157 with
 positions, distances, half-light radii and magnitudes, and Vasiliev & Baumgardt
 2021 give 162 accurate distances from Gaia; the ingest packs them like the star
 catalog does, and each draws as a sprite whose halo scales with its half-light
@@ -540,205 +570,134 @@ real direction and size. The follow-up ledger preserves these targets; the field
 parameter record allows separate objects without scheduling them in the
 integration PR.
 
-**Calibration.** Fit the field against the following proposed checks. M6
-verifies each source, bandpass and viewing geometry before accepting its target:
+**Calibration.** M6 verifies the source, bandpass and viewing geometry before
+accepting the target. The following replaces the draft transcriptions:
 
-| Check                                                   | Published                                                           | Tolerance |
-| ------------------------------------------------------- | ------------------------------------------------------------------- | --------- |
-| Integrated starlight from the Sun, mid-latitude average | 75 nW m⁻² sr⁻¹ ≈ **23.2 mag/arcsec²** (Masana et al. 2021, GAMBONS) | 0.3 mag   |
-| On the plane at l = 45°, a rift sightline               | 22.3–23.4 mag/arcsec² (Masana, Table 3)                             | in range  |
-| The galaxy's total absolute magnitude                   | **M_V = −21.37**, B−V 0.73 (Licquia & Newman 2015)                  | 0.3 mag   |
-| Face-on central surface brightness from outside         | 21.65 B mag/arcsec² (Freeman's law)                                 | 0.3 mag   |
+| Check                                               | Source target                                      | Tolerance                  |
+| --------------------------------------------------- | -------------------------------------------------- | -------------------------- |
+| Solar sky, all longitudes, 30–60° absolute latitude | 53.559 V nW m⁻² sr⁻¹, GAMBONS supplemental map     | 0.3 mag                    |
+| Solar sky, all longitudes, 60–90° absolute latitude | 41.862 V nW m⁻² sr⁻¹, same map                     | 0.3 mag                    |
+| Aquila region, l = 40–50°, absolute b = 0–5°        | 176.410 V nW m⁻² sr⁻¹, same map                    | 0.3 mag                    |
+| Emergent face-on isotropic-equivalent luminosity    | M_V = −21.515, Licquia et al. Table 3 with h = 0.7 | 0.3 mag                    |
+| Central disk B brightness / integrated B−V          | Freeman comparison / Licquia B−V = 0.744           | No V-band acceptance claim |
 
-The unit is the sensor's: luminance in cd/m², and 22 mag/arcsec² is 2 × 10⁻⁴
-cd/m², thirteen orders below the Sun's disk. The sensor's pre-exposure carries
-the portion of that range visible in the current frame. The bake stores nW m⁻² sr⁻¹, values from 10 to
-10⁴, because the same numbers in W m⁻² sr⁻¹ sit at 10⁻⁸ and below half-float's
-normal range.
+The GAMBONS reference includes integrated starlight, diffuse Galactic light and
+extragalactic background. The model supplies the stellar component only; this
+is a broad sky constraint with a declared component mismatch. The original
+75 nW target is a ground-level annual zenith average at geographic 40° N and
+includes atmospheric contributions. Table 3 does not give the proposed generic
+22.3–23.4 mag range. The external magnitude needs the paper's `5 log h`
+correction; the earlier −21.37 transcription is not its V-band target.
 
-**Versioning.** The field is a generation algorithm and changes to it are
-versioned through `algorithm()` and `manifest()` like every other one
-([ADR-0005](../../docs/adr/0005-procedural-seeds.md)). One consequence is worth
-stating plainly: `proceduralCount` reads `stellarDensity`, so any change to the
-field moves which procedural systems exist beyond the survey cube and what their
-ids are. M9 checks save and address references before activating that change.
-Each field revision carries an algorithm version. M2 through M6 build and calibrate the field without changing
-the active population generator. M9 activates the calibrated field for
-population generation and records that version change. Later recalibration is
-another versioned change.
+Green in the raw RGB field is Johnson V radiance; red and blue retain
+illustrative color and extinction. A fixed photopic/V ratio of 1.25 converts
+V radiance to luminance at 683 lm/W. A target texel stores those V-anchored
+channels divided by 1,000 nW m⁻² sr⁻¹. Neither exposure nor a display response
+enters the photometric acceptance calculation. The Natural-specific work is
+held separately from these physical units and constants.
+
+**Versioning.** Field and population changes use `algorithm()` and `manifest()`
+([ADR-0005](../../docs/adr/0005-procedural-seeds.md)). M2–M6 kept the preview
+separate from active generation. M9 activates magnitude levels; the coherent
+young-height correction advances both active algorithms to version 5. Legacy P
+addresses retain their original generator. Q addresses depend on their recorded
+generation manifest; loading older generation reports drift and an unavailable
+old index fails resolution explicitly. Recalibration remains a versioned change.
 
 ---
 
 ### Cached sky
 
-The observer is inside the disk, 20.8 pc off a plane whose dust is 81 pc thick,
-and a low-latitude ray runs 25 kpc while everything that matters to its picture
-happens in the first few hundred parsecs. So the integrator is not a uniform
-march.
+The cube and live volume integrate the same bounded, adaptive physical kernel.
+Sampling begins at the observer and concentrates around nearby clouds and disk
+crossings. Dust is integrated front to back; unresolved luminosity is the
+complement of the actual resolved envelope. There is no assumed empty first
+10 pc and no arbitrary spherical subtraction around the camera.
 
-**The march.** The initial proposal uses 256 log-spaced samples per texel
-direction from **10 pc to 30 kpc**. Skip the near interval only where the
-observer's local field supports it. Concentrate samples near clouds and widen
-them where only the smooth disk remains. Accumulate emission front to back with
-extinction `T ← T·exp(−κ dt)`; the smooth exponential terms integrated
-analytically per ray where the noise is off, which is most of the way out. The
-stars the sprite layer resolves are masked out of the emission; the haze is the
-light of stars fainter than the resolved limit, which is how GAMBONS builds its
-integrated starlight map; so a star is never drawn twice.
+Production refines 32² → 128² → 512² in 32² tiles, two per submission. A 512²
+RGBA-half cube contains 12 MiB; three resident cache slots total 36 MiB. The
+1024² experiment needs 144 MiB for those slots and an 18.256 s drained bake,
+so it is not the shipped tier. The earlier 120 ms full-bake and 2 ms first-sky
+estimates are superseded by measured progressive scheduling and a separate
+completed-cube archive. Warm reuse does not block boot on a new full bake.
 
-**Where it goes.** A cubemap, six faces of **1024² RGBA half-float, 50 MB**, on
-a fine-pointer machine; 512² and 12.6 MB on a coarse one; the same query
-`output.ts` already asks to pick a DPR ceiling. At 1024 a texel is 0.088°, a
-pixel at the flight lens over 1080 lines is 0.06°, and the dust is diffuse at
-that scale; the 2048² alternative is 200 MB and SpaceEngine ships it as an
-option for exactly this reason. Drawn as the background; before the star shell,
-no depth write, the same custom blend as the star field so alpha never reaches
-the canvas; through the sensor's exposure like everything else.
+The archive keeps two completed WebGPU entries independently of save state.
+Its fingerprint includes field/seed, kernel, cube sampling version, quality,
+exact observer and resolved envelope. A valid read within 0.15 pc can restore
+physical pixels asynchronously. Storage errors and stale replies become misses.
+The unchanged 1% translation budget is checked at Sol, regional positions,
+bulge and local-cloud fronts, not inferred only from a nominal dust distance.
 
-**When.** Six faces at 1024² and 256 samples is 1.6 × 10⁹ field evaluations
-(initial budgets: **120 ms** on the M5 and **500 ms** on the target laptop). M7
-measures the tile count and dispatch duration together; neither follows from the
-evaluation count alone. Register the bake with `render/warmup.ts` so the
-progress total includes it. A progressive 128² pass targets a **2 ms** first
-sky, with refinement over the following second. The bake goes in the IndexedDB
-cache keyed on the field's version, quality and observer region, with the actual
-baked origin recorded and checked against the parallax budget on every reuse,
-because it is regenerable content and
-[ADR-0007](../../docs/adr/0007-persistence.md) says that is what a cache is for.
-
-**How long it is valid.** The nearest dust is about 100 pc away, so moving one
-parsec swings it 0.6°, and a texel is 0.088°: the proposed budget is **0.15
-pc**, thirty thousand astronomical units. M7 validates that budget against the
-observer and actual nearest structure; a jump rebakes at arrival, behind the
-tunnel; a planetarium fly-to that leaves the budget uses the live march until a
-valid bake is ready. This is the `WrittenShell` pattern; a record of what was
-baked and the budget it holds under; and `Starfield.tsx` shows the shape.
-
-**Precision.** The kernel takes the observer in galactocentric parsecs as
-float32. At 8 kpc that resolves 5 × 10⁻⁴ pc, a hundred astronomical units, and
-the finest feature in the field is the 1 pc noise octave; two thousand times
-larger. The terrain kernel's split-frame rule
-([ADR-0023](../../docs/adr/0023-the-gpu-producer.md)) exists because a crater is
-3 × 10⁻⁷ rad against a float32 direction's 6 × 10⁻⁸; nothing here is within
-three orders of that ratio, and importing the machinery would be a comment
-nobody could justify. The number is written here so the next reader can check it
-rather than reach for it.
-
-**The GPU kernel** `render/galaxyKernel.ts` is a TSL port of the field, and
-`galaxyKernel.gpu.test.ts` holds it to the CPU at a few hundred sample points
-and holds one full ray's integral to the CPU march within 1%. The calibration
-tests run on both.
+CPU/GPU field, ray, cube interpolation and lifecycle tests guard agreement.
+`cube@2` uses the conservative cube-face texel angle `2 / faceSize`; the
+physical kernel is `galaxy-tsl@9`. Physical radiance survives response and
+gamut changes; display history has its own validity. Fine split coordinates are
+needed for nearby resolved-star projection, while the diffuse field's parsec
+scale remains representable in float32.
 
 ---
 
 ### Resolved population
 
-The survey draws every star in a 100 ly cube. The sky needs more than that in
-two ways: the bright far stars that make constellations, and the faint haze that
-is not stars at all. The haze is described in the cached-sky reference. This
-section is the middle.
+The explicit catalog contains nearby stars and the 7,515-system distant V≤6.5
+asset (188 KB brotli). The draw joins catalog and procedural selection by stable
+identity. Catalog coverage is V7.3 inside 150 ly, V6.5 beyond it and a 25 ly
+volume-complete neighborhood, with the assumptions and source provenance in
+[ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md). Sparse fainter
+catalog stars also remove their expected procedural contribution. The proposed
+V8 distant catalog extension remains a separate ingest/download decision.
 
-**The naked-eye sky is a catalog, not a model.** Betelgeuse is 550 ly out, Rigel
-860, Deneb 2,600: many recognizable constellation stars are beyond the 150 ly
-bundle; each distant source is absent from the current local survey. The ingest
-gains a second asset, `stars-sky.irsc`: every HYG row with V ≤ 6.5 beyond 150
-ly; about 9,000 stars, **60 KB brotli** at the 16-byte record; at their
-published positions, loaded and indexed by cell like the rest. They are catalog
-stars in every sense, resolvable by id, and the only thing that distinguishes
-them is that the travel survey never reaches them. M1 also adds a distant-sky
-selection path to the draw. Loading the asset alone cannot make Orion visible
-because the travel survey never reaches those cells. The extension to V ≤ 8,
-about 40,000 stars and 250 KB, is a measurement of the cold download against its
-4 s budget, not a decision made here.
+Nine disjoint log-uniform V-luminosity bands use cells of `20 · 2^level` ly and
+seeds derived from level and cell. The population weights reproduce each
+calibrated mean luminosity. Complete level envelopes are admitted only within
+the candidate and cell ceilings; the source ceiling can lower the actual
+magnitude threshold. The shared resolved-envelope record controls the diffuse
+first-moment complement on CPU and GPU. This conserves ensemble luminosity;
+individual finite realizations retain a sampling residual.
 
-**The completeness rule, as a magnitude.** The initial proposal estimates V 7.5
-inside 150 ly and V 6.5 beyond it. M1 measures the catalog distribution and M9
-establishes a defensible coverage rule; the histogram peak alone is insufficient
-evidence of completeness. A procedural star exists only if its apparent
-magnitude is fainter than that limit at its distance, and the limit rides on
-`CellContext` as `completeRadius` does; two numbers, pure in the catalog
-version. `population.test.ts` draws ten thousand cells and asserts no procedural
-star violates it. M9 replaces the sphere, and it is what makes the horizon of
-knowledge the irregular, class-dependent surface
-[galaxy](../../docs/design/galaxy.md#completeness-is-the-real-constraint) says
-it has to be.
+The shipped V8 request uses 100,000 sprites, 1,000,000 candidates and 2,000
+cells, selected from measured 20k/100k/200k GPU costs and bounded CPU work. The
+field@5 operating-point table records the actual counts, masks and costs. It
+does not claim every magnitude level is drawable in the densest region.
 
-**Levels.** Gaia Sky's magnitude-space octree is the construction: each level
-holds a disjoint band of absolute magnitude, brighter bands at coarser cells.
-Level 0 uses the existing 20 ly cells; level `k` uses cells of `20 · 2^k` ly.
-Each luminosity interval belongs to exactly one level, including level 0.
-Increasing brightness thresholds alone are insufficient because overlapping
-bands draw duplicate populations. Seed by `(level, cell)` so independent
-selections are order-free; a level is swept to the radius at which its band
-drops below the resolved limit. The count is bounded by the sky: to apparent V 8
-there are about 40,000 stars in the whole sky, to V 10 about 350,000. The
-proposed sprite ceiling is **200,000**, compared with the current 20,000. M8 and
-M9 measure whether that ceiling is affordable.
+GPU projection reads stable source positions from integer sectors and relative
+offsets. Observer motion updates uniforms; survey changes upload source data,
+with retained identities and partial updates.
 
-**The shell moves to the GPU.** `Render/starfield` is the perf plan's largest
-span, 0.62–0.79 ms under warp, because the sprite positions are rewritten on the
-CPU whenever the origin leaves a parallax budget that binds on the system's own
-sun. With positions uploaded once per survey as cell-relative float32 plus a
-per-cell offset, the vertex stage projects each star onto the shell from an
-origin uniform, and a translation rewrites nothing; only a re-survey or a change
-of anchor frame uploads. That closes the perf plan's item 3 as a side effect of
-needing ten times the stars, and it is measured the same way.
-
-**Extinction on the resolved stars.** A star behind the Aquila Rift is reddened
-and dimmed by the dust in front of it; the sprite's color and flux carry
-`exp(−τ)` per channel, integrated along the line from the observer through the
-same dust field, sixteen samples in the vertex stage. Without it the band's dark
-lanes would have bright stars sitting in front of them, which is the giveaway in
-every additive star field ever drawn.
+Resolved dust uses retained physical columns with 32/64/512 distance-tier
+samples, ending at each star. A catalog Solar-reference correction preserves
+observed photometry. GPU cycles handle 1,024 sources; the WebGL fallback handles
+one source per submission and converges progressively. A sixteen-sample
+per-vertex integral was a proposal, not the shipped implementation.
 
 ---
 
 ### Live volume
 
-The planetarium's ceiling is 100 ly, an absolute cap so that "zoom out until the
-neighboring stars appear" works at a moon as well as at a star. It rises to 100
-kly through the three tiers [galaxy](../../docs/design/galaxy.md#scale-tiers)
-names. These are initial regimes near Sol, with `d` measured from the Sun. Cache
-validity elsewhere is relative to the actual baked observer, and volume sampling
-depends on the observer's position within the disk, not just `d`:
+The camera's 100 kly ceiling covers the Earth-to-disk journey. Local cache
+validity is measured from the actual baked observer; it is independent of the
+observer's distance from Sol. Outside the 0.15 pc cache radius, the same physical
+integral renders live until a valid bake is ready. Resolved stars keep their
+bounded selection and the diffuse field keeps its matching complement.
 
-| Regime   | `d`             | The sky                                      | The stars                                                                               |
-| -------- | --------------- | -------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Local    | under 0.15 pc   | the bake                                     | catalog and population sprites                                                          |
-| Regional | 0.15 pc – 1 kpc | the live march, camera-centered, quarter res | the same sprites, the near field masked from the march                                  |
-| Galactic | over 1 kpc      | the live march over the disk's bounding slab | unresolved stellar emission with bounded resolved stars; optional tracers in follow-ups |
+Production uses a half-resolution target, capped at a 960-pixel long edge,
+with stride-8 interleaved temporal history. Adaptive ray spacing resolves the
+dust columns; the original uniform 96-step proposal is not the implementation.
+History preserves fine detail at rest and resets for discontinuities. Scene
+depth composition lets nearby bodies occlude the galaxy. The completed
+measurements above replace the original universal 2 ms at 1080p target.
 
-**The live march** is the same kernel as the bake with different sampling: a
-ray–slab intersection with the disk's bounding box, 96 uniform steps between the
-two hits with a blue-noise start offset, at **quarter resolution with temporal
-reprojection**; one of four pixels per 2×2 block per frame, the _Horizon Zero
-Dawn_ cloud construction, which is about 2 ms there for a far more expensive
-integrand (budget: **2 ms** at 1080p). The observer and the ray are in
-galactocentric parsecs; the result composites through the depth buffer so a body
-in front of the galaxy occludes it. Regime boundaries are not switches: the
-march's sample density and resolution scale with `d`, and the bake and live
-march integrate the same rays at the same observer position.
-`galaxyKernel.gpu.test.ts` asserts that identity at three directions rather than
-trusting the argument.
+Face-on and edge-on views expose the arm ridges, warm central population, dust
+lanes and warp. H II knots and catalog globular clusters are follow-ups. The
+central morphology remains approximate: passing broad integrated V constraints
+does not establish a measured bulge/disk decomposition or final visual quality.
+C5 and the complete journey remain the image acceptance gates.
 
-**What the picture is.** Face-on, the bar at 27° with the arms wrapping off its
-ends, the young-arm ridges blue with pink H II knots, the dust lanes inside the
-ridges, the bulge warm, the halo's globulars scattered to 40 kpc; edge-on, a
-thin bright plane with the dust lane cutting it, the boxy bulge, the warp
-lifting the rim past 20 kpc. Every one of those features is a published number
-in the stellar-population reference, and the outside view is the check on all of
-them at once; the reason to build it is that a galaxy that looks wrong from
-outside is a field that is wrong from inside.
-
-**Brightness from outside.** Equivalent unobscured views have distance-invariant
-surface brightness, but the internal sky and face-on disk integrate different
-columns. Their calibration checks are separate. The sensor exposes the actual
-view, while the galaxy instrument may state a fixed exposure and bound its
-sprite count. Those are declared instrument settings.
-
-**Culling** is trivial and named so it is not forgotten: below about 50 px of
-subtended size the march is replaced by a sprite of its own last frame, which is
-also how the two Clouds and M31 draw at any distance.
+Equivalent unobscured views have distance-invariant surface brightness, but an
+internal sky and face-on disk integrate different columns. Their calibration
+checks remain separate. Sensor exposure and declared galaxy-instrument settings
+do not change the physical field. A small-angular-size sprite fallback remains
+an optional measured follow-up; it is not needed to claim a second field model.
 
 ---
 
@@ -768,30 +727,17 @@ also how the two Clouds and M31 draw at any distance.
 
 ## Evidence still to resolve
 
-- All unmeasured times, memory sizes, sprite limits and download estimates in
-  the reference are budgets. M1, M3, M7 through M11 replace them with results.
-- The bulge brightness attributed to Leinert et al. 1998 needs a readable source.
-  M6 uses supported sky measurements and records the missing evidence.
-- Hou & Han's arm fits use their own azimuth origin. Verify the source convention
-  before transcribing coefficients; tangency tests do not establish that
-  convention on their own.
-- The completeness limit must come from the ingest's measured coverage, with
-  its assumptions recorded. A histogram peak alone does not prove completeness.
-- Local density and sky luminosity constrain the population mix together. A
-  mismatch is a model finding and must not disappear into a relaxed tolerance.
-- The proposed local sampling and outside uniform-step march must converge to
-  the same integral. Validate step spacing and cloudy rays before accepting the
-  quoted sample counts. The proposed bake tile durations and total time must
-  agree in the measured schedule.
-- Named local clouds can make the nearest dust distance differ from the nominal
-  100 pc used for the 0.15 pc cache budget. Derive validity from the actual field
-  and screen-space error, then test observer positions beyond Sol.
-- A central surface brightness is not the same observable as an arbitrary
-  sightline from inside the disk. Distance-invariance alone cannot equate them.
-  M6 keeps the viewing geometry, bandpass and calibration source explicit.
-- The 100 kly camera ceiling covers the target journey, but neighboring galaxies
-  require a separate coordinate-range check. M31 is outside the current
-  coordinate system's roughly 249,000 ly span.
+- The completion record separates passing author checks from the remaining
+  image limits and return-frame spikes. A universal 60 fps journey is not proven.
+- A drained full-bake time is not a boot time. The current boot capture completes
+  all 1,638 progressive tiles and writes one archive; storage, readback and driver
+  differences still affect cold/reload latency.
+- Central morphology, H II line emission and clusters remain approximate or
+  deferred. Integrated V calibration does not measure their spatial light mix.
+- The catalog's coverage assumptions are explicit; deeper observed completeness
+  requires an ingest and source review, not inference from a histogram peak.
+- Neighboring galaxies require a separate coordinate-range check. M31 lies
+  outside the current coordinate system's roughly 249,000 ly span.
 
 ## Commands and evidence locations
 
@@ -804,10 +750,11 @@ node scripts/drive.mjs --url 'http://localhost:5173/?timing=full' \
   --js "await ir.gpu(60)" --down
 ```
 
-M2 adds `pnpm sim --sky --out sky.png` and explicit external-view options. M3
-adds the galaxy GPU suite; M7 adds bake/live identity tests. These are milestone
-deliverables, not commands available at the planning baseline. Use the existing
-headless session constructor and browser driver instead of a second runner.
+M2 provides `pnpm sim --galaxy-plates <directory> --galaxy-width 384` for
+composite and isolated-population plates, raw radiance, and the reference report.
+The galaxy GPU suite includes field/ray, baked/live, temporal and lifecycle
+checks. Rerun the relevant suites at the final assembled tip. Use the existing headless session constructor and browser
+driver instead of a second runner.
 
 Put scratch plates, traces and recordings in `.scratch/`, publish review media
 through the existing media workflow when opening its PR, and link the durable

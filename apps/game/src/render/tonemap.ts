@@ -19,9 +19,9 @@ import {
 } from 'three/tsl'
 import { LINEAR_P3 } from './gamut.ts'
 
-/* Natural retains the production ACES fit. Neutral applies the fit to
- * luminance, preserving channel ratios through the highlight range. Both use
- * one headroom lift and one output encoder; the choice belongs to the camera.
+/* The photographic response preserves channel ratios through highlights.
+ * The ACES branch belongs to explicitly calibrated cinematic staging and
+ * diagnostic comparisons. Camera modes share one final output encoder.
  */
 const ACES_INPUT = /*@__PURE__*/ mat3(
   0.59719,
@@ -108,7 +108,9 @@ export function installToneCurve(
   const naturalUniform = uniform(1)
 
   const toneCurve = Fn(([color, exposure]: [Node<'vec3'>, Node<'float'>]) => {
-    const input = color.mul(exposure)
+    // Branches share one detector result; inlining it at each use can exceed
+    // WGSL's private-storage budget before the shader reaches the GPU.
+    const input = color.mul(exposure).toVar()
     const light = wideUniform
       .greaterThan(0.5)
       .select(

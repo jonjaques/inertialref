@@ -1,4 +1,6 @@
-import { FastForward, Pause, Play, Rewind } from 'lucide-react'
+import { presentationClock } from '../hud/time.ts'
+import { PictureTime } from './PictureTime.tsx'
+import { FastForward, Pause, Play, Rewind, RotateCcw } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
@@ -8,26 +10,9 @@ import { useActionTitle } from '../input/useKeymap.ts'
 import type { PlanetariumContext } from './context.ts'
 import { localZone, simulationInstant } from './simulationTime.ts'
 
-/*
- * A transport for the clock, and the instant it is standing at.
- *
- * The shape every planetarium since Stellarium has converged on: slower, play,
- * faster, and a way back to normal time. What is deliberately *not* here is a
- * reverse button, and it is worth writing down why rather than leaving it to be
- * re-proposed. `SimulationClock` counts fixed ticks forward and `setTimeScale`
- * refuses anything that is not positive; ship state is integrated rather than
- * derived, so running it backwards is not a sign flip but a re-simulation from
- * a snapshot. The determinism guarantee — same tick count, same state hash — is
- * built on that being impossible. Time warp is the axis this panel controls.
- *
- * The readout used to be `formatDuration(clock.time)`: "15.23 s", a stopwatch
- * reading in a mode whose entire subject is *when* you are looking. It is an
- * instant now — the elements every orbit is solved from are J2000, so the clock
- * has always had a date, and `@inertialref/shared` is where that mapping lives.
- * A picker that writes into it is the obvious next control and this is the
- * readout it will replace.
- */
-export function TimePanel({ engine }: PlanetariumContext) {
+/** The photographic clock follows the simulation until a shot or date holds it. */
+export function TimePanel(context: PlanetariumContext) {
+  const { engine } = context
   const slower = useActionTitle('time.slower', 'Slower')
   const faster = useActionTitle('time.faster', 'Faster')
   const pause = useActionTitle('time.pause', 'Pause')
@@ -44,10 +29,17 @@ export function TimePanel({ engine }: PlanetariumContext) {
    */
   const world = useEngine(
     useShallow((snapshot) => ({
-      time: snapshot.status?.world.time ?? 0,
-      timeScale: snapshot.status?.world.timeScale ?? 1,
+      time: snapshot.observer?.time ?? snapshot.status?.world.time ?? 0,
+      held: snapshot.observer?.heldTime != null,
+      timeScale:
+        snapshot.observer?.heldTime != null
+          ? snapshot.observer.timeScale
+          : (snapshot.status?.world.timeScale ?? 1),
       achievedTimeScale: snapshot.status?.world.achievedTimeScale ?? 1,
-      paused: snapshot.status?.world.paused ?? false,
+      paused:
+        snapshot.observer?.heldTime != null
+          ? snapshot.observer.timePaused
+          : (snapshot.status?.world.paused ?? false),
     })),
   )
   const at = simulationInstant(world.time)
@@ -71,6 +63,18 @@ export function TimePanel({ engine }: PlanetariumContext) {
         <p className="type-micro truncate text-slate-400">{localZone()}</p>
       </div>
 
+      <PictureTime {...context} />
+      {world.held && (
+        <div className="flex items-center gap-2">
+          <span className="type-ui text-slate-400">Custom time</span>
+          <Action
+            label="Reset"
+            icon={RotateCcw}
+            title="Return to the simulation clock"
+            onClick={() => engine.harness.observatory.setTime(null)}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
         {/* The keys come from the keymap rather than from the string, so a
             rebind reaches these labels in the same commit that stores it — and
@@ -78,18 +82,25 @@ export function TimePanel({ engine }: PlanetariumContext) {
         <TransportButton
           label={slower}
           icon={Rewind}
-          onClick={() => warp(engine, -1)}
+          onClick={() => {
+            warp(engine, -1)
+          }}
         />
         <TransportButton
           label={world.paused ? run : pause}
           icon={world.paused ? Play : Pause}
           primary
-          onClick={() => engine.world.clock.setPaused(!world.paused)}
+          onClick={() => {
+            const clock = presentationClock(engine)
+            clock.setPaused(!clock.paused)
+          }}
         />
         <TransportButton
           label={faster}
           icon={FastForward}
-          onClick={() => warp(engine, 1)}
+          onClick={() => {
+            warp(engine, 1)
+          }}
         />
         {/*
          * The rate readout *is* the way back to normal time.
@@ -113,14 +124,16 @@ export function TimePanel({ engine }: PlanetariumContext) {
               ? realTime
               : `${world.timeScale}× — ${realTime.toLowerCase()}`
           }
-          onClick={() => engine.world.clock.setTimeScale(1)}
+          onClick={() => {
+            presentationClock(engine).setTimeScale(1)
+          }}
         />
       </div>
 
       {/* What the clock is actually delivering. Below the requested warp when
           the simulation cannot keep up, and saying so is the whole point —
           `hud/PerfPanel.tsx` found that warp above 5× had never worked. */}
-      {world.achievedTimeScale < world.timeScale * 0.95 && (
+      {!world.held && world.achievedTimeScale < world.timeScale * 0.95 && (
         <p
           className="type-micro text-amber-300/90"
           title="The simulation is not keeping up with the requested warp"
@@ -133,7 +146,6 @@ export function TimePanel({ engine }: PlanetariumContext) {
 }
 
 const warp = (engine: GameEngine, direction: number): void => {
-  engine.world.clock.setTimeScale(
-    nextWarp(engine.world.clock.timeScale, direction),
-  )
+  const clock = presentationClock(engine)
+  clock.setTimeScale(nextWarp(clock.timeScale, direction))
 }

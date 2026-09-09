@@ -52,6 +52,17 @@ const AXES: Readonly<
 
 const AXIS_IDS = Object.keys(AXES) as readonly ActionId[]
 
+/**
+ * How far one press walks the throttle.
+ *
+ * A twentieth: fine enough to set a quarter burn from the keyboard, coarse
+ * enough that a held key crosses the whole range in under a second at the
+ * operating system's repeat rate. The throttle is not an axis — it is a
+ * setting the drive keeps — so it goes at the engine as a value and never
+ * through the held set above.
+ */
+const THROTTLE_STEP = 0.05
+
 export function useShipControls(
   engine: GameEngine,
   bindings: ControlBindings,
@@ -85,6 +96,10 @@ export function useShipControls(
     apply()
   })
 
+  useAction('flight.throttleUp', () => engine.nudgeThrottle(THROTTLE_STEP))
+  useAction('flight.throttleDown', () => engine.nudgeThrottle(-THROTTLE_STEP))
+  useAction('flight.throttleFull', () => engine.setThrottle(1))
+  useAction('flight.throttleCut', () => engine.setThrottle(0))
   useAction('flight.assist', () => bindings.onToggleAssist())
   useAction('flight.kill', () => bindings.onKillRotation())
   useAction('time.pause', () => bindings.onPause())

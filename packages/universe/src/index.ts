@@ -20,3 +20,18 @@ export * from './surveySites.ts'
 export * from './system.ts'
 export * from './terrain.ts'
 export * from './terrainKernel.ts'
+export * from './worldQuery.ts'
+
+export * from './galaxy/arms.ts'
+export * from './galaxy/field.ts'
+export * from './galaxy/population.ts'
+export * from './galaxy/dust.ts'
+export * from './galaxy/integral.ts'
+
+export * from './galaxy/localDust.ts'
+
+export * from './galaxy/photometry.ts'
+
+export * from './galaxy/calibration.ts'
+
+export * from './galaxy/starExtinction.ts'

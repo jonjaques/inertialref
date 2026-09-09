@@ -56,11 +56,15 @@ node scripts/drive.mjs --help
 
 It starts `pnpm dev` if nothing is serving, boots the renderer, and then **leaves Chrome
 running**. Boot is the expensive part — about five seconds of shader warm and body build
-on top of the dev server's own start — and every call after the first attaches to the
-booted page in well under a second. That is what makes a batch worth writing:
+on top of the dev server's own start. **Each invocation clears local storage and
+cookies before booting the requested page.** Pass `--keep-storage` to retain them
+and attach to an already booted page. Batch setup and measurements in one call
+when they must share state; `--reload` steps within that call keep its storage.
+IndexedDB saves, asset caches and service workers are retained. That is what makes
+a batch worth writing:
 
 ```bash
-node scripts/drive.mjs --js "ir.summary()"                     # ~0.1 s, page still hot
+node scripts/drive.mjs --keep-storage --js "ir.summary()"                     # ~0.1 s, page still hot
 node scripts/drive.mjs --url http://localhost:5173/planetarium \
     --js "ir.look('g:milky-way/s:SOL/b:5')" --wait 3000 --shot saturn.jpg
 node scripts/drive.mjs --js "ir.play('tng-intro')" --js "ir.pause()" \
@@ -102,8 +106,8 @@ set up.** Every call re-asserts `--url`, `--width`, `--height` and `--dpr`; a se
 call that omits them is a call at the defaults, and the driver re-navigates because
 the attached page is not showing what the URL asks for. That silently discards the
 observatory — `ir.preset('earthrise')` in one invocation and `ir.terrain()` in the
-next reports the menu. Either repeat the whole session line every time, or put the
-setup and the measurement in one invocation. The second is cheaper and always right.
+next reports the menu. Either repeat the whole session line with `--keep-storage` every time, or put
+the setup and the measurement in one invocation. The second is cheaper and always right.
 
 **The failure is silent and it answers plausibly**, which is what makes it expensive:
 you land back on the home page and every probe after it returns a real value about the
@@ -114,7 +118,7 @@ is empty when it should not be, check the page before checking the code.
 Session flags worth knowing: `--url` (the mode is a function of the path and the query,
 and the driver re-boots unless the attached page is already showing everything the URL
 asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
-profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--fresh`,
+profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--keep-storage`, `--fresh`,
 `--json`, `--down`, `--status`.
 
 A `--shot` is downscaled to 1568 px on its long edge, because that is where the reader
@@ -125,6 +129,64 @@ or not `--logs` was asked for, so a broken page never looks like a blank capture
 For anything about how the app is _served_ — asset headers, the SPA fallback, the service
 worker — point the driver at `pnpm preview` on 8787 instead: `pnpm preview` in one shell,
 then `--url http://localhost:8787/`.
+
+## Documents before enhancement
+
+`--document` waits for HTML readiness instead of `engine.gl`.
+`--no-javascript` implies document mode and disables scripts before navigation.
+`--block-url '*App*.js'` can keep runtime chunks from arriving while the shell
+hydrates. The flags apply only to the isolated rig and reset on its next call.
+Use `--js` to inspect document content and `--shot` to capture it. A document
+capture does not wait for first light or activate the renderer.
+
+## Presets as reproducible browser fixtures
+
+**Use the public URL restore path when the setup is a photograph.** `--preset <id>`
+expands a bundled planetarium shot into its full query fields. `--picture <path>`
+reads a JSON export containing exactly one shot. Both choose `/planetarium` on
+`--url`'s host and use the application's serializer; they do not call a separate
+camera setter. Use either source flag, not both.
+
+```bash
+node scripts/drive.mjs --preset earthrise --wait 2000 --shot earthrise.jpg
+node scripts/drive.mjs --picture .scratch/shoreline.json \
+  --query 'lens.zoom=2' --query 'time=841996882.478' \
+  --wait 2000 --shot shoreline-detail.jpg
+node scripts/drive.mjs --picture .scratch/shoreline.json \
+  --query 'save=1' --js '({path:location.pathname, dialog:!!document.querySelector("[role=dialog]")})'
+```
+
+`--query <key=value>` repeats, applies after the fixture, and keeps the last
+value for each key. Quote the shell argument and write raw text: `--query
+'label=Sea + sky & ice'`. The driver handles URL escaping. These are session
+flags, so every override applies before the first measurement regardless of
+where it appears among the steps. Repeat the source and overrides when attaching
+with `--keep-storage`. `presentation=occluded` always wins.
+Add `--print-url` to inspect or copy the resulting link without starting Chrome
+or a dev server.
+
+Custom URLs start with `shot=1` and use the picture object's dotted leaf paths:
+`address`, `seed`, `time`, `framing.state.distance`, `framing.tracking.address`,
+`framing.surface.latitude`, `lens.zoom`, and the remaining fields. Numbers retain
+full precision; time is seconds from J2000, camera angles are radians, and camera
+distances are meters. Lens focal length and gauge are millimeters.
+`lens.focus=null` means infinity; `framing.surface=null` means an orbit
+camera. The seed and generation manifest must describe the running universe.
+The [preset ADR](../../../docs/adr/0033-presets-hold-a-photographic-instant.md)
+specifies the record.
+
+To test the short built-in alias, pass
+`--url 'http://localhost:5173/planetarium?preset=earthrise'` directly. `save=1`
+opens `/planetarium/presets` with a suggested name after restoration; it does not
+save automatically. A malformed `--query`, such as `lens.zoom=broken`, reaches
+the page so a test can assert its error and unchanged view. An invalid JSON file
+fails before the browser starts.
+
+Codec and driver URL tests run without Chrome:
+`pnpm vitest run presetUrl.test driveUrl.test`. For browser regressions, check a
+cold link, a URL field edit, opening and closing the save dialog without moving
+the camera, and focusing another body clearing the shot fields. JSON file exports
+use their envelope, not flattened query keys.
 
 ## Seeing a strobe, and where the reporter's frames already are
 

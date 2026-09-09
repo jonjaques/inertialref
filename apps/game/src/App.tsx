@@ -1,5 +1,12 @@
+import { presentationClock } from './hud/time.ts'
 import { Canvas } from '@react-three/fiber'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
@@ -44,6 +51,7 @@ import {
   type CanvasProps,
   commitToneCurve,
   createRenderer,
+  releaseRenderer,
   type RendererHandle,
 } from './render/createRenderer.ts'
 import {
@@ -53,9 +61,6 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
-import { DocumentMeta } from './pages/DocumentMeta.tsx'
-import { ModeRoutes } from './pages/ModeRoutes.tsx'
-import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
 import {
   KEYS,
   modeForPath,
@@ -64,6 +69,8 @@ import {
   SETTINGS,
 } from './pages/paths.ts'
 import { SceneView } from './scene/SceneView.tsx'
+import { publishRuntime } from './runtimeState.ts'
+import { runtimeFailure } from './runtimeFailure.ts'
 import {
   engineStore,
   startEngineSampler,
@@ -71,7 +78,7 @@ import {
 } from './state/engineStore.ts'
 
 /*
- * The application shell.
+ * The persistent browser runtime.
  *
  * React owns the UI and nothing else. The engine is created once, outside the
  * component tree's data flow, and lives in a ref-like module singleton; the
@@ -280,8 +287,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * `ir.rise`) goes into the preference through the same module, which is what
    * keeps the panel's sliders agreeing with the picture and the picture alive
    * across the next unrelated toggle.
+   *
+   * Bind before route effects restore a public picture. Passive effects run
+   * child-first: binding here in that phase overwrote the restored lens and
+   * camera mode with the stored preferences immediately after the URL applied.
    */
-  useEffect(() => bindEngineKnobs(engine), [engine])
+  useLayoutEffect(() => bindEngineKnobs(engine), [engine])
 
   useEffect(() => {
     const unsubscribe = monitor.subscribe(setConnection)
@@ -293,15 +304,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }, [monitor])
 
   /*
-   * No release-on-unmount effect here, deliberately — the factory is the
-   * *sole* owner of renderer disposal. An effect keyed on the canvas string
-   * used to call `releaseRenderer()` in its cleanup, and under StrictMode
-   * that cleanup fires once between the doubled mounts: it could dispose the
-   * very renderer the surviving mount had adopted, whose animation loop died
-   * with it — a black canvas, a healthy HUD, and nothing in the console.
-   * R3F's unmount cannot release a `WebGPURenderer` either way; the factory
-   * releases the previous build before starting the next, which covers the
-   * one real replacement path (the HDR preference remounting the canvas).
+   * The factory owns renderer replacement. StrictMode cleanup must leave a
+   * healthy device alive for the surviving mount. Only terminal failure
+   * permits the unmount cleanup to release the device and engine workers.
    */
   // MSAA joins the key because it is a constructor fact; the `2x`↔`4x` step
   // only changes the drawing-buffer scale, which R3F applies live via `dpr`.
@@ -345,6 +350,22 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     producer.current = null
     engine.setHeightfieldSource(null)
   }
+
+  useEffect(
+    () => () => {
+      // StrictMode's ordinary replay keeps the device; a terminal failure retires it.
+      if (runtimeFailure.getSnapshot() === null) return
+      producer.current?.dispose()
+      producer.current = null
+      engine.setHeightfieldSource(null)
+      engine.gl = null
+      engine.view = null
+      releaseRenderer()
+      engine.dispose()
+      singleton = null
+    },
+    [engine],
+  )
 
   /*
    * Which ceiling the drawing buffer gets. Deliberately *not* in the key above:
@@ -394,7 +415,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     if (output === null) return
     const handle = renderer.current
     if (handle === null) return
-    void warmScene(handle, engine, firstLight.progress).then(firstLight.warmed)
+    void warmScene(handle, engine, firstLight.progress).then(
+      firstLight.warmed,
+      (cause: unknown) => runtimeFailure.report('graphics', cause),
+    )
     // After `warmScene`, which is what opens the session this registers with.
     // See the note at `retireProducer`.
     if (producer.current !== null) return
@@ -463,17 +487,19 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
   const commands: HudCommands = {
     togglePause: () => {
-      const paused = !engine.world.clock.paused
-      engine.world.clock.setPaused(paused)
+      const clock = presentationClock(engine)
+      const paused = !clock.paused
+      clock.setPaused(paused)
       flash(paused ? 'paused' : 'running')
     },
     warp: (direction: number) => {
-      const next = nextWarp(engine.world.clock.timeScale, direction)
-      engine.world.clock.setTimeScale(next)
+      const clock = presentationClock(engine)
+      const next = nextWarp(clock.timeScale, direction)
+      clock.setTimeScale(next)
       flash(`time warp ${next}×`)
     },
     realTime: () => {
-      engine.world.clock.setTimeScale(1)
+      presentationClock(engine).setTimeScale(1)
       flash('time warp 1×')
     },
     toggleAssist: () =>
@@ -561,6 +587,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     onOpenChange: setDebug,
   }
 
+  useEffect(() => {
+    publishRuntime({ engine, dev, render: renderState, onNotice: flash })
+  })
+  useEffect(() => () => publishRuntime(null), [])
+
   /*
    * The transport verbs, bound in every mode.
    *
@@ -583,7 +614,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     const held = read(RENDER_SENSOR)
     write(RENDER_SENSOR, {
       ...held,
-      response: held.response === 'composite' ? 'direct' : 'composite',
+      mode:
+        held.mode === 'enhanced'
+          ? 'automatic'
+          : held.mode === 'automatic'
+            ? 'manual'
+            : 'enhanced',
     })
   })
   useAction('time.normal', commands.realTime)
@@ -635,11 +671,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
      * document's own size, which `index.css` sets to `100dvh` and locks against
      * scrolling in one place.
      */
-    <div className="relative h-full w-full overflow-hidden bg-black text-slate-200">
-      {/* Renders nothing; keeps the tab, the canonical link and the analytics
-          page view in step with the address bar. Inside the shell rather than
-          in `main.tsx` because it needs the router's location. */}
-      <DocumentMeta />
+    <div className="absolute inset-0 h-full w-full overflow-hidden bg-black text-slate-200">
       <Canvas
         key={canvasKey}
         // Not renderer *settings* — the renderer itself. `createRenderer` probes
@@ -681,63 +713,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         <SceneView engine={engine} />
       </Canvas>
 
-      {/*
-       * Everything above the scene, clamped to standard range.
-       *
-       * `docs/design/art.md` wants the HUD composited after tone mapping at fixed
-       * luminance so it stays legible against a star. The browser already
-       * composites the DOM over the canvas — but the dock and the flight strip
-       * are `backdrop-blur`, and a backdrop filter samples what is behind it,
-       * which on the extended path includes a star's disk at twice diffuse
-       * white. `dynamic-range-limit` inherits, so one declaration on the layer
-       * holds for every overlay inside it, and it must not be on the root: the
-       * canvas is a sibling and would be clamped with it.
-       */}
-      {/*
-       * The overlay layer, and the order things are stacked in it.
-       *
-       * Every band below is `position: absolute` in one stacking context, so
-       * with no `z-index` anywhere the paint order — and, worse, the
-       * *hit-testing* order — is DOM order. That was an accident waiting for a
-       * mode that covers the viewport: `PlanetariumMode`'s input surface is
-       * `absolute inset-0 pointer-events-auto` and is emitted after the dock,
-       * so in the planetarium every button, tab and drag handle in the dock
-       * was unclickable and the surface silently took the click.
-       *
-       * So the order is stated, bottom to top, and each band gets an inert
-       * wrapper to state it on — `ErrorBoundary`'s `className` styles its
-       * *fallback* rather than a wrapper, and the chrome inside positions
-       * itself, so there is otherwise nothing here to hang a z-index on. The
-       * wrappers are `pointer-events-none` like the layer itself, so they
-       * change nothing about what is clickable: each piece of chrome turns
-       * events back on for itself, exactly as before.
-       *
-       *   0  the mode           — its input surface, its panes and its menu
-       *   10 the cutscene layer — blackout and titles: picture, not UI
-       *   30 notices, and the cinema player
-       *   40 dialogs            — over all of it, which is what a dialog is
-       *   50 the boot overlay   — over even those, until first light: nothing
-       *      below is usable before the scene exists, and it unmounts forever
-       *      once its fade completes
-       *
-       * The band that used to sit at 20 was the dev dock, a fixed panel in the
-       * top-right corner that `App` drew over whichever mode was running. There
-       * is no such thing now: the author's instruments are panels in the mode's
-       * own workspace (`dock/Workspace.tsx`), so they are inside the mode band
-       * and ordered against its input surface by DOM order, exactly like every
-       * other panel.
-       *
-       * The cutscene layer is above the mode because its blackout is part of
-       * the picture. The cinema player is the one mode that has to be read
-       * *through* that blackout — it carries the transport and the way out —
-       * which is why the mode band is lifted to 30 there and nowhere else.
-       *
-       * The tooltip wrapper portals its content *into* this layer at `z-50`
-       * — above every band here, and inside the standard-range clamp, which
-       * is the point: a chip portalled to `<body>` sat outside the clamp and
-       * composited over a star at twice diffuse white. See
-       * `components/ui/tooltip.tsx`.
-       */}
+      {/* Shared z bands with PageShell preserve cutscene and dialog ordering.
+          Neither persistent sibling introduces its own stacking context. */}
       <ChromeContext value={chromeHidden}>
         <div className="hud-layer pointer-events-none absolute">
           {/* Renders nothing at all when no cutscene is running. While one is,
@@ -768,36 +745,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               <TrackOverlay engine={engine} />
             </ErrorBoundary>
           </div>
-          {/*
-           * The mode: the menu, a flight session, the planetarium, the player.
-           *
-           * Its own boundary, separate from the cutscene layer's. The scene is
-           * outside both: `<Canvas>` is a sibling of `.hud-layer` and nothing in
-           * here can reach it, so a throw in a panel loses the panel and not the
-           * picture. Each panel carries its own boundary inside this one — see
-           * `dock/PanelChrome.tsx` — so one failing readout does not take the
-           * menu that could close it down with it.
-           */}
-          {/*
-           * The one exception to "a cutscene hides every other piece of chrome":
-           * the cinema player *is* the chrome for a playing scene, and unmounting
-           * it would stop the scene it is playing — its cleanup calls
-           * `stopCutscene`, so gating it on `!cinema` made pressing play stop the
-           * cutscene a fraction of a second later, with nothing to explain it.
-           */}
-          {(!cinema || mode === 'cinema') && (
-            <div
-              className={`pointer-events-none absolute inset-0 ${mode === 'cinema' ? 'z-30' : 'z-0'}`}
-            >
-              <ErrorBoundary
-                what={`the ${mode} mode`}
-                className="pointer-events-auto absolute inset-0"
-              >
-                <ModeRoutes engine={engine} dev={dev} onNotice={flash} />
-              </ErrorBoundary>
-            </div>
-          )}
-
           {/* A notice echoes what was asked for, and one of the things that can
             be asked for is whatever was typed into the address field. Bounded
             so a paste is a truncated sentence rather than a band across the
@@ -815,7 +762,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             left to transition. The key is the message, so a second notice
             arriving while the first is up crossfades rather than swapping text
             inside a box that never moved. Transform is dropped for anyone who
-            asks for reduced motion; see `MotionConfig` in `main.tsx`. */}
+            asks for reduced motion; see the shared `MotionConfig` in `Root.tsx`. */}
           {/* The cinema exception again, and for the same reason as the dialog
             band below: the player's workspace carries the save, warp and HDR
             controls, and this notice is the only confirmation any of them
@@ -852,35 +799,13 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             )}
           </AnimatePresence>
 
-          {/* Dialogs, over a running simulation and over whatever mode is behind
-            them. Inside the layer so they inherit the standard-range clamp; a
-            sibling of `<Canvas>`, so navigating cannot remount the renderer.
-
-            The cinema mode is the same exception it is for the mode band
-            above: its workspace carries the settings link, so a scene being
-            open must not unmount the dialog that link opens — gated on
-            `!cinema` alone, settings from the player changed the URL and drew
-            nothing, and a second press wrapped the dead `/settings` as the new
-            background and killed the scene. Elsewhere a cutscene still clears
-            the frame. */}
-          {(!cinema || mode === 'cinema') && (
-            <div className="pointer-events-none absolute inset-0 z-40">
-              <ErrorBoundary
-                what="the page overlay"
-                className="pointer-events-auto absolute inset-0"
-              >
-                <OverlayRoutes render={renderState} onNotice={flash} />
-              </ErrorBoundary>
-            </div>
-          )}
-
-          {/* The loading screen. Mounted from the first commit — it is what
-            keeps React's clearing of the index.html placeholder from flashing
-            an unlit canvas — and gone for good once its fade completes. A
-            boundary of its own: a throw in here must cost the cover, never
-            the session under it. */}
+          {/* Public pages remain readable above the cover while their backdrop
+              warms. Keep the fade mounted in every mode: onRevealed completes
+              firstLight and releases its warm-up machinery. */}
           {boot !== 'done' && (
-            <div className="pointer-events-none absolute inset-0 z-50">
+            <div
+              className={`pointer-events-none absolute inset-0 ${mode === 'menu' || mode === 'docs' ? 'z-0' : 'z-50'}`}
+            >
               <ErrorBoundary
                 what="the loading screen"
                 className="type-readout pointer-events-auto absolute bottom-3 left-3"

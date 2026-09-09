@@ -26,6 +26,7 @@ import {
   systemFrameId,
   systemId,
   walkBodies,
+  TEST_CATALOG,
 } from '@inertialref/universe'
 import {
   MAX_WARP_FRAME,
@@ -601,6 +602,27 @@ describe('rails', () => {
     expect(world.isCoasting(burner.id)).toBe(false)
   })
 
+  it('keeps a throttled drive off the rails until it is cut', () => {
+    const world = solarWorld()
+    const ship = coastingShip(world)
+    world.step()
+    expect(world.isCoasting(ship.id)).toBe(true)
+    // The drive is a term the conic does not carry, however low it is set.
+    world.setThrottle(ship.id, 0.05)
+    expect(world.isCoasting(ship.id)).toBe(false)
+    world.step()
+    expect(world.isCoasting(ship.id)).toBe(false)
+    // A hand coming off the thrusters leaves the throttle where it was, and
+    // the ship stays integrated; only cutting the drive puts it back on.
+    world.setControl(ship.id, Vec.ZERO, Vec.ZERO)
+    expect(world.entities.require(ship.id).control.throttle).toBe(0.05)
+    world.step()
+    expect(world.isCoasting(ship.id)).toBe(false)
+    world.setThrottle(ship.id, 0)
+    world.step()
+    expect(world.isCoasting(ship.id)).toBe(true)
+  })
+
   it('refuses rails to anything whose conic reaches the ground or the air', () => {
     const world = solarWorld()
     const planet = landingTarget(world)
@@ -756,12 +778,12 @@ describe('rails', () => {
 
 describe('streaming', () => {
   it('loads and unloads systems as ordinary control flow', () => {
-    const world = new World({ seed: 'inertialref' })
+    const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
     const sol = world.loadSystem(SOL)
     const ship = world.spawnShip('scout', systemFrameId(SOL), vec3(1e9, 0, 0))
 
     const near = world.updateInterest(sol.position, 5 * LIGHT_YEAR)
-    expect(near.loaded.length).toBeGreaterThan(0)
+    expect(near.loaded).toContain(TEST_CATALOG.find('Proxima Centauri')!.id)
     expect(world.loadedSystems().length).toBeGreaterThan(1)
 
     // Move the interest center far away: everything unloads except the system
@@ -908,6 +930,14 @@ describe('the state hash covers what it claims', () => {
     expect(a.world.stateHash()).toBe(b.world.stateHash())
     b.world.setControl(b.ship, vec3(0, 0, 1), Vec.ZERO)
     expect(a.world.stateHash()).not.toBe(b.world.stateHash())
+  })
+
+  it('separates worlds that differ only in the throttle', () => {
+    const [a, b] = twoWorlds()
+    b.world.setThrottle(b.ship, 0.5)
+    expect(a.world.stateHash()).not.toBe(b.world.stateHash())
+    a.world.setThrottle(a.ship, 0.5)
+    expect(a.world.stateHash()).toBe(b.world.stateHash())
   })
 
   it('separates worlds that differ only in flight assist', () => {

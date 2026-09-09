@@ -23,7 +23,7 @@
     "test:me": "vitest run --reporter=dot --reporter=vitest-nyancat-reporter",
     "test:gpu": "vitest run --config apps/game/vitest.gpu.config.ts",
     "test:slow": "vitest run --config apps/game/vitest.slow.config.ts",
-    "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/ingest/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/ingest/tsconfig.json && pnpm --filter @inertialref/game check",
     "lint": "oxlint",
     "fta": "fta .",
     "fta:check": "fta . --score-cap 91",
@@ -48,6 +48,7 @@
     "check": "pnpm graph && pnpm brand:check && pnpm presets:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:slow && pnpm build"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
     "@types/node": "^24.13.3",
     "@vitest/coverage-v8": "4.1.10",
     "fast-check": "^4.1.1",
@@ -58,7 +59,8 @@
     "marked": "^18.0.11",
     "oxlint": "^1.75.0",
     "prettier": "^3.9.6",
-    "sharp": "^0.35.3",
+    "prettier-plugin-astro": "^0.14.1",
+    "sharp": "^0.35.4",
     "shiki": "^4.4.3",
     "ts-morph": "^28.0.0",
     "typedoc": "^0.28.20",

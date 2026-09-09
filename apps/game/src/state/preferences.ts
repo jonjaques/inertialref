@@ -1,4 +1,6 @@
+import { isPicture, MAX_PICTURES, type Picture } from '@inertialref/devtools'
 import { useEffect, useRef, useState } from 'react'
+import { useHydrated } from './hydration.ts'
 import {
   type Lens,
   LENS_PRESETS,
@@ -7,6 +9,7 @@ import {
   FOV_MIN,
   DEFAULT_SENSOR_SETTINGS,
   isSensorSettings,
+  parseSensorSettings,
 } from '@inertialref/rendering'
 import {
   type Accept,
@@ -41,6 +44,7 @@ import {
   OUTPUT_PREFERENCES,
 } from '../render/output.ts'
 import { type TimingLevel, TIMING_LEVELS } from '../engine/browserTiming.ts'
+import { DEFAULT_SHIP, SHIP_IDS } from '../render/ships.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   isSurfaceQuality,
@@ -107,6 +111,8 @@ export interface Preference<T> {
   readonly what: string
   readonly initial: T
   readonly accept: Accept<T>
+  /** Convert a validated older value stored under the same key. */
+  readonly migrateValue?: (value: unknown) => T | null
   /**
    * What a believed stored value is put back through before it is used.
    *
@@ -154,6 +160,7 @@ export interface AnyPreference {
   readonly what: string
   readonly initial: unknown
   readonly accept: Accept<unknown>
+  readonly migrateValue?: (value: unknown) => unknown
   readonly revive?: (value: never) => unknown
   readonly migrate?: () => unknown
 }
@@ -234,9 +241,10 @@ export const RENDER_HDR = define<OutputPreference>({
 export const RENDER_SENSOR = define({
   key: 'render.sensor',
   group: 'display',
-  what: 'canopy response, exposure comfort clamps, peak luminance and white balance',
+  what: 'camera mode, exposure compensation, comfort clamps, peak luminance and white balance',
   initial: DEFAULT_SENSOR_SETTINGS,
   accept: isSensorSettings,
+  migrateValue: parseSensorSettings,
 })
 
 export const RENDER_AA = define<AaLevel>({
@@ -271,9 +279,46 @@ export const RENDER_SURFACE = define<SurfaceQuality>({
   accept: isSurfaceQuality,
 })
 
+/**
+ * Which modeled hull the ship is drawn as.
+ *
+ * A string id into the ship manifest rather than a stored spec: the length,
+ * the license and the file are the manifest's to state, and a save from a
+ * build that had one more hull must degrade to the default rather than resolve
+ * an id this build cannot load. `ShipModel` and the boot warm-up both read it,
+ * so a chosen hull is the one that is compiled ahead as well as the one drawn.
+ */
+export const RENDER_SHIP = define<string>({
+  key: 'render.ship',
+  group: 'display',
+  what: 'which modeled hull the ship is drawn as',
+  initial: DEFAULT_SHIP,
+  accept: oneOf(SHIP_IDS),
+})
+
+export const RENDER_THRUSTER_VARIATION = define({
+  key: 'render.thrusterVariation',
+  group: 'display',
+  what: 'uneven valve timing and tiny settling puffs; visual only',
+  initial: true,
+  accept: isBoolean,
+})
+
 /* ------------------------------------------------------------------------ */
 /* camera                                                                    */
 /* ------------------------------------------------------------------------ */
+
+export const PERSONAL_PICTURES = define<readonly Picture[]>({
+  key: 'planetarium.pictures',
+  group: 'planetarium',
+  what: 'personal camera shots',
+  initial: [],
+  accept: (value): value is readonly Picture[] =>
+    Array.isArray(value) &&
+    value.length <= MAX_PICTURES &&
+    value.every(isPicture) &&
+    new Set(value.map((one) => one.id)).size === value.length,
+})
 
 export const CAMERA_LENS = define<Lens>({
   key: 'camera.lens',
@@ -399,18 +444,24 @@ export const PLANETARIUM_HINTED = define({
   accept: isBoolean,
 })
 
-export const CATALOGUE_RADIUS = define<string>({
+/*
+ * The navigator's three keys keep `catalogue` in their stored names. A key is
+ * what a reader's browser already holds, and renaming it would put every
+ * radius and every chip selection back to the default on the next visit — a
+ * rename of the panel's title that reset its settings.
+ */
+export const NAVIGATOR_RADIUS = define<string>({
   key: 'planetarium.catalogue.radius',
   group: 'planetarium',
-  what: 'the catalog’s survey radius',
+  what: 'the navigator’s survey radius',
   initial: '10',
   accept: oneOf(RADII),
 })
 
-export const CATALOGUE_CLASSES = define<readonly string[]>({
+export const NAVIGATOR_CLASSES = define<readonly string[]>({
   key: 'planetarium.catalogue.classes',
   group: 'planetarium',
-  what: 'which object classes the catalog lists',
+  what: 'which object classes the navigator lists',
   initial: ALL_CLASSES,
   // Membership in the live set, not merely "an array of strings". The point of
   // a validator here is the value that survives a *rename* — a stored id no
@@ -421,10 +472,10 @@ export const CATALOGUE_CLASSES = define<readonly string[]>({
   ),
 })
 
-export const CATALOGUE_FILTERING = define({
+export const NAVIGATOR_FILTERING = define({
   key: 'planetarium.catalogue.filtering',
   group: 'planetarium',
-  what: 'whether the catalog’s filter row is showing',
+  what: 'whether the navigator’s filter row is showing',
   initial: false,
   accept: isBoolean,
 })
@@ -515,7 +566,10 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_AA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
+  RENDER_SHIP,
+  RENDER_THRUSTER_VARIATION,
   CAMERA_LENS,
+  PERSONAL_PICTURES,
   CONTROLS_KEYMAP,
   PLANETARIUM_LABELS,
   PLANETARIUM_LABEL_DENSITY,
@@ -525,9 +579,9 @@ export const REGISTRY: readonly AnyPreference[] = [
   PLANETARIUM_SHIP,
   PLANETARIUM_FLARE,
   PLANETARIUM_HINTED,
-  CATALOGUE_RADIUS,
-  CATALOGUE_CLASSES,
-  CATALOGUE_FILTERING,
+  NAVIGATOR_RADIUS,
+  NAVIGATOR_CLASSES,
+  NAVIGATOR_FILTERING,
   DEBUG_ON,
   TIMING_LEVEL,
 ]
@@ -696,12 +750,25 @@ export const read = <T>(preference: Preference<T>): T =>
 /** The same, for a definition whose value type the caller does not know. */
 export function resolve(definition: AnyPreference): unknown {
   const stored = readRaw(definition.key)
-  if (stored !== MISSING && definition.accept(stored)) {
+  const accepted = acceptedValue(definition, stored)
+  if (accepted !== MISSING) {
+    if (accepted !== stored) writeRaw(definition.key, accepted)
     const revive = definition.revive as
       ((value: unknown) => unknown) | undefined
-    return revive === undefined ? stored : revive(stored)
+    return revive === undefined ? accepted : revive(accepted)
   }
   return definition.migrate?.() ?? definition.initial
+}
+
+function acceptedValue(definition: AnyPreference, value: unknown): unknown {
+  if (value === MISSING) return MISSING
+  if (definition.accept(value)) return value
+  const migrated = definition.migrateValue?.(value)
+  return migrated !== undefined &&
+    migrated !== null &&
+    definition.accept(migrated)
+    ? migrated
+    : MISSING
 }
 
 /**
@@ -797,6 +864,7 @@ export function subscribe<T>(
 export function usePersistentState<T>(
   preference: Preference<T>,
 ): [T, (value: T | ((previous: T) => T)) => void] {
+  const hydrated = useHydrated()
   const [value, setValue] = useState<T>(() => read(preference))
   /*
    * What is already on disk, so an unchanged value is not rewritten.
@@ -849,7 +917,7 @@ export function usePersistentState<T>(
       }),
     [key],
   )
-  return [value, setValue]
+  return [hydrated ? value : preference.initial, setValue]
 }
 
 /* ------------------------------------------------------------------------ */
@@ -885,8 +953,10 @@ export function exportPreferences(now: string): PreferenceExport {
     const definition = definitionFor(key)
     if (definition === null) continue
     const stored = readRaw(key)
-    if (stored === MISSING || !definition.accept(stored)) continue
-    preferences[key] = stored
+    const accepted = acceptedValue(definition, stored)
+    if (accepted === MISSING) continue
+    if (accepted !== stored) writeRaw(key, accepted)
+    preferences[key] = accepted
   }
   return {
     app: EXPORT_APP,
@@ -938,7 +1008,7 @@ export function planImport(data: unknown): ImportPlan {
       })
       continue
     }
-    if (!definition.accept(value)) {
+    if (acceptedValue(definition, value) === MISSING) {
       entries.push({
         key,
         group: definition.group,
@@ -975,7 +1045,10 @@ export function importPreferences(data: unknown): ImportPlan {
   if (preferences === null) return plan
   for (const entry of plan.entries) {
     if (!entry.applied) continue
-    const value = preferences[entry.key]
+    const definition = definitionFor(entry.key)
+    if (definition === null) continue
+    const value = acceptedValue(definition, preferences[entry.key])
+    if (value === MISSING) continue
     writeRaw(entry.key, value)
     announce(entry.key, believe(entry.key))
   }

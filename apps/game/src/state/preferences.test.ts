@@ -1,11 +1,11 @@
 import fc from 'fast-check'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { LENS_PRESETS } from '@inertialref/rendering'
+import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
 import { isBoolean, numberWithin, oneOf } from './accept.ts'
 import * as preferences from './preferences.ts'
 import {
   CAMERA_LENS,
-  CATALOGUE_CLASSES,
+  NAVIGATOR_CLASSES,
   CONTROLS_KEYMAP,
   DOCK_PANES,
   EXPORT_APP,
@@ -17,6 +17,8 @@ import {
   planImport,
   PREFERENCE_GROUPS,
   read,
+  RENDER_SENSOR,
+  RENDER_THRUSTER_VARIATION,
   REGISTRY,
   resetPreferences,
   SECTION_OPEN,
@@ -43,6 +45,118 @@ const stamp = '2026-08-28T00:00:00.000Z'
 
 beforeEach(() => {
   resetPreferences()
+})
+
+describe('thruster variation', () => {
+  it('defaults to enabled without storing a choice', () => {
+    expect(read(RENDER_THRUSTER_VARIATION)).toBe(true)
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.thrusterVariation',
+    )
+  })
+
+  for (const enabled of [true, false]) {
+    it(`keeps an explicit ${enabled} choice through export and import`, () => {
+      write(RENDER_THRUSTER_VARIATION, enabled)
+      const file = JSON.parse(JSON.stringify(exportPreferences(stamp)))
+      resetPreferences()
+      expect(importPreferences(file).applied).toBe(1)
+      expect(read(RENDER_THRUSTER_VARIATION)).toBe(enabled)
+    })
+  }
+
+  it('rejects non-boolean imports without changing the choice', () => {
+    write(RENDER_THRUSTER_VARIATION, false)
+    for (const invalid of [0, 1, 'true', null, {}, []]) {
+      const plan = importPreferences({
+        app: EXPORT_APP,
+        version: 1,
+        exported: stamp,
+        preferences: { 'render.thrusterVariation': invalid },
+      })
+      expect(plan.applied).toBe(0)
+      expect(plan.dropped).toBe(1)
+      expect(read(RENDER_THRUSTER_VARIATION)).toBe(false)
+    }
+  })
+})
+
+describe('camera settings migration', () => {
+  const legacy = {
+    response: 'composite',
+    curve: 'natural',
+    rate: 0,
+    range: { bright: 0.25, dark: 0.5 },
+    peak: 1.5,
+    balance: 5200,
+  }
+
+  it('defaults an absent camera preference to Enhanced without storing it', () => {
+    expect(read(RENDER_SENSOR).mode).toBe('enhanced')
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.sensor',
+    )
+  })
+
+  for (const response of ['composite', 'direct']) {
+    for (const curve of ['natural', 'neutral', 'gentle', 'crisp']) {
+      it(`migrates and persists ${response} + ${curve} without changing the lens`, () => {
+        write(CAMERA_LENS, LENS_PRESETS.cinematic)
+        write(
+          { ...RENDER_SENSOR, accept: (_value): _value is unknown => true },
+          { ...legacy, response, curve },
+        )
+        const mode =
+          response === 'direct'
+            ? 'manual'
+            : curve === 'natural'
+              ? 'enhanced'
+              : 'automatic'
+        const expected = {
+          mode,
+          look: curve === 'natural' ? 'neutral' : curve,
+          compensation: 0,
+          rate: legacy.rate,
+          range: legacy.range,
+          peak: legacy.peak,
+          balance: legacy.balance,
+        }
+        expect(read(RENDER_SENSOR)).toEqual(expected)
+        expect(exportPreferences(stamp).preferences['render.sensor']).toEqual(
+          expected,
+        )
+        expect(read(CAMERA_LENS)).toEqual(LENS_PRESETS.cinematic)
+      })
+    }
+  }
+
+  it('imports valid legacy settings and rejects malformed settings without resetting the selection', () => {
+    const file = (sensor: unknown) => ({
+      app: EXPORT_APP,
+      version: 1,
+      exported: stamp,
+      preferences: { 'render.sensor': sensor },
+    })
+    expect(
+      importPreferences(file({ ...legacy, curve: 'gentle' })).applied,
+    ).toBe(1)
+    expect(read(RENDER_SENSOR).mode).toBe('automatic')
+    for (const invalid of [
+      { ...legacy, response: 'future' },
+      { ...legacy, curve: 'future' },
+      { ...legacy, rate: -1 },
+      { ...legacy, range: { bright: 0 } },
+      { ...legacy, mode: 'manual' },
+      { ...DEFAULT_SENSOR_SETTINGS, mode: 'future' },
+      { ...DEFAULT_SENSOR_SETTINGS, compensation: Infinity },
+      { ...DEFAULT_SENSOR_SETTINGS, look: 'future' },
+    ]) {
+      const plan = importPreferences(file(invalid))
+      expect(plan.applied).toBe(0)
+      expect(plan.dropped).toBe(1)
+      expect(read(RENDER_SENSOR).mode).toBe('automatic')
+    }
+  })
 })
 
 describe('the guard vocabulary', () => {
@@ -281,7 +395,7 @@ describe('an import', () => {
   })
 
   it('rejects a class list naming something no chip answers to', () => {
-    expect(CATALOGUE_CLASSES.accept(['stars'])).toBe(true)
-    expect(CATALOGUE_CLASSES.accept(['stars', 'wormholes'])).toBe(false)
+    expect(NAVIGATOR_CLASSES.accept(['stars'])).toBe(true)
+    expect(NAVIGATOR_CLASSES.accept(['stars', 'wormholes'])).toBe(false)
   })
 })

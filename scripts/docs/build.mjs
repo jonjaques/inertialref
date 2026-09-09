@@ -8,11 +8,12 @@ import {
   TSConfigReader,
   TypeDocReader,
 } from 'typedoc'
-import { buildReference } from './api.mjs'
+import { buildReference, canonicalReferenceLinks } from './api.mjs'
 import { loadHighlighter } from './highlight.mjs'
 import { renderMarkdown } from './markdown.mjs'
 import { assetName, routeFor, sourceUrl } from './routes.mjs'
 import { allWings, documentsUnderDocs, listedPages } from './wings.mjs'
+import { apiPrerenderEnabled, docRedirects } from './prerender.mjs'
 
 /*
  * The documentation build.
@@ -45,6 +46,7 @@ import { allWings, documentsUnderDocs, listedPages } from './wings.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const OUT = join(ROOT, 'apps/game/public/doc-content')
+const REDIRECTS = join(ROOT, 'apps/game/public/_redirects')
 
 const quiet = process.argv.includes('--quiet')
 const skipApi = process.argv.includes('--no-api')
@@ -58,10 +60,13 @@ async function main() {
   const prose = await renderProse()
   const reference =
     serialized === null
-      ? { pages: [], groups: [] }
+      ? { pages: [], groups: [], aliases: {} }
       : buildReference(serialized, await packageDescriptions())
 
-  const pages = [...prose, ...reference.pages]
+  const pages = [...prose, ...reference.pages].map((page) => ({
+    ...page,
+    html: canonicalReferenceLinks(page.html, reference.aliases),
+  }))
   const wings = allWings(reference.groups)
 
   await rm(OUT, { recursive: true, force: true })
@@ -95,6 +100,7 @@ async function main() {
   )
 
   const manifest = {
+    prerenderApi: apiPrerenderEnabled(),
     /*
      * A digest of everything the manifest describes, so a client can tell one
      * build's content from another's without a wall clock in the output. A
@@ -102,6 +108,7 @@ async function main() {
      * a content change to anything comparing them.
      */
     version: digest(pages),
+    aliases: reference.aliases,
     /*
      * The navigation, in routes.
      *
@@ -162,6 +169,7 @@ async function main() {
     },
   }
 
+  await writeFile(REDIRECTS, docRedirects(manifest))
   await writeJson(join(OUT, 'manifest.json'), manifest)
   await writeJson(join(OUT, 'search.json'), searchIndex(pages, manifest))
 
@@ -175,7 +183,8 @@ async function main() {
         `(${manifest.counts.documents} documents, ${manifest.counts.exports} exports ` +
         `across ${manifest.counts.packages} packages), ` +
         `${manifest.counts.words.toLocaleString('en-US')} words, ` +
-        `${manifest.counts.diagrams} diagrams, in ${ms.toFixed(0)} ms`,
+        `${manifest.counts.diagrams} diagrams, in ${ms.toFixed(0)} ms; ` +
+        `API HTML: ${manifest.prerenderApi ? 'prerendered' : 'async'}`,
     )
 }
 

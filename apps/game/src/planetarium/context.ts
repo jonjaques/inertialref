@@ -1,3 +1,4 @@
+import type { Picture } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
 import type { LabelDensity } from './layers.ts'
@@ -18,6 +19,10 @@ export interface PlanetariumContext {
   /** The address the observatory is on, refreshed by the mode at panel rate. */
   readonly target: string | null
   readonly focus: (address: string) => void
+  readonly takePicture: (picture: Picture, builtin?: boolean) => void
+  readonly managePresets: (save?: boolean) => void
+  /** Open the deep catalog over the mode, keeping the camera mounted. */
+  readonly openCatalog: () => void
   readonly labels: boolean
   readonly onLabels: (on: boolean) => void
   /** How many names the sky carries at once. */

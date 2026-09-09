@@ -74,7 +74,8 @@ ir.preset('earthrise') // a named picture: address, framing and lens, in one cal
 ir.chrome(false) // the interface out of the frame — the state a plate is taken in
 ir.layers(false) // names and traces off, which is a different claim from the chrome
 ir.terrain() // the live streamer and the rocks on it — null headlessly
-ir.ascend() // back to the framing the camera left
+ir.ascend() // back to the framing the camera left, or abandon a drop
+ir.drop(20, -30, { seconds: 6 }) // fly down instead of cutting, facing the star
 ```
 
 **A patch count is only comparable against the lens it was taken through.** The
@@ -85,6 +86,11 @@ different question rather than a disagreement — the telephoto end of the slide
 measures 1.9× to 3.2× the flight lens's demand. `ir.lens()` is what the picture
 is being taken with, and `ir.descend` takes a `lens` and a `viewport` to ask at
 another one.
+
+**`ir.visit` cuts and `ir.drop` flies.** Use `visit` for a plate — the frame
+after it returns is the frame asked for — and `drop` when the descent itself is
+the subject, which takes its `seconds` and ends facing the star. A `--shot`
+taken straight after `drop` photographs the top of the arc.
 
 `ir.visit` stands a camera on the ground; `ir.land` teleports the ship onto it.
 The same distinction as `look` and `goTo`, one clamp lower — and they are not the
@@ -105,14 +111,89 @@ port, so it needs no focus and does not touch the browser a person is using.
 ```bash
 node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:5')" \
                        --wait 3000 --shot saturn.jpg
-node scripts/drive.mjs --sample 240 --sample-js "ir.terrain()"
+node scripts/drive.mjs --keep-storage --sample 240 --sample-js "ir.terrain()"
 node scripts/drive.mjs --down
 ```
 
 Steps run in the order written, in one session, and Chrome stays up between
-invocations — boot is about five seconds and every call after the first attaches
-to the booted page in well under one. Batch the steps rather than paying a
-process per question. `--help` lists them all.
+calls. Each invocation clears local storage and cookies, then boots the requested
+page. `--keep-storage` retains them and permits attaching to the booted page;
+`--fresh` still forces a reload when combined with it. IndexedDB saves, asset
+caches and service workers are retained. Batch setup and measurements in one
+invocation when they must share state. `--reload` steps keep that invocation's
+storage.
+
+### Public HTML before the scene
+
+Use `--document` to wait for the document to become readable without waiting
+for `window.engine.gl`. `--no-javascript` implies this mode and disables page
+scripts before navigation, including the first navigation of a new rig.
+Inspection expressions passed through `--js` still run through DevTools.
+
+```bash
+node scripts/drive.mjs --url http://localhost:8787/docs/architecture \
+  --document --no-javascript \
+  --js '({title:document.title, text:document.body.innerText})' \
+  --shot docs-without-javascript.jpg
+node scripts/drive.mjs --url http://localhost:8787/docs/architecture \
+  --document --block-url '*App.*.js' --wait 2000 --logs \
+  --shot docs-without-runtime.jpg
+```
+
+Repeat `--block-url` for additional request patterns. Match the actual chunk
+names emitted by the build. Blocking bypasses service workers so a cached
+response cannot conceal the requested failure. These settings are per
+invocation, and changing script execution or blocked patterns reloads a warm
+page. Omitting the flags restores scripts and ordinary service worker behavior.
+
+Document screenshots capture the compositor directly, without the renderer's
+extra activation capture. Frame sampling and screencasts require scripts and
+reject `--no-javascript`. Default readiness still waits for the renderer and
+its boot cover, and default screenshots retain the two captures it needs.
+
+### A saved shot as the setup
+
+The driver can open a bundled preset or a single-shot JSON export through the
+same URL the planetarium shares. This exercises time, orbit anchor, tracking,
+surface stance and lens restoration together.
+
+```bash
+node scripts/drive.mjs --preset earthrise --wait 2000 --shot earthrise.jpg
+node scripts/drive.mjs --picture .scratch/shoreline.json \
+  --query 'lens.zoom=2' --query 'label=Sea + sky' --shot shoreline.jpg
+node scripts/drive.mjs --picture .scratch/shoreline.json \
+  --query 'save=1' --logs
+```
+
+`--preset` expands the named bundled shot into a complete URL. `--picture`
+accepts the public JSON envelope containing exactly one shot; the two flags are
+mutually exclusive. Both select `/planetarium` on the host given by `--url`,
+which also supports a copied share link directly. To exercise a built-in's
+short alias, use `--url 'http://localhost:5173/planetarium?preset=earthrise'`.
+
+Repeat `--query 'key=value'` to override individual fields after selecting the
+shot. Values are raw text, with shell quotes around the argument; the driver
+handles URL escaping. Repeating a key keeps its last value. These are session
+flags, applied before all steps, and must be repeated for a matching warm attach.
+The driver always sets `presentation=occluded`.
+Add `--print-url` to print the resolved link without starting Chrome or a server.
+
+The URL uses `shot=1` plus dotted picture keys such as `time`,
+`framing.state.distance`, and `lens.zoom`. Numbers retain full precision.
+Time is seconds from J2000, camera angles are radians, and camera distances
+are meters. Lens focal length and gauge are millimeters.
+`lens.focus=null` means infinity; `framing.surface=null` means an orbit camera.
+`save=1` restores the view and opens its save prompt at `/planetarium/presets`
+without writing to the library. See the
+[preset format](../adr/0033-presets-hold-a-photographic-instant.md).
+
+Invalid query overrides reach the page for error-path tests. Invalid JSON
+fixtures fail before Chrome starts. Run `pnpm vitest run presetUrl.test
+driveUrl.test` for the codec and driver tests without a browser. In the browser,
+verify URL restoration and field edits, preservation of the pose across dialog
+navigation, and removal of shot fields when focusing another body.
+
+### Session lifetime
 
 Run shutdown separately. `--down` exits before step processing, so a command
 containing both `--js` and `--down` closes Chrome without evaluating the script.
@@ -160,8 +241,9 @@ three; they are here because they explain what it is doing:
    `wrangler dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
    or build once. [development](../guides/development.md) § Commands.
 
-Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds
-earlier, so a probe on it captures an unlit canvas.
+Default readiness is `window.engine.gl`, not `window.ir`. The harness appears
+seconds earlier, so a probe on it captures an unlit canvas. `--document` uses
+the committed document's readiness for public HTML checks.
 
 **Terrain streams only below the eight-pixel relief gate, and above it
 `ir.terrain()` reports zeros that read exactly like a broken streamer.** From

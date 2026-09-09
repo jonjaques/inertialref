@@ -1,6 +1,14 @@
 'use no memo'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useSearchParams, Outlet, useNavigate } from 'react-router'
+import {
+  pictureLink,
+  presetLink,
+  readPictureLink,
+  pictureQueryKey,
+  withoutPictureLink,
+  withPictureLink,
+} from './presetUrl.ts'
 import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -21,10 +29,11 @@ import {
 import { useChromeHidden } from '../hud/chrome.ts'
 import { useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
-import { QUERY } from '../pages/paths.ts'
+import { QUERY, CATALOG, PRESETS } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
+import { DropHandle } from './DropHandle.tsx'
 import { pick } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
@@ -57,8 +66,12 @@ export function PlanetariumMode({
 }) {
   const [params, setParams] = useSearchParams()
   const requested = params.get(QUERY.at)
-
-  const [target, setTarget] = useState<string | null>(null)
+  const document = pictureQueryKey(params)
+  const saveRequested = params.get(QUERY.save) === '1'
+  const navigate = useNavigate()
+  const target = useEngine(
+    (snapshot) => snapshot.observer?.target?.address ?? null,
+  )
   const [labels, setLabels] = usePersistentState(PLANETARIUM_LABELS)
   const [orbits, setOrbits] = usePersistentState(PLANETARIUM_ORBITS)
   const [ship, setShip] = usePersistentState(PLANETARIUM_SHIP)
@@ -133,6 +146,7 @@ export function PlanetariumMode({
     const held = engine.presentation.push({
       observatory: true,
       motionBlur: false,
+      diffuseGalaxy: true,
     })
     stance.current = held
     return () => {
@@ -143,6 +157,7 @@ export function PlanetariumMode({
   useEffect(() => {
     stance.current?.update({
       motionBlur: false,
+      diffuseGalaxy: true,
       showShip: ship,
       showOrbits: orbits,
       orbitScope,
@@ -156,7 +171,6 @@ export function PlanetariumMode({
     (address: string, options: { url?: boolean } = {}) => {
       try {
         const status = engine.harness.look(address)
-        setTarget(status.target?.address ?? null)
         setNotice(null)
         if (options.url !== false && status.target !== null) {
           // `replace`, not push: focusing is a continuous act — a tour through
@@ -164,7 +178,7 @@ export function PlanetariumMode({
           // through every one of them would be useless for leaving the mode.
           setParams(
             (current) => {
-              const next = new URLSearchParams(current)
+              const next = withoutPictureLink(current)
               next.set(QUERY.at, status.target?.address ?? '')
               return next
             },
@@ -181,30 +195,84 @@ export function PlanetariumMode({
     [engine, setParams],
   )
 
-  /*
-   * Open on what the URL asks for, and keep it that way.
-   *
-   * Reconciling against the observatory's *actual* target rather than guarding
-   * with a "have I run yet" ref, and that is not a style preference — the ref
-   * version is broken. React re-runs effects on a remount while refs survive
-   * it, so the cleanup below clears the target and the guard then refuses to
-   * set it again: the planetarium comes up with the camera on nothing, in dev
-   * every time and in production whenever anything remounts the mode. Asking
-   * the thing that owns the state is idempotent by construction.
-   *
-   * It also makes writing the resolved address back into the URL free: the
-   * effect re-runs, finds the observatory already on that address, and stops.
-   */
+  const managePresets = (save = false) => {
+    const query = new URLSearchParams(params)
+    if (save) query.set('capture', '1')
+    else query.delete('capture')
+    void navigate({ pathname: PRESETS, search: query.toString() })
+  }
+
+  // Only view parameters replace the camera. A child dialog keeps the same document.
   useEffect(() => {
-    const wanted = requested ?? DEFAULT_TARGET
-    if (engine.harness.observatory.target?.address === wanted) return
-    focus(wanted, { url: requested === null })
-  }, [engine, requested, focus])
+    try {
+      const { picture } = readPictureLink(new URLSearchParams(document))
+      if (picture !== null) engine.harness.takePicture(picture)
+      else if (
+        engine.harness.observatory.target?.address !==
+        (requested ?? DEFAULT_TARGET)
+      )
+        engine.harness.look(requested ?? DEFAULT_TARGET)
+      setNotice(null)
+    } catch (cause) {
+      setNotice({
+        text: cause instanceof Error ? cause.message : String(cause),
+        tone: 'error',
+      })
+      if (engine.harness.observatory.target === null)
+        engine.harness.look(DEFAULT_TARGET)
+    }
+  }, [engine, requested, document])
+
+  useEffect(() => {
+    if (!saveRequested) return
+    try {
+      const { picture } = readPictureLink(params)
+      if (picture === null) return
+      // A syntactically valid link may still name an incompatible universe.
+      // Only a successfully restored view can become the save dialog's shot.
+      engine.harness.takePicture(picture)
+      const clean = new URLSearchParams(params)
+      clean.delete(QUERY.save)
+      clean.set('capture', '1')
+      clean.set('name', picture.label)
+      void navigate(
+        { pathname: PRESETS, search: clean.toString() },
+        { replace: true },
+      )
+    } catch {
+      // The view effect reports invalid links and leaves the current view intact.
+    }
+  }, [engine, saveRequested, params, navigate])
+
+  const openCatalog = () => {
+    void navigate({ pathname: CATALOG, search: params.toString() })
+  }
 
   const panels = planetariumPanels({
     engine,
     target,
     focus,
+    managePresets,
+    openCatalog,
+    takePicture: (picture, builtin = false) => {
+      try {
+        engine.harness.takePicture(picture)
+        setParams(
+          (current) =>
+            withPictureLink(
+              current,
+              builtin ? presetLink(picture.id) : pictureLink(picture),
+            ),
+          { replace: true },
+        )
+        setNotice(null)
+      } catch (cause) {
+        setNotice({
+          text: cause instanceof Error ? cause.message : String(cause),
+          tone: 'error',
+        })
+      }
+    },
     labels,
     onLabels: setLabels,
     labelDensity,
@@ -337,6 +405,17 @@ export function PlanetariumMode({
         target={target}
       />
 
+      {/* Somewhere to stand, and the arc that says where. Chrome, so the plate
+          rig's `Shift+H` clears it along with everything else — a figure in
+          the corner of a captured picture is the interface in a photograph. */}
+      {!chromeHidden && (
+        <DropHandle
+          engine={engine}
+          target={target}
+          onNotice={(text) => setNotice({ text, tone: 'said' })}
+        />
+      )}
+
       {/* The aiming point. Small and always there: it is the answer to "what
           will a click hit", and in a mode with no ship it is the only thing
           anchoring the center of the frame. Chrome, so `Shift+H` clears it —
@@ -369,6 +448,7 @@ export function PlanetariumMode({
         panels={panels}
         dev={dev}
       />
+      <Outlet />
     </div>
   )
 }

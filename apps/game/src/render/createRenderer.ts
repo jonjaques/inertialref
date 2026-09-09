@@ -1,4 +1,9 @@
 import { getLogger } from '@inertialref/shared'
+import { runtimeFailure } from '../runtimeFailure.ts'
+import {
+  watchRendererErrors,
+  watchRendererValidation,
+} from './rendererErrors.ts'
 import { HalfFloatType, WebGPURenderer } from 'three/webgpu'
 import { probeOutputCapability } from './capability.ts'
 import {
@@ -78,6 +83,7 @@ export interface CanvasProps {
  * what goes wrong when two of them share a canvas.
  */
 let live: RendererHandle | null = null
+let stopLiveErrors: (() => void) | null = null
 
 /*
  * One build per (canvas, preference), whoever asks and however often.
@@ -110,6 +116,8 @@ export function createRenderer(
   preference: OutputPreference,
   antialias: boolean,
   onReady: (handle: RendererHandle) => void,
+  onFailure: (cause: unknown) => void = (cause) =>
+    runtimeFailure.report('unsupported', cause),
 ): (props: CanvasProps) => Promise<WebGPURenderer> {
   return ({ canvas }) => {
     if (
@@ -144,8 +152,9 @@ export function createRenderer(
       promise: build,
     }
     current = entry
-    build.catch(() => {
+    build.catch((cause: unknown) => {
       if (current === entry) current = null
+      onFailure(cause)
     })
     return build
   }
@@ -158,12 +167,15 @@ async function buildRenderer(
   onReady: (handle: RendererHandle) => void,
 ): Promise<WebGPURenderer> {
   // Before anything else. Two renderers on one canvas is a killed tab.
-  releaseRenderer()
+  releaseRenderer(false)
 
   // See `CanvasProps`: the web renderer only ever hands over the element.
   const surface = canvas as HTMLCanvasElement
   const capability = await probeOutputCapability()
   const requested = resolveOutputMode(preference, capability)
+  if (runtimeFailure.getSnapshot() !== null) {
+    throw new Error('Graphics startup was canceled.')
+  }
 
   const renderer = new WebGPURenderer({
     canvas: surface,
@@ -191,69 +203,99 @@ async function buildRenderer(
     ...(requested === 'extended' ? { outputType: HalfFloatType } : {}),
   })
 
-  await renderer.init()
-  declareSceneTarget(renderer, { samples: antialias ? 4 : 0, optics: true })
-
-  /*
-   * Clear to *opaque* black. The default clear alpha is 0, and on the
-   * extended path that zero reaches the `rgba16float` canvas, which Chrome
-   * composites premultiplied — so the alpha channel becomes visible
-   * structure. That is how the lens flare's additive quads (whose preset
-   * blending also adds alpha) drew their own footprints as hard rectangles,
-   * dimmed every star inside them on an EDR display, and, once their alpha
-   * writes were silenced, vanished over empty sky instead: rgb over
-   * alpha-0 pixels is discarded by the compositor. Space is black, not
-   * transparent; nothing behind the canvas was ever meant to show through.
-   */
-  renderer.setClearColor(0x000000, 1)
-
-  /*
-   * Take ownership of the draw-call counters.
-   *
-   * `Info.autoReset` is honored inside three's *own* `Animation` loop, which
-   * is a `requestAnimationFrame` three starts for itself and which keeps
-   * running whether or not anything uses it. R3F drives the renderer from its
-   * loop instead, so the reset lands at a moment unrelated to any frame R3F
-   * draws — and `info.render.drawCalls` read from the frame loop is reliably
-   * zero while the same field read from the console is correct. A counter that
-   * is right when you inspect it and wrong when you record it is worse than no
-   * counter, so the reset moves to `GameEngine.frame`, right after sampling.
-   */
-  renderer.info.autoReset = false
-
-  // Ask afterwards rather than assume. `init` is where the device request can
-  // still fail and take the WebGL backend instead, and extended output does
-  // not exist there whatever the probe said a moment earlier.
-  const backend = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl'
-  const mode: OutputMode = backend === 'webgpu' ? requested : 'standard'
-  const headroom = headroomFor(mode)
-  const gamut = createCanvasGamut(renderer, mode === 'extended')
-
-  const tone = installToneCurve(renderer, headroom)
-  const description: RendererDescription = {
-    get gamut() {
-      return gamut.colorSpace
-    },
-    backend,
-    mode,
-    preference,
-    headroom,
-    capability,
+  const report = (cause: Error): void => {
+    runtimeFailure.report('graphics', cause)
   }
+  const stopErrors = watchRendererErrors(renderer, report)
+  let stopValidation = (): void => {}
+  const stopWatching = (): void => {
+    stopValidation()
+    stopErrors()
+  }
+  try {
+    await renderer.init()
+    if (runtimeFailure.getSnapshot() !== null) {
+      throw new Error('Graphics startup was canceled.')
+    }
+    if (!('isWebGPUBackend' in renderer.backend)) {
+      const gl = (
+        renderer.backend as unknown as { getContext(): WebGL2RenderingContext }
+      ).getContext()
+      if (gl.getExtension('EXT_color_buffer_float') === null) {
+        throw new Error(
+          'WebGPU is unavailable and WebGL cannot render the floating-point scene targets (EXT_color_buffer_float).',
+        )
+      }
+    }
+    stopValidation = watchRendererValidation(renderer, report)
+    declareSceneTarget(renderer, { samples: antialias ? 4 : 0, optics: true })
 
-  log.info('renderer ready', {
-    backend,
-    output: mode,
-    headroom,
-    preference,
-    antialias,
-    dynamicRangeHigh: capability.dynamicRangeHigh,
-    extendedCanvas: capability.extendedCanvas,
-  })
+    /*
+     * Clear to *opaque* black. The default clear alpha is 0, and on the
+     * extended path that zero reaches the `rgba16float` canvas, which Chrome
+     * composites premultiplied — so the alpha channel becomes visible
+     * structure. That is how the lens flare's additive quads (whose preset
+     * blending also adds alpha) drew their own footprints as hard rectangles,
+     * dimmed every star inside them on an EDR display, and, once their alpha
+     * writes were silenced, vanished over empty sky instead: rgb over
+     * alpha-0 pixels is discarded by the compositor. Space is black, not
+     * transparent; nothing behind the canvas was ever meant to show through.
+     */
+    renderer.setClearColor(0x000000, 1)
 
-  live = { renderer, description, tone, gamut }
-  onReady(live)
-  return renderer
+    /*
+     * Take ownership of the draw-call counters.
+     *
+     * `Info.autoReset` is honored inside three's *own* `Animation` loop, which
+     * is a `requestAnimationFrame` three starts for itself and which keeps
+     * running whether or not anything uses it. R3F drives the renderer from its
+     * loop instead, so the reset lands at a moment unrelated to any frame R3F
+     * draws — and `info.render.drawCalls` read from the frame loop is reliably
+     * zero while the same field read from the console is correct. A counter that
+     * is right when you inspect it and wrong when you record it is worse than no
+     * counter, so the reset moves to `GameEngine.frame`, right after sampling.
+     */
+    renderer.info.autoReset = false
+
+    // Ask afterwards rather than assume. `init` is where the device request can
+    // still fail and take the WebGL backend instead, and extended output does
+    // not exist there whatever the probe said a moment earlier.
+    const backend = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl'
+    const mode: OutputMode = backend === 'webgpu' ? requested : 'standard'
+    const headroom = headroomFor(mode)
+    const gamut = createCanvasGamut(renderer, mode === 'extended')
+
+    const tone = installToneCurve(renderer, headroom)
+    const description: RendererDescription = {
+      get gamut() {
+        return gamut.colorSpace
+      },
+      backend,
+      mode,
+      preference,
+      headroom,
+      capability,
+    }
+
+    log.info('renderer ready', {
+      backend,
+      output: mode,
+      headroom,
+      preference,
+      antialias,
+      dynamicRangeHigh: capability.dynamicRangeHigh,
+      extendedCanvas: capability.extendedCanvas,
+    })
+
+    live = { renderer, description, tone, gamut }
+    stopLiveErrors = stopWatching
+    onReady(live)
+    return renderer
+  } catch (cause) {
+    stopWatching()
+    disposeRenderer(renderer)
+    throw cause
+  }
 }
 
 /**
@@ -299,9 +341,23 @@ export function commitToneCurve(handle: RendererHandle): void {
  * mounts every component twice in development, and changing the HDR preference
  * remounts the canvas by design, because `outputType` is a constructor argument.
  */
-export function releaseRenderer(): void {
+export function releaseRenderer(invalidatePending = true): void {
+  if (invalidatePending) current = null
   if (live === null) return
-  live.gamut.dispose()
-  live.renderer.dispose()
+  const held = live
   live = null
+  stopLiveErrors?.()
+  stopLiveErrors = null
+  held.gamut.dispose()
+  disposeRenderer(held.renderer)
+}
+
+/** A partially initialized or lost device may throw during disposal too. */
+function disposeRenderer(renderer: WebGPURenderer): void {
+  try {
+    if (renderer.initialized) renderer.dispose()
+    else (renderer.backend as unknown as { dispose(): void }).dispose()
+  } catch (cause) {
+    log.warn('renderer disposal failed', { cause: String(cause) })
+  }
 }

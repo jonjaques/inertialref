@@ -1,14 +1,39 @@
 {
-  "version": "hyg-4.4+nea-2b24daf0",
-  "radiusLightYears": 150,
-  "completeRadiusLightYears": 25,
-  "file": "stars-150ly.irsc",
-  "bytes": 468889,
-  "brotliBytes": 183239,
-  "systems": 7123,
-  "planets": 702,
-  "hostSystems": 443,
-  "unstableIds": 50,
+  "version": "hyg-4.4+nea-01c631cc+sky-0414d660",
+  "volume": {
+    "file": "stars-150ly.irsc",
+    "version": "hyg-4.4+nea-01c631cc",
+    "radiusLightYears": 150,
+    "completeRadiusLightYears": 25,
+    "bytes": 468888,
+    "brotliBytes": 182160,
+    "systems": 7123,
+    "planets": 702,
+    "hostSystems": 443,
+    "unstableIds": 50
+  },
+  "sky": {
+    "file": "stars-sky.irsc",
+    "version": "sky-0414d660",
+    "beyondLightYears": 150,
+    "apparentMagnitudeLimit": 6.5,
+    "bytes": 459841,
+    "brotliBytes": 190838,
+    "systems": 7514,
+    "unstableIds": 0,
+    "inVolume": 1,
+    "farthestLightYears": 3198,
+    "apparentMagnitudes": {
+      "0": 5,
+      "1": 18,
+      "2": 74,
+      "3": 203,
+      "4": 861,
+      "5": 2899,
+      "6": 3453,
+      "-1": 1
+    }
+  },
   "sources": [
     {
       "name": "HYG v4.4",

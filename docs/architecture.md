@@ -245,8 +245,9 @@ many workers. [Determinism](concepts/determinism.md) ·
 
 **Except where somebody measured it.** The catalog is a second generation input
 (`docs/design/galaxy.md` Rule 1), and so are `packages/universe/src/solar/` and
-`data/shapes/` — 7,123 real stars, 702 confirmed exoplanets, the Solar System's
-129 bodies, and twenty-five published shape models. The split is not per object
+`data/shapes/` — 7,123 real stars within 150 ly and the 7,514 naked-eye stars
+beyond, 702 confirmed exoplanets, the Solar System's 129 bodies, and
+twenty-five published shape models. The split is not per object
 but per _field_: an `observed` body uses the published number for everything
 somebody published and derives the rest from its own seed, and the absence of a
 value is what decides which. Phobos's whole shape is a measurement; 67P's is a
@@ -370,19 +371,19 @@ unreachable rather than merely discouraged.
 ## Verification
 
 ```bash
-pnpm check   # graph → brand → presets → format → lint → typecheck (5 projects) → tests → build
+pnpm check   # graph → brand → presets → format → lint → typecheck (5 projects and Astro templates) → tests → build
 ```
 
-| Stage           | What it proves                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------- |
-| `graph`         | layering intact, no cycles                                                                  |
-| `brand:check`   | generated brand artifacts match their source                                                |
-| `presets:check` | every picture still has a plate, and every composition it names still resolves              |
-| `format:check`  | committed files match Prettier                                                              |
-| `lint`          | oxlint across the workspace                                                                 |
-| `typecheck`     | five tsconfig projects — portable packages, client, Node runner, Worker, and offline ingest |
-| `test`          | the full Vitest suite runs in plain Node — `packages/*` and `apps/*` alike                  |
-| `build`         | the client actually bundles, workers included                                               |
+| Stage           | What it proves                                                                 |
+| --------------- | ------------------------------------------------------------------------------ |
+| `graph`         | layering intact, no cycles                                                     |
+| `brand:check`   | generated brand artifacts match their source                                   |
+| `presets:check` | every picture still has a plate, and every composition it names still resolves |
+| `format:check`  | committed files match Prettier                                                 |
+| `lint`          | oxlint across the workspace                                                    |
+| `typecheck`     | five tsconfig projects plus Astro templates                                    |
+| `test`          | the full Vitest suite runs in plain Node — `packages/*` and `apps/*` alike     |
+| `build`         | the server renders every public route and bundles the client and workers       |
 
 On top of that, twelve **capability checks** execute the milestone's claims
 against the live build — in Node via `pnpm sim --self-test`, and in the browser

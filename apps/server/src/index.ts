@@ -8,9 +8,11 @@ import { GENERATION_VERSIONS } from '@inertialref/universe'
  * The catalog the *bundle this Worker serves* was built against.
  *
  * Read from the manifest rather than from the packed catalog itself: both are
- * written by the same `pnpm catalog:build` run, and the manifest is 1 KB of
- * JSON where the catalog is 460 KB of binary this script has no reason to
- * decode. `apps/headless/src/catalog.test.ts` holds the two together.
+ * written by the same `pnpm catalog:build` run, and the manifest is 2 KB of
+ * JSON where the catalog is 900 KB of binary across two files this script has
+ * no reason to decode. Its top-level `version` is the pair's, the string a
+ * client composes when it loads both. `apps/headless/src/catalog.test.ts`
+ * holds the three together.
  *
  * Stating it is what closes the hole the handshake had: a client whose catalog
  * had moved could agree with a server whose catalog had not, cleanly, and then

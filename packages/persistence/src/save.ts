@@ -98,6 +98,7 @@ export function captureSave(
     control: {
       translation: encodeVec3(entity.control.translation),
       rotation: encodeVec3(entity.control.rotation),
+      throttle: entity.control.throttle,
     },
     flightAssist: entity.flightAssist,
     rails: entity.rails === null ? null : encodeRailsEpoch(entity.rails),
@@ -233,6 +234,7 @@ export function restoreSave(
           entity.control.rotation[1],
           entity.control.rotation[2],
         ),
+        throttle: entity.control.throttle,
       },
       flightAssist: entity.flightAssist,
       rails: rails.value,

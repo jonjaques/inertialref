@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_SENSOR_SETTINGS,
+  GALAXY_JOURNEY_LENS,
   LENS_PRESETS,
   lensForFov,
 } from '@inertialref/rendering'
@@ -56,7 +57,7 @@ describe('the engine knobs', () => {
     const lens = bound.flightLens
     const settings = {
       ...DEFAULT_SENSOR_SETTINGS,
-      response: 'direct' as const,
+      mode: 'manual' as const,
       peak: 1.2,
     }
     write(RENDER_SENSOR, settings)
@@ -119,6 +120,25 @@ describe('the engine knobs', () => {
     expect(read(CAMERA_LENS)).toEqual(before)
     expect(bound.flightLens).toBe(narrow)
     release()
+  })
+
+  it('keeps the galaxy exposure in the panel and restores it on a new binding', () => {
+    const bound = engine()
+    const release = bindEngineKnobs(bound)
+    try {
+      bound.onLensRequest?.(GALAXY_JOURNEY_LENS)
+      expect(read(CAMERA_LENS)).toEqual(GALAXY_JOURNEY_LENS)
+      expect(bound.flightLens).toEqual(GALAXY_JOURNEY_LENS)
+    } finally {
+      release()
+    }
+    const restored = engine()
+    const unbind = bindEngineKnobs(restored)
+    try {
+      expect(restored.flightLens).toEqual(GALAXY_JOURNEY_LENS)
+    } finally {
+      unbind()
+    }
   })
 
   it('stops following once released', () => {

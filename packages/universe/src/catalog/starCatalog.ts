@@ -26,6 +26,7 @@ import {
   type PackedPlanet,
   type PackedStar,
   type Provenance,
+  type SkySelection,
 } from './format.ts'
 import {
   blackbodyColour,
@@ -60,6 +61,12 @@ import {
  *   The second is answered through the same cell grid the procedural generator
  *   uses, so that a query's cost depends on the volume asked about and not on
  *   how much catalog happens to exist.
+ *
+ * Two assets feed it. The volume asset holds everything the source knows
+ * inside a radius; the sky asset holds the sources bright enough to be seen
+ * from Earth beyond it. Both go through the same decoder and the same
+ * photometry, and a star from either answers `get`, `find` and `search` — but
+ * only the volume's stars enter the cell index. See `StarCatalog.sky`.
  *
  * This is a *value*, not a service: it is constructed from bytes and never
  * mutates. That is what lets it be an explicit input to generation rather than
@@ -128,7 +135,28 @@ export interface StarCatalog {
   readonly radius: Meters
   /** Radius inside which procedural fill is suppressed; see `CellContext`. */
   readonly completeRadius: Meters
+  /** Every star this catalog holds: the volume's first, then the sky's. */
   readonly stars: readonly CatalogStar[]
+  /**
+   * The distant bright stars, from the sky asset. Empty without one.
+   *
+   * These are catalog stars in every sense but one: `get`, `find` and `search`
+   * answer for them, `resolveSystem` reaches them by id, and their light comes
+   * from a published magnitude like everyone else's. What they are not in is
+   * the cell index, so `inCell` and `within` — and through them every
+   * procedural count and every survey — answer for the volume alone.
+   *
+   * That is deliberate. The sky asset claims no volume: a cell 500 ly out holds
+   * thousands of stars and this file has the two of them bright enough to be
+   * seen from Earth. Counting those two as "cataloged" would make the
+   * procedural fill in that cell depend on which of its stars happen to be
+   * naked-eye from one planet, and would drop procedural stars from the cells
+   * straddling the volume's edge — so the survey inside the volume is the same
+   * with the sky loaded and without it. Generation learns about these stars
+   * through a magnitude limit carried like `completeRadius`, not through a
+   * count. The draw reaches them through this list.
+   */
+  readonly sky: readonly CatalogStar[]
   /** Exact lookup by id. */
   get(id: SystemId): CatalogStar | undefined
   /** Lookup by any name or designation, case- and punctuation-insensitive. */
@@ -152,9 +180,12 @@ export interface StarCatalog {
    * `limit` is the number of *stars*, not of matched keys.
    */
   search(text: string, limit?: number): readonly CatalogStar[]
-  /** Every cataloged star within `radius` of a point, unordered. */
+  /** Every star of the volume within `radius` of a point, unordered. */
   within(centre: UniverseVector, radius: Meters): readonly CatalogStar[]
-  /** Cataloged stars in one generation cell. The procedural fill needs the count. */
+  /**
+   * The volume's stars in one generation cell. The procedural fill needs the
+   * count, which is why the sky's stars are not here; see `sky`.
+   */
   inCell(cell: GalacticCell): readonly CatalogStar[]
 }
 
@@ -392,6 +423,7 @@ export function designationsOf(packed: PackedStar): readonly Designation[] {
 class DecodedCatalog implements StarCatalog {
   readonly metadata: CatalogMetadata
   readonly stars: readonly CatalogStar[]
+  readonly sky: readonly CatalogStar[]
   readonly #byId = new Map<SystemId, CatalogStar>()
   readonly #byName = new Map<string, CatalogStar>()
   readonly #byCell = new Map<string, CatalogStar[]>()
@@ -411,101 +443,199 @@ class DecodedCatalog implements StarCatalog {
   readonly #searchKeys: string[] = []
   readonly #searchStars: CatalogStar[] = []
 
-  constructor(packed: PackedCatalog) {
-    this.metadata = packed.metadata
-
+  constructor(volume: PackedCatalog, sky: PackedCatalog | null = null) {
     const planetsByHost = new Map<number, PackedPlanet[]>()
-    for (const planet of packed.planets) {
+    for (const planet of volume.planets) {
       const list = planetsByHost.get(planet.host)
       if (list === undefined) planetsByHost.set(planet.host, [planet])
       else list.push(planet)
     }
 
     const stars: CatalogStar[] = []
-    for (let index = 0; index < packed.stars.length; index += 1) {
-      const row = packed.stars[index] as PackedStar
-      const type =
-        row.spectralType === ''
-          ? UNKNOWN_SPECTRAL_TYPE
-          : parseSpectralType(row.spectralType)
-      const position = heliocentricToUniverse(row.x, row.y, row.z)
-      const designations = designationsOf(row)
-      const planets = (planetsByHost.get(index) ?? [])
-        .map((planet) => ({
-          ...planet,
-          name:
-            planet.name === ''
-              ? `${row.commonName} ${planet.letter}`
-              : planet.name,
-        }))
-        // Orbital order for display. Planets with no published semi-major axis
-        // sort last rather than to zero, which would put an unmeasured orbit
-        // inside every measured one.
-        .sort(
-          (a, b) =>
-            (a.semiMajorAxisAu ?? Infinity) - (b.semiMajorAxisAu ?? Infinity),
-        )
+    for (let index = 0; index < volume.stars.length; index += 1) {
+      const row = volume.stars[index] as PackedStar
+      stars.push(this.#admit(row, planetsByHost.get(index) ?? [], true))
+    }
 
-      const star: CatalogStar = {
-        id: systemId(row.id),
-        name: row.commonName,
-        designations,
-        position,
-        distanceLightYears: Math.hypot(row.x, row.y, row.z) / LIGHT_YEAR,
-        spectralType: type,
-        spectralSource: row.spectralType,
-        components: row.components,
-        provenance: row.provenance,
-        physical: derivePhysical(row, type),
-        planets,
-      }
-      stars.push(star)
-
-      this.#byId.set(star.id, star)
-      // The Greek Bayer form (`α Cen`) is search-only: designations.ts
-      // promises it is findable — it is what gets pasted out of Wikipedia —
-      // but listing it as a designation would cite the same catalog twice
-      // on the system panel.
-      const greek = expandedBayerOf(row)?.greek
-      const shared = searchKeysFor(
-        designations,
-        greek === undefined ? [star.id] : [star.id, greek],
+    /*
+     * The sky's stars, after the volume's, and held to the volume's edge.
+     *
+     * The order is what keeps the planet table honest: a planet names its host
+     * by index into the star array, and the sky asset carries none, so the
+     * volume's indices stay where its own file put them. Every sky star must
+     * lie beyond the volume, and no id may appear in both files — a system
+     * with two records would resolve to whichever was indexed last, and a sky
+     * star inside the volume would be a star the survey never sees drawn on
+     * top of one it does. Both are checked here rather than trusted, because
+     * the ingest that writes the two files is the only thing that keeps them
+     * disjoint and this is the one place that reads them together.
+     */
+    const distant: CatalogStar[] = []
+    let selection: SkySelection | null = null
+    if (sky !== null) {
+      selection = sky.metadata.sky ?? null
+      invariant(
+        selection !== null,
+        'The sky catalog does not state its selection; it is not a sky asset',
       )
-      for (const key of shared) {
-        if (!this.#byName.has(key)) this.#byName.set(key, star)
+      invariant(
+        sky.planets.length === 0,
+        `The sky catalog carries ${sky.planets.length} planets; its host indices ` +
+          `would name the volume's stars`,
+      )
+      const edge = volume.metadata.radiusLightYears
+      // A sky that begins past the volume's edge leaves a shell of distance
+      // with no bright star in it at all, which no reader of either file
+      // could tell from an empty patch of sky.
+      invariant(
+        selection.beyondLightYears <= edge,
+        `The sky catalog begins at ${selection.beyondLightYears} ly and the ` +
+          `volume ends at ${edge} ly; nothing covers the shell between them`,
+      )
+      for (const row of sky.stars) {
+        invariant(
+          !this.#byId.has(systemId(row.id)),
+          `${row.id} is in both the volume and the sky catalog; a system has one record`,
+        )
+        const lightYears = Math.hypot(row.x, row.y, row.z) / LIGHT_YEAR
+        invariant(
+          lightYears > edge,
+          `${row.id} is ${lightYears.toFixed(1)} ly out, inside the ${edge} ly ` +
+            `volume; the sky catalog holds only what the volume does not`,
+        )
+        const star = this.#admit(row, [], false)
+        stars.push(star)
+        distant.push(star)
+      }
+    }
+    this.stars = stars
+    this.sky = distant
+
+    /*
+     * One version for the pair. The volume's version and the sky's are each a
+     * digest of their own packed bytes, and a save or a peer that states this
+     * catalog states both — a sky rebuilt against a newer HYG is a different
+     * catalog even when the volume's file is byte-identical, because `get`
+     * and `search` answer differently.
+     */
+    this.metadata =
+      sky === null || selection === null
+        ? volume.metadata
+        : {
+            ...volume.metadata,
+            version: `${volume.metadata.version}+${sky.metadata.version}`,
+            attribution: [
+              ...volume.metadata.attribution,
+              ...sky.metadata.attribution.filter(
+                (line) => !volume.metadata.attribution.includes(line),
+              ),
+            ],
+            sources: [
+              ...volume.metadata.sources,
+              ...sky.metadata.sources.filter(
+                (source) =>
+                  !volume.metadata.sources.some(
+                    (own) =>
+                      own.name === source.name &&
+                      own.retrieved === source.retrieved,
+                  ),
+              ),
+            ],
+            sky: selection,
+          }
+  }
+
+  /**
+   * Derive one star, index it by id and by name, and — for the volume's stars
+   * only — by cell. Returns it so the caller can keep its own list.
+   */
+  #admit(
+    row: PackedStar,
+    packedPlanets: readonly PackedPlanet[],
+    inVolume: boolean,
+  ): CatalogStar {
+    const type =
+      row.spectralType === ''
+        ? UNKNOWN_SPECTRAL_TYPE
+        : parseSpectralType(row.spectralType)
+    const position = heliocentricToUniverse(row.x, row.y, row.z)
+    const designations = designationsOf(row)
+    const planets = packedPlanets
+      .map((planet) => ({
+        ...planet,
+        name:
+          planet.name === ''
+            ? `${row.commonName} ${planet.letter}`
+            : planet.name,
+      }))
+      // Orbital order for display. Planets with no published semi-major axis
+      // sort last rather than to zero, which would put an unmeasured orbit
+      // inside every measured one.
+      .sort(
+        (a, b) =>
+          (a.semiMajorAxisAu ?? Infinity) - (b.semiMajorAxisAu ?? Infinity),
+      )
+
+    const star: CatalogStar = {
+      id: systemId(row.id),
+      name: row.commonName,
+      designations,
+      position,
+      distanceLightYears: Math.hypot(row.x, row.y, row.z) / LIGHT_YEAR,
+      spectralType: type,
+      spectralSource: row.spectralType,
+      components: row.components,
+      provenance: row.provenance,
+      physical: derivePhysical(row, type),
+      planets,
+    }
+
+    this.#byId.set(star.id, star)
+    // The Greek Bayer form (`α Cen`) is search-only: designations.ts
+    // promises it is findable — it is what gets pasted out of Wikipedia —
+    // but listing it as a designation would cite the same catalog twice
+    // on the system panel.
+    const greek = expandedBayerOf(row)?.greek
+    const shared = searchKeysFor(
+      designations,
+      greek === undefined ? [star.id] : [star.id, greek],
+    )
+    for (const key of shared) {
+      if (!this.#byName.has(key)) this.#byName.set(key, star)
+      this.#searchKeys.push(key)
+      this.#searchStars.push(star)
+    }
+
+    /*
+     * Search-only keys: the Bayer forms with the superscript dropped.
+     *
+     * `α Cen` is what gets pasted out of Wikipedia, and `designations.ts`
+     * says so — but only `α¹ Cen` was ever indexed, because dropping the
+     * superscript keys `ζ¹ Reticuli` and `ζ² Reticuli` — two unrelated
+     * systems — to one string, and `find` must not answer an ambiguous name
+     * with an arbitrary one of two.
+     *
+     * That is a constraint on `find`, not on `search`. A search box handed an
+     * ambiguous name should offer *both* stars; this is exactly what the
+     * split by question buys, so these go into the search index and stay out
+     * of the exact map.
+     */
+    const plain = expandedBayerOf(row, false)
+    if (plain !== null) {
+      for (const key of searchKeysFor([], [plain.text, plain.greek])) {
+        if (shared.includes(key)) continue
         this.#searchKeys.push(key)
         this.#searchStars.push(star)
       }
+    }
 
-      /*
-       * Search-only keys: the Bayer forms with the superscript dropped.
-       *
-       * `α Cen` is what gets pasted out of Wikipedia, and `designations.ts`
-       * says so — but only `α¹ Cen` was ever indexed, because dropping the
-       * superscript keys `ζ¹ Reticuli` and `ζ² Reticuli` — two unrelated
-       * systems — to one string, and `find` must not answer an ambiguous name
-       * with an arbitrary one of two.
-       *
-       * That is a constraint on `find`, not on `search`. A search box handed an
-       * ambiguous name should offer *both* stars; this is exactly what the
-       * split by question buys, so these go into the search index and stay out
-       * of the exact map.
-       */
-      const plain = expandedBayerOf(row, false)
-      if (plain !== null) {
-        for (const key of searchKeysFor([], [plain.text, plain.greek])) {
-          if (shared.includes(key)) continue
-          this.#searchKeys.push(key)
-          this.#searchStars.push(star)
-        }
-      }
-
+    if (inVolume) {
       const key = cellKey(cellOf(position))
       const bucket = this.#byCell.get(key)
       if (bucket === undefined) this.#byCell.set(key, [star])
       else bucket.push(star)
     }
-    this.stars = stars
+    return star
   }
 
   get version(): string {
@@ -580,17 +710,26 @@ class DecodedCatalog implements StarCatalog {
   }
 }
 
-export const loadCatalog = (packed: PackedCatalog): StarCatalog =>
-  new DecodedCatalog(packed)
+/** Index a decoded volume catalog, and the sky catalog that goes with it. */
+export const loadCatalog = (
+  volume: PackedCatalog,
+  sky: PackedCatalog | null = null,
+): StarCatalog => new DecodedCatalog(volume, sky)
 
-/** Decode a packed catalog file and index it. */
-export function readCatalog(bytes: Uint8Array): StarCatalog {
+/**
+ * Decode the packed volume file and index it, with the sky file when a host
+ * has one. The two are one catalog with one version; see `StarCatalog.sky`.
+ */
+export function readCatalog(bytes: Uint8Array, sky?: Uint8Array): StarCatalog {
   const packed = decodeCatalog(bytes)
   invariant(
     packed.stars.length > 0,
     'Star catalog decoded to zero stars; the file is truncated or empty',
   )
-  return new DecodedCatalog(packed)
+  return new DecodedCatalog(
+    packed,
+    sky === undefined ? null : decodeCatalog(sky),
+  )
 }
 
 /* ------------------------------------------------------------------------- */

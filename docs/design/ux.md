@@ -207,21 +207,26 @@ information teaches constantly.
 [The canopy is a sensor, not a window](art.md#the-canopy-is-a-sensor-not-a-window),
 and its controls are physical, on the console, always reachable.
 
-| Control         | What it does                                                                                                                                                                 |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Mode**        | Direct ↔ Composite. A real two-position switch, not a menu.                                                                                                                  |
-| **Gain**        | Sensor sensitivity. In Direct this is the whole exposure control.                                                                                                            |
-| **Integration** | How long the sensor accumulates. Longer reveals faint structure and smears anything moving.                                                                                  |
-| **Response**    | Composite only — the tone curve's shoulder, from near-linear to fully filmic                                                                                                 |
-| **View**        | Which direction the composite is assembled from. **This is what lets you watch your destination through the second half of a burn**, when the ship is pointed the other way. |
-| **Filter**      | Broadband, narrowband, false-color composites                                                                                                                                |
+The following controls describe the accepted three-mode design in
+[ADR-0037](../adr/0037-the-enhanced-camera.md). The current interface still uses
+Composite/Direct and a separate Natural response preset.
 
-Two design rules. **The composited view never rotates the cockpit** — the ship's
-attitude indicator and the physical window always tell you where the hull
-actually points, so the player can never be lost about their own orientation.
-And **Direct mode is never taken away**: it is the mode in which the game's claim
-about physical correctness is checkable, and hiding it would undercut
-[pillar 2](charter.md#pillar-2--the-sky-is-real).
+| Control       | What it does                                                                                                                                                         |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Camera Mode   | Enhanced, Automatic or Manual. Enhanced is the default HDR composite.                                                                                                |
+| Exposure      | Automatic offers compensation and adaptation/hold. Manual exposes aperture, shutter and ISO. The readout distinguishes a metered, manual, composite or staged image. |
+| Optics        | Focal length, aperture and focus control the lens. Shutter also determines the modeled motion interval. Controls state when exposure is automatically compensated.   |
+| White Balance | Sets the camera's color response without changing source light.                                                                                                      |
+| HDR Output    | Selects display behavior independently of camera mode; peak luminance remains a comfort control.                                                                     |
+| View          | Forward, aft, target or nadir, so the pilot can watch the destination during the second half of a burn.                                                              |
+
+The first release has one authored Enhanced look and one photographic look.
+It does not need a second response selector. Spectral filters remain a separate
+feature that requires actual line emission.
+
+The composited view never rotates the cockpit. The attitude indicator and
+physical window retain the hull's orientation. Manual stays accessible for a
+photograph at known settings. Changing display output cannot change that choice.
 
 **Resolved:** four presets — forward, aft, target, nadir — on a key each, plus
 hold-to-free-look that snaps back on release. Predictable enough that you can

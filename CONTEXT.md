@@ -37,7 +37,7 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                                                                         |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
-| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                                                                                |
+| `universe`      | 3     | done — addressing, star catalog with its naked-eye sky, generation, terrain, frames                                                                                                                         |
 | `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                                                                        |
 | `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                                    |
@@ -47,6 +47,25 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                                                                         |
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
+
+The default Enhanced camera composes detailed worlds and faint sky; Automatic
+and Manual share photographic light and response. The active galaxy population
+and diffuse field share luminosity bands and dust transport. GPU star projection
+keeps ordinary camera motion to observer uniforms; a bounded V8 sky query is
+independent of travel selection. Physical sky cubes refine through 32², 128²
+and 512², with a separate regenerable disk cache and 0.15 pc shared reuse
+allowance. Live temporal history retains angular detail and caps its longest
+edge at 960 pixels. The reversible Earth-to-disk journey keeps the player's
+mode and lens. Field@5 replaces the maser-tracer height previously used for
+all young stellar light; its V-band calibration and local density remain
+within their original tests. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
+records the population, transport, versions and approximation limits;
+[ADR-0037](docs/adr/0037-the-enhanced-camera.md) owns camera processing.
+
+Astro pre-renders the public shell and documentation before the persistent
+React runtime adds the live scene. Public content remains readable without
+JavaScript; request-time rendering can use the same shell when needed.
+[ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
 
 ## Decisions that are expensive to reverse
 
@@ -211,6 +230,26 @@ Every driving verb took an address and nothing produced one.
   throws on first render, which nothing else in the suite would notice.
 
 ## Bugs the tests found (worth not reintroducing)
+
+- **Case-only export paths overwrite each other on macOS.** The first Astro
+  corpus build generated `BayerName.html` and `bayerName.html` into the same
+  file. All 47 colliding pairs now have stable, distinct canonical paths;
+  redirects and the client manifest preserve existing links. The site check
+  reads each emitted document and compares its actual heading and metadata.
+- **A rendered head can still contain no metadata.** Astro's special `head`
+  handling dropped `set:html` on the element. A child `Fragment` renders the
+  tags correctly. Testing only the string helper missed it; checking the
+  production HTML caught it.
+
+- **An axial GPU azimuth had the wrong sign.** On Metal, fast `atan2(-z, -x)`
+  at exactly x = 0 reversed the warp at +Z and shifted the arm strength from
+  0.064 to 0.98. Explicit axial values hold the TSL field and clipped rays to
+  the CPU reference; near-axis and kink checks keep the correction narrow.
+- **Depthless sensor passes warmed a depth attachment.** Three.js r185's
+  `compileAsync` reads renderer depth/stencil flags even for offscreen targets.
+  `warmSensorPass` now matches the target while issuing each compile and
+  restores the renderer afterward. The GPU regression counted a second
+  pipeline before the fix and none afterward.
 
 - **A cache keyed without the body, cleared without the queue.** `regionKey` is
   packed arithmetic over the region alone, so after a retarget a job still out
@@ -488,6 +527,16 @@ again in a neighboring system.
   happens to be near the origin and facing it. The dresser's dummies set
   `frustumCulled = false`; `warmup.gpu.test.ts` compiles one behind the
   camera beside a plain mesh that builds nothing.
+- **An orbit camera's basis mirrored through its own east–up plane.** Every
+  orthonormality and round-trip property passes on a frame whose azimuth runs
+  the other way about the pole; only a test that compares the _sign_ of a
+  drag's swing with the other camera's catches it. `orbitOffset` is the
+  planetarium's `observerOffset` in a local frame now, and `camera.test.ts`
+  holds the sign for any up.
+- **A bank measured against the wrong up.** `attitudeOf` read the roll's sine
+  off the horizon's up, which is the level up only at zero pitch; the error
+  is the cosine of the pitch and a round-trip property found it by failing
+  at its own tolerance boundary. The level triad is built about the nose.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -7217,7 +7266,6 @@ move every body in the galaxy, including the ones the change never touched, and
 the loader could no longer distinguish "this save's ground moved" from
 "everything moved". So a bump moves nothing by itself. It is the honest half of a
 change that already happened, and it has to be spent by hand.
-||||||| parent of 9aa5891 (docs(adr): the sensor spine gets a record, and the plan keeps only what is open)
 
 ## The sensor owns the frame, and the picture that was one transfer too dark (4 Sep 2026)
 
@@ -7442,6 +7490,44 @@ to that record before work in a governed area. Claude's rule extracts and
 Cursor's references retain their paths, so reducing startup text does not
 remove the reasoning or require maintaining a second set of constraints.
 
+## A second hull, a ship the player picks, and solo behind a dev flag (4 Sep 2026)
+
+`data/models/` now holds two hulls. The Rocinante — the _Corvette_-class light
+frigate of _The Expanse_, in its MCRN _Tachi_ livery — joins the Enterprise-D,
+CC BY 4.0 by Jakub.Vildomec, ~141k triangles against the Enterprise's ~50k, with
+four 1K PBR material sets and the same `asset.extras` attribution block the
+Enterprise carries, so the credit travels with the file. **Scaled to 46 m**, the
+length the Expanse wiki and the official _Ships of the Expanse_ RPG both give;
+the loader divides that by the model's own nose-axis extent exactly as it does
+for the Enterprise's 642.5 m, so `engine.hull` reads length 46, beam 16 in
+flight, and 642.5, 467 when the Enterprise is chosen back. The bow is +Z — the
+drive cone sits at the model's −Z, the antennas at its +Z — which the loader's
+half-turn faces to the game's −Z.
+
+Two changes made the manifest a chooser rather than a constant:
+
+- **The manifest is a data module now, `render/ships.ts`, holding no Three.js.**
+  `state/preferences.ts` needs the set of ship ids to guard the stored choice,
+  and it is imported by the Node preferences suite; `shipModels.ts` imports
+  `three/webgpu`, the `GLTFLoader` and an `import.meta.glob` of the `.glb` files,
+  none of which can load in Node. So the JSON lives in a leaf both import, and
+  the loader is the only thing that pulls the renderer in.
+- **`render.ship` is a preference like any other** — a string id into the
+  manifest, guarded by `oneOf(SHIP_IDS)`, defaulting to the Enterprise so every
+  screenshot and the reference cutscene keep their framing. `ShipModel` reads it
+  live and reloads the hull without a page reload, which here rebuilds the
+  renderer and loses the camera; the boot warm-up reads it too, so the compiled
+  hull is the one that will be drawn. The chooser is an `OptionGroup` at the top
+  of Display settings, the label a short chip and the value the id, so a saved
+  ship survives a name reword. A stored id this build cannot load degrades to the
+  default the same way a missing hull degrades to the debug cone.
+
+Solo flight is offered from the menu **in development builds only**:
+`isEnterable` now returns true for a `built` mode when `import.meta.env.DEV` is,
+which Vite folds away in a production bundle. The routes stay mounted regardless,
+so a pasted `/play/solo` still resolves in every build — the gate is about what a
+visitor is invited into, not what the build can do.
+
 ## The sensor keeps its default sky, and half a pixel is not half resolution (4 Sep 2026)
 
 [ADR-0031](docs/adr/0031-the-sensor-response.md) records the lens-driven sensor.
@@ -7611,6 +7697,1487 @@ the checks never ran. Shutdown belongs in its own invocation with the same
 port. The driving guide and shared drive skill now say so; successful process
 exit alone is not evidence that an inspection batch executed.
 
+## The naked-eye sky is a second catalog file (5 Sep 2026)
+
+M1 of `design/plans/the-galaxy.md`. The star field is a survey of the cells
+around the player — a 100 ly cube — and the constellations are not in it:
+Betelgeuse is 500 ly out, Rigel 860, Deneb 1,400. `data/catalog/stars-sky.irsc`
+is every HYG v4.4 source beyond 150 ly at apparent V ≤ 6.5: 7,515 systems from
+7,519 rows, the farthest at 3,198 ly, every one with a Hipparcos number, none
+already in the volume. `readCatalog(volume, sky)` reads the pair as one catalog
+under one version, `<volume>+<sky>`, and the manifest states that version at
+the top with each file's own beneath.
+
+**The plan's estimate against the measurement.** The plan put the file at
+about 9,000 stars and 60 KB brotli at a 16-byte record. The record the game
+ships carries the id, the common name and the spectral string, and costs
+25.6 B per system after brotli — the same as the volume — so the sky is 449 KB
+packed and 188 KB brotli, and the pair 907 KB and 366 KB. Decoding both under
+Node is 43 ms against 21 ms for the volume alone; six searches over the
+doubled key set take 8.2 ms against 1.9. In Chrome on the dev server under
+`?timing=full`, `catalog.decode` is 57–62 ms over three reloads against 30 ms
+for the volume, and `catalog.fetch` is 8–9 ms either way — localhost, so the
+download cost is the 366 KB brotli figure and not that span. The apparent-magnitude histogram is
+in the manifest — 1, 5, 18, 74, 203, 862, 2,899, 3,453 systems at V −1
+through 6 — because it is the input the completeness rule is fitted against
+and the reader that fits it should not re-derive it from rounded magnitudes.
+
+**The sky stays out of the cell index.** The obvious merge counts a sky star
+in `inCell`, and `proceduralCount` subtracts that count from the density
+model, so a cell 500 ly out would generate one fewer star for each member
+that happens to be naked-eye from Earth, and the cells straddling the 150 ly
+edge would lose procedural stars inside the volume the survey reads. 190 sky
+stars sit in the 161 cells the sphere touches. A sky star therefore answers
+`get`, `find`, `search` and `resolveSystem` and is drawn from anywhere, and is
+absent from `inCell`, `within`, `systemsWithin` and the travel panel; the
+ingest test asserts every one of the 4,096 cells in the sphere's bounding box
+answers the same with the sky loaded, and that a 40 ly `systemsWithin` from
+Sol returns the same ids. Generation learns about bright far stars through a
+magnitude limit carried like `completeRadius`, which is M9's job, not a count.
+
+**The volume's version string had drifted from its formula.** The rebuild
+moved it from `2b24daf0` to `01c631cc` on byte-identical stars and planets:
+re-encoding the committed file reproduces its bytes exactly, and the current
+digest formula over the committed data gives `01c631cc`. The committed string
+came from an earlier formula in `apps/ingest/src/main.ts`, changed after the
+asset was built and never refreshed by a rebuild. The version exists to change
+exactly when the data changes; a formula change without a rebuild makes it say
+"unchanged" about a file a rebuild would rename. `apps/headless/src/catalog.test.ts`
+now holds the three versions together.
+
+**Orion is the assertion.** Its seven brightest are held to published J2000
+coordinates within 0.02°, and Betelgeuse to Rigel within 0.1° of 18.62° — a
+separation no rotation of the frame can change, so it checks the rotation
+itself where the per-star test checks the transcription. HYG agrees with the
+published positions to arcseconds. The plate is the planetarium 64,000 km
+above Earth at a 29.7° vertical field, aimed at Alnilam with Earth's limb at
+the bottom edge, and a drawn star sits under each of the seven marks the
+catalog directions project to. `.scratch/orion-aim.mjs` is the aim: it
+samples `ir.observatory.eye` at four angle pairs to recover the target's
+axes, because the observer offset is built in the target's own frame and no
+verb states that frame.
+
+**From Earth orbit, Natural draws every star at the ramp's floor.** The
+integrated ramp anchors on the brightest star in the survey whether or not
+its disk is drawn, and inside the Solar System that is Sol, 25 magnitudes
+above Sirius; every sprite lands at visibility zero and the seven are drawn
+but not distinguished from a V 6 star. The anchor is deliberate — dropping a
+resolved sun from it steps the whole sky the frame the disk crosses the
+sprite threshold — and the consequence is the operating point M4's exposure
+work has to measure: the faint sky beside a sunlit body, through each
+response.
+
+**Two test mistakes worth not repeating.** A published direction scaled to
+one metre: a universe position is 2.5 × 10²⁰ m from the origin, a double
+resolves about 3 × 10⁴ m there, and the expected direction came out 65° off
+as rounding noise — scale to the star's own distance. And `search('rig')`
+returns Rigil Kentaurus first, at 4 ly, above Rigel at 860; that is the
+ranking rule working, and the test now asks for `rigel`.
+
+## The sky keeps the volume and shares its system identities (5 Sep 2026)
+
+PR 62's review exposes two independent failure paths. Both host loaders treat
+an unreadable optional sky as a reason to discard a valid volume. They now
+retry the volume alone. Fixtures prove corrupt and incompatible skies preserve
+all 7,123 local systems, while a missing sky exercises the same result.
+
+HYG companions on opposite sides of 150 ly can carry different HIP ids.
+Excluding by packed id misses that they share `comp_primary`. Group exclusion
+removes one duplicate from the real asset: 7,514 sky systems, version
+`sky-0414d660`; the volume bytes stay identical. The sky digest includes both
+selection bounds even when changing a bound selects the same rows. Source-id
+ties also settle equal component numbers so reversing CSV rows cannot change
+the selected primary. Regression tests fail before each fix. The sprite
+selection property identifies generated stars by unique id-derived names.
+
+Baseline `pnpm check` passes at PR 62's `76cef98`. The review fixes pass 74
+focused tests and all five TypeScript projects; the full gate follows M2.
+
+## The galaxy can be measured from outside (5 Sep 2026)
+
+M2's `galaxy-field@1` is a CPU preview beside active `galaxy@2`.
+[ADR-0032](docs/adr/0032-the-stellar-field.md) records the version boundary,
+sources and calibration assumptions. `ir.galaxy()` exposes samples, count
+quadrature, tangent longitudes and six plate selections through `openSession`.
+The session hash is identical before and after making the plates.
+
+For the default session seed, the normalization is 0.09487290001358409 and
+solar density is 0.1 star/pc³. The 30 kpc-radius, ±10 kpc-height cylinder holds
+116.107 billion stars on a 120 × 96 × 96 grid and 116.185 billion on a
+240 × 192 × 192 grid, a 0.067% difference. The finer population totals are
+58.642 billion thin-disk stars, 10.242 billion thick-disk stars, 2.394 million
+young-arm stars, 46.145 billion bar/bulge stars and 1.153 billion halo stars.
+The halo above the reference cylinder remains outside this count.
+
+The six tangent longitudes are Scutum 32.70°, Sagittarius 47.26°, Carina
+283.23°, Centaurus 308.79°, Norma 327.79° and near-3kpc 25.54°. All are within
+3° of Hou & Han's medians. Reid's unadjusted Scutum and Sagittarius
+quadrant-IV pitches miss that bound; calibration moves each by one published
+standard deviation. Chen's power-law warp begins at 7.72 kpc, not the plan's
+20 kpc, and displaces the model's solar mid-plane by −6.39 pc. The Sun's
+catalog position stays unchanged.
+
+`pnpm sim --galaxy-plates .scratch/galaxy-m2/plates --galaxy-width 384 --quiet`
+writes six PNGs, raw float64 radiance and a report. Node 26.5.0 on this Apple
+Silicon host takes 20.5 s for face-on, 26.5 s for edge-on, and 10.4 s for the
+observer plate. These are CPU wall times, not GPU budgets. The display's
+asinh stretch reveals the faint arm modulation; isolated population plates
+show the arms, bar and halo without retuning their densities. Every view uses
+the same display parameters. There is no dust, resolved-star masking or
+physical sensor calibration. The PNGs cannot establish visible-band brightness.
+
+The focused M2 checks pass 22 tests: finite nonnegative samples, solar
+normalization, order independence, tangent locations, azimuth wrap, converged
+counts and rays, additive population emission, unchanged session state and
+fixed numeric references for three plates. PR 62's five Copilot comments and
+the companion-order bug are addressed in the preceding checkpoint. The full
+`pnpm check` passes at `3936e35`: 118 files, 1,704 regular tests, four slow
+tests, documentation build and production build. `pnpm sim --self-test` passes
+12/12. A final catalog rebuild produces no diff. The branch remains local,
+based on PR 62 at `76cef98`; no M2 PR is opened.
+
+## Counting the galaxy belongs in the slow suite (05 Sep 2026)
+
+PR #63’s first completed CI gate passed 1,703 tests and timed out on the
+count-convergence test at 20 s. The same four-test file passed in 8.55 s
+locally with two workers. Its two quadratures evaluate 9,953,280 field
+positions, so the test now uses `.slow.test.ts` and a two-minute call-site
+budget. Both grids and every assertion stay intact; `pnpm check` still runs
+it. Moving the expensive integration out of the regular suite also removes
+that cost from the per-turn hook.
+
+## A diagnostic must name the population it integrates (05 Sep 2026)
+
+Copilot’s review of PR #63 found that a runtime population typo fell through
+to composite emission and returned a plate labeled with the typo. The ray
+integrator now validates membership in `POPULATION_NAMES` before lookup,
+even for a ray outside the field. Tests also reject inherited property names
+and `null`. The ADR-0032 index row is back inside its Markdown table.
+
+Self-review found that a width-only plate request kept the fixed default
+height, stretching the projection. The omitted height now follows the width:
+square face-on, half-height edge-on and observer views. Eight regression cases
+failed before these two API fixes. The plan’s command inventory now names the
+implemented exporter. Field samples, explicitly sized plates, and the field
+version are unchanged.
+
+## The arm curve kinked, and its density jumped (05 Sep 2026)
+
+Self-review of PR #63 found a discontinuity beyond the centerline: the
+Gaussian distance projected by the pitch on either side of a kink, so a hard
+pitch branch changed off-ridge density instantly. Four of six new boundary
+regressions failed; Sagittarius’s ridge sum jumped by 0.03514 at a 300 pc
+radial offset across a two-nanoradian step.
+
+Width projection now blends from 1° before to 1° after each kink. The measured
+centerlines and tangencies are untouched. This changes field values, so the
+preview spends `galaxy-field@2`; active generation stays unchanged. The fine
+reference count is 116,184,595,789.68 stars. The edge-on and observer numeric
+plates change and receive new versioned references. `VITEST_MAX_WORKERS=2 pnpm check` passes at `33f50fb`: 1,717 regular
+tests, five slow tests, documentation and production builds. The headless
+self-test passes 12/12. All six 384-wide v2 plates were regenerated and
+visually checked in `.scratch/galaxy-m2/plates-v2`.
+
+## The disk reaches the sensor, and the rig starts clean (05 Sep 2026)
+
+M3 starts from PR #63 at `bdbfd93450dd38726e77478256a82ba12c074e18` on
+`codex/galaxy-the-disk-is-visible`, open in [PR #65](https://github.com/jonjaques/inertialref/pull/65)
+against PR #63’s branch. The CPU reference remains
+`galaxy-field@2`; the port is `galaxy-tsl@1`. The live external instrument and
+its depth/ownership limits are recorded in [ADR-0032](docs/adr/0032-the-stellar-field.md).
+
+The first browser view was washed out by the local Sun's relative-brightness
+glare. Lowering the exposure only revealed its ghosts. Isolating the volume
+showed that its radiance was correct: fixed external views now use physical
+star flux and the sensor PSF, while the ordinary camera keeps its prior look.
+The CPU/GPU comparison includes two seeds, nonzero fields, axes and their
+neighborhoods, arm kinks and the extrapolated join, plus 33 complete/clipped
+rays. The 1% bound is unchanged. GPU composition also checks a black foreground
+sphere, repeated deterministic frames and an odd-size resize.
+
+On a MacBook Air with a 10-core Apple M5 GPU and 32 GB shared memory, macOS
+26.6.2, Chrome 152, WebGPU/Metal, at 1920×1080 and DPR 1, the owned target is
+480×270 rgba16f: **1,036,800 bytes (0.989 MiB)**. The existing scene and sensor
+retain their own targets. Three batches of 40 submissions per view, through
+`ir.gpu(40)` with the animation loop held and the GPU queue drained at both
+ends, measured:
+
+| View    | Full sensor frame | Same frame without volume | Incremental volume and composition |
+| ------- | ----------------- | ------------------------- | ---------------------------------- |
+| Face-on | 14.66–14.69 ms    | 4.08–4.09 ms              | 10.58–10.61 ms                     |
+| Edge-on | 27.23–27.39 ms    | 4.08–4.09 ms              | 23.14–23.31 ms                     |
+
+Each measured 40-frame batch produced exactly 40 volume updates. These are
+wall-clock queue measurements including submission overhead, not timestamp
+queries; the output was extended Display P3 with headroom 2. The 2 ms volume
+target remains open. There is no temporal reuse, dust extinction, partial-ray
+foreground integration, or M6 bandpass calibration. r185's first-use cached
+function ordering rebuilds one integral pipeline after warming; subsequent
+frames add none. The full physical-GPU suite passes 69 tests in 17 files. In the live
+browser, a 65 m black sphere 500 m in front of the instrument masks the volume.
+Resizing to 953×617 produces a 239×155 target (296,360 bytes). Switching the
+canvas from extended P3 to standard sRGB retires the old target to zero owned
+bytes and resumes the same edge-on instrument with a new ready target.
+
+The driver now clears local storage and cookies before each invocation's boot.
+It leaves the app before clearing the current and requested origins so an
+already-running instance cannot retain or write back old preferences.
+`--keep-storage` retains them and permits a warm attach; IndexedDB saves and
+asset caches remain. A harmless storage marker and cookie survived the old
+default, disappeared under the new default, and survived
+`--keep-storage --fresh`. The shared drive skill and browser guide describe
+that contract.
+
+`VITEST_MAX_WORKERS=2 pnpm check` passes: 120 regular files / 1,723 tests,
+two slow files / five tests, documentation and production builds. The headless
+self-test passes 12/12. A newly launched clean Chrome session verifies resize
+and renderer remount without console errors; the only warning is the existing
+Three.js Clock deprecation.
+
+## Earth can leave the picture without moving the world (05 Sep 2026)
+
+M4 is open in [PR #66](https://github.com/jonjaques/inertialref/pull/66) on
+`codex/galaxy-earth-to-the-disk`, targeting M3's branch at `d980228`. The [execution plan](design/plans/galaxy-m4-earth-to-the-disk.md)
+records scope and verification; [ADR-0032](docs/adr/0032-the-stellar-field.md)
+records the camera and sensor contracts. The route's target, 30 kpc above the
+center, is about 101,400 ly from Earth: a literal 100,000 ly ceiling clips it.
+The ordinary observatory's ceiling is therefore 110,000 ly. The field stays
+`galaxy-field@2`; the interior sampling port spends `galaxy-tsl@2`.
+
+Two integration mistakes earned regressions. Resuming from progress alone
+reconstructed the route's original angles after a manual orbit drag and jumped
+649,127,422,775,389.6 m. Timed travel now starts from the complete displayed
+orbit state, and Hold preserves that state. The 2,400 s instrument also exceeded
+the persisted lens's 30 s ceiling: the picture used the long exposure while the
+controls still described 1/60 s. The shared shutter control and guard now reach
+3,600 s; the existing request bridge carries the instrument into the preference
+and back into a newly bound engine. Both tests failed before their fixes.
+
+The response plates in `.scratch/galaxy-m4/` use one pose and lens per comparison.
+The outside and Earth-orbit instrument uses 90° vertical FOV, f/2, 2,400 s,
+ISO 400: EV100 −11.2288, pre-exposure 2,000, residual gain 1. Natural clips Earth.
+A 1/40,000 s plate at the same pose preserves Earth's surface and loses the faint
+field, a 26.5165-stop separation. The interior sky comparison uses 60 s, f/2,
+ISO 400, EV100 −5.9069. These are emission-only preview exposures, not M6's
+photometric acceptance. There is no dust, resolved-light subtraction, or
+partial-ray transport between an internal opaque body and the observer.
+
+On Apple M5, 32 GiB shared memory, macOS 26.6.2 and Chrome 152 WebGPU/Metal,
+production at 1920×1080, DPR 1, extended Display P3 with headroom 2, three
+40-frame queue-drained batches per response measured:
+
+| View / response    | Complete frame | Without volume | Added volume and composition |
+| ------------------ | -------------- | -------------- | ---------------------------- |
+| Outside / Direct   | 17.43–18.04 ms | 3.97–4.22 ms   | 13.21–13.86 ms               |
+| Outside / Neutral  | 18.06–18.70 ms | 4.20–4.29 ms   | 13.78–14.50 ms               |
+| Outside / Natural  | 14.69–14.88 ms | 3.65–3.70 ms   | 10.99–11.19 ms               |
+| Interior / Direct  | 32.39–35.53 ms | 2.12–2.27 ms   | 30.13–33.36 ms               |
+| Interior / Neutral | 28.56–30.37 ms | 1.70–1.73 ms   | 26.86–28.63 ms               |
+| Interior / Natural | 36.94–39.90 ms | 2.15–2.48 ms   | 34.51–37.75 ms               |
+
+These are sequential wall-clock measurements including submission overhead,
+not timestamp queries or a ranking of response algorithms. Every accepted
+batch produced exactly 40 volume updates. The first interior Neutral run
+was discarded: scene settlement resumed animation during its batch and the
+update counts were 43–49. Repeating after settlement produced 40 with the
+volume and zero without it. The 2 ms target remains open; the interior
+quadrature costs more than the outside view. Raw runs are
+`measure-disk-natural.json`, `measure-responses.json`, and
+`measure-interior-neutral.json` in the evidence directory.
+
+The volume owns 1,036,800 bytes at 480×270 rgba16f. Resizing to 953×617 at
+DPR 2 produces a 1906×1234 drawing buffer and a 477×309 target,
+1,179,144 bytes. Changing extended P3 to standard sRGB retires the old target
+to zero bytes and resumes exactly the same galactocentric observer origin
+and journey; returning to automatic output restores a ready extended target.
+The production controls perform Earth Orbit, Travel Out, Hold, and Return;
+the held state is unchanged after 600 ms. Browser reports contain no
+unhandled errors. The ordinary Three.js Clock deprecation remains.
+
+`VITEST_MAX_WORKERS=2 pnpm check` passes after both regression fixes:
+1,742 regular tests in 123 files, five slow tests, documentation and production
+builds. The physical GPU suite passes 71 tests in 18 files; the headless
+self-test passes 12/12. The observer quadrature agrees with the finer CPU
+reference within 1%, and 80 complete/clipped GPU ray cases agree with the CPU
+observer profile within the same tolerance.
+
+The full 36-second outward and 36-second return route completes in the
+production capture, with 99 diagnostic samples over 2,998 animation frames.
+The frozen world hash stays `bd75d6b3`, orientation changes by zero, and the
+maximum adjacent log-distance step is 0.038790. The selected local population
+never exceeds 10,155 sprites. All 5,000 captured compositor frames are nonblack;
+the darkest grayscale mean is 8.2663/255. The renderer carries no camera/lens
+finiteness or survey-bound failures. The first capture frame retains the view
+before the initial instrument seek; timed travel starts after the endpoint
+hold. The evidence script now waits for the initial seek to present before
+starting a recording.
+
+The full export is 5,000 frames at 37 fps, 135.135 s; the retained 85-second
+`journey.mp4` excerpt includes both directions and endpoint holds. The driver
+finds seven isolated brightness excursions, 203–396 pixels each at its
+480×270 comparison size. Inspection of the neighboring frames and difference
+map localizes them to the bright foreground point. Clearing the central
+71×76 comparison region leaves zero threshold-crossing pixels in all seven
+pairs (`point-flicker.json`). There is no corresponding camera or diffuse-field
+jump. This is a lighting limitation, consistent with an unresolved point's
+raster coverage at the extreme exposure, not a diagnosis proved by this test.
+The 37 fps capture also cannot rule out every one-frame artifact. Keep both
+limits beside the clip; it is not an artifact-free claim.
+
+## An endpoint distance is not an endpoint pose (05 Sep 2026)
+
+PR #66's review found two gaps after manual camera gestures. Seeking Earth
+Orbit retained free look: with a half-turn offset, the camera's forward
+direction dotted with the direction to Earth was −1. Immediate journey seeks
+now clear that offset; timed travel and Hold preserve it.
+
+At progress one, an orbit drag moved the eye 8,244 pc from the destination
+without changing its distance from Earth. The distance-only progress kept
+Travel Out disabled. Both destination buttons now allow reasserting their
+endpoint while a journey exists; Travel Out also starts a new journey.
+Five regression cases failed before these fixes, covering three seek
+positions and the actual rendered buttons after orbiting at either endpoint.
+The control tests render in Node. Browser tests are omitted at the user's
+request.
+
+## Light passes through the same dust from either side (05 Sep 2026)
+
+M5 is based on PR #66 at `837be56`, on `codex/galaxy-light-through-dust`.
+The CPU model spends `galaxy-field@3`; the TSL port spends `galaxy-tsl@3`.
+Active population generation stays unchanged. [ADR-0032](docs/adr/0032-the-stellar-field.md#dust-transport-m5)
+records the profile, source distinction, preview assumptions, and transport.
+
+The homogeneous-absorber regression initially returned 3,199.34 instead of
+2,022.37 in the red channel. Front-to-back analytic interval transport passes
+that test and the two-layer ordering check, zero-dust identity, channel bounds,
+column monotonicity, seed/order properties, and population additivity.
+
+Ten rays against a 0.25 pc CPU reference show why sampling quality and field
+identity are separate. Moving 100 pc sampling reaches 2.512% RGB error.
+Uniform 10 pc sampling reaches 0.663%, but long GPU paths with both stellar and
+dust evaluation can return all-zero RGBA without a validation error. Short
+paths and the independent transmittance graph agree with the CPU. Expanding
+fixed arm windings alone does not cure every ray. Sharing stellar and dust
+centerlines, concentrating fine intervals near the plane, and discarding
+further RGB when all transmittance channels fall below `1e-12` passes the
+complete matrix. The actual driver/compiler cause remains unproven.
+
+The settled profile caps intervals at `max(10 pc, 0.1 × warped height)` as well
+as the 100 pc maximum and observer step law. It uses 139–2,524 samples across
+the ten rays, with maximum RGB error 0.7806925%; optical-depth error peaks
+separately at 1.5373267%. Uniform 0.5 pc CPU rays agree with 0.25 pc within
+0.000776% RGB. The input cases and residuals are retained in
+`.scratch/galaxy-m5/convergence-uniform.jsonl` and `convergence-settled.jsonl`.
+The live view refines after eight stable submissions, using accumulated motion
+thresholds so ordinary local drift does not keep it at travel quality.
+
+The full physical GPU suite passes 74 tests in 19 files, including seeded dust
+points, 108 transported ray cases, separate transmittance, short-ray
+convergence, foreground-depth composition, orientation, and resource lifetime.
+The headless self-test passes 12/12. The first full gate finds a pre-existing
+orbital property failure at eccentricity 0.9874839879822216 and
+49.999961414866746 periods. Relative velocity error is
+`2.5500372384223466e-7` against a `2.5499980707433374e-7` bound. The physics,
+spatial, and shared sources are identical to PR #66; direct evaluation of the
+saved counterexample reproduces it there. Position passes. The dust work does
+not change that bound or the solver. The repeated full `pnpm check` passes:
+1,784 regular tests, five slow tests, formatting, lint, types, layering,
+documentation validation, and production build.
+
+The @3 edge-on capture has a dark lane through the warm bulge. The final
+interior capture uses a 640×360 drawing buffer, 160×90 volume and 115,200 target
+bytes, with settled sampling and the same field/kernel versions. Its 2,400 s
+exposure is still a preview, and resolved sprites remain unextinct. The
+captures and reports are in `.scratch/galaxy-m5/`; the inside and outside
+images have different resolutions.
+
+The user observed GPU saturation and OS UI stalls during the larger runs.
+No M5 frame-cost result is accepted. The @2 edge-on control passed submission
+counters at 1920×1080: 29.27–29.37 ms full, 4.335–4.385 ms without volume,
+24.93–24.99 ms added. The @3 40-frame batches timed out or lost their CDP
+connection. Even requests for a single frame recorded 5–10 volume updates,
+and the supposedly disabled volume still recorded 8–10. Those differences
+cannot measure the shader. The cause of the extra submissions remains open.
+A detached browser also returned to display ratio two despite an attached
+`--dpr 1` request; `supersample` was one, so this was not 4× AA. Actual canvas
+and target dimensions must accompany any subsequent measurement.
+
+At the user's request, feature work ends here and performance goes to a fresh
+agent. The reduced-resolution capture had no timing batches, a 45-second
+outer limit, and automatic Chrome shutdown. The test Chrome on port 9335 and
+preview server on 4173 are stopped. The
+[handoff](design/plans/galaxy-performance-handoff.md) distinguishes valid
+arithmetic/capture evidence from invalid timing, records the workload and
+numerical limitations, and leaves the performance design open.
+
+## The galaxy holds its picture and filters its dust (05 Sep 2026)
+
+The M5 handoff's invalid timing had one cause and it was not the shader:
+`measureGpuFrameMs` drains the queue with an `await`, animation frames keep
+presenting under it, and every one goes through the same chain — so a batch
+of one frame recorded five to ten volume draws, and a batch with the backdrop
+hidden recorded eight to ten more, because the frame callback that shows it
+outran the line that hid it. R3F's `setFrameloop('never')` is not a hold:
+`<Canvas>` writes the `frameloop` prop back through `configure` on any render
+of the shell, and a probe here held `never` for 1.5 s with nothing submitted,
+so neither outcome is a property of the flag. `engine/frameHold.ts` is the
+hold every frame consumer reads for itself; `ir.gpu()` takes it before its
+first await. Ten frames asked for are ten submissions, and the hidden
+backdrop is none. **Do not measure through R3F's frameloop again.**
+
+The saturation was the redraw. Measured headlessly on the Apple M5 at a
+480×270 target, a draw was 113 ms face-on, 246 edge-on, 165 and 237 at two
+interior points — 5 ns a sample over 21–47 million samples — and it happened
+on every scene submission whether or not the view had moved. The volume now
+draws on a change of view, field or size, once more to settle after eight
+unchanged submissions, and holds the target between: 0.17 ms a frame at rest
+at 960×540 against 60–80 ms a draw, one observer draw and one settled draw
+per view switch, and one draw a frame through the journey's last third with
+the period at vsync. `ir.galaxy().render()` reports `draws` and `held`.
+
+Attribution through a kernel copy with parts switched off, at 240×135
+edge-on: 58.5 ms whole, 7.4 without the four dust-noise bands, 33.8 without
+the arms, 2.4 with neither. A texel from 40 kpc spans 140 pc and none of the
+64, 16, 4 and 1 pc bands resolves there. The ray now carries the pixel's
+angle; unresolved bands are replaced by their lattice mean `exp(a²σ²/2)`,
+σ² measured at 0.0729 and matching the exact mean to five decimals, and the
+live intervals are floored at half the footprint under the observer and
+settled laws only — never the plane-crossing law, or the young disk renders
+as noise. Edge-on 53 → 10.8 ms moving, 64 → 9.6 settled; interior toward the
+center 51 → 15.9 and 80 → 17.2. Over seventeen edge-on texels the filtered
+sum is 0.994 of the exact one in the plane; the GPU/CPU tests hold within
+the existing 1%; the edge-on plate differs from M5's by an RMSE of 0.86%.
+The field stays `galaxy-field@3`; the port is `galaxy-tsl@4`.
+
+Two measured non-wins, so nobody builds them: an eighth-size travel target
+(16.4 ms at 120×68 against 10.8 at 240×135 — a small draw is bound by its
+longest in-plane rays, not by throughput) and early termination at the
+transmittance floor (the loop body is 4% of a draw). Orbit traces were
+pre-exposed with the scene and bloomed white under the 2,400 s instrument;
+they now carry `integratedSkyGain` and present at one brightness at every
+exposure, held by `orbitTrace.gpu.test.ts` across 10⁶ of pre-exposure. The
+meter still counts them. The rigs are `.scratch/galaxy-perf/` and the record
+is [perf § The galaxy](design/plans/perf.md#the-galaxy). Every browser figure
+is from a 960×540 rig at the user's request.
+
+## Orbit dragging was spending the frame on an invisible sky (06 Sep 2026)
+
+The report was a camera drag that slowed the game until the mouse stopped.
+On the production build at 1920×1080, DPR 1, Apple M5, the occluded rig
+reproduced 62.47 ms mean orbit frames and 55.69 ms free-look frames against
+16.67 ms at rest. The simulation took 0.29 ms during orbit rotation and
+terrain visited zero nodes. Every one of the 35 frames in a 2.2-second drag
+window redrew the galaxy integral. The same motion with the volume hidden
+returned to 16.67 ms. At 960×540, rotation averaged 18.37 ms, which is why the
+smaller rig did not reveal the full regression.
+
+The held-target fix only helped a camera that stopped moving. Ordinary
+Natural views now omit the diffuse volume when the lens and exposure range
+resolve to terrestrial daylight or darker. The test is the lens EV plus the
+bright range reaching the calibration EV, exactly the condition under which
+Natural's clamp admits that calibration. It reads current settings because
+the published exposure is one frame old. Brighter Natural settings, metered
+responses, Direct and named galaxy instruments still render the volume.
+
+Two regressions failed before the change. They cover repeated orbit movement,
+unchanged canonical state, and immediate transitions into and out of an
+eligible exposure. The physical-GPU comparison includes foreground PSF mixing
+and a fixed noise tick; three solar viewpoints differ by less than one 8-bit
+display code with and without dust. A long-exposure control remains visibly
+different when the sky is omitted. This bounds the tested scenes, not every
+possible sensor setting or field. The field and kernel versions are unchanged.
+
+The rebuilt production view holds 16.67 ms during orbit and free-look movement
+at 1920×1080 and at a confirmed 2880×1800 drawing buffer, the latter a
+1440×900 CSS viewport at DPR 2. There are zero volume submissions in all four
+windows. The Retina simulation-to-wall-time ratios are 0.9955 during orbit and
+1.0016 during free look, within one fixed tick of real time across each
+2.2-second window; their largest frame is 17.8 ms. The full `pnpm check`
+passes 1,793 regular tests, five slow tests, layering, formatting, lint, types,
+documentation validation and the production build. Both new physical-GPU
+daylight comparisons pass separately.
+
+The browser's face-on instrument remains active at 640×360, with the pinned
+2,000× exposure multiplier, one observer draw and one settled draw. The Earth
+and galaxy captures are retained beside the profiles.
+
+The profiles and comparison script are in `.scratch/orbit-perf/`. Visible
+galaxy draws retain their measured cost; angular caching and the other
+remaining work stay in [the performance plan](design/plans/perf.md#the-galaxy).
+
+## A preset keeps the instant, and Cinema keeps the Enterprise (6 Sep 2026)
+
+[ADR-0033](docs/adr/0033-presets-hold-a-photographic-instant.md) records the
+portable preset format and the photographic clock. Restoring a surface shot
+preserves its pose, full lens and instant without changing `world.stateHash()`.
+The snapshot evaluates analytic bodies at that same instant; orbit traces need
+it too, because anchoring them to live time leaves a held moon detached from
+its path. Keyboard transport and panel transport share the clock selection.
+
+Scouting with the shipped catalog covers 464 bodies in 21 systems within
+12 light-years of Sol and 272 bodies in 17 systems across the galactic center.
+Tau Ceti supplies two additional local compositions. The far shore is on
+`P222_1_0_9/b:4`, about 53,350 light-years from Sol. Its low sun is composed at
+100331.9499824278 seconds from J2000. The six selected views have rendered
+480×320 JPEG plates and share the same JSON decoder as personal imports.
+
+A sparse eclipse plate is a valid 3,613-byte JPEG. A 4 KB minimum file-size
+check rejects it; the plate gate now checks dimensions and decodes every pixel.
+The Enterprise's three portraits belong to Cinema, so their clearance test
+samples the cinema script directly instead of reading planetarium presets.
+
+## Earth moved to September and the camera stayed in January (6 Sep 2026)
+
+The photographic snapshot used the selected date, but
+`Observatory.#targetPosition` still read `world.clock.renderTime`. Setting
+September 2026 left the orbit camera 250,074,693,191 meters from the drawn
+Earth, at a requested standoff of 20,779,659 meters. Surface-camera coverage
+missed it because that arm already used photographic time. The regression
+now compares the orbit eye to the drawn body's position across date jumps,
+Earth–Luna–Earth navigation, and return to simulation time.
+
+The orbit anchor and tracking target are separate. A year of Earth–Luna
+samples holds both centers' eye directions within 1e-7 while the canonical
+state hash stays unchanged. The pair's changing separation requires a
+camera-distance change as well as rotation; orientation alone cannot keep
+two screen positions fixed. The safe orbit floor takes precedence.
+[ADR-0033](docs/adr/0033-presets-hold-a-photographic-instant.md) records the
+camera basis and reference instant carried by a shared shot.
+
+Preset management lives at `/planetarium/presets`, owned by the planetarium's
+nested route. Its dock is a quick selector. A global `/presets` route would
+put a planetarium feature outside its mode and require a separate background
+location to preserve the camera. The nested parent supplies that lifetime.
+
+## Shared shots have readable query fields (6 Sep 2026)
+
+Custom links use `shot=1` with dotted picture keys through `URLSearchParams`,
+including the ordinary `seed` boot parameter. They replace URL-encoded JSON;
+the JSON file envelope stays unchanged. Field paths determine value types so
+numeric-looking seeds remain strings and `lens.focus=null` means infinity.
+Unknown paths, duplicate fields, conflicting paths and invalid numbers are
+rejected before the camera reads the reconstructed picture.
+
+The parent route compares only sorted picture parameters. Changing a lens or
+time field restores the shot; entering the preset dialog, changing its name
+query, or reordering parameters preserves the current pose. Focusing a body
+clears all picture fields while keeping the universe seed and diagnostics.
+
+The browser driver opens those same URLs with `--preset <id>` or
+`--picture <single-shot.json>`. Repeatable `--query key=value` overrides make
+field changes and invalid-link fixtures explicit; `--print-url` resolves them
+without Chrome. The drive skill and driving guide carry the setup and regression
+checks. The driver does not maintain a separate camera restoration path.
+
+## The navigator, the drop and a search over the volume (6 Sep 2026)
+
+The catalog panel is the **Navigator** in both workspaces. Its id and its three
+preference keys keep `catalogue`, because those are what a stored layout and a
+stored radius remember; a rename that reset every reader's chips would be a
+rename of the wrong thing.
+
+**The list is windowed** (`@tanstack/react-virtual`). At 50 ly the survey
+answers with 1,507 rows and the panel drew a capped 200 systems of them, every
+one a button with an SVG in it, reconciled twice a second beside the render
+loop. The derivations were never the cost — 0.19 ms at that size — React was.
+Measured in Chrome at 1600×900: 19 rows rendered at rest and 43 mid-scroll from
+a 42,196 px list, so the cap and its "further out — search by name" footer are
+gone. The scroll element is the panel body's, found by computed style and
+offset by `scrollMargin`, because a second scroller inside a 60vh-capped panel
+has no height anything can know.
+
+**Search ranks rather than filters** (`@leeoniya/ufuzzy`), over every
+designation the catalog holds and every body the world has generated, lighting
+the characters that matched. Verified in the browser: `proxmia` → Proxima
+Centauri, `centauri alpha` → Alpha Centauri, `europa` → Europa, `hip 71683` →
+Alpha Centauri with `HIP` and `71683` lit, `s:SOL/b:5` → Saturn. Each of the
+first three found nothing before. The matcher lives in the client because
+`packages/*` may carry no third-party dependency: the harness hands names out
+(`searchEntries`) and takes addresses back (`rowsFor`), and the index is rebuilt
+only when `searchIndexVersion` changes.
+
+**A figure dragged onto a world flies the camera down to it** (ADR-0034). The
+trajectory is the conic an unpowered body would follow, and the record holds
+`1 − e` rather than `e`: a drop from far out onto ground nearly under the eye
+has `e` within 1e-13 of one, and `1 − e·cos ψ` written as a subtraction loses
+every digit it has there.
+
+Two things the aid had to learn. **An overlay is flat** — it cannot be occluded
+by the limb it crosses and its ring is a circle rather than the ellipse a circle
+on a sphere is — so it is scene geometry. And **a point put through its own
+render compression sinks inside the body it is meant to lie on**: the ground
+ring vanished until the observatory answered in body radii in body-fixed axes
+and the drawer hung the aid off the placement the body was drawn with, the way
+a terrain patch is. Holding the figure at the viewer's full orbital radius put
+it 3.3 body-radii out at Earth, off the side of a 65° frame exactly when the aim
+reached a limb; a fifth of the altitude keeps it in frame and side-on.
+
+Verified with real CDP pointer events, since `scripts/drive.mjs` has no input
+dispatch: eight moves all reached the button, it never remounted, capture was
+never lost, and the ring sat on the pointer to **0.01 px** — which is what says
+the projection is right. Landed at 2 m on Earth, on Luna's cratered ground, and
+on a planet of the generated system `P221_4_0_a` with 292 terrain patches drawn.
+A 200-frame cast of a descent found no isolated frames at 60.3 fps.
+
+**The catalog dialog searches the volume by what a world is** (ADR-0035).
+Nothing can be indexed, because a body does not exist until its seed is
+expanded — so every system in the radius is generated and tested on the pool.
+Streaming is several jobs rather than one, because `WorkerOutbound` has no
+partial-result message: 32-system batches, dispatched nearest first.
+
+The cap is the finding worth keeping. Uncapped, re-sorting the accumulation as
+batches landed **dropped the simulation clock to 0.2× real time** while a wide
+sweep ran. The nearest thousand are kept, trimmed at twice that so the sort is
+amortized, and the true total is reported beside them. Measured at 1600×900:
+133 systems within 25 ly answer in under a second with 323 rocky worlds; 150 ly
+is 37,929 systems and the list fills continuously — 3,335 rows by 3%, 16,805 by
+17% — with Stop working throughout.
+
+**A windowed list needs a scroll container with a definite height.**
+`OverlayPage` gained an opt-in `fill` body for that: the default of scrolling
+the body is right for prose and wrong for a list measuring a window against its
+container, and without it the dialog rendered 1,100 rows for 323 results
+against 27 with it.
+
+## The pointer and the camera agree on the landing (6 Sep 2026)
+
+The drop retained the first valid hit in React while its scene preview followed
+the hand. A browser drag across Earth missed the final preview by 0.552 radians.
+Release now reads the observatory's live aim; the same fixture agrees within
+1.2e-16 radians. A property check of actual camera positions also exposed a
+13 cm error in nearly radial arcs: `acos` amplified normalization error. The
+cross-product/dot-product `atan2` form keeps the endpoint within the spatial
+position resolution.
+
+The pointer holds the launch end of a spring rope. Its launch chooses the
+surface endpoint, and the camera lands there. The browser projection check
+places the held end within 1e-8 pixels of the pointer at 1600 × 900, DPR 1.
+[ADR-0036](docs/adr/0036-the-pointer-holds-the-rope.md) records the gesture.
+
+The narrow-screen capture exposed a second rendering defect: `Line2NodeMaterial`
+expands instance endpoints in clip space, but its inherited logarithmic depth
+uses the ribbon template. Foreground rope disappeared over the planet. The
+aid now reconstructs view depth from its expanded clip position. A GPU fixture
+with a real depth attachment fails under the old material and verifies both
+foreground visibility and background occlusion under the corrected one.
+
+The first full check timed out after 300 seconds in the existing terrain
+fixture. With the browser rig closed, that fixture passed in 179 seconds.
+Browser work and verification run serially; the task's rig is closed after
+its capture rather than left rendering between checks.
+
+## The sky has a V band, and the source has a coordinate convention (06 Sep 2026)
+
+M6 continues on PR #69's tip, after reading #67's transport and display policies
+and #68–69's photographic instant and navigation changes. The source corrections
+matter more than a prettier plate: GAMBONS's 75 nW value is a ground-level annual
+zenith mean, Zucker's 165 pc is a radius, and Licquia's V magnitude is reported
+with `5 log h` removed. [ADR-0032](docs/adr/0032-the-stellar-field.md#the-local-sky-and-linear-calibration-m6)
+records their replacement targets and the model approximations.
+
+The Lallement FITS header uses magnitudes per parsec despite the catalogue
+ReadMe's nanomagnitude label. Nine Gaussian cloud approximations derive from
+explicit windows in that cube; source hashes and columns accompany the runtime
+records. A solar-centered 165 pc cavity reduces the smooth dust to 20% locally,
+without removing stars or skipping nearby light. Removing the cavity makes the
+solar extinction regression fail at 0.000767 per pc against its 0.0002 bound.
+
+The calibrated field is `galaxy-field@4`, port `galaxy-tsl@5`; active generation
+stays unchanged. With the default session, V residuals against the three
+equal-area GAMBONS regions are
++0.132, +0.235 and −0.211 mag, with a +0.055 mag residual in external face-on
+absolute magnitude. The report contains 116.107 billion stars and exactly
+0.1 star/pc³ locally. The GAMBONS sky also includes scattering and extragalactic
+light, which the model omits; these comparisons do not isolate those components.
+The 1,536-ray sky and 96×96 luminosity quadratures change the default results by
+less than 1%. GPU region averages agree with CPU within 0.01 mag, and individual
+rays within 1%, using the suite's directly seeded test field. Its numbers differ
+slightly from the CLI's session-derived galaxy seed; the command's values are
+the ones quoted here. The full convergence check takes about 25 seconds locally and
+belongs in the slow suite.
+
+The sensor receives V power through a declared photopic/V ratio of 1.25, with
+illustrative RGB normalized independently of luminance. It no longer treats
+bolometric power as visible light. At the user's direction, Natural-specific
+display treatment and final appearance acceptance wait for the response revision.
+Physical luminosities fit the linear sky and external-light constraints; current
+Natural visibility is not a calibration input. `pnpm sim --galaxy-calibration
+--quiet` reproduces the checks without a renderer.
+
+The gate passes 1,898 regular tests and six slow tests; the physical-GPU suite
+passes 80 and the headless self-test 12/12. Source regeneration followed by
+formatting reproduces the checked-in tables exactly. The 960×540 Direct rig
+captures face-on at 30 kpc, f/2, 2,400 s, ISO 400; edge-on at 40 kpc, f/2,
+600 s, ISO 400; and 64,000 km above Earth at the face-on lens. Earth clips at
+that exposure. The 240×135 target draws twice per held view and keeps the
+canonical hash unchanged. These are integration plates, not Natural appearance
+acceptance. Captures and raw reports remain in `.scratch/galaxy-m6/`.
+
+## The default camera composes bright worlds and faint space (6 Sep 2026)
+
+The accepted direction is Enhanced by default, with Automatic and Manual for
+photographic exposure. [ADR-0037](docs/adr/0037-the-enhanced-camera.md) records
+why Natural's preserved daylight response is insufficient. The M4 exposure
+comparison remains useful physical evidence, but its clipped Earth is not the
+default image target. Display gamut and HDR output are separate choices.
+
+[The camera plan](design/plans/the-camera.md) owns the change, including
+radiance precision, preference and preset migration, and matched image gates.
+Galaxy M6 retains physical calibration independently; M7's visible cached sky
+is required before the production default changes. The galaxy plan drops its
+completed M1–M5 recipes and moves optional sensor work to the camera follow-ups.
+Natural's performance measurements stay labeled as that baseline. They cannot
+prove the cost of an Enhanced frame with its sky visible.
+
+The planning branch includes M6 from PR #70 at `9911dd5`, stacked on PR #69.
+Its physical calibration remains intact. The three camera modes and their
+images are not implemented by this entry.
+
+## The sky had to survive before it could be revealed (07 Sep 2026)
+
+The camera implementation starts from `codex/galaxy` at
+`b50a1f22df424e24a7165fa811374694221c6c98`. Physical galaxy-field@4 and
+galaxy-tsl@5 remain the source of the image. A half-float scene attachment at
+daylight exposure cannot carry all the faint sky that a later tone curve would
+need. The sky therefore stays in its owned physical RGB target, in
+`nW m^-2 sr^-1 / 1000`, until backdrop composition. Enhanced applies a declared
+24-stop gain and a luminance shoulder bounded at 0.35 surface-relative units;
+photographic modes bypass it. The GPU precision test spans 26.5165 stops,
+retains the source, and checks foreground coverage through the real sensor.
+Returning unprocessed radiance from composition makes that regression fail.
+The first 21-stop gain passed the numerical gate but left the band barely
+visible beside Earth in SDR. Matched sRGB captures settled the initial
+24-stop choice; the Cloudflare preview remains the user's visual acceptance
+gate, including composition, dust contrast and star hierarchy.
+
+A count-weighted histogram let faint occupied pixels overpower a small bright
+disk. The replacement weights by luminance after trimming the highest 0.1%
+of occupied samples. Empty pixels contribute nothing. A separate R8 mask
+excludes orbit and landing ink without erasing those instruments from the
+image. Held adaptation still obeys newly tightened comfort limits. Readback
+generations reject old mode, pose and photographic-time samples; adaptation
+uses presentation time while a photographic instant is held. Manual never
+consumes meter gain. WebGL explicitly reports Automatic unavailable and offers
+Manual; Enhanced SDR rendered the matched Earth-and-band view on that backend.
+
+Two cache implementation details needed real GPU regressions. Assigning a
+target's scissor rectangle does not enable scissoring in three r185: without
+`renderer.setScissorTest(true)`, a claimed 16² tile draws an entire face.
+Changing a cube target's size also leaves its six image extents stale; a tier
+change replaces only the free target. Both fixes preserve the published cube.
+A complete 32² sky publishes after 24 bounded tile submissions and stays
+available through the following 384 refinement submissions. Camera rotation
+only resamples it. A 0.15 pc radius bounds reuse; sampled 0.14 pc probes agree
+within 1%, which is a tested sample set, not a universal dust-error bound.
+An outside-disk visit followed by an early return canceled one incomplete
+generation and reused the completed home sky.
+
+With the capture browser stopped, the final cache's 408 submissions took
+619.80 ms across a drained queue, averaging 1.519 ms. Warm rotating projection
+cost 0.0602 ms at 1920×1080 and 0.0579 ms at 2880×1800, slightly above the
+0.05 ms target. Under continuous rotation, the first 16 cold frames averaged
+6.93 ms and subsequent 16-frame blocks 0.85–3.01 ms. The coarse cube bounds
+the initial quality cost; these measurements do not close the 2 ms live-volume
+budget or the full cold/descent/travel acceptance matrix.
+
+On Apple M5, Chrome 152, WebGPU, sRGB SDR and MSAA 4, the complete warm sensor
+frame averaged 4.02 ms at 1920×1080 DPR 1 and 8.09 ms at 1440×900 CSS / DPR 2,
+each across 80 submissions and a drained queue. The sky cache plus projected
+target used 2,658,816 and 4,214,016 bytes respectively. The added meter mask,
+including its multisample attachment and resolve, used 10,368,000 and
+25,920,000 bytes. A separate two-second free-look recording at DPR 2 presented
+121 frames, with 17.6 ms frame-interval p95 and none over 25 ms. These are
+different measurements: the drained submission batch is sensor cost, while
+the paced recording includes the complete moving app. A first profile begun
+immediately after the drained batch included its deliberate queue hold; the
+recorded free-look run begins after settling. The Enhanced descent capture
+contains 90 presented frames and no isolated-frame strobe detection, which
+does not establish visual acceptance of a moving shot. WebGL's settled SDR
+recording presented 120 frames in two seconds, p95 17.1 ms. Extended P3 is a
+separate supported output, not a requirement for the SDR picture.
+
+Version 2 pictures carry selected camera processing and never carry adaptation
+history or display hardware. Version 1 restores Enhanced defaults while
+retaining the lens, pose and photographic time it actually recorded; it cannot
+promise its historical appearance. Ordinary galaxy travel no longer writes
+an instrument lens into the preference. The new mode controls and these
+compatibility decisions are described in
+[ADR-0037](docs/adr/0037-the-enhanced-camera.md); the remaining image gate stays
+in [the camera plan](design/plans/the-camera.md).
+
+The existing drag-to-land browser fixture initially failed its strict
+longitude comparison because the preset camera was still easing. The ground
+point drifted by about 0.0059 radians over four frames with no pointer event,
+and by the same amount after a correctly rejected foreign pointer. Finishing
+the camera motion before the gesture preserves the strict assertion. The
+fixture then passed in Enhanced, Automatic and Manual, with a projected
+pointer error of 5.31e-11 pixels and a landing-coordinate error of 6.94e-18
+radians. Product input handling did not change.
+
+## The sky keeps its detail, and the dust finishes its queue (07 Sep 2026)
+
+The M7–M11 completion branch is stacked on PR #72 at `2847688`, by Jon's
+explicit choice. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
+records the architecture; [the galaxy plan](design/plans/the-galaxy.md) carries
+the final evidence and quality budgets. The source model is now active
+`galaxy@5` / `galaxy-field@5`, with GPU port `galaxy-tsl@8`. Old `P` addresses
+still use the exact legacy generator. New `Q` addresses carry level, cell and
+ordinal; the saved manifest identifies generation drift rather than promising
+an ordinal survives a changed algorithm.
+
+The 19 pc young-star height was a maser-tracer measurement, not the optical
+population's geometry. The shared flaring sech² height now reaches 50 pc at
+the center, 67 pc at 4.5 kpc and 90 pc at the Sun, with conserved column
+normalization. Recalibration keeps the original 0.3 mag tolerances: Solar
+midlatitude, polar, Aquila and exterior V residuals are +0.0765, +0.1785,
+−0.2800 and +0.0325 mag. The reference cylinder holds 116.064 billion stars;
+local number density remains 0.1 star/pc³. Emergent young-cohort V at the
+Solar arm ridge rises from 0.66% to 15.31%. This improves the external arms,
+but does not turn the model's central V-light fraction or illustrative RGB
+colors into measured morphology. Bounded inner-disk and response-gain trials
+were rejected: the former missed the fixed sky constraints or softened the
+arms; the latter merely brightened the central lens. A published mass bulge
+fraction cannot substitute for a V-light constraint.
+
+At the production V8/100k-source/1m-candidate/2000-cell budgets, three repeated
+Node 26 queries return identical selections: Sol 29,257 sources, 1 kpc region
+37,423, and the dense center 16,004. Sol and the region retain all nine
+luminosity levels; the center keeps levels 0–1 and leaves the rest diffuse.
+Worker medians are 119.7/172.4/132.0 ms, with host application
+10.4/17.4/7.9 ms. A separate cell-boundary probe observes combined inline
+worker/host heaps of 139.7/180.9/158.6 MiB; these are sampled peaks, not an
+exact V8 maximum or browser IPC measurement. Solar counts inside 10/25/50 pc
+differ from integrated expectations by −7.14%/+3.64%/+2.73%. The split
+conserves expected luminosity; a finite stochastic sky still has sampling noise.
+
+Ordinary observer motion no longer rewrites source positions. At equal 20k
+load, measured CPU projection preparation falls from 0.8003 ms to 0.000656 ms
+and 640 kB per frame becomes observer uniforms. A controlled MSAA4 star draw
+at 1080p adds median 0.343/0.687/1.254 ms for 20k/100k/200k sources on Apple
+M5. The 100k ceiling is chosen for worker memory and cold preparation, rather
+than a supposed draw limit. A 90%-retained 28,942-source fixture improves
+combined projection, dust and appearance preparation from 9.80 to 3.00 ms;
+broad reorders take 4.88 ms median and cold all-new populations still exceed
+5 ms. Partial uploads and compact name rebuilding matter as much as the vertex
+math. These figures exclude driver work and use the preceding field@4 fixture.
+
+Sixteen dust samples missed nearby thin columns by as much as 0.82 in
+transmission. Distance-aware quadrature uses 32/64/512 samples and the shared
+16 MiB arm table. A frozen observer owns each finite queue: restarting on
+motion starves it forever. GPU batches of 1024 sources cost about 1.5–1.7 ms
+steady or 3.1 ms for cold catalogue reference plus current columns. Unchanged
+sources retain their last column through six-submission optical-depth blending;
+new sources begin hidden. The WebGL fallback computes one source per
+submission and exposes its slower convergence. Catalogue magnitudes receive
+an observer/Solar transmission ratio, so Sol does not count extinction twice.
+
+A 512² physical cube is 12 MiB. Its final 72-direction GPU comparison has
+median 0.0624%, p95 0.5115% and maximum 0.6292% error against live rays. The
+cube footprint must be `2/N`, the widest angular texel, rather than π/(2N):
+the smaller footprint admitted unresolved dust bands at face centers. Raising
+the cube to 1024² quadrupled memory and took 18.3 seconds in the earlier
+isolated bake trial without fixing that filtering error. The final 512² bake
+takes 3.83 seconds across a drained GPU queue; two tiles per submitted frame
+spread its final tier over about 12.8 seconds at 60 fps. Earlier complete tiers
+remain visible. Sampling costs roughly 0.03–0.05 ms in the isolated rig.
+
+The 0.15 pc reuse radius is a tested local approximation. The final field's
+21-origin cloud/rim/bulge check reaches 0.7096% coarse relative error, with
+finer worst-ray checks reaching 0.6604%. Archive source-envelope displacement
+and later eye displacement spend one combined allowance. Checking those two
+radii separately let a restored sky travel twice as far; forgetting the reduced
+allowance after upload reintroduced the same bug on the next frame. Metadata,
+all six faces, field/filter versions, transaction completion and renderer epochs
+are validated before publication. Cache misses remain recoverable.
+
+Stationary history must retain the fine sample a previous phase measured;
+clamping it to the current coarse neighbors erased its detail. Moving history
+still clamps and rejects disocclusions. Production retains half-resolution
+history, stride eight, with a 960-pixel longest-edge cap. On Apple M5 Metal,
+40 queued moving-volume draws average 2.23/4.50/6.30 ms for face/edge/interior
+at 1920×1080 and 2.46/5.53/7.40 ms at a 2880×1800 drawing buffer. The latter
+interior was 12.69 ms without the cap. Retina volume plus shared-table
+allocation falls 48.04 to 30.67 MB; native foreground rendering is unaffected.
+The original universal 2 ms live target is revised explicitly in the plan.
+These are volume costs, not a whole-app moving-frame claim.
+
+Two integration regressions only appeared through their real consumers. The
+WebGL builder rejected temporal-history variables captured outside an active
+TSL stack; a real GLSL compilation test now catches that. A cold public picture
+requested 1/3200 s but drew at 1/60 s because the parent's passive preference
+binding ran after the route restored its photograph. The same binding now runs
+in the layout phase, before route restoration, keeping its existing owner and
+cleanup. Camera fixtures compare actual pose, time, lens and processing after
+settling, rather than trusting their encoded URL.
+
+The assembled production check at `ee0e9e1` passes 2,010 regular tests and eight
+slow tests, plus all build, type and documentation gates. Sixteen exact public
+pictures pass in native 1920×1080 sRGB; source pose, time, lens and processing
+are compared after settling. The complete held sensor costs 4.257 ms for
+Enhanced Earth-band, 4.562 ms for Automatic Earth and 5.043 ms for the long
+Manual photograph. Those are 60 queued frames, not moving-app costs.
+
+The outward and return casts each contain 2,400 compositor frames and preserve
+canonical hash `98b5b2be`, mode and lens. Outward averages 59.7 fps with a
+18.0 ms frame-interval p95; return averages 52.8 fps with 32.5 ms p95 and a
+150 ms maximum. Both complete the same 36-second presentation journey. The
+return has visible performance headroom to recover; the held 2.765 ms returned
+orbit does not cancel those spikes. [The evidence](design/plans/the-galaxy.md#assembled-image-and-motion-record)
+links the public images and both recordings.
+
+Two limits are source findings. At the reviewed Earth-band pose, unfiltered
+versus 512-filtered radiance differs by at most 0.38% across two 81-ray patches;
+1024 faces would not recover the missing broad dust structure. The smooth
+Gaussian clouds and population profiles dominate. The night Automatic image
+also exposes the blue background of the colorized Black Marble map being
+emitted together with city lights. Its 238.94 cd/m² meter result is inside the
+comfort bounds; forcing more gain would amplify the source error. Neither was
+hidden by adjusting exposure or relaxing calibration.
+
+The final output lifecycle run negotiates Extended display-P3 at 2× headroom,
+then returns to Standard sRGB with renderer replacement. Native Retina
+2880×1800 retains 960×600 galaxy history and costs 6.410 ms across 60 held
+complete-sensor frames. Both resized and Extended views restore an archive
+with one hit and no write or failure. Mode-switch and photographic pause/resume
+casts contain 360 and 240 frames respectively, with no isolated-frame flags or
+browser errors. All owned Chrome rigs and preview servers are closed.
+
+The final physical GPU suite passes 107 tests in 36 files on source identical
+to `ee0e9e1`. Its first run returned zero light in two dust tests; a focused
+run also reproduced one zero readback. The cause remains unproven. Six focused
+reruns, a cold-program probe of 72 distinct shaders and 864 rays, then two full
+suite reruns pass the original bounds. No production, test or tolerance change
+was made, and the diagnostic branch did not execute on the successful run.
+The verification record preserves the transient failure rather than inventing
+a shader or driver fix. All owned GPU processes have exited.
+
+## The camera keeps the light through a change of origin (07 Sep 2026)
+
+The camera completion branch starts at PR #73's `9e26512`, with the physical
+field and its 960-pixel live-history cap intact. The
+[camera completion record](design/plans/the-camera.md#camera-completion-record)
+owns the matched images and complete-frame measurements; the sensor index
+points to the same C1–C5 sequence. Iris sampling, diffraction, spectral
+attachments, export, tether controls and headroom discovery remain separate
+follow-ups.
+
+A ten-meter camera move can look like a 4,086-meter jump when its render
+origin advances by 4,096 meters. Comparing render-relative camera positions
+therefore resets a correctly adapting meter. Sensor history now compares
+physical positions and keeps origin changes as an independent optical-motion
+reset. The real GPU regression fails against PR #73 because metering becomes
+uncalibrated at the rebase. Its fixed run retains exposure; a separate motion
+test suppresses blur on that frame and resumes it on the next. In the app,
+361 frames of a 1,000× photographic clock produce 360 rebases, no uncalibrated
+frames and a maximum adjacent exposure change of 0.000987 EV. Canonical time
+is paused for this probe; its world hash stays unchanged.
+
+Earth's blue night-side glow comes from a colorized basemap, not city emission.
+The ingestion source is NASA's grayscale Black Marble 2016 map, with a distinct
+cache filename. Dark Pacific, Sahara and Antarctica patches and bright city
+patches hold the distinction in tests. Only the night map and its manifest
+record are regenerated. The 4096×2048 asset falls from 259,990 to 145,144 bytes;
+all 25 maps total 24.884 MiB. This is a relative night-light illustration,
+not a measurement of absolute city radiance or emission spectra.
+
+The Enhanced sky uses gain `2^23` and a 0.5 luminance ceiling. The matched
+Earth-and-band view keeps a darker background and stronger separation between
+the lane and neighboring light without changing physical radiance or adding
+passes. Smooth Gaussian cloud morphology remains visible in that field;
+changing the response does not recover structure the source does not contain.
+
+Bennu's mapped sphere multiplied the map by its 0.066-scale albedo swatch
+again. Its nominal Enhanced gain still left the lit face near black. Mapped
+surfaces now use the map's reflectance and a normalized hue tint; mapless
+surfaces use the physical palette. Ground and orbital bakes share those
+inputs, and the scene applies the Enhanced gain once. The terrain's 3% night
+fill and water's matching fill belong to Enhanced. Foam receives the same
+direct, sky and visibility illumination as the surrounding water; white foam
+does not supply its own nighttime light. Hull ambient and camera fill likewise
+follow resolved processing, with explicit cinematic calibration as the scoped
+exception. The readout distinguishes Calibrating, Metered and Held.
+
+The corrected sixteen-image set preserves the non-Bennu Enhanced and Manual
+pixels exactly. Bennu's Enhanced central-face median rises from 8.353 to
+116.412 encoded levels out of 255, with no full-white pixels; Manual rises
+from 1.928 to 60.774. Automatic compensates by changing EV from 8.507 to
+12.431 and keeps its image within three encoded levels of the earlier one.
+These are image comparisons, not calibrated radiance measurements. All five
+triplets and the long Manual frame pass inspection. The two transition casts
+show smooth adaptation, held Manual exposure and identical Enhanced frames
+before and after switching modes.
+
+The descent's last meter retains its approach bearing while the horizon turn
+finishes. A one-meter cutoff replaced that bearing with the final heading when
+the blend was only about 87% complete, producing a 24.493° frame turn without
+a corresponding position jump. Keeping the direction until actual coincidence
+reduces the reported turn to 1.125°. The exact eight-second fixture and variable
+cadence properties retain the same touchdown; a deterministic three-case replay
+also checks held and advancing photographic time and a motionless held endpoint.
+
+Crossing Earth's thin cloud shell removed its full front-facing alpha in one
+frame. In the Enhanced descent recording, the center patch fell from 129.780
+to 80.028 encoded luma; Automatic and Manual showed the same transition.
+Hiding only the cloud material removed that step. Cloud coverage now clears
+over the last quarter of the rendered deck altitude along the view path.
+View-space distance avoids subtracting planetary radii in float32; distant
+weather retains exactly the same coverage. A real-GPU shell-crossing test
+fails without the correction and passes with it.
+The final 600-frame Enhanced recast replaces the 49.75-level adjacent center
+change with a gradual crossing whose largest adjacent change is 4.26 levels.
+The photographic views clear the veil over fewer recorded frames while keeping
+terrain detail and alignment. The thin-shell culling step is absent in all
+three modes; those frame sequences do not establish identical capture timing.
+
+A shallow ground blur still paid for forty-eight samples in each half-resolution
+near/far gather. Circles through four pixels now use twelve samples distributed
+over the entire iris. Both variants warm in advance and share the existing four
+targets; large blur, the half-pixel bypass and normalized color keep their
+contracts. The four-pixel edge fixture stays within 0.01172 linear-channel
+difference and 0.00893% energy difference from the larger pattern. Six alternating
+sixty-frame GPU batches measure 0.931 versus 0.376 ms at 1080p and 2.259 versus
+0.921 ms at Retina for the isolated four-pass chain. The runtime reports the
+selected sample count. A separate aperture probe puts the full ground view at
+21.52 ms with the earlier defocus and 19.60 ms when it bypasses; its protocol and
+incomplete scene metadata do not explain the initial 37.13 ms ground measurement.
+The paired optical measurement establishes the saving; cross-run totals do not.
+
+A pending star survey keeps its completed field and the matching resolved
+envelope, including an empty exterior field. Falling back to the ambient
+catalog during every request changes the represented light and uploads source
+records again. Catalog preparation is cached per world, and worker replies
+carry only the source fields the renderer consumes. The paired Node clone
+benchmark reduces Solar packets from 6,408,271 to 3,976,194 bytes and regional
+packets from 12,206,045 to 7,578,045 bytes. Median clone costs fall from
+26.38 to 17.02 ms and 49.83 to 31.86 ms respectively; these are Node transfer
+measurements, not browser frame timings.
+
+The matched-lens Chrome return traces at PR #73 and `bface6f` measure survey
+preparation at 0.532 versus 0.022 ms mean and starfield preparation at 0.285
+versus 0.197 ms. Engine intervals above 25 ms fall from 12 to seven over
+40 seconds, but the maximum grows from 42.7 to 62.1 ms. The largest final
+delay is mostly outside instrumented spans. Reply application remains about
+1.5 ms mean and 6.3 ms p95. Different initial world hashes and asynchronous
+survey completion prevent a claim of identical input state or improved worst
+frame time. All pending final samples retain their envelope. Extinction source
+writes fall, while mapping writes and temporal resets rise as completed fields
+reach their consumers; reduced preparation does not mean every cache does
+less work.
+
+One full-check attempt finds the existing near-parabolic propagation property
+boundary at seed `972706803`. At eccentricity 0.9872096784537322 over almost
+50 periods, relative velocity error is `2.550006871955817e-7` against
+`2.549997502695383e-7`, 3.674 ppm over the empirical bound. The same
+counterexample reproduces with byte-identical PR #73 physics. Reconstructing
+the state changes the inferred semimajor axis by 0.034153 meters and the period
+by 4.833 microseconds; correcting only that accumulated phase difference
+reduces the discrepancy to 0.01078 meters. Physics and tolerances are
+untouched. The focused rerun and subsequent complete check pass; the boundary
+is retained here for a separate test-oracle correction.
+
+The assembled implementation passes 2,043 regular tests in 158 files,
+eight slow tests in four files and the complete `pnpm check` gate. The GPU
+suite passes 119 tests in 40 files, including physical reflectance/bake parity,
+unlit terrain/water, cloud crossing and both defocus variants; all twelve
+headless capability checks pass. The lifecycle test checks six warmed materials
+sharing four targets and one disposal per resource. The sixteen matched images
+use `4249c28`; the final motion and operating-point records use the fixed
+production build at `db34e2a` after the descent, cloud and defocus corrections.
+
+Quiet complete-frame probes at `db34e2a` keep the visible Enhanced sky at both
+native drawing-buffer sizes. At 1920×1080, the orbit, free-look, twelve-second
+descent and held ground samples contain no intervals above 25 ms; held orbit
+and ground GPU batches measure 4.28 and 12.39 ms. At 2880×1800, held orbit is
+7.66 ms, while dense ground is 26.20 ms with a 29.26 ms mean rAF interval and
+33.90 ms p95. Native Retina ground therefore remains about 30–34 fps in this
+scene. The separately measured small-gather saving is not an explanation for
+every change between complete-frame batches. The physical sky stays visible,
+with its 960-pixel history cap; the scene keeps native resolution. Retina
+outward and return probes have p95 intervals of 17.70 and 17.60 ms, with maxima
+of 66.80 and 50.10 ms. These are measured operating points, not a universal
+frame-rate guarantee.
+
+A held ground frame issues eighteen renderer calls at either size: one scene,
+four defocus draws, twelve PSF draws and one final output. Both gathers report
+twelve samples. The queue intercept observes additional command buffers whose
+producers remain unclassified. That instrumented audit is separate from the
+timing batches.
+All thirteen preset thumbnails are recaptured at standard sRGB / DPR 1 and
+pass image inspection and preset validation. The final matched Earth image is
+pixel-identical to the accepted surface checkpoint. The final WebGL smoke
+retains Enhanced SDR and the visible Automatic-to-Manual fallback at lens EV
+14.6147, with unit gain and no browser errors.
+
+## A review comment is about the tree it saw (07 Sep 2026)
+
+The camera branch already retains a completed survey and fixes the quaternion
+spread when the earlier galaxy review arrives. Reapplying those suggestions
+against the older tree would obscure the remaining defects. The follow-up keeps
+the camera branch as its base; `codex/galaxy` is already in that ancestry.
+
+Exposure invalidation was also invalidating focus readbacks and velocity
+history. Dragging aperture therefore removed motion blur, while scrubbing time
+could starve the measured focus extent. They now have separate validity checks.
+The twelve-sample defocus gather stored coverage divided by twelve, but its
+composite multiplied by forty-eight. A controlled quarter-covered gather was
+almost opaque, 0.99951, instead of 0.25. Both sample counts now use their own
+normalization. The old one-pixel cloud test missed the grazing rim. A 33-square
+wide-angle fixture measured nearly full alpha where the whole shell should be
+half faded. Body-local ellipsoid altitude, computed in float64, controls that
+fade without subtracting planetary radii in the shader.
+
+A stationary failed survey used to submit again every frame. Spatial hysteresis
+now bounds failures as well as successes, and a catalog-only fallback refreshes
+until the first completed survey arrives. The selector also exposed a rounding
+edge: adjacent linear fluxes can have equal logarithmic magnitudes. Ranking in
+linear flux preserves the ordering while deriving magnitude from the same
+single displacement. Unknown V-band luminosity does not become bolometric V.
+
+At 100,000 sources the CPU extinction backend owns 3,200,000 attribute bytes;
+the GPU backend owns 10,004,096. Previously each allocated the other's buffers.
+The production visual shader binds three source-storage buffers instead of four
+and builds no legacy brightest-star reduction. These are allocation and graph
+counts, not browser frame-time claims. LRU metadata now lives apart from the
+12 MiB sky cubes. A write reads no retained pixels and writes only the new cube;
+a hit touches only metadata. Pixel validation remains complete and yields every
+16,384 texels outside the database transaction. Restoration checks the request
+again after those yields.
+
+Matched production plates use `c18f744` and `9ce9e03`, WebGPU, standard sRGB,
+and a 1600×900 drawing buffer. At Iapetus's summit, two meters above the ground,
+a temporary missing-body lookup drops a central ground ROI from 219.42 to
+187.96 encoded luma on the base. The fixed normal and missing-body images have
+pixel-identical ground ROIs, at 219.38. Outside that region, 121 pixels differ
+by at most two encoded channel levels. Exposure stays fixed at EV 14.60964.
+A 120-frame photographic-time scrub retains a measured circle of 3.01953 to
+3.02344 pixels, with no 40-pixel fallback among the last ninety frames.
+The real IndexedDB reload reports version 2, one metadata row, one completed
+cube, one archive hit and zero archive failures. The star renderer reports
+zero legacy reductions. These checks exercise the shipped bundle through the
+repository driver; the temporary lookup and presentation overrides are released.
+
+## The valves fire, the drive burns, and the ship arm has an orbit (4 Sep 2026)
+
+The Rocinante maneuvers with its thrusters drawn firing, and its Epstein drive
+burns when it burns. Three layers, each testable without the one above it:
+
+- **The snapshot states the thrust demand.** `thrustDemand(entity, dt)` in
+  `packages/simulation/src/flight.ts` is the commanded acceleration as
+  fractions of the thruster profile's authority, in body axes, with the
+  assist's damping torque included — and it is computed by the same
+  `commandedAcceleration` the two integrators call, so a spin being nulled
+  draws the nozzles nulling it and a plume can never light while the hull does
+  not turn. `EntitySnapshot.thrust` carries it, `RenderEntity.thrust` passes it
+  through. A forward burn arrives as `linear.z = −1`, and a zero is a zero: the
+  sign flip in `resolveThrust` produces `−0`, and `flight.test.ts` found it.
+- **`packages/rendering/src/thrusters.ts` maps a demand onto valves.** A
+  projection, not an allocation: a valve opens in proportion to its thrust
+  against the linear demand plus its torque _direction_ against the angular
+  one, clamped to 0..1, and the physics — which applied the demand exactly —
+  makes the ship move as if the set were perfect. Torque is by direction and
+  not by lever so a pitch is drawn as a couple rather than as the nose alone,
+  with `TORQUE_LEVER` (2 m) scaling only valves near the centre of mass. A
+  hull with a drive burns ahead on the drive alone; the valves never see the
+  forward half of the demand, or a stern pod leaning aft would glow through
+  every burn. `thrusters.test.ts` holds it to nine properties, the mirror
+  symmetry among them: a mirrored hull under a mirrored demand fires the
+  mirrored set, which is the cross product's handedness checked by
+  `fast-check` rather than by eye.
+- **The layout is measured, never drawn.** `scripts/nozzles.mjs` parses the
+  GLB itself and walks each matching mesh into shells, reporting centroids,
+  mean face normals and boundary loops in the game's hull axes — recentred,
+  scaled, bow turned — so a number it prints is copied into
+  `render/thrusterLayouts.ts` as it stands. The reading found that these
+  nozzles are capped bumps whose open loop is the _attachment_: the exhaust
+  axis is the shell's mean normal, and the loop's normal points into the hull.
+  The Rocinante has fourteen bow jets in ten `thruster_N` shells, six belly
+  pods with a round lip at the tip of a hexagonal housing, and one stern pod
+  modeled at one corner with holes in `hull_rear` at all four, so the corners
+  are that pod mirrored twice. The drive's exit plane sits at z 21.0 between
+  the throat piece and the 3.70 m mouth, so the rim stands in front of it from
+  every angle but dead astern. `thrusterLayouts.test.ts` holds the table to
+  the hull's extent, unit exhausts, mirror symmetry, a valve for every
+  half-axis, and the couples a pitch and a retro should light.
+
+`render/plumes.ts` draws it in five draws for the whole hull: the jets and the
+pods are each one shell instanced by four attributes — mouth, axis, size,
+firing — of which only the last is written per frame; the drive is the same
+shell at a torch's profile with filaments scrolling aft and a crown of spikes
+at the rim, plus a disk at the exit plane carrying the turbulent core the
+reference plates show filling the cone. Additive in colour and silent in
+alpha on the flare's discipline, depth-tested against the hull, with the
+facing term carried down from the vertex stage so a shell seen edge-on
+softens and one seen down its axis shows the cap as a burning disk. No
+light: a point light on the skirt would be a second program for every
+material in the scene. `materials.gpu.test.ts` compiles all four.
+
+The ship arm of the camera precedence has two views. **Chase** is what it
+was, exactly — `flightCameraPose` with the head centred reproduces
+`chaseCameraPosition` and the ship's orientation bit for bit, and
+`camera.test.ts` says so — with a drag now turning the head. **Orbit** stands
+off in the world's own axes, pole on the scene's local up, distance in hull
+lengths and tethered at eight, looking at the ship while it turns: the only
+way to watch a maneuvering system fire, since a camera bolted to the hull
+shows every plume in the same place on screen whatever the ship does. Entering
+it seeds the angles from where the chase was standing, so the switch is a
+change of what the camera does next rather than a jump. The state lives in
+`packages/devtools/src/flightCamera.ts` beside the observatory, is reachable
+as `ir.view('orbit')` and `ir.flightCamera`, and rides `HarnessStatus` so a
+plate beside the hull records the orbit it was taken from. `V` cycles the
+views, `Home` levels the head, and the drag sensitivity is the one number
+every draggable camera now reads, `dragSensitivityOf`.
+
+## The two engines, the throttle, the navigation cluster, and the mirrored orbit (4 Sep 2026)
+
+The second pass over the Rocinante's flight model, and the instrument that
+made the first pass's defects visible.
+
+**The forward translation axis fired the main drive at 3 g both ways.** A
+retro was the drive run backwards — fourteen bow jets the size of a fist
+drawn decelerating a frigate at three g — and a nudge ahead for docking was
+a transit burn for as long as W was down. `docs/design/flight.md` is built on
+the drive being one throttle a pilot sets and leaves, so `ControlInput` now
+carries the thrusters (`translation`, six ways at 8 m/s² on the debug hull)
+and the drive (`throttle`, 0..1 at 30 m/s², ahead only) apart, and
+`resolveThrust` hands back both shares beside their sum. The throttle is
+canonical: hashed, saved with a decoder that bounds it to a fraction and
+reads an older save as a cold drive, and a term the rails refuse. It has its
+own verb, `setThrottle`, because a key edge writes the thrusters forty times
+a burn and never means to touch the drive; `setControl` leaves it where it
+is, and every placement verb in the harness cuts it — a ship put into a
+circular orbit with its drive lit is not in that orbit on the next tick. The
+self-test's movement check burns on the drive now: on the thrusters alone
+the probe crossed 400 m of its 1 km floor in ten seconds, against 6.81 km.
+Keys: W/S are the thrusters; T and G walk the throttle a twentieth at a time
+on the operating system's repeat, Shift+T and Shift+G slam it.
+
+**The orbit beside the hull was mirrored.** `orbitFrame` built its basis as
+(east, pole × east), the right-handed geographic frame whose azimuth runs
+counter-clockwise from above, while `observerOffset` swings from +X toward
++Z, clockwise — and both cameras share `applyDrag`, whose sign was settled
+against the planetarium. Every property in `camera.test.ts` held, because
+the frame was orthonormal and consistent with its own inverse; what nothing
+asserted was the sense of the swing. The orbit is now `observerOffset`
+carried into a local frame whose y is the scene's up, and the test that
+holds it compares the sign of a rightward drag's swing about the pole with
+the planetarium's, for any up.
+
+**The navigation cluster.** A navball drawn on a canvas in an animation-frame
+loop from `engine.scene()`, because eight poses a second of a hull rolling
+through a flip is a ball that jumps rather than turns; the readings beside
+it — speed against the ground within ten kilometers of it and in the frame
+beyond, the throttle on a ring, the altitude, the rate of climb on a
+symmetric log ring that spends a tenth of its needle on the first meter a
+second, the thrusters' state, the assist, the conic — off the 8 Hz sampler
+through `EntityInspection`. The scene carries the horizon (`RenderScene.horizon`:
+the nearest body's up, its pole laid flat for north, and the ground's own
+velocity under the eye) and the frame-relative velocity per entity, because
+a prograde mark taken from the universe velocity of a ship in low Earth orbit
+points along the ecliptic — thirty kilometers a second of Earth's year —
+whatever the orbit does. Below the compact breakpoint it is not drawn.
+
+**The bank was scaled by the cosine of the pitch.** The first `attitudeOf`
+took the sine of the roll against the horizon's up rather than the level up
+that goes with the nose, so a hull banked a radian while pitched to 86° read
+a quarter of it. A round-trip property with a six-digit tolerance failed
+intermittently and shrank to the boundary, which is the signature of a
+region of the input space losing far more than rounding; a 200,000-sample
+probe put the worst case at 1.05 rad, and the fix took it to 2e-14. The
+example test pins the steep case so shrinking cannot hide it again.
+
+**Seen and left.** Flight opens with the assist off: the boot frames the menu
+through `shot('gibbous')`, which switches the assist off to hold the
+composition, and solo inherits that ship. The Enterprise draws no plumes
+still. `universal.test.ts`'s ellipse property failed once at a bound of
+2.55e-7 against 2.5499e-7 and passed three runs after; it is a pre-existing
+razor and worth a measured tolerance.
+
+## The Roci exhaust follows the sensor (08 Sep 2026)
+
+The Rocinante's plume materials bypassed the sensor's radiance conversion.
+Rebasing the ship onto the galaxy camera kept the hull's conversion but left
+its exhaust outside it. A fourfold exposure change produced identical plume
+RGB. The exhaust also wrote its own inverse depth, 0.5 in the GPU fixture,
+over a surface whose inverse depth was 1/3, and the shells contributed motion.
+That gives the optical passes a nearby surface where there is only light.
+
+Both plume material constructors use `sensorRadiance(material, true)`, the
+same exposure and motion-overlay path as the flare. The GPU regression draws
+the production RCS jets, pods, drive shell and drive disk separately. Each must
+emit nonzero RGB, follow a fourfold exposure change and preserve the motion
+and depth behind it. All four variants fail before the fix and pass after it;
+the related optics and orbit-trace checks pass with them.
+
+## The stop has a plume, and the sky follows the eye (08 Sep 2026)
+
+Killing rotation goes straight through the world's verb and clears angular
+velocity before another frame can observe it. Recomputing demand from that
+stopped ship therefore produced no counter-thrust picture. The engine now
+captures the opposing direction before the stop as an expiring presentation cue;
+world replacement discards it. The cue stays out of the snapshot's demand, the
+control loop, state hashes and saves. A paired headless flight takes 600 more
+ticks with and without valve presentation and ends with identical hashes and
+serialized saves.
+
+The default-on Thruster variation preference adds small unequal response times
+and sparse 25–50 ms hold pulses, at no more than eight percent demand. These are
+art settings, not measurements of hardware. A pulse is shorter as well as dimmer;
+a GPU silhouette regression failed at a small/full length ratio of 1 with the
+old geometry. Variation can be disabled while the rotation-stop burst remains.
+
+The galaxy disk followed hull rotation in the orbit camera because its pose
+came from the raw player, before the flight camera applied orbit or head turn.
+Earth already used the rendered camera. The background now reads that camera
+through the floating origin, and the camera callback runs between the engine
+and its consumers. The regression turns the ship under a fixed camera, then
+turns the camera, with a nonidentity origin so an inverted basis cannot pass.
+No second camera producer and no new architectural boundary.
+
+## The document arrives before the universe (08 Sep 2026)
+
+The Astro migration uses `codex/galaxy` at `f0d09b5` as its base. The old
+client-only-island proposal did not supply the requested shell: docs still
+depended on browser startup. [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md)
+records the replacement. Astro 7.3.2 emits 1,576 documents, including 1,554
+documentation pages, with their article, navigation and metadata already in
+the response. Public pages are pre-rendered; request rendering remains a
+possible adapter choice rather than a running server requirement.
+
+Chrome at 1600×900, DPR 1, against local production builds gave the unchanged
+base and the Astro flight route the same 4.9 s renderer readiness. Separate
+2.5 s samples each contained 150 frames, mean 16.67 ms, with none over 25 ms.
+Frame p95 was 17.70 ms before and 17.90 ms after; sensor p95 was 1.20 ms in
+both. These are local desktop observations, not a network or handheld budget.
+The engine, renderer and canvas identities survived flight, home, docs,
+settings, planetarium and cinema links, including Back from settings to the
+article underneath.
+
+With selected-mode preloading in place, the final fresh-profile flight run
+reached renderer readiness in 4.6 s. FlightMode's request began at 71.3 ms and
+App's at 74.5 ms, so the controls no longer wait for runtime publication to
+start downloading. The same 2.5 s sample again contained 150 frames, mean
+16.67 ms, p95 17.60 ms, none over 25 ms. A saved false Thruster variation
+preference survived a full settings-page hydration as false, with no hydration
+errors; the HTML response still supplies the server default.
+
+Docs remained readable with JavaScript disabled, including navigation at
+390×844, and with the runtime chunk deliberately blocked. Home and docs still
+acquire the existing sky after hydration. With the local server stopped, a
+cached deep article reloaded with its own title and content. A settings value
+import had pulled the engine into the shell's static bundle; reading the pure
+camera configuration instead keeps that dependency deferred. Public reading
+must not wait on a catalog or graphics device to succeed.
+
+## The signed bar and the tab that restarts (08 Sep 2026)
+
+The galaxy bar evaluated fourth powers of signed coordinates through native
+shader `pow`. WGSL leaves negative bases outside its defined domain. The Apple
+GPU returned finite values here, so a numerical test on that adapter passed
+while the emitted program remained nonportable. The regression inspects
+compiled WGSL as well as sampling four signed bar quadrants and Sol against
+the CPU field. Multiplication removes the undefined operation;
+`galaxy-tsl@9` retires physical cubes computed by the affected kernel. The
+reported Windows/Chrome/RTX 2070 missing background still needs confirmation
+on that device.
+
+Mobile Safari's reported crash followed by repeated automatic reloads is a
+separate failure. JavaScript cannot show a notice after its process is killed.
+A session marker set before runtime loading and cleared on `pagehide` lets the
+replacement document stop before repeating the graphics work. The marker is
+evidence of an interrupted session, not a diagnosis; explicit retry clears it.
+Device loss and ordinary rendering failures use the live shell notice. The
+browser rig verifies simulated device loss removes the canvas and retains
+navigation. [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records the
+ownership and storage limitation.
+
+## The camera fits WGSL's private storage (08 Sep 2026)
+
+Safari reported a `RenderPipeline` compilation refusal because private shader
+variables exceeded 8,192 bytes. The final camera graph reproduced that bound:
+12,484 bytes for sRGB and linear P3 output, 12,500 for encoded P3. Nested tone
+and color-space branches expanded the upstream detector calculation at each
+use. Materializing the exposed input with TSL's `toVar()` reduced those totals
+to 1,472 and 1,488 bytes without changing the optical passes, samples or color
+math. This is the [WGSL guaranteed budget](https://www.w3.org/TR/WGSL/#limits),
+which another implementation may exceed, rather than a Safari-specific mode.
+
+The regression captures the actual camera output quad during warmup and counts
+its generated private declarations, including the padded output struct. All
+three encoding cases failed against the inline graph and passed with the
+shared input. Unknown declaration types fail the test instead of silently
+undercounting. A device accepting the oversized shader is insufficient evidence
+of portability. Mobile Safari still needs a device retest after this fix.
+
+Sixteen full-optics camera configurations produced identical before/after
+RGBA32F readbacks on the local Apple GPU: enhanced/manual exposure,
+standard/staging curves, sRGB/P3 and headroom 1/4. The 32×32 gradient at noise
+tick 17 covered faint channels and highlights. All 65,536 compared components
+matched exactly, with maximum absolute difference zero.
+
+## The alpha review, and API pages that need no separate shell (08 Sep 2026)
+
+The production review compares `codex/galaxy` with `origin/main` across 468
+changed files. The full baseline passes 2,218 regular tests, eight slow tests
+and the emitted-site checks. Isolated reviews cover the canonical packages,
+rendering and application shell; the integrated fixes pass 2,241 regular tests.
+The review record is [alpha production review](design/reports/alpha-production-review.md).
+
+API content comprises 1,459 of the 1,554 documentation pages. Rendering each
+through the full React shell makes the measured local Astro build emit 1,576
+HTML files in 42.75 seconds. Keeping one API loading shell reduces that to 118
+files in 6.40 seconds. TypeDoc and its link validation still run, and all API
+JSON remains present. Main builds retain full HTML; preview builds record the
+asynchronous choice in the manifest. Exact asset proxies preserve valid deep
+links and real 404s without invoking the Worker. A wildcard proxy would turn
+unknown API addresses into successful pages, so the generated rules name each
+known address and reject Cloudflare's redirect limit before upload.
+[ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) holds the policy.
+
+The search prefilter must share the catalog's spectral parser. Its first-letter
+shortcut drops Barnard's `sdM4` from an M-host search and disagrees with 588
+shipped catalog records. Imported photographic presets also need semantic
+validation before changing their target, date, lens or processing: valid JSON
+can still ask for Earthrise on Earth or a surface composition on Jupiter.
+Selecting a catalog result must clear a current picture URL, and a streamed
+world search must publish the final capped answer rather than leaving its
+larger intermediate batch visible. Each defect has a regression observed
+failing before its fix.
+
+Three r185 retains a disposed BufferAttribute unless its attribute manager
+releases it. Projection source storage alone is 9.6 MB at the production
+ceiling. GPU tests observe the memory records surviving disposal, then verify
+release for packed and separate history layouts. Appearance buffers use the
+same cleanup without disposing the Sprite's shared quad. The full GPU baseline
+passes 135 tests; focused post-fix checks cover the cleanup. The final camera
+shaders use 1,472 to 1,488 bytes of private WGSL storage against the guaranteed
+8,192-byte budget.
+
+The production identity names `inertialref.app` in metadata, Worker routing and
+published entry points. Direct sharp dependencies resolve to 0.35.4 with
+libheif 1.23.2, addressing GHSA-rgj7-g3m4-5g8c; the production dependency audit
+reports no vulnerabilities.
+
+## Fifty turns on two slightly different ellipses (08 Sep 2026)
+
+The first shipping check draws an ellipse that the earlier local checks did
+not: fast-check seed `-1913150845`, eccentricity 0.9869367908579146, nearly
+fifty revolutions from periapsis. The universal propagator follows the rounded
+epoch state; the comparison follows the original elements. Their periods
+differ by 4.885 microseconds. Near the next periapsis that becomes about
+201 metres and 0.208 m/s, enough to cross the velocity comparison's bound.
+Both the property and propagator are unchanged from `main`.
+
+An independent eccentricity-vector and Kepler calculation, agreeing at 90
+and 100 decimal digits, places the propagator within 2.173 metres and
+0.002244 m/s of its actual input orbit. Binary64 period reconstruction
+accounts for that remaining error. The solver stays unchanged. The property
+retains its base tolerance and adds a phase allowance derived from input
+energy and period, bounded by periapsis speed and acceleration. Its CI input
+is a permanent example, observed failing before this correction. A separate
+reference-state test rejects the original-element answer, so the allowance
+cannot conceal that error. The corrected agreement property passes 100,000
+draws with the failing CI seed.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -7690,10 +9257,11 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   mean linear luminance ranges from 0.048 (Callisto) to 0.32 (the Moon) across
   the shipped set, against published geometric albedos that do not track it —
   Vesta's map is four times darker than Mercury's on a body three times brighter.
-  Each body's tint compensates by hand. The fix is for the texture ingest to
-  record each map's mean and the renderer to scale toward `1.5 p`, which would
-  change how every planet is lit and is therefore a deliberate pass rather than a
-  patch.
+  Mapped surfaces retain the map's reflectance and use a normalized hue tint.
+  That avoids multiplying albedo twice but does not calibrate the map's mean.
+  The remaining step is for the texture ingest to record each map's mean and
+  the renderer to scale toward `1.5 p`, which changes every mapped world's
+  illumination and needs its own calibration.
 - **Three of the four Galilean maps are monochrome.** That is how Voyager and
   Galileo returned them. They are tinted with published colors, which is a
   different and smaller lie than rendering them gray.
@@ -7730,27 +9298,18 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   LUTs spike 2 made a requirement remain the specified replacement.
 - No indirect draw or GPU-driven culling yet: the heightfield producer is the one
   compute pass (ADR-0023); selection and the mesh are CPU-side.
-- Cold load to interactive is still unmeasured, and it is the budget most likely
-  to be missed: the bundle is **663.3 KB gzip — 511.0 KB brotli — in a single
-  chunk** with no code splitting and no `React.lazy` anywhere in `src`, of which
-  67 KB arrived with the UI foundations on 22 Aug. `main.tsx` then awaits a
-  469 KB catalog before the first render, correctly (it is a generation input)
-  but on top of that. Three of the four modes are not the first viewport and are
-  the obvious thing to split out.
+- Cold network startup still needs a budget on representative connections.
+  The Astro shell, game runtime and modes now load separately, and the catalog
+  loads alongside the runtime. Local production startup measurements do not
+  establish how quickly the game starts on a constrained network.
 - **No performance number in this file was measured on a handheld.** The
   pixel-ratio ceiling for a coarse pointer is reasoned about rather than
   profiled; so is the claim that the near-planet frame is fragment-bound on a
   tile-based GPU. `render/measure.ts` on the device is what settles both.
-- Every performance number recorded here is from an Apple M5 in a 1000×760
-  window. The target is a 2023-class laptop at 1920×1080 — roughly three times
-  the pixels on a much weaker GPU — so these establish that the instrument works,
-  not that the budget is met.
-- The tone curve has no test. It is a TSL node graph, and a scalar mirror of
-  the same arithmetic would pass while the graph drifted — which is the
-  failure the terrain-normals test is remembered for. Its home is a
-  `*.gpu.test.ts` under `pnpm test:gpu`, where `drawGraph` on a float target
-  returns the curve's own output for comparison against the published formula;
-  none is written yet.
+- Early performance records use an Apple M5 in a 1000×760 window. The camera
+  completion record adds native 1920×1080 and 2880×1800 operating points on
+  that M5. The 2023-class laptop target still needs measurements on its own
+  hardware; a larger drawing buffer does not establish that hardware budget.
 - `World.updateInterest` is the core's own system-streaming policy and has no
   production caller: both apps load one system and never stream another, and the
   client runs a separate starfield survey with its own radius and hysteresis.

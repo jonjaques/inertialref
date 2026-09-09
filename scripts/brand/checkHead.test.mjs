@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { SITE } from '../../apps/game/src/site.ts'
+import { SITE, metadataForPath } from '../../apps/game/src/site.ts'
+import { renderDocumentHead } from '../../apps/game/src/documentHead.ts'
 import { checkPublicSurface, headOf, metaTags } from './checkHead.mjs'
 
 /*
@@ -13,7 +14,7 @@ import { checkPublicSurface, headOf, metaTags } from './checkHead.mjs'
  */
 
 const ROOT = new URL('../../', import.meta.url)
-const HTML = readFileSync(new URL('apps/game/index.html', ROOT), 'utf8')
+const HTML = renderDocumentHead(metadataForPath('/'))
 const SW = readFileSync(new URL('apps/game/public/sw.js', ROOT), 'utf8')
 const PUBLIC_FILES = new Set(readdirSync(new URL('apps/game/public/', ROOT)))
 
@@ -90,7 +91,7 @@ describe('the gate can fail', () => {
     // The bound `site.test.ts` holds every PageMeta to, applied for the first
     // time to the strings a search result actually shows.
     const problems = drifted(
-      'content="An open-source spaceflight simulator that runs in a browser tab. The Milky Way is the real one, derived rather than downloaded."',
+      `content="${SITE.description}"`,
       `content="${'x'.repeat(200)}"`,
     )
     expect(problems.join(' ')).toMatch(/twitter:description is 200 characters/)
@@ -102,8 +103,8 @@ describe('the gate can fail', () => {
       SITE.description.replace('7,123', '7,124'),
     )
     // Both the meta and the og tag carry it, so both report.
-    expect(problems).toHaveLength(2)
-    expect(problems.join(' ')).toContain('SITE.description')
+    expect(problems).toHaveLength(3)
+    expect(problems.join(' ')).toContain('page description')
   })
 
   it('catches a theme-color that is no longer the page background', () => {

@@ -34,11 +34,20 @@ const nothing = <T>(pending: boolean): Loaded<T> => ({
   pending,
 })
 
-export function useManifest(): Loaded<DocManifest> {
-  const [state, setState] = useState<Loaded<DocManifest>>(() => nothing(true))
+export function useManifest(
+  initial: DocManifest | undefined,
+  enabled: boolean,
+): Loaded<DocManifest> {
+  const [state, setState] = useState<Loaded<DocManifest>>(() =>
+    initial === undefined
+      ? nothing(enabled)
+      : { value: initial, error: null, pending: false },
+  )
 
   useEffect(() => {
+    if (!enabled || initial !== undefined) return
     let live = true
+    setState(nothing(true))
     loadManifest().then(
       (value) => {
         if (live) setState({ value, error: null, pending: false })
@@ -51,7 +60,7 @@ export function useManifest(): Loaded<DocManifest> {
     return () => {
       live = false
     }
-  }, [])
+  }, [enabled, initial])
 
   return state
 }
@@ -67,11 +76,18 @@ export function useManifest(): Loaded<DocManifest> {
 export function usePage(
   manifest: DocManifest | null,
   route: string,
+  initial: DocPage | null | undefined,
 ): Loaded<DocPage> {
-  const [state, setState] = useState<Loaded<DocPage>>(() => nothing(true))
+  const seeded = initial?.route === route ? initial : null
+  const [state, setState] = useState<Loaded<DocPage>>(() =>
+    seeded === null
+      ? nothing(manifest === null || manifest.pages[route] !== undefined)
+      : { value: seeded, error: null, pending: false },
+  )
   const entry = manifest?.pages[route]
 
   useEffect(() => {
+    if (seeded !== null) return
     if (entry === undefined) {
       setState(nothing(manifest === null))
       return
@@ -90,8 +106,13 @@ export function usePage(
     return () => {
       live = false
     }
-  }, [entry, manifest])
+  }, [entry, manifest, seeded])
 
+  // The response's page stays available when a reader goes back to it. A
+  // pending request for another route cannot replace those server-rendered words.
+  if (seeded !== null) return { value: seeded, error: null, pending: false }
+  if (state.value !== null && state.value.route !== route)
+    return nothing(manifest === null || entry !== undefined)
   return state
 }
 

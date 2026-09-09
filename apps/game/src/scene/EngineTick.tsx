@@ -1,5 +1,7 @@
 import { useFrame } from '@react-three/fiber'
+import { framesHeld } from '../engine/frameHold.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { runGraphicsFrame } from '../runtimeFailure.ts'
 
 /**
  * Steps the simulation, once per animation frame, before anything reads it.
@@ -14,13 +16,16 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  */
 export function EngineTick({ engine }: { engine: GameEngine }) {
   useFrame((_, delta) => {
+    // A held frame steps nothing. The wall time it took reaches the next
+    // step's `delta`, where the clock books it — see `engine/frameHold.ts`.
+    if (framesHeld()) return
     // The one place the wall clock enters the game, and it is handed over raw.
     // It used to be clamped to 0.25 s here, which changed nothing about the
     // spiral of death — `clock.plan` already caps a frame's integration at
     // DEFAULT_MAX_STEPS — and did corrupt the diagnostic: the clock books the
     // excess as `droppedTicks`, so a three-minute background stall was reported
     // in the HUD as 8 dropped ticks instead of 11,520.
-    engine.frame(delta)
+    runGraphicsFrame(() => engine.frame(delta))
   }, -1)
   return null
 }

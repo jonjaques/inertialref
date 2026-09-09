@@ -11,6 +11,7 @@ import {
   decodeString,
   decodeStringRecord,
   type Decoder,
+  refine,
 } from './codec.ts'
 import {
   decodeWireFrameState,
@@ -60,6 +61,8 @@ export interface SaveEntity {
   readonly control: {
     readonly translation: WireVec3
     readonly rotation: WireVec3
+    /** The main drive, 0..1. A burn in progress is part of the universe. */
+    readonly throttle: number
   }
   readonly flightAssist: boolean
   /**
@@ -122,8 +125,27 @@ export const decodeSaveEntity: Decoder<SaveEntity> = decodeObject({
   // Added after the first v1 saves existed; defaulted rather than versioned,
   // because a missing control input has an unambiguous meaning: hands off.
   control: decodeOptional(
-    decodeObject({ translation: decodeWireVec3, rotation: decodeWireVec3 }),
-    { translation: [0, 0, 0] as WireVec3, rotation: [0, 0, 0] as WireVec3 },
+    decodeObject({
+      translation: decodeWireVec3,
+      rotation: decodeWireVec3,
+      // Defaulted for the same reason the whole control is: a save from
+      // before the drive had a throttle has it cold. Bounded, because the
+      // world clamps what it is handed and a save is the one door into an
+      // entity that does not go through a verb.
+      throttle: decodeOptional(
+        refine(
+          decodeNumber,
+          (value): value is number => value >= 0 && value <= 1,
+          'a fraction between 0 and 1',
+        ),
+        0,
+      ),
+    }),
+    {
+      translation: [0, 0, 0] as WireVec3,
+      rotation: [0, 0, 0] as WireVec3,
+      throttle: 0,
+    },
   ),
   flightAssist: decodeOptional(decodeBoolean, true),
   // Defaulted rather than versioned, like `control`: a save written before

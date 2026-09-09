@@ -40,7 +40,18 @@ export function Sensor({ engine }: { engine: GameEngine }) {
         lens: engine.lens,
         settings: engine.sensorSettings,
         time: engine.snapshot?.renderTime ?? 0,
-        pinned: engine.cinematic?.effects.exposure ?? null,
+        adaptationTime: engine.presentationTime,
+        renderOrigin: engine.origin,
+        historyKey: [
+          String(engine.world.galaxySeed),
+          engine.harness.observatory.target?.address ?? 'flight',
+          engine.galaxyView ?? '',
+          engine.harness.observatory.timePaused
+            ? engine.harness.observatory.heldTime
+            : '',
+        ].join(':'),
+        pinned: engine.pinnedExposure,
+        stagingLook: (engine.cinematic?.effects.calibratedLight ?? 0) > 0,
         headroom: engine.gl?.description.headroom ?? 1,
         motionBlur: engine.presentation.resolved().motionBlur,
         noiseTick: Math.floor(

@@ -94,7 +94,9 @@ export function sensorSignature(input: TextureNode) {
     const noise = electrons.add(read.mul(read)).sqrt().mul(gaussian).div(well)
     const floor = read.div(well)
     const noisy = signal.add(noise)
-    const composite = noisy.max(vec3(floor.mul(0.5)))
+    const composite = signal
+      .greaterThan(vec3(0))
+      .select(noisy.max(vec3(0)), vec3(0))
     const clipped = noisy.sub(vec3(floor)).max(vec3(0))
     const result = vec4(direct.greaterThan(0.5).select(clipped, composite), 1)
     return wide
@@ -122,13 +124,16 @@ export function sensorSignature(input: TextureNode) {
       gain: number,
       sdr: boolean,
       p3 = false,
+      photographic = settings.mode !== 'enhanced',
     ): void {
       size.value.set(width, height)
       tick.value = Math.max(0, Math.floor(noiseTick)) >>> 0
       residual.value = gain
-      well.value = (glass.fullWell * 100) / Math.max(1, lens.iso)
+      well.value = photographic
+        ? (glass.fullWell * 100) / Math.max(1, lens.iso)
+        : glass.fullWell
       read.value = glass.readNoise
-      direct.value = settings.response === 'direct' ? 1 : 0
+      direct.value = photographic ? 1 : 0
       const tangent = Math.tan(verticalFov(lens) / 2)
       field.value.set((tangent * width) / height, tangent)
       correction.value = glass.vignettingCorrection

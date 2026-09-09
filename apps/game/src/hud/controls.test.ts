@@ -53,7 +53,14 @@ describe('a stored lens', () => {
 })
 
 describe('the lens channels', () => {
-  const CHANNELS = ['focal', 'zoom', 'aperture', 'focus'] as const
+  const CHANNELS = [
+    'focal',
+    'zoom',
+    'aperture',
+    'focus',
+    'shutter',
+    'iso',
+  ] as const
 
   it('round-trips every position the slider can send', () => {
     /*

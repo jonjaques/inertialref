@@ -1,12 +1,23 @@
 import { SensorSection } from './SensorSection.tsx'
 import type { ReactNode } from 'react'
-import { effectiveFocalLength } from '@inertialref/rendering'
-import { DEFAULT_FOV_DEG, DEFAULT_LENS } from '../engine/GameEngine.ts'
-import { CAMERA_LENS, usePersistentState } from '../state/preferences.ts'
+import {
+  effectiveFocalLength,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
+import {
+  CAMERA_LENS,
+  RENDER_SENSOR,
+  usePersistentState,
+} from '../state/preferences.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { Action } from './Action.tsx'
 import { type CameraState, LENS_CHANNELS } from './controls.ts'
 import { LensSlider } from './LensSlider.tsx'
 import { Section } from './Section.tsx'
+
+// Reset follows the preference's declared default without loading the runtime.
+const DEFAULT_LENS = CAMERA_LENS.initial
+const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 
 /**
  * The four things a lens is, as four sliders.
@@ -39,9 +50,17 @@ export function LensSection({
   children?: ReactNode
 }) {
   const [lens, setLens] = usePersistentState(CAMERA_LENS)
+  const [sensor] = usePersistentState(RENDER_SENSOR)
+  const automaticAvailable = useEngine(
+    (snapshot) => snapshot.exposure?.automaticAvailable,
+  )
+  const manual =
+    sensor.mode === 'manual' ||
+    (sensor.mode === 'automatic' && automaticAvailable === false)
   const camera: CameraState = { lens, onLens: setLens }
   return (
     <>
+      <SensorSection />
       <Section
         id="camera.lens"
         title="Lens"
@@ -65,21 +84,23 @@ export function LensSection({
          * fitted a 5 rem column with nothing to spare, and "31.3 mm · 42°" is
          * within one character of overflowing a 7 rem one.
          */}
-        {(
-          ['focal', 'zoom', 'aperture', 'focus', 'shutter', 'iso'] as const
-        ).map((channel) => (
-          <div key={channel} className="flex flex-col">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="type-ui shrink-0 text-slate-400">
-                {LENS_CHANNELS[channel].label}
-              </span>
-              <span className="type-readout truncate text-right text-slate-300">
-                {LENS_CHANNELS[channel].format(camera.lens)}
-              </span>
+        {(['focal', 'zoom', 'aperture', 'focus', 'shutter', 'iso'] as const)
+          .filter(
+            (channel) => manual || (channel !== 'shutter' && channel !== 'iso'),
+          )
+          .map((channel) => (
+            <div key={channel} className="flex flex-col">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="type-ui shrink-0 text-slate-400">
+                  {LENS_CHANNELS[channel].label}
+                </span>
+                <span className="type-readout truncate text-right text-slate-300">
+                  {LENS_CHANNELS[channel].format(camera.lens)}
+                </span>
+              </div>
+              <LensSlider channel={channel} camera={camera} />
             </div>
-            <LensSlider channel={channel} camera={camera} />
-          </div>
-        ))}
+          ))}
         {children}
         <div className="mt-1 flex items-center justify-end gap-2">
           <Action
@@ -97,7 +118,6 @@ export function LensSection({
           />
         </div>
       </Section>
-      <SensorSection />
     </>
   )
 }

@@ -3,7 +3,7 @@ import type { DockPanelDefinition } from '../dock/panels.ts'
 import { Neighbourhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
 import { CameraPanel } from './CameraPanel.tsx'
-import { CataloguePanel } from './CataloguePanel.tsx'
+import { NavigatorPanel } from './NavigatorPanel.tsx'
 import { ObjectPanel } from './ObjectPanel.tsx'
 import { PresetsPanel } from './PresetsPanel.tsx'
 import { TimePanel } from './TimePanel.tsx'
@@ -28,8 +28,11 @@ export function planetariumPanels(
 ): readonly DockPanelDefinition[] {
   return [
     {
+      // The id keeps its old word. It is what a stored layout remembers, and
+      // renaming it would put every reader's navigator back in its default
+      // slot on the next visit. The title is what a person reads.
       id: 'catalogue',
-      title: 'Catalog',
+      title: 'Navigator',
       // The neighborhood rather than the span between two stars: this panel is
       // "what is around here", and `StellarSpan` is a *dimension* — a measure
       // with arrow heads. The two glyphs sat one menu apart meaning almost the
@@ -38,7 +41,9 @@ export function planetariumPanels(
       icon: Neighbourhood,
       zone: 'left',
       hint: 'Everything within reach — fold it, filter it, look at it',
-      render: () => <CataloguePanel {...context} />,
+      render: () => (
+        <NavigatorPanel {...context} onCatalog={context.openCatalog} />
+      ),
     },
     {
       id: 'object',

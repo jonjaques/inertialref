@@ -11,7 +11,7 @@ loading screens and no scale seams.
 [![pnpm 11](https://img.shields.io/badge/pnpm-11-orange.svg)](#prerequisites)
 [![12/12 capabilities](https://img.shields.io/badge/capabilities-12%2F12%20proven-success.svg)](#the-twelve-capabilities-proven)
 
-**[Try it → inertialref.jonjaques.com](https://inertialref.jonjaques.com)**
+**[Try it → inertialref.app](https://inertialref.app)**
 
 [Quick start](#quick-start) · [What it does](#what-it-does-today) ·
 [Architecture](#architecture-in-one-page) · [Development](#development) ·
@@ -93,7 +93,7 @@ pnpm install
 pnpm dev                 # → http://localhost:5173
 ```
 
-One command starts both halves — Vite on 5173 and the Cloudflare Worker on 8787,
+One command starts both halves — Astro on 5173 and the Cloudflare Worker on 8787,
 with `/api` and `/ws` proxied to it. `pnpm dev:client` and `pnpm dev:server` are
 the halves if you want one without the other, and `pnpm preview` builds and then
 serves the result through the real Worker, which is the closest thing to
@@ -113,8 +113,8 @@ Neither is needed to run the game, the tests or the build.
   in at build time (`pnpm media:pull`), never committed. Without it the cutscene
   plays silent, which is what a fork gets and is a supported outcome rather than
   a failure. `scripts/media.mjs` has the reasoning.
-- **Raw catalog downloads.** 34 MB of HYG to produce a 458 KB asset, and the
-  asset is committed. `pnpm catalog:fetch` re-downloads them if you want to
+- **Raw catalog downloads.** 34 MB of HYG to produce 907 KB of assets, and the
+  assets are committed. `pnpm catalog:fetch` re-downloads them if you want to
   rebuild.
 
 </details>
@@ -310,24 +310,24 @@ in `packages/*`.
 
 ### Commands
 
-| Command                       | What it does                                                                      |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| `pnpm dev`                    | Vite on :5173 **and** the Worker on :8787, in one terminal                        |
-| `pnpm dev:client`             | Just Vite — keeps its interactive `r` / `o` / `q` keys                            |
-| `pnpm dev:server`             | Just `wrangler dev`                                                               |
-| `pnpm preview`                | Build, then serve it through the real Worker on :8787                             |
-| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                         |
-| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`              |
-| `pnpm typecheck`              | Five independent tsconfig projects; see below                                     |
-| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                         |
-| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                           |
-| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                        |
-| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`           |
-| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then `vite build`                 |
-| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → build.** |
-| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                    |
-| `pnpm vitest run <substring>` | A single test file                                                                |
-| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`            |
+| Command                       | What it does                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------- |
+| `pnpm dev`                    | Astro on :5173 **and** the Worker on :8787, in one terminal                        |
+| `pnpm dev:client`             | Just the Astro development server on :5173                                         |
+| `pnpm dev:server`             | Just `wrangler dev`                                                                |
+| `pnpm preview`                | Build, then serve it through the real Worker on :8787                              |
+| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                          |
+| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`               |
+| `pnpm typecheck`              | Five independent tsconfig projects and Astro templates; see below                  |
+| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                          |
+| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                            |
+| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                         |
+| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`            |
+| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then Astro and emitted HTML checks |
+| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → build.**  |
+| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                     |
+| `pnpm vitest run <substring>` | A single test file                                                                 |
+| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`             |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.
@@ -344,7 +344,7 @@ that command, so there is no separate list of CI stages to drift out of step.
   `verbatimModuleSyntax` are all on.** So: no `enum`, no parameter properties,
   `import type` for type-only imports, and **local imports carry their `.ts`
   extension** — Node runs the sources directly.
-- **Vite 8 with the Oxc transform, and React Compiler is on.** Do not hand-write
+- **Astro 7 with React, Vite 8, and React Compiler.** Do not hand-write
   `useMemo`/`useCallback` memoization. (`useMemo` for a stable Three.js object is
   a different thing and is fine.)
 - **Tests live beside the code and run in plain Node.** That is the check that the
@@ -380,7 +380,7 @@ Read it before changing anything. Agents should continue in
 are in [`STYLE.md`](STYLE.md).
 
 Every page below is also readable at
-[`/docs`](https://inertialref.jonjaques.com/docs) — the same markdown, rendered
+[`/docs`](https://inertialref.app/docs) — the same markdown, rendered
 by `pnpm docs:build` alongside a generated reference for every export of
 `packages/*`, and read over a live scene rather than beside a screenshot of one.
 The markdown in this repository is the source; the site has no copy of its own.

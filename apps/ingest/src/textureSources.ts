@@ -124,11 +124,13 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
   {
     body: 'earth',
     map: 'night',
-    // Black Marble 2016, VIIRS day/night band. The single most recognisable
-    // thing about Earth from orbit at night, and nothing else in the system has
-    // an equivalent.
-    url: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_01deg.jpg',
-    file: 'earth_night.jpg',
+    // Black Marble 2016, VIIRS day/night band, grayscale without a basemap.
+    // The color product includes blue land and ocean that must not emit light.
+    // This 8-bit illustration supplies relative intensity, not calibrated
+    // radiance or a measured spectrum. The renderer supplies its emission scale.
+    // https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
+    url: 'https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144897/BlackMarble_2016_01deg_gray.jpg',
+    file: 'earth_night_gray_2016.jpg',
     licence: 'public-domain',
     credit: NASA,
     transform: 'image',

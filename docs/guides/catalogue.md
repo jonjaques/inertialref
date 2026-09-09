@@ -13,20 +13,41 @@ publishes something, and the things that will bite you if you change it.
 
 ```
 data/catalog/
-  stars-150ly.irsc     7,123 systems and 702 confirmed planets, 458 KB
-  manifest.json        version, counts, and the digest of each source
+  stars-150ly.irsc     the volume: 7,123 systems and 702 confirmed planets within 150 ly, 458 KB
+  stars-sky.irsc       the sky: 7,514 systems beyond 150 ly at V ≤ 6.5, 449 KB
+  manifest.json        the pair's version, each file's own, counts, and the digest of each source
   LICENSE.md           CC BY-SA 4.0 and the attribution it requires
 ```
 
-All three are **committed**. The raw downloads they are built from are not:
-34 MB of HYG to produce a 458 KB asset, and the asset is what the game needs.
-`.data/raw/` is gitignored and `pnpm catalog:fetch` refills it.
+All four are **committed**. The raw downloads they are built from are not:
+34 MB of HYG to produce 907 KB of assets, and the assets are what the game
+needs. `.data/raw/` is gitignored and `pnpm catalog:fetch` refills it.
 
-| Over the wire                                    |                               |
-| ------------------------------------------------ | ----------------------------- |
-| `stars-150ly.irsc`                               | 458 KB raw, **179 KB brotli** |
-| the client bundle beside it                      | 2.49 MB raw, 736 KB gzip      |
-| the decoder and tables this added to that bundle | **15 KB**                     |
+**Two files, one catalog.** The volume is every system HYG knows inside 150 ly.
+The sky is the naked-eye sky beyond it — every source at apparent V ≤ 6.5,
+which is Betelgeuse at 500 ly, Rigel at 860 and Deneb at 1,400 — because the
+star field is a survey of the cells around the player and no survey a hundred
+light-years across reaches a constellation. `readCatalog(volume, sky)` indexes
+both as one catalog with one version, `<volume>+<sky>`; a sky star resolves by
+id, by name and in search like any other, and is drawn beside the survey.
+What it is not in is the cell index: `inCell` and `within` answer for the
+volume alone, so the procedural fill, which subtracts what the catalog holds
+from a density model, is the same galaxy with the sky loaded and without it.
+`StarCatalog.sky` in `starCatalog.ts` states the rule and the reason.
+
+| Over the wire                                    |                                     |
+| ------------------------------------------------ | ----------------------------------- |
+| `stars-150ly.irsc`                               | 458 KB raw, **178 KB brotli**       |
+| `stars-sky.irsc`                                 | 449 KB raw, **188 KB brotli**       |
+| the pair, fetched concurrently at boot           | 907 KB raw, **366 KB brotli**       |
+| the client bundle beside them                    | 2.49 MB raw, 736 KB gzip            |
+| the decoder and tables this added to that bundle | **15 KB**                           |
+| decoding both, under Node                        | 43 ms, against 21 ms for the volume |
+
+The sky costs 25.6 bytes per system after brotli, the same as the volume: the
+record is an id, a name, a spectral string and eight catalog numbers, and no
+selection changes what a record is. A 16-byte record would have made it 60 KB;
+what the game ships is not that record.
 
 ---
 
@@ -41,9 +62,10 @@ pnpm catalog:build --refresh   # ...re-downloading rather than using the cache
 
 `report` is the one to run first. Everything the ingest did is printed —
 how many rows it dropped, how many ids it could only derive from HYG's own row
-numbering, how many planets it failed to match and why. **An ingest that quietly
-drops a third of the catalog looks exactly like one that does not**, so the
-counts are the output and the file is a side effect.
+numbering, how many planets it failed to match and why, and for the sky, how
+many systems each whole magnitude holds. **An ingest that quietly drops a third
+of the catalog looks exactly like one that does not**, so the counts are the
+output and the files are a side effect.
 
 ---
 
@@ -64,6 +86,7 @@ flowchart LR
 | --------------------------------------- | ----------------------------------------------- |
 | fetch, with pinned URLs and a digest    | `apps/ingest/src/sources.ts`                    |
 | CSV, normalize, group, match            | `apps/ingest/src/build.ts`                      |
+| the sky's selection and its histogram   | `buildSkyCatalog`, in the same file             |
 | choosing the name that goes on screen   | `apps/ingest/src/naming.ts`                     |
 | the Solar System, transcribed           | `packages/universe/src/solar/`                  |
 | the JPL reference it is checked against | `apps/ingest/src/solarReference.ts`             |
@@ -257,20 +280,24 @@ The NASA archive updates weekly, so `--refresh` will usually change something.
 What to look at, in order:
 
 1. **The report.** Compare `systems`, `planets matched` and `ids only HYG can
-supply` against `data/catalog/manifest.json` from the previous build. A large
-   move in any of them is the story.
+supply` against `data/catalog/manifest.json` from the previous build, under
+   `volume` and under `sky`. A large move in any of them is the story. The
+   sky's `already in the volume` count is zero and should stay so: a system
+   in both files is a system with two records, and the reader refuses it.
 2. **`apps/ingest/src/ingest.test.ts`.** It asserts the nearest stars by name
    and distance, the eight planets and the sixty-two moons of the Solar System,
    and that no procedural star is invented closer than Proxima Centauri. If it
    fails, the ingest changed the universe. That is allowed — astronomy
    publishes — but it is never allowed to be a surprise, which is what those
    numbers are written down for.
-3. **The version string.** It digests the _packed output_, not the downloads, so
-   it changes exactly when the shipped data changes. Hashing the sources was the
-   first attempt and it churns: the NASA archive's TAP service returned two
-   different digests an hour apart for a query whose 702 matched planets were
-   identical, and a version that moves on its own turns a revision notice into
-   noise. It rides in every save (`SaveGame.catalog`) and is what a future
+3. **The version string.** Each file digests its _packed output_, not the
+   downloads, so it changes exactly when the shipped data changes. Hashing the
+   sources was the first attempt and it churns: the NASA archive's TAP service
+   returned two different digests an hour apart for a query whose 702 matched
+   planets were identical, and a version that moves on its own turns a
+   revision notice into noise. The catalog's version is the pair's,
+   `<volume>+<sky>`, composed by `readCatalog` and written to the top of the
+   manifest; it rides in every save (`SaveGame.catalog`) and is what a future
    revision notice will diff against.
 
 > **Not yet built:** the structured diff between two catalog versions, which is
@@ -288,16 +315,31 @@ a cataloged system takes it explicitly — `resolveSystem`, `systemsWithin`,
 the catalog version a hidden input to generation, which
 [Rule 1](../design/galaxy.md#the-four-rules) exists to prevent.
 
-**Workers do not have it.** Shipping a 458 KB table to every worker so it can
+**Workers do not have it.** Shipping a 907 KB table to every worker so it can
 compute one integer is the wrong trade, so tasks take what they need: a cell's
 cataloged _count_, or a whole resolved stub. See the header of
 `packages/workers/src/tasks.ts`.
 
-**Procedural fill subtracts, and stops.** The density model says how many stars
+**The sky is drawn, not surveyed.** A sky star is in `get`, `find`, `search`
+and `resolveSystem`, and it is not in `inCell`, `within`, `systemsWithin` or
+the travel panel. Counting it in a cell would let the procedural fill in a cell
+500 ly out depend on which of its stars happen to be naked-eye from Earth, and
+would drop procedural stars from the cells straddling the 150 ly edge — 190 sky
+stars sit in the 161 cells the sphere touches. `apps/ingest/src/ingest.test.ts` asserts every
+cell the 150 ly sphere touches answers the same with the sky loaded. The draw
+reaches the sky through `StarCatalog.sky`, and `apps/game/src/engine/starSelection.ts`
+joins it to the independent magnitude query: one record per id within the
+actual V threshold and a 100,000-sprite ceiling. The query uses catalogue
+completeness to bound procedural fill in each luminosity band. Travel queries
+retain their own spatial scope; they do not inherit a camera's sprite budget.
+[ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records the active
+population and its legacy address path.
+
+**Procedural fill subtracts known sources.** The density model says how many stars
 there _are_, not how many are _unknown_. Generating the full expected count on top
 of the catalog would double the solar neighborhood; generating none would leave
-it five times too sparse. So the fill is the difference — and it is switched off
-entirely inside `completeRadiusLightYears` (25 ly), because the first version
+it five times too sparse. So the fill is the difference — and its known faint neighborhood remains protected
+inside `completeRadiusLightYears` (25 ly), because the first version
 without that put an invented M dwarf 3.4 light-years away, closer than Proxima
 Centauri and a discovery that would have made the news.
 
@@ -362,9 +404,8 @@ data/textures/
   manifest.json      LICENSE.md
 ```
 
-**25 maps, 25.0 MB**, all 4096×2048 except the ones with no source that large.
-The six at the end arrived with the dwarf planets and the small bodies and are
-why the set went from 10.7 MB to 25.0 MB: Pluto and Charon are New Horizons at
+**25 maps, 24.9 MiB**, all 4096×2048 except the ones with no source that large.
+Pluto and Charon are New Horizons at
 300 m, Ceres and Vesta are Dawn, Phobos is Mars Express SRC, and Bennu is
 OSIRIS-REx OCAMS at **25 cm per pixel** — a global map with individual boulders
 in it, and the highest-resolution map of anything anywhere.
@@ -386,6 +427,15 @@ one particular week.
 
 Titan, Enceladus, Iapetus, Triton, Phobos, Deimos and the Uranian moons have no
 vendored map and render from their measured albedo and color.
+
+Earth's night emission uses NASA's [2016 grayscale Black Marble](https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/).
+Its dark regions emit zero, and city lights retain the image's relative
+intensity. The color illustration includes a Blue Marble background and cannot
+serve as an emission map. The grayscale JPEG is also an illustration: it
+supplies an emission pattern with an authored scale, without measured
+luminance or a recovered spectrum. The ingestion pipeline retains its neutral
+channels and checks unlit ocean, desert and Antarctic patches beside city
+samples.
 
 ### Two transforms that are not a resize
 
@@ -454,3 +504,10 @@ not a reference. Re-run it when JPL publishes; the diff is the news.
 - [spikes 3 and 4](../spikes.md) — the measurements that chose HYG and ruled out Gaia
 - [determinism](../concepts/determinism.md) — why the catalog version is a generation input
 - [ADR-0004](../adr/0004-entity-addressing.md), [ADR-0009](../adr/0009-issue-ordinal-addressing.md) — the addressing rules the issue ordinals extend
+
+Travel sweeps through `ir.systemsNearby` and `ir.findWorlds` bound their radius
+to 0–500 light-years and report a clamped request in `ir.logs()`. The bound
+keeps every grid alignment within the 200,000-cell budget. Catalog name search
+remains independent of this local sweep. Resolved sky selection requires V
+luminosity; a catalog source without an absolute V magnitude remains a named
+travel destination but does not substitute bolometric light in the sky draw.

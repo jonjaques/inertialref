@@ -1,7 +1,13 @@
+import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
-  naturalResponse,
+  GALAXY_VIEWS,
+  exposurePinnedToLens,
+  resolveCameraPolicy,
+  rotationStopCue,
+  type RotationStopCue,
+  isSensorSettings,
   type SensorSettings,
   type Exposure,
 } from '@inertialref/rendering'
@@ -12,6 +18,7 @@ import {
   type Seconds,
 } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
+import { encodeUniverseVector } from '@inertialref/protocol'
 import {
   orientationToRenderSpace,
   type Quat,
@@ -30,8 +37,8 @@ import {
 import {
   type Body,
   type CatalogStar,
-  cellKey,
-  cellOf,
+  GALAXY_SOLAR_V_MAGNITUDE,
+  populationCoverage,
   type EntityId,
   findBody,
   parseAddress,
@@ -56,7 +63,7 @@ import {
 import {
   type HeightfieldSource,
   type Heightfields,
-  surveyRegionTask,
+  surveySkyTask,
   type WorkerFactory,
   WorkerPool,
 } from '@inertialref/workers'
@@ -73,10 +80,18 @@ import {
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
 import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
+import { holdFrames } from './frameHold.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
+import {
+  EMPTY_STAR_FIELD,
+  STAR_SPRITE_CEILING,
+  selectStars,
+  type StarCandidate,
+  type StarField,
+} from './starSelection.ts'
 import {
   browserTimingPort,
   onTimingLevel,
@@ -155,15 +170,31 @@ export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
 /** The same lens as an angle, for the two places Three.js wants degrees. */
 export const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 
-const EMPTY_STAR_FIELD: StarField = {
-  positions: [],
-  names: [],
-  colours: [],
-  luminosities: [],
-}
+export type { StarField }
 
 /** How far the player must move before the starfield is surveyed again. */
+const STARFIELD_CELL_CEILING = 2000
+const STARFIELD_CANDIDATE_CEILING = 1000000
 const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
+
+/** A catalog star as the star field's selection sees it. */
+const asCandidate = (star: CatalogStar): StarCandidate => ({
+  id: star.id,
+  name: star.name,
+  position: star.position,
+  colour: [
+    star.physical.colour.r,
+    star.physical.colour.g,
+    star.physical.colour.b,
+  ],
+  solarLuminosities: star.physical.solarLuminosities,
+  visualLuminosities:
+    star.physical.absoluteMagnitude === null
+      ? undefined
+      : 10 **
+        ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
+  catalogued: true,
+})
 
 /**
  * A cutscene frame, converted to render space for the scene components.
@@ -200,25 +231,6 @@ export interface ObserverView {
 
 export { NO_EFFECTS }
 export type { CinematicEffects, CinematicTextState }
-
-export interface StarField {
-  readonly positions: readonly UniverseVector[]
-  readonly names: readonly string[]
-  /**
-   * Linear sRGB per star, from the blackbody color of its temperature.
-   *
-   * Carried per star rather than picked in the shader because the temperature
-   * comes from a published color index for the cataloged half of the sky and
-   * from a mass for the rest, and neither is available to a vertex program.
-   */
-  readonly colours: readonly [number, number, number][]
-  /**
-   * Bolometric luminosity in solar units. The renderer turns this and the
-   * distance into an apparent brightness; a star's size on screen is not a
-   * constant.
-   */
-  readonly luminosities: readonly number[]
-}
 
 export interface GameEngineOptions {
   readonly seed?: string
@@ -313,6 +325,12 @@ export class GameEngine {
   /**
    * Submit `frames` frames and time them across a drained queue, or null when
    * there is nothing to submit or no device to drain — see `measureGpuFrameMs`.
+   *
+   * The loop is held for the whole measurement, and taken synchronously here
+   * rather than inside the awaited helper: a caller that hides a mesh and
+   * asks for the figure on the next line has to know no frame ran between
+   * the two. `engine/frameHold.ts` says why the hold is not R3F's
+   * `frameloop`.
    */
   measureGpu(frames?: number): Promise<number> | null {
     const gl = this.gl
@@ -323,7 +341,8 @@ export class GameEngine {
       present ??
       (view === null ? null : () => gl.renderer.render(view.scene, view.camera))
     if (draw === null) return null
-    return measureGpuFrameMs(gl.renderer, draw, frames)
+    const release = holdFrames()
+    return measureGpuFrameMs(gl.renderer, draw, frames).finally(release)
   }
 
   origin: RenderOrigin | null = null
@@ -401,15 +420,20 @@ export class GameEngine {
    * observatory, then the ship*; the optics follow the same order through the
    * same code, because a picture composed through one lens and measured through
    * another is exactly the class of bug this phase exists to close. The
-   * observatory has no lens of its own — it solves a standoff against whatever
-   * the camera panel is set to, which is the flight lens — so the order has two
-   * arms rather than three.
+   * ordinary observatory solves a standoff against the player's flight lens.
+   * A fixed galaxy instrument supplies its declared lens only while that
+   * instrument is active; entering and leaving it preserves the flight lens.
    *
    * A getter rather than a field: `this.cinematic` is written once per frame by
    * `#step`, and a mirrored copy would be a second thing to keep in step.
    */
   get lens(): Lens {
-    return this.cinematic?.lens ?? this.#flightLens
+    return (
+      this.cinematic?.lens ??
+      (this.galaxyView === null
+        ? this.#flightLens
+        : GALAXY_VIEWS[this.galaxyView].lens)
+    )
   }
 
   /**
@@ -548,14 +572,79 @@ export class GameEngine {
   flareArtifacts = 1
 
   sensorSettings: SensorSettings = DEFAULT_SENSOR_SETTINGS
+  onSensorRequest: ((settings: SensorSettings) => void) | null = null
+  /** Adaptation follows presentation, including a held photographic instant. */
+  presentationTime = 0
+  /** A brief counter-thrust picture, captured before the world stops the spin. */
+  rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
+  galaxyRenderer: (() => GalaxyRenderReport) | null = null
+  #presentedPose: ObserverPose | null = null
 
-  get calibratedLight(): boolean {
+  /** The pose already sampled for this scene, never a second camera update. */
+  get galaxyPose(): ObserverPose | null {
+    return this.cinematic === null &&
+      (this.presentation.resolved().diffuseGalaxy || this.galaxyInstrument)
+      ? this.#presentedPose
+      : null
+  }
+
+  get galaxyInstrument(): boolean {
     return (
-      naturalResponse(this.sensorSettings) ||
+      this.cinematic === null &&
+      this.observer !== null &&
+      this.harness.observatory.galaxyInstrument
+    )
+  }
+
+  get starSurvey() {
+    return {
+      radiusCells: 2,
+      cellCeiling: STARFIELD_CELL_CEILING,
+      candidateCeiling: STARFIELD_CANDIDATE_CEILING,
+      resolved: this.#starField.resolved,
+      spriteCount: this.#starField.positions.length,
+      spriteCeiling: STAR_SPRITE_CEILING,
+      pending: this.#starFieldPending,
+      center: this.#starFieldCentre,
+    }
+  }
+
+  /** The resolved external instrument, under the usual camera precedence. */
+  get galaxyView() {
+    return this.cinematic === null && this.observer !== null
+      ? this.harness.observatory.galaxyView
+      : null
+  }
+
+  get pinnedExposure(): number | null {
+    return (
+      this.cinematic?.effects.exposure ??
+      (this.galaxyView === null ? null : exposurePinnedToLens(this.lens))
+    )
+  }
+
+  get cameraPolicy() {
+    return resolveCameraPolicy(
+      this.sensorSettings,
+      this.lens,
+      this.pinnedExposure,
+    )
+  }
+
+  /** Enhanced visibility and declared cinematic lighting own these source-side gains. */
+  get visibilityProcessing(): boolean {
+    return (
+      this.cameraPolicy.processing === 'enhanced' ||
       (this.cinematic?.effects.calibratedLight ?? 0) > 0
     )
+  }
+
+  requestSensorSettings(settings: SensorSettings): void {
+    if (!isSensorSettings(settings)) throw new Error('Invalid camera settings.')
+    this.sensorSettings = settings
+    this.onSensorRequest?.(settings)
   }
 
   /**
@@ -725,6 +814,8 @@ export class GameEngine {
   #fps = 60
   #ticksLastFrame = 0
   #starField: StarField = EMPTY_STAR_FIELD
+  #starFieldKnown: readonly StarCandidate[] | null = null
+  #starFieldCoverage: ReturnType<typeof populationCoverage> | null = null
   #starFieldCentre: UniverseVector | null = null
   #starFieldPending = false
   /*
@@ -754,8 +845,18 @@ export class GameEngine {
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
+        galaxyRender: () => this.galaxyRenderer?.() ?? null,
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
+        cameraProcessing: () => {
+          const { peak: _peak, ...processing } = this.sensorSettings
+          return { ...processing, range: { ...processing.range } }
+        },
+        setCameraProcessing: (processing) =>
+          this.requestSensorSettings({
+            ...processing,
+            peak: this.sensorSettings.peak,
+          }),
         pixelRatio: () => this.displayRatio,
         setFlightLens: (lens) => this.requestLens(lens),
         timing: () => browserTimingPort,
@@ -935,10 +1036,13 @@ export class GameEngine {
    * and `load` is how the starfield came to survive a jump of four light years.
    */
   #invalidateDerived(): void {
+    this.rotationStop = null
     this.origin = null
     this.snapshot = null
     this.#scene = null
     this.#starField = EMPTY_STAR_FIELD
+    this.#starFieldKnown = null
+    this.#starFieldCoverage = null
     this.#starFieldCentre = null
     this.#starFieldWorld += 1
     this.orbits = []
@@ -1099,6 +1203,7 @@ export class GameEngine {
    * in the trace during a load is information.
    */
   #step(delta: Seconds, started: number): void {
+    this.presentationTime += Math.max(0, Math.min(0.1, delta))
     this.#phases.open(started)
     this.#ticksLastFrame = this.world.advance(delta)
     /*
@@ -1135,7 +1240,19 @@ export class GameEngine {
         : ENGINE_PHASE,
     )
 
-    const shot = snapshot(this.world)
+    if (
+      this.harness.cutsceneStatus() === null &&
+      this.harness.observatory.target !== null
+    )
+      this.harness.observatory.advanceTime(delta)
+    const shot = snapshot(
+      this.world,
+      undefined,
+      this.harness.cutsceneStatus() === null &&
+        this.harness.observatory.target !== null
+        ? this.harness.observatory.time
+        : undefined,
+    )
     this.snapshot = shot
     this.#phases.step('snapshot', ENGINE_PHASE)
 
@@ -1182,6 +1299,12 @@ export class GameEngine {
 
     const eye =
       cinematic?.camera.position ?? observed?.position ?? camera?.position
+    this.#presentedPose =
+      cinematic?.camera ??
+      observed ??
+      (camera === undefined
+        ? null
+        : { position: camera.position, orientation: camera.orientation })
     if (eye === undefined) {
       // Nothing owns the camera this frame. Publishing the two presentation
       // eyes as null anyway is the point: a stale one held across a frame is
@@ -1390,147 +1513,79 @@ export class GameEngine {
     })
   }
 
-  /**
-   * Keep a local starfield around the player.
-   *
-   * Re-surveyed only when the player has actually gone somewhere, because a
-   * 40 ly sweep is tens of thousands of stars and belongs in a worker — which
-   * is exactly where it goes.
-   *
-   * Two halves. The worker invents the procedural stars, which is the expensive
-   * part; the cataloged ones are read straight out of the local index, which is
-   * cheaper than serializing them across a thread boundary would be, and means
-   * the real sky is on screen on the first frame after a jump even if the worker
-   * pool is busy or absent.
-   */
+  /** A bounded magnitude survey is independent of the travel query's spatial radius. */
   #maybeSurveyStars(centre: UniverseVector): void {
     if (this.#starFieldPending) return
-    const moved =
-      this.#starFieldCentre === null ||
-      UV.distance(this.#starFieldCentre, centre) > STARFIELD_HYSTERESIS
-    if (!moved) return
-
+    if (
+      this.#starFieldCentre !== null &&
+      UV.distance(this.#starFieldCentre, centre) <= STARFIELD_HYSTERESIS
+    )
+      return
     this.#starFieldCentre = centre
     this.#starFieldPending = true
     const world = this.#starFieldWorld
-    const radiusCells = 2
-    // `cellOf`, not a hand-inlined copy of it. The copy restated CELL_SIZE as
-    // `20 * 9.4607304725808e15` and recomputed `approxMeters` three times, so
-    // changing the galaxy's cell size would have left the client surveying
-    // cells that no longer correspond to where the player is — a compile-clean
-    // change that presents as "the stars are in the wrong place".
-    const cell = cellOf(centre)
     const catalog = this.world.catalog
-
-    // The worker has no catalog, so what it needs to know about one travels
-    // with the request: how many stars are already in each cell, and the radius
-    // inside which it should invent none. Only non-empty cells are listed.
-    const catalogued: Record<string, number> = {}
-    const catalogStars: CatalogStar[] = []
-    for (let x = cell.x - radiusCells; x <= cell.x + radiusCells; x += 1)
-      for (let y = cell.y - radiusCells; y <= cell.y + radiusCells; y += 1)
-        for (let z = cell.z - radiusCells; z <= cell.z + radiusCells; z += 1) {
-          const stars = catalog.inCell({ x, y, z })
-          if (stars.length === 0) continue
-          catalogued[cellKey({ x, y, z })] = stars.length
-          catalogStars.push(...stars)
-        }
-
+    const known = (this.#starFieldKnown ??= catalog.stars.map(asCandidate))
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
-      min: {
-        x: cell.x - radiusCells,
-        y: cell.y - radiusCells,
-        z: cell.z - radiusCells,
-      },
-      max: {
-        x: cell.x + radiusCells,
-        y: cell.y + radiusCells,
-        z: cell.z + radiusCells,
-      },
-      catalogued,
-      completeRadius: catalog.completeRadius,
+      origin: encodeUniverseVector(centre),
+      coverage: (this.#starFieldCoverage ??= populationCoverage(catalog)),
+      spriteCeiling: STAR_SPRITE_CEILING,
+      cellCeiling: STARFIELD_CELL_CEILING,
+      candidateCeiling: STARFIELD_CANDIDATE_CEILING,
+      apparentMagnitudeLimit: 8,
     }
-
-    // The cataloged half goes up *now*, not when the worker answers — that
-    // is the header's promise about the real sky being on screen on the first
-    // frame after a jump. Gated on the survey it waited behind a busy pool,
-    // and a single failed survey dropped it entirely, with the hysteresis
-    // then blocking any retry until the player had moved another 8 ly.
-    {
-      const positions: UniverseVector[] = []
-      const names: string[] = []
-      const colours: [number, number, number][] = []
-      const luminosities: number[] = []
-      for (const star of catalogStars) {
-        positions.push(star.position)
-        names.push(star.name)
-        const c = star.physical.colour
-        colours.push([c.r, c.g, c.b])
-        luminosities.push(star.physical.solarLuminosities)
-      }
-      this.#starField = { positions, names, colours, luminosities }
-    }
-
-    const run =
-      this.pool() === null
-        ? Promise.resolve(
-            surveyRegionTask.run(payload, { cancelled: () => false }),
-          )
-        : (this.pool() as WorkerPool).run(surveyRegionTask, payload)
-
-    void Promise.resolve(run)
-      .then((cells) => {
-        // The world this survey was asked about is gone; let the next frame
-        // start one against the world that replaced it.
+    // The retained sources and their original selection envelope describe the
+    // same light partition during travel. Publishing only the catalog between
+    // replies removes procedural sources and resets their dust and sky history.
+    if (this.#starField.resolved === undefined)
+      this.#starField = selectStars(centre, [known])
+    const pool = this.pool()
+    // Inline execution can throw before returning a promise. Start it inside the
+    // chain so it has the same failure and pending-state lifetime as a worker.
+    void Promise.resolve()
+      .then(() =>
+        pool === null
+          ? surveySkyTask.run(payload, { cancelled: () => false })
+          : pool.run(surveySkyTask, payload),
+      )
+      .then((selection) => {
         if (world !== this.#starFieldWorld) return
-        /*
-         * The expensive half, and it is not inside any frame.
-         *
-         * The `survey` phase in `#step` brackets the *dispatch* — building the
-         * cataloged half and handing the region walk to the pool — and returns.
-         * This runs in a microtask whenever the worker answers, outside
-         * `frame()` entirely, and it allocates four arrays over every star in
-         * an 8 ly sweep. Left uninstrumented it was main-thread work on no
-         * track at all, which is the exact gap this whole phase exists to
-         * close.
-         *
-         * A span rather than a `PhaseClock` step, because it is a one-off with
-         * no neighbor to tile against. Opened after the stale-world return, so
-         * an entry means the field was actually rebuilt.
-         */
         const applying = timer.span('survey.apply', ENGINE_PHASE)
-        const positions: UniverseVector[] = []
-        const names: string[] = []
-        const colours: [number, number, number][] = []
-        const luminosities: number[] = []
-
-        for (const star of catalogStars) {
-          positions.push(star.position)
-          names.push(star.name)
-          const c = star.physical.colour
-          colours.push([c.r, c.g, c.b])
-          luminosities.push(star.physical.solarLuminosities)
-        }
-        for (const entry of cells) {
-          for (const star of entry.stars) {
-            const [sx, sy, sz, ox, oy, oz] = star.position
-            positions.push(UV.universeVector(sx, sy, sz, ox, oy, oz))
-            names.push(star.name)
-            colours.push([...star.colour] as [number, number, number])
-            luminosities.push(star.solarLuminosities)
-          }
-        }
-        this.#starField = { positions, names, colours, luminosities }
+        const fill: StarCandidate[] = selection.stars.map((star) => ({
+          id: star.id,
+          name: star.name,
+          position: UV.universeVector(...star.position),
+          colour: star.colour,
+          solarLuminosities: star.solarLuminosities,
+          visualLuminosities: star.visualLuminosities,
+          catalogued: false,
+        }))
+        this.#starField = selectStars(
+          centre,
+          [known, fill],
+          STAR_SPRITE_CEILING,
+          {
+            origin: centre,
+            apparentMagnitudeLimit: selection.apparentMagnitudeLimit,
+            levelMask: selection.levelMask,
+          },
+        )
         applying.end()
         log.info('starfield surveyed', {
-          stars: positions.length,
-          catalogued: catalogStars.length,
+          stars: this.#starField.positions.length,
+          catalogued: known.length,
+          fill: fill.length,
+          cells: selection.cellsVisited,
+          candidates: selection.candidateCount,
+          resolved: this.#starField.resolved,
         })
       })
-      .catch((cause: unknown) =>
-        log.warn('starfield survey failed', { cause: String(cause) }),
-      )
+      .catch((cause: unknown) => {
+        log.warn('starfield survey failed', { cause: String(cause) })
+        // A failed worker must not turn the next frame into another full survey.
+        // Travel beyond the same spatial hysteresis permits a fresh attempt.
+      })
       .finally(() => {
         this.#starFieldPending = false
       })
@@ -1549,6 +1604,21 @@ export class GameEngine {
     this.world.setControl(player, vec3(...translation), vec3(...rotation))
   }
 
+  /** The main drive, 0..1. Returns the setting the world kept. */
+  setThrottle(fraction: number): number {
+    const player = this.session.player()
+    if (player === null) return 0
+    return this.world.setThrottle(player, fraction).control.throttle
+  }
+
+  /** Walk the throttle by a step, from wherever it is. */
+  nudgeThrottle(delta: number): number {
+    const player = this.session.player()
+    if (player === null) return 0
+    const held = this.world.entities.require(player).control.throttle
+    return this.world.setThrottle(player, held + delta).control.throttle
+  }
+
   toggleFlightAssist(): boolean {
     const player = this.session.player()
     if (player === null) return false
@@ -1561,6 +1631,13 @@ export class GameEngine {
   killRotation(): void {
     const player = this.session.player()
     if (player === null) return
+    const entity = this.world.entities.require(player)
+    const cue = rotationStopCue(
+      entity.state.angularVelocity,
+      entity.thrusters?.torque ?? 0,
+      this.presentationTime,
+    )
+    if (cue !== null) this.rotationStop = { ...cue, entity: player }
     this.world.killRotation(player)
   }
 

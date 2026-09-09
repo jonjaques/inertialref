@@ -76,18 +76,164 @@ circle of confusion is a claim about a display, and there is no display.
 
 ---
 
+## Measuring the stellar field
+
+`ir.galaxy()` returns a read-only inspector for the current world's galaxy
+seed. `sample(position?)` accepts a `UniverseVector`, defaults to the Sun, and
+reports population densities, Johnson V emission, RGB extinction per parsec,
+dust modulation, normalization, and both
+field and active generation versions. `count(options?)` integrates the
+reference cylinder; `tangencies()` reports the arm curve's tangent longitudes.
+`ray(direction, options?, origin?)` returns emergent RGB radiance, optical depth,
+and transmittance. Direction is a displacement in simulation axes; origin
+defaults to the Sun. Options include `distanceParsecs`, `maxStepParsecs`, and
+`sampling`, which accepts `reference`, `observer`, or `settled`.
+
+```sh
+pnpm sim --galaxy-plates .scratch/galaxy --galaxy-width 384 --quiet
+```
+
+The command writes `face-on`, `edge-on`, `observer`, `young-arms`, `bar-bulge`,
+and `halo` PNGs, paired `.f64` arrays, and `report.json`. The report declares
+units, dimensions, sample counts, timings, hashes and the shared display
+stretch. The raw arrays contain interleaved RGB float64 little-endian values in
+V-anchored nW m⁻² sr⁻¹. Green is Johnson V radiance; red and blue describe
+illustrative chromaticity, and the channel sum is not bolometric power. The observer plate
+is an equirectangular sky with the galactic center in the middle and longitude
+increasing to the left.
+
+In a script, `openSession().harness.galaxy().plate({ view: 'face-on', width:
+192, height: 192 })` returns the raw image. The `population` option selects
+`thinDisk`, `thickDisk`, `youngArms`, `barBulge`, or `halo`; `observer` supplies
+a different `UniverseVector` for the observer view. Calling these functions
+does not advance or mutate the world. Plates use dust transport with a 10 pc
+step maximum by default. `dustScale: 0` selects the emission-only control and
+its 100 pc default; `maxStepParsecs` overrides either. Metadata records these
+settings. See
+[ADR-0032](../adr/0032-the-stellar-field.md) for parameters and calibration limits.
+
+`pnpm sim --galaxy-calibration --quiet` emits the linear-light acceptance report
+and exits with status 1 if a bound fails. `ir.galaxy().calibration()` returns the
+same report without an exposure or display response; `localDust()` lists the
+Local Bubble approximation and nine source-derived cloud records. The reference
+sky includes diffuse Galactic and extragalactic light beyond the modeled stellar
+component. The report declares that limitation, its units, and the 0.3 mag bound.
+Enhanced processing consumes that calibrated field separately from this report.
+Matched camera images and transitions remain subject to preview acceptance;
+passing the linear-light bounds does not establish their appearance.
+
+To regenerate the checked-in source manifest and runtime cloud/sky tables:
+
+```sh
+node apps/ingest/src/galaxyReference.ts /path/to/cube_ext.fits /path/to/RadianceOut.csv
+pnpm exec prettier -w packages/universe/src/galaxy/localClouds.generated.ts packages/universe/src/galaxy/skyCalibration.generated.ts
+```
+
+The inputs are the uncompressed Lallement 2022 FITS cube and GAMBONS supplemental
+sky map; source links, hashes and exact selection windows accompany the output in
+`data/reference/galaxy.json`. No catalogue or procedural systems are regenerated.
+
+In the browser's planetarium, `ir.galaxyView('face-on')` and
+`ir.galaxyView('edge-on')` select the fixed external instruments also available
+under Presets → Milky Way. Each scopes its recipe lens and photographic
+exposure while it owns the view. Leaving it releases that scope and restores
+the player's lens and mode; no world state or global preference is rewritten.
+`ir.look('s:SOL/b:2')` returns to an Earth view.
+
+`ir.galaxyJourney(0)` holds 64,000 km above Earth with the player's lens and
+selected camera mode. `ir.galaxyJourney(1, 36)` travels to 30 kpc above the
+galactic center over 36 presentation seconds; `ir.galaxyJourney(0, 36)` returns.
+The first argument is progress from zero to one, and an omitted duration holds
+the requested view immediately. `ir.observerStatus().journey` reads progress,
+destination and remaining duration without moving the camera. The Milky Way
+controls expose the same trip and a slider. Automatic adapts to the framed
+light, Manual retains the chosen lens exposure, and Enhanced keeps its declared
+composition. Entering a journey does not select a long-exposure instrument.
+
+`ir.galaxy().render()` returns the projected target's dimensions and bytes,
+field and kernel versions, normalization, galactic-center origin in parsecs,
+step bounds, dust scale, sampling profile, settled state, readiness, observer
+frame, sensor exposure and bounded sky selection. `submissions` counts scene
+submissions requested from the volume; `draws` includes integral tiles and
+projection draws; `held` says whether the projected target was reused on the
+last submission. A held projection may coexist with an advancing cache bake.
+
+When the ordinary physical cache is enabled, `cache` reports `initialFaceSize`,
+`faceSize` and `selectedFaceSize`, tile progress, publication and cancellation
+counts, retained entries, the 0.15 pc reuse radius, allocated bytes and physical
+units. `using` identifies the selected cache path; `liveDraws` and
+`samplingDraws` distinguish integration from cache sampling. The first complete
+cube has 32-pixel faces, followed by 128 and 512 pixels. All retain physical
+V-anchored RGB in units of 1,000 nW m⁻² sr⁻¹ per stored unit. The display
+response is applied afterward. A bounded live target serves a cold or
+translated view while a replacement bakes; only complete cubes publish.
+
+`temporal` reports the live history dimensions, interleave stride, ray target,
+phase count, resets and owned bytes. `stars` reports source count, source
+uploads, maximum reductions, projection bytes and the resolved-star extinction
+cache. Its queue, lag and completed-source counts distinguish delayed physical
+refresh from an idle selection. `cache.archive` reports successful disk restores,
+completed writes and storage failures. A failed disk cache does not prevent a
+new bake.
+
+`--sample 12 --sample-js "ir.galaxy().render()"` records that state one frame
+at a time. Read cache publication and draw counters beside frame timings;
+submission counts alone do not measure cost. The report is `null` without a
+renderer. `ir.lens()` gives the resolved optics and exposure. The fixed face-on
+instrument uses f/2, 2,400 s, ISO 400; edge-on uses f/2, 600 s, ISO 400. These
+recipes apply only while the named instrument owns the view.
+
+The field transports stellar emission through the shared dust model. A declared
+photopic/V ratio of 1.25 converts V power to luminance; color remains
+illustrative. `resolvedStarExtinction: false` records the temporary mismatch
+between attenuated diffuse light and star sprites. The cache and camera
+processing do not establish that deferred population work.
+
+```sh
+node scripts/drive.mjs --url http://localhost:5173/planetarium \
+  --width 1920 --height 1080 --dpr 1 \
+  --js "ir.galaxyView('face-on')" --js "ir.chrome(false)" \
+  --wait 1500 --js "ir.galaxy().render()" --shot galaxy-face-on.jpg
+```
+
+---
+
 ## Finding and loading destinations
 
 | Call                | Effect                                                        |
 | ------------------- | ------------------------------------------------------------- |
 | `ir.targets()`      | destinations near the player, with addresses — start here     |
 | `ir.search(text)`   | everywhere matching a name, nearest first — the whole catalog |
+| `ir.rowsFor([…])`   | those addresses, as listing rows measured from here           |
+| `ir.findWorlds(q)`  | bodies matching what a world _is_, swept in worker batches    |
 | `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
 | `ir.loadSystem(id)` | generate a system without moving the ship                     |
 
 `goTo` is the only verb that accepts all the forms a person types: `SOL`,
 `s:SOL/b:2`, or `b:2` relative to the current system. Everywhere else,
 `parseAddress` remains strict.
+
+**`findWorlds` is a third question and the expensive one.** `targets` and
+`search` read what is already there; this generates every system inside the
+radius to test it, because a body does not exist until its seed is expanded and
+so cannot be indexed. It answers in batches on the worker pool:
+
+```js
+const sweep = ir.findWorlds(
+  { starClasses: ['M'], sea: true, landable: true },
+  {
+    lightYears: 25,
+    onBatch: (found, progress) => console.log(found.length, progress),
+  },
+)
+sweep.systems // how many systems it will walk
+await sweep.done // the nearest matches, sorted
+sweep.cancel() // stop; queued jobs are dropped and running ones are told
+```
+
+The nearest thousand are kept and the rest counted — "rocky, within 150 light
+years" is 37,929 systems and over a hundred thousand bodies.
+[ADR-0035](../adr/0035-searching-the-volume.md).
 
 **`targets` and `search` are not the same list narrowed.** `targets` is a star
 sweep with a radius and answers "what is near me"; `search` is an index lookup
@@ -137,8 +283,9 @@ flowchart TB
     subgraph AIM["aim and burn"]
         F["ir.face(address)<br/><i>free — changes nothing else</i>"]
         BT["ir.burnToward(address, throttle)"]
-        C["ir.control({translation, rotation})"]
-        HOLD["ir.hold()"]
+        T["ir.throttle(0..1)<br/><i>the main drive — a setting,<br/>not a held key</i>"]
+        C["ir.control({translation, rotation, throttle})<br/><i>the thrusters, the attitude,<br/>and the drive if given</i>"]
+        HOLD["ir.hold()<br/><i>hands off everything,<br/>drive included</i>"]
     end
     POS --> AIM
 ```
@@ -152,6 +299,13 @@ Two notes worth internalising:
   and useless.
 - **`face` and `burnToward` are separate** because looking and accelerating are
   different acts. `face` costs nothing and does not perturb the trajectory.
+- **The thrusters and the drive are two controls.** `translation` is the
+  reaction-control system, six ways at under a g, and holds only while it is
+  set; `throttle` is the main drive, ahead only, at three g, and stays where
+  it is put — through `control` calls that do not mention it, and through a
+  save. `burnToward` sets the throttle, and every placement verb cuts it,
+  because a ship put into a circular orbit with its drive lit is not in that
+  orbit on the next tick.
 - **`land` does not land you.** It puts the ship on the pad — local `y = 0` in a
   surface frame _is_ the ground — and the contact test makes it landed on the
   next tick, so `ir.land(...).player.landed` is `false` and one `ir.step()`
@@ -189,6 +343,23 @@ ir.observatory.clear()
 the subject; it survives a drag, a dolly and a wheel notch, and is cleared by
 whatever replaces the pose — a focus, a frame, a stance, a composition. Standing,
 it drives the stance's own heading and pitch.
+
+In flight the ship arm has a camera of its own, with two views. `ir.view('orbit')`
+stands it off the hull and looks at the ship while it maneuvers — the view the
+thrusters and the drive are watched from — and `ir.view('chase')` puts it back
+behind the hull; `ir.view()` cycles. `ir.flightCamera` is the camera itself:
+
+```js
+ir.flightCamera.drag(dx, dy) // orbit, or turn the head in the chase
+ir.flightCamera.turn(dx, dy) // turn the head in either view
+ir.flightCamera.zoom(factor) // dolly the orbit; above 1 retreats
+ir.flightCamera.recentre() // look where the view aims again
+```
+
+The orbit is measured in hull lengths about the ship in the world's own axes,
+pole on the local up, and tethered at eight lengths; it opens where the chase was
+standing. `ir.status().flightCamera` reports the view, the orbit and the look,
+so a plate taken beside the hull records the camera it was taken from.
 
 ### Compositions
 
@@ -240,11 +411,19 @@ framing it left; both are camera moves, so `world.stateHash()` is untouched —
 
 ```js
 ir.sites(address?)                       // the named places on a body
-ir.visit(address?, { site, height })     // stand there. Degrees and meters
+ir.visit(address?, { site, height })     // stand there, now. Degrees and meters
 ir.visit(address?, { latitude, longitude, heading, pitch })
+ir.drop(lat, lon, { address, seconds })  // fly down there, facing the star
 ir.observatory.setStanceScrub(0.5)       // the height slider, logarithmic
-ir.ascend()
+ir.ascend()                              // and this abandons a drop in flight
 ```
+
+**`visit` cuts and `drop` flies**, and the difference is the intent rather than
+the destination. `visit` is what a plate is captured through, so the frame after
+it returns is the frame asked for; `drop` is eight seconds of ballistic entry
+that ends level with the horizon facing the star, which is a thing to watch and
+useless to photograph the start of. `ir.ascend()` abandons one part-way at the
+framing it left. [ADR-0034](../adr/0034-the-drop.md).
 
 Sites are derived from the body's own terrain rather than authored, so
 "the highest ground on this world" survives regeneration and is still the

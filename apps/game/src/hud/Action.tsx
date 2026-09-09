@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FOCUS_RING, releaseFocus } from './focus.ts'
 
@@ -30,6 +31,8 @@ const TONE = {
 
 export function Action({
   label,
+  icon: Icon,
+  type = 'button',
   onClick,
   disabled = false,
   title,
@@ -37,7 +40,9 @@ export function Action({
   className = '',
 }: {
   label: string
-  onClick: () => void
+  icon?: LucideIcon
+  type?: 'button' | 'submit'
+  onClick?: () => void
   disabled?: boolean
   title?: string
   tone?: keyof typeof TONE
@@ -46,13 +51,14 @@ export function Action({
 }) {
   return (
     <Button
+      type={type}
       variant="outline"
       size="xs"
       title={title ?? label}
       disabled={disabled}
       onClick={(event) => {
         releaseFocus(event)
-        onClick()
+        onClick?.()
       }}
       /*
        * `min-h-6 min-w-6` — 24 px, which is WCAG 2.2's target minimum and not
@@ -87,6 +93,7 @@ export function Action({
        */
       className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none transition-[color,border-color,background-color,box-shadow,scale] active:scale-[0.96] disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]} ${className}`}
     >
+      {Icon !== undefined && <Icon aria-hidden className="size-3.5" />}
       {label}
     </Button>
   )

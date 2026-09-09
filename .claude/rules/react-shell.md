@@ -26,10 +26,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   put `showShip` back to a value it had never held. There is no carve-out for a field that
   looks like a preference — the frame loop reads `orbitScope`, which is the other half of
   why it cannot be component state.
-- **`App` owns the `<Canvas>` and `.hud-layer` for the life of the session.** Every route
-  renders _inside_ that layer, as a sibling of the canvas. A router over the whole tree
-  rebuilds the `WebGPURenderer` on every navigation — the black-screen class
-  `render/presentationWatchdog.ts` exists to recover from, arriving on purpose.
+- **`Root` keeps `GameLoader` and `PageShell` outside every route.** `App` owns the
+  persistent canvas and visual overlays; `PageShell` owns the server-rendered mode
+  and dialog layers. React Router handles navigation after hydration. Never replace
+  the runtime when changing pages, or gate readable content on renderer startup.
+  ADR-0039 records the server/client boundary.
 - **The current mode is never React state.** It is
   `modeForPath(resolvedLocation(location).pathname)`, a pure function in `pages/paths.ts`,
   so a reload, a back button and a pasted link land in the same place by construction.
@@ -138,8 +139,9 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
 - **The planetarium never writes canonical state.** It resolves an address, asks where
   that is at `renderTime`, returns a pose. `observatory.test.ts` compares `world.stateHash()`
   across a session of flying around — that test is the design promise.
-- **Presentation asks at `clock.renderTime`, never `clock.time`.** The latter is the tick
-  and moves in 1/64 s steps; the scene draws at the former. A camera placed against the
+- **Presentation asks at the snapshot’s instant, never `clock.time`.** Live time is
+  `clock.renderTime`; photographic time is the observatory’s held instant (ADR-0033).
+  `clock.time` advances in 1/64 s steps. A camera placed against the
   tick aims at where the body was, by its velocity times up to 15.6 ms, sawtoothing as
   alpha resets — 11 and 19 pixels of vibration on Phobos and Deimos at 1×, nothing
   measurable on anything larger.

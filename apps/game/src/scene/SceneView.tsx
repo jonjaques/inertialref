@@ -1,3 +1,4 @@
+import { GalaxyVolume } from './GalaxyVolume.tsx'
 import { useMemo } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createTerrainMaterial } from '../render/terrain.ts'
@@ -6,6 +7,7 @@ import { Bodies } from './Bodies.tsx'
 import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
 import { NearFieldProps } from './NearFieldProps.tsx'
+import { EntryTrace } from './EntryTrace.tsx'
 import { OrbitTraces } from './OrbitTraces.tsx'
 import { Sensor } from './Sensor.tsx'
 import { ShipModel } from './ShipModel.tsx'
@@ -13,6 +15,7 @@ import { Starfield } from './Starfield.tsx'
 import { SunFlare } from './SunFlare.tsx'
 import { ScatterRocks } from './ScatterRocks.tsx'
 import { TerrainPatches } from './TerrainPatches.tsx'
+import { ThrusterFx } from './ThrusterFx.tsx'
 import { WarpFx } from './WarpFx.tsx'
 import { WaterPatches } from './WaterPatches.tsx'
 
@@ -66,26 +69,19 @@ export function SceneView({ engine }: { engine: GameEngine }) {
   const water = useMemo(() => createWaterMaterial(), [])
   return (
     <>
-      {/* Space is genuinely high-contrast, but a debug build that renders its
-          own spacecraft as a black silhouette is not a debug build. Ambient
-          plus the camera-mounted fill in `CameraRig` keeps the near field
-          readable; the fill is what does the work, and it was a fixed world
-          direction pretending to be camera-mounted until the title sequence
-          caught it. Ambient stays small because it is the one term with no
-          direction, and it now reaches the ship and the near-field props
-          alone: planets, atmospheres and the streamed ground all shade from
-          their own `sunDirection` uniform and never see these lights. */}
-      <ambientLight intensity={0.16} />
       <EngineTick engine={engine} />
       <CameraRig engine={engine} />
       <Starfield engine={engine} />
+      <GalaxyVolume engine={engine} />
       <Bodies engine={engine} terrain={terrain} />
       <TerrainPatches engine={engine} terrain={terrain} />
       <WaterPatches engine={engine} water={water} />
       <ScatterRocks engine={engine} terrain={terrain} />
       <OrbitTraces engine={engine} />
+      <EntryTrace engine={engine} />
       <SunFlare engine={engine} />
       <ShipModel engine={engine} />
+      <ThrusterFx engine={engine} />
       <NearFieldProps engine={engine} />
       <WarpFx engine={engine} />
       {/* Last, and at priority 1: the sensor takes the frame away from R3F

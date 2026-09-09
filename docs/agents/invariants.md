@@ -81,7 +81,7 @@ table is one of those three, not drift.
 | Compile-ahead goes through one recipe                                                         | [Rendering](../concepts/rendering.md)                                                                                  |
 | Do not edit files `pnpm brand` writes                                                         | [Development](../guides/development.md)                                                                                |
 | Site metadata is duplicated on purpose                                                        | [Hosting](../hosting.md) · [Development](../guides/development.md)                                                     |
-| Third-party tags load from a module, not `index.html`                                         | [Hosting](../hosting.md)                                                                                               |
+| Third-party tags load through the analytics module                                            | [Hosting](../hosting.md)                                                                                               |
 
 When a defect exposes a missing invariant, add the rule to `AGENTS.md`, a
 one-liner under `.claude/rules/`, a row here, and a regression test that can
@@ -192,7 +192,7 @@ the margin has to be no wider than the search that collected them.
 the store's read half, so there is no `update` to reach for. A ship that
 starts moving is spawned moving — `spawnShip` takes the velocity — and after
 that it is `teleport` for a discontinuous move and `setControl` /
-`setFlightAssist` / `killRotation` for input. Each carries the bookkeeping a
+`setThrottle` / `setFlightAssist` / `killRotation` for input. Each carries the bookkeeping a
 write needs: the interpolation history, the landed set, the rails epoch.
 
 ### Rule 13
@@ -254,8 +254,9 @@ not license to hand-write `useMemo`.
 ### Rule 22
 
 **Never put the `<Canvas>` inside a route,** and never let a mode assume it
-owns the page. `App` owns the canvas and `.hud-layer` for the life of the
-session. [ADR-0011](../adr/0011-application-shell-and-modes.md).
+owns the page. `Root` keeps the browser runtime and server-rendered page shell
+outside every route. `App` owns the persistent canvas; `PageShell` owns routed
+chrome. [ADR-0039](../adr/0039-the-shell-before-the-scene.md).
 
 ### Rule 23
 
@@ -415,8 +416,10 @@ returns a pose. No teleport, no clock, no entity write, no save.
 ### Rule 38
 
 **Never ask where something is at `clock.time` in order to put it in a
-frame.** Presentation happens at `SimulationClock.renderTime` — one tick
-back, plus the interpolation alpha — and `clock.time` is the _tick_, which
+frame.** Live presentation happens at `SimulationClock.renderTime` — one tick
+back, plus the interpolation alpha. A photographic preset supplies an explicit
+observatory instant to the same snapshot, camera, terrain and orbit traces
+([ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md)). `clock.time` is the _tick_, which
 moves in 1/64 s steps. Anything that places, points at, aims at or measures
 against a body for the picture uses the same instant the picture is drawn at,
 or it is aiming at where that body used to be by its velocity times up to
@@ -683,10 +686,11 @@ is idempotent by label, because StrictMode does everything twice.
 ### Rule 63
 
 **Never change what the site says about itself in only one place.**
-`src/site.ts` supplies shared values, `index.html` is what a scraper reads,
-and `pages/DocumentMeta.tsx` applies route-specific browser metadata.
+`src/site.ts` supplies route metadata to the server-rendered head and to
+`pages/DocumentMeta.tsx` for client navigation. `documentHead.ts` emits the
+shared head that scrapers read.
 
 ### Rule 64
 
-**Never load a third-party tag from `index.html`.** `src/analytics.ts` is
+**Never load a third-party tag from the document head.** `src/analytics.ts` is
 the gate: production build, canonical host, no Global Privacy Control.

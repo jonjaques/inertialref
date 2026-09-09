@@ -1,0 +1,16 @@
+---
+import Base from '../layouts/Base.astro'
+import { metadataForPath } from '../../src/site.ts'
+---
+
+<Base meta={metadataForPath('/404')}>
+  <main
+    class="hud-layer pointer-events-auto absolute flex flex-col items-center justify-center gap-4 text-slate-200"
+  >
+    <h1 class="type-heading">Page not found</h1>
+    <p class="type-body">This address does not name a page in InertialRef.</p>
+    <nav class="flex gap-6">
+      <a href="/">Home</a><a href="/docs">Documentation</a>
+    </nav>
+  </main>
+</Base>

@@ -14,7 +14,7 @@ bun to change dependencies.
 
 ```bash
 pnpm install
-pnpm dev              # Vite on 5173 and wrangler on 8787
+pnpm dev              # Astro on 5173 and wrangler on 8787
 pnpm preview          # production build, served by the real Worker on 8787
 pnpm test             # Vitest, Node environment only
 pnpm test:gpu         # the shader suite on the real GPU via Dawn; not in check
@@ -26,7 +26,7 @@ pnpm brand            # regenerate brand artifacts from design/brand/brandmark.s
 pnpm presets:plates   # recapture the seven preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
 pnpm docs:build       # render docs/ and packages/* into the documentation site
-pnpm build            # optional media pull, docs, typecheck, then Vite build
+pnpm build            # optional media pull, docs, typecheck, then Astro build
 pnpm check            # graph, brand, presets, format, lint, typecheck, test, test:slow, build
 
 # The four instruments. They read the tree; none of them gates it.
@@ -53,7 +53,7 @@ pnpm textures:build            # surface maps into data/textures (1.5 GB in, 25 
 pnpm shapes:build              # measured shape models into data/shapes
 pnpm solar:fetch               # data/reference/solar-system.json, from JPL
 
-pnpm dev:client                # Vite only
+pnpm dev:client                # Astro only
 pnpm dev:server                # wrangler on 127.0.0.1:8787
 pnpm run deploy:worker         # build, then wrangler deploy
 pnpm media:pull                # reference audio from R2; not in git
@@ -65,13 +65,13 @@ pnpm media:push
 dev` refuses to start when that directory is absent — so in a worktree created
 by [`/parallel`](../../.claude/skills/parallel/SKILL.md), or in any clone that
 has never built, the Worker half exits immediately and `scripts/dev.mjs` stops
-the Vite half with it. The failure names the directory and nothing else, and it
+the Astro half with it. The failure names the directory and nothing else, and it
 is easy to read as a broken checkout.
 
 Two ways out, and which one you want depends on why you are serving:
 
 ```bash
-pnpm dev:client   # Vite alone on 5173 — everything except the Worker's routes
+pnpm dev:client   # Astro alone on 5173 — everything except the Worker's routes
 pnpm build        # once, then `pnpm dev` works for the life of the worktree
 ```
 
@@ -112,7 +112,7 @@ gitignored `.data/`, and only the processed outputs are committed. The
 [catalog guide](catalogue.md) has the provenance rules each of them follows.
 
 The site deploys to the `inertialrefd` Worker. Canonical URL:
-<https://inertialref.jonjaques.com>, and the only address it answers on. To
+<https://inertialref.app>, and the only address it answers on. To
 check a build before trusting DNS, `pnpm --filter @inertialref/server run
 versions:upload` uploads a version without promoting it and prints its own
 preview URL; analytics and `<link rel="canonical">` name the custom domain, so a
@@ -176,8 +176,9 @@ by an in-process fake in Node tests.
 
 ## Toolchain
 
-**Vite 8** with `@vitejs/plugin-react` (Oxc transform) and
-`@rolldown/plugin-babel` running `reactCompilerPreset()`. React Compiler is
+**Astro 7** with `@astrojs/react` over Vite 8 and
+`@rolldown/plugin-babel` running `reactCompilerPreset()`. The standalone Vite
+config remains available for focused build tests. React Compiler is
 on: do not hand-write `useMemo` / `useCallback` memoization. `useMemo` for a
 stable Three.js object is a different thing and is fine.
 
@@ -214,6 +215,17 @@ would break offline, which is the base case.
 means is arithmetic in `apps/game/src/dock/layout.ts` and `dock/floating.ts`.
 The backend is chosen once at mount from `(pointer: coarse)` because
 `DndProvider` cannot be handed a different one. [ADR-0012](../adr/0012-dockable-panels.md).
+
+**Two headless libraries carry the long lists.**
+`@tanstack/react-virtual` windows the navigator's tree and the catalog
+dialog's results — at fifty light years the survey is fourteen hundred systems
+and reconciling them twice a second beside the render loop is the stutter, not
+the arithmetic. It is headless, so the tree keeps its own markup, its single tab
+stop and its keyboard. `@leeoniya/ufuzzy` ranks the navigator's search: the
+catalog's own index is exact-then-prefix-then-substring, which is right for an
+address and cannot find `proxmia`. It returns match ranges rather than markup,
+which is what lets a row light the matched characters without
+`dangerouslySetInnerHTML` over catalog data.
 
 **shadcn/ui** is the overlay control set. Do not hand-roll a control the
 registry has. Go through `hud/Action.tsx`, `hud/SwitchRow.tsx`, or
@@ -260,6 +272,16 @@ publishing nowhere, and a `{@link}` pointing at a renamed symbol fails it
 rather than rendering as words that link to nothing. `scripts/docs/build.mjs`
 carries the rest.
 
+API articles always ship as JSON. Builds from `main` also pre-render their
+HTML; other branches emit one API loading shell and fetch articles when opened.
+Prose remains pre-rendered in both cases. Workers Builds uses
+`WORKERS_CI_BRANCH`; GitHub uses the source branch; a local build uses the
+checked-out branch. To verify the complete production output on a feature
+branch, run `IR_PRERENDER_API=1 pnpm build`. Set it to `0` to force asynchronous
+API pages. Use `pnpm preview` for built API deep links because the Worker asset
+server applies their generated proxy rules; `astro preview` does not. During
+`pnpm dev`, Astro renders API loading shells on demand.
+
 **`design/` is the other half of that division, and it is not published.**
 Plans, working reviews and the complexity report live there; `docs/` is the
 finished account of what the system does and `design/` is the working one. A
@@ -270,12 +292,11 @@ from a published page into a plan resolves to GitHub rather than to a route
 that does not exist. Brand sources and the reference imagery are there for the
 same reason: they are inputs, not pages.
 
-**Site metadata** is duplicated on purpose: `src/site.ts` for the running
-client, `index.html` for scrapers that do not run JavaScript, and
-`pages/DocumentMeta.tsx` for per-route title, description, and canonical URL.
-Change all affected copies together.
-[`docs/hosting.md`](../hosting.md) records why they are not a single Worker
-render.
+**Site metadata** comes from `src/site.ts`. `documentHead.ts` renders it into
+every Astro document, and `pages/DocumentMeta.tsx` updates it on client
+navigation. The sitemap comes from the emitted routes. Production public pages
+are pre-rendered; the Worker serves their HTML as static assets.
+[ADR-0039](../adr/0039-the-shell-before-the-scene.md) records the boundary.
 
 **Analytics** loads from `src/analytics.ts`, only in a production build, only
 on the canonical host, and only without Global Privacy Control. The
@@ -312,12 +333,12 @@ Four configurations in [`.vscode/launch.json`](../../.vscode/launch.json),
 shared by VS Code and Cursor. The play button on **Launch Browser** starts
 the game.
 
-| Configuration      | Debuggee                                      | Port |
-| ------------------ | --------------------------------------------- | ---- |
-| **Launch Browser** | the client; the editor starts Vite + wrangler | 5173 |
-| **Attach Browser** | Chrome already running with remote debugging  | 9222 |
-| **Launch Node**    | `apps/headless` (`--self-test`)               | —    |
-| **Attach Node**    | `pnpm sim` (`node --inspect=127.0.0.1:9229`)  | 9229 |
+| Configuration      | Debuggee                                       | Port |
+| ------------------ | ---------------------------------------------- | ---- |
+| **Launch Browser** | the client; the editor starts Astro + wrangler | 5173 |
+| **Attach Browser** | Chrome already running with remote debugging   | 9222 |
+| **Launch Node**    | `apps/headless` (`--self-test`)                | —    |
+| **Attach Node**    | `pnpm sim` (`node --inspect=127.0.0.1:9229`)   | 9229 |
 
 Launch Browser runs `node scripts/dev.mjs --ensure` as a background task. If
 5173 is already up, it reuses that process and does not kill it when debugging

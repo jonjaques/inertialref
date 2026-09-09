@@ -28,7 +28,11 @@ import {
 } from 'three/tsl'
 
 /** The bins stay on the device; a single outstanding staging buffer bounds readback. */
-export function createHistogramMeter(source: Texture, motion?: Texture) {
+export function createHistogramMeter(
+  source: Texture,
+  motion?: Texture,
+  mask?: Texture,
+) {
   const bins = new StorageBufferAttribute(new Uint32Array(HISTOGRAM_BINS), 1)
   const counts = storage(bins, 'uint', HISTOGRAM_BINS).toAtomic()
   const limits = new StorageBufferAttribute(new Uint32Array(1), 1)
@@ -63,7 +67,11 @@ export function createHistogramMeter(source: Texture, motion?: Texture) {
           ),
         ),
       )
-      atomicAdd(counts.element(bin), uint(1))
+      if (mask === undefined) atomicAdd(counts.element(bin), uint(1))
+      else
+        If(textureLoad(mask, xy).r.lessThan(0.5), () => {
+          atomicAdd(counts.element(bin), uint(1))
+        })
       if (motion !== undefined) {
         const inverseDepth = textureLoad(motion, xy).z
         const circle = defocus.x.mul(defocus.y.sub(inverseDepth)).abs().min(40)
