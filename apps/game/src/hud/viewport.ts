@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useHydrated } from '../state/hydration.ts'
 
 /*
  * What shape of screen this is, and whether it can be pointed at precisely.
@@ -29,6 +30,7 @@ const COMPACT_QUERY = `(max-width: ${COMPACT_MAX_WIDTH - 1}px)`
 const COARSE_QUERY = '(pointer: coarse)'
 
 function useMediaQuery(query: string): boolean {
+  const hydrated = useHydrated()
   const [matches, setMatches] = useState(
     () =>
       typeof window !== 'undefined' &&
@@ -43,7 +45,7 @@ function useMediaQuery(query: string): boolean {
     list.addEventListener('change', update)
     return () => list.removeEventListener('change', update)
   }, [query])
-  return matches
+  return hydrated && matches
 }
 
 /** Too narrow for docked columns beside the scene. */
