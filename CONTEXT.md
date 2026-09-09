@@ -9157,6 +9157,27 @@ published entry points. Direct sharp dependencies resolve to 0.35.4 with
 libheif 1.23.2, addressing GHSA-rgj7-g3m4-5g8c; the production dependency audit
 reports no vulnerabilities.
 
+## Fifty turns on two slightly different ellipses (08 Sep 2026)
+
+The first shipping check draws an ellipse that the earlier local checks did
+not: fast-check seed `-1913150845`, eccentricity 0.9869367908579146, nearly
+fifty revolutions from periapsis. The universal propagator follows the rounded
+epoch state; the comparison follows the original elements. Their periods
+differ by 4.885 microseconds. Near the next periapsis that becomes about
+201 metres and 0.208 m/s, enough to cross the velocity comparison's bound.
+Both the property and propagator are unchanged from `main`.
+
+An independent eccentricity-vector and Kepler calculation, agreeing at 90
+and 100 decimal digits, places the propagator within 2.173 metres and
+0.002244 m/s of its actual input orbit. Binary64 period reconstruction
+accounts for that remaining error. The solver stays unchanged. The property
+retains its base tolerance and adds a phase allowance derived from input
+energy and period, bounded by periapsis speed and acceleration. Its CI input
+is a permanent example, observed failing before this correction. A separate
+reference-state test rejects the original-element answer, so the allowance
+cannot conceal that error. The corrected agreement property passes 100,000
+draws with the failing CI seed.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

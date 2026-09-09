@@ -94,6 +94,17 @@ routes. [Cloudflare routing documentation](https://developers.cloudflare.com/wor
 
 ## Coverage and remaining checks
 
+The first shipping CI run exposes an existing ellipse-comparison property
+failure at fast-check seed `-1913150845`. A rounded epoch state and the
+original elements differ in period by 4.885 microseconds; fifty revolutions
+amplify that to about 201 metres near periapsis. An independent calculation
+at 90 and 100 decimal digits agrees with the propagator within 2.173 metres.
+The solver is unchanged. The test accounts for input-derived phase drift,
+retains the failing input as an example, and adds a separate reference-state
+check that rejects the original-element answer. Both physics test files pass
+all 24 cases, and the corrected agreement property passes 100,000 draws with
+the failing CI seed.
+
 Canonical review covers population addressing and bounds, catalog
 coverage/fallbacks, generation versioning, ship throttle save/hash/rails,
 observatory travel/drop/tracking, and imported presets. Rendering review
