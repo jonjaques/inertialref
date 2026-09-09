@@ -9090,6 +9090,30 @@ browser rig verifies simulated device loss removes the canvas and retains
 navigation. [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records the
 ownership and storage limitation.
 
+## The camera fits WGSL's private storage (08 Sep 2026)
+
+Safari reported a `RenderPipeline` compilation refusal because private shader
+variables exceeded 8,192 bytes. The final camera graph reproduced that bound:
+12,484 bytes for sRGB and linear P3 output, 12,500 for encoded P3. Nested tone
+and color-space branches expanded the upstream detector calculation at each
+use. Materializing the exposed input with TSL's `toVar()` reduced those totals
+to 1,472 and 1,488 bytes without changing the optical passes, samples or color
+math. This is the [WGSL guaranteed budget](https://www.w3.org/TR/WGSL/#limits),
+which another implementation may exceed, rather than a Safari-specific mode.
+
+The regression captures the actual camera output quad during warmup and counts
+its generated private declarations, including the padded output struct. All
+three encoding cases failed against the inline graph and passed with the
+shared input. Unknown declaration types fail the test instead of silently
+undercounting. A device accepting the oversized shader is insufficient evidence
+of portability. Mobile Safari still needs a device retest after this fix.
+
+Sixteen full-optics camera configurations produced identical before/after
+RGBA32F readbacks on the local Apple GPU: enhanced/manual exposure,
+standard/staging curves, sRGB/P3 and headroom 1/4. The 32×32 gradient at noise
+tick 17 covered faint channels and highlights. All 65,536 compared components
+matched exactly, with maximum absolute difference zero.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
