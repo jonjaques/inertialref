@@ -9202,6 +9202,15 @@ The [hosting policy](docs/hosting.md#service-worker-storage-and-updates) records
 the distinction between downloaded files, runtime/GPU caches, the separate
 IndexedDB sky archive and IndexedDB saves.
 
+## The failure fixture registered two competing mocks (8 Sep 2026)
+
+CI exposed an ordering dependency in `modeLoader.test.ts`: `beforeEach` queued a
+successful flight-module mock and the rejection test queued another factory for
+the same path. Vitest 4.1.10 resolves consecutive mock registrations concurrently,
+so the successful factory could win. One factory now reads an explicit failure
+state before the import. The test still checks that prefetch and the route share
+the same rejected promise; production loading code is unchanged.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
