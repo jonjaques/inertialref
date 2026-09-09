@@ -625,44 +625,55 @@ directory keeps the plain name; only the deployment carries the `d`.
 
 Ordered by how expensive they are to discover late.
 
-### The service worker will cache your API responses forever ✅ fixed
+### Service-worker storage and updates
 
-`apps/game/public/sw.js` was cache-first for **every same-origin GET that is not
-a navigation**. That policy is correct for content-hashed assets by
-construction, and catastrophic for live state: the first `/api` response would
-be pinned for the lifetime of the cache, and because the cache survives reloads
-it presents as "the API is stuck" with a perfectly healthy server.
+Both production domains serve the same application and `/sw.js` directly.
+`inertialref.app` is canonical. A redirect between hosts cannot move a service
+worker, an installed app, preferences or IndexedDB saves; each origin keeps its
+own browser storage. Existing installations can continue using the legacy host.
 
-Fixed in the same change that added the first endpoint, as this page asked.
-There are now three layers, because the failure is silent, durable and
-indistinguishable from an outage: the service worker returns early, the Worker
-sends `cache-control: no-store`, and the client's probe asks for
-`cache: 'no-store'`.
+The service worker uses the following policy:
 
-Three other things came out of looking at that file properly, all of which would
-have bitten later rather than sooner:
+- `/api`, `/ws`, `/sw.js`, source maps, range requests and explicit `reload` or
+  `no-store` requests bypass Cache Storage.
+- Navigation tries the network and caches successful HTML by pathname. Network
+  failures and server errors fall back to that route's document. A 404 remains
+  a 404, and an uncached offline route returns 503 rather than another page's HTML.
+- `/assets/*` contains content-hashed scripts, fonts, catalogs, models and
+  textures. These are cache-first. The current and previous build caches remain;
+  requested assets from the previous build are copied into the current one.
+  Older build caches are deleted. Unused files are not copied across every deploy.
+- `/media/*` uses cache-first within the current build. Its unhashed paths never
+  inherit a previous build's contents. Range requests continue to use the network.
+- Other public files use stale-while-revalidate in the current build's cache.
 
-- **Cache-first is wrong for the unhashed files too.** `favicon.svg`, the web
-  manifest, `robots.txt` and the share card have no hash in their names, so
-  cache-first meant a change to any of them could never reach anyone who had
-  loaded the game once. They are stale-while-revalidate now. Cache-first is
-  kept for `/assets/*`, which is honest because Vite's content hashing is what
-  makes it safe — and for `/media/*`, which is object storage
-  ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)): a fixed
-  reference track, where stale-while-revalidate would re-fetch 2.7 MB of audio
-  in the background on every load of the site.
-- **A fixed cache name has to be bumped by hand.** It is now
-  `inertialref-${build}`, where the build id arrives on the registration URL —
-  `sw.js` is copied verbatim out of `public/` and never compiled, so the URL is
-  the only channel into it. Activation deletes previous `inertialref-` caches
-  and leaves anything else on the origin alone.
-- **Range requests must not be cached.** A 206 stored whole is served back as
-  the complete resource. Nothing issues one today; the material sets will.
+The build id arrives on the registration URL and names `inertialref-${build}`.
+Registration bypasses the HTTP script cache. Installation refreshes a short
+route/icon list and open documents, then claims clients without forcing a reload.
+The page reports loaded hashed assets from buffered resource timing, including
+requests completing after claim. The worker warms these serially, so first-visit
+scripts, fonts and models can enter Cache Storage without downloading every
+available asset. An offline launch requires that this caching has finished;
+unvisited modes and unloaded assets are not promised offline.
 
-None of that was verifiable by reading. `apps/game/src/net/serviceWorker.test.ts`
-loads the real file, installs its real handlers against stubbed globals and asks
-it what it would do — including that it bypasses exactly the paths `net.ts`
-declares, which is the one duplication that could not be removed.
+Only complete, successful, same-origin responses without `private` or `no-store`
+are stored. HTML never occupies a data-file key. Storage denial and quota errors
+leave online requests usable. Fetch events retain background work from dispatch
+through the last cache write, including stale revalidation.
+
+This policy manages downloaded files, not generated terrain or sky data.
+Terrain and active sky caches live in the runtime and GPU. Completed sky cubes
+also persist in the separate `inertialref-galaxy-sky` IndexedDB database, whose
+archive policy retains two entries. Saves use the `inertialref` IndexedDB
+database. Service-worker cleanup touches neither database. Cache
+Storage can be evicted by the browser, and the two-build retention policy is not
+a fixed byte quota. The previous cache protects assets used during a deployment;
+it cannot provide an old tab's lazy chunk that neither the tab nor its worker
+ever downloaded.
+
+`apps/game/src/net/serviceWorker.test.ts` executes the shipped script against
+storage and fetch adapters. Startup-resource and hosting tests cover the browser
+handoff and both domain bindings.
 
 > An `api.` subdomain would have avoided this for free, since the handler
 > already returns early for cross-origin requests. It was not chosen because
@@ -892,7 +903,7 @@ is why it won out over a deploy workflow in Actions.
 
 | Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                             |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.app` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                                                  |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                     |
 | Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                                |
 | The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                           |
 | Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |

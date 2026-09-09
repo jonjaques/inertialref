@@ -2,6 +2,7 @@ import { createConsoleSink, logHub } from '@inertialref/shared'
 import { startAnalytics } from './analytics.ts'
 import { BUILD_ID } from './build.ts'
 import { isTimingLevel, setTimingLevel } from './engine/browserTiming.ts'
+import { cacheStartupAssets } from './net/cacheStartupAssets.ts'
 import { registerServiceWorker } from './net/registerServiceWorker.ts'
 import { QUERY } from './pages/paths.ts'
 import { installSchedulerYield } from './render/schedulerYield.ts'
@@ -27,12 +28,28 @@ export function startClient(): void {
   // The readiness adapter also covers hydration after the load event. A
   // listener alone would miss registration on that first visit.
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    cacheStartupAssets({
+      origin: location.origin,
+      controller: () => navigator.serviceWorker.controller,
+      onControllerChange: (run) =>
+        navigator.serviceWorker.addEventListener('controllerchange', run),
+      observeResources: (run) => {
+        const observer = new PerformanceObserver((list) =>
+          run(list.getEntries().map((entry) => entry.name)),
+        )
+        observer.observe({ type: 'resource', buffered: true })
+        return () => observer.disconnect()
+      },
+      onPageHide: (run) =>
+        window.addEventListener('pagehide', run, { once: true }),
+    })
     registerServiceWorker({
       page: {
         readyState: () => document.readyState,
         onLoad: (run) => window.addEventListener('load', run, { once: true }),
       },
-      register: (url) => navigator.serviceWorker.register(url),
+      register: (url) =>
+        navigator.serviceWorker.register(url, { updateViaCache: 'none' }),
       buildId: BUILD_ID,
     })
   }

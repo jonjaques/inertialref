@@ -95,8 +95,10 @@ change adds no request-rendering adapter or server-side game instance.
 The service worker caches navigation HTML by document address. Cached HTML
 must describe the requested page, because hydrating another page's markup
 would discard the server-rendered content. An uncached offline document gets
-an explicit offline response. Immutable game assets retain their existing
-cache policy.
+an explicit offline response. Hashed game assets use the current and previous build caches, promoting only
+requested files into the current build. Startup resource reporting covers assets
+loaded before service-worker control. The [hosting policy](../hosting.md#service-worker-storage-and-updates)
+defines retention, storage failures and the two production origins.
 
 ## Alternatives considered
 

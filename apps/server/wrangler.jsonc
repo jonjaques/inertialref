@@ -4,45 +4,17 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-20",
 
-  /*
-   * The site's address.
-   *
-   * A **custom domain**, not a route: a custom domain provisions the DNS record
-   * and the certificate and points the hostname at this Worker outright, where
-   * a route is a pattern layered over an origin that already exists. There is
-   * no origin here — the Worker *is* the site — so a route would need an
-   * orange-clouded record pointing at nothing to hang itself on.
-   *
-   * The first deploy after adding this creates the record. It needs the
-   * `inertialref.app` zone on the same account; Wrangler fails loudly if it is
-   * not there, which is the right failure.
+  /* Both hosts serve the same app without a redirect. Service workers and
+   * IndexedDB saves belong to their origin, so the legacy host must keep
+   * answering /sw.js and existing installs. Metadata names inertialref.app.
+   * Custom domains provision DNS and certificates in both account zones.
    */
-  "routes": [{ "pattern": "inertialref.app", "custom_domain": true }],
+  "routes": [
+    { "pattern": "inertialref.app", "custom_domain": true },
+    { "pattern": "inertialref.jonjaques.com", "custom_domain": true },
+  ],
 
-  /*
-   * One front door, and a per-version side door.
-   *
-   * `inertialrefd.jaquers.workers.dev` used to keep answering as "the address a
-   * deploy can be checked on before DNS is trusted". Wrangler now disables it
-   * unless it is asked for, and asking would be asking for the wrong thing: a
-   * single shared hostname always shows *whatever was deployed last*, which is
-   * exactly the question a pre-DNS check is not trying to answer. Stated as
-   * `false` rather than left to a default, because a second front door is a
-   * decision either way — `<link rel="canonical">` names one hostname and
-   * `src/analytics.ts` measures one hostname.
-   *
-   * Preview URLs replace it and are strictly better for the job. Every uploaded
-   * version gets its own `<version>-inertialrefd.<subdomain>.workers.dev`, so a
-   * check is against a *specific build* rather than against the tip. Generic
-   * ones only: `wrangler versions upload --preview-alias <name>` would mint a
-   * readable vanity hostname, and a named alias is another thing that outlives
-   * the reason it was created.
-   *
-   * `preview_urls` has to be explicit here. It defaults to whatever
-   * `workers_dev` is, so turning the front door off would silently take the
-   * side door with it — which is what the deploy log warns about, in as many
-   * words, and why both lines are written down.
-   */
+  // Version previews identify one build; workers.dev does not track production.
   "workers_dev": false,
   "preview_urls": true,
 

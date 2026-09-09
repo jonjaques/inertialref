@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const imported: string[] = []
+let flightFailure: Error | null = null
 beforeEach(() => {
   vi.resetModules()
   imported.length = 0
+  flightFailure = null
   vi.doMock('../cinema/CinemaMode.tsx', () => {
     imported.push('cinema')
     return { CinemaMode: () => null }
   })
   vi.doMock('../flight/FlightMode.tsx', () => {
+    if (flightFailure !== null) throw flightFailure
     imported.push('flight')
     return { FlightMode: () => null }
   })
@@ -40,9 +43,8 @@ describe('selected mode modules', () => {
   )
 
   it('preserves a failed prefetch for the route error boundary', async () => {
-    vi.doMock('../flight/FlightMode.tsx', () => {
-      throw new Error('chunk unavailable')
-    })
+    // One factory per path avoids racing two queued doMock registrations.
+    flightFailure = new Error('chunk unavailable')
     const { preloadMode, modeLoaders } = await import('./modeLoader.ts')
     const pending = preloadMode('flight')!
     const failure: unknown = await pending.catch((cause: unknown) => cause)

@@ -56,6 +56,7 @@ const request = (
  */
 const okResponse = (contentType = 'application/javascript') => ({
   ok: true,
+  status: 200,
   type: 'basic',
   headers: {
     get: (name: string) =>
@@ -71,6 +72,7 @@ interface Harness {
   readonly put: string[]
   cacheKeys: string[]
   clientUrls: string[]
+  storageFails: boolean
   /** Per-cache contents, keyed by cache name then request URL. */
   readonly stores: Map<string, Map<string, unknown>>
 }
@@ -86,6 +88,7 @@ function loadServiceWorker(
     put: [],
     cacheKeys: [],
     clientUrls: [],
+    storageFails: false,
     stores: new Map(),
   }
 
@@ -103,6 +106,8 @@ function loadServiceWorker(
 
   const caches = {
     open: (name: string) => {
+      if (harness.storageFails)
+        return Promise.reject(new Error('storage denied'))
       harness.opened.push(name)
       let store = harness.stores.get(name)
       if (store === undefined) {
@@ -354,53 +359,147 @@ describe('the service worker', () => {
     expect(sw.put).not.toContain('https://elsewhere.test/docs')
   })
 
-  it('evicts its own past builds and nothing else', async () => {
+  it('caches only same-origin hashed assets reported by a window client', async () => {
+    const sw = loadServiceWorker()
+    const message = sw.listeners.get('message')
+    expect(message).toBeDefined()
+    const send = async (source: unknown, urls: unknown) => {
+      let pending: Promise<unknown> = Promise.resolve()
+      message!({
+        source,
+        data: { type: 'CACHE_ASSETS', urls },
+        waitUntil: (p: Promise<unknown>) => (pending = p),
+      })
+      await pending
+    }
+    const source = { type: 'window', url: `${ORIGIN}/planetarium` }
+    await send(source, [
+      `${ORIGIN}/assets/chunk.js`,
+      `${ORIGIN}/api/health`,
+      `${ORIGIN}/media/tng-intro.mp3`,
+      `${ORIGIN}/assets/chunk.js.map`,
+      'https://elsewhere.test/assets/chunk.js',
+    ])
+    expect(sw.put).toEqual([`${ORIGIN}/assets/chunk.js`])
+    sw.put.length = 0
+    await send({ type: 'window', url: 'https://elsewhere.test/' }, [
+      `${ORIGIN}/assets/no.js`,
+    ])
+    await send(null, [`${ORIGIN}/assets/no.js`])
+    await send(source, 'invalid')
+    expect(sw.put).toEqual([])
+  })
+
+  it('retains one previous build without copying its entire asset history', async () => {
     const sw = loadServiceWorker()
     sw.cacheKeys = [
-      'inertialref-oldbuild',
+      'inertialref-ancient',
+      'inertialref-previous',
       `inertialref-${BUILD}`,
-      // Another application on the same origin. A service worker deleting this
-      // would be reaching well outside its own concern.
       'someone-elses-cache',
     ]
-    const activate = sw.listeners.get('activate')
-    if (activate === undefined) throw new Error('no activate listener')
-    let pending: Promise<unknown> = Promise.resolve()
-    activate({ waitUntil: (p: Promise<unknown>) => (pending = p) })
-    await pending
-    expect(sw.deleted).toEqual(['inertialref-oldbuild'])
+    sw.stores.set(
+      'inertialref-previous',
+      new Map([[`${ORIGIN}/assets/unused.js`, 'unused']]),
+    )
+    await lifecycle(sw, 'activate')
+    expect(sw.deleted).toEqual(['inertialref-ancient'])
+    expect(sw.put).toEqual([])
   })
 
-  it('rescues immutable assets from the build it replaces', async () => {
-    const sw = loadServiceWorker()
-    sw.cacheKeys = ['inertialref-oldbuild', `inertialref-${BUILD}`]
-    // What the old worker cached during the visit that fetched the new build:
-    // the new hashed chunks and catalog went into *its* cache, because it
-    // was still the controlling worker. Deleting that cache unread is what
-    // left the next offline launch with an index.html and none of its code.
+  it('promotes a requested hashed asset from the previous build for offline reuse', async () => {
+    const sw = loadServiceWorker(() => {
+      throw new Error('offline')
+    })
+    sw.cacheKeys = ['inertialref-previous', `inertialref-${BUILD}`]
     sw.stores.set(
-      'inertialref-oldbuild',
-      new Map<string, unknown>([
-        [`${ORIGIN}/assets/index-e5f6a7b8.js`, 'new chunk'],
-        [`${ORIGIN}/assets/stars-150ly-c9d0.irsc`, 'catalogue'],
-        [`${ORIGIN}/assets/stars-sky-3ab8.irsc`, 'sky'],
-        // Unhashed, so a copy *could* be stale — it must not migrate.
-        [`${ORIGIN}/index.html`, 'old shell'],
-      ]),
+      'inertialref-previous',
+      new Map([[`${ORIGIN}/assets/stars.irsc`, new Response('catalog')]]),
     )
-    const activate = sw.listeners.get('activate')
-    if (activate === undefined) throw new Error('no activate listener')
-    let pending: Promise<unknown> = Promise.resolve()
-    activate({ waitUntil: (p: Promise<unknown>) => (pending = p) })
-    await pending
+    expect(
+      await (
+        (await settle(sw, request('/assets/stars.irsc'))) as Response
+      ).text(),
+    ).toBe('catalog')
+    expect(
+      await (
+        sw.stores
+          .get(`inertialref-${BUILD}`)
+          ?.get(`${ORIGIN}/assets/stars.irsc`) as Response
+      ).text(),
+    ).toBe('catalog')
+  })
 
-    const rescued = sw.stores.get(`inertialref-${BUILD}`)
-    expect(rescued?.get(`${ORIGIN}/assets/index-e5f6a7b8.js`)).toBe('new chunk')
-    expect(rescued?.get(`${ORIGIN}/assets/stars-150ly-c9d0.irsc`)).toBe(
-      'catalogue',
+  it('does not reuse unhashed media or unrelated caches across builds', async () => {
+    const response = okResponse('audio/mpeg')
+    const sw = loadServiceWorker(() => response)
+    sw.cacheKeys = ['inertialref-previous', `inertialref-${BUILD}`]
+    sw.stores.set(
+      'inertialref-previous',
+      new Map([[`${ORIGIN}/media/tng-intro.mp3`, 'stale audio']]),
     )
-    expect(rescued?.get(`${ORIGIN}/assets/stars-sky-3ab8.irsc`)).toBe('sky')
-    expect(rescued?.has(`${ORIGIN}/index.html`)).toBe(false)
-    expect(sw.deleted).toEqual(['inertialref-oldbuild'])
+    sw.stores.set(
+      'unrelated',
+      new Map([[`${ORIGIN}/assets/chunk.js`, 'foreign chunk']]),
+    )
+    expect(await settle(sw, request('/media/tng-intro.mp3'))).toBe(response)
+    expect(await settle(sw, request('/assets/chunk.js'))).toBe(response)
+  })
+
+  it('keeps online requests working when Cache Storage is unavailable', async () => {
+    const response = okResponse()
+    const sw = loadServiceWorker(() => response)
+    sw.storageFails = true
+    expect(await settle(sw, request('/assets/chunk.js'))).toBe(response)
+    expect(await settle(sw, request('/favicon.svg'))).toBe(response)
+  })
+
+  it('honors explicit cache bypass and never intercepts its own script', () => {
+    const sw = loadServiceWorker()
+    expect(handled(sw, request('/sw.js?build=next'))).toBe(false)
+    expect(
+      handled(sw, request('/assets/chunk.js', { cache: 'no-store' })),
+    ).toBe(false)
+    expect(
+      handled(sw, request('/doc-content/manifest.json', { cache: 'reload' })),
+    ).toBe(false)
+  })
+
+  it('rejects incomplete and private responses even without a Range request', async () => {
+    for (const response of [
+      { ...okResponse(), status: 206 },
+      {
+        ...okResponse(),
+        headers: {
+          get: (name: string) =>
+            name === 'cache-control'
+              ? 'private, no-store'
+              : 'application/javascript',
+        },
+      },
+    ]) {
+      const sw = loadServiceWorker(() => response)
+      await settle(sw, request('/assets/chunk.js'))
+      expect(sw.put).toEqual([])
+    }
+  })
+
+  it('uses the matching offline document when the origin returns a server error', async () => {
+    const sw = loadServiceWorker(
+      () => new Response('unavailable', { status: 503 }),
+    )
+    sw.stores.set(
+      `inertialref-${BUILD}`,
+      new Map([[`${ORIGIN}/planetarium`, 'planetarium HTML']]),
+    )
+    expect(
+      await settle(sw, request('/planetarium', { mode: 'navigate' })),
+    ).toBe('planetarium HTML')
   })
 })
+
+async function lifecycle(sw: Harness, name: string): Promise<void> {
+  let pending: Promise<unknown> = Promise.resolve()
+  sw.listeners.get(name)!({ waitUntil: (p: Promise<unknown>) => (pending = p) })
+  await pending
+}

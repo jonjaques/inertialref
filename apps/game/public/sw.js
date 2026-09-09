@@ -1,55 +1,15 @@
 /*
- * Service worker.
+ * Offline delivery for the static site. Saves live in IndexedDB; generated
+ * terrain, galaxy and renderer caches belong to their runtime producers.
  *
- * The game is offline-first: once the application assets are cached, a
- * single-player universe needs no server at all. Nearly all of the content is a
- * pure function of a seed, so there is very little to download beyond the code —
- * the one exception is the packed star catalog, which is a content-hashed
- * asset under /assets and is therefore covered by the cache-first branch below
- * like any other. Saves live in IndexedDB.
- *
- * Deliberately hand-written rather than generated. The whole policy is one
- * screen, it has no build-manifest dependency to go stale, and being able to
- * read it matters more than being able to configure it.
- *
- * Four strategies, chosen by what the request is:
- *
- *   - /api and /ws: not touched at all. Live state.
- *   - Navigations: network first, cache as fallback. A deploy should reach a
- *     player who is online; a player who is offline should still get in.
- *   - /assets/*: cache first. Vite content-hashes those filenames, so a cached
- *     one can never be stale — a changed file has a different name.
- *   - Everything else same-origin: stale-while-revalidate. Fast like the cache,
- *     eventually correct like the network.
- *
- * This file is copied verbatim out of `public/` and never goes through the
- * bundler, so it cannot import anything. Every constant it shares with the rest
- * of the client is repeated here with a pointer to the original.
- */
-
-/*
- * The cache is named after the build that installed it.
- *
- * A fixed name has to be bumped by hand, and the failure mode of forgetting is
- * invisible: dead chunks from every past deploy accumulate forever, and a
- * precached page outlives the build it describes. There is no way to
- * inject a constant into this file, because it is not compiled — so the build
- * id arrives on the registration URL, which the browser entry supplies. `dev` is the
- * fallback for anyone who opens `/sw.js` directly.
+ * HTML is network-first and keyed by route. Hashed assets are cache-first;
+ * unhashed media is cache-first within one build. Other public files use
+ * stale-while-revalidate. Live state and explicit cache bypasses go to network.
+ * This file is copied verbatim, so the build id arrives on the script URL.
  */
 const BUILD = new URL(self.location.href).searchParams.get('build') ?? 'dev'
 const CACHE_PREFIX = 'inertialref-'
 const CACHE = `${CACHE_PREFIX}${BUILD}`
-/*
- * The handful of unhashed files a cold offline launch cannot start without.
- *
- * Deliberately short. Every other unhashed file in `public/` — the icons, the
- * share card, robots.txt, llms.txt — is reached by something that is already
- * online when it asks, and the stale-while-revalidate branch below covers them
- * the first time they are. Precaching them would trade a slower install for
- * nothing. `/manifest.webmanifest` is in, because an installed application is
- * launched *from* the manifest and that launch may be the offline one.
- */
 const PRECACHE = [
   '/',
   '/play/solo',
@@ -59,208 +19,222 @@ const PRECACHE = [
   '/manifest.webmanifest',
 ]
 
-/*
- * Paths that are state rather than content, kept in step by hand with
- * `API_PREFIX` and `SOCKET_PATH` in packages/protocol/src/net.ts.
- *
- * Without this the cache-first branch below pins the first `/api` response for
- * the lifetime of the cache — and because the cache survives a reload, that
- * presents as "the server is stuck" with a perfectly healthy server. The Worker
- * also sends `no-store` and the client also asks for `no-store`; three layers,
- * because this failure is silent, durable, and indistinguishable from an
- * outage.
- *
- * An `api.` subdomain would have avoided it for free — the handler already
- * returns early for cross-origin requests — but a second hostname means CORS
- * preflights, a second deploy target and a second origin for the socket, which
- * is a permanent cost in place of these three lines.
- */
+// Keep these paths in step with packages/protocol/src/net.ts.
 const isLive = (pathname) =>
   pathname === '/api' || pathname.startsWith('/api/') || pathname === '/ws'
-
-/**
- * Cache-first, because the content at these paths cannot change under the name.
- *
- * `/assets/` is Vite's content-hashed output, immutable by construction.
- * `/media/` is the build-time pull from R2 (`scripts/media.mjs`) — a fixed
- * reference track, not a hashed name, and it is here for a second reason:
- * stale-while-revalidate would re-fetch 2.7 MB of audio in the background on
- * every single load of the site to discover it had not changed.
- */
-const isImmutable = (pathname) =>
-  pathname.startsWith('/assets/') || pathname.startsWith('/media/')
-
-/*
- * Source maps sit next to hashed chunks, so `/assets/` would otherwise
- * cache-first them. They are a debugger fetch, not a cold-start asset:
- * DevTools asks the network when a breakpoint needs them, and pinning the
- * original source in every player's Cache Storage buys nothing the game
- * uses offline.
- */
-const isSourceMap = (pathname) => pathname.endsWith('.map')
+const isImmutable = (pathname) => pathname.startsWith('/assets/')
+const isShell = (response) =>
+  (response.headers.get('content-type') ?? '').startsWith('text/html')
+const canStore = (response) =>
+  response.status === 200 &&
+  response.type === 'basic' &&
+  !/\b(?:no-store|private)\b/i.test(response.headers.get('cache-control') ?? '')
 
 /** Queries select client state; each pathname has one prerendered document. */
 const navigationKey = (url) =>
   `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`
+const pastBuilds = async () =>
+  (await caches.keys()).filter(
+    (key) => key.startsWith(CACHE_PREFIX) && key !== CACHE,
+  )
+
+// Storage denial or quota pressure must not turn a successful fetch into an
+// outage. Cache writes are best effort; IndexedDB saves are never involved.
+const read = async (key, name = CACHE) => {
+  try {
+    return await (await caches.open(name)).match(key)
+  } catch {
+    return undefined
+  }
+}
+const store = async (key, response) => {
+  try {
+    await (await caches.open(CACHE)).put(key, response)
+  } catch {
+    // The online response still belongs to the caller.
+  }
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then(async (cache) => {
-        // The first document loads before a worker controls its navigation.
-        // Cache it during installation, including when a deploy replaces the
-        // worker that handled that document's first request.
-        const clients = await self.clients.matchAll({
-          type: 'window',
-          includeUncontrolled: true,
-        })
-        const current = clients
-          .map((client) => new URL(client.url))
-          .filter(
-            (url) =>
-              url.origin === self.location.origin && !isLive(url.pathname),
-          )
-          .map(navigationKey)
-        const urls = new Set([...PRECACHE, ...current])
-        // One absent page must not fail the whole install.
-        await Promise.allSettled([...urls].map((url) => cache.add(url)))
+    (async () => {
+      const clients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
       })
-      .then(() => self.skipWaiting()),
+      const current = clients
+        .map((client) => new URL(client.url))
+        .filter(
+          (url) => url.origin === self.location.origin && !isLive(url.pathname),
+        )
+        .map(navigationKey)
+      // Fetch with reload so an HTTP-cached document cannot seed a new build.
+      // A missing route or unavailable storage must not reject installation.
+      await Promise.allSettled(
+        [...new Set([...PRECACHE, ...current])].map(async (url) => {
+          const response = await fetch(url, { cache: 'reload' })
+          if (canStore(response)) await store(url, response)
+        }),
+      )
+      await self.skipWaiting()
+    })(),
   )
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(async (keys) => {
-      // Only this application's caches. Deleting every key would be a
-      // service worker reaching outside its own concern, and this origin
-      // may not always hold one app.
-      const old = keys.filter(
-        (key) => key.startsWith(CACHE_PREFIX) && key !== CACHE,
-      )
-      /*
-       * Rescue the immutable assets before the old caches go. On the first
-       * online visit after a deploy the page is still controlled by the
-       * *previous* worker, so the new build's hashed chunks — and the star
-       * catalog — were fetched through it and stored under the previous
-       * build's cache name. Deleting that cache outright threw away exactly
-       * the files the next offline launch needs, so offline-first only
-       * recovered on a second online visit. Content-hashed names cannot be
-       * stale, which is what makes the copy unconditionally safe.
-       */
-      const target = await caches.open(CACHE)
-      for (const key of old) {
-        const source = await caches.open(key)
-        for (const request of await source.keys()) {
-          if (!isImmutable(new URL(request.url).pathname)) continue
-          if ((await target.match(request)) !== undefined) continue
-          const response = await source.match(request)
-          if (response !== undefined) await target.put(request, response)
-        }
+    (async () => {
+      try {
+        await caches.open(CACHE)
+        const old = await pastBuilds()
+        // A new page can load through the previous controller during an
+        // update. Keep that cache for its hashed assets, then promote only
+        // requested files. Copying everything retains every obsolete model
+        // and chunk forever. CacheStorage keys are in creation order.
+        await Promise.all(old.slice(0, -1).map((key) => caches.delete(key)))
+      } catch {
+        // Claim still permits online use when browser storage is unavailable.
       }
-      await Promise.all(old.map((key) => caches.delete(key)))
       await self.clients.claim()
-    }),
+    })(),
   )
 })
+
+/** Only hashed assets may cross a build boundary. */
+async function immutable(request, background) {
+  const cached = await read(request)
+  if (cached !== undefined) return cached
+  try {
+    const previous = (await pastBuilds()).at(-1)
+    if (previous !== undefined) {
+      const inherited = await read(request, previous)
+      if (inherited !== undefined) {
+        background.push(store(request, inherited.clone()))
+        return inherited
+      }
+    }
+  } catch {
+    // Cache discovery can fail independently of a network request.
+  }
+  return fetchAndStore(request, background)
+}
+
+async function fetchAndStore(request, background) {
+  const response = await fetch(request)
+  if (canStore(response) && !isShell(response))
+    background.push(store(request, response.clone()))
+  return response
+}
+
+async function navigation(request, url, background) {
+  const key = navigationKey(url)
+  let response
+  try {
+    response = await fetch(request)
+    if (canStore(response) && isShell(response))
+      background.push(store(key, response.clone()))
+    // A real 404 must remain a 404; only outages use an offline document.
+    if (response.status < 500) return response
+  } catch {
+    // The route's own HTML is the only safe hydration fallback.
+  }
+  return (
+    (await read(key)) ??
+    response ??
+    new Response('offline, and nothing cached to start from', {
+      status: 503,
+      headers: { 'content-type': 'text/plain' },
+    })
+  )
+}
 
 self.addEventListener('fetch', (event) => {
   const request = event.request
-  if (request.method !== 'GET') return
-  /*
-   * A request Chrome's devtools makes while inspecting the cache. Answering it
-   * from a normal fetch throws, and the throw surfaces as a failed page load
-   * rather than as anything to do with devtools.
-   */
-  if (request.cache === 'only-if-cached' && request.mode !== 'same-origin')
-    return
-
   const url = new URL(request.url)
-  if (url.origin !== self.location.origin) return
-  if (isLive(url.pathname)) return
-  if (isSourceMap(url.pathname)) return
-  /*
-   * Range requests, for the material sets the design admits later. A 206 stored
-   * whole is served back as if it were the complete resource, which corrupts
-   * every subsequent range read of it — and nothing about that looks like a
-   * caching bug from the outside.
-   */
-  if (request.headers.has('range')) return
-
-  if (request.mode === 'navigate') {
-    // Astro renders one document per pathname. Queries select browser state,
-    // so the cached HTML can be shared without changing the address bar.
-    const key = navigationKey(url)
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok && isShell(response)) {
-            const copy = response.clone()
-            event.waitUntil(caches.open(CACHE).then((c) => c.put(key, copy)))
-          }
-          return response
-        })
-        .catch(() =>
-          caches
-            .open(CACHE)
-            .then((cache) => cache.match(key))
-            .then(
-              (cached) =>
-                cached ??
-                new Response('offline, and nothing cached to start from', {
-                  status: 503,
-                  headers: { 'content-type': 'text/plain' },
-                }),
-            ),
-        ),
-    )
+  if (
+    request.method !== 'GET' ||
+    url.origin !== self.location.origin ||
+    isLive(url.pathname) ||
+    url.pathname === '/sw.js' ||
+    url.pathname.endsWith('.map') ||
+    request.headers.has('range') ||
+    request.cache === 'no-store' ||
+    request.cache === 'reload' ||
+    (request.cache === 'only-if-cached' && request.mode !== 'same-origin')
+  )
     return
-  }
 
-  if (isImmutable(url.pathname)) {
-    event.respondWith(
-      caches
-        .match(request)
-        .then((cached) => cached ?? fetchAndStore(request, event)),
-    )
-    return
-  }
-
-  /*
-   * Stale-while-revalidate for everything else — the hand-written files in
-   * `public/`, which have no hash in their names and therefore *can* go stale.
-   * Cache-first here was correct while `favicon.svg` was the only one; the
-   * moment a second unhashed asset changes, cache-first means it never reaches
-   * anyone who has already loaded the game once.
-   */
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetchAndStore(request, event).catch(
-        () =>
-          cached ??
-          new Response('', { status: 504, statusText: 'offline, not cached' }),
-      )
-      if (cached === undefined) return network
-      event.waitUntil(network)
+  const background = []
+  const response = (async () => {
+    if (request.mode === 'navigate') return navigation(request, url, background)
+    if (isImmutable(url.pathname)) return immutable(request, background)
+    const cached = await read(request)
+    if (url.pathname.startsWith('/media/') && cached !== undefined)
       return cached
-    }),
+    const network = fetchAndStore(request, background).catch(
+      () =>
+        cached ??
+        new Response('', { status: 504, statusText: 'offline, not cached' }),
+    )
+    background.push(network)
+    return cached ?? network
+  })()
+  event.respondWith(response)
+  // Register the lifetime extension during dispatch, including cache hits
+  // whose revalidation appends a storage write after the response resolves.
+  event.waitUntil(
+    (async () => {
+      try {
+        await response
+      } catch {
+        /* respondWith reports network failure. */
+      }
+      for (let index = 0; index < background.length; index++) {
+        try {
+          await background[index]
+        } catch {
+          /* Caching is best effort. */
+        }
+      }
+    })(),
   )
 })
 
-/** HTML belongs only in the navigation cache, never under a data-file URL. */
-const isShell = (response) =>
-  (response.headers.get('content-type') ?? '').startsWith('text/html')
-
-/** Fetch, and keep the answer if it is one worth keeping. */
-function fetchAndStore(request, event) {
-  return fetch(request).then((response) => {
-    // Only real, complete, same-origin responses. An opaque or error response
-    // stored here would be served forever in place of the thing it failed to be.
-    if (response.ok && response.type === 'basic' && !isShell(response)) {
-      const copy = response.clone()
-      event.waitUntil(caches.open(CACHE).then((c) => c.put(request, copy)))
+// Startup requests can finish before claim, including a model still in flight
+// at load. The window reports resource timing names; only hashed same-origin
+// files are eligible. Serial warming avoids duplicating large downloads at once.
+let warming = Promise.resolve()
+self.addEventListener('message', (event) => {
+  if (
+    event.source?.type !== 'window' ||
+    new URL(event.source.url).origin !== self.location.origin ||
+    event.data?.type !== 'CACHE_ASSETS' ||
+    !Array.isArray(event.data.urls)
+  )
+    return
+  const urls = event.data.urls.slice(0, 64).filter((name) => {
+    if (typeof name !== 'string') return false
+    try {
+      const url = new URL(name)
+      return (
+        url.origin === self.location.origin &&
+        isImmutable(url.pathname) &&
+        !url.pathname.endsWith('.map')
+      )
+    } catch {
+      return false
     }
-    return response
   })
-}
+  warming = warming.then(async () => {
+    for (const url of new Set(urls)) {
+      const background = []
+      try {
+        await immutable(new Request(url), background)
+        await Promise.all(background)
+      } catch {
+        // Offline or quota-limited warming does not invalidate the install.
+      }
+    }
+  })
+  event.waitUntil(warming)
+})

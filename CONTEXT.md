@@ -9178,6 +9178,39 @@ reference-state test rejects the original-element answer, so the allowance
 cannot conceal that error. The corrected agreement property passes 100,000
 draws with the failing CI seed.
 
+## Both domains keep their installed app (8 Sep 2026)
+
+The custom-domain config named only `inertialref.app`. Both that hostname and
+`inertialref.jonjaques.com` now point at the same Worker configuration without
+an origin redirect. This preserves the address at which an installed worker
+updates and the origin holding existing IndexedDB saves. It does not migrate
+browser storage between the two domains. Deployment still has to provision the
+legacy custom domain; local verification cannot establish its live DNS state.
+
+The service worker copied every immutable entry into every new build, including
+unhashed media. Deleting old cache names therefore did not delete old assets.
+The current and previous builds remain, and only requested hashed files move
+forward. Media stays within its build. Storage failures leave online fetches
+working; partial responses and private/no-store responses do not enter storage.
+The expanded regression suite exposes these failures before the fixes.
+
+A fresh visit can fetch its scripts, fonts and models before service-worker
+control. Buffered resource timing reports those URLs to the worker for serial
+caching, including requests that finish after claim. Caching is demand-driven;
+installing a worker alone does not mean all modes or models are available offline.
+The [hosting policy](docs/hosting.md#service-worker-storage-and-updates) records
+the distinction between downloaded files, runtime/GPU caches, the separate
+IndexedDB sky archive and IndexedDB saves.
+
+## The failure fixture registered two competing mocks (8 Sep 2026)
+
+CI exposed an ordering dependency in `modeLoader.test.ts`: `beforeEach` queued a
+successful flight-module mock and the rejection test queued another factory for
+the same path. Vitest 4.1.10 resolves consecutive mock registrations concurrently,
+so the successful factory could win. One factory now reads an explicit failure
+state before the import. The test still checks that prefetch and the route share
+the same rejected promise; production loading code is unchanged.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

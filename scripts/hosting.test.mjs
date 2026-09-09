@@ -14,7 +14,10 @@ const { config } = parseConfigFileTextToJson(
 describe('the static hosting boundary', () => {
   it('deploys on the production domain used by canonical metadata', () => {
     expect(SITE.host).toBe('inertialref.app')
-    expect(config.routes).toEqual([{ pattern: SITE.host, custom_domain: true }])
+    expect(config.routes).toEqual([
+      { pattern: SITE.host, custom_domain: true },
+      { pattern: 'inertialref.jonjaques.com', custom_domain: true },
+    ])
   })
 
   it('returns a missing-page response instead of the home document', () => {
