@@ -60,7 +60,7 @@
     "oxlint": "^1.75.0",
     "prettier": "^3.9.6",
     "prettier-plugin-astro": "^0.14.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "shiki": "^4.4.3",
     "ts-morph": "^28.0.0",
     "typedoc": "^0.28.20",

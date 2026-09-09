@@ -18,6 +18,6 @@
     "@inertialref/spatial": "workspace:*",
     "@inertialref/universe": "workspace:*",
     "@inertialref/workers": "workspace:*",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   }
 }
