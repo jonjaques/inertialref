@@ -97,6 +97,8 @@ export interface DocCounts {
 
 export interface DocManifest {
   readonly version: string
+  /** Build policy only; every API article remains available through its JSON asset. */
+  readonly prerenderApi?: boolean
   readonly wings: readonly DocWing[]
   readonly pages: Readonly<Record<string, DocEntry>>
   /** Published spellings that redirect to a canonical page route. */

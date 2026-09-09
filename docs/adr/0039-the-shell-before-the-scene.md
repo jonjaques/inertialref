@@ -25,11 +25,29 @@ for each document would turn a link into another game startup.
 adds the scene after hydration.**
 
 Astro 7 owns route files, the HTML document and generated sitemap. Every
-published docs route is generated from the existing documentation manifest.
+published docs route comes from the existing documentation manifest.
 The same Markdown, TypeDoc and Shiki pipeline supplies article HTML to the
 server and to subsequent client navigation. `Root` receives the initial URL
 and documentation through props. Its content belongs to that render, never to
 a mutable module-global current page.
+
+Production builds from `main` pre-render every documentation page. Other
+branches pre-render prose and one API loading shell; API articles load through
+the existing JSON requests. TypeDoc conversion, link validation and all API
+JSON assets remain part of every build. `IR_PRERENDER_API=1` selects full HTML
+for production verification on another branch; `0` selects asynchronous API
+pages. Workers Builds and GitHub source-branch variables take precedence over
+the local branch, so a pull request targeting `main` remains a preview build.
+
+The manifest records this choice once for Astro and the hosting rules. Exact
+static-asset proxies send known API routes to `/docs/api` while retaining the
+requested URL; aliases redirect to their canonical spelling first. Unknown
+paths retain a 404. With no initial manifest or article, the loading shell
+renders identical markup at every API address and hydrates before fetching the
+requested page. Development serves those shells on demand. This needs no
+request-rendering adapter or Worker invocation. The build rejects a routing
+table above Cloudflare's static redirect limit instead of silently dropping
+API paths.
 
 API exports whose paths differ only in case receive stable suffixes derived
 from their exact original paths. Case-insensitive filesystems must not let
@@ -101,7 +119,9 @@ asset delivery; a future dynamic route can opt into request rendering.
 
 ## Consequences
 
-Public content remains readable when scripting or graphics fails. The engine
+Production public content remains readable when scripting or graphics fails.
+Preview API pages require JavaScript; their no-script notice links to the
+pre-rendered documentation. The engine
 keeps its existing frame path, and neither document navigation nor hydration
 adds a renderer. Astro templates and the emitted site need verification in
 addition to the existing TypeScript and runtime tests.

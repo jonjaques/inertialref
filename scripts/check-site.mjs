@@ -6,6 +6,7 @@ import {
   documentTitle,
   metadataForPath,
 } from '../apps/game/src/site.ts'
+import { docHtmlRoutes, docRedirects, isApiRoute } from './docs/prerender.mjs'
 
 const root = new URL('../apps/game/dist/', import.meta.url)
 const manifest = JSON.parse(
@@ -40,7 +41,8 @@ for (const file of await readdir(root, { recursive: true })) {
   const route = file === 'index.html' ? '/' : `/${file.slice(0, -5)}`
   const entry = manifest.pages[route]
   const page =
-    entry === undefined
+    entry === undefined ||
+    (manifest.prerenderApi === false && isApiRoute(route))
       ? undefined
       : JSON.parse(
           await readFile(
@@ -78,8 +80,15 @@ for (const file of await readdir(root, { recursive: true })) {
   checked += 1
 }
 
-for (const route of Object.keys(manifest.pages)) {
+for (const route of docHtmlRoutes(manifest)) {
   await readFile(new URL(`${route.slice(1)}.html`, root))
+}
+assert.equal(
+  await readFile(new URL('_redirects', root), 'utf8'),
+  docRedirects(manifest),
+)
+for (const entry of Object.values(manifest.pages)) {
+  await readFile(new URL(`doc-content/page/${entry.asset}`, root))
 }
 console.log(
   `site: ${checked} rendered documents verified in ${fileURLToPath(root)}`,

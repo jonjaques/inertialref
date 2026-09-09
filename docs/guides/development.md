@@ -272,6 +272,16 @@ publishing nowhere, and a `{@link}` pointing at a renamed symbol fails it
 rather than rendering as words that link to nothing. `scripts/docs/build.mjs`
 carries the rest.
 
+API articles always ship as JSON. Builds from `main` also pre-render their
+HTML; other branches emit one API loading shell and fetch articles when opened.
+Prose remains pre-rendered in both cases. Workers Builds uses
+`WORKERS_CI_BRANCH`; GitHub uses the source branch; a local build uses the
+checked-out branch. To verify the complete production output on a feature
+branch, run `IR_PRERENDER_API=1 pnpm build`. Set it to `0` to force asynchronous
+API pages. Use `pnpm preview` for built API deep links because the Worker asset
+server applies their generated proxy rules; `astro preview` does not. During
+`pnpm dev`, Astro renders API loading shells on demand.
+
 **`design/` is the other half of that division, and it is not published.**
 Plans, working reviews and the complexity report live there; `docs/` is the
 finished account of what the system does and `design/` is the working one. A
@@ -284,8 +294,8 @@ same reason: they are inputs, not pages.
 
 **Site metadata** comes from `src/site.ts`. `documentHead.ts` renders it into
 every Astro document, and `pages/DocumentMeta.tsx` updates it on client
-navigation. The sitemap comes from the emitted routes. Public pages are
-pre-rendered; the Worker serves their HTML as static assets.
+navigation. The sitemap comes from the emitted routes. Production public pages
+are pre-rendered; the Worker serves their HTML as static assets.
 [ADR-0039](../adr/0039-the-shell-before-the-scene.md) records the boundary.
 
 **Analytics** loads from `src/analytics.ts`, only in a production build, only
