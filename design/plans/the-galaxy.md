@@ -38,7 +38,7 @@ verification and do not assert that an earlier PR has merged.
 | Area                    | Current implementation                                                                                             | Open acceptance or limit                                                                              |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
 | Coordinates and catalog | Shared galactocentric coordinates, measured Sun position, stable catalog addresses and distant bright stars.       | Q addresses require the recorded generation manifest.                                                 |
-| Field and transport     | `galaxy-field@5` / `galaxy-tsl@8`, shared dust, flared young population and calibrated V light.                    | Central morphology remains an approximation; photometry alone does not establish exterior appearance. |
+| Field and transport     | `galaxy-field@5` / `galaxy-tsl@9`, shared dust, flared young population and calibrated V light.                    | Central morphology remains an approximation; photometry alone does not establish exterior appearance. |
 | Star population         | `galaxy@5`, magnitude levels, GPU shell projection, bounded selection, ensemble light partition and resolved dust. | Dense regions may omit whole levels; WebGL completes one source extinction column per submission.     |
 | Sensor                  | Enhanced, Automatic and Manual responses, with physical caches independent of presentation.                        | Sixteen matched C5 plates verified; appearance limits are recorded below.                             |
 | Resource lifetime       | Progressive cubes, a separate two-entry disk cache, temporal history and stale-work retirement.                    | Outward/return recordings and assembled gate pass; return hitches remain measurable.                  |
@@ -630,7 +630,7 @@ bulge and local-cloud fronts, not inferred only from a nominal dust distance.
 
 CPU/GPU field, ray, cube interpolation and lifecycle tests guard agreement.
 `cube@2` uses the conservative cube-face texel angle `2 / faceSize`; the
-physical kernel remains `galaxy-tsl@8`. Physical radiance survives response and
+physical kernel is `galaxy-tsl@9`. Physical radiance survives response and
 gamut changes; display history has its own validity. Fine split coordinates are
 needed for nearby resolved-star projection, while the diffuse field's parsec
 scale remains representable in float32.

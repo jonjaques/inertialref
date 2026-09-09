@@ -21,6 +21,13 @@ export function createRuntimeLoader<App, Catalog>(
 /** One browser startup, shared by StrictMode's effect replay and every mode. */
 export const loadRuntime = createRuntimeLoader({
   prepare: async () => {
+    if (!beginGraphicsSession()) {
+      const cause = new Error(
+        'The previous tab ended with an active graphics session.',
+      )
+      runtimeFailure.report('restart', cause)
+      throw cause
+    }
     const { startClient } = await import('./clientStartup.ts')
     startClient()
   },
@@ -30,3 +37,5 @@ export const loadRuntime = createRuntimeLoader({
     return loadStarCatalog()
   },
 })
+import { beginGraphicsSession } from './graphicsSession.ts'
+import { runtimeFailure } from './runtimeFailure.ts'

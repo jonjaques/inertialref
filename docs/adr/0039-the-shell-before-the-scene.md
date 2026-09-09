@@ -53,6 +53,21 @@ frame loop and renderer warm-up. A contained runtime failure leaves the
 reading shell mounted. The home/docs boot cover stays behind readable content;
 game modes retain their first-light admission cover.
 
+Renderer initialization failures, device loss, failed render pipelines and
+frame exceptions publish a terminal runtime failure. The shell replaces the
+interactive view with a graphics notice and retains reading routes. WebGPU is
+preferred; the WebGL fallback requires floating-point scene targets. GPU error
+observers belong to their device so a late error from a retired renderer cannot
+stop its replacement.
+
+A tab-scoped session-storage marker is set before the runtime import and
+cleared on an orderly `pagehide`. If a replacement document finds that marker,
+it leaves graphics stopped until an explicit retry. This bounds browser
+crash/reload loops without persisting a hardware ban. A browser that discards
+session storage during a crash cannot provide this evidence; storage denial
+does not itself reject graphics. The marker records an interrupted session,
+not proof of its cause.
+
 `site.ts` supplies route metadata. `documentHead.ts` renders the shared head,
 including the route's canonical address and social tags. Unknown paths return 404. The Worker continues to serve pre-rendered assets without an invocation;
 its API, websocket and media routing stays in the adapter. Request-time SSR

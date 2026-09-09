@@ -93,7 +93,10 @@ resolved transport and diffuse light; reference-counted leases own its lifetime.
 ### The optically young population
 
 The active revisions are `galaxy@5` and `galaxy-field@5`. The GPU port is
-`galaxy-tsl@8`. This field corrects the earlier use of a 19 pc height for all
+`galaxy-tsl@9`. The signed bar coordinates use multiplication for fourth
+powers, because native shader `pow` has no defined result for a negative base.
+The kernel revision invalidates physical cubes computed under that undefined
+operation. This field corrects the earlier use of a 19 pc height for all
 young stellar light. [Reid et al. 2019](https://arxiv.org/abs/1910.03357)
 measures that height for very young high-mass maser tracers within 7 kpc.
 [Natale et al. 2022](https://doi.org/10.1093/mnras/stab2771) models geometric

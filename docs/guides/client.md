@@ -17,8 +17,18 @@ preserves the renderer. [ADR-0039](../adr/0039-the-shell-before-the-scene.md).
 
 Home and docs are readable before the runtime starts. Initial documentation
 arrives through request-scoped props; subsequent links fetch the existing JSON
-content. A graphics failure stays inside the runtime boundary and leaves the
-page shell usable.
+content. Renderer startup, pipeline and device failures show a graphics notice
+and stop the interactive runtime while leaving the page shell usable. WebGPU
+is preferred; WebGL is attempted with floating-point render-target support.
+Standard output remains available when extended output is unsupported.
+The notice can be dismissed until the page reloads. Dismissal leaves graphics
+stopped and does not write a preference.
+
+A tab that restarts with an unfinished graphics-session marker shows the same
+notice before loading the engine. An orderly navigation clears the marker;
+**Try graphics again** clears it and reloads. The marker lives in session
+storage, so this guard depends on the browser retaining that storage through
+the interruption. It does not identify which GPU operation caused a crash.
 
 `.hud-layer` is `pointer-events: none` so the scene stays reachable. Mode
 chrome opts back in with `pointer-events-auto`. `ErrorBoundary`'s `className`

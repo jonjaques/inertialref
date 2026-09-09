@@ -51,7 +51,7 @@ import { coveredLuminosityCeiling } from './galaxyPopulationPartition.ts'
 const DEG = Math.PI / 180
 const TAU = Math.PI * 2
 /** The port has its own revision; the field manifest still identifies the CPU model. */
-export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@8'
+export const GALAXY_KERNEL_VERSION = 'galaxy-tsl@9'
 export const GALAXY_MAX_STEPS = 16384
 /** The step cap, parsecs. `integrateGalaxyRay`'s default, and what diagnostics report. */
 export const GALAXY_MAX_STEP_PARSECS = 100
@@ -333,7 +333,8 @@ const sample = Fn(
       s = Math.sin(27 * DEG)
     const along = p.x.mul(-c).sub(p.z.mul(s))
     const across = p.x.mul(s).sub(p.z.mul(c))
-    const box = along.div(1500).pow(4).add(across.div(750).pow(4)).pow(0.25)
+    // The bar coordinates are signed; native pow has no negative-base domain.
+    const box = along.div(1500).pow4().add(across.div(750).pow4()).pow(0.25)
     const populations = [
       radial.mul(height.div(-300).exp()).mul(strength.mul(0.2).add(1)),
       float(8178)
@@ -352,7 +353,7 @@ const sample = Fn(
         .negate()
         .sub(p.y.abs().div(390))
         .exp()
-        .mul(radius.div(5000).pow(4).negate().exp())
+        .mul(radius.div(5000).pow4().negate().exp())
         .mul(90),
       vec3(p.x, p.y.div(0.6), p.z)
         .length()

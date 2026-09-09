@@ -108,7 +108,9 @@ export function installToneCurve(
   const naturalUniform = uniform(1)
 
   const toneCurve = Fn(([color, exposure]: [Node<'vec3'>, Node<'float'>]) => {
-    const input = color.mul(exposure)
+    // Branches share one detector result; inlining it at each use can exceed
+    // WGSL's private-storage budget before the shader reaches the GPU.
+    const input = color.mul(exposure).toVar()
     const light = wideUniform
       .greaterThan(0.5)
       .select(

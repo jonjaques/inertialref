@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { framesHeld } from '../engine/frameHold.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { runGraphicsFrame } from '../runtimeFailure.ts'
 
 /**
  * Steps the simulation, once per animation frame, before anything reads it.
@@ -24,7 +25,7 @@ export function EngineTick({ engine }: { engine: GameEngine }) {
     // DEFAULT_MAX_STEPS — and did corrupt the diagnostic: the clock books the
     // excess as `droppedTicks`, so a three-minute background stall was reported
     // in the HUD as 8 dropped ticks instead of 11,520.
-    engine.frame(delta)
+    runGraphicsFrame(() => engine.frame(delta))
   }, -1)
   return null
 }
