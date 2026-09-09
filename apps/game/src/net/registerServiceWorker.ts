@@ -1,31 +1,7 @@
-/*
- * Installing the service worker.
- *
- * Offline-first is one well-tested module — `public/sw.js`, whose routing is
- * executed against stubbed globals in `serviceWorker.test.ts` — plus the lines
- * that put it there, which were untested and are where the shipped bug was
- * (`3ed4872`): registration listened for a `load` event that had already fired.
- *
- * The seam is between **"the page is ready"** and **"install the worker"**, and
- * it used to be implicit in module evaluation order — which is exactly the
- * thing that broke. `main.tsx` awaits the packed catalog at module scope, and
- * that await resolves *after* load: measured on a cold visit to a review app,
- * load at 761 ms and the 460 KB catalog at 969 ms. A bare
- * `addEventListener('load', …)` is therefore a listener for an event that has
- * been and gone.
- *
- * It looked fine, which is the worst part. A registration persists across
- * visits, so the *second* visit to an origin — where the catalog comes out of
- * the HTTP cache and resolves before load — registers one, and every visit
- * after that is controlled. What was broken was the first visit to any origin,
- * which is exactly the visit where "install it and it works on a plane" has to
- * be true. It surfaced on a review app because that is the only origin nobody
- * had ever opened twice.
- *
- * Deferring to `load` at all is still right when it has not fired: the worker's
- * install fetches `/`, `/index.html` and the icons, and doing that while the
- * page is still pulling its own critical path is bandwidth taken from the thing
- * the player is waiting for.
+/**
+ * Register after load to keep install fetches off the document's critical path.
+ * Hydration can finish after load, so readiness must be tested before listening.
+ * The script URL carries the build id because public/sw.js is copied verbatim.
  */
 
 /**
@@ -45,15 +21,7 @@ export type RegisterWorker = (url: string) => Promise<unknown>
 export interface RegistrationOptions {
   readonly page: RegistrationPage
   readonly register: RegisterWorker
-  /**
-   * The build this bundle is.
-   *
-   * It rides on the URL because `public/sw.js` is copied verbatim and never
-   * compiled, so nothing can be injected into it. Registering a *different* URL
-   * is what makes the browser install a new worker, and the worker reads the id
-   * back off its own location to name its cache (`sw.js`'s `BUILD`) — which is
-   * how a deploy stops inheriting the last one's precached `index.html`.
-   */
+  /** Names the worker's build cache through its registration URL. */
   readonly buildId: string
   readonly warn?: (message: string, cause: unknown) => void
 }
