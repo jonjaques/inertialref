@@ -61,6 +61,9 @@ routes. [Cloudflare routing documentation](https://developers.cloudflare.com/wor
   slow tests and all 1,576 emitted documents.
 - The combined `pnpm check` passes, including 2,241 tests across 188 files,
   eight slow tests and all 118 preview HTML documents.
+- `IR_PRERENDER_API=1 pnpm build` passes and verifies all 1,576 production
+  HTML documents. A no-JavaScript browser visit to an API member finds its
+  actual heading, article and production canonical URL in the response.
 - The simulation proves all 12 capability checks, including state-hash save
   round trips, frame-rate independence, precision and worker determinism.
 - The physical-GPU baseline passes 135 tests across 41 files. Post-cleanup
@@ -81,6 +84,13 @@ routes. [Cloudflare routing documentation](https://developers.cloudflare.com/wor
 - An independent review of the build gate confirms route counts, alias
   targets, main/preview selection, and identical loading-shell markup across
   API URLs.
+- A cold production planetarium visit reaches renderer readiness in 6.6
+  seconds. The Earthrise view renders; navigation to documentation and browser
+  back preserve the same single canvas and load the requested article.
+- Invoking the renderer's unexpected-device-loss callback removes the canvas
+  and shows the graphics notice while preserving the documentation article.
+  Intentional device destruction is ignored by Three and is not equivalent
+  to this failure callback.
 
 ## Coverage and remaining checks
 
