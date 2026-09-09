@@ -16,7 +16,7 @@ no body has one until its system is generated, and most never are.
 
 **The thing being asked about does not exist yet.** A system is a pure function
 of its seed ([ADR-0005](0005-procedural-seeds.md)), which is what makes the
-universe streamable and a save 744 bytes — and it means the only way to know
+universe streamable without storing generated systems — and it means the only way to know
 whether a star has a world with a sea is to build the system and look. There is
 nothing to index, because there is nothing there.
 

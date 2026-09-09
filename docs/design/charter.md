@@ -55,7 +55,7 @@ refactor.
 comparable titles are 100 GB downloads gated behind a store account. This is a
 link. That is not a small thing for a genre whose central pleasure — _look at
 this thing I found_ — is inherently social and inherently a thing you want to
-send someone. A 998-byte save means a coordinate **is** the share.
+send someone. A portable photographic preset makes a composed view shareable by URL.
 
 > 🎮 Designer's Note: The instinct will be to fight the browser and chase Star
 > Citizen's fidelity. Resist it. The browser is not the compromise this project
@@ -206,7 +206,7 @@ score, or a session that resolves in ten minutes. Nothing in this design is
 optimized for them and attempts to serve them will damage pillars 3 and 4.
 
 **Session assumption:** 45–120 minutes typical, and the design must tolerate a
-30-minute session ending mid-flight. The save is 744 bytes and restores an
+30-minute session ending mid-flight. The save holds dynamic state and references, and restores an
 identical state hash, so _quit anywhere_ is already true and should be treated as
 a hard requirement rather than a nicety.
 

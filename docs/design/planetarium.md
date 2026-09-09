@@ -319,7 +319,7 @@ other question a reading room exists for — _what is out there like this_ — a
 it is not a lookup at all.
 
 **There is nothing to index.** A system is a pure function of its seed, which is
-what makes the universe streamable and a save 744 bytes, and it means the only
+what makes the universe streamable without storing generated systems, and it means the only
 way to know whether a star has a world with a sea is to build the system and
 look. So the search is a sweep: every system inside the radius is generated and
 tested, on the worker pool, and the rows arrive while it is still running.

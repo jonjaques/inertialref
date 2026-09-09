@@ -176,7 +176,7 @@ rendering its own coverage.
 The hard problem the whole three-layer model exists to solve.
 
 **The problem.** Generation is a pure function of seed and address, which is what
-makes the universe reproducible, streamable and 744 bytes to save. But the
+makes the universe reproducible and streamable without storing generated content. But the
 catalog is an _input_ to generation, and the catalog changes. A star with no
 known planets today may have three confirmed next year. If that shifts every
 generated body around it, then every save, every Almanac entry and every

@@ -27,7 +27,7 @@ behind that URL before the persistent universe is possible.
 Because the universe is a pure function of `(seed, catalog version, address)`,
 a server never has to store, serve or simulate the galaxy. It holds exactly what
 a client cannot derive — **other entities and persistent mutations** — which is
-the same set a 744-byte save file holds. That is
+the same set the save format represents. That is
 [ADR-0007](adr/0007-persistence.md) and [ADR-0008](adr/0008-multiplayer-partitions.md)
 agreeing with each other, and it is the reason a non-commercial project can
 credibly promise a persistent universe at all.

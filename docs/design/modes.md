@@ -32,8 +32,9 @@ the URL each answers to is in [ux](ux.md#the-routes).
 > **Offline is not a degraded mode. It is the base case.**
 
 Because the universe is a deterministic pure function of a seed, a catalog
-version and an address, a client can derive the entire galaxy on its own. There
-is nothing to download and nothing to ask a server for. **Online adds a mutation
+version and an address, a client can derive the entire galaxy on its own. The shipped
+catalog and other client assets must be available locally; generation itself
+needs no server. See [offline delivery](../concepts/persistence.md#offline-first). **Online adds a mutation
 stream on top of a complete game**, rather than online being the game and offline
 being a cut-down copy of it.
 
@@ -44,7 +45,7 @@ persistent universe at all: the server's job is small.
 ```mermaid
 flowchart TB
     BASE["<b>derived universe</b><br/>seed · catalog version · address<br/><i>identical on every client, forever</i>"]
-    LOCAL["<b>local state</b><br/>ship · Almanac · bookmarks<br/>744-byte save"]
+    LOCAL["<b>local state</b><br/>ship · Almanac · bookmarks<br/>references and mutations"]
     NET["<b>replicated state</b><br/>other entities<br/>persistent mutations"]
 
     BASE --> SOLO["<b>Solo offline</b>"]
