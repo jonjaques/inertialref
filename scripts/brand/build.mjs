@@ -20,7 +20,7 @@
  *     apps/game/public/icon-maskable-512.png ...and the one Android crops
  *     apps/game/public/og.png                the share card
  *     apps/game/public/manifest.webmanifest  the install manifest
- *     apps/game/public/robots.txt            + sitemap.xml
+ *     apps/game/public/robots.txt            crawler policy
  *     apps/game/src/icons/brandmark.ts       the paths, for <Logomark>
  *
  * **Why a generator and not ten hand-kept files.** There were three copies of
@@ -37,11 +37,12 @@
  * turn into a red gate that means nothing. It asserts they exist and are not
  * empty, and re-rendering them is one command.
  */
-import { readFile, readdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir, writeFile, rm } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { relative } from 'node:path'
 import { format, getFileInfo, resolveConfig } from 'prettier'
-import { PAGES, SITE, canonicalUrl } from '../../apps/game/src/site.ts'
+import { SITE, metadataForPath } from '../../apps/game/src/site.ts'
+import { renderDocumentHead } from '../../apps/game/src/documentHead.ts'
 import { checkPublicSurface } from './checkHead.mjs'
 import { readMark, fit, markup, measure } from './mark.mjs'
 import { composeOgCard, OG_HEIGHT, OG_PLATE, OG_WIDTH } from './og.mjs'
@@ -232,26 +233,7 @@ User-agent: *
 ${blocked.map((path) => `Disallow: ${path}`).join('\n')}
 Allow: /
 
-Sitemap: ${SITE.origin}/sitemap.xml
-`
-}
-
-function sitemap() {
-  /*
-   * Deliberately just `<loc>`. `<changefreq>` and `<priority>` are ignored by
-   * every major crawler, and `<lastmod>` would have to come from the wall clock
-   * — a field that changes on every build and means nothing is worse than an
-   * absent one, because a crawler that learns to distrust it distrusts the
-   * whole file.
-   */
-  const urls = PAGES.filter((page) => page.index)
-    .map((page) => `  <url><loc>${canonicalUrl(page.path)}</loc></url>`)
-    .join('\n')
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!-- ${GENERATED} The list is PAGES in apps/game/src/site.ts. -->
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
-</urlset>
+Sitemap: ${SITE.origin}/sitemap-index.xml
 `
 }
 
@@ -333,7 +315,6 @@ async function main() {
     [new URL('favicon.svg', PUBLIC), faviconSvg(mark, box)],
     [new URL('manifest.webmanifest', PUBLIC), manifest()],
     [new URL('robots.txt', PUBLIC), robots()],
-    [new URL('sitemap.xml', PUBLIC), sitemap()],
     [
       new URL('icons/brandmark.ts', new URL('apps/game/src/', ROOT)),
       brandmarkModule(mark, box),
@@ -375,34 +356,25 @@ async function main() {
       process.exitCode = 1
       return
     }
-    /*
-     * The one artifact that is hand-kept rather than generated.
-     *
-     * Checked here rather than in a separate command because it belongs to the
-     * same question — "does the public surface still say what `site.ts` says" —
-     * and a second script is a second thing to remember to run. It cannot be
-     * *fixed* by `pnpm brand`, so its failure names the tag rather than telling
-     * anyone to re-run anything.
-     */
     const surface = checkPublicSurface({
-      html: await readFile(new URL('apps/game/index.html', ROOT), 'utf8'),
+      html: renderDocumentHead(metadataForPath('/')),
       sw: await readFile(new URL('sw.js', PUBLIC), 'utf8'),
       publicFiles: new Set(await readdir(PUBLIC)),
     })
     if (surface.length > 0) {
       console.error('The static head disagrees with apps/game/src/site.ts:')
       for (const problem of surface) console.error(`  - ${problem}`)
-      console.error(
-        '\nEdit apps/game/index.html to match, or src/site.ts if the head is right.',
-      )
+      console.error('\nCheck apps/game/src/documentHead.ts and src/site.ts.')
       process.exitCode = 1
       return
     }
     console.log('brand artifacts match design/brand/brandmark.svg')
-    console.log('index.html and sw.js match apps/game/src/site.ts')
+    console.log('documentHead.ts and sw.js match apps/game/src/site.ts')
     return
   }
 
+  // Astro's sitemap integration enumerates the rendered documentation routes.
+  await rm(new URL('sitemap.xml', PUBLIC), { force: true })
   console.log('Rendering from design/brand/brandmark.svg')
   for (const [target, body] of text) {
     await writeFile(target, body)

@@ -61,7 +61,7 @@
        * workspace. One of the two has to be told twice.
        */
       "entry": [
-        "src/main.tsx",
+        "astro/pages/**/*.astro",
         "public/sw.js",
         "src/render/gpuSetup.ts",
         "vite.config.ts",
@@ -69,7 +69,12 @@
         "vitest.slow.config.ts",
         "src/**/*.test.{ts,tsx}",
       ],
-      "project": ["src/**/*.{ts,tsx}", "public/sw.js", "*.ts"],
+      "project": [
+        "astro/**/*.{astro,ts}",
+        "src/**/*.{ts,tsx}",
+        "public/sw.js",
+        "*.ts",
+      ],
       // The other half of the `gpuSetup.ts` path disagreement above: naming it
       // as an entry stops it reading as a dead file, and this stops the
       // workspace-relative miss reading as a broken import.

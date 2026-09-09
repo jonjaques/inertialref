@@ -94,12 +94,9 @@ export interface MediaStores {
  * a bundle with no audio, and this is what makes that a slower first byte
  * rather than a missing feature. `media.ts` has the whole arrangement.
  *
- * **The miss is detected by content type, and that is not a heuristic.**
- * `not_found_handling: single-page-application` means the asset store answers a
- * path it does not have with `index.html` and a **200**, so there is no status
- * code to test. Nothing under `/media/` is ever HTML, so an HTML answer to a
- * request for an `.mp3` is unambiguous — and the alternative, trusting the 200,
- * hands an `<audio>` element a page of markup.
+ * A 404 falls through to R2, with or without an HTML error document.
+ * Successful HTML also cannot be media: a proxy or a cached SPA response
+ * must not hand an audio element a page of markup.
  *
  * **The asset store does not serve ranges**, which is the second reason R2 is
  * here. Measured against the deployed review app: a `Range: bytes=0-1023` for
@@ -119,7 +116,9 @@ export async function serveMedia(
   const asset = await stores.asset(request)
   const type = asset.headers.get('content-type') ?? ''
   const servedByAssets =
-    !type.startsWith('text/html') && !(wantsRange && asset.status === 200)
+    asset.status !== 404 &&
+    !type.startsWith('text/html') &&
+    !(wantsRange && asset.status === 200)
   if (servedByAssets) return asset
 
   let stored: StoredObjectBody | StoredObject | null

@@ -1,7 +1,9 @@
 import { SensorSection } from './SensorSection.tsx'
 import type { ReactNode } from 'react'
-import { effectiveFocalLength } from '@inertialref/rendering'
-import { DEFAULT_FOV_DEG, DEFAULT_LENS } from '../engine/GameEngine.ts'
+import {
+  effectiveFocalLength,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
 import {
   CAMERA_LENS,
   RENDER_SENSOR,
@@ -12,6 +14,10 @@ import { Action } from './Action.tsx'
 import { type CameraState, LENS_CHANNELS } from './controls.ts'
 import { LensSlider } from './LensSlider.tsx'
 import { Section } from './Section.tsx'
+
+// Reset follows the preference's declared default without loading the runtime.
+const DEFAULT_LENS = CAMERA_LENS.initial
+const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 
 /**
  * The four things a lens is, as four sliders.

@@ -1784,3 +1784,8 @@ a.t-link:hover {
 .api-example > :last-child {
   margin-bottom: 0;
 }
+
+/* The hydratable root occupies the same containing block as the server shell. */
+#root > astro-island {
+  display: contents;
+}

@@ -1,0 +1,41 @@
+import { ENTERPRISE_PORTRAITS, TNG_INTRO } from '@inertialref/devtools'
+import {
+  ABOUT,
+  AUTH_CALLBACK,
+  CATALOG,
+  CINEMA,
+  HOME,
+  KEYS,
+  PLANETARIUM,
+  PLAY_MULTIPLAYER,
+  PLAY_ONLINE,
+  PLAY_SOLO,
+  PRESETS,
+  PROFILE,
+  SETTINGS,
+  SIGN_IN,
+  SIGN_UP,
+  cinemaScene,
+  settingsSection,
+} from '../src/pages/paths.ts'
+
+/** Cold visits render the same route set the persistent client router accepts. */
+export const shellPaths = [
+  HOME,
+  ABOUT,
+  AUTH_CALLBACK,
+  CATALOG,
+  CINEMA,
+  KEYS,
+  PLANETARIUM,
+  PLAY_MULTIPLAYER,
+  PLAY_ONLINE,
+  PLAY_SOLO,
+  PRESETS,
+  PROFILE,
+  SETTINGS,
+  SIGN_IN,
+  SIGN_UP,
+  ...['display', 'camera', 'controls', 'data'].map(settingsSection),
+  ...[TNG_INTRO, ENTERPRISE_PORTRAITS].map((script) => cinemaScene(script.id)),
+]

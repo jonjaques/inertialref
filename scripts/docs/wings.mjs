@@ -155,6 +155,10 @@ export const WINGS = [
             'docs/adr/0038-the-stars-and-the-diffuse-sky.md',
             'Stars and diffuse sky',
           ],
+          [
+            'docs/adr/0039-the-shell-before-the-scene.md',
+            'The shell before the scene',
+          ],
         ],
       },
     ],

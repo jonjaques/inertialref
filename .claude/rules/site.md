@@ -1,6 +1,7 @@
 ---
 paths:
-  - 'apps/game/index.html'
+  - 'apps/game/astro/**'
+  - 'apps/game/src/documentHead.ts'
   - 'apps/game/public/**'
   - 'apps/game/src/site.ts'
   - 'apps/game/src/analytics.ts'
@@ -15,7 +16,7 @@ paths:
 Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, ADR-0011.
 
 - **Never edit a file `pnpm brand` writes.** `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`,
-  `icon-*.png`, `og.png`, `manifest.webmanifest`, `robots.txt`, `sitemap.xml` and
+  `icon-*.png`, `og.png`, `manifest.webmanifest`, `robots.txt` and
   `src/icons/brandmark.ts` are all generated from `design/brand/brandmark.svg`,
   `design/brand/og-plate.png` and `src/site.ts`. Edit the source, run `pnpm brand`,
   commit the result. `pnpm brand:check` is in `pnpm check`.
@@ -24,15 +25,14 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
   GPU-free and the card stays the same card. `scripts/brand/og.mjs` carries the
   framing; re-shooting it is a deliberate commit, and the type is composited on
   top rather than baked in.
-- **`index.html`'s head and `src/site.ts` are duplicated on purpose and change together.**
-  No social scraper runs JavaScript, so the static head is the only card the site has;
-  `DocumentMeta.tsx` covers only readers that execute scripts. `scripts/brand/checkHead.mjs`
-  is what holds them together, and it runs inside `pnpm brand:check` — adding a tag to the
-  head means covering it there and moving the census count, in that order.
+- **The server head and browser metadata share `src/site.ts`.**
+  `documentHead.ts` renders every route's head for Astro; `DocumentMeta.tsx`
+  updates it during React navigation. Never introduce hand-copied metadata.
+  `pnpm brand:check` validates the shared head, and Astro builds the sitemap.
 - **`DocumentMeta.tsx` is the one place `location.pathname` is read raw.** It is about the
   URL, not about what is on screen. Everything deciding _what is rendered_ still goes
   through `resolvedLocation`.
-- **Never load a third-party tag from `index.html`.** `src/analytics.ts` gates on
+- **Never load a third-party tag from the document head.** `src/analytics.ts` gates on
   production + canonical host + no Global Privacy Control, and `site.test.ts` states it.
 - **Never commit a measurement id or any other `VITE_*` value.** The repository is
   public; `.env*` is gitignored and `apps/game/.env.example` is the documentation. The

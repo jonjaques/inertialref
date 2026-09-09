@@ -35,6 +35,9 @@ import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
 import { fileURLToPath } from 'node:url'
 
+import { existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const ENSURE = process.argv.includes('--ensure')
 const CLIENT_PORT = 5173
@@ -98,6 +101,16 @@ if (ENSURE && (await listening(CLIENT_PORT))) {
     for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, stop)
   })
   process.exit(0)
+}
+
+if (
+  !existsSync(
+    fileURLToPath(
+      new URL('../apps/game/public/doc-content/manifest.json', import.meta.url),
+    ),
+  )
+) {
+  execFileSync('pnpm', ['docs:build'], { cwd: ROOT, stdio: 'inherit' })
 }
 
 /** One prefixed writer per stream, holding a partial line between chunks. */

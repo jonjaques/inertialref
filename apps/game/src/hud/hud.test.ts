@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openSession } from '@inertialref/devtools'
 import { engineStore } from '../state/engineStore.ts'
 import {
@@ -34,6 +34,11 @@ import {
   histogram,
 } from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
+
+// Static markup is the DOM-free renderer for these mounted client instruments.
+// Their saved preferences and published engine samples belong after hydration;
+// state/hydration.test.ts separately verifies the server's default preferences.
+vi.mock('../state/hydration.ts', () => ({ useHydrated: () => true }))
 
 /*
  * A smoke test for the author's instruments, in Node, with no DOM.

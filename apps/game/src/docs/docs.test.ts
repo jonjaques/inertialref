@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocEntry, DocManifest, DocWing, SearchIndex } from './content.ts'
-import { DocsMissingError, loadManifest } from './content.ts'
+import { DocsMissingError, docRoute, loadManifest } from './content.ts'
 import {
   groupFor,
   neighbours,
@@ -92,6 +92,26 @@ const MANIFEST: DocManifest = {
 }
 
 describe('where a route sits', () => {
+  it('resolves a published alias to the canonical document', () => {
+    const aliased = {
+      ...MANIFEST,
+      aliases: { '/docs/Frames': '/docs/concepts/frames' },
+    }
+    expect(docRoute(aliased, '/docs/Frames')).toBe('/docs/concepts/frames')
+    expect(docRoute(aliased, '/docs/unknown')).toBe('/docs/unknown')
+    expect(docRoute(null, '/docs/Frames')).toBe('/docs/Frames')
+  })
+
+  it('keeps an exact document ahead of a case-collision alias', () => {
+    const aliased = {
+      ...MANIFEST,
+      aliases: { '/docs/concepts/frames': '/docs/concepts/time' },
+    }
+    expect(docRoute(aliased, '/docs/concepts/frames')).toBe(
+      '/docs/concepts/frames',
+    )
+  })
+
   it('finds the wing that lists it', () => {
     expect(wingFor(MANIFEST, '/docs/concepts/time')?.id).toBe('concepts')
     expect(wingFor(MANIFEST, '/docs/api/spatial/Sector')?.id).toBe('api')

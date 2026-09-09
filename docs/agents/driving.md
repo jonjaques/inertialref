@@ -123,6 +123,34 @@ caches and service workers are retained. Batch setup and measurements in one
 invocation when they must share state. `--reload` steps keep that invocation's
 storage.
 
+### Public HTML before the scene
+
+Use `--document` to wait for the document to become readable without waiting
+for `window.engine.gl`. `--no-javascript` implies this mode and disables page
+scripts before navigation, including the first navigation of a new rig.
+Inspection expressions passed through `--js` still run through DevTools.
+
+```bash
+node scripts/drive.mjs --url http://localhost:8787/docs/architecture \
+  --document --no-javascript \
+  --js '({title:document.title, text:document.body.innerText})' \
+  --shot docs-without-javascript.jpg
+node scripts/drive.mjs --url http://localhost:8787/docs/architecture \
+  --document --block-url '*App.*.js' --wait 2000 --logs \
+  --shot docs-without-runtime.jpg
+```
+
+Repeat `--block-url` for additional request patterns. Match the actual chunk
+names emitted by the build. Blocking bypasses service workers so a cached
+response cannot conceal the requested failure. These settings are per
+invocation, and changing script execution or blocked patterns reloads a warm
+page. Omitting the flags restores scripts and ordinary service worker behavior.
+
+Document screenshots capture the compositor directly, without the renderer's
+extra activation capture. Frame sampling and screencasts require scripts and
+reject `--no-javascript`. Default readiness still waits for the renderer and
+its boot cover, and default screenshots retain the two captures it needs.
+
 ### A saved shot as the setup
 
 The driver can open a bundled preset or a single-shot JSON export through the
@@ -213,8 +241,9 @@ three; they are here because they explain what it is doing:
    `wrangler dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
    or build once. [development](../guides/development.md) § Commands.
 
-Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds
-earlier, so a probe on it captures an unlit canvas.
+Default readiness is `window.engine.gl`, not `window.ir`. The harness appears
+seconds earlier, so a probe on it captures an unlit canvas. `--document` uses
+the committed document's readiness for public HTML checks.
 
 **Terrain streams only below the eight-pixel relief gate, and above it
 `ir.terrain()` reports zeros that read exactly like a broken streamer.** From

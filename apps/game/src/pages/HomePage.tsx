@@ -10,6 +10,7 @@ import { ENTERABLE, WITHHELD } from './modes.ts'
 import { ABOUT, DOCS, SETTINGS } from './paths.ts'
 import { MENU_KEYS } from '../input/keymap.ts'
 import { useKeyContext } from '../input/useKeymap.ts'
+import { useHydrated } from '../state/hydration.ts'
 
 /*
  * The front door.
@@ -121,7 +122,8 @@ const SPEC: readonly (readonly [string, string])[] = [
   ['0', 'To Install'],
 ]
 
-export function HomePage({ engine }: { engine: GameEngine }) {
+export function HomePage({ engine }: { engine: GameEngine | null }) {
+  const hydrated = useHydrated()
   useKeyContext(MENU_KEYS)
   /*
    * Frame Earth, and carry the sun across it.
@@ -137,6 +139,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
    * behind does not spin the front door, which may not touch that warp.
    */
   useEffect(() => {
+    if (engine === null) return
     const observatory = engine.harness.observatory
     /*
      * The menu's stance. It used to capture the previous values and put them
@@ -188,24 +191,11 @@ export function HomePage({ engine }: { engine: GameEngine }) {
        * Earth's sunlit limb at about 1.6:1. The panel is wider than the column
        * on purpose: the extra 14rem is room for the fade to happen in.
        */}
-      {/*
-       * One entrance for the whole poster, not one per band.
-       *
-       * It was four: a header fade, a per-card stagger, a fade on the withheld
-       * list and another on the footer, each with its own delay. Two things
-       * wrong with that. It is four authored moments where a page gets one —
-       * and it is four independent ways for a piece of the page to be *absent*,
-       * which is not hypothetical: a tab that is not focused has its
-       * `requestAnimationFrame` throttled, so a load in a background window
-       * left the footer sitting at `opacity: 0` indefinitely with the rest of
-       * the page fully drawn.
-       *
-       * Now the column arrives as one object and the only thing that staggers
-       * inside it is the two doors, which is the moment worth authoring: a
-       * choice being laid out rather than a page loading.
-       */}
+      {/* An entrance belongs to client navigation. Initial HTML has to stay
+          visible when JavaScript never arrives, and hydration must match it.
+          The whole poster shares one opacity so no band can remain hidden. */}
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
+        initial={hydrated ? { opacity: 0, y: 14 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         /* The gradient runs to the physical edge; the words do not.
@@ -302,7 +292,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
           {ENTERABLE.map((mode, index) => (
             <motion.div
               key={mode.to}
-              initial={{ y: 12 }}
+              initial={hydrated ? { y: 12 } : false}
               animate={{ y: 0 }}
               /*
                * The one stagger on the page, and it is 70 ms — under the

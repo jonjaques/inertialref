@@ -70,6 +70,7 @@ interface Harness {
   readonly deleted: string[]
   readonly put: string[]
   cacheKeys: string[]
+  clientUrls: string[]
   /** Per-cache contents, keyed by cache name then request URL. */
   readonly stores: Map<string, Map<string, unknown>>
 }
@@ -84,6 +85,7 @@ function loadServiceWorker(
     deleted: [],
     put: [],
     cacheKeys: [],
+    clientUrls: [],
     stores: new Map(),
   }
 
@@ -92,7 +94,11 @@ function loadServiceWorker(
     addEventListener: (type: string, fn: (event: unknown) => void) =>
       listeners.set(type, fn),
     skipWaiting: () => Promise.resolve(),
-    clients: { claim: () => Promise.resolve() },
+    clients: {
+      claim: () => Promise.resolve(),
+      matchAll: () =>
+        Promise.resolve(harness.clientUrls.map((url) => ({ url }))),
+    },
   }
 
   const caches = {
@@ -131,13 +137,19 @@ function loadServiceWorker(
       harness.deleted.push(name)
       return Promise.resolve(true)
     },
-    match: () => Promise.resolve(undefined),
+    match: (req: FakeRequest | string) => {
+      const url = typeof req === 'string' ? req : req.url
+      for (const contents of harness.stores.values()) {
+        if (contents.has(url)) return Promise.resolve(contents.get(url))
+      }
+      return Promise.resolve(undefined)
+    },
   }
 
   // The file is a script, not a module, so this is how it gets evaluated with
   // its globals replaced. Everything it reaches for is a parameter here.
   new Function('self', 'caches', 'fetch', SOURCE)(self, caches, () =>
-    Promise.resolve(answer()),
+    Promise.resolve().then(answer),
   )
   return harness
 }
@@ -158,7 +170,7 @@ function handled(harness: Harness, req: FakeRequest): boolean {
 }
 
 /** The same, run to completion, for the tests that ask what got stored. */
-async function settle(harness: Harness, req: FakeRequest): Promise<void> {
+async function settle(harness: Harness, req: FakeRequest): Promise<unknown> {
   const listener = harness.listeners.get('fetch')
   if (listener === undefined) throw new Error('no fetch listener registered')
   const waits: Promise<unknown>[] = []
@@ -172,8 +184,9 @@ async function settle(harness: Harness, req: FakeRequest): Promise<void> {
       waits.push(promise)
     },
   })
-  await answered
+  const response = await answered
   await Promise.all(waits)
+  return response
 }
 
 describe('the service worker', () => {
@@ -241,6 +254,77 @@ describe('the service worker', () => {
     expect(sw.put).toEqual([`${ORIGIN}/doc-content/page/vision-1a2b3.json`])
   })
 
+  it('never serves the home document under an uncached docs address', async () => {
+    const sw = loadServiceWorker(() => {
+      throw new Error('offline')
+    })
+    sw.stores.set(
+      `inertialref-${BUILD}`,
+      new Map([
+        ['/index.html', 'home shell'],
+        [`${ORIGIN}/`, 'home shell'],
+      ]),
+    )
+    const response = await settle(
+      sw,
+      request('/docs/concepts/coordinates', { mode: 'navigate' }),
+    )
+    expect(response).toBeInstanceOf(Response)
+    expect((response as Response).status).toBe(503)
+  })
+
+  it('stores only successful navigation documents', async () => {
+    const sw = loadServiceWorker(
+      () => new Response('unavailable', { status: 503 }),
+    )
+    await settle(
+      sw,
+      request('/docs/concepts/coordinates', { mode: 'navigate' }),
+    )
+    expect(sw.put).toEqual([])
+  })
+
+  it('reuses a cached route with different camera or seed queries', async () => {
+    let online = true
+    const sw = loadServiceWorker(() => {
+      if (!online) throw new Error('offline')
+      return okResponse('text/html')
+    })
+    await settle(sw, request('/play/solo?seed=first', { mode: 'navigate' }))
+    online = false
+    const response = await settle(
+      sw,
+      request('/play/solo?seed=second', { mode: 'navigate' }),
+    )
+    expect(response).toEqual({ body: 'copy' })
+    expect(sw.put).toEqual([`${ORIGIN}/play/solo`])
+  })
+
+  it('keeps each document separate in the navigation cache', async () => {
+    const sw = loadServiceWorker(() => {
+      throw new Error('offline')
+    })
+    sw.stores.set(
+      `inertialref-${BUILD}`,
+      new Map([
+        [`${ORIGIN}/docs/concepts/coordinates`, 'coordinates HTML'],
+        [`${ORIGIN}/docs/concepts/determinism`, 'determinism HTML'],
+      ]),
+    )
+    expect(
+      await settle(
+        sw,
+        request('/docs/concepts/coordinates?reader=1', { mode: 'navigate' }),
+      ),
+    ).toBe('coordinates HTML')
+    expect(
+      await settle(
+        sw,
+        request('/docs/concepts/determinism', { mode: 'navigate' }),
+      ),
+    ).toBe('determinism HTML')
+  })
+
   it('names its cache after the build that installed it', async () => {
     const sw = loadServiceWorker()
     const install = sw.listeners.get('install')
@@ -251,6 +335,23 @@ describe('the service worker', () => {
     expect(sw.opened).toContain(`inertialref-${BUILD}`)
     // Precaching an /api path would defeat the bypass above at install time.
     for (const url of sw.put) expect(url.startsWith('/api')).toBe(false)
+  })
+
+  it('caches the first open document before it controls any navigation', async () => {
+    const sw = loadServiceWorker()
+    sw.clientUrls = [
+      `${ORIGIN}/docs/concepts/coordinates?reader=1`,
+      `${ORIGIN}/api/health`,
+      'https://elsewhere.test/docs',
+    ]
+    const install = sw.listeners.get('install')
+    if (install === undefined) throw new Error('no install listener')
+    let pending: Promise<unknown> = Promise.resolve()
+    install({ waitUntil: (p: Promise<unknown>) => (pending = p) })
+    await pending
+    expect(sw.put).toContain(`${ORIGIN}/docs/concepts/coordinates`)
+    expect(sw.put).not.toContain(`${ORIGIN}/api/health`)
+    expect(sw.put).not.toContain('https://elsewhere.test/docs')
   })
 
   it('evicts its own past builds and nothing else', async () => {

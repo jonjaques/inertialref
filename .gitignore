@@ -81,6 +81,8 @@ coverage
 # would be committing a second copy of the documentation that drifts from the
 # first. `scripts/docs/build.mjs` explains where it goes and why.
 apps/game/public/doc-content/
+# The same build writes permanent redirects for renamed API routes.
+apps/game/public/_redirects
 
 # Media the build pulls out of the site's own R2 bucket rather than carrying —
 # today, the reference edit's audio track. A local copy of copyrighted music
@@ -96,3 +98,6 @@ apps/game/public/media/
 # `/impeccable` writes here every run; only a curated critique is checked in,
 # and it goes to `design/reports/` like every other working review.
 .impeccable/
+
+# Astro generated type declarations and build cache.
+apps/game/.astro/

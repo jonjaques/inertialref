@@ -2,6 +2,9 @@
 
 Status: accepted · 27 Aug 2026
 
+Document and startup ownership is superseded by
+[ADR-0039](0039-the-shell-before-the-scene.md).
+
 ## Context
 
 `docs/` is a hundred and twenty thousand words across seventy markdown files —

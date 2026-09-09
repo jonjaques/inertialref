@@ -1,5 +1,6 @@
 import { isPicture, MAX_PICTURES, type Picture } from '@inertialref/devtools'
 import { useEffect, useRef, useState } from 'react'
+import { useHydrated } from './hydration.ts'
 import {
   type Lens,
   LENS_PRESETS,
@@ -863,6 +864,7 @@ export function subscribe<T>(
 export function usePersistentState<T>(
   preference: Preference<T>,
 ): [T, (value: T | ((previous: T) => T)) => void] {
+  const hydrated = useHydrated()
   const [value, setValue] = useState<T>(() => read(preference))
   /*
    * What is already on disk, so an unchanged value is not rewritten.
@@ -915,7 +917,7 @@ export function usePersistentState<T>(
       }),
     [key],
   )
-  return [value, setValue]
+  return [hydrated ? value : preference.initial, setValue]
 }
 
 /* ------------------------------------------------------------------------ */

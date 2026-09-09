@@ -83,6 +83,10 @@ const OPTIONS = {
   fresh: { type: 'boolean', default: false },
   /** Preserve local storage and cookies, and permit a warm attach. */
   'keep-storage': { type: 'boolean', default: false },
+  /** Public HTML can be inspected before a runtime exists or when it fails. */
+  document: { type: 'boolean', default: false },
+  javascript: { type: 'boolean', default: true },
+  'block-url': { type: 'string', multiple: true },
   /** Start `pnpm dev` when nothing answers `--url`; `--no-serve` to fail
    *  instead, which `allowNegative` gives for free. */
   serve: { type: 'boolean', default: true },
@@ -157,7 +161,7 @@ Steps run in the order they are written, in one browser session:
                      --url, or ir.timing('trace'), or the tracks are empty.
                      Read it back with: node scripts/timing.mjs
   --logs             console output and page errors buffered so far
-  --reload           hard reload, then wait for the renderer
+  --reload           hard reload, then wait for the selected readiness mode
 
 Session flags:
 
@@ -174,6 +178,11 @@ Session flags:
   --fresh            re-boot even if the attached page is already rendering
   --keep-storage     retain local storage/cookies and allow a warm attach;
                      default clears both before booting the requested page
+  --document         wait for HTML readiness, without waiting for the renderer
+  --no-javascript    disable page scripts before navigation; implies --document.
+                     --js still evaluates inspection expressions through CDP.
+  --block-url <glob> block matching requests before navigation; repeat for more.
+                     Pair with --document to inspect a failed runtime startup.
   --no-serve         fail instead of starting \`pnpm dev\` when nothing answers
   --max-px <n>       longest edge of a written shot, default 1568; 0 for native
   --quality <n>      JPEG quality, default 88
@@ -248,6 +257,9 @@ const DPR = Number(values.dpr)
 const MAX_PX = Number(values['max-px'])
 const QUALITY = Number(values.quality)
 const SERVE = values.serve === true
+const JAVASCRIPT = values.javascript === true
+const DOCUMENT = values.document === true || !JAVASCRIPT
+const BLOCKED_URLS = values['block-url'] ?? []
 const STATE = path.join(RIG, `session-${PORT}.json`)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -298,6 +310,8 @@ const count = (arg, flag, least) => {
  *  whole start-up it sits behind. */
 function checkScript() {
   for (const { step, arg } of script) {
+    if (!JAVASCRIPT && (step === 'sample' || step === 'cast'))
+      throw new Error(`--${step} needs page scripts; omit --no-javascript`)
     if (step === 'wait') count(arg, 'wait', 0)
     if (step === 'sample') count(arg, 'sample', 1)
     if (step === 'trace') count(arg, 'trace', 100)
@@ -383,7 +397,9 @@ async function launchChrome(state) {
       // rendering, and a window nobody can see is a window nobody clicks in.
       `--window-size=${WIDTH},${HEIGHT + 120}`,
       '--window-position=2400,60',
-      URL_,
+      // A proof with scripts disabled or requests blocked must not execute
+      // the requested page before the DevTools controls reach this target.
+      DOCUMENT || BLOCKED_URLS.length > 0 ? 'about:blank' : URL_,
     ],
     { stdio: 'ignore', detached: true },
   )
@@ -406,9 +422,9 @@ async function pageTarget() {
     const list = await fetch(`http://127.0.0.1:${PORT}/json/list`)
       .then((r) => r.json())
       .catch(() => [])
-    const page = list.find(
-      (t) => t.type === 'page' && String(t.url).startsWith('http'),
-    )
+    const page =
+      list.find((t) => t.type === 'page' && String(t.url).startsWith('http')) ??
+      list.find((t) => t.type === 'page' && t.url === 'about:blank')
     if (page?.webSocketDebuggerUrl) return page.webSocketDebuggerUrl
     await sleep(500)
   }
@@ -540,7 +556,9 @@ async function clearStorage(send) {
   note('cleared local storage and cookies')
 }
 
-const READY = 'return Boolean(window.ir && window.engine && window.engine.gl)'
+const READY = DOCUMENT
+  ? "return document.readyState !== 'loading'"
+  : 'return Boolean(window.ir && window.engine && window.engine.gl)'
 
 async function boot(send, { force }) {
   const ready = await evaluate(send, READY).catch(() => false)
@@ -567,18 +585,35 @@ async function boot(send, { force }) {
       ([key, value]) => at.searchParams.get(key) === value,
     )
   if (ready && !force && showing) {
-    note('attached to a booted page')
+    note(
+      DOCUMENT ? 'attached to a ready document' : 'attached to a booted page',
+    )
     return
   }
   // Always a full navigate, never HMR: a WebGPURenderer does not survive a
   // dozen hot reloads, and a tab that has had them draws its HUD with
   // `engine.gl` null — which reads as a rendering bug and is not one.
-  await send('Page.navigate', { url: URL_ })
+  const navigation = await send('Page.navigate', { url: URL_ })
+  if (navigation.errorText) throw new Error(navigation.errorText)
   const started = Date.now()
   for (let i = 0; ; i += 1) {
     await sleep(500)
-    if (await evaluate(send, READY).catch(() => false)) break
-    if (i === 200) throw new Error('renderer never became ready')
+    // navigate acknowledges before the new document commits. The old page's
+    // readyState can still be complete, so match the navigation's loader first.
+    const committed =
+      !DOCUMENT ||
+      navigation.loaderId === undefined ||
+      (await send('Page.getFrameTree')).frameTree.frame.loaderId ===
+        navigation.loaderId
+    if (committed && (await evaluate(send, READY).catch(() => false))) break
+    if (i === 200)
+      throw new Error(
+        `${DOCUMENT ? 'document' : 'renderer'} never became ready`,
+      )
+  }
+  if (DOCUMENT) {
+    note(`document ready in ${((Date.now() - started) / 1000).toFixed(1)} s`)
+    return
   }
   // The boot cover lifts on the presentation watchdog, which needs a frame
   // after `engine.gl` appears. Poll for its removal rather than sleeping a
@@ -604,8 +639,10 @@ async function capture(send, target) {
   // Twice, with a pause. The first capture is what activates the page and
   // draws the frame; taken alone it shows whatever was on screen before the
   // step that preceded it. The second one is the evidence.
-  await send('Page.captureScreenshot', format)
-  await sleep(700)
+  if (!DOCUMENT) {
+    await send('Page.captureScreenshot', format)
+    await sleep(700)
+  }
   const shot = await send('Page.captureScreenshot', format)
   let bytes = Buffer.from(shot.data, 'base64')
   if (MAX_PX > 0 && Math.max(WIDTH, HEIGHT) * DPR > MAX_PX) {
@@ -919,6 +956,14 @@ async function main() {
   const { send, events, subscribe } = connect(ws)
   await send('Page.enable')
   await send('Runtime.enable')
+  await send('Emulation.setScriptExecutionDisabled', { value: !JAVASCRIPT })
+  await send('Network.enable')
+  await send('Network.setBlockedURLs', { urls: BLOCKED_URLS })
+  // A service worker can satisfy a request without the network blocker seeing
+  // it. Failure proofs bypass it; ordinary runs restore its offline behavior.
+  await send('Network.setBypassServiceWorker', {
+    bypass: BLOCKED_URLS.length > 0,
+  })
   await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', {
     width: WIDTH,
@@ -928,7 +973,15 @@ async function main() {
   })
   await send('Page.bringToFront')
   if (values['keep-storage'] !== true) await clearStorage(send)
-  await boot(send, { force: values.fresh === true })
+  await boot(send, {
+    force:
+      values.fresh === true ||
+      (prior.javascript ?? true) !== JAVASCRIPT ||
+      JSON.stringify(prior.blockedUrls ?? []) !== JSON.stringify(BLOCKED_URLS),
+  })
+  // Record the controls only once this navigation succeeds. A failed boot
+  // must not make the next warm attach trust a page from a different mode.
+  await writeState({ javascript: JAVASCRIPT, blockedUrls: BLOCKED_URLS })
 
   const results = []
   for (const { step, arg } of script) {

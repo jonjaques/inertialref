@@ -1,14 +1,32 @@
-import { Route, Routes, useLocation } from 'react-router'
+import { lazy, Suspense, useEffect } from 'react'
+import { Link, Route, Routes, useLocation } from 'react-router'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { CinemaMode } from '../cinema/CinemaMode.tsx'
 import { DocsMode } from '../docs/DocsMode.tsx'
-import { FlightMode } from '../flight/FlightMode.tsx'
-import { CatalogPage } from '../planetarium/CatalogPage.tsx'
-import { PresetsPage } from '../planetarium/PresetsPage.tsx'
-import { PlanetariumMode } from '../planetarium/PlanetariumMode.tsx'
 import { HomePage } from './HomePage.tsx'
-import { CINEMA, DOCS, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
+import { modeLoaders, preloadMode } from './modeLoader.ts'
+import {
+  CINEMA,
+  DOCS,
+  HOME,
+  PLANETARIUM,
+  modeForPath,
+  resolvedLocation,
+} from './paths.ts'
+
+const CinemaMode = lazy(modeLoaders.cinema)
+const FlightMode = lazy(modeLoaders.flight)
+const PlanetariumMode = lazy(modeLoaders.planetarium)
+const CatalogPage = lazy(() =>
+  import('../planetarium/CatalogPage.tsx').then((module) => ({
+    default: module.CatalogPage,
+  })),
+)
+const PresetsPage = lazy(() =>
+  import('../planetarium/PresetsPage.tsx').then((module) => ({
+    default: module.PresetsPage,
+  })),
+)
 
 /*
  * The mode route table — one of two, and the split is the whole design:
@@ -30,7 +48,7 @@ import { CINEMA, DOCS, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
  */
 
 interface ModeRouteProps {
-  readonly engine: GameEngine
+  readonly engine: GameEngine | null
   /**
    * The author's instruments, and the disclosure that reveals them.
    *
@@ -72,6 +90,46 @@ export function ModeRoutes(props: ModeRouteProps) {
   // The same resolution the shell derives its mode from — one function, so the
   // two cannot answer differently about what is on screen.
   const at = resolvedLocation(useLocation())
+  const mode = modeForPath(at.pathname)
+  useEffect(() => {
+    // Begin alongside GameLoader, while the engine is still absent. Waiting
+    // for its publication adds a network round trip before this mode mounts.
+    // React.lazy reads the same rejection through the existing route boundary.
+    void preloadMode(mode)?.catch(() => {})
+  }, [mode])
+  const title =
+    mode === 'planetarium'
+      ? 'Planetarium'
+      : mode === 'cinema'
+        ? 'Cinema'
+        : 'Flight'
+  const admission = (
+    <main className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/85 p-6 text-center">
+      <h1 className="type-display text-4xl text-slate-50">{title}</h1>
+      <p className="type-body max-w-prose text-slate-300">
+        {mode === 'planetarium'
+          ? 'Explore the sky and the catalog in one continuous universe.'
+          : mode === 'cinema'
+            ? 'Watch scripted scenes over the live universe.'
+            : 'Fly through a universe simulated in this browser.'}
+      </p>
+      <p className="type-ui text-slate-400">
+        The interactive experience starts when graphics are ready.
+      </p>
+      <noscript>
+        <p className="type-body text-slate-300">
+          Enable JavaScript to enter the interactive experience.
+        </p>
+      </noscript>
+      <nav
+        aria-label="Explore InertialRef"
+        className="type-ui flex gap-6 text-sky-300"
+      >
+        <Link to={HOME}>Home</Link>
+        <Link to={DOCS}>Documentation</Link>
+      </nav>
+    </main>
+  )
 
   return (
     <Routes location={at}>
@@ -79,19 +137,43 @@ export function ModeRoutes(props: ModeRouteProps) {
       <Route
         path="/play/:mode"
         element={
-          <FlightMode
-            engine={props.engine}
-            dev={props.dev}
-            onNotice={props.onNotice}
-          />
+          props.engine === null ? (
+            admission
+          ) : (
+            <Suspense fallback={admission}>
+              <FlightMode
+                engine={props.engine}
+                dev={props.dev}
+                onNotice={props.onNotice}
+              />
+            </Suspense>
+          )
         }
       />
       <Route
         path={PLANETARIUM}
-        element={<PlanetariumMode engine={props.engine} dev={props.dev} />}
+        element={
+          props.engine === null ? (
+            admission
+          ) : (
+            <Suspense fallback={admission}>
+              <PlanetariumMode engine={props.engine} dev={props.dev} />
+            </Suspense>
+          )
+        }
       >
-        <Route path="presets" element={<PresetsPage engine={props.engine} />} />
-        <Route path="catalog" element={<CatalogPage engine={props.engine} />} />
+        <Route
+          path="presets"
+          element={
+            props.engine === null ? null : <PresetsPage engine={props.engine} />
+          }
+        />
+        <Route
+          path="catalog"
+          element={
+            props.engine === null ? null : <CatalogPage engine={props.engine} />
+          }
+        />
       </Route>
       {/*
        * One route for the whole section, and the splat is the point: the
@@ -107,11 +189,27 @@ export function ModeRoutes(props: ModeRouteProps) {
       />
       <Route
         path={CINEMA}
-        element={<CinemaMode engine={props.engine} dev={props.dev} />}
+        element={
+          props.engine === null ? (
+            admission
+          ) : (
+            <Suspense fallback={admission}>
+              <CinemaMode engine={props.engine} dev={props.dev} />
+            </Suspense>
+          )
+        }
       />
       <Route
         path={`${CINEMA}/:scene`}
-        element={<CinemaMode engine={props.engine} dev={props.dev} />}
+        element={
+          props.engine === null ? (
+            admission
+          ) : (
+            <Suspense fallback={admission}>
+              <CinemaMode engine={props.engine} dev={props.dev} />
+            </Suspense>
+          )
+        }
       />
       {/*
        * Anything else falls through to the menu rather than to a 404 page.
