@@ -27,6 +27,50 @@ beforeAll(async () => {
 })
 afterAll(() => gpu.dispose())
 
+it.each([true, false])(
+  'releases its allocated source buffers, compute %s',
+  async (compute) => {
+    const projection = createStarProjection(3, { compute })
+    const eye = UV.fromMeters(0, 0, 0)
+    projection.upload({
+      positions: [UV.fromMeters(0, 0, -LIGHT_YEAR)],
+      luminosities: [1],
+    })
+    const memory = (
+      gpu.renderer.info as unknown as { memoryMap: Map<object, unknown> }
+    ).memoryMap
+    const buffers = [
+      ...new Set([
+        ...[projection.current, projection.previous].flatMap((coordinates) => [
+          coordinates.cells,
+          coordinates.offsets,
+          coordinates.subcells,
+        ]),
+        ...(projection.maximum === null ? [] : [projection.maximum]),
+      ]),
+    ]
+    try {
+      projection.update(
+        gpu.renderer,
+        createRenderOrigin(eye),
+        eye,
+        vec3(0, 0, 0),
+        true,
+      )
+      await gpu.drawGraph(
+        vec4(projection.point.add(projection.previousPoint), 1),
+        { width: 1, height: 1 },
+      )
+      expect(buffers.every((buffer) => memory.has(buffer))).toBe(true)
+    } finally {
+      projection.dispose()
+    }
+    // BufferAttribute.dispose emits an event, but the renderer retains these
+    // storage attributes outside a geometry's disposal path.
+    expect(buffers.filter((buffer) => memory.has(buffer))).toEqual([])
+  },
+)
+
 it('matches CPU directions and flux near stars, at the rim, and across translated anchors', async () => {
   const projection = createStarProjection(1)
   const base = UV.universeVector(

@@ -12,6 +12,7 @@ import {
   type NamedStars,
 } from '../render/starfieldAppearance.ts'
 import { createStarProjection } from '../render/starProjection.ts'
+import { disposeAttributes } from '../render/disposeAttributes.ts'
 import { StarExtinctionCache } from '../render/starExtinctionCache.ts'
 import { acquireGalaxyStructure } from '../render/galaxyStructure.ts'
 import { createGalaxyKernel } from '../render/galaxyKernel.ts'
@@ -99,7 +100,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       created.structure?.release()
       created.material.material.dispose()
       // A Sprite shares its quad geometry. Its instanced buffers belong here.
-      for (const attribute of [
+      disposeAttributes(gl as unknown as WebGPURenderer, [
         created.material.positions,
         created.material.colours,
         created.material.prominence,
@@ -107,7 +108,6 @@ export function Starfield({ engine }: { engine: GameEngine }) {
         created.material.enabled,
         created.material.transmission,
       ])
-        attribute.dispose()
     }
   }, [group, engine, gl])
 

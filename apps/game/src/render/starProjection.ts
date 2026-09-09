@@ -39,6 +39,7 @@ import {
   uniform,
   vec3,
 } from 'three/tsl'
+import { disposeAttributes } from './disposeAttributes.ts'
 
 interface Sources {
   readonly positions: readonly UniverseVector[]
@@ -260,6 +261,7 @@ export function createStarProjection(
   let reductions = 0
   let disposed = false
   let normalized = false
+  let owner: WebGPURenderer | null = null
 
   return {
     visual,
@@ -390,6 +392,7 @@ export function createStarProjection(
       integrated: boolean,
     ): void {
       if (disposed) return
+      owner = renderer
       const before = heldObserver ?? { origin, position, eye }
       writeObserver(
         previousPose,
@@ -434,13 +437,19 @@ export function createStarProjection(
       changed = false
     },
     dispose(): void {
+      if (disposed) return
       disposed = true
       clear?.dispose()
       reduce?.dispose()
-      maximum?.dispose()
-      for (const buffers of allocations)
-        for (const buffer of [buffers.cells, buffers.offsets, buffers.subcells])
-          buffer.dispose()
+      disposeAttributes(owner, [
+        ...allocations.flatMap((buffers) => [
+          buffers.cells,
+          buffers.offsets,
+          buffers.subcells,
+        ]),
+        ...(maximum === null ? [] : [maximum]),
+      ])
+      owner = null
     },
   }
 }

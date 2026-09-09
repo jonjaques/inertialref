@@ -1,7 +1,6 @@
 import {
   StorageInstancedBufferAttribute,
   Vector3,
-  type BufferAttribute,
   type Node,
   type WebGPURenderer,
 } from 'three/webgpu'
@@ -28,6 +27,7 @@ import {
 } from '@inertialref/universe'
 import { createGalaxyKernel } from './galaxyKernel.ts'
 import { createStarExtinction, starExtinctionOrigin } from './starExtinction.ts'
+import { disposeAttributes } from './disposeAttributes.ts'
 
 export const STAR_EXTINCTION_CACHE_RADIUS_PARSECS = 0.15
 /** Shared-table M5 means: 1.5–1.7 ms; a cold catalogue correction is 3.1 ms. */
@@ -773,13 +773,7 @@ export class StarExtinctionCache {
     this.schedule.dispose()
     this.#generation.value = this.schedule.generation
     this.#compute?.dispose()
-    // Compute-node disposal releases bindings but Three retains storage
-    // attributes. Their renderer owner must release those allocations too.
-    const attributes = (
-      this.#renderer as unknown as {
-        _attributes?: { delete(attribute: BufferAttribute): unknown }
-      } | null
-    )?._attributes
-    for (const buffer of this.#buffers) attributes?.delete(buffer)
+    disposeAttributes(this.#renderer, this.#buffers)
+    this.#renderer = null
   }
 }
