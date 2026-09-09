@@ -38,6 +38,7 @@ type AssetBehavior =
   | 'serves'
   /** The bundle does not: `not_found_handling` answers index.html and a 200. */
   | 'spa-fallback'
+  | 'not-found'
   /** The bundle has it, but answers the whole object to a `Range` request. */
   | 'ignores-range'
 
@@ -85,6 +86,8 @@ function fake(options: FakeOptions): MediaStores {
   return {
     async asset(request) {
       switch (options.asset) {
+        case 'not-found':
+          return new Response(null, { status: 404 })
         case 'spa-fallback':
           return new Response('<!doctype html><title>InertialRef</title>', {
             status: 200,
@@ -162,6 +165,16 @@ describe('serveMedia', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe(OBJECT.type)
     expect(response.headers.get('content-length')).toBe(String(SIZE))
+  })
+
+  it('falls through to R2 when the asset store returns a bare 404', async () => {
+    const response = await serveMedia(
+      get(),
+      OBJECT,
+      fake({ asset: 'not-found' }),
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe(OBJECT.type)
   })
 
   it('falls through to R2 with a 206 when the asset store ignores the range', async () => {

@@ -3,6 +3,11 @@ import {
   CINEMA,
   DOCS,
   HOME,
+  KEYS,
+  PROFILE,
+  SIGN_IN,
+  SIGN_UP,
+  AUTH_CALLBACK,
   PLANETARIUM,
   PLAY_MULTIPLAYER,
   PLAY_ONLINE,
@@ -10,33 +15,11 @@ import {
   SETTINGS,
 } from './pages/paths.ts'
 
-/*
- * Who this site says it is.
- *
- * One module, read by four things that would otherwise each carry their own
- * copy of the same sentence and drift:
- *
- *   - `pages/DocumentMeta.tsx`   the title, description and canonical link on
- *                                every navigation
- *   - `analytics.ts`             the one hostname that is allowed to be measured
- *   - `scripts/brand/build.mjs`  the share card, `robots.txt` and `sitemap.xml`
- *   - `index.html`               by hand, and only for the home page — see below
- *
- * **`index.html` is the exception and it is deliberate.** A social scraper does
- * not run JavaScript, so whatever this module computes at runtime is invisible
- * to the card Slack or iMessage draws. The static head is what those read, and
- * it is written for the home page because the SPA fallback serves that same
- * document for every path. Keeping it in step is a hand job with a pointer at
- * both ends; the alternative is routing every navigation through the Worker so
- * `HTMLRewriter` can rewrite four tags, which turns a free static asset request
- * into a billed invocation on every page load. `docs/hosting.md` records that
- * trade as the seam to revisit if per-route cards ever matter more than they do
- * for a project with two shareable pages.
- *
- * Node runs this file directly (type stripping) so the build scripts can import
- * it. Nothing here may touch the DOM, React or `import.meta.env`.
+/**
+ * Identity and route metadata shared by Astro, browser navigation, analytics
+ * and the brand generator. Node imports this file with type stripping, so it
+ * cannot depend on browser globals or build-time environment replacement.
  */
-
 export const SITE = {
   name: 'InertialRef',
   /** The canonical host. Everything else — a preview, a `workers.dev`
@@ -115,7 +98,7 @@ export const PAGES: readonly PageMeta[] = [
     path: DOCS,
     title: 'Documentation',
     description:
-      'How InertialRef works and why: ten mechanisms, sixteen decision records, the design bible, and a generated reference for every export of the engine.',
+      'How InertialRef works and why: the simulation, architecture decisions, design bible, and generated reference for every export of the engine.',
     index: true,
   },
   {
@@ -153,6 +136,24 @@ export const PAGES: readonly PageMeta[] = [
     index: false,
   },
   {
+    path: KEYS,
+    title: 'Keyboard Controls',
+    description:
+      'The current keyboard controls for flight, the planetarium and cinema, including the shortcuts customized for this browser.',
+    index: false,
+  },
+  ...[
+    { path: PROFILE, title: 'Profile' },
+    { path: SIGN_IN, title: 'Sign In' },
+    { path: SIGN_UP, title: 'Sign Up' },
+    { path: AUTH_CALLBACK, title: 'Account Callback' },
+  ].map((page) => ({
+    ...page,
+    description:
+      'Account features are planned for connected flight. Solo flight and the planetarium are available without an account.',
+    index: false,
+  })),
+  {
     path: HOME,
     title: SITE.tagline,
     description: SITE.description,
@@ -160,18 +161,18 @@ export const PAGES: readonly PageMeta[] = [
   },
 ]
 
-/** The home page's entry, which is also the fallback for anything unlisted. */
+/** The home page is the final, least-specific entry. */
 const ROOT = PAGES[PAGES.length - 1] as PageMeta
 
-/**
- * The metadata for a path, by longest matching prefix.
- *
- * A prefix rather than an exact match because the addressable surface is
- * deeper than the page list: `/cinema/tng-intro?t=1150` is the cinema page and
- * `/settings/camera` is the settings dialog. A scene deserving its own card is
- * a real thing to want and is not this — it needs the Worker, and the note at
- * the top of this file says why that is not free.
- */
+const missingPage = (path: string): PageMeta => ({
+  path,
+  title: 'Page Not Found',
+  description:
+    'This address has no page in InertialRef. Open the documentation or return to the home page to find your way around.',
+  index: false,
+})
+
+/** Section defaults for routes whose deeper content supplies its own metadata. */
 export function pageMetaFor(pathname: string): PageMeta {
   const path = withoutTrailingSlash(pathname)
   return (
@@ -179,9 +180,35 @@ export function pageMetaFor(pathname: string): PageMeta {
       (page) =>
         page.path !== HOME &&
         (path === page.path || path.startsWith(`${page.path}/`)),
-    ) ?? ROOT
+    ) ?? (path === HOME ? ROOT : missingPage(path))
   )
 }
+
+/** Metadata for the exact HTML document, including a documentation article. */
+export function metadataForPath(
+  pathname: string,
+  doc?: { readonly title: string; readonly lead: string } | null,
+): PageMeta {
+  const path = withoutTrailingSlash(pathname)
+  const page = pageMetaFor(path)
+  if (page.path === DOCS && path !== DOCS) {
+    if (doc === null) return missingPage(path)
+    if (doc !== undefined) {
+      const lead = doc.lead.replace(/\s+/g, ' ').trim()
+      const description =
+        lead.length > 160
+          ? `${lead.slice(0, 157).replace(/\s+\S*$/, '')}…`
+          : lead || page.description
+      return { path, title: doc.title, description, index: true }
+    }
+  }
+  return { ...page, path }
+}
+
+export const robotsContent = (page: PageMeta): string =>
+  page.index
+    ? 'index, follow, max-image-preview:large, max-snippet:-1'
+    : 'noindex, follow'
 
 /**
  * What goes in `<title>`.
@@ -205,17 +232,7 @@ export function documentTitle(page: PageMeta): string {
 const withoutTrailingSlash = (pathname: string): string =>
   pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
 
-/**
- * The absolute URL for a path, for a canonical link or a sitemap entry.
- *
- * Normalized, and that is the whole reason this is a function rather than a
- * template literal at each call site. `pageMetaFor` already treats a trailing
- * slash as the same page and `sitemap.xml` lists the slash-less form — so a
- * visitor arriving at a shared `/planetarium/` link used to be served a
- * self-referencing canonical that disagreed with the sitemap. Two canonicals
- * for one page is the exact duplicate-content split the tag exists to prevent,
- * and it split the analytics `page_location` the same way.
- */
+/** One canonical spelling per path, independent of a preview's hostname. */
 export function canonicalUrl(pathname: string): string {
   const path = withoutTrailingSlash(pathname)
   return path === HOME ? SITE.origin : `${SITE.origin}${path}`

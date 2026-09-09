@@ -32,9 +32,9 @@
  *
  * A fixed name has to be bumped by hand, and the failure mode of forgetting is
  * invisible: dead chunks from every past deploy accumulate forever, and a
- * precached `/index.html` outlives the build it describes. There is no way to
+ * precached page outlives the build it describes. There is no way to
  * inject a constant into this file, because it is not compiled — so the build
- * id arrives on the registration URL, which `main.tsx` supplies. `dev` is the
+ * id arrives on the registration URL, which the browser entry supplies. `dev` is the
  * fallback for anyone who opens `/sw.js` directly.
  */
 const BUILD = new URL(self.location.href).searchParams.get('build') ?? 'dev'
@@ -50,7 +50,14 @@ const CACHE = `${CACHE_PREFIX}${BUILD}`
  * nothing. `/manifest.webmanifest` is in, because an installed application is
  * launched *from* the manifest and that launch may be the offline one.
  */
-const PRECACHE = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest']
+const PRECACHE = [
+  '/',
+  '/play/solo',
+  '/planetarium',
+  '/cinema',
+  '/favicon.svg',
+  '/manifest.webmanifest',
+]
 
 /*
  * Paths that are state rather than content, kept in step by hand with
@@ -163,17 +170,22 @@ self.addEventListener('fetch', (event) => {
   if (request.headers.has('range')) return
 
   if (request.mode === 'navigate') {
+    // Astro renders one document per pathname. Queries select browser state,
+    // so the cached HTML can be shared without changing the address bar.
+    const key = `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone()
-          event.waitUntil(caches.open(CACHE).then((c) => c.put(request, copy)))
+          if (response.ok && isShell(response)) {
+            const copy = response.clone()
+            event.waitUntil(caches.open(CACHE).then((c) => c.put(key, copy)))
+          }
           return response
         })
         .catch(() =>
           caches
-            .match(request)
-            .then((cached) => cached ?? caches.match('/index.html'))
+            .open(CACHE)
+            .then((cache) => cache.match(key))
             .then(
               (cached) =>
                 cached ??
@@ -217,18 +229,7 @@ self.addEventListener('fetch', (event) => {
   )
 })
 
-/**
- * Whether a 200 is actually the application shell wearing another file's URL.
- *
- * The Worker serves this origin with `not_found_handling:
- * single-page-application`, so a request for a staged file the asset store does
- * not have yet comes back as `index.html` with a **200** — and every navigation
- * is answered in its own branch above, so nothing that reaches here is
- * legitimately HTML. Stored, that shell is served from Cache Storage in place
- * of the file for the life of the cache: `docs/content.ts` asks for a page's
- * JSON, gets markup, and the reader sees "no such page" for a page that exists
- * until the next deploy rotates the cache name.
- */
+/** HTML belongs only in the navigation cache, never under a data-file URL. */
 const isShell = (response) =>
   (response.headers.get('content-type') ?? '').startsWith('text/html')
 

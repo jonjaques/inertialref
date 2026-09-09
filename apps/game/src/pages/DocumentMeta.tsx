@@ -1,65 +1,58 @@
-import { useEffect } from 'react'
+import { useContext, useEffect } from 'react'
 import { useLocation } from 'react-router'
-import { recordPageView } from '../analytics.ts'
-import { canonicalUrl, documentTitle, pageMetaFor } from '../site.ts'
+import { recordPageView, startAnalytics } from '../analytics.ts'
+import { DocsContentContext } from '../docs/initialDocs.ts'
+import {
+  canonicalUrl,
+  documentTitle,
+  metadataForPath,
+  robotsContent,
+} from '../site.ts'
+import { DOCS } from './paths.ts'
 
-/*
- * What the document says about itself, kept in step with the address bar.
- *
- * Renders nothing. It exists because the URL is this product's public surface
- * (ADR-0011) and a tab strip, a bookmark, a browser history entry and a shared
- * link are four places a person reads a page's name — none of which the
- * interface itself controls.
- *
- * **Three tags, and deliberately not the Open Graph set.** `<title>`,
- * `<meta name="description">` and `<link rel="canonical">` are read by things
- * that execute JavaScript: the browser, Googlebot, an agent driving a headless
- * browser. Open Graph is read by things that do not — Slack, iMessage,
- * Discord, every unfurler — so rewriting `og:title` here would change nothing
- * any scraper ever sees while looking exactly like it had. Those live static in
- * `index.html`; `src/site.ts` carries the note about what that costs and what
- * it would take to make them per-route.
- *
- * **The raw pathname, not `resolvedLocation`.** Everywhere else that would be
- * the bug AGENTS.md names: with a dialog open, the mode's location and the
- * URL differ, and anything deciding *what is on screen* has to use the mode's.
- * This is the other question. The address bar reads `/settings`, so the tab,
- * the bookmark and the canonical link have to say Settings — they are about the
- * URL, which is exactly what `location.pathname` is.
- */
+/** Metadata describes the address bar, including a dialog over another mode. */
 export function DocumentMeta() {
-  const location = useLocation()
-  const pathname = location.pathname
+  const { pathname } = useLocation()
+  const docs = useContext(DocsContentContext)
+  const path = pathname.replace(/\/+$/, '') || '/'
+  const article = docs?.page.value
+  const isArticle = path.startsWith(`${DOCS}/`)
+  const pending =
+    isArticle && (docs === null || docs.manifest.pending || docs.page.pending)
+  const doc = article?.route === path ? article : undefined
+  const missing =
+    isArticle &&
+    docs !== null &&
+    !pending &&
+    docs.manifest.value !== null &&
+    docs.manifest.value.pages[path] === undefined
 
   useEffect(() => {
-    const page = pageMetaFor(pathname)
+    // Await an article's metadata once, alongside its content. A provisional
+    // section title would overwrite the prerendered head and double-count the
+    // navigation when the article arrives.
+    if (pending && doc === undefined) return
+    const page = metadataForPath(path, missing ? null : doc)
     const title = documentTitle(page)
-    const canonical = canonicalUrl(page.path === '/' ? '/' : pathname)
+    const canonical = canonicalUrl(page.path)
 
     document.title = title
     attribute('meta[name="description"]', 'content', page.description)
     attribute('link[rel="canonical"]', 'href', canonical)
-
-    /*
-     * The page view goes out from here rather than from a second effect on the
-     * same location, because a view is *this* — a name and an address, at the
-     * moment they became true. Two effects racing to describe one navigation is
-     * how a title and a report of it end up describing different pages.
-     */
+    attribute('meta[name="robots"]', 'content', robotsContent(page))
+    attribute('meta[property="og:title"]', 'content', title)
+    attribute('meta[property="og:description"]', 'content', page.description)
+    attribute('meta[property="og:url"]', 'content', canonical)
+    attribute('meta[name="twitter:title"]', 'content', title)
+    attribute('meta[name="twitter:description"]', 'content', page.description)
+    startAnalytics()
     recordPageView(canonical, title)
-  }, [pathname])
+  }, [path, pending, doc, missing])
 
   return null
 }
 
-/**
- * Update a tag `index.html` already has, and do nothing if it does not.
- *
- * Deliberately not "create it if missing": every tag this touches is in the
- * static head, because a scraper that does not run scripts has to find it
- * there. If one is absent, the static head is what is wrong, and silently
- * papering over that would hide it from the only person who could fix it.
- */
+/** Astro supplies these tags before hydration; navigation updates their values. */
 function attribute(selector: string, name: string, value: string): void {
   document.head.querySelector(selector)?.setAttribute(name, value)
 }

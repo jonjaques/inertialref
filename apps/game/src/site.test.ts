@@ -15,6 +15,7 @@ import {
   canonicalUrl,
   documentTitle,
   pageMetaFor,
+  metadataForPath,
 } from './site.ts'
 
 /*
@@ -38,15 +39,16 @@ describe('page metadata', () => {
     expect(pageMetaFor(PLANETARIUM).path).toBe(PLANETARIUM)
   })
 
-  it('falls back to the home page for anything unlisted', () => {
-    expect(pageMetaFor('/nothing/here').path).toBe(HOME)
+  it('marks an unknown page as missing and unindexable', () => {
+    expect(pageMetaFor('/nothing/here').index).toBe(false)
+    expect(pageMetaFor('/nothing/here').title).toBe('Page Not Found')
     expect(pageMetaFor(HOME).path).toBe(HOME)
   })
 
   it('does not treat a longer name as a section of a shorter one', () => {
     // `/aboutish` starts with `/about` as a *string* and is not under it as a
     // path. Matching on the raw prefix is the bug this guards.
-    expect(pageMetaFor(`${ABOUT}ish`).path).toBe(HOME)
+    expect(pageMetaFor(`${ABOUT}ish`).index).toBe(false)
   })
 
   it('ignores a trailing slash, which is the same page', () => {
@@ -174,5 +176,32 @@ describe('who is measured', () => {
 
   it('honors an explicit opt-out', () => {
     expect(isMeasured({ ...canonical, optedOut: true })).toBe(false)
+  })
+})
+
+describe('prerendered document metadata', () => {
+  it('uses the article title, lead and exact canonical path', () => {
+    const page = metadataForPath('/docs/concepts/coordinates/', {
+      title: 'Universe coordinates',
+      lead: 'Sector indices and local offsets retain precision across the Milky Way without storing an absolute position in a vector.',
+    })
+    expect(documentTitle(page)).toBe('Universe coordinates · InertialRef')
+    expect(page.path).toBe('/docs/concepts/coordinates')
+    expect(page.description).toContain('Sector indices')
+    expect(page.index).toBe(true)
+  })
+
+  it('marks an absent article as missing', () => {
+    expect(metadataForPath('/docs/missing', null).index).toBe(false)
+    expect(metadataForPath('/docs/missing', null).title).toBe('Page Not Found')
+  })
+
+  it('bounds an article lead without cutting a word', () => {
+    const page = metadataForPath('/docs/long', {
+      title: 'Long article',
+      lead: 'A complete sentence with familiar words. '.repeat(10),
+    })
+    expect(page.description.length).toBeLessThanOrEqual(160)
+    expect(page.description).toMatch(/\S…$/)
   })
 })

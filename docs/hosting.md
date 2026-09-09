@@ -156,10 +156,10 @@ irrelevant — the bundle is an _asset_, not part of the script.
 
 ✅ **Built.** `apps/server` owns `wrangler.jsonc` and the Worker entry point,
 and points `assets.directory` at `apps/game/dist`. `run_worker_first` sends
-`/api` and `/ws` to the script; everything else is served as a static asset
+`/api`, `/ws` and `/media/*` to the script; everything else is served as a static asset
 without invoking it.
 
-This is what is deployed, minus the comments:
+The asset routing is configured in `apps/server/wrangler.jsonc`:
 
 ```jsonc
 {
@@ -174,11 +174,12 @@ This is what is deployed, minus the comments:
   "assets": {
     "directory": "../game/dist",
     "binding": "ASSETS",
-    // The client is a single page; every unmatched path is index.html, not a 404.
-    "not_found_handling": "single-page-application",
+    // Astro emits route HTML; an unknown address receives a real 404.
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash",
     // `/api` is listed as well as `/api/*` because the glob does not match the
-    // bare path, and the SPA fallback would answer it with index.html.
-    "run_worker_first": ["/api", "/api/*", "/ws"],
+    // bare path. Media names go through the R2 allow-list.
+    "run_worker_first": ["/api", "/api/*", "/ws", "/media/*"],
   },
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "observability": { "enabled": true },
@@ -401,43 +402,47 @@ does: the share card, the install manifest, the crawler files, the analytics
 gate, and the one asset the repository will not carry.
 
 **One canonical hostname.** `inertialref.jonjaques.com` is what
-`<link rel="canonical">` names, what `sitemap.xml` lists, and the only host
+`<link rel="canonical">` names, what the sitemap lists, and the only host
 `src/analytics.ts` will load a tag on. Every Wrangler preview URL is the same
 deployment under a different name — useful for checking a build, and wrong to
 count as visits or to let a crawler index as a duplicate site. The Worker's own
 `workers.dev` route is off (`workers_dev: false` in `wrangler.jsonc`), so there
 is no second address that tracks the tip; a preview URL names one version.
 
-**The static head is the card, and it is hand-kept.** `not_found_handling` is
-`single-page-application`, so one document is served for every path — and no
-social scraper runs JavaScript. Whatever React writes into `og:title` is
-therefore invisible to Slack, iMessage, Discord and every other unfurler. So
-`index.html` carries a complete Open Graph and Twitter set plus a JSON-LD
-`@graph` (`WebSite`, `Person`, `SoftwareApplication`/`VideoGame`), written for
-the home page, and `pages/DocumentMeta.tsx` updates `<title>`, the description
-and the canonical link per route for the readers that _do_ execute scripts — the
-browser, Googlebot, an agent driving a headless browser. `src/site.ts` is the
-single source both are written from; the duplication into the head is
-deliberate and is called out at both ends.
+**Every public route arrives as HTML.** Astro prerenders the React shell,
+documentation body and navigation at build time. `src/documentHead.ts` renders
+the title, description, canonical URL, robots policy, Open Graph, Twitter and
+JSON-LD tags from `src/site.ts` and the article's title and lead. A scraper sees
+the page it requested before JavaScript runs. `pages/DocumentMeta.tsx` uses the
+same metadata resolver after React Router navigation.
 
-> **The seam.** Per-route Open Graph tags need `HTMLRewriter`, which needs the
-> Worker to run on navigations — `run_worker_first` on `/*` — which turns a
-> free, unbilled static asset request into a billed invocation on every page
-> load of the site. That is a real trade and not obviously the right one for a
-> project whose shareable pages number three. Revisit it when a _scene_ deserves
-> its own card, which is the first case where the generic one is actually wrong.
+`@astrojs/sitemap` enumerates the rendered routes, including every published
+documentation page. `robots.txt` points at `/sitemap-index.xml`; account stubs,
+settings and missing pages carry `noindex` and stay out of the sitemap.
 
-**Installable, because offline was already true.** The service worker predates
-this; what was missing was the manifest that lets a browser act on it. The game
-is a pure function of a seed, so once the bundle and the 907 KB of catalog are
-cached there is nothing left to fetch — an installed copy is a real offline
-application rather than a shortcut with a dinosaur behind it.
+**Request-time rendering remains an adapter choice.** The build uses Astro's
+static output. A route that needs request data can opt out of prerendering once
+an Astro server adapter and its Worker routing are configured. Public HTML and
+hashed game assets can keep their static delivery. There is no request-time
+renderer deployed by this configuration.
 
-**The brand is generated.** `design/brand/brandmark.svg` is the mark, and
+**The simulation stays in the browser.** Hydration starts the optional visuals;
+React Router owns subsequent navigation and the persistent runtime keeps its
+canvas. Astro does not run the engine or add work to the simulation loop.
+
+**Offline HTML is scoped to a route.** The service worker fetches navigations
+from the network first and stores successful HTML by pathname. Camera and seed
+queries keep their meaning in the browser while sharing the route's document.
+An uncached article receives a clear offline response rather than home-page
+markup that cannot hydrate at that address. Installation precaches the home,
+solo flight, planetarium and cinema shells. Hashed assets remain cache-first,
+and activation carries them forward before deleting an earlier build's cache.
+
+**The brand is generated.** `design/brand/brandmark.svg` supplies the mark.
 `pnpm brand` renders the favicon, the `.ico`, the apple-touch and PWA icons, the
-maskable variant, the 1200×630 share card, the manifest, `robots.txt`,
-`sitemap.xml` and the `<Logomark>` module from it. `pnpm brand:check` is in
-`pnpm check`.
+maskable variant, the 1200×630 share card, the install manifest, `robots.txt` and
+the `<Logomark>` module. `pnpm brand:check` also validates the shared head
+renderer and the service worker's precache paths without requiring a build.
 
 The card's background is the one artifact with a second source:
 `design/brand/og-plate.png`, a frame of the real renderer — Earth's limb at
@@ -474,18 +479,13 @@ They are not two sources. It is one object under one key, reached by two
 transports, and the fallback is what makes a credential-less build a slower
 first byte rather than a missing feature.
 
-**`run_worker_first` covers `/media/*`, and that is the cost.** The path is no
-longer free: the script runs, asks `env.ASSETS` first, and only reaches R2 on a
-miss. Two things buy it back. The response is `immutable`, so it is about one
-invocation per client rather than one per play. And a name that is _not_ served
-now 404s — where before, the SPA fallback answered a request for an `.mp3` with
-`index.html` and a 200, and an `<audio>` element handed a page of markup fails
-as though it could not decode the file.
+**`run_worker_first` covers `/media/*`.** The script asks `env.ASSETS` first
+and reaches R2 on a miss. The response is `immutable`, so a cache can reuse it
+on later plays. Unlisted names return 404 before any bucket read.
 
-**The miss is detected by content type**, because there is no status code to
-test: `not_found_handling: single-page-application` means the asset store
-answers what it does not have with a 200. Nothing under `/media/` is ever HTML,
-so an HTML answer to a request for an `.mp3` is unambiguous.
+**A 404 or an HTML response is a miss.** An absent asset can have a custom HTML
+error page or an empty body. Successful HTML cannot be media either, so the
+handler rejects it if a proxy or a stale response supplies it.
 
 **`env.ASSETS` does not serve ranges**, which is the second reason the binding
 is here rather than only the fallback one. Measured against a deployed review
@@ -778,29 +778,16 @@ is what makes hibernation and teardown testable at all. Note that the pool wants
 
 ### The dev loop is two servers, and that is the cheaper option
 
-`@cloudflare/vite-plugin` runs the Worker inside Vite's dev server on real
-workerd, which is genuinely nicer. It also takes over the client build — and the
-current build is Vite 8 with the Oxc transform, `@rolldown/plugin-babel` running
-the React Compiler preset, and Tailwind, which is tuned and load-bearing.
+`pnpm dev` starts Astro on 5173 and Wrangler on 8787. Astro's Vite server
+proxies `/api` and `/ws` to the Worker. `scripts/dev.mjs` gives both processes a
+shared lifetime; `pnpm dev:client` and `pnpm dev:server` run either half alone.
+Astro owns the page build, while the React Compiler and Tailwind remain Vite
+plugins inside that build.
 
-✅ **Wired, and now one command.** `vite dev` proxies `/api` and `/ws` to
-`wrangler dev` on 8787, and `scripts/dev.mjs` starts both under `pnpm dev` with
-prefixed output and a shared lifetime — one exits, both stop. That was the
-actual cost of the split: not two processes, but a second terminal somebody
-could forget, after which every `/api` call fails in a way indistinguishable
-from a broken client. `pnpm dev:client` and `pnpm dev:server` are still the
-halves, and `dev:client` exists partly because piping Vite's stdio costs its
-interactive `r`/`o`/`q` keys.
-
-Revisit the plugin once _that_ is annoying enough to be worth the build risk,
-and revisit it as a _separate_ change so a build regression has one suspect.
-
-**`pnpm preview` is the production emulation**, and it is what to reach for when
-a bug is about how something is _served_ rather than what it does: it builds and
-then runs `wrangler dev` alone, so the assets come out of the real static asset
-store through the real `run_worker_first` and the real SPA fallback, and the
-service worker registers because it is a production build. Under `pnpm dev` all
-of that is Vite's.
+**`pnpm preview` is the production emulation.** It builds and runs
+`wrangler dev` against the resulting static assets. That exercises the real
+`run_worker_first`, per-route HTML and 404 behavior, and registers the service
+worker because the assets are a production build.
 
 A property worth keeping rather than fixing: with the Worker **not** running,
 the proxy fails and the client reports `no server`. The offline path is
@@ -826,20 +813,20 @@ Each one ends in something demonstrable. The point of the ordering is that
 which is the same discipline `partitionForPosition` already got: build the seam,
 put it on the debug overlay, and look at it for a phase before trusting it.
 
-| #         | Milestone                            | Ends when                                                                                                                                                                   |
-| --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **H0** ✅ | Fix the coincidence                  | `inspect.ts` calls `partitionForAddress`; a renamed frame grammar breaks a test rather than production                                                                      |
-| **H1** ✅ | The client is on a URL               | `apps/server` exists, serves `apps/game/dist`, SPA fallback works, service worker excludes `/api` and `/ws`, custom domain live, 12/12 capability checks pass in production |
-| **H2** 🟡 | The API exists and is empty          | `/api/version` returns seed, galaxy and `GENERATION_VERSIONS`; D1 bound with one migration; `wrangler types` output committed; fourth tsconfig project green                |
-| **H3** ✅ | The port exists, still offline       | `packages/net` with `AuthorityPort` + `LocalAuthority`; `openSession` takes one and defaults to local; **no behavioral change**, proven by an unchanged `stateHash`         |
-| **H4**    | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction     |
-| **H5**    | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                      |
+| #         | Milestone                            | Ends when                                                                                                                                                                                     |
+| --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **H0** ✅ | Fix the coincidence                  | `inspect.ts` calls `partitionForAddress`; a renamed frame grammar breaks a test rather than production                                                                                        |
+| **H1** ✅ | The client is on a URL               | `apps/server` exists, serves `apps/game/dist`, prerendered route HTML and 404s work, service worker excludes `/api` and `/ws`, custom domain live, 12/12 capability checks pass in production |
+| **H2** 🟡 | The API exists and is empty          | `/api/version` returns seed, galaxy and `GENERATION_VERSIONS`; D1 bound with one migration; `wrangler types` output committed; fourth tsconfig project green                                  |
+| **H3** ✅ | The port exists, still offline       | `packages/net` with `AuthorityPort` + `LocalAuthority`; `openSession` takes one and defaults to local; **no behavioral change**, proven by an unchanged `stateHash`                           |
+| **H4**    | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction                       |
+| **H5**    | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                                        |
 
 H4 is the milestone the request actually asks for: everything stood up, nothing
 load-bearing.
 
 **Where this actually stands.** H0 and H3 are done. H1 is done apart from the
-custom domain — the client is live, the SPA fallback works, and the
+custom domain — the client is live, the prerendered route HTML and 404s work, and the
 service worker excludes both live paths. H2 is half done from the other end than
 planned: `wrangler types` output is committed and the fourth tsconfig project is
 green, but the endpoint that exists is `/api/health` rather than `/api/version`,
@@ -894,20 +881,20 @@ regression is reproducible in CI without a browser.
 version at its own URL. That removes the API token from GitHub entirely, which
 is why it won out over a deploy workflow in Actions.
 
-| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                                       |
-| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                               |
-| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                          |
-| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `vite build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
-| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                      |
-| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                    |
-| Migrations      | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                                                                                                                                                                                                                                                      |
-| Secrets         | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.                                                                                                                                                                                                                             |
-| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.         |
-| Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                                       |
-| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                   |
-| Observability   | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                                                                                                                                                                                                                                                      |
+| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                                        |
+| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                                |
+| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                           |
+| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
+| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                       |
+| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                     |
+| Migrations      | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                                                                                                                                                                                                                                                       |
+| Secrets         | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.                                                                                                                                                                                                                              |
+| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.          |
+| Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                                        |
+| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                    |
+| Observability   | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                                                                                                                                                                                                                                                       |
 
 ### Review apps stop at H4, and that is worth knowing now
 

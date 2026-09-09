@@ -1,36 +1,15 @@
 /*
- * The gate on the one artifact a scraper actually reads.
- *
- * `pnpm brand --check` re-derives every generated public-surface artifact —
- * `manifest.webmanifest`, `robots.txt`, `sitemap.xml`, `favicon.svg` — and
- * diffs it against what is committed. It never opened `index.html`, which is
- * the file Slack, iMessage, Bluesky and Googlebot parse, and the only one whose
- * contents nothing derives.
- *
- * **A check, not a generator.** Generating the head was argued and declined:
- * `build.mjs` records why a generator fights `pnpm format`, and the head is
- * hand-written prose with comments in it that explain a trade a generator would
- * flatten. So the interface here is "pass, or name the tag that disagrees" —
- * the duplication stays, and stops being unguarded.
- *
- * It is guarding a real near miss. `d4f4065` fixed `canonicalUrl` to drop a
- * trailing slash; the generated sitemap fixed itself and the hand-typed
- * canonical at `index.html` was already right — by luck, that time. The head
- * also carries five description strings, and the 60–160 bound `site.test.ts`
- * holds every `PageMeta` to has never applied to any of them.
- *
- * **Parsing.** Tolerant extraction over a file whose shape this repository
- * controls, rather than an HTML parser dependency for a gate on our own head.
- * The one assumption is that no attribute value contains a `>`; if that ever
- * stops being true the extraction silently returns fewer tags, which is why
- * every expected tag is *counted* as well as compared. A gate that quietly
- * stops looking is worse than no gate.
+ * Checks the shared server head and the service worker's precache contract.
+ * The head renderer is pure, so this gate needs neither Astro nor a build.
+ * Counts catch tags the extractor cannot parse; mutated-output tests prove
+ * that each checked value can fail independently of the renderer.
  */
 import {
   PAGES,
   SITE,
   canonicalUrl,
   documentTitle,
+  robotsContent,
 } from '../../apps/game/src/site.ts'
 
 /** The home page's entry, which is what the static head is written for. */
@@ -156,11 +135,12 @@ function structuredDescriptions(head) {
  * hand it a deliberately drifted head — a gate that cannot fail is not a gate.
  *
  * @param {object} sources
- * @param {string} sources.html      `apps/game/index.html`
+ * @param {string} sources.html      output of `renderDocumentHead`
  * @param {string} sources.sw        `apps/game/public/sw.js`
  * @param {Set<string>} sources.publicFiles  names in `apps/game/public/`
+ * @param {import('../../apps/game/src/site.ts').PageMeta} [sources.page]
  */
-export function checkPublicSurface({ html, sw, publicFiles }) {
+export function checkPublicSurface({ html, sw, publicFiles, page = ROOT }) {
   const problems = []
   const head = headOf(html)
   const meta = metaTags(head)
@@ -170,7 +150,7 @@ export function checkPublicSurface({ html, sw, publicFiles }) {
   /* The title, and the two cards that repeat it. ------------------------- */
 
   const title = /<title>([\s\S]*?)<\/title>/.exec(head)?.[1]?.trim() ?? null
-  const wantedTitle = documentTitle(ROOT)
+  const wantedTitle = documentTitle(page)
   if (title !== wantedTitle) {
     say(
       `<title> is ${JSON.stringify(title)}, expected ${JSON.stringify(wantedTitle)}`,
@@ -188,9 +168,9 @@ export function checkPublicSurface({ html, sw, publicFiles }) {
 
   // The two that *are* the home page's description are compared exactly. A
   // rewrite in `site.ts` that leaves these behind is the ordinary drift.
-  for (const key of ['description', 'og:description']) {
-    if (meta.get(key) !== SITE.description) {
-      say(`${key} does not match SITE.description`)
+  for (const key of ['description', 'og:description', 'twitter:description']) {
+    if (meta.get(key) !== page.description) {
+      say(`${key} does not match the page description`)
     }
   }
   // Every description-bearing tag, including the ones with their own wording,
@@ -221,9 +201,9 @@ export function checkPublicSurface({ html, sw, publicFiles }) {
     [
       'link rel=canonical',
       links.get('canonical')?.[0],
-      canonicalUrl(ROOT.path),
+      canonicalUrl(page.path),
     ],
-    ['og:url', meta.get('og:url'), canonicalUrl(ROOT.path)],
+    ['og:url', meta.get('og:url'), canonicalUrl(page.path)],
     ['theme-color', meta.get('theme-color'), SITE.background],
     ['og:image', meta.get('og:image'), `${SITE.origin}${SITE.socialImage}`],
     [
@@ -238,6 +218,7 @@ export function checkPublicSurface({ html, sw, publicFiles }) {
       SITE.name,
     ],
     ['author', meta.get('author'), SITE.author],
+    ['robots', meta.get('robots'), robotsContent(page)],
   ]
   for (const [label, found, wanted] of exact) {
     if (found !== wanted) {
@@ -282,9 +263,8 @@ export function checkPublicSurface({ html, sw, publicFiles }) {
     const entries = [...precache.matchAll(/'([^']*)'/g)].map(([, path]) => path)
     if (entries.length === 0) say('public/sw.js PRECACHE is empty')
     for (const path of entries) {
-      // `/` is the SPA root and `/index.html` is Vite's entry; neither is a file
-      // in `public/`, and both are what an offline launch starts from.
-      if (path === '/' || path === '/index.html') continue
+      // These routes are prerendered by Astro rather than copied from public.
+      if (PAGES.some((page) => page.path === path)) continue
       if (!publicFiles.has(path.replace(/^\//, ''))) {
         say(`public/sw.js precaches ${path}, which nothing generates or ships`)
       }
