@@ -232,12 +232,10 @@ const pages = new Map<string, Promise<DocPage>>()
  * again past the cache turns that into a slower first load instead of an error
  * on a page that exists.
  *
- * **Past a different cache than the one it looks like.** `cache: 'reload'`
- * bypasses the HTTP cache, and the service worker is not one: it answers from
- * Cache Storage, and `Cache.match` keys on the URL alone — it has never heard
- * of a request's cache mode. So the retry asks for a *different* URL, which is
- * the only thing a `caches.match` can miss on. The query is ignored by the
- * asset store and the file that comes back is the same one.
+ * `cache: 'reload'` bypasses both HTTP caching and this build's service
+ * worker. The distinct retry URL also misses Cache Storage when a controller
+ * from another build ignores that request mode during an update. The asset
+ * store ignores the query and returns the same file.
  */
 export function loadPage(entry: DocEntry): Promise<DocPage> {
   const url = `${CONTENT}/page/${entry.asset}`
