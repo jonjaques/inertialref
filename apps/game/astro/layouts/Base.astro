@@ -11,7 +11,8 @@ const { meta } = Astro.props
 
 <!doctype html>
 <html lang="en">
-  <head set:html={renderDocumentHead(meta)} /><body>
+  <head><Fragment set:html={renderDocumentHead(meta)} /></head>
+  <body>
     <div id="root"><slot /></div>
     <noscript>
       <style>
