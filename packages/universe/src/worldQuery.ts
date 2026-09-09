@@ -3,7 +3,7 @@ import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { Seed } from '@inertialref/procedural'
 import { formatAddress, type GalaxyId } from './address.ts'
 import type { SystemStub } from './galaxy.ts'
-import type { SpectralClass } from './catalog/spectral.ts'
+import { parseSpectralType, type SpectralClass } from './catalog/spectral.ts'
 import {
   type Body,
   type BodyKind,
@@ -246,15 +246,14 @@ export function findWorlds(
 /**
  * The star filter, applied to a stub rather than to a generated star.
  *
- * A stub carries the spectral type as the published *string* and the generated
- * star carries a parsed class, so this reads the first letter — which is the
- * class for every well-formed MK type and is the same letter `parseSpectralType`
- * would extract. It is deliberately the cheap half of `matchesStar`: it exists
- * to skip generation, and `matchSystem` asks the real question afterwards.
+ * Published types include luminosity prefixes such as Barnard's `sdM4`.
+ * Parse them before filtering, with the same unclassified fallback as the
+ * system generator, so this optimization cannot discard a matching host.
  */
 function matchesStubStar(stub: SystemStub, query: WorldQuery): boolean {
   const classes = query.starClasses ?? []
   if (classes.length === 0) return true
-  const letter = stub.spectralType.trim().charAt(0).toUpperCase()
-  return classes.some((one) => one === letter)
+  const spectralClass =
+    parseSpectralType(stub.spectralType).spectralClass ?? 'M'
+  return classes.includes(spectralClass)
 }

@@ -238,6 +238,39 @@ describe('matching, as properties over generated systems', () => {
     )
     expect(none).toEqual([])
   })
+
+  it('finds worlds around catalog stars with luminosity prefixes', () => {
+    const stub = catalogStub(TEST_CATALOG.find("Barnard's Star")!)
+    const query: WorldQuery = { starClasses: ['M'] }
+    const expected = matchSystem(
+      generateSystem(SEED, MILKY_WAY, stub),
+      query,
+      stub.position,
+    )
+    expect(expected.map((one) => one.name)).toContain("Barnard's Star b")
+    expect(findWorlds(SEED, MILKY_WAY, [stub], query, stub.position)).toEqual(
+      expected,
+    )
+  })
+
+  it.each(['dM4', 'sdM4', 'gK5', 'esdM5', 'DA2', '(unclassified)'])(
+    'filters %s by the generated star classification',
+    (spectralType) => {
+      const stub = {
+        ...catalogStub(TEST_CATALOG.find("Barnard's Star")!),
+        spectralType,
+      }
+      const generated = generateSystem(SEED, MILKY_WAY, stub)
+      const query: WorldQuery = {
+        starClasses: [generated.star.spectralClass],
+      }
+      const expected = matchSystem(generated, query, stub.position)
+      expect(expected.length).toBeGreaterThan(0)
+      expect(findWorlds(SEED, MILKY_WAY, [stub], query, stub.position)).toEqual(
+        expected,
+      )
+    },
+  )
 })
 
 describe('a match', () => {

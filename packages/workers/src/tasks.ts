@@ -560,7 +560,7 @@ export interface FindWorldsResponse {
 export const findWorldsTask = defineTask<FindWorldsRequest, FindWorldsResponse>(
   {
     name: 'universe.findWorlds',
-    version: 1,
+    version: 2,
     run({ seed, galaxy, stubs, query, from }, context) {
       const decoded = stubs.map(decodeStub)
       const matches = findWorlds(
