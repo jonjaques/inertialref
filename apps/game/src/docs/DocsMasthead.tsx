@@ -63,7 +63,7 @@ export function DocsMasthead({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/85 to-transparent" />
       <motion.div
         key={route}
-        initial={{ opacity: 0, y: 10 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
         className="doc-measure relative w-full pb-7"

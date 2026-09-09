@@ -42,7 +42,7 @@ export interface FramedBody {
 }
 
 export function useDocsFraming(
-  engine: GameEngine,
+  engine: GameEngine | null,
   framing: DocFraming | undefined,
 ): FramedBody | null {
   const [body, setBody] = useState<FramedBody | null>(null)
@@ -53,6 +53,7 @@ export function useDocsFraming(
    * the framing would release and re-push on every navigation.
    */
   useEffect(() => {
+    if (engine === null) return
     const stance = engine.presentation.push({
       motionBlur: false,
       showShip: false,
@@ -82,7 +83,12 @@ export function useDocsFraming(
   const fill = framing?.fill
 
   useEffect(() => {
-    if (address === undefined || phase === undefined || tilt === undefined)
+    if (
+      engine === null ||
+      address === undefined ||
+      phase === undefined ||
+      tilt === undefined
+    )
       return
     const observatory = engine.harness.observatory
 

@@ -66,7 +66,7 @@ export function OverlayPage({
       aria-modal={modal}
       aria-label={title}
       className={`type-body flex max-h-[calc(100%-4rem)] ${wide ? 'w-[56rem]' : 'w-[34rem]'} max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl outline-none`}
-      initial={{ opacity: 0, y: 8 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.18 }}
@@ -106,7 +106,7 @@ export function OverlayPage({
   const scrim = (
     <motion.div
       className="hud-bleed pointer-events-auto absolute flex items-center justify-center bg-slate-950/70"
-      initial={{ opacity: 0 }}
+      initial={false}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}

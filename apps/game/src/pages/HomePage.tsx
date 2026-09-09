@@ -121,7 +121,7 @@ const SPEC: readonly (readonly [string, string])[] = [
   ['0', 'To Install'],
 ]
 
-export function HomePage({ engine }: { engine: GameEngine }) {
+export function HomePage({ engine }: { engine: GameEngine | null }) {
   useKeyContext(MENU_KEYS)
   /*
    * Frame Earth, and carry the sun across it.
@@ -137,6 +137,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
    * behind does not spin the front door, which may not touch that warp.
    */
   useEffect(() => {
+    if (engine === null) return
     const observatory = engine.harness.observatory
     /*
      * The menu's stance. It used to capture the previous values and put them
@@ -205,7 +206,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
        * choice being laid out rather than a page loading.
        */}
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         /* The gradient runs to the physical edge; the words do not.
@@ -302,7 +303,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
           {ENTERABLE.map((mode, index) => (
             <motion.div
               key={mode.to}
-              initial={{ y: 12 }}
+              initial={false}
               animate={{ y: 0 }}
               /*
                * The one stagger on the page, and it is 70 ms — under the
