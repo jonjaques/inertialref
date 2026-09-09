@@ -1,9 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Link, Route, Routes, useLocation } from 'react-router'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { DocsMode } from '../docs/DocsMode.tsx'
 import { HomePage } from './HomePage.tsx'
+import { modeLoaders, preloadMode } from './modeLoader.ts'
 import {
   CINEMA,
   DOCS,
@@ -13,21 +14,9 @@ import {
   resolvedLocation,
 } from './paths.ts'
 
-const CinemaMode = lazy(() =>
-  import('../cinema/CinemaMode.tsx').then((module) => ({
-    default: module.CinemaMode,
-  })),
-)
-const FlightMode = lazy(() =>
-  import('../flight/FlightMode.tsx').then((module) => ({
-    default: module.FlightMode,
-  })),
-)
-const PlanetariumMode = lazy(() =>
-  import('../planetarium/PlanetariumMode.tsx').then((module) => ({
-    default: module.PlanetariumMode,
-  })),
-)
+const CinemaMode = lazy(modeLoaders.cinema)
+const FlightMode = lazy(modeLoaders.flight)
+const PlanetariumMode = lazy(modeLoaders.planetarium)
 const CatalogPage = lazy(() =>
   import('../planetarium/CatalogPage.tsx').then((module) => ({
     default: module.CatalogPage,
@@ -102,6 +91,12 @@ export function ModeRoutes(props: ModeRouteProps) {
   // two cannot answer differently about what is on screen.
   const at = resolvedLocation(useLocation())
   const mode = modeForPath(at.pathname)
+  useEffect(() => {
+    // Begin alongside GameLoader, while the engine is still absent. Waiting
+    // for its publication adds a network round trip before this mode mounts.
+    // React.lazy reads the same rejection through the existing route boundary.
+    void preloadMode(mode)?.catch(() => {})
+  }, [mode])
   const title =
     mode === 'planetarium'
       ? 'Planetarium'
