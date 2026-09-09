@@ -5,7 +5,7 @@ behind that URL before the persistent universe is possible.
 
 > **H0, H1, H3, H7 and H8 are built and deployed; H2 is half done. Everything from
 > H4 onward is still a plan.** The client is live at
-> <https://inertialref.jonjaques.com> — a Cloudflare custom domain, and the only
+> <https://inertialref.app> — a Cloudflare custom domain, and the only
 > one it answers on. It is served by `apps/server`: one Worker, the
 > static bundle, `/api/health`, and `/ws` reserved behind a deliberate 501. `packages/net` holds the authority port and the local
 > implementation of it that every solo player runs. There is no Durable Object,
@@ -170,7 +170,7 @@ The asset routing is configured in `apps/server/wrangler.jsonc`:
   // A custom domain, not a route: it provisions the DNS record and the
   // certificate and points the hostname at this Worker. A route is a pattern
   // over an origin that already exists, and there is no origin here.
-  "routes": [{ "pattern": "inertialref.jonjaques.com", "custom_domain": true }],
+  "routes": [{ "pattern": "inertialref.app", "custom_domain": true }],
   "assets": {
     "directory": "../game/dist",
     "binding": "ASSETS",
@@ -401,7 +401,7 @@ exists to catch.
 does: the share card, the install manifest, the crawler files, the analytics
 gate, and the one asset the repository will not carry.
 
-**One canonical hostname.** `inertialref.jonjaques.com` is what
+**One canonical hostname.** `inertialref.app` is what
 `<link rel="canonical">` names, what the sitemap lists, and the only host
 `src/analytics.ts` will load a tag on. Every Wrangler preview URL is the same
 deployment under a different name — useful for checking a build, and wrong to
@@ -884,7 +884,7 @@ is why it won out over a deploy workflow in Actions.
 
 | Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                             |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                                        |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.app` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                                                  |
 | Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                                |
 | The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                           |
 | Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |

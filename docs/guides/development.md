@@ -112,7 +112,7 @@ gitignored `.data/`, and only the processed outputs are committed. The
 [catalog guide](catalogue.md) has the provenance rules each of them follows.
 
 The site deploys to the `inertialrefd` Worker. Canonical URL:
-<https://inertialref.jonjaques.com>, and the only address it answers on. To
+<https://inertialref.app>, and the only address it answers on. To
 check a build before trusting DNS, `pnpm --filter @inertialref/server run
 versions:upload` uploads a version without promoting it and prints its own
 preview URL; analytics and `<link rel="canonical">` name the custom domain, so a

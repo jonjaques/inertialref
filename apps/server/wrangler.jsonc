@@ -14,10 +14,10 @@
    * orange-clouded record pointing at nothing to hang itself on.
    *
    * The first deploy after adding this creates the record. It needs the
-   * `jonjaques.com` zone on the same account; Wrangler fails loudly if it is
+   * `inertialref.app` zone on the same account; Wrangler fails loudly if it is
    * not there, which is the right failure.
    */
-  "routes": [{ "pattern": "inertialref.jonjaques.com", "custom_domain": true }],
+  "routes": [{ "pattern": "inertialref.app", "custom_domain": true }],
 
   /*
    * One front door, and a per-version side door.

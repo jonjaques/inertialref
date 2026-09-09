@@ -11,7 +11,7 @@ loading screens and no scale seams.
 [![pnpm 11](https://img.shields.io/badge/pnpm-11-orange.svg)](#prerequisites)
 [![12/12 capabilities](https://img.shields.io/badge/capabilities-12%2F12%20proven-success.svg)](#the-twelve-capabilities-proven)
 
-**[Try it → inertialref.jonjaques.com](https://inertialref.jonjaques.com)**
+**[Try it → inertialref.app](https://inertialref.app)**
 
 [Quick start](#quick-start) · [What it does](#what-it-does-today) ·
 [Architecture](#architecture-in-one-page) · [Development](#development) ·
@@ -380,7 +380,7 @@ Read it before changing anything. Agents should continue in
 are in [`STYLE.md`](STYLE.md).
 
 Every page below is also readable at
-[`/docs`](https://inertialref.jonjaques.com/docs) — the same markdown, rendered
+[`/docs`](https://inertialref.app/docs) — the same markdown, rendered
 by `pnpm docs:build` alongside a generated reference for every export of
 `packages/*`, and read over a live scene rather than beside a screenshot of one.
 The markdown in this repository is the source; the site has no copy of its own.

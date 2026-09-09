@@ -41,12 +41,12 @@ says so on its own front page.
 
 ## Pages
 
-- [Home](https://inertialref.jonjaques.com/): a menu over a live scene.
-- [Planetarium](https://inertialref.jonjaques.com/planetarium): free navigation
+- [Home](https://inertialref.app/): a menu over a live scene.
+- [Planetarium](https://inertialref.app/planetarium): free navigation
   of the catalog. No ship, no fuel. This is the mode worth trying first.
-- [Cinema](https://inertialref.jonjaques.com/cinema): scripted scenes staged
+- [Cinema](https://inertialref.app/cinema): scripted scenes staged
   over the live world, playable frame by frame.
-- [About](https://inertialref.jonjaques.com/about): what it is and where the
+- [About](https://inertialref.app/about): what it is and where the
   astronomy comes from.
 
 Every addressable thing is a URL — a mode, a scene at a frame

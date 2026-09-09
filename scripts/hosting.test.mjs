@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { parseConfigFileTextToJson } from 'typescript'
 import { describe, expect, it } from 'vitest'
+import { SITE } from '../apps/game/src/site.ts'
 
 const { config } = parseConfigFileTextToJson(
   'wrangler.jsonc',
@@ -11,6 +12,11 @@ const { config } = parseConfigFileTextToJson(
 )
 
 describe('the static hosting boundary', () => {
+  it('deploys on the production domain used by canonical metadata', () => {
+    expect(SITE.host).toBe('inertialref.app')
+    expect(config.routes).toEqual([{ pattern: SITE.host, custom_domain: true }])
+  })
+
   it('returns a missing-page response instead of the home document', () => {
     expect(config.assets.not_found_handling).toBe('404-page')
   })

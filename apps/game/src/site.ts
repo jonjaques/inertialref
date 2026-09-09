@@ -25,8 +25,8 @@ export const SITE = {
   /** The canonical host. Everything else — a preview, a `workers.dev`
    *  fallback, localhost — is the same build wearing a different name, and
    *  neither analytics nor a canonical link should treat it as this site. */
-  host: 'inertialref.jonjaques.com',
-  origin: 'https://inertialref.jonjaques.com',
+  host: 'inertialref.app',
+  origin: 'https://inertialref.app',
   tagline: 'A real sky, in a browser tab',
   /**
    * The one sentence a stranger gets, and the length is the constraint.

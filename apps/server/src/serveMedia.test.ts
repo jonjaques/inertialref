@@ -130,13 +130,10 @@ function fake(options: FakeOptions): MediaStores {
 }
 
 function get(headers: Record<string, string> = {}, method = 'GET'): Request {
-  return new Request(
-    `https://inertialref.jonjaques.com${mediaPath(OBJECT.name)}`,
-    {
-      method,
-      headers,
-    },
-  )
+  return new Request(`https://inertialref.app${mediaPath(OBJECT.name)}`, {
+    method,
+    headers,
+  })
 }
 
 /* ------------------------------------------------------------------------- */
