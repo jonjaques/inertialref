@@ -13,17 +13,17 @@ Package manager is **pnpm**. The lockfile is pnpm's; do not use npm, yarn, or
 bun to change dependencies.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev              # Astro on 5173 and wrangler on 8787
 pnpm preview          # production build, served by the real Worker on 8787
 pnpm test             # Vitest, Node environment only
 pnpm test:gpu         # the shader suite on the real GPU via Dawn; not in check
-pnpm test:slow        # the terrain descent, about 100 s; in check and CI, not in the Stop gate
-pnpm typecheck        # five tsconfig projects
+pnpm test:slow        # terrain descent and galaxy convergence/population checks; in check and CI
+pnpm typecheck        # five tsconfig projects and Astro templates
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
 pnpm brand            # regenerate brand artifacts from design/brand/brandmark.svg
-pnpm presets:plates   # recapture the seven preset thumbnails through the renderer
+pnpm presets:plates   # recapture the built-in preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
 pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Astro build
@@ -263,14 +263,15 @@ its `display: table` viewport breaks `truncate`. Add a component with
 
 **Brand** is generated from `design/brand/brandmark.svg` via `pnpm brand`.
 Never hand-edit `favicon.svg`, the `.ico`, the apple-touch and PWA icons, the
-share card, the web manifest, `robots.txt`, `sitemap.xml`, or
+share card, the web manifest, `robots.txt`, or
 `src/icons/brandmark.ts`. `pnpm brand:check` is in `pnpm check`. The share
 card has a second source, `design/brand/og-plate.png` — a captured frame of the
 renderer that its type is composited over. `scripts/brand/og.mjs` carries the
-framing it was shot at, so it can be shot again.
+framing it was shot at, so it can be shot again. Astro's sitemap integration
+emits the route sitemap during the application build.
 
 **Preset plates** are the thumbnails under the planetarium's Presets panel, in
-`apps/game/public/presets/`. `pnpm presets:plates` recaptures them — all seven,
+`apps/game/public/presets/`. `pnpm presets:plates` recaptures the built-in set,
 or one by id — by driving Chrome against `pnpm dev`, so a dev server has to be
 up and the machine needs a GPU. They are vendored for the reason the share card
 is: a build that needed a GPU would not run in CI, on a fork, or on a machine

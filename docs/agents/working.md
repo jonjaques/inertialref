@@ -12,12 +12,12 @@ A session begins by knowing what tree it is standing in. Follow an explicit
 user-selected base branch or checkout; the defaults below apply when none is
 specified. Preserve other agents' worktrees and uncommitted changes.
 
-The `SessionStart`
-hook fetches `origin`, fast-forwards local `main` when it can do so without a
+When shared hooks are enabled, the `SessionStart` implementation fetches `origin`, fast-forwards local `main` when it can do so without a
 checkout, and states the branch, the uncommitted count, and how far ahead of
 `origin/main` the branch is. The imperative half is
 [`.claude/rules/branching.md`](../../.claude/rules/branching.md), which carries
-no `paths:` and so is in context from the first turn.
+no `paths:` for Claude Code, a Cursor `alwaysApply` adapter, and an explicit
+read instruction for Codex in `AGENTS.md`.
 
 In a linked worktree the hook installs dependencies and says nothing about the
 branch. A worktree is already on a branch cut for one change, so the report

@@ -175,11 +175,13 @@ file, and this is the tripwire.
 
 ## Algorithm versioning
 
-Generators carry an `AlgorithmVersion`. The version is part of what defines the
-universe, and a save records the versions it was written with:
+Generators declare an `AlgorithmVersion`, and saves record the manifest of the
+implementation that produced them. These numbers identify drift; they are not
+folded into seed paths and do not select archived generators. The active
+manifest is:
 
 ```
-generation: { galaxy: 2, system: 4, terrain: 4, photometry: 1 }
+generation: { galaxy: 5, 'galaxy-field': 5, system: 4, terrain: 4, photometry: 1 }
 ```
 
 `system` went to 3 when generated systems gained a belt — six to eighteen small

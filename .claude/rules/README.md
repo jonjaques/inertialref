@@ -8,28 +8,18 @@ paths:
 
 # .claude/rules
 
-Path-scoped instructions. A rule with `paths:` frontmatter loads **only when a file
-matching one of its globs enters context** — so an agent editing `dock/layout.ts` is told
-about the one-panel-one-zone invariant at the moment it opens the file, and an agent
-editing the catalog is not.
+Shared rule extracts with host-specific loading. In Claude Code, a rule with
+`paths:` frontmatter loads when a matching file enters context. Cursor's
+`.mdc` adapters provide the corresponding `globs:` and reference these bodies.
+Codex reads the relevant extracts explicitly, as `AGENTS.md` instructs; it does
+not interpret Claude's path-loading metadata.
 
-This exists because of a measurable gap. `AGENTS.md` holds the invariants, each one
-there because violating it is a rewrite rather than a refactor. Cursor and some
-other tools auto-load it; Claude Code does not. There, `CLAUDE.md` saying "read
-AGENTS.md first" is a request, not a mechanism. A session that never reads it
-operates with none of them.
-
-**A rule with no `paths:` loads at session start**, like `CLAUDE.md` — which is why this
-file has them too, pointed at the two sides of the contract it describes. It loads when
-you open a rule or `AGENTS.md`, and costs nothing the rest of the time.
-
-Three rules are deliberately unscoped, because no glob would fire in time for them.
-`branching.md` governs the first commit, which happens before any rule about a directory
-is relevant. `writing.md` governs prose written into files a glob cannot predict —
-including the commit message, which is not a file in the tree at all. `browser.md`
-governs a tool choice made in answer to "check the app", where nothing has been opened
-yet at all. All three are kept under thirty lines for the same reason: they are in
-context for every session, including the ones that only answer a question.
+The three unscoped rules apply from the start of work. `branching.md` governs
+the first commit, `writing.md` governs prose including commit messages, and
+`browser.md` governs tool choice before any file need be opened. They have no
+`paths:` for Claude Code and `alwaysApply: true` in Cursor's adapters. Codex
+reads all three at startup. Hook setup is host-specific and still requires the
+host's trust and enablement.
 
 ## The maintenance contract
 

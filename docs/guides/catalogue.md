@@ -25,15 +25,17 @@ needs. `.data/raw/` is gitignored and `pnpm catalog:fetch` refills it.
 
 **Two files, one catalog.** The volume is every system HYG knows inside 150 ly.
 The sky is the naked-eye sky beyond it — every source at apparent V ≤ 6.5,
-which is Betelgeuse at 500 ly, Rigel at 860 and Deneb at 1,400 — because the
-star field is a survey of the cells around the player and no survey a hundred
-light-years across reaches a constellation. `readCatalog(volume, sky)` indexes
-both as one catalog with one version, `<volume>+<sky>`; a sky star resolves by
-id, by name and in search like any other, and is drawn beside the survey.
-What it is not in is the cell index: `inCell` and `within` answer for the
-volume alone, so the procedural fill, which subtracts what the catalog holds
-from a density model, is the same galaxy with the sky loaded and without it.
-`StarCatalog.sky` in `starCatalog.ts` states the rule and the reason.
+which preserves measured constellations beyond the local volume.
+`readCatalog(volume, sky)` indexes both as one catalog with one version,
+`<volume>+<sky>`. Lookup, search and spatial system queries can reach sky stars.
+The `inCell` and `within` indexes remain volume-only because a sparse bright
+sky does not claim a complete distant volume.
+
+The rendered sky combines these records with an independent, bounded magnitude
+query over luminosity levels. Catalog completeness and sparse known-source
+counts suppress the corresponding procedural sources; the selected bands also
+control diffuse-light subtraction. Travel queries keep their own spatial
+scope. [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) owns that contract.
 
 | Over the wire                                    |                                     |
 | ------------------------------------------------ | ----------------------------------- |
@@ -316,17 +318,14 @@ the catalog version a hidden input to generation, which
 [Rule 1](../design/galaxy.md#the-four-rules) exists to prevent.
 
 **Workers do not have it.** Shipping a 907 KB table to every worker so it can
-compute one integer is the wrong trade, so tasks take what they need: a cell's
-cataloged _count_, or a whole resolved stub. See the header of
+compute a query is the wrong trade, so tasks take compact magnitude coverage
+and source counts, or resolved stubs for system and predicate queries. See the header of
 `packages/workers/src/tasks.ts`.
 
-**The sky is drawn, not surveyed.** A sky star is in `get`, `find`, `search`
-and `resolveSystem`, and it is not in `inCell`, `within`, `systemsWithin` or
-the travel panel. Counting it in a cell would let the procedural fill in a cell
-500 ly out depend on which of its stars happen to be naked-eye from Earth, and
-would drop procedural stars from the cells straddling the 150 ly edge — 190 sky
-stars sit in the 161 cells the sphere touches. `apps/ingest/src/ingest.test.ts` asserts every
-cell the 150 ly sphere touches answers the same with the sky loaded. The draw
+**The sparse sky has its own coverage contract.** A sky star is in `get`, `find`, `search`
+and `resolveSystem`. `systemsWithin` includes sky records inside its requested
+sphere; `inCell` and `within` retain the volume-only index. This avoids treating
+a few bright distant stars as a complete volume. The draw
 reaches the sky through `StarCatalog.sky`, and `apps/game/src/engine/starSelection.ts`
 joins it to the independent magnitude query: one record per id within the
 actual V threshold and a 100,000-sprite ceiling. The query uses catalogue
@@ -356,12 +355,15 @@ within 150 ly are the single lowercase letter `m`. A `spect[0]` parse classifies
 87% of the catalog and is quietly wrong about the rest. `catalog.test.ts` has a
 golden vector for every one of those shapes.
 
-**The procedural fill's IMF does not know what the catalog is missing.** It
-draws B stars at their true frequency, so a sweep can put an invented 5,000 L☉ B
-star in the sky brighter than anything real in it — and real B stars that close do
-not exist, which is exactly why the catalog has none. Conditioning the fill on
-per-spectral-class completeness is the fix, and it is the same curve the
-[horizon of knowledge](../design/galaxy.md#the-horizon-of-knowledge) wants.
+**Procedural fill respects a magnitude-and-distance completeness envelope.**
+The known faint neighborhood is protected inside 25 ly, the volume supplies a
+conservative V 7.3 envelope inside 150 ly, and the distant sky supplies V 6.5.
+Known records outside those envelopes reduce their owning luminosity level and
+cell. This is a declared completeness model, not a complete measurement of the
+stellar luminosity function. It prevents adding procedural bright neighbors on
+top of a sky that already measures them. The
+[horizon of knowledge](../design/galaxy.md#the-horizon-of-knowledge) remains a
+separate presentation and exploration design.
 
 **A spectral string can parse cleanly to the wrong answer.** Capella's HYG row is
 `M1: comp`, so a G-type giant binary renders as a red dwarf. Two rows in 7,123
@@ -425,7 +427,7 @@ are a 12 GB and a 4 GB GeoTIFF; the gas giants have no authoritative global map
 at all, because Jupiter's belts move and every "map of Jupiter" is a mosaic from
 one particular week.
 
-Titan, Enceladus, Iapetus, Triton, Phobos, Deimos and the Uranian moons have no
+Titan, Enceladus, Iapetus, Triton, Deimos and the Uranian moons have no
 vendored map and render from their measured albedo and color.
 
 Earth's night emission uses NASA's [2016 grayscale Black Marble](https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/).

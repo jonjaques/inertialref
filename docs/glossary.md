@@ -87,12 +87,16 @@ reference and the console argument. → [identity](concepts/identity.md)
 **EntityId** — runtime identity. `@<address>` for generated things, `#<n>` for
 dynamic ones with no address to derive from.
 
-**Generation cell** — a 20 ly cube. Procedural stars are generated per cell, and
-a cell's contents depend only on `(seed, cell)`.
+**Generation cell** — a spatial partition for deterministic queries. Travel
+cells are 20 ly cubes. Active `Q` sources belong to nine luminosity levels whose
+cell edges are `20 ly × 2^level`; travel cells gather sources from those levels.
+The seed and catalog coverage are explicit inputs. Legacy `P` ids retain their
+own cell generator. → [identity](concepts/identity.md)
 
-**Algorithm version** — a version number folded into generation. Bumping it
-deliberately produces a different universe rather than silently mutating saved
-worlds.
+**Algorithm version** — revision metadata identifying the generator that
+produces a world. It is recorded in saves and handshakes, never folded into the
+seed. Changing the implementation changes output; the version declares that
+drift. → [determinism](concepts/determinism.md#algorithm-versioning)
 
 **Golden vector** — a pinned PRNG or noise output in a test. Not testing that
 the value is right; testing that it never changes.
@@ -145,7 +149,7 @@ _presents_ is its largest members.
 Canonical state depends only on the integer tick count. → [time](concepts/time.md)
 
 **State hash** — a hash over the tick, the seed, and every entity's frame,
-position, velocity, orientation, angular velocity, control input, flight-assist
+position, velocity, orientation, angular velocity, control axes and throttle, flight-assist
 setting, landedness and rails epoch. The comparison every determinism test
 makes, and the natural desync check. Add a field to canonical state and it
 belongs here too.
@@ -155,8 +159,8 @@ Prevents a backgrounded tab from freezing the page on return. Dropped ticks are
 counted and displayed. It caps _integration_; a tick every entity coasts through
 is jumped, not stepped, and costs nothing.
 
-**Rails** — what a coasting entity is on: no control input, no spin under flight
-assist, and a conic whose periapsis clears the ground band, so its state at any
+**Rails** — what an eligible coasting entity is on: no thrust from either
+control axes or persistent throttle, no spin under flight assist, and a conic whose periapsis clears the ground band, so its state at any
 tick is the two-body propagation of a recorded epoch rather than the result of
 integrating every tick between. The epoch is canonical — hashed and saved — and
 any input, teleport or frame change drops it.
@@ -217,18 +221,20 @@ to it by a measured bound.
 spheroid; the measured ellipsoid for a body with a figure. Not the shape model —
 `packages/universe` may not read a file.
 
-**Adaptation** — the per-body exposure lift for a surface too dark to expose the
-whole scene for. Only opens up, only below 0.12 geometric albedo, only as the
-body fills the frame. The mirror of a star stopping down as it fills the frame.
+**Adaptation** — Automatic camera mode's temporal exposure response. It can
+brighten or darken toward the measured scene. Enhanced's bounded dark-body
+visibility gain is separate processing, not that temporal exposure state.
+→ [ADR-0037](adr/0037-the-enhanced-camera.md)
 
 **Observatory** — the planetarium's camera, `packages/devtools/src/observatory.ts`.
-It resolves an address, asks the world where that is at `renderTime`, and
+It resolves an address at live `renderTime` or a held photographic instant and
 returns a pose; it never writes canonical state. Two arms that meet and do not
 overlap: the orbit camera, clamped `MIN_DISTANCE_RADII` (1.5 radii) from the
 center, and the surface stance below, whose ceiling is that same half radius
 above the ground. It produces a camera only while a stance layer is holding it,
-and it reads `framingLens()` — the flight lens alone. `ir.observatory` exposes
-it. → [ADR-0018](adr/0018-the-instrument.md), [planetarium](design/planetarium.md)
+and ordinary framing reads `framingLens()`, the flight lens alone. Fixed galaxy
+instruments own their pose and lens together; galaxy journeys change only the
+presentation eye. `ir.observatory` exposes it. → [ADR-0018](adr/0018-the-instrument.md), [planetarium](design/planetarium.md)
 
 **Stance** — two things, and the page says which. A _presentation_ stance is a
 `Stance` layer pushed on `engine.presentation`

@@ -121,9 +121,12 @@ into a bug report, does not.
 state hash  f38e988a
 ```
 
-Eight characters that answer "are these two universes the same?". It is the
-comparison every determinism test makes, it is on screen so a human can compare
-two tabs, and it is the natural desync check if a server ever appears.
+Eight characters summarize simulation state for comparisons under matching
+generation and catalog inputs. The hash includes tick, seed text and canonical
+entity fields; it does not include the catalog or algorithm manifest, physical
+sky calibration or renderer state. Compare those inputs separately. Determinism
+tests use the hash to detect state disagreement, and two tabs can expose it for
+the same purpose. Equality alone is not proof of identical universes.
 
 ---
 

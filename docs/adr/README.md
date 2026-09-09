@@ -153,13 +153,37 @@ flowchart TB
     style A22 fill:#0e7490,stroke:#155e75,color:#fff
 ```
 
+The foundation graph above ends at ADR-0029. The camera, galaxy and shell
+extensions connect those decisions as follows:
+
+```mermaid
+flowchart LR
+    S["0029 sensor spine"] --> T["0030 three r185"]
+    S --> C["0031 sensor response"]
+    C --> E["0037 Enhanced camera"]
+    L["0017 lens"] --> P["0033 photographic presets"]
+    P --> E
+    I["0018 instrument"] --> D["0034 drop"]
+    I --> R["0036 pointer rope"]
+    A["0004 addresses + 0005 seeds"] --> Q["0035 volume search"]
+    F["0032 stellar field preview"] --> G["0038 active population and diffuse sky"]
+    E --> G
+    A --> G
+    H["0011 shell + 0016 docs mode"] --> B["0039 shell before scene"]
+```
+
+ADR-0037 owns current camera processing over ADR-0031's optical record.
+ADR-0038 supersedes ADR-0032's preview restriction and initial cache
+configuration. ADR-0039 amends the shell and documentation host boundary while
+retaining the persistent scene and route-derived modes.
+
 Four dependencies are worth noticing because they are not obvious:
 
 - **0001 → 0002.** Because coordinates are precise everywhere, frames did _not_
   have to be a precision mechanism, which is the opposite of how most engines at
   this scale are built. That freed frames to be about the semantics of motion.
 - **0005 + 0004 → 0007.** Determinism plus stable identity is what makes a save
-  a few hundred bytes instead of gigabytes. Persistence did not need a clever format; it
+  compact references instead of stored generated content. Persistence did not need a clever format; it
   needed the other two decisions to have been made correctly.
 - **0004 → 0009.** ADR-0004's own consequences section admitted that bodies are
   addressed by orbital index and that changing the layout renames them. That was

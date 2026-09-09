@@ -7,7 +7,8 @@ messages. Follow it for new writing and when editing what is already here.
 
 The imperative half of this page is mirrored as
 [`.claude/rules/writing.md`](.claude/rules/writing.md), which carries no
-`paths:` and therefore loads at the start of every agent session. The rule has
+`paths:` and therefore loads at Claude Code session start. Codex reads it
+explicitly through `AGENTS.md`; Cursor's adapter uses `alwaysApply`. The rule has
 to be in context before the first comment is written, not after.
 
 ---
@@ -59,7 +60,7 @@ cite those pages. They should not retell them.
   said "the twelve capability checks."
 - Addressing "the next agent" or "the maintainer" as if they shared the chat
   that produced the file.
-- Writing a label in the case you want on screen. Interface copy is title case
+- Writing a label in the case you want on screen. Interface copy is sentence case
   in source; CSS decides what is shouted. See [`DESIGN.md`](DESIGN.md).
 
 ---
