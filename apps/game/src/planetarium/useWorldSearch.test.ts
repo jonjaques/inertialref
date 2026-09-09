@@ -43,14 +43,17 @@ function searchEngine() {
         _query: WorldQuery,
         options: { onBatch: (typeof pending)[number]['onBatch'] },
       ) => {
-        const done = Promise.withResolvers<readonly WorldMatch[]>()
+        let resolve!: (matches: readonly WorldMatch[]) => void
+        const done = new Promise<readonly WorldMatch[]>((finish) => {
+          resolve = finish
+        })
         const cancel = vi.fn()
         pending.push({
           onBatch: options.onBatch,
-          resolve: done.resolve,
+          resolve,
           cancel,
         })
-        return { done: done.promise, cancel, systems: 64 }
+        return { done, cancel, systems: 64 }
       },
     },
   } as unknown as GameEngine
@@ -89,7 +92,7 @@ it('ignores both batches and final results from a replaced search', async () => 
   const { engine, pending } = searchEngine()
   const search = useWorldSearch(engine)
   search.run({ kinds: ['rocky'] }, 150)
-  search.run({ hasSea: true }, 25)
+  search.run({ kinds: ['gas-giant'] }, 25)
   expect(pending[0]!.cancel).toHaveBeenCalledOnce()
   const current = hooks.state
   pending[0]!.onBatch(matches, 1, 1500)
