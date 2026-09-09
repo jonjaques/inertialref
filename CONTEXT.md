@@ -9114,6 +9114,49 @@ standard/staging curves, sRGB/P3 and headroom 1/4. The 32×32 gradient at noise
 tick 17 covered faint channels and highlights. All 65,536 compared components
 matched exactly, with maximum absolute difference zero.
 
+## The alpha review, and API pages that need no separate shell (08 Sep 2026)
+
+The production review compares `codex/galaxy` with `origin/main` across 468
+changed files. The full baseline passes 2,218 regular tests, eight slow tests
+and the emitted-site checks. Isolated reviews cover the canonical packages,
+rendering and application shell; the integrated fixes pass 2,241 regular tests.
+The review record is [alpha production review](design/reports/alpha-production-review.md).
+
+API content comprises 1,459 of the 1,554 documentation pages. Rendering each
+through the full React shell makes the measured local Astro build emit 1,576
+HTML files in 42.75 seconds. Keeping one API loading shell reduces that to 118
+files in 6.40 seconds. TypeDoc and its link validation still run, and all API
+JSON remains present. Main builds retain full HTML; preview builds record the
+asynchronous choice in the manifest. Exact asset proxies preserve valid deep
+links and real 404s without invoking the Worker. A wildcard proxy would turn
+unknown API addresses into successful pages, so the generated rules name each
+known address and reject Cloudflare's redirect limit before upload.
+[ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) holds the policy.
+
+The search prefilter must share the catalog's spectral parser. Its first-letter
+shortcut drops Barnard's `sdM4` from an M-host search and disagrees with 588
+shipped catalog records. Imported photographic presets also need semantic
+validation before changing their target, date, lens or processing: valid JSON
+can still ask for Earthrise on Earth or a surface composition on Jupiter.
+Selecting a catalog result must clear a current picture URL, and a streamed
+world search must publish the final capped answer rather than leaving its
+larger intermediate batch visible. Each defect has a regression observed
+failing before its fix.
+
+Three r185 retains a disposed BufferAttribute unless its attribute manager
+releases it. Projection source storage alone is 9.6 MB at the production
+ceiling. GPU tests observe the memory records surviving disposal, then verify
+release for packed and separate history layouts. Appearance buffers use the
+same cleanup without disposing the Sprite's shared quad. The full GPU baseline
+passes 135 tests; focused post-fix checks cover the cleanup. The final camera
+shaders use 1,472 to 1,488 bytes of private WGSL storage against the guaranteed
+8,192-byte budget.
+
+The production identity names `inertialref.app` in metadata, Worker routing and
+published entry points. Direct sharp dependencies resolve to 0.35.4 with
+libheif 1.23.2, addressing GHSA-rgj7-g3m4-5g8c; the production dependency audit
+reports no vulnerabilities.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

@@ -35,7 +35,7 @@ web
    under debugging outranks polish, and every control has a harness equivalent
    so that anything doable by clicking is reproducible in a test.
 2. **People sent the link.** The build is deployed at
-   <https://inertialref.jonjaques.com>, which is the only address it answers on
+   <https://inertialref.app>, which is the only address it answers on
    — `workers_dev` is off. They form an impression in about a minute, from a
    first viewport, with no context and no instructions.
 

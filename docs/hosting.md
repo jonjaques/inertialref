@@ -193,7 +193,7 @@ and a shared `/docs/api` loading shell, with exact `_redirects` proxies for
 known API pages. The browser fetches their articles from `doc-content`; unknown
 addresses still return 404. TypeDoc validation runs in both builds.
 `IR_PRERENDER_API=1 pnpm build` verifies the full production output from another
-branch. See the [development guide](guides/development.md#the-stack) and
+branch. See the [development guide](guides/development.md#toolchain) and
 [ADR-0039](adr/0039-the-shell-before-the-scene.md).
 
 The Durable Object and D1 bindings are **not** in the deployed config; they
