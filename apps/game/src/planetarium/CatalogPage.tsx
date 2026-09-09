@@ -11,6 +11,7 @@ import { PLANETARIUM, QUERY } from '../pages/paths.ts'
 import { WorldQueryControls } from './WorldQueryControls.tsx'
 import { WorldRow } from './WorldRow.tsx'
 import { describeQuery } from './worldQuery.ts'
+import { withoutPictureLink } from './presetUrl.ts'
 import { useWorldSearch } from './useWorldSearch.ts'
 
 /*
@@ -67,7 +68,7 @@ export function CatalogPage({ engine }: { engine: GameEngine }) {
    */
   const open = (address: string): void => {
     search.stop()
-    const next = new URLSearchParams(params)
+    const next = withoutPictureLink(params)
     next.set(QUERY.at, address)
     void navigate(
       { pathname: PLANETARIUM, search: next.toString() },
