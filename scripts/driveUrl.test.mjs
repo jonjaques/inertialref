@@ -1,10 +1,48 @@
 import { describe, expect, it } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { PICTURES, encodePictures } from '../packages/devtools/src/index.ts'
 import { readPictureLink } from '../apps/game/src/planetarium/presetUrl.ts'
 import { driveUrl } from './driveUrl.mjs'
 
 describe('driver view URLs', () => {
+  it.each(['sample', 'cast'])(
+    'rejects --%s without scripts before starting a browser',
+    (step) => {
+      const result = spawnSync(
+        process.execPath,
+        [
+          new URL('./drive.mjs', import.meta.url).pathname,
+          '--no-javascript',
+          `--${step}`,
+          '2',
+        ],
+        { encoding: 'utf8' },
+      )
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain(`--${step} needs page scripts`)
+    },
+  )
+  it('accepts document and blocked-runtime proof flags without changing the URL', () => {
+    const output = execFileSync(
+      process.execPath,
+      [
+        new URL('./drive.mjs', import.meta.url).pathname,
+        '--url',
+        'http://localhost:8787/docs/architecture',
+        '--document',
+        '--no-javascript',
+        '--block-url',
+        '*App.*.js',
+        '--block-url',
+        '*catalogAsset*.js',
+        '--print-url',
+      ],
+      { encoding: 'utf8' },
+    )
+    const url = new URL(output.trim())
+    expect(url.pathname).toBe('/docs/architecture')
+    expect(url.searchParams.get('presentation')).toBe('occluded')
+  })
   it('prints a complete URL from CLI flags without opening a browser', () => {
     const output = execFileSync(
       process.execPath,
