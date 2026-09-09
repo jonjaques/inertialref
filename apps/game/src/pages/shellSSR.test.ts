@@ -115,6 +115,7 @@ describe('the HTML page before the renderer starts', () => {
       }),
     )
     expect(html).toContain('role="dialog"')
+    expect(html).toContain('href="/"')
     expect(html).not.toContain('opacity:0')
   })
 

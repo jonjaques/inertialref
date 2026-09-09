@@ -4,6 +4,8 @@ import { Dialog } from 'radix-ui'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAction, useActionTitle, useKeyContext } from '../input/useKeymap.ts'
+import { useHydrated } from '../state/hydration.ts'
+import { HOME } from './paths.ts'
 import { useOverlay } from './useOverlay.ts'
 
 /** A routed dialog over the running scene. Modal tasks also contain keyboard focus. */
@@ -34,7 +36,12 @@ export function OverlayPage({
   fill?: boolean
   children: ReactNode
 }) {
-  const { close } = useOverlay()
+  const { close, background } = useOverlay()
+  const hydrated = useHydrated()
+  const closeHref =
+    background === null
+      ? HOME
+      : `${background.pathname}${background.search}${background.hash}`
   const closeTitle = useActionTitle('overlay.close', 'Close')
   useKeyContext({ context: 'dialog' })
   useAction('overlay.close', close)
@@ -66,7 +73,7 @@ export function OverlayPage({
       aria-modal={modal}
       aria-label={title}
       className={`type-body flex max-h-[calc(100%-4rem)] ${wide ? 'w-[56rem]' : 'w-[34rem]'} max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl outline-none`}
-      initial={false}
+      initial={hydrated ? { opacity: 0, y: 8 } : false}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.18 }}
@@ -82,14 +89,30 @@ export function OverlayPage({
           </span>
         )}
         <Button
+          asChild
           variant="ghost"
           size="icon-xs"
           className="ml-auto text-slate-400 hover:text-sky-200"
           aria-label={closeTitle}
           title={closeTitle}
-          onClick={close}
         >
-          <X />
+          <a
+            href={closeHref}
+            onClick={(event) => {
+              if (
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              )
+                return
+              event.preventDefault()
+              close()
+            }}
+          >
+            <X />
+          </a>
         </Button>
       </header>
       <div
@@ -106,7 +129,7 @@ export function OverlayPage({
   const scrim = (
     <motion.div
       className="hud-bleed pointer-events-auto absolute flex items-center justify-center bg-slate-950/70"
-      initial={false}
+      initial={hydrated ? { opacity: 0 } : false}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
