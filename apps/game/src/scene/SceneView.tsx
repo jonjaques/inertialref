@@ -12,6 +12,7 @@ import { OrbitTraces } from './OrbitTraces.tsx'
 import { Sensor } from './Sensor.tsx'
 import { ShipModel } from './ShipModel.tsx'
 import { Starfield } from './Starfield.tsx'
+import { SurfaceStructures } from './SurfaceStructures.tsx'
 import { SunFlare } from './SunFlare.tsx'
 import { ScatterRocks } from './ScatterRocks.tsx'
 import { TerrainPatches } from './TerrainPatches.tsx'
@@ -80,6 +81,7 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <OrbitTraces engine={engine} />
       <EntryTrace engine={engine} />
       <SunFlare engine={engine} />
+      <SurfaceStructures engine={engine} />
       <ShipModel engine={engine} />
       <ThrusterFx engine={engine} />
       <CinematicStage engine={engine} />
