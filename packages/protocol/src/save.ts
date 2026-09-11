@@ -42,7 +42,50 @@ import {
  * than a change of model.
  */
 
-export const SAVE_SCHEMA_VERSION = 1
+export const SAVE_SCHEMA_VERSION = 2
+
+/** Portable authored placement; protocol and simulation meet in persistence. */
+export interface SaveSurfacePlacement {
+  readonly id: string
+  readonly assetId: string
+  readonly bodyAddress: string
+  readonly latitude: number
+  readonly longitude: number
+  readonly height: number
+  readonly heading: number
+}
+
+const placementText = refine(
+  decodeString,
+  (value): value is string => value.length > 0 && value.length <= 256,
+  'a nonempty identifier of at most 256 characters',
+)
+export const decodeSaveSurfacePlacement: Decoder<SaveSurfacePlacement> =
+  decodeObject({
+    id: placementText,
+    assetId: placementText,
+    bodyAddress: placementText,
+    latitude: refine(
+      decodeNumber,
+      (value): value is number => Math.abs(value) <= Math.PI / 2,
+      'latitude between the poles',
+    ),
+    longitude: refine(
+      decodeNumber,
+      (value): value is number => Math.abs(value) <= Math.PI,
+      'longitude between -pi and pi',
+    ),
+    height: refine(
+      decodeNumber,
+      (value): value is number => value >= 0,
+      'nonnegative height',
+    ),
+    heading: refine(
+      decodeNumber,
+      (value): value is number => Math.abs(value) <= Math.PI * 2,
+      'heading between -2pi and 2pi',
+    ),
+  })
 
 export interface SaveEntity {
   readonly id: string
@@ -105,6 +148,7 @@ export interface SaveGame {
    */
   readonly catalog: string
   readonly entities: readonly SaveEntity[]
+  readonly structures: readonly SaveSurfacePlacement[]
   readonly playerEntity: string | null
   readonly dynamicIdCounter: number
   readonly loadedSystems: readonly string[]
@@ -168,7 +212,7 @@ export const decodeSaveMutation: Decoder<SaveMutation> = decodeObject({
  * Decode a save of the *current* schema version.
  *
  * Older versions are handled by the migration chain in the persistence package
- * before they reach here, so this decoder only ever sees v1 shapes. Keeping the
+ * before they reach here, so this decoder only ever sees current shapes. Keeping the
  * validator and the migrator separate is what makes it possible to add v2
  * without weakening the v1 checks into "some fields might be missing".
  */
@@ -180,6 +224,12 @@ export const decodeSaveGame: Decoder<SaveGame> = decodeObject({
   generation: decodeNumberRecord,
   catalog: decodeOptional(decodeString, ''),
   entities: decodeArray(decodeSaveEntity),
+  structures: refine(
+    decodeArray(decodeSaveSurfacePlacement),
+    (value): value is readonly SaveSurfacePlacement[] =>
+      new Set(value.map((item) => item.id)).size === value.length,
+    'structures with unique ids',
+  ),
   playerEntity: (value, path) =>
     value === null ? ok(null) : decodeString(value, path),
   dynamicIdCounter: decodeInteger,

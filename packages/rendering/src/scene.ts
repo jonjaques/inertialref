@@ -20,7 +20,13 @@ import type {
   ThrustDemand,
   WorldSnapshot,
 } from '@inertialref/simulation'
-import type { BodyAppearance, EntityId } from '@inertialref/universe'
+import { surfacePlacementPose } from '@inertialref/simulation'
+import {
+  type BodyAppearance,
+  type EntityId,
+  drawnSurfaceRadius,
+  geodeticDirection,
+} from '@inertialref/universe'
 import { atmosphereShellRatio, ringScales, sunkSphereRadius } from './datum.ts'
 import { terminatorFor } from './terrainPalette.ts'
 import {
@@ -184,8 +190,19 @@ export interface RenderScene {
   /** Brightest apparent first: `stars[0]` is the scene's key light. */
   readonly stars: readonly RenderStar[]
   readonly entities: readonly RenderEntity[]
+  readonly structures: readonly RenderStructure[]
   /** Bodies close enough to want streamed terrain, nearest first. */
   readonly terrainCandidates: readonly RenderBody[]
+}
+
+/** Metric assets are drawn only beside an uncompressed body. */
+export const STRUCTURE_VISIBILITY_METRES: Meters = 100_000
+
+export interface RenderStructure {
+  readonly id: string
+  readonly assetId: string
+  readonly position: Vec3
+  readonly orientation: Quat
 }
 
 /** Bodies smaller than this angular radius are dropped entirely. */
@@ -392,6 +409,33 @@ export function buildScene(
     }),
   )
 
+  const structures: RenderStructure[] = []
+  for (const structure of snapshot.structures) {
+    const body = bodies.find(
+      (candidate) => candidate.address === structure.bodyAddress,
+    )
+    if (body === undefined || body.placement.compression !== 1) continue
+    const pose = surfacePlacementPose(
+      structure,
+      structure.body,
+      structure.spin,
+      drawnSurfaceRadius(
+        structure.body,
+        geodeticDirection(structure.latitude, structure.longitude),
+      ),
+    )
+    if (
+      UV.distance(camera.position, pose.position) > STRUCTURE_VISIBILITY_METRES
+    )
+      continue
+    structures.push({
+      id: structure.id,
+      assetId: structure.assetId,
+      position: toRenderSpace(origin, pose.position),
+      orientation: orientationToRenderSpace(origin, pose.orientation),
+    })
+  }
+
   // From the *snapshot's* body positions, not the placed ones: placement
   // compresses distance, and while that leaves the direction intact it is
   // not a property worth depending on from over here.
@@ -429,6 +473,7 @@ export function buildScene(
     bodies,
     stars,
     entities,
+    structures,
     terrainCandidates,
   }
 }

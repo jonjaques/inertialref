@@ -55,7 +55,14 @@ const v0ToV1: Migration = {
   },
 }
 
-export const MIGRATIONS: readonly Migration[] = [v0ToV1]
+const v1ToV2: Migration = {
+  from: 1,
+  to: 2,
+  describe: 'add durable surface structures',
+  migrate: (raw) => ({ ...raw, schemaVersion: 2, structures: [] }),
+}
+
+export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2]
 
 export function migrateSave(
   raw: unknown,

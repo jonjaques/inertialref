@@ -3,6 +3,7 @@ import {
   canonicalOrientation,
   canonicalPosition,
   canonicalVelocity,
+  type FramePose,
   type FrameId,
   type FrameState,
   type Quat,
@@ -13,6 +14,7 @@ import {
 } from '@inertialref/spatial'
 import {
   type BodyAppearance,
+  type Body,
   type BodyFigure,
   bodyFixedFrameId,
   bodyFrameId,
@@ -24,6 +26,19 @@ import { TICK_DURATION } from './clock.ts'
 import type { Entity, EntityKind } from './entity.ts'
 import { type ThrustDemand, thrustDemand } from './flight.ts'
 import type { World, WorldEvent } from './world.ts'
+import {
+  type SurfacePlacement,
+  surfacePlacementPose,
+} from './surfacePlacement.ts'
+
+/** A placement carried by its body at the snapshot's presentation instant. */
+export interface SnapshotStructure extends SurfacePlacement {
+  readonly position: UniverseVector
+  readonly orientation: Quat
+  /** Immutable terrain inputs let rendering derive its drawn-ground correction. */
+  readonly body: Body
+  readonly spin: FramePose
+}
 
 /*
  * The presentation bridge.
@@ -128,6 +143,7 @@ export interface WorldSnapshot {
   readonly paused: boolean
   readonly droppedTicks: number
   readonly entities: readonly EntitySnapshot[]
+  readonly structures: readonly SnapshotStructure[]
   readonly bodies: readonly BodySnapshot[]
   readonly stars: readonly StarSnapshot[]
   readonly events: readonly WorldEvent[]
@@ -217,6 +233,8 @@ export function snapshot(
     entities.push(entitySnapshot(world, entity, alpha))
 
   const bodies: BodySnapshot[] = []
+  const structures: SnapshotStructure[] = []
+  const placements = world.structures
   const stars: StarSnapshot[] = []
   for (const system of world.loadedSystems()) {
     stars.push({
@@ -234,6 +252,19 @@ export function snapshot(
       // ternary below — `has` and then the read — which is two template
       // strings and two address formats per body per frame for one answer.
       const spin = bodyFixedFrameId(body.address)
+      const spinPose = world.frames.pose(
+        world.frames.has(spin) ? spin : frame,
+        renderTime,
+      )
+      for (const placement of placements) {
+        if (placement.bodyAddress !== formatAddress(body.address)) continue
+        structures.push({
+          ...placement,
+          body,
+          spin: spinPose,
+          ...surfacePlacementPose(placement, body, spinPose),
+        })
+      }
       bodies.push({
         address: formatAddress(body.address),
         name: body.name,
@@ -268,6 +299,9 @@ export function snapshot(
     paused: status.paused,
     droppedTicks: status.droppedTicks,
     entities,
+    structures: structures.sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    ),
     bodies,
     stars,
     events: world.events(16),

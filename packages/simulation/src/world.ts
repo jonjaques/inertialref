@@ -33,6 +33,8 @@ import {
   dynamicEntityId,
   type EntityId,
   findBody,
+  formatAddress,
+  hasSolidSurface,
   type GalaxyId,
   galaxySeedOf,
   generateSystem,
@@ -40,6 +42,8 @@ import {
   installSystemFrames,
   MILKY_WAY,
   parseSurfaceFrameId,
+  parseAddress,
+  surfaceAsset,
   resolveSystem,
   SOL_ONLY_CATALOG,
   type StarCatalog,
@@ -72,6 +76,10 @@ import {
   type SoiWatch,
   stepFlight,
 } from './flight.ts'
+import {
+  type SurfacePlacement,
+  validateSurfacePlacement,
+} from './surfacePlacement.ts'
 
 /*
  * The world.
@@ -163,6 +171,62 @@ export class World implements FlightWorld {
   }
 
   readonly #systems = new Map<SystemId, StarSystem>()
+  readonly #structures = new Map<string, SurfacePlacement>()
+
+  /** Stable, immutable authored placements, including those in unloaded systems. */
+  get structures(): readonly SurfacePlacement[] {
+    return Object.freeze(
+      [...this.#structures.values()].sort((a, b) =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      ),
+    )
+  }
+
+  placeStructure(placement: SurfacePlacement): SurfacePlacement {
+    validateSurfacePlacement(placement)
+    invariant(
+      !this.#structures.has(placement.id),
+      `Structure ${placement.id} already exists`,
+    )
+    invariant(
+      surfaceAsset(placement.assetId) !== undefined,
+      `Unknown surface asset ${placement.assetId}`,
+    )
+    const address = parseAddress(placement.bodyAddress)
+    invariant(
+      address.kind === 'body' && address.galaxy === this.galaxy,
+      'A structure needs a body in this galaxy',
+    )
+    const stub = resolveSystem(this.galaxySeed, this.catalog, address.system)
+    invariant(stub !== undefined, `Unknown system ${address.system}`)
+    // Validation must not install a system, or a rejected body address changes the world.
+    const system =
+      this.system(address.system) ??
+      generateSystem(this.rootSeed, this.galaxy, stub)
+    const body = findBody(system, address.body)
+    invariant(
+      body !== undefined && hasSolidSurface(body),
+      'A structure needs a solid body',
+    )
+    const stored = Object.freeze({
+      id: placement.id,
+      assetId: placement.assetId,
+      bodyAddress: formatAddress(body.address),
+      latitude: placement.latitude,
+      longitude: placement.longitude,
+      height: placement.height,
+      heading: placement.heading,
+    })
+    this.#structures.set(stored.id, stored)
+    this.#groundAhead.clear()
+    return stored
+  }
+
+  removeStructure(id: string): boolean {
+    const removed = this.#structures.delete(id)
+    if (removed) this.#groundAhead.clear()
+    return removed
+  }
   readonly #bindings = new Map<FrameId, FrameBinding>()
   readonly #children = new Map<FrameId, FrameBinding[]>()
   readonly #landed = new Set<EntityId>()
@@ -983,6 +1047,8 @@ export class World implements FlightWorld {
    */
   stateHash(): string {
     const parts: string[] = [`t=${this.clock.tick}`, `seed=${this.seedText}`]
+    for (const structure of this.structures)
+      parts.push(`structure:${JSON.stringify(structure)}`)
     for (const entity of this.#entities.ordered()) {
       const s = entity.state
       const c = entity.control
