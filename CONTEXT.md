@@ -67,6 +67,13 @@ React runtime adds the live scene. Public content remains readable without
 JavaScript; request-time rendering can use the same shell when needed.
 [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
 
+Surface structures have durable body-fixed anchors, shared by flight,
+planetarium, and Cinema. Save schema 2 carries placements; World verbs place,
+move, and remove them. Flat support disks participate in surface contact.
+The Blender-authored Mars pad and its sunset Rocinante landing are the first
+consumer. [ADR-0040](docs/adr/0040-structures-keep-a-body-fixed-anchor.md)
+records the boundary; placement controls currently live in the harness.
+
 The application hosts also include `apps/ingest`, which builds committed
 astronomical assets offline, and `apps/server`, the Cloudflare adapter. All
 package layers match their `package.json` declarations in the 9 Sep 2026 review.
@@ -9330,6 +9337,44 @@ from 1 to 2,000 model units. A regression samples 48 points across all six
 panels and requires 15–35 mm of clearance over the underlying hull. It fails
 on the source and passes on the corrected export. The six batches and 140,863
 triangles remain; the GLB is 14,983,892 bytes including the modification record.
+
+## A landing pad stays with Mars (11 Sep 2026)
+
+The useful landing site was a shallow basin in the game's Mars relief at
+34.560341698° N, 85.053877851° E. Sampling a 100 m square on a 2 m grid found
+1.362 m of height variation about its tangent plane. The deck sits 2 m above
+the center; the six-meter skirt reaches the ground across that footprint.
+The site's relief is generated, so these coordinates do not claim a named
+real-world Martian facility.
+
+The Blender master retains 595 editable parts. The shipped pad has 29,348
+triangles in ten material batches and occupies 1,583,188 bytes. Initial
+captures exposed overlapping slab tops and millimeter hazard decals sharing
+depth bins from the ground camera. Removing the hidden faces and cutting
+actual gaps between hazard sectors fixed the export. The asset regression
+ray-traces the shipped triangles, so a visually correct Blender preview alone
+cannot conceal the same defect again.
+
+The pad's saved record belongs to World; the Cinema stage borrows it.
+[ADR-0040](docs/adr/0040-structures-keep-a-body-fixed-anchor.md) explains the
+canonical/drawn terrain split and schema migration. Support is a flat disk
+in the existing point-entity contact model, not a hull or ramp collision mesh.
+Moving a placement is atomic and cannot leave a partially replaced record;
+removing the seeded pad stays removed after save/load.
+
+The 46-second Mars scene holds the sunset ephemeris while the director keeps
+advancing from simulation render time. Holding the director's clock instead
+freezes the film. The chosen instant puts the Sun 3° above the horizon at
+azimuth 266.677°; rotating the pad heading to 246° keeps that real Sun beside
+the Roci during the pullback. The opening three-quarter profile is framed by
+a 0.3–0.9° ground telephoto. Touchdown occurs at 41 seconds with zero sampled
+velocity and no burn. Heat, plume, and dust are functions of the playhead.
+
+Cinema's direct URL initially returned 404 even though the director could
+play the scene: Astro's document routes had their own list. Both now consume
+the same script registry, and a regression checks every registered scene's
+cold route. Projection tests keep the entry hull readable and the sunset
+beside the pad; every frame is checked for ground and hull clearance.
 
 ## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
 

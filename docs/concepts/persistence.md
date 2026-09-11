@@ -34,15 +34,16 @@ Storing generated content would be storing a **cache** — one that goes stale t
 moment a generator changes, and that is measured in terabytes if the player
 travels. So a save contains:
 
-| Stored                         | Not stored                |
-| ------------------------------ | ------------------------- |
-| global seed, galaxy id         | every planet, moon, orbit |
-| simulation tick                | every star                |
-| algorithm and catalog versions | any heightfield           |
-| dynamic entities (ships)       | any terrain mesh          |
-| a coasting ship's epoch        |                           |
-| which systems were loaded      | anything with an address  |
-| mutations                      |                           |
+| Stored                         | Not stored                      |
+| ------------------------------ | ------------------------------- |
+| global seed, galaxy id         | every planet, moon, orbit       |
+| simulation tick                | every star                      |
+| algorithm and catalog versions | any heightfield                 |
+| dynamic entities (ships)       | any terrain mesh                |
+| body-fixed structure anchors   | asset geometry or derived poses |
+| a coasting ship's epoch        |                                 |
+| which systems were loaded      | anything with an address        |
+| mutations                      |                                 |
 
 A test asserts the shape of that claim rather than trusting it: the serialized
 fixture save must be **under 2 KB** and must not contain the string `elevations`.
