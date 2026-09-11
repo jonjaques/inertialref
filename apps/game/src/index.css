@@ -632,6 +632,30 @@ a {
 }
 
 /*
+ * The boot cover's ledger: a column that grows from the top and, once it is
+ * taller than its cap, fades its oldest lines out under the top edge.
+ *
+ * The mask is sized to the cap and anchored to the bottom, not stretched over
+ * the box. A mask stretched over a box that grows with its content puts the
+ * fade over the first two lines from the first frame — "waking the renderer"
+ * was gray before the column had reached anything — and a box of fixed height
+ * with the column packed to its end puts the first line a whole cap below the
+ * wordmark. Anchored to the bottom at the cap's height, the fade zone sits
+ * above the box until the box has grown to the cap, which is exactly when
+ * there is something to fade; the box is never taller than the mask, so no
+ * part of it falls outside the image and goes unmasked.
+ */
+@utility boot-ledger {
+  --boot-ledger-cap: min(50dvh, 22rem);
+  max-height: var(--boot-ledger-cap);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent, black 2rem);
+  mask-size: 100% var(--boot-ledger-cap);
+  mask-position: bottom;
+  mask-repeat: no-repeat;
+}
+
+/*
  * Everything drawn over the scene, held at standard range.
  *
  * On the extended path the canvas carries values above diffuse white, and the

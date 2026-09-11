@@ -266,7 +266,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const [firstLight] = useState(() => createFirstLight())
   const {
     phase: boot,
-    status: bootStatus,
+    stages: bootStages,
+    fraction: bootFraction,
     epoch: canvasEpoch,
   } = useStore(firstLight.store)
   // `start` rather than the factory, because a `useState` initializer is
@@ -808,11 +809,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             >
               <ErrorBoundary
                 what="the loading screen"
-                className="type-readout pointer-events-auto absolute bottom-3 left-3"
+                className="type-readout pointer-events-auto absolute top-3 right-3"
               >
                 <BootOverlay
                   phase={boot === 'revealing' ? 'revealing' : 'booting'}
-                  status={bootStatus}
+                  stages={bootStages}
+                  fraction={bootFraction}
                   onRevealed={firstLight.revealed}
                 />
               </ErrorBoundary>
