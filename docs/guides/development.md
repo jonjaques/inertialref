@@ -77,20 +77,24 @@ pnpm build        # once, then `pnpm dev` works for the life of the worktree
 
 `pnpm check` runs `pnpm build`, so a worktree that has been through the gate
 once is already fixed. **`pnpm drive` walks into this**: `--serve` is on by
-default and starts `scripts/dev.mjs`, so on a fresh worktree it waits its full
-sixty seconds for a server that died in the first two and then reports that
-nothing is answering. Serve with `pnpm dev:client` yourself and pass
+default and starts `scripts/dev.mjs`, so on a fresh worktree it reports that
+`pnpm dev` exited without serving, a few seconds in, and the reason is in
+`.data/drive/dev.log`. Serve with `pnpm dev:client` yourself and pass
 `--no-serve`, or build once.
 
-**Astro daemonises itself when it detects a coding agent.** Astro 7 sniffs the
+**Astro daemonizes itself when it detects a coding agent.** Astro 7 sniffs the
 environment for Claude Code, Codex, Cursor and the rest, and a detected `astro
 dev` spawns a detached copy, writes `apps/game/.astro/dev.json`, and returns.
 `scripts/dev.mjs` sets `ASTRO_DEV_BACKGROUND` on its children to keep Astro in
 the foreground, so `pnpm dev` behaves the same under an agent as in a terminal.
-`pnpm dev:client` does not, so run from an agent it leaves a background server
-that outlives the session and holds 5173. `pnpm dev` refuses to start over it
-and names the pid; `pnpm --filter @inertialref/game exec astro dev stop` ends
-it.
+`pnpm dev:client` does not, so, run from an agent, it leaves a background
+server that outlives the session and holds 5173. `pnpm dev` refuses to start
+over it and names the pid while that pid is alive — Astro removes the lock file
+only on a graceful stop, so after a Ctrl-C the file names a pid that is gone,
+and `pnpm dev` then says so and points at `lsof` instead;
+`pnpm --filter @inertialref/game exec astro dev stop` ends a live one. A held
+8787 is refused the same way, except under `--ensure`, which starts the client
+alone and lets Vite proxy to the Worker already there.
 
 `pnpm run deploy:worker`, not `pnpm deploy:worker` — `deploy` is a pnpm
 built-in. After any change to `wrangler.jsonc`, regenerate
