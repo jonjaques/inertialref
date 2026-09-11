@@ -2,8 +2,9 @@
 
 > **The question:** how is only the relevant slice of a galaxy in memory, without
 > "loading screens" or a space-mode/planet-mode split?
-> **The answer:** loading and unloading are ordinary methods called every so
-> often, and existence is separated from being loaded.
+> **The answer:** canonical existence is independent of residency. Systems can
+> load and unload through world APIs; terrain and sky have separate bounded
+> presentation caches.
 >
 > Code: `packages/simulation/src/world.ts` (`updateInterest`),
 > `packages/rendering/src/terrainSelect.ts`,
@@ -42,9 +43,14 @@ the third planet of HIP71683?" is answerable without loading HIP71683.
 
 ## System streaming
 
+`World.updateInterest` is an available residency-management API, exercised by
+world tests. The browser frame loop does not currently call it periodically;
+systems load when navigation and other world operations request them. This
+diagram describes what an explicit call does, not an automatic browser loop.
+
 ```mermaid
 sequenceDiagram
-    participant E as engine
+    participant E as caller
     participant W as World
     participant G as galaxy generator
 
@@ -71,8 +77,16 @@ Two details that make this safe:
   consequence, which is what makes it usable as an ordinary operation rather
   than a risky one.
 
-The 1.25× hysteresis on the unload radius stops a system thrashing when the
-player hovers at the boundary.
+The 1.25× hysteresis on the unload radius prevents thrashing when a caller
+updates interest near a boundary. A browser residency policy still needs to
+schedule that API.
+
+The visible sky does not require those systems to be loaded. A separate
+magnitude query returns bounded source records and a completed selection
+envelope. GPU projection, source-bounded extinction, progressive physical cubes
+and temporal history operate on that presentation data. The cube archive is a
+regenerable cache, not canonical residency or saved state.
+[ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) owns those lifetimes.
 
 ---
 

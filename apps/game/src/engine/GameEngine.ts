@@ -469,7 +469,7 @@ export class GameEngine {
    * capture script may well ask for — stays on the field alone, because
    * `state/engineKnobs.ts` asks the owner only what it accepts.
    *
-   * Not a second producer: `engine.lens` still resolves cutscene-then-flight,
+   * Not a second producer: `engine.lens` resolves cinematic, fixed instrument, then flight,
    * and this writes the one flight lens a panel's slider also writes.
    */
   requestLens(lens: Lens): void {

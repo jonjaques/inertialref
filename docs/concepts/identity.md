@@ -6,7 +6,8 @@
 > is also the seed path, the save reference, the log field and the console
 > argument.
 >
-> Decision record: [ADR-0004](../adr/0004-entity-addressing.md) ·
+> Decision records: [ADR-0004](../adr/0004-entity-addressing.md),
+> [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) ·
 > Code: `packages/universe/src/address.ts`
 
 ---
@@ -99,27 +100,32 @@ unique while staying deterministic.
 
 ## Resolution without an index
 
-A procedural star's id encodes the generation cell it lives in plus its index
-within that cell:
+Procedural systems use two address families. The active population uses `Q`
+ids containing a luminosity level, spatial cell and ordinal. Nine luminosity
+levels have cell widths that double from 20 light-years. A bright source can
+therefore be found without generating every faint star between it and the eye.
+`resolveSystem` decodes the id and regenerates that level's cell plan; there is
+no galaxy-wide index.
 
-```mermaid
-flowchart LR
-    ID["<code>P2s_1e_3_7</code>"] --> DEC["decode<br/><i>zigzag base-36</i>"]
-    DEC --> CELL["cell (50, 25, -2)"]
-    CELL --> REGEN["generateCell(seed, cell)"]
-    REGEN --> STAR["star at index 7"]
+A source's seed uses its population and its index within that population. Its
+address uses the combined ordinal within the level and cell. Those are different
+numbers: changing a population count can move address ordinals even when a
+source's own seed path stays fixed. The active `galaxy@5` and `galaxy-field@5`
+revisions declare that generation policy. Versions identify drift; they do not
+select an archived generator. An ordinal absent from the current plan fails
+resolution explicitly. [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md)
+owns this contract.
 
-    STAR -.- NOTE["one cell generation —<br/>no galaxy-wide index<br/>that would have to exist somewhere"]
-    classDef note fill:none,stroke:none,color:#64748b,font-style:italic
-    class NOTE note
-```
+Legacy `P` ids, such as `P2s_1e_3_7`, encode a 20 light-year cell and an index.
+They retain their legacy generator so existing destinations remain resolvable.
+New surveys issue `Q` ids. Catalog systems keep measured designations such as
+`HIP71683`, and `resolveSystem` tries the explicit catalog before either
+procedural family.
 
-Catalog stars use their real designation (`HIP71683`), so the two id spaces
-coexist and `resolveSystem` tries the catalog first.
-
-The consequence: a save can reference a system nobody has ever visited, and
-loading it costs one cell generation rather than a lookup in a table that would
-have to have been built by exhaustively enumerating a galaxy.
+Stable identity requires the seed, generation manifest and catalog input to
+agree. A save may name an unvisited system without storing its generated
+contents, but the address alone cannot promise the same world across a change
+of those inputs. See [persistence](persistence.md) for drift reporting.
 
 ---
 

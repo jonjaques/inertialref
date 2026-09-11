@@ -7,40 +7,39 @@ From clone to flying, and the first things worth trying.
 ## Run it
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+pnpm build        # creates the assets directory used by Wrangler
 pnpm dev          # → http://localhost:5173
 ```
 
-One command starts both halves — Vite on 5173 and the Cloudflare Worker on 8787,
-with `/api` and `/ws` proxied to it. `pnpm dev:client` is Vite alone, which is
-also how you get the offline path deliberately: with no Worker, the client
-correctly reports `no server`, and that is the normal case for a game whose
-universe is derived rather than fetched.
+One command starts both halves — Astro on 5173 and the Cloudflare Worker on 8787,
+with `/api` and `/ws` proxied to it. `pnpm dev:client` is Astro alone, which is
+how you run solo development without the Worker. After a fresh install, run
+`pnpm docs:build` first. This tests server-independent simulation; it does not
+exercise the production service worker's offline cache.
 
 From VS Code or Cursor, **Run and Debug → Launch Browser** does the same start
 and attaches the debugger. Attach/Launch Node target the headless runner.
 [Development](development.md#debugging) has the four configurations.
 
-The client opens on Earth, three-quarter lit, with the ship — a CC-BY
-USS Enterprise-D hull by default, a CC-BY Rocinante if you choose it in
-Display settings, or the debug cone while either loads — framed in the
-foreground of a Solar System built from measurements rather than from a seed.
+The home page frames Earth with the ship hidden. Choose Solo or open
+`/play/solo` to fly. Flight uses the CC-BY Enterprise-D hull by default; Display
+settings also offer the CC-BY Rocinante, with a debug cone during loading.
 
 ```mermaid
 flowchart LR
-    A["pnpm install"] --> B["pnpm dev<br/><i>vite + wrangler</i>"] --> C["localhost:5173"]
-    C --> D["fly with WASD / arrows"]
-    C --> E["drive it from the console<br/><code>ir.help()</code>"]
-    C --> F["prove it works<br/><code>await ir.selfTest()</code>"]
-    style F fill:#065f46,stroke:#064e3b,color:#fff
+    A["pnpm install"] --> B["pnpm build"] --> C["pnpm dev<br/><i>Astro + Wrangler</i>"]
+    C --> D["localhost:5173/play/solo"]
+    D --> E["fly or call ir.help()"]
+    D --> F["await ir.selfTest()"]
 ```
 
-In a **production** build (`pnpm preview`, which builds and then serves the
-result through the real Worker on 8787) no server is required after the first
-load — a service worker caches the app and content comes from the seed. The
-worker is deliberately not registered under `pnpm dev`, where it would sit in
-front of Vite and turn every edit into a caching investigation. See
-[persistence](../concepts/persistence.md#offline-first).
+`pnpm preview` builds and serves through the real Worker on 8787. A warmed
+production build can then run without that server, for the routes and assets
+already cached. Unvisited documentation and uncached models or textures still
+need a connection. The service worker is not registered during development,
+where it would interfere with hot reload.
+[Persistence](../concepts/persistence.md#offline-first) gives the full boundary.
 
 ---
 
@@ -209,15 +208,15 @@ puts it under thrust, which is what an integrated tick costs.
 ## Commands
 
 ```bash
-pnpm dev          # vite on 5173 and wrangler on 8787, in one terminal
+pnpm dev          # Astro on 5173 and wrangler on 8787, in one terminal
 pnpm preview      # build, then serve it through the real Worker on 8787
 pnpm test         # vitest, node environment only
-pnpm typecheck    # five tsconfig projects
+pnpm typecheck    # five tsconfig projects and Astro templates
 pnpm lint         # oxlint
 pnpm graph        # dependency layering + cycle check
 pnpm brand        # re-render the icons, the share card and the crawler files
 pnpm build
-pnpm check        # the gate — graph → brand → presets → format → lint → typecheck → test → build
+pnpm check        # the gate — graph → brand → presets → format → lint → typecheck → test → test:slow → build
 
 pnpm sim --self-test          # headless run + capability checks
 pnpm sim --scenario surface --ticks 2526    # also: --seed, --system, --quiet

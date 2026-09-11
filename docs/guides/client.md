@@ -157,7 +157,8 @@ ship**. Each arm hands a presentation eye to `buildScene`. No arm may depend
 on a later one resolving, and only the last needs a player.
 
 **The lens follows the same order through the same code.** `engine.lens` is a
-getter over `cinematic?.lens ?? flightLens`, and everything that composes a
+getter choosing the cinematic lens, then an active fixed galaxy instrument's
+declared lens, then `flightLens`, and everything that composes a
 frame — `CameraRig`, the flare, the warp streaks, the sky labels, the terrain
 predicate — reads it rather than holding a copy. A picture composed through one
 lens and measured through another is the bug class this closes, which is why a

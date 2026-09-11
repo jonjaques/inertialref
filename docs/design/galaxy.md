@@ -124,7 +124,10 @@ three signatures and no architecture. Beside it, `stars-sky.irsc` holds the
 **naked-eye sky beyond 150 ly**: 7,514 systems at apparent V ≤ 6.5, 188 KB
 brotli, the farthest at 3,198 ly. The two load as one catalog; the sky's stars
 resolve by id and are drawn from anywhere in the volume, and they stay out of
-the cell index so the procedural fill is the same galaxy with or without them.
+the volume-only cell index. The local volume's index and travel queries stay
+stable when the sky asset is supplied. Outside that volume, the sky's
+magnitude envelope changes procedural completeness; it is an explicit
+generation input. [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md).
 
 | Dataset                    | Provides                                                  | Scale                                                                                                                                                           | License posture                                                                                                                                                                                                    |
 | -------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -176,7 +179,7 @@ rendering its own coverage.
 The hard problem the whole three-layer model exists to solve.
 
 **The problem.** Generation is a pure function of seed and address, which is what
-makes the universe reproducible, streamable and 744 bytes to save. But the
+makes the universe reproducible and streamable without storing generated content. But the
 catalog is an _input_ to generation, and the catalog changes. A star with no
 known planets today may have three confirmed next year. If that shifts every
 generated body around it, then every save, every Almanac entry and every
@@ -474,8 +477,8 @@ flowchart LR
     RAW["raw dataset<br/>HYG csv · NASA archive"] --> NORM["normalize<br/>ICRS → galactic<br/>units → SI"]
     NORM --> RES["resolve identity<br/>HIP/HD/Gliese/2MASS<br/>→ one SystemId"]
     RES --> DIFF["diff vs previous<br/>version"]
-    DIFF --> PACK["pack<br/>binary, chunked<br/>by galactic cell"]
-    PACK --> SHIP["ship<br/>bundled ≤ 25 ly<br/>streamed beyond"]
+    DIFF --> PACK["pack<br/>volume and sparse sky<br/>as two binary assets"]
+    PACK --> SHIP["ship<br/>committed pair<br/>fetched together at boot"]
 
     style RES fill:#7f1d1d,stroke:#450a0a,color:#fff
     style DIFF fill:#0369a1,stroke:#0c4a6e,color:#fff

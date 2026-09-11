@@ -37,13 +37,13 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                                                                         |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
-| `universe`      | 3     | done — addressing, star catalog with its naked-eye sky, generation, terrain, frames                                                                                                                         |
+| `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames                                                                                                 |
 | `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                                                                        |
-| `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                                    |
+| `workers`       | 5     | done — typed tasks, ports, pool, seven shared tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                            |
 | `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                                                                            |
 | `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                                                                             |
-| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                                                                                              |
+| `rendering`     | 5     | done — camera and lens math, LOD, depth compression, terrain meshing, galaxy presentation                                                                                                                   |
 | `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                                                                         |
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
@@ -51,7 +51,7 @@ planetarium at 0.37 ms of engine (ADR-0025).
 The default Enhanced camera composes detailed worlds and faint sky; Automatic
 and Manual share photographic light and response. The active galaxy population
 and diffuse field share luminosity bands and dust transport. GPU star projection
-keeps ordinary camera motion to observer uniforms; a bounded V8 sky query is
+keeps ordinary camera motion to observer uniforms; a bounded V ≤ 8 sky query is
 independent of travel selection. Physical sky cubes refine through 32², 128²
 and 512², with a separate regenerable disk cache and 0.15 pc shared reuse
 allowance. Live temporal history retains angular detail and caps its longest
@@ -66,6 +66,14 @@ Astro pre-renders the public shell and documentation before the persistent
 React runtime adds the live scene. Public content remains readable without
 JavaScript; request-time rendering can use the same shell when needed.
 [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
+
+The application hosts also include `apps/ingest`, which builds committed
+astronomical assets offline, and `apps/server`, the Cloudflare adapter. All
+package layers match their `package.json` declarations in the 9 Sep 2026 review.
+
+The 9 Sep 2026 Node self-test passes 12/12 and its save is 1,041 bytes.
+Earlier browser figures above are recorded operating points, not a fresh
+measurement of this review or a bound for every session.
 
 ## Decisions that are expensive to reverse
 
@@ -97,7 +105,8 @@ Full reasoning is in `docs/adr/`. The short version:
    kinematically to a surface frame instead.
 8. **Render compression keys off distance to the _surface_.** Keying off the
    center put a planet's datum sphere 30 km from the terrain it represents.
-9. **A save is a reference, not a copy** — under 800 bytes for a flown session.
+9. **A save is a reference, not a copy.** Size follows dynamic state and references,
+   rather than how much terrain has been generated.
 
 ## Conventions worth knowing before editing
 
@@ -117,16 +126,16 @@ Full reasoning is in `docs/adr/`. The short version:
 ## Commands
 
 ```bash
-pnpm dev         # ONE command: vite on 5173 and wrangler on 8787, /api proxied
-pnpm dev:client  # just vite      pnpm dev:server  # just wrangler
+pnpm dev         # ONE command: Astro on 5173 and wrangler on 8787, /api proxied
+pnpm dev:client  # just Astro      pnpm dev:server  # just wrangler
 pnpm preview     # build, then the real Worker over the real dist — production
 pnpm test        # vitest, node environment only
-pnpm typecheck   # five tsconfig projects
+pnpm typecheck   # five tsconfig projects and Astro templates
 pnpm lint        # oxlint
 pnpm graph       # dependency layering + cycle check
 pnpm brand       # re-render every brand artifact from design/brand/brandmark.svg
-pnpm build       # optional media pull, docs:build, typecheck, vite build
-pnpm check       # graph, brand:check, presets:check, format:check, lint, typecheck, test, build
+pnpm build       # optional media pull, docs:build, typecheck, Astro build and emitted HTML checks
+pnpm check       # graph, brand:check, presets:check, format:check, lint, typecheck, test, test:slow, build
 pnpm vitest run <substring>   # single test file
 pnpm run deploy:worker        # pnpm build, then wrangler deploy
 
@@ -9211,6 +9220,30 @@ so the successful factory could win. One factory now reads an explicit failure
 state before the import. The test still checks that prefetch and the route share
 the same rejected promise; production loading code is unchanged.
 
+## A photograph and its Navigator disagree about the date (09 Sep 2026)
+
+The galaxy documentation review followed the invariant audit against the merged
+`codex/galaxy` code and the offline-assets fix. The baseline `pnpm check` passed
+2,250 regular tests and eight slow tests; `pnpm sim --self-test` passed 12/12
+with a 1,041-byte save. The twelve checks establish the architectural
+foundation, not the galaxy's physical calibration or visual acceptance.
+
+The audit reproduced a presentation-time defect in Navigator distances.
+After looking at Earth, holding time at 100 days and sampling the observer,
+`targets({ origin: 'observer', lightYears: 0 })` reported Earth at
+228,893,310,401 m while its distance at the photographic instant was
+20,779,658.5 m. Both survey and fuzzy-search rows pass the photographic eye to
+`travel.ts` without its instant, and the body samples use `world.clock.time`.
+[Rule 38](docs/agents/invariants.md#rule-38) still applies. The documentation
+records the defect rather than weakening the invariant to bless it.
+
+A separate probe changed Proxima's catalog position by 10¹⁴ m. Restoring a
+portable picture accepted the same seed and algorithm manifest, moved the eye
+by 10¹⁴ m, and gave no catalog warning. Picture files have no catalog version;
+canonical saves do. [ADR-0033](docs/adr/0033-presets-hold-a-photographic-instant.md)
+does not decide whether a future catalog change should refuse a shot or keep
+it relative to the changed target. That policy remains open.
+
 ## pnpm 12, and the dev server that daemonized under an agent (10 Sep 2026)
 
 pnpm 12 is the Rust rewrite; commands, flags, settings and the lockfile format
@@ -9264,6 +9297,13 @@ is alive and on 5173.
 
 ## Known gaps
 
+- **Navigator body distances ignore held photographic time.** Observer-centered
+  survey and fuzzy-search rows need the eye and body sampled at the same instant.
+  The 9 Sep 2026 entry above records the reproduction; runtime behavior is unchanged.
+- **Portable pictures do not record catalog versions.** A changed catalog can
+  move the restored view without a warning. The intended restoration policy
+  across catalog revisions is not settled by ADR-0033.
+
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
 - **The timeline has no span inside `packages/simulation`, so `pnpm sim
@@ -9302,20 +9342,21 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   volume is `disabled-by-default-v8.gc`, which comes along with
   `devtools.timeline`. A longer recording wants streaming rather than one
   `JSON.parse`, and `traceFrames.mjs` has the same shape of limit.
-- **The planetarium has no bookmarks, filters or measure tool.** The address is
-  already the whole record for a bookmark, so what is missing is a store; the
-  filter fields are the ones `docs/design/galaxy.md` lists for the galaxy map.
-- **Mode routes are not covered by a Node test.** Each drives a live engine, and
-  a test that stubbed a renderer, a worker pool and a camera would assert
-  against the stub. `modeForPath`, the link builders, the dock algebra, the
-  gesture arithmetic and the compact dock all are; the boundary is deliberate.
+- **The planetarium has no general measure tool or discovery Almanac.** Personal
+  photographic presets and predicate catalog filters exist. They do not supply
+  the discovery progression or spatial measurement tools in the design bible.
+- **Node route tests do not prove compositor behavior.** `shellSSR.test.ts`,
+  `ModeRoutes.preload.test.ts` and `modeLoader.test.ts` cover server output,
+  preload and loader behavior; paths, link builders and dock arithmetic have
+  their own tests. Focus, pointer routing and the live canvas still need browser
+  evidence when changed.
 - **Piloting on a touchscreen is not designed.** The flight modes are
   desktop-only and the menu says so. The planetarium and the cinema player are
   the mobile surface.
 - Binary and multiple-star systems are modeled as single stars (`components`
   in the catalog records the truth for all 375 of them within 150 ly).
 - Moons outside the Solar System are all projections, which is right — no
-  exoplanet moon has been confirmed. Sol's twenty are real and observed.
+  exoplanet moon has been confirmed. Sol's sixty-two moons are real and observed.
 - **Most small bodies have no vendored surface map** — Titan, Enceladus,
   Iapetus, Triton, the Uranian moons, Deimos, Eros, Itokawa, Ryugu and every
   asteroid and comet below Bennu — and render from their measured albedo and

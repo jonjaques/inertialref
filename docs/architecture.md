@@ -220,7 +220,10 @@ Details: [coordinates](concepts/coordinates.md) · [frames](concepts/frames.md) 
 
 ## Where the universe comes from
 
-Nothing is stored. Content is a pure function of a seed and an address.
+Generated content is derived from a seed and address under declared algorithm
+versions. Measured catalog records, Solar System data, maps and models are
+explicit inputs supplied by the host. The manifest identifies which inputs
+produced the result; it does not select archived implementations.
 
 ```mermaid
 flowchart LR
@@ -255,8 +258,9 @@ draw on measured half-extents; a generated moon is a draw all the way down.
 [ADR-0013](adr/0013-measured-figures.md)
 
 The consequence for storage is stark: a save is the seed, the tick and the
-handful of things with no address to regenerate from — **just under 800 bytes
-for a flown session**. [Persistence](concepts/persistence.md)
+dynamic state and references that cannot be reconstructed from those inputs.
+The self-test's flown session is about 1 KB; a larger session can grow without
+storing a single generated planet. [Persistence](concepts/persistence.md)
 
 ---
 
@@ -309,24 +313,32 @@ flowchart TB
   [Streaming](concepts/streaming.md#where-the-heightfields-come-from)
 - **The harness** is the same object the headless runner uses, so a bug
   reproduced in Chrome replays in a test. [Harness](guides/harness.md)
-- **The service worker** caches the app shell. With the server stopped the game
-  still loads and passes all twelve capability checks — there is nothing else to
-  fetch, because content comes from the seed.
+- **The service worker** caches route-specific HTML and fetched assets. A warmed
+  production build passes the twelve capability checks offline; an uncached
+  document, catalog, model or texture still needs a connection.
+  [Persistence](concepts/persistence.md#offline-first) defines the cache policies.
+- **The sky** combines a bounded magnitude-selected source field with diffuse
+  light from the same luminosity population. Source selection and its diffuse
+  subtraction envelope publish together. GPU projection follows the observer;
+  physical cubes and temporal history retain transported light independently
+  of camera exposure. [ADR-0038](adr/0038-the-stars-and-the-diffuse-sky.md).
 
 ---
 
 ## Applications
 
-| App             | What it is for                                                                                                                     |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/game`     | The client. React for UI, R3F for the view, and an engine that owns everything else.                                               |
-| `apps/headless` | The same core in Node — no DOM, no React, no WebGL. Proves the boundary and runs the capability checks via `pnpm sim --self-test`. |
+| App             | What it is for                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/game`     | Astro pre-renders the readable shell; React owns navigation and UI, R3F the persistent scene, and the engine simulation and presentation. |
+| `apps/headless` | The same core in Node — no DOM, no React, no WebGL. Proves the boundary and runs the capability checks via `pnpm sim --self-test`.        |
+| `apps/ingest`   | Offline conversion of published catalogs, textures, reference data and shape models into committed assets.                                |
+| `apps/server`   | Cloudflare adapter for static assets, media and the current API/WebSocket boundary. Multiplayer authority remains future work.            |
 
-Both open a session through the same `Session` in `devtools`, which owns the
-seven steps of standing a world up. Before it existed there were five copies of
-that sequence and they had already drifted — the client spawned the ship at 2.5
-body radii and everything else at 3, a difference that would make a bug
-reproduce in one runtime and not the other.
+The game and headless runner call `openSession` in `devtools`. It wires the
+same world and harness while each host supplies storage, workers and catalog
+bytes. The server and ingest application do not reconstruct that client
+session. [ADR-0039](adr/0039-the-shell-before-the-scene.md) describes how the
+readable shell remains independent of renderer startup.
 
 ---
 
@@ -371,19 +383,20 @@ unreachable rather than merely discouraged.
 ## Verification
 
 ```bash
-pnpm check   # graph → brand → presets → format → lint → typecheck (5 projects and Astro templates) → tests → build
+pnpm check   # graph → brand → presets → format → lint → typecheck (5 projects and Astro templates) → tests → slow tests → build
 ```
 
-| Stage           | What it proves                                                                 |
-| --------------- | ------------------------------------------------------------------------------ |
-| `graph`         | layering intact, no cycles                                                     |
-| `brand:check`   | generated brand artifacts match their source                                   |
-| `presets:check` | every picture still has a plate, and every composition it names still resolves |
-| `format:check`  | committed files match Prettier                                                 |
-| `lint`          | oxlint across the workspace                                                    |
-| `typecheck`     | five tsconfig projects plus Astro templates                                    |
-| `test`          | the full Vitest suite runs in plain Node — `packages/*` and `apps/*` alike     |
-| `build`         | the server renders every public route and bundles the client and workers       |
+| Stage           | What it proves                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `graph`         | layering intact, no cycles                                                                     |
+| `brand:check`   | generated brand artifacts match their source                                                   |
+| `presets:check` | every picture still has a plate, and every composition it names still resolves                 |
+| `format:check`  | committed files match Prettier                                                                 |
+| `lint`          | oxlint across the workspace                                                                    |
+| `typecheck`     | five tsconfig projects plus Astro templates                                                    |
+| `test`          | the regular Vitest suite runs in plain Node — `packages/*` and `apps/*` alike                  |
+| `test:slow`     | terrain descent and galaxy convergence/population checks run separately from the regular suite |
+| `build`         | the server renders every public route and bundles the client and workers                       |
 
 On top of that, twelve **capability checks** execute the milestone's claims
 against the live build — in Node via `pnpm sim --self-test`, and in the browser

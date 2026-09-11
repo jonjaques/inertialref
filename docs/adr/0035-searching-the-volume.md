@@ -16,7 +16,7 @@ no body has one until its system is generated, and most never are.
 
 **The thing being asked about does not exist yet.** A system is a pure function
 of its seed ([ADR-0005](0005-procedural-seeds.md)), which is what makes the
-universe streamable and a save 744 bytes — and it means the only way to know
+universe streamable without storing generated systems — and it means the only way to know
 whether a star has a world with a sea is to build the system and look. There is
 nothing to index, because there is nothing there.
 
@@ -60,9 +60,10 @@ last worker holds the whole answer.
 
 ### The star class is checked against the stub before the system is built
 
-Generating a system is milliseconds and reading a letter off a stub is nothing,
-so a search for M dwarfs skips nine systems in ten before paying for any of
-them. `matchSystem` asks the real question afterwards against the parsed class.
+The stub permits rejecting a nonmatching host class before generating its
+system. The share of work avoided depends on the selected population and
+query; there is no fixed rejection ratio. `matchSystem` checks the generated
+star against its parsed class afterwards.
 
 ### The nearest thousand are kept, and the rest are counted
 

@@ -3,10 +3,11 @@
 How InertialRef gets from a `dist/` directory to a URL, and what has to exist
 behind that URL before the persistent universe is possible.
 
-> **H0, H1, H3, H7 and H8 are built and deployed; H2 is half done. Everything from
-> H4 onward is still a plan.** The client is live at
-> <https://inertialref.app> — a Cloudflare custom domain, and the only
-> one it answers on. It is served by `apps/server`: one Worker, the
+> **Static hosting, the local authority port, metadata and reference media are
+> implemented. The API is partial; remote authority and persistent mutations
+> remain planned.** The client is live at
+> <https://inertialref.app>, the canonical Cloudflare custom domain, and the
+> retained `inertialref.jonjaques.com` origin. It is served by `apps/server`: one Worker, the
 > static bundle, `/api/health`, and `/ws` reserved behind a deliberate 501. `packages/net` holds the authority port and the local
 > implementation of it that every solo player runs. There is no Durable Object,
 > no D1 and no socket yet, and the sections below still describe those in the
@@ -27,7 +28,7 @@ behind that URL before the persistent universe is possible.
 Because the universe is a pure function of `(seed, catalog version, address)`,
 a server never has to store, serve or simulate the galaxy. It holds exactly what
 a client cannot derive — **other entities and persistent mutations** — which is
-the same set a 744-byte save file holds. That is
+the same set the save format represents. That is
 [ADR-0007](adr/0007-persistence.md) and [ADR-0008](adr/0008-multiplayer-partitions.md)
 agreeing with each other, and it is the reason a non-commercial project can
 credibly promise a persistent universe at all.
@@ -415,7 +416,9 @@ gate, and the one asset the repository will not carry.
 deployment under a different name — useful for checking a build, and wrong to
 count as visits or to let a crawler index as a duplicate site. The Worker's own
 `workers.dev` route is off (`workers_dev: false` in `wrangler.jsonc`), so there
-is no second address that tracks the tip; a preview URL names one version.
+is no additional `workers.dev` address tracking production. Both custom
+origins remain live so installed apps keep their storage; a preview URL names
+one version.
 
 **Every public route arrives as HTML.** Astro prerenders the React shell,
 documentation body and navigation at build time. `src/documentHead.ts` renders
@@ -842,18 +845,15 @@ put it on the debug overlay, and look at it for a phase before trusting it.
 | **H4**    | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction                       |
 | **H5**    | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                                        |
 
-H4 is the milestone the request actually asks for: everything stood up, nothing
-load-bearing.
+H4 introduces remote presence; the current solo runtime uses local authority.
 
-**Where this actually stands.** H0 and H3 are done. H1 is done apart from the
-custom domain — the client is live, the prerendered route HTML and 404s work, and the
-service worker excludes both live paths. H2 is half done from the other end than
-planned: `wrangler types` output is committed and the fourth tsconfig project is
-green, but the endpoint that exists is `/api/health` rather than `/api/version`,
-and there is no D1 yet. Health turned out to be the more useful of the two to
-build first, because it is the one the client has a reason to call on a
-schedule — and it carries `GENERATION_VERSIONS` anyway, so `/api/version` is now
-a rename away rather than a build.
+**Current implementation.** H0, H1 and H3 are complete. Both custom domains serve
+the client, prerendered route HTML and 404s work, and the service worker excludes
+the live API and socket paths. H2 is partial: generated Worker types and type
+checks exist, and `/api/health` reports protocol, generation and catalog
+identity. There is no `/api/version` endpoint or D1 binding. H4 presence and H5
+discovery mutations remain unbuilt. Public metadata and R2 media delivery are
+implemented separately, as described in H-7 and H-8 above.
 
 The client shows the result in the telemetry tab under **network**, in five
 states: `checking`, `online`, `offline` (the browser says there is no network),
@@ -903,7 +903,7 @@ is why it won out over a deploy workflow in Actions.
 
 | Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                             |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                     |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workers_dev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                   |
 | Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                                |
 | The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                           |
 | Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |

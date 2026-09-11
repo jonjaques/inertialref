@@ -54,7 +54,7 @@ contain state this build cannot represent, and silently dropping it loses a
 player's progress.
 
 Storage is behind a `SaveStore` port. The browser uses IndexedDB (localStorage
-is a synchronous 5 MB box that blocks the main thread — fine for 750 bytes,
+is a synchronous 5 MB box that blocks the main thread — fine for a small fixture save,
 wrong the moment terrain mutations arrive); Node tests and the headless runner
 use an in-memory store.
 

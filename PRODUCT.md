@@ -35,8 +35,8 @@ web
    under debugging outranks polish, and every control has a harness equivalent
    so that anything doable by clicking is reproducible in a test.
 2. **People sent the link.** The build is deployed at
-   <https://inertialref.app>, which is the only address it answers on
-   — `workers_dev` is off. They form an impression in about a minute, from a
+   <https://inertialref.app>, the canonical domain, and the retained
+   `inertialref.jonjaques.com` origin. `workers_dev` is off. They form an impression in about a minute, from a
    first viewport, with no context and no instructions.
 
 **Designed for, not yet reachable.** The audience the game is being built
@@ -54,8 +54,8 @@ score, or a session that resolves in ten minutes. Serving them damages the
 momentum and single-viewpoint pillars.
 
 **Session assumption:** 45–120 minutes typical, and the design must tolerate a
-30-minute session ending mid-flight. A save is 744 bytes and restores an
-identical state hash, so **quit anywhere is a hard requirement, not a nicety.**
+30-minute session ending mid-flight. A save stores dynamic state and references, and restores an
+identical state hash when its generation inputs agree, so **quit anywhere is a hard requirement, not a nicety.**
 
 ---
 
@@ -100,8 +100,8 @@ Two supporting claims, both load-bearing:
   144 Hz and 100× warp. Projects with this ambition usually die on exactly these
   problems, years in, when they are a rewrite rather than a refactor.
 - **Zero install is a distribution advantage nobody in the genre has.** The
-  comparables are 100 GB downloads behind a store account. This is a link, and a
-  744-byte save means **a coordinate is the share.**
+  comparables are 100 GB downloads behind a store account. This is a link, and portable
+  photographic presets make a composed view shareable by URL.
 
 Fidelity is where this project would always lose. Continuity, reality and reach
 are where it can win outright, and every scoping argument resolves that way.
@@ -134,9 +134,11 @@ position is negative and settled, WebKit has not shipped it. The public phrasing
 must therefore name the browser: "full 6-DoF axis binding with no emulation
 layer, in Chrome and Edge."
 
-**Offline is real.** A service worker caches the app; with the server stopped
-the game still loads, streams terrain from its own GPU and workers, and passes all twelve
-checks.
+**Offline works after caching.** A warmed production build loads, streams
+terrain and passes the twelve capability checks with its server stopped.
+Uncached documents, models and textures need a connection. The two production
+origins retain separate browser storage. [Persistence](docs/concepts/persistence.md#offline-first)
+describes the boundary.
 
 **One environmental gotcha:** Chrome throttles `requestAnimationFrame` in
 backgrounded tabs, so a freshly reloaded unfocused page sits at tick 0 until
@@ -154,7 +156,8 @@ through the compositor at twice white and the readouts wash out at exactly the
 moment they are being read. Chrome and Safari implement the property; Firefox
 does not and has no extended range to need it.
 
-**Client stack.** React + React Three Fiber on Vite 8, Tailwind 4, TypeScript
+**Client stack.** Astro 7 pre-renders the shell; React + React Three Fiber
+provide the persistent runtime over Vite 8, with Tailwind 4 and TypeScript
 throughout, pnpm workspace. React Compiler is on. The HUD is absolutely
 positioned over a canvas that fills the viewport and never scrolls.
 
@@ -174,12 +177,12 @@ enforced by `pnpm graph`, not documented. `pnpm check` is the gate.
 | Real data, forever changing   | Address stability and generation purity are non-negotiable.                                                                          |
 
 **Deliberately not built, with the seam named for each** — multiplayer, n-body
-gravity, hull and entity collision, terrain patch stitching, and a content
-pipeline. See [roadmap](docs/roadmap.md).
+gravity, hull and entity collision, and the ship-parts content pipeline. See [roadmap](docs/roadmap.md).
 
 **Undecided, and not to be invented.** Perf budgets are written for a 2023-class
-laptop at 1920×1080 and every number recorded so far comes from an Apple M5 at
-1000×760; cold load to interactive is unmeasured. The hardware half of the HOTAS
+laptop at 1920×1080. The build records several Apple M5 operating points,
+including 1080p and retina drawing buffers, plus cold and warm startup. Those
+measurements do not establish performance on the target laptop. The hardware half of the HOTAS
 spike has never been run — no stick-and-throttle pair was available.
 
 ---

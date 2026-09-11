@@ -2,6 +2,10 @@
 
 Status: accepted · 2026-08-19
 
+The active luminosity-level `Q` system ids and legacy `P` resolution policy are
+specified by [ADR-0038](0038-the-stars-and-the-diffuse-sky.md). The hierarchical
+address and seed principles here still apply.
+
 ## Context
 
 A procedurally generated universe has no database of objects to hand out ids
@@ -21,7 +25,7 @@ slash-separated typed segments:
 ```
 g:milky-way                                        a galaxy
 g:milky-way/s:HIP71683                             a star system
-g:milky-way/s:HIP71683/b:2                         the third planet
+g:milky-way/s:HIP71683/b:2                         the third body issued
 g:milky-way/s:HIP71683/b:2.0                       its first moon
 g:milky-way/s:HIP71683/b:2/r:3.6.12.44             a surface region
 g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7         an object in it

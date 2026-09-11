@@ -185,9 +185,11 @@ recipes apply only while the named instrument owns the view.
 
 The field transports stellar emission through the shared dust model. A declared
 photopic/V ratio of 1.25 converts V power to luminance; color remains
-illustrative. `resolvedStarExtinction: false` records the temporary mismatch
-between attenuated diffuse light and star sprites. The cache and camera
-processing do not establish that deferred population work.
+illustrative. `resolvedStarExtinction` reports the resolved-star cache's
+readiness. Star sprites use source-bounded dust columns; the report's queue,
+lag and completion counters show whether they are still catching up with an
+observer move. [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) defines
+the catalog-relative transmission and finite update cycles.
 
 ```sh
 node scripts/drive.mjs --url http://localhost:5173/planetarium \
@@ -209,9 +211,9 @@ node scripts/drive.mjs --url http://localhost:5173/planetarium \
 | `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
 | `ir.loadSystem(id)` | generate a system without moving the ship                     |
 
-`goTo` is the only verb that accepts all the forms a person types: `SOL`,
-`s:SOL/b:2`, or `b:2` relative to the current system. Everywhere else,
-`parseAddress` remains strict.
+`goTo` and the observatory's `look` accept human forms such as `SOL`,
+`s:SOL/b:2`, or `b:2` relative to the current system. The low-level
+`parseAddress` function remains strict; use the harness resolver for human input.
 
 **`findWorlds` is a third question and the expensive one.** `targets` and
 `search` read what is already there; this generates every system inside the
@@ -325,7 +327,7 @@ Two notes worth internalising:
 
 `ir.look(target, options?)` moves the observatory camera without moving the
 ship or changing canonical state. That distinction is deliberate:
-`ir.look('s:SOL/b:5')` and `ir.goTo('s:SOL/b:5')` can both fill the frame with
+`ir.look('s:SOL/b:4')` and `ir.goTo('s:SOL/b:4')` can both fill the frame with
 Jupiter, but only `goTo` leaves the ship there.
 
 `ir.observatory` exposes the camera itself for repeated interaction:
@@ -381,13 +383,22 @@ the orbit floor, so `ir.compose` lands them on the surface arm.
 
 ### Pictures
 
-A composition plus the two things a composition leaves out — an address and a
-lens — so it produces the same frame every time:
+A portable picture stores its seed and algorithm manifest, photographic
+instant, target, framing and tracking state, full lens and camera processing.
+Built-ins and imported shots use the same validated format.
 
 ```js
 ir.presets() // ids, labels and what each one is
 ir.preset('earthrise') // takes it, and fits the lens it solved
+const picture = ir.capturePicture('my-view', 'My view') // held instant and full camera
+ir.takePicture(picture) // validates and restores the picture
 ```
+
+`takePicture` refuses a different seed or algorithm manifest. Pictures do not
+carry a catalog version, so a changed catalog can move a restored shot without
+a warning. This differs from canonical-save drift reporting.
+[ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md) records the format
+and current limitation.
 
 `ir.rise()` is the framing behind Earthrise on its own: it stands on the body
 being looked at with its parent a stated clearance over the horizon, and returns
@@ -463,8 +474,10 @@ a `.text` block — the shape `terrainBaseline` established — because the poin
 a terminal-readable answer from a single `--js` call:
 
 ```
-node scripts/drive.mjs --js "ir.visit('g:milky-way/s:SOL/b:2',{site:'summit',height:2})" \
-                       --wait 5000 --js "(await ir.profile(2000)).text" --down
+node scripts/drive.mjs --url http://localhost:5173/planetarium \
+  --js "ir.visit('g:milky-way/s:SOL/b:2',{site:'summit',height:2})" \
+  --wait 5000 --js "(await ir.profile(2000)).text"
+node scripts/drive.mjs --down
 ```
 
 The last line of the report is the deliverable: _"9 of 61 frames over 25 ms;
@@ -605,7 +618,7 @@ ir.stopCutscene()
 
 Pause before seeking for a frame-exact still. The browser needs to render
 after the seek before the sampled cinematic state is current; follow the
-capture procedure in [Driving](../agents/driving.md#browser-gotchas).
+capture procedure in [Driving](../agents/driving.md#session-lifetime).
 
 ---
 
@@ -652,7 +665,7 @@ than one. Worth knowing before using the self-test as a mid-session probe.
 ## Persistence
 
 ```js
-const text = ir.save() // serialized save, ~750 bytes
+const text = ir.save() // serialized save; size follows dynamic state and references
 ir.load(text) // → Result<stateHash, error>
 ```
 

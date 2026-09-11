@@ -215,16 +215,13 @@ Two practical rules from the existing renderer:
 
 - **Mutate imperatively for per-frame work.** A React reconcile per body per
   frame at 144 Hz is a lot of work to arrive at the same matrix.
-- **Record the origin generation** on anything you build from render-space
-  _positions_, so a rebase invalidates it. A buffer that holds only
-  **directions** is the exception, and reaching for the counter there is
-  expensive: a direction is invariant under translation, so moving `d` swings
-  the nearest thing in the buffer through at most `d/r` radians while the
-  generation ticks every 4,096 m regardless. `scene/Starfield.tsx` is the worked
-  case — the counter fired every ninth frame in Earth orbit to rewrite twenty
-  thousand stars that had not moved a pixel, and the budget it uses instead is a
-  parallax tolerance against the nearest star, which in orbit is the system's own
-  sun and about 1,500 km of travel.
+- **Give buffers the invalidation rule their coordinates need.** Render-space
+  positions depend on the floating origin, but star sources carry packed
+  absolute sectors, subcells and remainders. `scene/Starfield.tsx` uploads them
+  when selection changes; `render/starProjection.ts` projects them against
+  observer uniforms on the GPU. Ordinary camera translation must not become a
+  full source upload. [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md)
+  records source identity and projection ownership.
 
 ---
 
@@ -316,7 +313,7 @@ rather than in the harness.
    `"exports": { ".": "./src/index.ts" }` and `inertialref.layer` set to a number
    strictly above every dependency. Copy `packages/rendering/package.json`.
 2. Nothing to do for TypeScript. Packages have no `tsconfig.json` of their own —
-   the root project already includes `packages/*/src`, and only the two apps have
+   the root project already includes `packages/*/src`, and the four host applications have
    their own config.
 3. Add it to the dependents' `dependencies` with `workspace:*`.
 4. `pnpm install` then `pnpm graph`.

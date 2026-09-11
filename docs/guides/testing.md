@@ -12,8 +12,9 @@ means something.
 > frame loop, lens resolution, observatory framing, save/load and
 > derived-state invalidation under Node — because `GameEngine` takes its worker
 > factory and save store as arguments instead of constructing a browser
-> `Worker` and IndexedDB itself. Its terrain descent is the one part of that
-> file the suite does not currently run; see below.
+> `Worker` and IndexedDB itself. The dedicated terrain-descent slow test runs
+> through `pnpm test:slow`, alongside galaxy convergence and population checks;
+> both regular and slow suites are in `pnpm check`.
 
 ---
 
@@ -327,22 +328,18 @@ the three globals `three/webgpu` reads at import time, and
 verbs: `compile`, `shader` (the generated WGSL), `drawGraph` and `draw`
 (pixels back from a render target), and `compute` with `readBuffer` (a
 storage buffer back from a kernel). The suite is `*.gpu.test.ts`, its config
-is `apps/game/vitest.gpu.config.ts`, and the whole of it — every production
-material compiled to a Metal pipeline, structural assertions on the WGSL, a
-pixel ramp, the orbital bake read back both ways, the ring strips, the terrain
-kernels against their CPU originals — runs in about **18 s** on an M5, eight
-files and 41 tests. One test is seventeen of those seconds:
-`terrainKernel.gpu.test.ts` holds the tile kernel to `generateHeightfield`
-across the zoo and the levels, and it walks all fourteen rungs of the crater
-ladder on every body. The bands are 3.2 s and the producer 1.4 s, running in
-parallel beside it; everything else together, Dawn's boot included, is about a
-second, which is why a question that is not about the kernel should name its own
-file. Why that config exists and why it sits outside `pnpm check` is its own
-header,
-[`apps/game/vitest.gpu.config.ts`](../../apps/game/vitest.gpu.config.ts); what
-is still open — whether a hosted macOS runner gives Dawn a Metal adapter, and
-the two limits on how far these answers travel — is
-[the headless WebGPU plan](../../design/plans/headless-webgpu.md).
+is `apps/game/vitest.gpu.config.ts`. It covers material compilation, WGSL
+structure, pixel and bake readback, terrain agreement, star projection and dust,
+physical galaxy light, temporal history and sensor behavior.
+
+Name a focused file when investigating one mechanism:
+`pnpm vitest run --config apps/game/vitest.gpu.config.ts materials.gpu`.
+Suite size and wall time change as coverage grows, and cost depends on the
+adapter and selected tests. The early eight-file, 41-test suite took about
+18 seconds on an M5; that is a historical measurement, not the current suite's
+budget. The config explains why the physical-GPU suite sits outside
+`pnpm check`; [the headless WebGPU plan](../../design/plans/headless-webgpu.md)
+records the remaining hosted-adapter and portability questions.
 
 It is a separate command rather than part of `pnpm test` because it makes a
 different portability claim: the rest of the suite runs on any Node, and this
@@ -441,7 +438,8 @@ otherwise assert in prose.
 ## Running them
 
 ```bash
-pnpm test                       # everything that runs on any Node
+pnpm test                       # regular Node suite
+pnpm test:slow                  # terrain descent and galaxy calibration/population
 pnpm test:gpu                   # the shader suite, on the real GPU — not in check
 pnpm test:coverage              # the same suite, plus coverage/coverage-final.json
 pnpm vitest run world.test      # one file
@@ -449,7 +447,7 @@ pnpm vitest run world.test      # one file
 # answers "No test files found" for anything named *.gpu.test.ts.
 pnpm vitest run --config apps/game/vitest.gpu.config.ts materials.gpu
 pnpm vitest                     # watch
-pnpm check                      # graph, brand, presets, format, lint, typecheck, test, build
+pnpm check                      # graph, brand, presets, format, lint, typecheck, test, test:slow, build
 ```
 
 ---

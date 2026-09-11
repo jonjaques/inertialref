@@ -1,6 +1,9 @@
 # ADR-0008: Authority partitions by star system, behind a port
 
-Status: proposed · 2026-08-19 · **design only — multiplayer is a later phase**
+Status: proposed · 2026-08-19 · **remote authority remains a later phase**
+
+The partition helpers, `AuthorityPort` and `LocalAuthority` are implemented.
+The remote authority, replication and partition handoff remain proposed.
 
 ## Context
 
@@ -29,23 +32,16 @@ opaque string keys. Authority follows an entity's **frame chain**, not its
 address — a ship has no address at all, but a ship inside Sol belongs to Sol's
 partition.
 
-What exists today is exactly that: a mapping to opaque keys, in `universe`, with
-no networking, no transport and no vendor import anywhere in the graph.
+`partitionForFrames` owns frame-chain derivation in `universe`. Both entity
+inspection and `packages/net` call it. `openSession` accepts an `AuthorityPort`
+and defaults to a `LocalAuthority` over its own world and player. The telemetry
+shows the partition and authority status before a remote transport exists.
 
-Two amendments, from a later review:
-
-- It is no longer purely design. `partitionForPosition` is a live consumer —
-  `devtools/inspect.ts` puts the partition key on every entity inspection and
-  the debug overlay shows it as "authority". Being able to see which partition
-  an entity would belong to, a phase before any partition exists, is the cheapest
-  possible test of whether the rule makes sense.
-- The frame-chain rule is implemented, but _not_ through this ADR's own API:
-  `inspect.ts` scans the chain for an `s:` prefix itself rather than calling
-  `partitionForAddress`. The two agree only because the frame-id grammar and the
-  partition-key grammar are both `s:<system>`. That is a coincidence one rename
-  away from being a bug, and it is the first thing to fix when this phase starts.
-  `partitionForAddress`, `partitionsAdjacent`, `formatPartition` and
-  `partitionForFlight` have no callers at all.
+An early review found that inspection returned a frame ID as a partition key.
+The two strings agreed only because both grammars used `s:<system>`.
+`partitionForFrames` removes that coincidence by resolving the system through
+`partitionForAddress`, with `partitionForPosition` as the interstellar fallback.
+No remote transport or hosting-vendor dependency enters the portable packages.
 
 ## Sketch, to be validated rather than assumed
 
@@ -56,11 +52,11 @@ Persistent universe
   └── partition "c:12,-3,7"    ← interstellar space, by generation cell
 ```
 
-A Durable Object per key is one plausible binding. The simulation would reach it
-through an `AuthorityPort` interface — join, leave, submit intent, receive
-authoritative state — with a `LocalAuthority` implementation for single-player
-that is not a stub but the normal case (ADR: offline-first is the requirement,
-not a mode).
+A Durable Object per key is one proposed host adapter behind the existing
+`AuthorityPort` interface. `LocalAuthority` implements the single-player case;
+a remote implementation must preserve the port's partition and state contracts.
+The [hosting guide](../hosting.md#milestones) distinguishes those implemented
+seams from the proposed remote service.
 
 Because the base universe is deterministic, an authority only has to replicate
 what a client cannot derive: entity states and persistent mutations. That is the

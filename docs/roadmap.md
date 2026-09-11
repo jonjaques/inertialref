@@ -26,7 +26,7 @@ flowchart LR
     end
     subgraph LATER["⬜ not started"]
         L1["multiplayer · replay"]
-        L2["performance work · content systems"]
+        L2["discovery progression · content systems"]
     end
     DONE --> NEXT --> LATER
     style DONE fill:#065f46,stroke:#064e3b,color:#fff
@@ -40,35 +40,35 @@ a production build. What follows is depth, not foundations.
 
 ## Status at a glance
 
-| Area                                | Status | Notes                                                                                                                                                             |
-| ----------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Universe coordinates and precision  | ✅     | [ADR-0001](adr/0001-universe-coordinates.md)                                                                                                                      |
-| Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                                                                          |
-| Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                                        |
-| Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                                         |
-| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                                          |
-| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly, and the 7,514 naked-eye stars beyond; 129 Solar System bodies; [guide](guides/catalogue.md)                          |
-| Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                                        |
-| Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                                             |
-| Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                                         |
-| Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                                                                    |
-| Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                                           |
-| Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                                                |
-| Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                                               |
-| Level of detail                     | 🟡     | Tiers exist; [terrain](#terrain) is a restricted morphing quadtree over a measured detail floor, with rock scatter and a per-pixel grain band under it            |
-| Units and conventions               | ✅     |                                                                                                                                                                   |
-| Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                                          |
-| Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                                                |
-| Observability                       | ✅     | All twelve inspectable fields                                                                                                                                     |
-| Automation and DX                   | 🟡     | Commands, docs, CI and the formatter done; [no save fixture](#automation-gaps)                                                                                    |
-| Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                                                                           |
-| Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                                                                                |
-| Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field                                                    |
-| Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                                                                    |
-| Planetarium                         | ✅     | Free navigation, a folding and filterable catalog, the body record, orbit traces, labels, composed shots, standing on a surface — [design](design/planetarium.md) |
-| Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)                                                                  |
-| Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                                                                              |
-| Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                                                                          |
+| Area                                | Status | Notes                                                                                                                                                                                 |
+| ----------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Universe coordinates and precision  | ✅     | [ADR-0001](adr/0001-universe-coordinates.md)                                                                                                                                          |
+| Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                                                                                              |
+| Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                                                            |
+| Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                                                             |
+| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                                                              |
+| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly, and the 7,514 naked-eye stars beyond; 129 Solar System bodies; [guide](guides/catalogue.md)                                              |
+| Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                                                            |
+| Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                                                                 |
+| Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                                                             |
+| Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                                                                                        |
+| Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                                                               |
+| Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                                                                    |
+| Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                                                                   |
+| Level of detail                     | 🟡     | Tiers exist; [terrain](#terrain) is a restricted morphing quadtree over a measured detail floor, with rock scatter and a per-pixel grain band under it                                |
+| Units and conventions               | ✅     |                                                                                                                                                                                       |
+| Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                                                              |
+| Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                                                                    |
+| Observability                       | ✅     | All twelve inspectable fields                                                                                                                                                         |
+| Automation and DX                   | 🟡     | Commands, docs, CI and the formatter done; [no save fixture](#automation-gaps)                                                                                                        |
+| Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                                                                                               |
+| Performance                         | 🟡     | Instrumented and measured at declared operating points; target-hardware acceptance remains open ([performance](#performance-work))                                                    |
+| Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field                                                                        |
+| Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                                                                                        |
+| Planetarium                         | ✅     | Free navigation, Navigator and predicate catalog search, body records, orbit traces, labels, portable photographs, held time and galaxy instruments — [design](design/planetarium.md) |
+| Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)                                                                                      |
+| Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                                                                                                  |
+| Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                                                                                              |
 
 ---
 
@@ -89,7 +89,8 @@ change** — they are generators plus representations.
 | Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; a procedural giant gets a 1-in-6 chance and a strip drawn from its own character                           |
 | Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
 | Small-body figures       | ✅     | 92 of Sol's 129 bodies are not spheroids; 25 have published shape models and the rest are seeded — [ADR-0013](adr/0013-measured-figures.md)                                                                                     |
-| Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                                                                                                                                               |
+| Diffuse galaxy and dust  | ✅     | Calibrated stellar populations, luminosity-level resolved stars and absorption share one field; ADR-0038                                                                                                                        |
+| Star clusters, nebulae   | ⬜     | Globular clusters, H II line emission and dust scattering remain separate additions; the existing diffuse galaxy does not implement them                                                                                        |
 | Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                                                                                                                                  |
 | Vegetation, flora, fauna | ⬜     | Region-seeded scatter on terrain — the `o:` address segment exists for this                                                                                                                                                     |
 | Structures, settlements  | ⬜     | First real consumer of [persistent mutations](#persistent-mutations)                                                                                                                                                            |
@@ -98,9 +99,10 @@ change** — they are generators plus representations.
 
 **Gameplay verbs**: piloting ✅, in-system travel ✅, approach and orbit ✅,
 landing ✅. Interstellar travel is 🟡 — possible but takes hours of
-simulated time, so it wants either a warp/jump mechanic or much higher
-acceleration. Atmospheric entry is 🟡: drag and an exponential atmosphere are
-modeled, but there is no heating, no plasma, no structural stress. Surface
+simulated time, so the designed burn/jump travel loop remains open. The
+planetarium's reversible Earth-to-disk journey is a presentation tool and does
+not move a ship. Atmospheric entry is 🟡: drag, a visual entry arc and heat flux
+are modeled, but there is no thermal damage or structural stress. Surface
 exploration is 🟡 — you can land and fly around, but there is nothing to explore
 yet.
 
@@ -301,72 +303,47 @@ contains, which is not a coincidence and is worth preserving.
 
 ## Performance work
 
-The principle is _design for these, measure before optimising_
-([vision](vision.md#measure-before-optimizing)). The design admits all of them;
-almost none are applied, and almost nothing is measured.
+The principle is [measure before optimizing](vision.md#measure-before-optimizing).
+The build has a shared timeline, browser driving and profiling tools, a physical
+GPU test suite, and recorded cold/warm operating points. These establish costs
+under named conditions; they do not establish the 60 fps target on every laptop.
 
-| Technique            | Status | Where it would go first                                                                                                                                                 |
-| -------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                                                            |
-| Transferable buffers | ✅     | Worker results                                                                                                                                                          |
-| Worker pools         | ✅     |                                                                                                                                                                         |
-| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size; rock scatter is four instanced meshes in the terrain's own material. Asteroids are not                      |
-| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                                                              |
-| Spatial indexes      | ⬜     | Interest queries                                                                                                                                                        |
-| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                                                             |
-| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. The heightfield producer is a compute pass over storage buffers (ADR-0023); indirect draw is not used yet |
-| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                                                                   |
+| Technique                              | Status | Current boundary                                                                               |
+| -------------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| Typed arrays and transferables         | ✅     | Terrain fields, vertex buffers and worker results                                              |
+| Worker pools                           | ✅     | Galaxy queries, canonical terrain and client atmosphere tasks                                  |
+| Instanced rendering                    | 🟡     | Stars and rock scatter; a visible asteroid-belt population remains unbuilt                     |
+| GPU projection and bounded sky updates | ✅     | Source uploads follow selection changes; observer uniforms handle ordinary camera movement     |
+| Physical sky reuse                     | ✅     | Progressive cubes, a bounded regenerable disk cache and temporal history, governed by ADR-0038 |
+| WebGPU                                 | ✅     | TSL renderer and compute terrain; WebGL 2 remains a slower fallback                            |
+| WASM and shared mutable buffers        | ⬜     | Require evidence that the existing kernels or transferables are insufficient                   |
 
-**What is measured today:** simulation throughput (~1.25M ticks/s in the browser
-for one _integrated_ entity; the headless run's own figure is a coasting ship, so
-it measures a jump), worker queue latency and execution time,
-frame time, engine time, draw calls, triangles, JS heap, and GPU milliseconds per
-frame — the last measured across a drained queue rather than from
-`renderer.info.render.timestamp`, which
-[lies](spikes.md#2--tsl-and-the-atmosphere-integral). All of it is live in the
-dev dock's **perf** panel, and all of it is a scalar — which is why
-[ADR-0022](adr/0022-the-timeline.md) adds the shared time axis those scalars
-never had: the engine step decomposed into eight phases, the streamer into five,
-ten `useFrame` consumers, both sides of the worker boundary, and boot from
-navigation to first light. `ir.profile(ms)` and `pnpm timing` read it back from
-a terminal. **What is not:** allocation rate, GC pressure, anything at all on the
-target machine, and any stored baseline — so there is still nothing that can fail
-a pull request for getting slower. Cold load to interactive now has an
-instrument rather than a figure: the one reading taken is a driver's occluded
-Chrome against a Vite dev server, which is a number about that window and not
-about a player.
+`ir.profile(ms)`, `pnpm timing` and the Perf panel expose engine, terrain,
+render, boot and worker work. [ADR-0038](adr/0038-the-stars-and-the-diffuse-sky.md)
+records the sky's work budgets and memory allocations; its 2 ms live target is
+not a universal bound. [ADR-0037](adr/0037-the-enhanced-camera.md) records camera
+acceptance, and [technical](design/technical.md) keeps the historical baseline
+measurements separate from budgets.
 
-The overlay earned itself on the first day: it found that the simulation clock
-capped time warp at 7.5× while the UI offered 100,000×.
+Astro serves readable HTML before the scene loads. `GameLoader` imports the
+runtime separately, and the runtime registers the service worker after startup.
+A reader reaching documentation does not need a working renderer to read the
+page. [ADR-0039](adr/0039-the-shell-before-the-scene.md) owns that split. Mermaid
+is a separate on-demand documentation dependency.
 
-Also unaddressed: the entry chunk is 2.48 MB raw (**747.0 KB gzip / 583.8 KB
-brotli**, measured 2026-08-27), dominated by Three.js. Roughly 150 KB raw of it
-is dead weight: React Three Fiber imports `three`, which pulls in the classic
-`WebGLRenderer` that nothing uses, because the WebGL _fallback_ here is
-`WebGPURenderer`'s own backend. Dropping R3F or splitting the renderer out would
-both recover it. The budget is 900 KB gzip, so this is inside it.
+Remaining work includes acceptance on the target laptop, representative input
+and travel recordings, allocation/GC investigation where traces identify it,
+and a reliable performance-regression gate on controlled hardware. A fixed
+wall-time threshold in ordinary CI would measure the runner as much as the code.
+Physical GPU correctness tests and preset plates already exist; comparing
+rendered images automatically on stable CI hardware remains separate work.
 
-**One split exists, and it is not the application's.** The documentation's
-diagrams import Mermaid dynamically, which brings 116 further chunks —
-3.28 MB raw, 954.0 KB gzip, Mermaid's own parsers plus cytoscape, dagre and
-KaTeX. None carries a first-party module, and nobody fetches one until they open
-a documentation page that has a diagram on it. Nothing in `apps/game/src` is
-lazily loaded, so a reader arriving at `/` still pays the whole entry chunk.
-
-**Two numbers arrived from [the spikes](spikes.md) and both belong here.**
-
-- A single-scattering atmosphere raymarch at 256 samples per pixel costs
-  **7.27 ms at 1080p on an Apple M5** — 2.4× the frame budget's atmosphere line on
-  a GPU well above target. Precomputed LUTs are a requirement, not an
-  optimization.
-- The whole 150 ly catalog is **159 KB brotli**. It is not a performance
-  problem and does not need streaming.
-
-> ⚠️ **When the benchmark harness is built, do not use
-> `renderer.info.render.timestamp`.** It double-counts on the canvas path — it
-> reported 14.6 ms for a frame whose true cost is 7.27 ms. Wall clock across
-> `queue.onSubmittedWorkDone()`, or a raw `timestamp-query`, agree with each other
-> and with reality.
+Historical measurements retain their conditions: the 27 Aug 2026 entry chunk
+was 747.0 KB gzip, the early M5 atmosphere raymarch cost 7.27 ms at 1080p, and
+the 150 ly catalog measured 159 KB brotli. They are not current whole-app or
+current atmosphere costs. Do not use `renderer.info.render.timestamp` for that
+measurement; [the spike](spikes.md#2--tsl-and-the-atmosphere-integral) records its
+double-counting failure and the drained-queue method.
 
 ---
 
@@ -462,23 +439,22 @@ value is.
 
 ### Photometric normalization
 
-**The largest single thing standing between the renderer and "photographic".**
+The surface pipeline separates physical reflectance from camera processing.
+Mapped bodies retain their texture reflectance with a normalized hue tint;
+mapless bodies use their physical palette. The sphere, ground and orbital bake
+share this convention. Enhanced applies a bounded visibility gain at the lit
+material, while Automatic and Manual omit it.
+[ADR-0037](adr/0037-the-enhanced-camera.md) records the current camera contract.
 
-A surface map's mean linear luminance ranges from 0.048 (Callisto) to 0.32 (the
-Moon) across the shipped set, and it does not track the published geometric
-albedo at all — Vesta's map is four times darker than Mercury's on a body three
-times brighter. Every body's tint compensates by hand, which is a per-body
-constant standing in for a per-body measurement.
+Per-map photometric normalization remains open. The 25 Aug 2026 measurement
+found mean linear luminance from 0.048 on Callisto to 0.32 on the Moon, without
+agreement with their published geometric albedos. Removing double-applied
+albedo does not calibrate those map means.
 
-| Gap                                    | Consequence                                                      | Seam                                                                                                                                                 |
-| -------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Maps are not normalized to albedo      | Each body's brightness is hand-tuned and a new map arrives wrong | `apps/ingest/src/textures.ts` already decodes every map; recording its mean linear luminance in the manifest is a few lines                          |
-| The renderer has no target reflectance | Nothing converts a published `p` into a rendered brightness      | `PlanetMaterial.albedoScale` already exists and is already driven per body by `adaptationFor`; a normalization term multiplies into the same uniform |
-
-The reason it is not done: it changes how **every planet** is lit, including the
-eight that are currently right. That makes it a deliberate pass with its own
-before-and-after plates, not a patch. The measurement that would drive it is in
-[`CONTEXT.md`](../CONTEXT.md) under the 25 Aug entry.
+The remaining work is to record each map's linear mean in the ingest manifest,
+then evaluate a scale toward the chosen reflectance convention. It changes
+every mapped world's brightness and needs a deliberate calibration with
+before/after plates. The historical measurement is in [CONTEXT.md](../CONTEXT.md).
 
 ### Shape models the ingest cannot reach
 
@@ -538,13 +514,13 @@ destinations and the population is the scenery between them.
 
 ## Automation gaps
 
-| Gap                             | Note                                                                                                                                                                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ~~No CI configuration~~ ✅      | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                                                                                                      |
-| ~~No formatter~~ ✅             | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review                                                                         |
-| No stored save fixture          | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk                                                                                                  |
-| No performance regression tests | See above                                                                                                                                                                                               |
-| No visual regression testing    | The seam now exists: the `tng-intro` cutscene (ADR-0010) is frame-seekable against a frame-analyzed reference edit, so render → dump → re-measure → diff is a script away. Would still need a GPU in CI |
+| Gap                            | Note                                                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| ~~No CI configuration~~ ✅     | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                              |
+| ~~No formatter~~ ✅            | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review |
+| No stored save fixture         | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk                          |
+| No controlled performance gate | Physical GPU correctness tests exist; timing regression needs stable hardware, see above                                        |
+| No automated image comparison  | Preset plates and scripted camera frames supply reproducible fixtures; automated visual comparison still needs stable GPU CI    |
 
 ---
 
@@ -567,30 +543,23 @@ Not roadmap items so much as honest labels on what is modeled:
 
 ## What would be next
 
-If the goal is the most architectural value per unit of work:
+The terrain quadtree, stitching, GPU heightfields and rock scatter already
+exist. The remaining paths build on them:
 
 ```mermaid
 flowchart LR
-    T["<b>1. Terrain quadtree<br/>+ stitching</b>"] --> W["<b>2. Content variety</b><br/>scatter, belts as a population"]
-    T --> P["<b>3. Replay recording</b>"]
-    W --> M["<b>4. Persistent mutations</b>"]
-    P --> N["<b>5. Multiplayer</b>"]
+    T["Terrain mesh cost and erosion"] --> C["Content variety and visible belts"]
+    C --> M["Persistent mutations"]
+    R["Input recording and replay"] --> N["Multiplayer"]
     M --> N
-    L["<b>0. Photometric<br/>normalization</b>"] --> T
-
-    style T fill:#0369a1,stroke:#0c4a6e,color:#fff
-    style L fill:#0e7490,stroke:#155e75,color:#fff
+    P["Per-map photometric calibration"] --> A["Visual acceptance on target hardware"]
 ```
 
-Terrain first: it is the visible ceiling on everything surface-related, it
-exercises the streaming and LOD systems properly, and every later content system
-(scatter, structures, terrain mutations) sits on top of it.
-
-[Photometric normalization](#photometric-normalization) is numbered zero because
-it is smaller than any of these and is the difference between a renderer that is
-correct and one that is convincing. It is a day's work behind a measurement that
-already exists, and it is the last thing that would be easy to do _before_ the
-number of bodies grows again.
+Terrain mesh cost and erosion have explicit seams in [terrain](#terrain).
+[Photometric normalization](#photometric-normalization) is an independent
+calibration task. Replay and persistent mutations supply different parts of
+the multiplayer prerequisite; neither is supplied by the galaxy journey or
+portable photographs.
 
 ---
 

@@ -23,14 +23,17 @@ loading screens and no scale seams.
 
 ## What this is
 
-This repository contains the **first milestone**: a vertical architectural proof.
-It is deliberately a platform first and a visual demo second — **the graphics are
-primitives; the point is what is underneath them.**
+The first milestone, a vertical architectural proof, is complete. The current
+build adds measured Solar System bodies, streamed terrain, a planetarium,
+portable photographs, cinematic playback and a calibrated stellar population
+with diffuse sky and dust. Flight remains a simulation foundation; the
+exploration reward loop and ship subsystems are still design work.
 
 The hard problems in a game at this scale are precision, determinism and
 identity, and all three are solved and demonstrated here rather than asserted. You
 can fly from the galactic center to a mountainside, resolve an inch, save the
-whole universe in under a kilobyte, and get the same answer twice.
+session as compact references and dynamic state, and get the same answer twice
+when the seed, catalog and generation versions agree.
 
 > **Status: pre-alpha, single maintainer, no release.** There is no gameplay yet.
 > [`docs/roadmap.md`](docs/roadmap.md) says what is deliberately not built and
@@ -91,19 +94,23 @@ pnpm --version    # 12.x
 ```bash
 git clone git@github.com:jonjaques/inertialref.git
 cd inertialref
-pnpm install
+pnpm install --frozen-lockfile
+pnpm build               # creates the assets directory used by Wrangler
 pnpm dev                 # → http://localhost:5173
 ```
 
 One command starts both halves — Astro on 5173 and the Cloudflare Worker on 8787,
 with `/api` and `/ws` proxied to it. `pnpm dev:client` and `pnpm dev:server` are
-the halves if you want one without the other, and `pnpm preview` builds and then
+the halves if you want one without the other. After a fresh install,
+`pnpm docs:build && pnpm dev:client` starts the client without a full build;
+combined development also needs the Worker assets produced by `pnpm build`.
+`pnpm preview` builds and then
 serves the result through the real Worker, which is the closest thing to
 production that runs locally.
 
 That is the whole setup. No environment variables you have to set, no services to
-start, no API keys — the universe is generated from a seed, and the game is
-fully playable with the server stopped.
+start, no API keys — the universe is generated from a seed, and solo simulation does not need a live server. A warmed production build
+can also start offline, subject to its [cached assets](docs/concepts/persistence.md#offline-first).
 
 <details>
 <summary><b>Two things this repository deliberately does not contain</b></summary>
@@ -123,7 +130,8 @@ Neither is needed to run the game, the tests or the build.
 
 ### First sixty seconds
 
-Open the browser console. The whole simulation is scriptable from there:
+Open `/play/solo`, then the browser console. The whole simulation is scriptable
+from there once the scene is ready:
 
 ```js
 ir.help() // everything the harness can do
@@ -158,7 +166,10 @@ pnpm sim --help                # all flags
 
 - A galaxy centered on the **real galactic center**, with **7,123 real star
   systems out to 150 light-years** — HYG v4.4 converted through ICRS → galactic
-  coordinates — and procedural stars filling the gap the catalog leaves.
+  coordinates, plus 7,514 distant bright catalog stars. Nine luminosity levels
+  fill the catalog's completeness gaps. Resolved stars and diffuse light share
+  one calibrated population and dust field; [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
+  records the physical model and its limits.
 - **702 confirmed exoplanets** around 443 of them, with their published orbits,
   masses and radii, plus the eight planets of the Solar System. Every body says
   whether it is `observed` or `projected`; the game never claims a generated
@@ -204,11 +215,13 @@ pnpm sim --help                # all flags
   addressed as `o:` objects lying on it — and the ground the ship lands on and
   the ground you can see are two functions 1.25 m apart, measured and written
   down.
-- **Save and load to IndexedDB in under a kilobyte**, because a save is a reference
-  and not a copy.
-- **Genuinely offline** — a service worker caches the app, and with the server
-  stopped the game still loads, streams terrain from its own GPU and workers, and
-  passes all twelve capability checks.
+- **Save and load to IndexedDB**, storing references and dynamic state rather
+  than generated content. The self-test's flown session is about 1 KB; save
+  size grows with entities, loaded-system references and mutations.
+- **Offline after caching**: a warmed production build loads, streams terrain
+  from its GPU and workers, and passes the twelve capability checks with the
+  server stopped. Unvisited documents and uncached models or textures still
+  need a connection.
 - **Dockable panels** in the browser — the catalog, the object record, the
   camera and the presets in the planetarium, and the author's `controls`,
   `telemetry`, `perf` and `graphics` behind a disclosure — that call the harness
@@ -233,11 +246,15 @@ PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc fro
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 PASS 10. Worker task — 4761 elevations and 33800 cover bytes generated in a worker, identical to local generation
-PASS 11. Save round trip — 998 bytes restored to an identical state hash
-PASS 12. Frame-rate independence — identical state hash ec3ff6d1 at tick 513
+PASS 11. Save round trip — 1041 bytes restored to an identical state hash
+PASS 12. Frame-rate independence — identical state hash 55d4dba1 at tick 513
 ```
 
-CI runs this on every pull request, alongside `pnpm check`.
+This example is the Node run from 9 Sep 2026. The twelve checks cover the
+architectural foundation; they do not establish visual quality, galaxy
+photometry, GPU performance or every offline asset. Dedicated suites and
+recorded measurements cover those areas. CI runs the self-test on every pull
+request, alongside `pnpm check`.
 
 ---
 
@@ -277,7 +294,7 @@ Full reasoning, alternatives and consequences are in [`docs/adr/`](docs/adr/).
 
 ```
 apps/
-  game               React + React Three Fiber client, WebGPU/TSL renderer
+  game               Astro shell, React + R3F runtime, WebGPU/TSL renderer
   headless           Node runner — no DOM, no React, no WebGL
   ingest             turns published catalogs into the packed star asset
   server             the Cloudflare Worker — the only place Cloudflare appears
@@ -312,24 +329,24 @@ in `packages/*`.
 
 ### Commands
 
-| Command                       | What it does                                                                       |
-| ----------------------------- | ---------------------------------------------------------------------------------- |
-| `pnpm dev`                    | Astro on :5173 **and** the Worker on :8787, in one terminal                        |
-| `pnpm dev:client`             | Just the Astro development server on :5173                                         |
-| `pnpm dev:server`             | Just `wrangler dev`                                                                |
-| `pnpm preview`                | Build, then serve it through the real Worker on :8787                              |
-| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                          |
-| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`               |
-| `pnpm typecheck`              | Five independent tsconfig projects and Astro templates; see below                  |
-| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                          |
-| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                            |
-| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                         |
-| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`            |
-| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then Astro and emitted HTML checks |
-| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → build.**  |
-| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                     |
-| `pnpm vitest run <substring>` | A single test file                                                                 |
-| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`             |
+| Command                       | What it does                                                                                  |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| `pnpm dev`                    | Astro on :5173 **and** the Worker on :8787, in one terminal                                   |
+| `pnpm dev:client`             | Just the Astro development server on :5173                                                    |
+| `pnpm dev:server`             | Just `wrangler dev`                                                                           |
+| `pnpm preview`                | Build, then serve it through the real Worker on :8787                                         |
+| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                                     |
+| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`                          |
+| `pnpm typecheck`              | Five independent tsconfig projects and Astro templates; see below                             |
+| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                                     |
+| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                                       |
+| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                                    |
+| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`                       |
+| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then Astro and emitted HTML checks            |
+| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → test:slow → build.** |
+| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                                |
+| `pnpm vitest run <substring>` | A single test file                                                                            |
+| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`                        |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.
@@ -439,21 +456,21 @@ Stated plainly, because discovering these by surprise is worse than reading them
   producer but the pool and pays its figure in full.
   `pnpm sim --terrain-baseline` prints all of it; the
   [roadmap](docs/roadmap.md#terrain) has the seams.
-- **Almost nothing is measured on the target machine.** The dev dock's perf panel
-  (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
-  time GPU frames properly — but every number recorded so far is from an Apple M5
-  at 1000×760, not the 2023-class laptop at 1920×1080 the budgets are written
-  for. Cold load to interactive is still unmeasured.
-- **The graphics are primitives.** The renderer is WebGPU and TSL and the HDR
-  output path is real, but what it draws is spheres, radius-grid bodies, cones
-  and boxes. GPU-driven instancing and Bruneton atmosphere LUTs are the
-  [migration's](docs/design/technical.md#the-webgpu-migration) remaining half;
-  terrain tiles are the half that is built, a TSL compute kernel held to the
-  CPU field by a stated bound — measured by `pnpm test:gpu` on a physical
-  adapter, which CI does not have.
-- **The atmosphere is an analytic shell, not scattering.** Uniform density and a
-  path length, standing in for the precomputed LUTs that
-  [spike 2](docs/spikes.md#2--tsl-and-the-atmosphere-integral) made a requirement.
+- **Target-laptop acceptance remains open.** The Perf panel and timeline record
+  frame, engine, worker, memory and GPU work. Measurements include M5 runs at
+  1080p and retina resolutions and cold/warm startup; they do not establish the
+  2023-class laptop budget. [Technical requirements](docs/design/technical.md)
+  separates budgets from historical operating points.
+- **Rendering has explicit approximation limits.** Measured maps and figures,
+  modeled hulls, GPU terrain, instanced stars and rock scatter are implemented.
+  The galaxy has calibrated V-band light, illustrative RGB stellar colors and
+  absorption-only dust. Scattering by interstellar dust, H II emission,
+  globular clusters and neighboring galaxies remain separate additions.
+  [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md).
+- **Atmospheric scattering uses precomputed tables.** The shared CPU bake and
+  client worker path provide transmittance and multiple-scattering tables.
+  Cloud maps are thin weather shells, and weather dynamics remain unbuilt.
+  [ADR-0028](docs/adr/0028-client-tasks.md) records task ownership.
 
 ---
 

@@ -131,7 +131,7 @@ export interface StarCatalog {
   readonly metadata: CatalogMetadata
   /** The whole-catalog version. A generation input; see Rule 1. */
   readonly version: string
-  /** Radius of the volume this catalog covers. Procedure owns everything past it. */
+  /** Radius of the volume catalog; the sparse bright sky can extend beyond it. */
   readonly radius: Meters
   /** Radius inside which procedural fill is suppressed; see `CellContext`. */
   readonly completeRadius: Meters
@@ -140,21 +140,14 @@ export interface StarCatalog {
   /**
    * The distant bright stars, from the sky asset. Empty without one.
    *
-   * These are catalog stars in every sense but one: `get`, `find` and `search`
-   * answer for them, `resolveSystem` reaches them by id, and their light comes
-   * from a published magnitude like everyone else's. What they are not in is
-   * the cell index, so `inCell` and `within` — and through them every
-   * procedural count and every survey — answer for the volume alone.
+   * Exact lookup and name search reach these records, and `systemsWithin`
+   * includes them when they fall inside its query sphere. `inCell` and `within`
+   * remain volume-only indexes; this sparse sky is not a complete volume.
    *
-   * That is deliberate. The sky asset claims no volume: a cell 500 ly out holds
-   * thousands of stars and this file has the two of them bright enough to be
-   * seen from Earth. Counting those two as "cataloged" would make the
-   * procedural fill in that cell depend on which of its stars happen to be
-   * naked-eye from one planet, and would drop procedural stars from the cells
-   * straddling the volume's edge — so the survey inside the volume is the same
-   * with the sky loaded and without it. Generation learns about these stars
-   * through a magnitude limit carried like `completeRadius`, not through a
-   * count. The draw reaches them through this list.
+   * Population coverage uses the sky's magnitude envelope and counts known
+   * records outside that envelope by luminosity level and cell. It reads the
+   * combined `stars` list explicitly, so sparse measured sources suppress only
+   * the corresponding procedural population, not an entire distant cell.
    */
   readonly sky: readonly CatalogStar[]
   /** Exact lookup by id. */

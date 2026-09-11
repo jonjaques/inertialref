@@ -26,10 +26,9 @@ gets.
 
 A shader question has a rung of its own between these and the browser:
 `pnpm test:gpu` compiles and runs a TSL graph on the physical GPU from a
-`*.gpu.test.ts`. Budget ~18 s for the whole suite, of which seventeen are
-`terrainKernel.gpu.test.ts` walking the fourteen-rung ladder on every zoo body —
-so name the file when the question is not about the kernel, and all twenty-one
-of `materials.gpu` come back in 1.4 s ([testing](../guides/testing.md)). Use the
+`*.gpu.test.ts`. Name the relevant file to keep the run focused; total cost
+depends on the selected tests and physical adapter
+([testing](../guides/testing.md)). Use the
 browser only for what only a compositor can prove: LOD at real display pixels,
 framing, a cutscene, presentation, a strobe.
 
@@ -42,9 +41,8 @@ await ir.selfTest()
 await ir.scenario('surface')
 ```
 
-`goTo` is the only verb that accepts the forms a person types (`SOL`,
-`s:SOL/b:2`, `b:2` relative to the current system). Everywhere else,
-`parseAddress` is strict.
+`goTo` and the observatory's `look` accept human forms (`SOL`, `s:SOL/b:2`,
+`b:2` relative to the current system). The low-level `parseAddress` stays strict.
 
 `ir.look` moves only a camera. `ir.goTo` teleports the ship. Both can fill the
 frame with Jupiter; only one leaves you in orbit of it.

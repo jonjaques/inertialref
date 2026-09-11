@@ -2,6 +2,10 @@
 
 Status: accepted · 2026-08-19
 
+The active luminosity-level `Q` system ids and legacy `P` resolution policy are
+specified by [ADR-0038](0038-the-stars-and-the-diffuse-sky.md). The hierarchical
+address and seed principles here still apply.
+
 ## Context
 
 The universe is a pure function of a global seed. It has to be generated on

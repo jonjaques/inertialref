@@ -24,12 +24,12 @@ pnpm sim --targets --goto b:2 # the same navigation from a terminal
 pnpm sim --terrain-baseline   # what a descent costs — patch ms, level churn (~16s)
 pnpm sim --help               # every flag
 pnpm vitest run <substring>   # one test file
-pnpm test:gpu                 # every shader compiled and run on the real GPU (~18s)
+pnpm test:gpu                 # the physical-GPU suite; cost depends on selected tests and adapter
 ```
 
-`test:gpu` is seventeen seconds of `terrainKernel.gpu.test.ts` and about one of
-everything else, so a question that is not about the kernel names its own file:
-`pnpm vitest run --config apps/game/vitest.gpu.config.ts materials.gpu` is 1.4 s.
+`test:gpu` includes terrain, galaxy, stars and camera graphs. Name the mechanism
+under test to avoid unrelated work:
+`pnpm vitest run --config apps/game/vitest.gpu.config.ts materials.gpu`.
 The root config excludes the `.gpu.test.ts` suffix, so the plain `pnpm vitest run`
 answers "No test files found" for one of these.
 

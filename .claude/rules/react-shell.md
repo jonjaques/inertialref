@@ -81,15 +81,15 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   resolving** — only the ship needs a player, and a cutscene sample placed below the
   missing-player return latched `engine.cinematic` for the rest of the session.
 - **One producer of the lens, and the field of view is derived from it.** `engine.lens`
-  resolves the same order — a script's lens, then the flight one — and every consumer
-  reads it. Focal length, gauge and zoom are canonical; the angle is arithmetic from
+  resolves a script's lens, then an active fixed galaxy instrument's declared lens
+  within the observatory arm, then the flight lens. Every consumer reads it. Focal length, gauge and zoom are canonical; the angle is arithmetic from
   them. A panel writes the `camera.lens` preference and `state/engineKnobs.ts` carries it
   to `engine.flightLens` — never a `fov`, and never `camera.fov`:
   `CameraRig` is the one writer of that, `<Canvas camera>` is a constructor argument, and
   a consumer that cannot see the lens is a bug rather than a case to have a default for.
-  The observatory's framing solver reads `framingLens()` — the flight lens alone —
-  because it is the arm that only produces a camera when the cutscene arm is null.
-  ADR-0017.
+  Ordinary observatory framing reads `framingLens()`, the flight lens alone.
+  A fixed galaxy instrument owns its pose and optics together and preserves that
+  flight preference when entered or left. ADR-0017 and ADR-0038.
 - **One window-level `keydown`, and it is `input/keymapStore.ts`'s.** A mode
   registers a handler for an action id (`useAction`) and declares its context
   (`useKeyContext`); it never sees a key. Conflicts are checked against

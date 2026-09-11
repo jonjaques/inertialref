@@ -69,13 +69,15 @@ Today's tasks:
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `universe.generateHeightfield` | 65×65 samples × six bands and a crater ladder → a transferable `Float32Array` of elevations and a `Uint8Array` of surface cover |
 | `universe.surfaceDetailFloor`  | the level past which a patch is an upsample of its parent — ~1,500 samples of the same bands, once per body                     |
-| `universe.generateCell`        | every star in one 20 ly generation cell                                                                                         |
+| `universe.generateCell`        | the procedural population inside one 20 ly spatial cell                                                                         |
 | `universe.surveyRegion`        | a block of cells — tens of thousands of stars                                                                                   |
+| `universe.surveySky`           | a bounded luminosity-level source selection, with the actual magnitude limit and completed level mask for diffuse subtraction   |
+| `universe.findWorlds`          | predicates over generated systems supplied in batches by the host                                                               |
 | `universe.surveySystem`        | a whole system's bodies, for the map                                                                                            |
 | `render.bakeAtmosphere`        | one atmosphere's scattering tables — 528 KB of `Float32Array`, 20–40 ms of CPU, once per distinct haze                          |
 
-The first five are `createTaskRegistry()` in `packages/workers`, the set every
-host serves. The last is the game's own: its bake lives in
+The seven `universe.*` tasks are `createTaskRegistry()` in `packages/workers`, the set every
+host serves. `render.bakeAtmosphere` is the game's own: its bake lives in
 `packages/rendering`, which sits at the same layer as `packages/workers` and
 therefore cannot be imported by it, and the headless runner would never ask
 for it. So the game's worker entry serves `createGameTaskRegistry()` —
@@ -122,12 +124,9 @@ to be left open across a deploy. Without the check, a page could generate half a
 planet with algorithm v1 and half with v2 and never notice. With it, the job
 fails loudly.
 
-The envelope is now **validated** rather than discriminated: the host runs
-`decode(decodeWorkerRequest, message)` and drops anything malformed with a log
-line. It previously checked only `kind === 'request'`, so `job`, `task` and
-`taskVersion` were read off an unvalidated object and `payload` reached
-`task.run` as `never` — a trust boundary that trusted everything. `protocol`
-exists for exactly this, and now the boundary uses it.
+The host validates the envelope with `decode(decodeWorkerRequest, message)`
+and drops malformed messages with a log line. Discriminating on `kind` alone
+would leave `job`, `task` and `taskVersion` unchecked at the transport boundary.
 
 ---
 

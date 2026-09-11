@@ -40,8 +40,8 @@ Executable machinery — path-scoped rules, skills, hooks, subagents — lives i
 [Codex's adapters](../../.codex/README.md) reuse those sources through native
 configuration and skill symlinks. Cursor's
 [adapters](../../.cursor/README.md) reference those files rather than copying
-their contents. This machinery is not documentation: it puts a one-line rule
-in context when you open a matching file. The rule's reasoning stays in
+their contents. Claude Code and Cursor can load rule extracts by path. Codex reads the
+relevant shared extracts explicitly; Claude's `paths:` is not a Codex feature. The rule's reasoning stays in
 `invariants.md` and the technical docs.
 
 ---
