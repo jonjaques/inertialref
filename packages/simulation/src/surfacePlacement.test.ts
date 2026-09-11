@@ -80,6 +80,19 @@ describe('body-fixed structures', () => {
     expect(original.removeStructure(placement.id)).toBe(false)
     expect(original.stateHash()).toBe(create().stateHash())
   })
+
+  it('moves atomically and preserves the original when validation rejects a move', () => {
+    const world = create()
+    world.placeStructure(placement)
+    const before = world.stateHash()
+    expect(() => world.moveStructure({ ...placement, latitude: NaN })).toThrow()
+    expect(world.stateHash()).toBe(before)
+    expect(world.structures).toEqual([placement])
+    expect(() => world.moveStructure({ ...placement, id: 'missing' })).toThrow()
+    world.moveStructure({ ...placement, height: 3 })
+    expect(world.structures[0]?.height).toBe(3)
+    expect(world.stateHash()).not.toBe(before)
+  })
   it('resolves an authored pose at the snapshot presentation instant', () => {
     const world = create(),
       body = world.loadSystem(systemId('SOL')).planets[3]!

@@ -27,6 +27,8 @@ import {
 } from '@inertialref/spatial'
 import {
   type Body,
+  type BodyFixedDirection,
+  bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
   directionToGeodetic,
@@ -44,6 +46,8 @@ import {
   parseSurfaceFrameId,
   parseAddress,
   surfaceAsset,
+  surfaceRadius,
+  geodeticDirection,
   resolveSystem,
   SOL_ONLY_CATALOG,
   type StarCatalog,
@@ -78,6 +82,7 @@ import {
 } from './flight.ts'
 import {
   type SurfacePlacement,
+  surfaceSupportRadius,
   validateSurfacePlacement,
 } from './surfacePlacement.ts'
 
@@ -183,11 +188,28 @@ export class World implements FlightWorld {
   }
 
   placeStructure(placement: SurfacePlacement): SurfacePlacement {
-    validateSurfacePlacement(placement)
     invariant(
       !this.#structures.has(placement.id),
       `Structure ${placement.id} already exists`,
     )
+    const stored = this.#validatedStructure(placement)
+    this.#structures.set(stored.id, stored)
+    this.#structuresChanged()
+    return stored
+  }
+
+  /** A replacement is fully validated before the existing placement is touched. */
+  moveStructure(placement: SurfacePlacement): SurfacePlacement {
+    const previous = this.#structures.get(placement.id)
+    invariant(previous !== undefined, `Unknown structure ${placement.id}`)
+    const stored = this.#validatedStructure(placement)
+    this.#structures.set(stored.id, stored)
+    this.#structuresChanged(previous)
+    return stored
+  }
+
+  #validatedStructure(placement: SurfacePlacement): SurfacePlacement {
+    validateSurfacePlacement(placement)
     invariant(
       surfaceAsset(placement.assetId) !== undefined,
       `Unknown surface asset ${placement.assetId}`,
@@ -208,7 +230,7 @@ export class World implements FlightWorld {
       body !== undefined && hasSolidSurface(body),
       'A structure needs a solid body',
     )
-    const stored = Object.freeze({
+    return Object.freeze({
       id: placement.id,
       assetId: placement.assetId,
       bodyAddress: formatAddress(body.address),
@@ -217,15 +239,84 @@ export class World implements FlightWorld {
       height: placement.height,
       heading: placement.heading,
     })
-    this.#structures.set(stored.id, stored)
-    this.#groundAhead.clear()
-    return stored
   }
 
   removeStructure(id: string): boolean {
-    const removed = this.#structures.delete(id)
-    if (removed) this.#groundAhead.clear()
-    return removed
+    const previous = this.#structures.get(id)
+    if (previous === undefined) return false
+    this.#structures.delete(id)
+    this.#structuresChanged(previous)
+    return true
+  }
+
+  /** Terrain and any placed support disk compete by height, never insertion order. */
+  contactRadius(
+    body: Body,
+    direction: BodyFixedDirection,
+    terrain = surfaceRadius(body, direction),
+  ): Meters {
+    let radius = terrain
+    const address = formatAddress(body.address)
+    for (const placement of this.#structures.values()) {
+      if (placement.bodyAddress !== address) continue
+      radius = Math.max(
+        radius,
+        surfaceSupportRadius(placement, body, direction) ?? terrain,
+      )
+    }
+    return radius
+  }
+
+  /** Highest support above the body datum, for the integrator's rails boundary. */
+  contactHeight(body: Body): Meters {
+    let height = 0
+    const address = formatAddress(body.address)
+    for (const placement of this.#structures.values()) {
+      if (
+        placement.bodyAddress !== address ||
+        surfaceAsset(placement.assetId)?.supportRadius === null
+      )
+        continue
+      height = Math.max(
+        height,
+        surfaceRadius(
+          body,
+          geodeticDirection(placement.latitude, placement.longitude),
+        ) +
+          placement.height -
+          body.radius,
+      )
+    }
+    return height
+  }
+
+  #structuresChanged(previous?: SurfacePlacement): void {
+    this.#groundAhead.clear()
+    for (const entity of this.#entities.ordered()) {
+      // A new obstacle can intersect an otherwise eligible analytical coast.
+      this.#leaveRails(entity.id)
+      if (previous === undefined || !this.#landed.has(entity.id)) continue
+      const binding = this.binding(entity.state.frame)
+      if (
+        binding?.body == null ||
+        binding.spinFrame === null ||
+        formatAddress(binding.body.address) !== previous.bodyAddress
+      )
+        continue
+      const time = this.clock.time
+      const spin = this.frames.pose(binding.spinFrame, time)
+      const position = canonicalPosition(this.frames, entity.state, time)
+      const direction = bodyFixedDirection(spin, position)
+      const before = surfaceSupportRadius(previous, binding.body, direction)
+      if (before === null) continue
+      const now = this.contactRadius(binding.body, direction)
+      if (
+        now < before - 1e-3 &&
+        UV.distance(position, spin.position) > now + 1e-3
+      ) {
+        this.#liftOff(entity.id, time)
+      }
+    }
   }
   readonly #bindings = new Map<FrameId, FrameBinding>()
   readonly #children = new Map<FrameId, FrameBinding[]>()
@@ -922,6 +1013,22 @@ export class World implements FlightWorld {
     const { latitude, longitude } = directionToGeodetic(bodyFixed)
     const frame = installSurfaceFrame(this.frames, body, latitude, longitude)
     const landedState = reframe(this.frames, entity.state, frame, time)
+    const direction = bodyFixedDirection(spinPose, universe)
+    const terrainRadius = surfaceRadius(body, direction)
+    const contactRadius = this.contactRadius(body, direction, terrainRadius)
+    const supported =
+      contactRadius > terrainRadius
+        ? universeToLocal(
+            this.frames.pose(frame, time),
+            UV.translate(
+              spinPose.position,
+              Q.rotate(
+                spinPose.orientation,
+                Vec.scale(direction, contactRadius),
+              ),
+            ),
+          )
+        : null
     this.#entities.update(id, {
       state: {
         ...landedState,
@@ -929,7 +1036,7 @@ export class World implements FlightWorld {
         // test fires on the tick that crosses zero, which is usually just past.
         position: vec3(
           landedState.position.x,
-          Math.max(0, landedState.position.y),
+          Math.max(0, landedState.position.y, supported?.y ?? 0),
           landedState.position.z,
         ),
         // Attached to the ground: no residual motion in the surface frame.

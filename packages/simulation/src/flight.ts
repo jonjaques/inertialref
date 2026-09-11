@@ -27,6 +27,7 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import {
+  type Body,
   type BodyFixedDirection,
   bodyFixedDirection,
   surfaceRadius,
@@ -62,6 +63,13 @@ export interface FlightWorld {
   readonly frames: FrameGraph
   binding(frame: FrameId): FrameBinding | undefined
   bindingsUnder(frame: FrameId): readonly FrameBinding[]
+  /** Optional authored surfaces, separate from the terrain used for atmospheric density. */
+  contactRadius?(
+    body: Body,
+    direction: BodyFixedDirection,
+    terrain: Meters,
+  ): Meters
+  contactHeight?(body: Body): Meters
 }
 
 /** Hysteresis on the sphere-of-influence boundary, so a grazing pass cannot flap. */
@@ -305,9 +313,19 @@ export function stepFlight(
       after,
     )
     const speed = Vec.length(state.velocity)
+    const distanceAfter = Vec.length(radiusAfter)
+    const contactAltitude =
+      world.contactRadius === undefined
+        ? afterAltitude
+        : distanceAfter -
+          world.contactRadius(
+            binding.body,
+            groundDirection(world, moved, binding, radiusAfter, after),
+            distanceAfter - afterAltitude,
+          )
     const contact =
-      afterAltitude <= 0 ||
-      (afterAltitude <= LANDING_CLEARANCE && speed < LANDING_SPEED_LIMIT)
+      contactAltitude <= 0 ||
+      (contactAltitude <= LANDING_CLEARANCE && speed < LANDING_SPEED_LIMIT)
     if (contact) {
       return {
         state,
@@ -826,7 +844,17 @@ export function railsEpoch(
   if (binding !== undefined) {
     if (state.frame !== binding.frame) return null
     const conic = conicOf(state, binding.mu)
-    if (!(conic.periapsis > binding.radius + groundBand(binding))) return null
+    const contactBand =
+      binding.body === null
+        ? 0
+        : (world.contactHeight?.(binding.body) ?? 0) + LANDING_CLEARANCE
+    if (
+      !(
+        conic.periapsis >
+        binding.radius + Math.max(groundBand(binding), contactBand)
+      )
+    )
+      return null
   }
   return {
     time,

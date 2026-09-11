@@ -8,7 +8,9 @@ import {
 } from '@inertialref/spatial'
 import {
   type Body,
+  type BodyFixedDirection,
   geodeticDirection,
+  surfaceAsset,
   surfaceRadius,
 } from '@inertialref/universe'
 
@@ -23,6 +25,25 @@ export interface SurfacePlacement {
   readonly height: Meters
   /** Compass heading, radians clockwise from north. */
   readonly heading: Radians
+}
+
+/** Radius where a body-fixed ray meets this asset's horizontal support disk. */
+export function surfaceSupportRadius(
+  placement: SurfacePlacement,
+  body: Body,
+  direction: BodyFixedDirection,
+): Meters | null {
+  const support = surfaceAsset(placement.assetId)?.supportRadius
+  if (support === null || support === undefined) return null
+  const up = geodeticDirection(placement.latitude, placement.longitude)
+  const cosine = Vec.dot(up, direction)
+  if (cosine <= 0) return null
+  const deck = surfaceRadius(body, up) + placement.height
+  const radius = deck / cosine
+  const tangent = Vec.sub(direction, Vec.scale(up, cosine))
+  if (Vec.lengthSquared(tangent) * radius * radius > support * support)
+    return null
+  return radius
 }
 
 /** Validate before resolving a body, so a rejected placement has no world effects. */
