@@ -16,7 +16,7 @@ every visual decision in [art](art.md).
 | Simulation core       | 12 layered TypeScript packages, framework-free below `apps/`                                                           |
 | Renderer              | Three.js 0.185 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback            |
 | Build                 | Vite 8 with the Oxc transform; React Compiler on                                                                       |
-| Runtime               | Node 26, pnpm 11; Node runs the TypeScript sources directly                                                            |
+| Runtime               | Node 26, pnpm 12; Node runs the TypeScript sources directly                                                            |
 | Bundle                | 2.49 MB, **736.0 KB gzip / 555.7 KB brotli**, dominated by Three.js, **no code splitting**                             |
 | Simulation throughput | ~1.25M ticks/s in-browser for one integrated entity; a coasting one is on rails and a frame jumps its ticks (ADR-0025) |
 | Offline               | Service worker + IndexedDB + a migration chain, verified with the server stopped                                       |

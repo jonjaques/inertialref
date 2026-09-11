@@ -77,10 +77,31 @@ pnpm build        # once, then `pnpm dev` works for the life of the worktree
 
 `pnpm check` runs `pnpm build`, so a worktree that has been through the gate
 once is already fixed. **`pnpm drive` walks into this**: `--serve` is on by
-default and starts `scripts/dev.mjs`, so on a fresh worktree it waits its full
-sixty seconds for a server that died in the first two and then reports that
-nothing is answering. Serve with `pnpm dev:client` yourself and pass
+default and starts `scripts/dev.mjs`, so on a fresh worktree it reports that
+`pnpm dev` exited without serving, a few seconds in, and the reason is in
+`.data/drive/dev.log`. Serve with `pnpm dev:client` yourself and pass
 `--no-serve`, or build once.
+
+**Astro daemonizes itself when it detects a coding agent.** Astro 7 sniffs the
+environment for Claude Code, Codex, Cursor and the rest, and a detected `astro
+dev` or `astro preview` spawns a detached copy of itself, writes a lock file
+under `apps/game/.astro/`, and returns: from a terminal, a server that outlives
+the session; under `scripts/dev.mjs`, a client child that exits cleanly a
+second in and takes wrangler with it. The game package's `dev` and `preview`
+scripts set `ASTRO_DEV_BACKGROUND` and `ASTRO_PREVIEW_BACKGROUND`, the
+variables Astro gives its own detached child so that it does not daemonize
+twice, and so every route into Astro stays in the foreground. They are the only
+switch: `--ignore-lock` throws once an agent is detected. The cost is that the
+lock file records the server as background, so `astro dev logs` points at a
+log nobody writes.
+
+**`pnpm dev` refuses a taken port before either child starts.** A live Astro on
+5173 is named by pid from its lock file while that pid is alive. Astro removes
+the file only on a graceful stop, so after a Ctrl-C it names a pid that is
+gone, and `pnpm dev` then says so and points at `lsof` instead;
+`pnpm --filter @inertialref/game exec astro dev stop` ends a live one. A held
+8787 is refused the same way, except under `--ensure`, which starts the client
+alone and lets Vite proxy to the Worker already there.
 
 `pnpm run deploy:worker`, not `pnpm deploy:worker` — `deploy` is a pnpm
 built-in. After any change to `wrangler.jsonc`, regenerate

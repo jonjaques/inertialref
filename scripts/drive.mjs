@@ -373,6 +373,14 @@ async function serve(state) {
   for (let i = 0; i < 120; i += 1) {
     await sleep(500)
     if (await answers(URL_)) return child.pid ?? null
+    // `dev.mjs` refuses a taken port in milliseconds; polling the full sixty
+    // seconds for a process that has already exited is the wait nobody can
+    // explain. `unref` drops the loop reference only — exitCode still lands.
+    if (child.exitCode !== null) {
+      throw new Error(
+        `pnpm dev exited (code ${child.exitCode}) without serving ${URL_} — see .data/drive/dev.log`,
+      )
+    }
   }
   throw new Error(
     `pnpm dev did not start serving ${URL_} — see .data/drive/dev.log`,
@@ -900,8 +908,10 @@ async function down() {
     say(`closed Chrome (pid ${state.chromePid})`)
   }
   if (state.startedServer === true && alive(state.serverPid)) {
-    // The negative pid is the process group: `scripts/dev.mjs` has two
-    // children, and killing only the parent leaves wrangler holding 8787.
+    // `dev.mjs` is a group leader (`detached`, in serve()) that starts vite and
+    // wrangler in groups of their own, so the signal reaches them through its
+    // SIGTERM handler, which relays to both. The fallback is for a recorded pid
+    // that leads no group.
     try {
       process.kill(-state.serverPid, 'SIGTERM')
     } catch {

@@ -9211,6 +9211,57 @@ so the successful factory could win. One factory now reads an explicit failure
 state before the import. The test still checks that prefetch and the route share
 the same rejected promise; production loading code is unchanged.
 
+## pnpm 12, and the dev server that daemonized under an agent (10 Sep 2026)
+
+pnpm 12 is the Rust rewrite; commands, flags, settings and the lockfile format
+are pnpm 11's, so the only lockfile change is the leading document pnpm 12
+writes to record its own binary, and the one package `pnpm install` removed —
+blurhash 2.0.5 — was extraneous in `node_modules`, named by no manifest. The
+pin has to agree in eight places, not the three the bump first named: the
+`packageManager` field, `pnpm/action-setup`, `scripts/cloud-setup.sh`, the
+Cursor Dockerfile, the session-start hook's advice for a bare tree, the README
+badge and version check, `AGENTS.md`, and the runtime row in
+`docs/design/technical.md`. Node 26 ships no Corepack, so a global pnpm is the
+install path; any pnpm from 10 on reads the pin and runs the pinned version.
+
+Astro 7 sniffs the environment for a coding agent and, when it finds one,
+daemonizes `astro dev` and `astro preview`: it spawns a detached copy of
+itself, writes a lock file under `apps/game/.astro/`, and returns. Under
+`scripts/dev.mjs` that was the client child exiting cleanly a second in, the
+script stopping wrangler with a 143, and an orphan holding 5173 that the next
+`pnpm dev` from a human terminal could not start beside — one had been up for
+two days. `ASTRO_DEV_BACKGROUND` and `ASTRO_PREVIEW_BACKGROUND`, the variables
+Astro gives its own detached child, are the only switch; `--ignore-lock` throws
+once an agent is detected. They live in the game package's `dev` and `preview`
+scripts so that every route into Astro stays in the foreground, not only the
+one through `dev.mjs`. Two smaller holes went with it: the port probe asked
+`127.0.0.1` and Astro binds `::1` alone on this machine, so a taken 5173 read
+as free (`localhost` tries both families); and `pnpm run` does not forward a
+signal to the script it runs, in 11 or 12 — SIGTERM kills pnpm and leaves
+Astro or workerd, SIGINT does nothing — so each child runs in its own process
+group and the group is signaled. Killing Astro under the script takes wrangler
+and both workerd processes with it within eight seconds.
+
+Detaching the children costs something, and the review of that change found
+what. `detached` is `setsid`, so the children have no controlling terminal and
+the script's relay is the only route a signal has to them: a closed window or
+a dropped ssh session sent SIGHUP, which ended the script by default action and
+orphaned both servers behind the new port guard. SIGHUP is relayed as SIGTERM,
+and killing the pty owner clears the whole tree within two seconds. A second
+Ctrl-C, which reached a wedged workerd directly while the children shared the
+foreground group, was swallowed by the `stopping` guard; a repeat of any signal
+is now SIGKILL to both groups, measured with wrangler frozen under SIGSTOP so
+the first signal could not finish. `close` fires while workerd is still alive,
+because workerd holds its own pipes, so the closed child has to stay in the
+running set until its group is signaled — SIGKILL to wrangler now sweeps both
+workerd processes within five seconds where before they kept 8787. The
+`--ensure` hold did not hold: signal listeners do not keep Node's event loop
+alive, so an unsettled top-level await exited 13 after about 20 ms; a timer
+holds it. And Astro removes its lock file only from `server.stop()` — its only
+signal handlers are in the `logs` follower — so after every Ctrl-C the file
+names a pid that is gone, and the port message trusts it only while that pid
+is alive and on 5173.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

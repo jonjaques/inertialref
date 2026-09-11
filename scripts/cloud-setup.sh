@@ -28,7 +28,7 @@
 set -uo pipefail
 
 NODE_MAJOR=$(tr -d '[:space:]' < .node-version 2>/dev/null || echo 26)
-PNPM_VERSION=11.22.0
+PNPM_VERSION=12.3.4
 
 case "$(uname -m)" in
   x86_64) ARCH=x64 ;;

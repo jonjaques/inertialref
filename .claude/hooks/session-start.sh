@@ -43,7 +43,7 @@ if [ -f "$cwd/pnpm-workspace.yaml" ] && [ ! -d "$cwd/node_modules" ]; then
       alerts+=("pnpm install failed in $cwd — this session is starting on a broken tree.")
     fi
   else
-    notes+=("There is no pnpm on PATH and no node_modules in $cwd. Corepack or pnpm 11 has to be installed before any command here will run.")
+    notes+=("There is no pnpm on PATH and no node_modules in $cwd. pnpm has to be installed before any command here will run — Node 26 ships no Corepack, so install it directly (mise use -g npm:pnpm, or npm install -g pnpm); any pnpm from 10 on then runs the version pinned in package.json.")
     alerts+=("No pnpm on PATH in $cwd.")
   fi
 fi
