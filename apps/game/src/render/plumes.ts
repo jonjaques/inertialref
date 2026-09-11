@@ -101,6 +101,8 @@ export interface ThrusterPlumes {
     delta: number,
     variation?: boolean,
   ): void
+  /** Exact scripted drive state. Repeated seeks produce identical uniforms. */
+  sample(throttle: number, elapsedSeconds: number): void
   dispose(): void
 }
 
@@ -557,52 +559,63 @@ export function createThrusterPlumes(layout: ThrusterLayout): ThrusterPlumes {
 
   let driveHeld = 0
 
+  const write = (
+    firing: Float32Array | null,
+    target: number,
+    delta: number,
+    variation = false,
+    sampleTime?: number,
+  ): void => {
+    clock.value = sampleTime ?? clock.value + delta
+    for (const kind of kinds) {
+      let brightest = 0
+      kind.indices.forEach((n, i) => {
+        const want = firing === null ? 0 : (firing[n] ?? 0)
+        const had = kind.held[i] ?? 0
+        const now =
+          sampleTime !== undefined
+            ? want
+            : valveOpening(had, want, delta, valveSeeds[n] ?? 0, variation)
+        kind.held[i] = now
+        kind.fire.setX(i, now)
+        if (now > brightest) brightest = now
+      })
+      kind.fire.needsUpdate = true
+      kind.mesh.visible = brightest > DARK
+    }
+    driveHeld =
+      sampleTime !== undefined
+        ? target
+        : approach(
+            driveHeld,
+            target,
+            delta,
+            target > driveHeld ? DRIVE_RISE : DRIVE_FALL,
+          )
+    throttle.value = driveHeld
+    if (driveMeshes !== null && drive !== null) {
+      const lit = driveHeld > DARK
+      driveMeshes.sheath.visible = lit
+      driveMeshes.disk.visible = lit
+      driveMeshes.fire.setX(0, driveHeld)
+      driveMeshes.fire.needsUpdate = true
+      // The torch grows with the burn: half throttle is not half as long
+      // but it is shorter, as a throttled engine's plume is.
+      driveMeshes.size.setXY(
+        0,
+        drive.radius,
+        drive.radius * DRIVE_LENGTH * (0.35 + 0.65 * Math.sqrt(driveHeld)),
+      )
+      driveMeshes.size.needsUpdate = true
+    }
+  }
+
   return {
     group,
     nozzleCount: layout.nozzles.length,
-    update(firing, target, delta, variation = false) {
-      clock.value += delta
-      for (const kind of kinds) {
-        let brightest = 0
-        kind.indices.forEach((n, i) => {
-          const want = firing === null ? 0 : (firing[n] ?? 0)
-          const had = kind.held[i] ?? 0
-          const now = valveOpening(
-            had,
-            want,
-            delta,
-            valveSeeds[n] ?? 0,
-            variation,
-          )
-          kind.held[i] = now
-          kind.fire.setX(i, now)
-          if (now > brightest) brightest = now
-        })
-        kind.fire.needsUpdate = true
-        kind.mesh.visible = brightest > DARK
-      }
-      driveHeld = approach(
-        driveHeld,
-        target,
-        delta,
-        target > driveHeld ? DRIVE_RISE : DRIVE_FALL,
-      )
-      throttle.value = driveHeld
-      if (driveMeshes !== null && drive !== null) {
-        const lit = driveHeld > DARK
-        driveMeshes.sheath.visible = lit
-        driveMeshes.disk.visible = lit
-        driveMeshes.fire.setX(0, driveHeld)
-        driveMeshes.fire.needsUpdate = true
-        // The torch grows with the burn: half throttle is not half as long
-        // but it is shorter, as a throttled engine's plume is.
-        driveMeshes.size.setXY(
-          0,
-          drive.radius,
-          drive.radius * DRIVE_LENGTH * (0.35 + 0.65 * Math.sqrt(driveHeld)),
-        )
-        driveMeshes.size.needsUpdate = true
-      }
+    update: write,
+    sample(throttle, elapsedSeconds) {
+      write(null, Math.max(0, Math.min(1, throttle)), 0, false, elapsedSeconds)
     },
     dispose() {
       for (const dispose of disposers) dispose()

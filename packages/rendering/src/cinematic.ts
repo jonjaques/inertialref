@@ -88,6 +88,10 @@ export interface CinematicSpark {
 
 /** Screen-space effect drives, all 0..1. */
 export interface CinematicEffects {
+  /** Atmospheric heating around the hull, opt-in per shot, 0..1. */
+  readonly entryHeat?: number
+  /** Pad dust lifted by the terminal burn, opt-in per shot, 0..1. */
+  readonly landingDust?: number
   /** EV offset from the calibrated surface exposure, pinned by the shot. */
   readonly exposure: number
   /** Unit sunlight for reference-matched staging; zero uses physical irradiance. */
@@ -141,6 +145,15 @@ export const NO_EFFECTS: CinematicEffects = Object.freeze({
 /** Everything a cutscene decides for one frame. */
 export interface CinematicSample {
   readonly frame: number
+  /** Analytic body epoch held for a surface stage; the playhead keeps live time. */
+  readonly presentationTime?: number
+  /** Script time for seekable effects, independent of frame delivery history. */
+  readonly elapsedSeconds?: number
+  /** Metric prop origin. The pad's landing deck is local y = 0. */
+  readonly stage?: CinematicPose & {
+    readonly model: string
+    readonly placementId?: string
+  }
   readonly camera: CinematicPose
   /**
    * The lens the shot is taken with — a cinematic one, not the flight lens.
@@ -154,7 +167,11 @@ export interface CinematicSample {
    * `docs/design/art.md`'s photo mode is going to want and an angle cannot hold.
    */
   readonly lens: Lens
-  readonly ship: CinematicPose & { readonly visible: boolean }
+  readonly ship: CinematicPose & {
+    readonly visible: boolean
+    readonly model?: string
+    readonly throttle?: number
+  }
   readonly texts: readonly CinematicTextState[]
   readonly effects: CinematicEffects
   /** True on and after the final frame; the director restores and stops. */

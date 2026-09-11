@@ -1,9 +1,10 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
-import type { Group } from 'three/webgpu'
+import type { Group, Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { type LoadedShip, loadShipModel } from '../render/shipModels.ts'
 import { RENDER_SHIP, usePersistentState } from '../state/preferences.ts'
+import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { debugMaterials } from './debugMaterials.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -15,6 +16,9 @@ import { useTimedFrame } from './useTimedFrame.ts'
  */
 export function ShipModel({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
+  const gl = useThree((state) => state.gl)
+  const camera = useThree((state) => state.camera)
+  const scene = useThree((state) => state.scene)
   const anisotropy = useThree(
     (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
   )
@@ -22,6 +26,9 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
   // reload of the page, which here would rebuild the renderer and lose the
   // camera. The loader caches by id, so switching back is instant.
   const [shipId] = usePersistentState(RENDER_SHIP)
+  const [requestedId, setRequestedId] = useState(
+    engine.cinematic?.ship.model ?? shipId,
+  )
   // Seeded from the engine so a Fast Refresh remount, whose effect may not
   // re-run, still renders the hull the session already loaded.
   const [hull, setHull] = useState<LoadedShip | null>(engine.hull)
@@ -30,7 +37,13 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     // The loader caches by id, so StrictMode's double-mount and the canvas
     // remount on an HDR change reuse the same fetch and the same meshes.
     let mounted = true
-    void loadShipModel(shipId, anisotropy).then((ship) => {
+    void loadShipModel(requestedId, anisotropy).then(async (ship) => {
+      if (ship !== null)
+        await warmCompile(warmRenderer(gl), {
+          object: ship.group,
+          camera,
+          scene: scene as Scene,
+        })
       // Only apply if this is still the wanted hull: a fast switch resolves two
       // cached promises and the last requested id must win, not the last to
       // land. The old hull stays on stage until the new one is ready, so a
@@ -43,9 +56,28 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     return () => {
       mounted = false
     }
-  }, [engine, anisotropy, shipId])
+  }, [engine, anisotropy, requestedId, gl, camera, scene])
+
+  useEffect(() => {
+    warmAtMount({
+      label: 'compiling the cinematic hull',
+      units: 1,
+      run: async (done) => {
+        const ship = await loadShipModel('rocinante', anisotropy)
+        if (ship !== null)
+          await warmCompile(warmRenderer(gl), {
+            object: ship.group,
+            camera,
+            scene: scene as Scene,
+          })
+        done()
+      },
+    })
+  }, [anisotropy, gl, camera, scene])
 
   useTimedFrame('shipModel', () => {
+    const desiredId = engine.cinematic?.ship.model ?? shipId
+    if (desiredId !== requestedId) setRequestedId(desiredId)
     const scene = engine.scene()
     if (scene === null || group.current === null) return
 
@@ -55,7 +87,10 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     // drawn until the scene hands everything back.
     const cinematic = engine.cinematic
     if (cinematic !== null) {
-      group.current.visible = cinematic.ship.visible
+      group.current.visible =
+        cinematic.ship.visible &&
+        (cinematic.ship.model === undefined ||
+          cinematic.ship.model === hull?.id)
       group.current.position.set(
         cinematic.ship.position.x,
         cinematic.ship.position.y,

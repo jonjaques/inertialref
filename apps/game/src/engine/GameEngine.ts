@@ -205,10 +205,20 @@ const asCandidate = (star: CatalogStar): StarCandidate => ({
  */
 export interface CinematicView {
   readonly frame: number
+  readonly presentationTime?: number
+  readonly elapsedSeconds?: number
+  readonly stage?: {
+    readonly model: string
+    readonly placementId?: string
+    readonly position: Vec3
+    readonly orientation: Quat
+  }
   /** The shot's own lens. `engine.lens` resolves it against the flight one. */
   readonly lens: Lens
   readonly camera: { readonly position: Vec3; readonly orientation: Quat }
   readonly ship: {
+    readonly model?: string
+    readonly throttle?: number
     readonly position: Vec3
     readonly orientation: Quat
     readonly visible: boolean
@@ -1251,37 +1261,22 @@ export class GameEngine {
       this.harness.observatory.target !== null
     )
       this.harness.observatory.advanceTime(delta)
+    // A surface stage holds its ephemeris epoch while the director samples
+    // live render time. Feeding the held snapshot time back freezes the playhead.
+    // Sampling before the player lookup also lets a scene end during a hand-off.
+    const cinematic = this.harness.cutsceneSample(this.world.clock.renderTime)
+    this.#phases.step('cutscene', ENGINE_PHASE)
     const shot = snapshot(
       this.world,
       undefined,
-      this.harness.cutsceneStatus() === null &&
-        this.harness.observatory.target !== null
-        ? this.harness.observatory.time
-        : undefined,
+      cinematic?.presentationTime ??
+        (cinematic === null && this.harness.observatory.target !== null
+          ? this.harness.observatory.time
+          : undefined),
     )
     this.snapshot = shot
     this.#phases.step('snapshot', ENGINE_PHASE)
 
-    /*
-     * The cutscene director's per-frame ask, against `renderTime` so a paused
-     * or stepped clock gives frame-exact stills. Everything downstream — the
-     * origin, the scene build, terrain, the star survey — follows the
-     * *cinematic* eye when there is one: the origin must stay within its
-     * rebase window of wherever the camera actually is, and a scene built
-     * around a ship an AU behind the shot would light and sort for nobody.
-     *
-     * **Above the missing-player returns below, and it has to be.** A cutscene
-     * owns the camera precisely when the ship does not matter, so the cutscene
-     * arm of the precedence order must not depend on the ship arm resolving.
-     * With the sample underneath them, a single frame during a load or an
-     * authority hand-off — `session.player()` null for one frame — meant the
-     * director was never asked again: it kept `#active`, `this.cinematic` kept
-     * its last non-null value for the rest of the session, `engineStore`
-     * published `cinema: true` forever, and every piece of chrome unmounted,
-     * including the control that stops it.
-     */
-    const cinematic = this.harness.cutsceneSample(shot.renderTime)
-    this.#phases.step('cutscene', ENGINE_PHASE)
     /*
      * The observatory's eye, when a cutscene is not already holding the camera.
      *
@@ -1338,6 +1333,23 @@ export class GameEngine {
         ? null
         : {
             frame: cinematic.frame,
+            presentationTime: cinematic.presentationTime,
+            elapsedSeconds: cinematic.elapsedSeconds,
+            stage:
+              cinematic.stage === undefined
+                ? undefined
+                : {
+                    model: cinematic.stage.model,
+                    placementId: cinematic.stage.placementId,
+                    position: toRenderSpace(
+                      this.origin,
+                      cinematic.stage.position,
+                    ),
+                    orientation: orientationToRenderSpace(
+                      this.origin,
+                      cinematic.stage.orientation,
+                    ),
+                  },
             lens: cinematic.lens,
             camera: {
               position: toRenderSpace(this.origin, cinematic.camera.position),
@@ -1353,6 +1365,8 @@ export class GameEngine {
                 cinematic.ship.orientation,
               ),
               visible: cinematic.ship.visible,
+              model: cinematic.ship.model,
+              throttle: cinematic.ship.throttle,
             },
             texts: cinematic.texts,
             effects: cinematic.effects,
