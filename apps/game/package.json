@@ -5,9 +5,9 @@
   "type": "module",
   "description": "InertialRef browser client: React UI over a React Three Fiber view of the simulation.",
   "scripts": {
-    "dev": "astro dev",
+    "dev": "ASTRO_DEV_BACKGROUND=1 astro dev",
     "build": "astro build && node ../../scripts/check-site.mjs",
-    "preview": "astro preview --port 4173",
+    "preview": "ASTRO_PREVIEW_BACKGROUND=1 astro preview --port 4173",
     "check": "astro check"
   },
   "dependencies": {

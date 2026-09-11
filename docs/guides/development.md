@@ -84,14 +84,21 @@ default and starts `scripts/dev.mjs`, so on a fresh worktree it reports that
 
 **Astro daemonizes itself when it detects a coding agent.** Astro 7 sniffs the
 environment for Claude Code, Codex, Cursor and the rest, and a detected `astro
-dev` spawns a detached copy, writes `apps/game/.astro/dev.json`, and returns.
-`scripts/dev.mjs` sets `ASTRO_DEV_BACKGROUND` on its children to keep Astro in
-the foreground, so `pnpm dev` behaves the same under an agent as in a terminal.
-`pnpm dev:client` does not, so, run from an agent, it leaves a background
-server that outlives the session and holds 5173. `pnpm dev` refuses to start
-over it and names the pid while that pid is alive — Astro removes the lock file
-only on a graceful stop, so after a Ctrl-C the file names a pid that is gone,
-and `pnpm dev` then says so and points at `lsof` instead;
+dev` or `astro preview` spawns a detached copy of itself, writes a lock file
+under `apps/game/.astro/`, and returns: from a terminal, a server that outlives
+the session; under `scripts/dev.mjs`, a client child that exits cleanly a
+second in and takes wrangler with it. The game package's `dev` and `preview`
+scripts set `ASTRO_DEV_BACKGROUND` and `ASTRO_PREVIEW_BACKGROUND`, the
+variables Astro gives its own detached child so that it does not daemonize
+twice, and so every route into Astro stays in the foreground. They are the only
+switch: `--ignore-lock` throws once an agent is detected. The cost is that the
+lock file records the server as background, so `astro dev logs` points at a
+log nobody writes.
+
+**`pnpm dev` refuses a taken port before either child starts.** A live Astro on
+5173 is named by pid from its lock file while that pid is alive. Astro removes
+the file only on a graceful stop, so after a Ctrl-C it names a pid that is
+gone, and `pnpm dev` then says so and points at `lsof` instead;
 `pnpm --filter @inertialref/game exec astro dev stop` ends a live one. A held
 8787 is refused the same way, except under `--ensure`, which starts the client
 alone and lets Vite proxy to the Worker already there.

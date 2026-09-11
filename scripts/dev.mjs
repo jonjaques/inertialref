@@ -78,25 +78,17 @@ const CHILDREN = [
  * inspector on 9230. A leftover `NODE_OPTIONS=--inspect` inherited into both
  * children would fight itself for 9229, and fight the headless runner too.
  *
- * `ASTRO_DEV_BACKGROUND` keeps Astro in the foreground. Astro 7 sniffs the
- * environment for a coding agent — Claude Code, Codex, Cursor and the rest —
- * and when it finds one `astro dev` daemonizes: it spawns a detached copy of
- * itself, writes `.astro/dev.json`, and exits. Under this script that is the
- * client child exiting cleanly a second in, which stops wrangler (one down
- * means both down, below) and leaves an orphan on 5173 that the next `pnpm dev`
- * from a human terminal refuses to start beside. The variable is the one Astro
- * sets on its own detached child so that the child does not detect the agent
- * and daemonize again; it is the only switch, because `--ignore-lock` throws
- * once an agent is detected. The cost is that the lock file records the server
- * as background, so `astro dev logs` points at a log nobody writes — the log
- * is this terminal.
+ * Astro's agent detection, which would daemonize the client child and end it
+ * cleanly a second in, is switched off in the game package's own `dev` script
+ * rather than here, so it holds on every route into Astro. The development
+ * guide has the mechanism.
  */
 function childEnv(env) {
   const current = env.NODE_OPTIONS ?? ''
   const cleaned = current
     .replace(/(^|\s)--inspect(?:-brk)?(?:=\S+)?(?=\s|$)/g, ' ')
     .trim()
-  const next = { ...env, FORCE_COLOR: '1', ASTRO_DEV_BACKGROUND: '1' }
+  const next = { ...env, FORCE_COLOR: '1' }
   if (cleaned === '') delete next.NODE_OPTIONS
   else next.NODE_OPTIONS = cleaned
   return next
