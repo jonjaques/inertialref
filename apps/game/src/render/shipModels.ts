@@ -62,7 +62,7 @@ async function build(
 
   // Recenter on the bounding-box middle so the hull yaws and pitches about its
   // own center; exported origins land wherever the artist left them.
-  const box = new Box3().setFromObject(hull)
+  const box = new Box3().setFromObject(hull, true)
   const size = box.getSize(new Vector3())
   hull.position.sub(box.getCenter(new Vector3()))
 
