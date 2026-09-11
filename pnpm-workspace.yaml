@@ -3,7 +3,7 @@ packages:
   - 'packages/*'
 
 # pnpm refuses to run install scripts unless the package is named here, and
-# pnpm 11 wants the decision spelled out per package rather than as a list.
+# pnpm 11 and later want the decision spelled out per package, not as a list.
 # These all ship native binaries and genuinely need their postinstall; workerd is
 # the Workers runtime `wrangler dev` and `wrangler deploy` execute against, and
 # without its postinstall there is no binary to run.

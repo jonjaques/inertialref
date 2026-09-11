@@ -16,7 +16,7 @@ Shared working card for Codex, Claude Code, and Cursor. Read this first; the
   Run `pnpm check` before changing code; report a pre-existing failure.
 - Find the test covering the behavior. Write a missing regression test first
   and prove it fails with the defect present. Prefer properties for mathematics.
-- Use Node 26 and pnpm 11. See [development](docs/guides/development.md).
+- Use Node 26 and pnpm 12. See [development](docs/guides/development.md).
   In a fresh worktree, run `pnpm install --frozen-lockfile --prefer-offline`.
 - Ask headlessly first: `pnpm sim`, focused Vitest, or `openSession` in `.scratch/`.
   Browser work goes through `node scripts/drive.mjs` and the `drive` skill.
@@ -133,7 +133,7 @@ Pushing and opening a PR use
 ## Cloud environments
 
 Cursor's environment is `.cursor/environment.json`; it pins Node 26 and pnpm
-11 and installs dependencies during the build. Inspect the **Game and Worker**
+12 and installs dependencies during the build. Inspect the **Game and Worker**
 terminal before starting another dev server. `pnpm dev` serves ports 5173 and 8787. Claude cloud setup is in `CLAUDE.md`; other fresh hosts use
 `scripts/cloud-setup.sh` as their environment setup script.
 

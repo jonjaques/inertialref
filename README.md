@@ -8,7 +8,7 @@ loading screens and no scale seams.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node 26+](https://img.shields.io/badge/node-26%2B-brightgreen.svg)](#prerequisites)
-[![pnpm 11](https://img.shields.io/badge/pnpm-11-orange.svg)](#prerequisites)
+[![pnpm 12](https://img.shields.io/badge/pnpm-12-orange.svg)](#prerequisites)
 [![12/12 capabilities](https://img.shields.io/badge/capabilities-12%2F12%20proven-success.svg)](#the-twelve-capabilities-proven)
 
 **[Try it → inertialref.app](https://inertialref.app)**
@@ -81,7 +81,7 @@ Check both:
 
 ```bash
 node --version    # v26.x or newer
-pnpm --version    # 11.x
+pnpm --version    # 12.x
 ```
 
 </details>
