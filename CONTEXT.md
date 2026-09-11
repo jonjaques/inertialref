@@ -9316,6 +9316,21 @@ bounds agree with the source within 1 mm in game meters.
 The meter, foot and inch reference cubes no longer follow the player. Their
 precision claim remains covered by the coordinate tests.
 
+## The white hull markings hold their depth (11 Sep 2026)
+
+MCRN, NAVY and 158 sit about 1.9 mm above the armor in the source asset. Tachi
+sits 6.7 mm above it. Blender's viewport spans 0.01 to 5,000 model units with
+an eye 650 units away, so the lettering competes with the underlying depth
+samples as the view moves. Batching preserves those gaps and does not cause
+this defect.
+
+Each marking plane gains 20 mm of outward clearance in the editable master;
+the exported game geometry carries the same correction. The viewport clips
+from 1 to 2,000 model units. A regression samples 48 points across all six
+panels and requires 15–35 mm of clearance over the underlying hull. It fails
+on the source and passes on the corrected export. The six batches and 140,863
+triangles remain; the GLB is 14,983,892 bytes including the modification record.
+
 ## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
 
 The cover's readout is a column now rather than a line. `render/firstLight.ts`

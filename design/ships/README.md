@@ -23,7 +23,11 @@ tangents do not occupy another vertex stream. The five materials share ten
 | --------------- | ---------: | ---------: |
 | Mesh primitives |        355 |          6 |
 | Triangles       |    140,863 |    140,863 |
-| GLB bytes       | 19,590,524 | 14,983,688 |
+| GLB bytes       | 19,590,524 | 14,983,892 |
+
+Marking planes sit 22–27 mm above the underlying armor. Their added 20 mm
+clearance prevents depth fighting. The Blender viewport clips from 1 to 2,000
+model units so it retains useful depth precision at this source scale.
 
 The loader uses exact vertex bounds before centering and scaling the hull to
 46 meters. Bounds remain within 1 mm of the source, in game meters. Existing
