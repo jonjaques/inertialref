@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "packageManager": "pnpm@11.22.0",
+  "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:client": "pnpm --filter @inertialref/game dev",

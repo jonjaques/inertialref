@@ -45,7 +45,7 @@ whole universe in under a kilobyte, and get the same answer twice.
 | Requirement               | Version                    | Why                                                                                                                                                                                                             |
 | ------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Node.js**               | **26 or newer**            | The headless runner executes the TypeScript sources directly through type stripping — that is how `pnpm sim` works with no build step                                                                           |
-| **pnpm**                  | **11** (11.22.0 pinned)    | The lockfile is pnpm's, and `packages/*` are source-only workspace links                                                                                                                                        |
+| **pnpm**                  | **12** (12.3.4 pinned)     | The lockfile is pnpm's, and `packages/*` are source-only workspace links                                                                                                                                        |
 | **A browser with WebGPU** | Chrome, Edge or Safari 26+ | The client renders through `WebGPURenderer` with TSL. WebGL 2 is a retained fallback, so Firefox runs — without extended-range HDR output, which it [cannot do at all](docs/spikes.md#1--hdr-display-detection) |
 | **git**                   | any                        |                                                                                                                                                                                                                 |
 
@@ -56,11 +56,13 @@ enforces rather than documents.
 <details>
 <summary><b>Getting Node 26 and pnpm</b></summary>
 
-The version of pnpm is pinned in `package.json`'s `packageManager` field, so the
-simplest path is to let Corepack read it:
+The version of pnpm is pinned in `package.json`'s `packageManager` field, and
+any pnpm from 10 on reads that pin and runs the pinned version in this tree, so
+which pnpm is installed globally does not matter. Node 26 does not bundle
+Corepack, so install one directly:
 
 ```bash
-corepack enable          # ships with Node; installs the pinned pnpm on first use
+mise use -g npm:pnpm     # or: npm install -g pnpm
 ```
 
 For Node itself, any version manager works. With [mise](https://mise.jdx.dev):
