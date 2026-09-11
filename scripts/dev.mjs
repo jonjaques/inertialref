@@ -35,12 +35,19 @@ import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
 import { fileURLToPath } from 'node:url'
 
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const ENSURE = process.argv.includes('--ensure')
 const CLIENT_PORT = 5173
+const SERVER_PORT = 8787
+/*
+ * Astro's own record of a dev server it started for this project — pid, url,
+ * and whether it was daemonised. Read only to name the holder of 5173 when the
+ * port is taken; Astro reads it too and refuses to start a second server.
+ */
+const ASTRO_LOCK = new URL('../apps/game/.astro/dev.json', import.meta.url)
 
 const ESC = '\u001b'
 const RESET = `${ESC}[0m`
@@ -70,21 +77,39 @@ const CHILDREN = [
  * `--inspect` is for `pnpm sim` (port 9229). Wrangler already opens workerd's
  * inspector on 9230. A leftover `NODE_OPTIONS=--inspect` inherited into both
  * children would fight itself for 9229, and fight the headless runner too.
+ *
+ * `ASTRO_DEV_BACKGROUND` keeps Astro in the foreground. Astro 7 sniffs the
+ * environment for a coding agent — Claude Code, Codex, Cursor and the rest —
+ * and when it finds one `astro dev` daemonises: it spawns a detached copy of
+ * itself, writes `.astro/dev.json`, and exits. Under this script that is the
+ * client child exiting cleanly a second in, which stops wrangler (one down
+ * means both down, below) and leaves an orphan on 5173 that the next `pnpm dev`
+ * from a human terminal refuses to start beside. The variable is the one Astro
+ * sets on its own detached child so that the child does not detect the agent
+ * and daemonise again; it is the only switch, because `--ignore-lock` throws
+ * once an agent is detected. The cost is that the lock file records the server
+ * as background, so `astro dev logs` points at a log nobody writes — the log
+ * is this terminal.
  */
-function withoutInspect(env) {
+function childEnv(env) {
   const current = env.NODE_OPTIONS ?? ''
   const cleaned = current
     .replace(/(^|\s)--inspect(?:-brk)?(?:=\S+)?(?=\s|$)/g, ' ')
     .trim()
-  const next = { ...env, FORCE_COLOR: '1' }
+  const next = { ...env, FORCE_COLOR: '1', ASTRO_DEV_BACKGROUND: '1' }
   if (cleaned === '') delete next.NODE_OPTIONS
   else next.NODE_OPTIONS = cleaned
   return next
 }
 
+/*
+ * `localhost`, not `127.0.0.1`: Astro binds `::1` alone on this machine, so an
+ * IPv4 probe reports the port free while the next `astro dev` refuses it.
+ * Node tries both families for a hostname and connects to whichever answers.
+ */
 function listening(port) {
   return new Promise((resolve) => {
-    const socket = createConnection({ port, host: '127.0.0.1' }, () => {
+    const socket = createConnection({ port, host: 'localhost' }, () => {
       socket.end()
       resolve(true)
     })
@@ -101,6 +126,39 @@ if (ENSURE && (await listening(CLIENT_PORT))) {
     for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, stop)
   })
   process.exit(0)
+}
+
+/*
+ * Both ports, before either child starts. Otherwise wrangler boots, Astro
+ * fails on the port, and the "one down means both down" rule below kills
+ * wrangler with a 143 — three screens of output whose only real line is the
+ * one about the port. Refusing here is also the same rule as `--ensure`: a
+ * server this script did not start is not one it kills.
+ */
+function astroLock() {
+  try {
+    const data = JSON.parse(readFileSync(ASTRO_LOCK, 'utf8'))
+    return `astro dev, pid ${data.pid}, since ${data.startedAt}`
+  } catch {
+    return 'not an astro dev server this checkout knows about'
+  }
+}
+
+const taken = [
+  [CLIENT_PORT, 'client', astroLock],
+  [SERVER_PORT, 'server', () => '`lsof -nP -iTCP:8787` names the holder'],
+]
+for (const [port, label, describe] of taken) {
+  if (!(await listening(port))) continue
+  console.error(
+    [
+      `${label} port ${port} is already in use (${describe()}).`,
+      label === 'client'
+        ? 'Stop it with `pnpm --filter @inertialref/game exec astro dev stop`, or reuse it with `--ensure`.'
+        : 'Stop it, then run `pnpm dev` again.',
+    ].join('\n'),
+  )
+  process.exit(1)
 }
 
 if (
@@ -131,17 +189,32 @@ function prefixer(label, colour, stream) {
 const running = new Map()
 let stopping = false
 
+/*
+ * Each child is `pnpm run`, and pnpm — 11 and 12 alike — does not pass a signal
+ * on to the script it runs: SIGTERM kills pnpm and leaves Astro or workerd
+ * running, and SIGINT does nothing at all. So each child is started in its own
+ * process group (`detached`) and the group is signalled, which reaches the
+ * grandchild directly. Ctrl-C still works: the terminal delivers it to this
+ * process, and this handler relays it to both groups.
+ */
 function stop(signal) {
   if (stopping) return
   stopping = true
-  for (const child of running.values()) child.kill(signal)
+  for (const child of running.values()) {
+    try {
+      process.kill(-child.pid, signal)
+    } catch {
+      child.kill(signal)
+    }
+  }
 }
 
 for (const { label, colour, argv } of CHILDREN) {
   const child = spawn('pnpm', argv, {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: withoutInspect(process.env),
+    detached: true, // its own process group; see stop()
+    env: childEnv(process.env),
   })
   /*
    * Character mode, not Buffer mode, and it is not a formality.

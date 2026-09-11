@@ -82,6 +82,16 @@ sixty seconds for a server that died in the first two and then reports that
 nothing is answering. Serve with `pnpm dev:client` yourself and pass
 `--no-serve`, or build once.
 
+**Astro daemonises itself when it detects a coding agent.** Astro 7 sniffs the
+environment for Claude Code, Codex, Cursor and the rest, and a detected `astro
+dev` spawns a detached copy, writes `apps/game/.astro/dev.json`, and returns.
+`scripts/dev.mjs` sets `ASTRO_DEV_BACKGROUND` on its children to keep Astro in
+the foreground, so `pnpm dev` behaves the same under an agent as in a terminal.
+`pnpm dev:client` does not, so run from an agent it leaves a background server
+that outlives the session and holds 5173. `pnpm dev` refuses to start over it
+and names the pid; `pnpm --filter @inertialref/game exec astro dev stop` ends
+it.
+
 `pnpm run deploy:worker`, not `pnpm deploy:worker` — `deploy` is a pnpm
 built-in. After any change to `wrangler.jsonc`, regenerate
 `apps/server/worker-configuration.d.ts` with
