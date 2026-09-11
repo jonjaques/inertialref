@@ -6,7 +6,6 @@ import { createWaterMaterial } from '../render/water.ts'
 import { Bodies } from './Bodies.tsx'
 import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
-import { NearFieldProps } from './NearFieldProps.tsx'
 import { EntryTrace } from './EntryTrace.tsx'
 import { OrbitTraces } from './OrbitTraces.tsx'
 import { Sensor } from './Sensor.tsx'
@@ -82,7 +81,6 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <SunFlare engine={engine} />
       <ShipModel engine={engine} />
       <ThrusterFx engine={engine} />
-      <NearFieldProps engine={engine} />
       <WarpFx engine={engine} />
       {/* Last, and at priority 1: the sensor takes the frame away from R3F
           once every priority-0 consumer above has written its uniforms, and
