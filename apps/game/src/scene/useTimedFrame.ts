@@ -10,16 +10,10 @@ import { runGraphicsFrame } from '../runtimeFailure.ts'
  * `frameMetrics.ts` states the boundary this exists to make visible:
  * *"everything the GPU does happens after this returns, and conflating the two
  * is how a renderer problem gets diagnosed as a simulation one."* The same
- * conflation runs the other way for the scene components. Ten of them run per
- * frame — `Bodies`, `TerrainPatches`, `ScatterRocks`, `Starfield`, `ShipModel`,
- * `OrbitTraces`, `NearFieldProps`, `SunFlare`, `WarpFx` and `CameraRig` — and
- * `engineMs` explicitly excludes every one. They were, until this, real
- * main-thread work no instrument in the project could see at all.
- *
- * (The plan counted nine and left `CameraRig` out as "the pose rather than a
- * draw". It is still a callback on the main thread inside the frame, and the
- * whole argument for the track is that nothing else measures these — so it is
- * ten. `EngineTick` is deliberately not one of them: it *is* the Engine track.)
+ * conflation runs the other way for scene components. Bodies, terrain, ships,
+ * traces and optical effects all do main-thread work that `engineMs` excludes.
+ * Each callback owns a span so the timeline can account for that work.
+ * `EngineTick` is the Engine track and does not use this wrapper.
  *
  * A span rather than the `PhaseClock` used inside the engine, because these are
  * not adjacent: R3F interleaves them with its own work and each has to stand on

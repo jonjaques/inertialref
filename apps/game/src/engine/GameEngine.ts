@@ -696,9 +696,8 @@ export class GameEngine {
   /*
    * The modeled hull the player is flying, once its glTF resolves.
    *
-   * Three scene components need it every frame — `ShipModel` mounts it,
-   * `CameraRig` scales the chase distance from its length, `NearFieldProps`
-   * steps aside from its beam — and it changes exactly once per session. On
+   * `ShipModel` mounts it and `CameraRig` scales the chase distance from its
+   * length. The selected hull can change during a session. It lives on
    * the engine rather than in module state in `SceneView`, because Vite
    * re-evaluates an edited render module while Fast Refresh preserves the
    * mounted components' hook state: a module-level copy resets to null mid-

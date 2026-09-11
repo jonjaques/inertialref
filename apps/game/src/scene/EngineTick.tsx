@@ -9,8 +9,7 @@ import { runGraphicsFrame } from '../runtimeFailure.ts'
  * Its own component with an explicit negative priority rather than a line at the
  * top of `CameraRig`. R3F runs equal-priority `useFrame` callbacks in mount
  * order, so while the tick lived inside `CameraRig` the correctness of every
- * other consumer — `Starfield`, `Bodies`, `TerrainPatches`, `ShipModel`,
- * `NearFieldProps` — rested on `<CameraRig />` appearing first in the fragment
+ * other consumer — `Starfield`, `Bodies`, `TerrainPatches`, `ShipModel` — rested on `<CameraRig />` appearing first in the fragment
  * above. Moving one JSX line would have made every planet render a frame stale,
  * silently. Priority says it instead.
  */
