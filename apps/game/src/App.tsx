@@ -660,6 +660,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       }),
   )
 
+  /*
+   * Where the cover sits under a public page rather than over the scene. The
+   * page stays readable above it while its backdrop warms, and the cover is
+   * then a black ground and nothing else: the front door already carries the
+   * mark and the name, and a second wordmark showing through the page's
+   * transparent half is two mastheads on one screen.
+   */
+  const coverUnderPage = mode === 'menu' || mode === 'docs'
+
   return (
     /*
      * `h-full w-full`, not `h-screen w-screen`.
@@ -805,7 +814,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               firstLight and releases its warm-up machinery. */}
           {boot !== 'done' && (
             <div
-              className={`pointer-events-none absolute inset-0 ${mode === 'menu' || mode === 'docs' ? 'z-0' : 'z-50'}`}
+              className={`pointer-events-none absolute inset-0 ${coverUnderPage ? 'z-0' : 'z-50'}`}
             >
               <ErrorBoundary
                 what="the loading screen"
@@ -815,6 +824,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                   phase={boot === 'revealing' ? 'revealing' : 'booting'}
                   stages={bootStages}
                   fraction={bootFraction}
+                  quiet={coverUnderPage}
                   onRevealed={firstLight.revealed}
                 />
               </ErrorBoundary>
