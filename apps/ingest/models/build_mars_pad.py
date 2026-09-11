@@ -31,7 +31,7 @@ PROVENANCE = {
     "landingRadiusMetres": 25,
     "foundationRadiusMetres": 45,
     "skirtDepthMetres": 6,
-    "revision": 1,
+    "revision": 2,
 }
 PARTS = []
 MATERIALS = {}
@@ -72,10 +72,12 @@ def box(name, location, dimensions, paint, bevel=0.04, rotation=0):
     return finish(obj, name, paint, bevel)
 
 
-def prism(name, points, low, high, paint, bevel=0):
+def prism(name, points, low, high, paint, bevel=0, cap_top=True):
     n = len(points)
     vertices = [(x, y, z) for z in (low, high) for x, y in points]
-    faces = [tuple(reversed(range(n))), tuple(range(n, 2 * n))]
+    faces = [tuple(reversed(range(n)))]
+    if cap_top:
+        faces.append(tuple(range(n, 2 * n)))
     faces += [(i, (i + 1) % n, (i + 1) % n + n, i + n) for i in range(n)]
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(vertices, [], faces)
@@ -85,18 +87,28 @@ def prism(name, points, low, high, paint, bevel=0):
     return finish(obj, name, paint, bevel)
 
 
-def annulus(name, inner, outer, low, high, paint, start=0, end=math.tau, segments=128):
+def annulus(
+    name,
+    inner,
+    outer,
+    low,
+    high,
+    paint,
+    start=0,
+    end=math.tau,
+    segments=128,
+    octagonal=False,
+):
     count = max(1, round(segments * (end - start) / math.tau))
     vertices = []
     for z, radius in ((low, inner), (low, outer), (high, inner), (high, outer)):
-        vertices += [
-            (
-                radius * math.cos(start + (end - start) * i / count),
-                radius * math.sin(start + (end - start) * i / count),
-                z,
-            )
-            for i in range(count + 1)
-        ]
+        for i in range(count + 1):
+            angle = start + (end - start) * i / count
+            extent = radius
+            if octagonal and radius == outer:
+                face = (math.floor(angle / (math.tau / 8)) + 0.5) * math.tau / 8
+                extent *= math.cos(math.pi / 8) / math.cos(angle - face)
+            vertices.append((extent * math.cos(angle), extent * math.sin(angle), z))
     stride = count + 1
     faces = []
     for i in range(count):
@@ -106,10 +118,11 @@ def annulus(name, inner, outer, low, high, paint, start=0, end=math.tau, segment
             (i, 2 * stride + i, 2 * stride + i + 1, i + 1),
             (stride + i, stride + i + 1, 3 * stride + i + 1, 3 * stride + i),
         ]
-    faces += [
-        (0, stride, 3 * stride, 2 * stride),
-        (count, 2 * stride + count, 3 * stride + count, stride + count),
-    ]
+    if end - start < math.tau:
+        faces += [
+            (0, stride, 3 * stride, 2 * stride),
+            (count, 2 * stride + count, 3 * stride + count, stride + count),
+        ]
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(vertices, [], faces)
     mesh.update()
@@ -180,15 +193,25 @@ def build():
         for i in range(8)
     ]
     inset = [(x * 0.955, y * 0.955) for x, y in octagon]
-    prism("Buried foundation skirt", inset, -6, -1.6, "foundation")
-    prism("Octagonal load ring", octagon, -2.4, -0.45, "structural-steel", 0.16)
+    # Hidden slab tops compete with the deck in depth at the landing shot's low angle.
+    prism("Buried foundation skirt", inset, -6, -1.6, "foundation", cap_top=False)
     prism(
-        "Apron slab",
-        [(x * 0.992, y * 0.992) for x, y in octagon],
+        "Octagonal load ring",
+        octagon,
+        -2.4,
+        -0.45,
+        "structural-steel",
+        0.16,
+        cap_top=False,
+    )
+    annulus(
+        "Outer apron",
+        37.25,
+        45 * 0.992,
         -0.7,
         -0.18,
         "recess-black",
-        0.08,
+        octagonal=True,
     )
 
     # The landing datum belongs to the tile tops, not the underside or model bounds.
@@ -226,32 +249,32 @@ def build():
 
     annulus("Expansion joint", 26.65, 27.25, -0.16, -0.03, "recess-black")
     annulus(
-        "Landing perimeter", 24.75, 25.15, 0.004, 0.012, "guidance-ivory", segments=192
+        "Landing perimeter", 24.75, 25.15, 0.08, 0.1, "guidance-ivory", segments=192
     )
     annulus(
         "Outer guidance hairline",
         25.8,
         25.92,
-        0.004,
-        0.012,
+        0.08,
+        0.1,
         "guidance-ivory",
         segments=192,
     )
-    annulus("Central burn seal", 4.1, 4.26, 0.005, 0.012, "guidance-ivory", segments=64)
+    annulus("Central burn seal", 4.1, 4.26, 0.08, 0.1, "guidance-ivory", segments=64)
     for axis in range(4):
         angle = axis * math.pi / 2
         box(
             f"Touchdown cross {axis}",
-            (7 * math.cos(angle), 7 * math.sin(angle), 0.008),
-            (4.8, 0.42, 0.014),
+            (7 * math.cos(angle), 7 * math.sin(angle), 0.09),
+            (4.8, 0.42, 0.02),
             "guidance-ivory",
             bevel=0,
             rotation=angle,
         )
         box(
             f"Approach bearing {axis}",
-            (23.1 * math.cos(angle), 23.1 * math.sin(angle), 0.009),
-            (3.0, 0.7, 0.014),
+            (23.1 * math.cos(angle), 23.1 * math.sin(angle), 0.09),
+            (3.0, 0.7, 0.02),
             "guidance-ivory",
             bevel=0,
             rotation=angle,
@@ -274,28 +297,18 @@ def build():
             a1,
             segments=64,
         )
-        annulus(
-            f"Warning band {side}",
-            27.8,
-            29.1,
-            -0.065,
-            -0.045,
-            "hazard-ochre",
-            a0 + 0.035,
-            a1 - 0.035,
-            segments=128,
-        )
-        for stripe in range(7):
-            center = a0 + 0.065 + stripe * 0.098
+        for stripe in range(8):
+            start = a0 + 0.035 if stripe == 0 else a0 + 0.097 + (stripe - 1) * 0.098
+            end = a1 - 0.035 if stripe == 7 else a0 + 0.065 + stripe * 0.098
             annulus(
-                f"Hazard gap {side} {stripe}",
-                27.76,
-                29.13,
-                -0.038,
-                -0.028,
-                "recess-black",
-                center,
-                center + 0.032,
+                f"Warning band {side} {stripe}",
+                27.8,
+                29.1,
+                0,
+                0.02,
+                "hazard-ochre",
+                start,
+                end,
                 segments=256,
             )
         for rib in range(-3, 4):
@@ -322,7 +335,7 @@ def build():
                 slat_pos = pos + radial * ((slat - 2.5) * 0.67)
                 box(
                     f"Drain grille {side} {track} {slat}",
-                    (slat_pos.x, slat_pos.y, 0.02),
+                    (slat_pos.x, slat_pos.y, 0.105),
                     (0.16, 0.94, 0.08),
                     "service-ceramic",
                     bevel=0.015,
@@ -358,13 +371,13 @@ def build():
             p = pos + tangent * ((slot - 3) * 0.50)
             box(
                 f"Service radiator {side} {slot}",
-                (p.x, p.y, 1.91),
+                (p.x, p.y, 1.98),
                 (1.8, 0.13, 0.045),
                 "recess-black",
                 bevel=0,
                 rotation=theta,
             )
-        p = pos - radial * 1.375
+        p = pos - radial * 1.47
         box(
             f"Service identification {side}",
             (p.x, p.y, 1.1),
@@ -444,9 +457,9 @@ def build():
             bevel=0.01,
         )
         obj.rotation_euler.x = slope
-    label("01", (0, -34.1, -0.06), 4.8, "guidance-ivory")
-    label("MARS", (0, -36.7, -0.06), 1.35, "guidance-ivory")
-    label("KEEP CLEAR", (0, 31.4, -0.06), 1.15, "guidance-ivory", rotation=math.pi)
+    label("01", (0, -34.1, 0.02), 4.8, "guidance-ivory")
+    label("MARS", (0, -36.7, 0.02), 1.35, "guidance-ivory")
+    label("KEEP CLEAR", (0, 31.4, 0.02), 1.15, "guidance-ivory", rotation=math.pi)
 
 
 def preview_setup(path):

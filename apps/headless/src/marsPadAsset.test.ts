@@ -2,7 +2,14 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-type Accessor = { count: number; min?: number[]; max?: number[] }
+type Accessor = {
+  count: number
+  bufferView: number
+  byteOffset?: number
+  componentType: number
+  min?: number[]
+  max?: number[]
+}
 type Primitive = {
   attributes: { POSITION: number }
   indices: number
@@ -11,6 +18,7 @@ type Primitive = {
 type PadDocument = {
   asset: { version: string; extras: Record<string, unknown> }
   accessors: Accessor[]
+  bufferViews: { byteOffset?: number; byteStride?: number }[]
   meshes: { primitives: Primitive[] }[]
   materials: { name: string }[]
   nodes: { translation?: number[]; rotation?: number[]; scale?: number[] }[]
@@ -33,6 +41,60 @@ function readPad(): PadDocument {
   return JSON.parse(
     bytes.subarray(20, 20 + jsonBytes).toString('utf8'),
   ) as PadDocument
+}
+
+/** Upward surfaces under a ray reveal hidden plates that fight at grazing angles. */
+function surfaceHeights(x: number, z: number): number[] {
+  const bytes = readFileSync(padPath)
+  const pad = readPad()
+  const binaryStart = 28 + bytes.readUInt32LE(12)
+  const heights = new Set<number>()
+  for (const primitive of pad.meshes.flatMap((mesh) => mesh.primitives)) {
+    const position = pad.accessors[primitive.attributes.POSITION]!
+    const positionView = pad.bufferViews[position.bufferView]!
+    const positionStart =
+      binaryStart + (positionView.byteOffset ?? 0) + (position.byteOffset ?? 0)
+    const indices = pad.accessors[primitive.indices]!
+    const indexView = pad.bufferViews[indices.bufferView]!
+    const indexStart =
+      binaryStart + (indexView.byteOffset ?? 0) + (indices.byteOffset ?? 0)
+    const indexSize = indices.componentType === 5123 ? 2 : 4
+    expect([5123, 5125]).toContain(indices.componentType)
+    expect(position.componentType).toBe(5126)
+    const vertex = (index: number): [number, number, number] => {
+      const vertexIndex =
+        indexSize === 2
+          ? bytes.readUInt16LE(indexStart + index * 2)
+          : bytes.readUInt32LE(indexStart + index * 4)
+      const start =
+        positionStart + vertexIndex * (positionView.byteStride ?? 12)
+      return [
+        bytes.readFloatLE(start),
+        bytes.readFloatLE(start + 4),
+        bytes.readFloatLE(start + 8),
+      ]
+    }
+    for (let index = 0; index < indices.count; index += 3) {
+      const a = vertex(index)
+      const b = vertex(index + 1)
+      const c = vertex(index + 2)
+      const bx = b[0] - a[0],
+        bz = b[2] - a[2]
+      const cx = c[0] - a[0],
+        cz = c[2] - a[2]
+      const determinant = bx * cz - bz * cx
+      if (determinant >= -1e-8) continue
+      const dx = x - a[0],
+        dz = z - a[2]
+      const u = (dx * cz - dz * cx) / determinant
+      const v = (bx * dz - bz * dx) / determinant
+      if (u < -1e-6 || v < -1e-6 || u + v > 1 + 1e-6) continue
+      heights.add(
+        Math.round((a[1] + u * (b[1] - a[1]) + v * (c[1] - a[1])) * 1e6) / 1e6,
+      )
+    }
+  }
+  return [...heights].sort((a, b) => a - b)
 }
 
 describe('the shipped Mars pad', () => {
@@ -98,5 +160,20 @@ describe('the shipped Mars pad', () => {
     expect(bounds.max![1]).toBeCloseTo(0, 5)
     expect(bounds.max![0]! - bounds.min![0]!).toBeGreaterThan(50)
     expect(bounds.max![2]! - bounds.min![2]!).toBeGreaterThan(50)
+  })
+
+  it('has no hidden upward slabs beneath the deck and apron', () => {
+    expect(surfaceHeights(2, 2)).toEqual([0])
+    expect(
+      surfaceHeights(32 * Math.cos(Math.PI / 8), 32 * Math.sin(Math.PI / 8)),
+    ).toEqual([-0.08])
+    expect(
+      surfaceHeights(41 * Math.cos(Math.PI / 8), 41 * Math.sin(Math.PI / 8)),
+    ).toEqual([-0.18])
+  })
+
+  it('separates the guidance ring from the deck by ten centimetres', () => {
+    // At 200 m with a 0.1 m near plane, millimetre decals share depth bins.
+    expect(surfaceHeights(24.95, 0.7)).toEqual([0, 0.1])
   })
 })
