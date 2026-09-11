@@ -88,6 +88,8 @@ export interface CinematicSpark {
 
 /** Screen-space effect drives, all 0..1. */
 export interface CinematicEffects {
+  /** Screen-space hull smear, opt-in for a shot's exposure treatment, 0..1. */
+  readonly motionSmear?: number
   /** Atmospheric heating around the hull, opt-in per shot, 0..1. */
   readonly entryHeat?: number
   /** Pad dust lifted by the terminal burn, opt-in per shot, 0..1. */
@@ -132,6 +134,7 @@ export const NO_SPARK: CinematicSpark = Object.freeze({
 })
 
 export const NO_EFFECTS: CinematicEffects = Object.freeze({
+  motionSmear: 0,
   exposure: 0,
   calibratedLight: 0,
   blackout: 0,

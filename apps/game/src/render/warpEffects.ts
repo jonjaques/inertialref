@@ -354,7 +354,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         effects.streaks > 0.002 ||
         effects.nacelleGlow > 0.002 ||
         effects.spark.drive > 0.002 ||
-        view.ship.visible
+        ((effects.motionSmear ?? 0) > 0 && view.ship.visible)
       if (!anything) {
         group.visible = false
         hadShip = false
@@ -616,7 +616,12 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
       // The smear: apparent-velocity blur for the hull. Anchored on last
       // frame's position, stretched to this frame's — light where the hull
       // was, which is what a long exposure records.
-      if (shipScreen.ok && ship.visible && hadShip) {
+      if (
+        (effects.motionSmear ?? 0) > 0 &&
+        shipScreen.ok &&
+        ship.visible &&
+        hadShip
+      ) {
         const dx = (shipScreen.x - lastShipX) * 0.5 * aspect
         const dy = (shipScreen.y - lastShipY) * 0.5
         const speed = Math.hypot(dx, dy) // screen heights per frame, roughly
@@ -631,7 +636,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
           (shipScreen.y - lastShipY) * tanHalf * PLANE,
         )
         smear.mesh.scale.set(Math.max(stretch, 0.01), frameHeight * 0.12, 1)
-        smear.intensity.value = drive * 1.1
+        smear.intensity.value = drive * 1.1 * (effects.motionSmear ?? 0)
         smear.tint.value.setRGB(0.9, 0.95, 1.1)
       } else {
         smear.intensity.value = 0

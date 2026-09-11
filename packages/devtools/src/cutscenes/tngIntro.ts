@@ -2772,6 +2772,7 @@ function effectsAt(frame: number): CinematicEffects {
   }
 
   return {
+    motionSmear: 1,
     blackout,
     flash,
     streaks,
