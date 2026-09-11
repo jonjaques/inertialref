@@ -62,10 +62,14 @@ export function createLandingEffects() {
   const sunGlow = uniform(0)
   const skyMaterial = sensorRadiance(new MeshBasicNodeMaterial(), true)
   skyMaterial.side = BackSide
+  skyMaterial.transparent = true
+  skyMaterial.opacityNode = float(1)
+  skyMaterial.depthTest = true
   skyMaterial.depthWrite = false
   skyMaterial.depthNode = float(1)
   skyMaterial.fog = false
   const elevation = positionLocal.normalize().y
+  const aboveGround = smoothstep(0, 0.025, elevation)
   const rose = mix(
     vec3(0.27, 0.105, 0.042),
     vec3(0.074, 0.027, 0.041),
@@ -81,18 +85,16 @@ export function createLandingEffects() {
     .mul(0.6)
     .add(exp(sunAngle.sub(1).mul(200)).mul(0.35))
     .mul(sunGlow)
-  skyMaterial.colorNode = mix(
-    vec3(0.11, 0.046, 0.026),
-    upper,
-    smoothstep(-0.4, 0, elevation),
-  )
+    .mul(aboveGround)
+  skyMaterial.colorNode = mix(vec3(0.006, 0.0018, 0.0008), upper, aboveGround)
     .add(vec3(0.55, 0.22, 0.072).mul(solarGlow))
     .mul(haze)
   const sky = new Mesh(new SphereGeometry(1000, 48, 32), skyMaterial)
   sky.name = 'cinematic-sky'
-  // The galaxy draws first. A far-depth sky without a depth write leaves
-  // opaque terrain and the hull in front under either draw-order policy.
-  sky.renderOrder = -900
+  // Replace the physical atmosphere's transparent background contribution.
+  // Alpha one and far-depth testing preserve opaque terrain, hull and Sun;
+  // the subsequent flare and entry passes still composite over the sky.
+  sky.renderOrder = 8
   sky.frustumCulled = false
   group.add(sky)
 

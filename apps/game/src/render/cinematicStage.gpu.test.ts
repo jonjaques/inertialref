@@ -1,13 +1,18 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import {
+  AddEquation,
+  CustomBlending,
   Mesh,
   MeshBasicNodeMaterial,
   NodeUpdateType,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
   PerspectiveCamera,
   PlaneGeometry,
   Scene,
+  ZeroFactor,
 } from 'three/webgpu'
-import { pass, vec3 as nodeVec3 } from 'three/tsl'
+import { float, pass, vec3 as nodeVec3 } from 'three/tsl'
 import {
   lensForFov,
   NO_EFFECTS,
@@ -131,18 +136,18 @@ it('draws a warm photographic sky behind the scene only when the script requests
     setSceneExposure(gpu.renderer, 1 / SURFACE_LUMINANCE)
     fx.update(sample)
     const first = await gpu.drawGraph(scenePass, { float: true })
-    const horizon = first.at(5, 48)
+    const horizon = first.at(5, 52)
     expect(horizon[0]).toBeGreaterThan(0.05)
     expect(horizon[0]).toBeGreaterThan(horizon[2] * 1.5)
     expect(first.at(48, 48)[2]).toBeCloseTo(0.3, 3)
     fx.update(sample, 46, 16, vec3(-5, 0, -10))
     const sunlit = await gpu.drawGraph(scenePass, { float: true })
-    expect(sunlit.at(5, 48)[0]).toBeGreaterThan(horizon[0] * 1.3)
-    expect(sunlit.at(5, 48)[0]).toBeGreaterThan(sunlit.at(90, 48)[0] * 1.3)
+    expect(sunlit.at(5, 52)[0]).toBeGreaterThan(horizon[0] * 1.3)
+    expect(sunlit.at(5, 52)[0]).toBeGreaterThan(sunlit.at(90, 52)[0] * 1.3)
     fx.update(sample)
     setSceneExposure(gpu.renderer, 0.25 / SURFACE_LUMINANCE)
     const dim = await gpu.drawGraph(scenePass, { float: true })
-    expect(dim.at(5, 48)[0] / horizon[0]).toBeCloseTo(0.25, 3)
+    expect(dim.at(5, 52)[0] / horizon[0]).toBeCloseTo(0.25, 3)
     fx.update(view(0, 0))
     const off = await gpu.drawGraph(scenePass, { float: true })
     expect(off.at(5, 48)[0]).toBe(0)
@@ -152,6 +157,98 @@ it('draws a warm photographic sky behind the scene only when the script requests
     scenePass.dispose()
     foreground.geometry.dispose()
     foreground.material.dispose()
+    fx.dispose()
+  }
+})
+
+it.each([50, 5000])(
+  'replaces transparent atmospheric radiance at %i metres without covering foreground or the Sun',
+  async (distance) => {
+    const camera = new PerspectiveCamera(55, 1, 0.1, 10000)
+    const scene = new Scene()
+    const fx = createLandingEffects()
+    const geometry = new PlaneGeometry(1, 1)
+    const foregroundMaterial = new MeshBasicNodeMaterial()
+    foregroundMaterial.colorNode = nodeVec3(0.02, 0.04, 0.3)
+    const foreground = new Mesh(geometry, foregroundMaterial)
+    foreground.position.z = -3
+    const sunMaterial = new MeshBasicNodeMaterial()
+    sunMaterial.colorNode = nodeVec3(2, 1.5, 1)
+    const sun = new Mesh(geometry, sunMaterial)
+    sun.position.set(9, 9, -30)
+    sun.scale.setScalar(3)
+    const atmosphereMaterial = new MeshBasicNodeMaterial()
+    atmosphereMaterial.colorNode = nodeVec3(0.5, 2, 3)
+    atmosphereMaterial.opacityNode = float(0.25)
+    atmosphereMaterial.transparent = true
+    atmosphereMaterial.depthWrite = false
+    // The production physical shell composites L + T·background. Test shell
+    // geometry on either side of the sky dome, independently of depth sorting.
+    atmosphereMaterial.blending = CustomBlending
+    atmosphereMaterial.blendEquation = AddEquation
+    atmosphereMaterial.blendSrc = OneFactor
+    atmosphereMaterial.blendDst = OneMinusSrcAlphaFactor
+    atmosphereMaterial.blendSrcAlpha = ZeroFactor
+    atmosphereMaterial.blendDstAlpha = OneFactor
+    const atmosphere = new Mesh(geometry, atmosphereMaterial)
+    atmosphere.position.z = -distance
+    atmosphere.scale.setScalar(distance * 2)
+    atmosphere.visible = false
+    scene.add(fx.group, foreground, sun, atmosphere)
+    const scenePass = pass(scene, camera)
+    scenePass.updateBeforeType = NodeUpdateType.RENDER
+    try {
+      setSceneExposure(gpu.renderer, 1 / SURFACE_LUMINANCE)
+      fx.update({ ...view(0, 0), effects: { ...NO_EFFECTS, skyHaze: 1 } })
+      const baseline = await gpu.drawGraph(scenePass, { float: true })
+      atmosphere.visible = true
+      const composed = await gpu.drawGraph(scenePass, { float: true })
+      expect(
+        composed.data.every((value, index) => value === baseline.data[index]),
+      ).toBe(true)
+      expect(composed.at(48, 48)[2]).toBeCloseTo(0.3, 3)
+      expect(
+        composed.data.some((value, index) => index % 4 === 0 && value === 2),
+      ).toBe(true)
+      fx.update(view(0, 0))
+      const unmodified = await gpu.drawGraph(scenePass, { float: true })
+      expect(unmodified.at(5, 20)[2]).toBeCloseTo(3, 3)
+    } finally {
+      setSceneExposure(gpu.renderer, null)
+      scenePass.dispose()
+      geometry.dispose()
+      foregroundMaterial.dispose()
+      sunMaterial.dispose()
+      atmosphereMaterial.dispose()
+      fx.dispose()
+    }
+  },
+)
+
+it('keeps the lower hemisphere dark even when the Sun is below the ground', async () => {
+  const camera = new PerspectiveCamera(55, 1, 0.1, 10000)
+  camera.rotation.x = -Math.PI / 4
+  const scene = new Scene()
+  const fx = createLandingEffects()
+  scene.add(fx.group)
+  const scenePass = pass(scene, camera)
+  scenePass.updateBeforeType = NodeUpdateType.RENDER
+  const sample = { ...view(0, 0), effects: { ...NO_EFFECTS, skyHaze: 1 } }
+  try {
+    setSceneExposure(gpu.renderer, 1 / SURFACE_LUMINANCE)
+    fx.update(sample)
+    const baseline = await gpu.drawGraph(scenePass, { float: true })
+    fx.update(sample, 46, 16, vec3(0, -5, -10))
+    const subterraneanSun = await gpu.drawGraph(scenePass, { float: true })
+    expect(
+      subterraneanSun.data.every(
+        (value, index) => value === baseline.data[index],
+      ),
+    ).toBe(true)
+    expect(subterraneanSun.at(48, 48)[0]).toBeLessThan(0.01)
+  } finally {
+    setSceneExposure(gpu.renderer, null)
+    scenePass.dispose()
     fx.dispose()
   }
 })
