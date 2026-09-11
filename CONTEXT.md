@@ -9376,6 +9376,15 @@ the same script registry, and a regression checks every registered scene's
 cold route. Projection tests keep the entry hull readable and the sunset
 beside the pad; every frame is checked for ground and hull clearance.
 
+An opaque sunset dome did not replace the physical sky: the atmosphere's
+transparent pass ran afterward and added its scattering over the authored
+color. The sky now composites at far depth after the atmosphere and before
+the lens effects, with alpha one and depth writes disabled. A GPU regression
+places physical atmosphere on both sides of the dome and checks identical
+background pixels with it enabled or disabled, while preserving the opaque
+foreground and Sun. The lower hemisphere carries dark regolith and no solar
+glow; sunlight belongs above the ground.
+
 ## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
 
 The cover's readout is a column now rather than a line. `render/firstLight.ts`
