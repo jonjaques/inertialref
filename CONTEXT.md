@@ -9295,6 +9295,27 @@ signal handlers are in the `logs` follower — so after every Ctrl-C the file
 names a pid that is gone, and the port message trusts it only while that pid
 is alive and on 5173.
 
+## The Rocinante keeps its paint in six batches (10 Sep 2026)
+
+The Rocinante master in `design/ships/rocinante.blend` retains the source parts
+and Tachi markings. Its Principled materials distinguish dielectric armor and
+safety paint from gunmetal and titanium. The ingest exporter combines static
+parts into six mesh primitives, down from 355, with all 140,863 triangles intact.
+Unused UV streams and exported tangents are absent; normal mapping derives its
+frame from UV0. Ten 1024-pixel PNG maps remain shared. The GLB is 14,983,688 bytes,
+down from 19,590,524 bytes. These are asset counts, not a frame-rate claim.
+
+The ship loader previously copied textures but dropped `baseColorFactor` and
+ambient occlusion. A material that looked charcoal in Blender consequently
+arrived with a white factor and lost its recess shading. The conversion keeps
+paint, AO, normal-map settings and vertex-color flags. Four focused regressions
+fail with the old conversion. Exact vertex bounds keep batching from shifting
+the hull's center through transformed bounding-box overestimation; the exported
+bounds agree with the source within 1 mm in game meters.
+
+The meter, foot and inch reference cubes no longer follow the player. Their
+precision claim remains covered by the coordinate tests.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
