@@ -9295,6 +9295,56 @@ signal handlers are in the `logs` follower — so after every Ctrl-C the file
 names a pid that is gone, and the port message trusts it only while that pid
 is alive and on 5173.
 
+## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
+
+The cover's readout is a column now rather than a line. `render/firstLight.ts`
+publishes every stage the warm-up has been through, oldest first, each keeping
+the census count it ended on, and `hud/BootOverlay.tsx` streams them down the
+top-right corner under the mark, the name and a hairline that fills with the
+census. One line replacing itself fourteen times in five seconds was a flicker,
+and it sat bottom left — the flight strip's corner — so the reveal read as the
+strip's text changing rather than as a cover coming off.
+
+**The census grows while the cover is up.** On `/play/solo` the total is 71
+units through the awaited producers and jumps to 173 (201 in another run) when
+the frame-driven ones — `building bodies`, `baking the nearby sky` — declare
+theirs, so any single progress figure steps backward once, at "warming the
+galaxy 65/71" → "compiling the ground 67/173". That is the census being honest
+about work it has just discovered, and the ledger keeps the count per line so
+a reader can see why the rule retreated. A monotonic bar would stall at 92%
+for half the boot instead; it was not tried and should not be.
+
+**The fade at the top of the column cannot be a mask stretched over the box.**
+Two obvious forms fail. A mask over a box that grows with its content puts the
+fade zone on the first two lines from the first frame — "waking the renderer"
+was gray before the column had reached anything. A box of fixed height with
+the column packed to its end puts the first line a whole cap below the
+wordmark. `boot-ledger` in `index.css` sizes the mask image to the cap
+(`min(50dvh, 22rem)`) and anchors it to the box's bottom, so its fade zone sits
+above the box until the box has grown to the cap, which is exactly when there
+is something to fade; the box is never taller than the mask, so nothing falls
+outside the image and goes unmasked.
+
+**The front door draws over the cover and its right half is transparent.** On
+`/` and `/docs` the cover sits at z-0 under the public page, and a wordmark on
+the cover showed through beside the page's own — two mastheads on one screen.
+Under a public page the cover is a black ground and the live region only,
+which is what the bottom-left readout amounted to there: it sat under the
+page's opaque half and only a screen reader ever met it.
+
+**Icons from one library, or the weights disagree.** An authored spinner on a
+16-unit grid at stroke 2 renders 1.5 px at 12 px where lucide's check — a
+24-unit grid at stroke 2 — renders 1 px, so the ring a running line turned was
+half again as heavy as the glyph it became. The finish review caught it; both
+are lucide now.
+
+Boot under the driver, for whoever photographs the cover next (dev React,
+`--document` mode, 1600×900 at DPR 1, warm page): the surface maps hold the
+ledger at two lines until about 3.5 s, the remaining stages land within the
+next 0.7 s, and first light is at 5–6 s. A still taken at 2.3 s and one at
+2.8 s were on opposite sides of that cliff, and a driven boot lifts the cover
+at first light, so a still past 5 s is the scene.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
