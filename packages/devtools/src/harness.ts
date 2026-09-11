@@ -154,9 +154,7 @@ import {
   type TimingVerb,
 } from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
-import { TNG_INTRO } from './cutscenes/tngIntro.ts'
-import { MARS_LANDING } from './cutscenes/marsLanding.ts'
-import { ENTERPRISE_PORTRAITS } from './cutscenes/enterprisePortraits.ts'
+import { CUTSCENES } from './cutscenes/index.ts'
 import type { CinematicSample } from '@inertialref/rendering'
 
 /*
@@ -435,11 +433,7 @@ export class GameHarness {
 
   constructor(host: Host) {
     this.#host = host
-    this.#cutscenes = new CutsceneDirector(host, [
-      TNG_INTRO,
-      MARS_LANDING,
-      ENTERPRISE_PORTRAITS,
-    ])
+    this.#cutscenes = new CutsceneDirector(host, CUTSCENES)
     this.#observatory = new Observatory(host)
     this.#flightCamera = new FlightCamera(host)
     logHub.addSink(this.#logSink)
@@ -1470,6 +1464,17 @@ export class GameHarness {
     this.#host.world.removeStructure(id)
   }
 
+  /** Move a structure atomically; invalid coordinates leave its existing anchor intact. */
+  moveStructure(structure: SurfacePlacement): void {
+    const radians = Math.PI / 180
+    this.#host.world.moveStructure({
+      ...structure,
+      latitude: structure.latitude * radians,
+      longitude: structure.longitude * radians,
+      heading: structure.heading * radians,
+    })
+  }
+
   /** Stand above a structure in the planetarium, looking toward its northern approach. */
   visitStructure(id: string, height = 100): ObserverStatus {
     const structure = this.structures().find((candidate) => candidate.id === id)
@@ -2232,6 +2237,7 @@ export class GameHarness {
           .join(', '),
       '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
       '  ir.structures() / ir.placeStructure(record) / ir.removeStructure(id)',
+      '  ir.moveStructure(record)      replace an existing anchor atomically',
       '  ir.visitStructure(id, height?) surface anchors; angles in degrees, heights in meters',
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',

@@ -20,7 +20,7 @@ second scene** — the traps below are the index, not the explanation.
   in Node. The director and scripts live in `packages/devtools`. A script's
   `prepare(world)` resolves the stage once; its `sample(frame)` is pure; time derives from
   `renderTime`, never a wall clock. A new scene is a new file exporting a `CutsceneScript`,
-  registered in `harness.ts`.
+  registered in `cutscenes/index.ts`, which both the director and document routes read.
 - **A scene is a shot list, not a camera move.** Each shot owns its camera, placed against
   its own subject; cuts hide in darkness, behind a flash, or under a body filling the
   frame. Authored as one continuous spline, a scene becomes a camera crossing astronomical
