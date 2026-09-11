@@ -3,6 +3,11 @@ import { Quaternion as Q, vec3 } from '@inertialref/spatial'
 import { describe, expect, it } from 'vitest'
 
 type Triple = [number, number, number]
+interface ShipPrimitive {
+  attributes: Record<string, number>
+  indices?: number
+  material: number
+}
 interface ShipNode {
   mesh?: number
   children?: number[]
@@ -15,12 +20,7 @@ interface ShipAsset {
   scene?: number
   scenes: { nodes: number[] }[]
   nodes: ShipNode[]
-  meshes: {
-    primitives: {
-      attributes: Record<string, number>
-      indices?: number
-    }[]
-  }[]
+  meshes: { primitives: ShipPrimitive[] }[]
   accessors: {
     bufferView: number
     byteOffset?: number
@@ -77,9 +77,9 @@ function transform(node: ShipNode, [x, y, z]: Triple): Triple {
   return [rotated.x + tx, rotated.y + ty, rotated.z + tz]
 }
 
-function bounds(): { min: Triple; max: Triple } {
-  const min: Triple = [Infinity, Infinity, Infinity]
-  const max: Triple = [-Infinity, -Infinity, -Infinity]
+function visitMeshes(
+  visit: (primitive: ShipPrimitive, points: Triple[]) => void,
+): void {
   function walk(index: number, parents: ShipNode[]): void {
     const node = ship.nodes[index]!
     const chain = [node, ...parents]
@@ -91,6 +91,7 @@ function bounds(): { min: Triple; max: Triple } {
         const view = ship.bufferViews[accessor.bufferView]!
         const offset = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
         const stride = view.byteStride ?? 12
+        const points: Triple[] = []
         for (let vertex = 0; vertex < accessor.count; vertex += 1) {
           const at = offset + vertex * stride
           let point: Triple = [
@@ -99,17 +100,66 @@ function bounds(): { min: Triple; max: Triple } {
             binary.readFloatLE(at + 8),
           ]
           for (const ancestor of chain) point = transform(ancestor, point)
-          for (const axis of [0, 1, 2] as const) {
-            min[axis] = Math.min(min[axis], point[axis])
-            max[axis] = Math.max(max[axis], point[axis])
-          }
+          points.push(point)
         }
+        visit(primitive, points)
       }
     }
     for (const child of node.children ?? []) walk(child, chain)
   }
   for (const root of ship.scenes[ship.scene ?? 0]!.nodes) walk(root, [])
+}
+
+function bounds(): { min: Triple; max: Triple } {
+  const min: Triple = [Infinity, Infinity, Infinity]
+  const max: Triple = [-Infinity, -Infinity, -Infinity]
+  visitMeshes((_primitive, points) => {
+    for (const point of points) {
+      for (const axis of [0, 1, 2] as const) {
+        min[axis] = Math.min(min[axis], point[axis])
+        max[axis] = Math.max(max[axis], point[axis])
+      }
+    }
+  })
   return { min, max }
+}
+
+const sub = (a: Triple, b: Triple): Triple => [
+  a[0] - b[0],
+  a[1] - b[1],
+  a[2] - b[2],
+]
+const dot = (a: Triple, b: Triple): number =>
+  a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+const cross = (a: Triple, b: Triple): Triple => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+]
+
+interface Triangle {
+  a: Triple
+  u: Triple
+  v: Triple
+  normal: Triple
+}
+
+function lineHit(
+  point: Triple,
+  direction: Triple,
+  triangle: Triangle,
+): number | null {
+  if (Math.abs(dot(direction, triangle.normal)) < 0.98) return null
+  const q = cross(direction, triangle.v)
+  const determinant = dot(triangle.u, q)
+  if (Math.abs(determinant) < 1e-14) return null
+  const s = sub(point, triangle.a)
+  const u = dot(s, q) / determinant
+  if (u < -1e-5 || u > 1 + 1e-5) return null
+  const r = cross(s, triangle.u)
+  const v = dot(direction, r) / determinant
+  if (v < -1e-5 || u + v > 1 + 1e-5) return null
+  return dot(triangle.v, r) / determinant
 }
 
 describe('the Rocinante realtime asset', () => {
@@ -185,6 +235,82 @@ describe('the Rocinante realtime asset', () => {
       for (const axis of [0, 1, 2] as const) {
         const error = Math.abs(actual[side][axis] - original[side][axis]!)
         expect(error * metresPerUnit).toBeLessThan(0.001)
+      }
+    }
+  })
+
+  it('keeps all six marking quads 15–35 mm above the underlying hull', () => {
+    const markings: Triangle[] = []
+    const hull: Triangle[] = []
+    visitMeshes((primitive, points) => {
+      const name = ship.materials[primitive.material]!.name
+      const target = /^(Texts|Roci \| Hull markings)$/.test(name)
+        ? markings
+        : hull
+      const indices =
+        primitive.indices === undefined
+          ? null
+          : ship.accessors[primitive.indices]!
+      const view =
+        indices === null ? null : ship.bufferViews[indices.bufferView]!
+      const width =
+        indices === null
+          ? 0
+          : ({ 5121: 1, 5123: 2, 5125: 4 } as Record<number, number>)[
+              indices.componentType
+            ]!
+      const offset = (view?.byteOffset ?? 0) + (indices?.byteOffset ?? 0)
+      const at = (index: number): Triple =>
+        points[
+          indices === null
+            ? index
+            : binary.readUIntLE(
+                offset + index * (view?.byteStride ?? width),
+                width,
+              )
+        ]!
+      for (
+        let index = 0;
+        index < (indices?.count ?? points.length);
+        index += 3
+      ) {
+        const a = at(index),
+          u = sub(at(index + 1), a),
+          v = sub(at(index + 2), a)
+        const normal = cross(u, v)
+        const length = Math.hypot(...normal)
+        if (length === 0) continue
+        target.push({
+          a,
+          u,
+          v,
+          normal: normal.map((value) => value / length) as Triple,
+        })
+      }
+    })
+    expect(markings).toHaveLength(12)
+    const metresPerUnit = 0.09572333467945615
+    // Four interior samples per triangle cover both the middle and corners of
+    // each quad; a centroid alone misses a tilted decal intersecting the hull.
+    for (const marking of markings) {
+      for (const [u, v] of [
+        [1 / 3, 1 / 3],
+        [0.1, 0.1],
+        [0.8, 0.1],
+        [0.1, 0.8],
+      ] as const) {
+        const point = marking.a.map(
+          (value, axis) => value + u * marking.u[axis]! + v * marking.v[axis]!,
+        ) as Triple
+        let nearest = Infinity
+        for (const triangle of hull) {
+          const distance = lineHit(point, marking.normal, triangle)
+          if (distance !== null && Math.abs(distance) < Math.abs(nearest))
+            nearest = distance
+        }
+        const clearance = -nearest * metresPerUnit
+        expect(clearance).toBeGreaterThanOrEqual(0.015)
+        expect(clearance).toBeLessThanOrEqual(0.035)
       }
     }
   })
