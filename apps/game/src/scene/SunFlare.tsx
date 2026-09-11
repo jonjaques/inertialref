@@ -92,6 +92,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // are staged around this glow whatever response the player chose.
       engine.visibilityProcessing,
       engine.cinematic?.effects.anamorphicFlare ?? 0,
+      1 - 0.94 * (engine.cinematic?.effects.skyHaze ?? 0),
     )
   })
 

@@ -331,6 +331,8 @@ export interface LensFlare {
     natural?: boolean,
     /** Explicit coating streak, anchored to the same real star and visibility. */
     anamorphicDrive?: number,
+    /** Gain on the analytic solar glow alone, independent of coating artifacts. */
+    coreGain?: number,
   ): void
   dispose(): void
 }
@@ -384,6 +386,7 @@ export function createLensFlare(): LensFlare {
       lens,
       natural = true,
       anamorphicDrive = 0,
+      coreGain = 1,
     ) {
       // Behind test in view space; NDC alone cannot tell front from back.
       view
@@ -555,7 +558,12 @@ export function createLensFlare(): LensFlare {
             )
         const lens = spec.kind === 'glow' ? 1 : artifacts
         element.intensity.value =
-          spec.gain * strength * nearSun * lens * (core && !natural ? 0 : 1)
+          spec.gain *
+          strength *
+          nearSun *
+          lens *
+          (core && !natural ? 0 : 1) *
+          (spec.kind === 'glow' ? coreGain : 1)
       }
     },
     dispose() {
