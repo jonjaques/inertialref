@@ -380,6 +380,15 @@ export function sampleIsFinite(sample: CinematicSample): boolean {
     // projection matrix and nothing drawn anywhere. `lensForFov` clamps the
     // slider's route in; a `CutsceneScript.sample()` builds its lens by hand
     // and has no clamp between it and the camera.
-    isUsableLens(sample.lens)
+    isUsableLens(sample.lens) &&
+    [
+      sample.effects.skyHaze,
+      sample.effects.lensArtifacts,
+      sample.effects.anamorphicFlare,
+    ].every(
+      (drive) =>
+        drive === undefined ||
+        (Number.isFinite(drive) && drive >= 0 && drive <= 1),
+    )
   )
 }

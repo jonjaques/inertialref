@@ -1341,3 +1341,39 @@ describe('tng-intro lighting geometry', () => {
     expect(worstPair).toBeLessThan(0)
   })
 })
+
+describe('cinematic atmosphere and lens drive validation', () => {
+  it.each(['skyHaze', 'lensArtifacts', 'anamorphicFlare'] as const)(
+    'rejects non-finite and out-of-range %s drives',
+    (field) => {
+      const { at } = playing()
+      const sample = at(96)!
+      for (const value of [NaN, Infinity, -Infinity, -0.001, 1.001]) {
+        expect(
+          sampleIsFinite({
+            ...sample,
+            effects: { ...sample.effects, [field]: value },
+          }),
+          `${field}=${value}`,
+        ).toBe(false)
+      }
+    },
+  )
+
+  it.each(['skyHaze', 'lensArtifacts', 'anamorphicFlare'] as const)(
+    'accepts an omitted %s drive and its inclusive unit interval',
+    (field) => {
+      const { at } = playing()
+      const sample = at(96)!
+      for (const value of [undefined, 0, 0.5, 1]) {
+        expect(
+          sampleIsFinite({
+            ...sample,
+            effects: { ...sample.effects, [field]: value },
+          }),
+          `${field}=${value}`,
+        ).toBe(true)
+      }
+    },
+  )
+})
