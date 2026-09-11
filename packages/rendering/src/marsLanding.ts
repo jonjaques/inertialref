@@ -78,17 +78,17 @@ export function marsLandingCamera(seconds: number): Vec3 {
   const reveal = smooth((seconds - 11) / 11)
   const settle = smooth((seconds - 25) / 16)
   return Vec.add(
-    Vec.add(vec3(-95, 5, 160), Vec.scale(vec3(-45, 43, 50), reveal)),
-    Vec.scale(vec3(38, -33, -75), settle),
+    Vec.add(vec3(-95, 5, 160), Vec.scale(vec3(-65, 43, 110), reveal)),
+    Vec.scale(vec3(55, -33, -120), settle),
   )
 }
 
 export function marsLandingFov(seconds: number): number {
   const beats = [
-    [0, 0.7],
-    [8, 2.6],
+    [0, 0.3],
+    [8, 0.9],
     [14, 11],
-    [22, 38],
+    [22, 46],
     [41, 34],
   ] as const
   for (let i = 1; i < beats.length; i += 1) {

@@ -27,7 +27,7 @@ import { MARS_PAD } from '../structures.ts'
 export const MARS_PAD_SITE = Object.freeze({
   latitude: MARS_PAD.latitude,
   longitude: MARS_PAD.longitude,
-  presentationTime: -1578.8510672495163,
+  presentationTime: 1133.5211610867814,
   deckHeight: MARS_PAD.height,
 })
 
@@ -68,16 +68,28 @@ export const MARS_LANDING: CutsceneScript = {
         const seconds = Math.max(0, frame / MARS_LANDING_FPS)
         const { offset, velocity } = marsApproach(seconds)
         const eye = marsLandingCamera(seconds)
-        const reveal = smooth((seconds - 13) / 12) * 0.5
+        const reveal = smooth((seconds - 11) / 9) * 0.55
         const target = Vec.add(
           Vec.scale(offset, 1 - reveal),
           Vec.scale(vec3(0, 26, 0), reveal),
         )
         // The tail faces the approach while braking; a fixed vertical attitude carries the final hold.
-        const attitude =
+        const braking =
           Vec.length(velocity) > 1e-6
             ? lookAlong(Vec.scale(velocity, -1), vec3(0, 0, -1))
             : upright
+        const broadside = Q.multiply(
+          braking,
+          Q.fromAxisAngle(
+            vec3(0, 1, 0),
+            0.95 * (1 - smooth((seconds - 6) / 9)),
+          ),
+        )
+        const attitude = Q.slerp(
+          broadside,
+          upright,
+          smooth((seconds - 10) / 10),
+        )
         const { entryHeat, throttle, landingDust } = marsLandingDrives(seconds)
         return {
           frame,
@@ -109,7 +121,16 @@ export const MARS_LANDING: CutsceneScript = {
             position,
             orientation,
           },
-          effects: { ...NO_EFFECTS, exposure: 0.35, entryHeat, landingDust },
+          effects: {
+            ...NO_EFFECTS,
+            exposure: -0.2,
+            calibratedLight: 1,
+            entryHeat,
+            landingDust,
+            skyHaze: 1,
+            lensArtifacts: 0.65,
+            anamorphicFlare: 0.9,
+          },
           texts: [],
           done: frame >= MARS_LANDING_FPS * MARS_LANDING_SECONDS,
         }

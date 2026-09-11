@@ -13,7 +13,7 @@ export const SURFACE_ASSETS: readonly SurfaceAssetDefinition[] = Object.freeze([
   Object.freeze({
     id: 'mars-pad',
     name: 'Mars landing pad',
-    footprintRadius: 45,
+    footprintRadius: 58,
     supportRadius: 25,
   }),
 ])
