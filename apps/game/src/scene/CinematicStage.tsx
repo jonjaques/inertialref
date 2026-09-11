@@ -36,6 +36,7 @@ export function CinematicStage({ engine }: { engine: GameEngine }) {
         : cinematic,
       engine.hull?.lengthMetres,
       engine.hull?.beamMetres,
+      engine.scene()?.stars[0]?.placement.position,
     )
   })
 

@@ -88,6 +88,12 @@ export interface CinematicSpark {
 
 /** Screen-space effect drives, all 0..1. */
 export interface CinematicEffects {
+  /** Surface-stage sunset sky, 0..1; dormant outside an authored atmosphere. */
+  readonly skyHaze?: number
+  /** Lens ghost intensity; omitted keeps the cinematic lens at its clean default. */
+  readonly lensArtifacts?: number
+  /** Horizontal coating streak on the real star image, 0..1. */
+  readonly anamorphicFlare?: number
   /** Screen-space hull smear, opt-in for a shot's exposure treatment, 0..1. */
   readonly motionSmear?: number
   /** Atmospheric heating around the hull, opt-in per shot, 0..1. */

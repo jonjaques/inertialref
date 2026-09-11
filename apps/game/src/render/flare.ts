@@ -72,7 +72,7 @@ function smoothFade(distance: number): number {
   return t * t * (3 - 2 * t)
 }
 
-type ElementKind = 'glow' | 'streak' | 'disc' | 'ring' | 'corona'
+type ElementKind = 'glow' | 'streak' | 'disc' | 'ring' | 'corona' | 'anamorphic'
 
 interface ElementSpec {
   readonly kind: ElementKind
@@ -158,6 +158,20 @@ function elementMaterial(kind: ElementKind): {
       const along = oneMinus(smoothstep(float(0), float(1), abs(centred.x)))
       profile = exp(across.negate()).mul(pow(along, 3))
       colour = tint
+      break
+    }
+    case 'anamorphic': {
+      const across = abs(centred.y)
+      const along = abs(centred.x)
+      profile = exp(across.mul(-120))
+        .add(exp(across.mul(-25)).mul(0.08))
+        .mul(exp(along.mul(-3)))
+        .mul(oneMinus(smoothstep(0.82, 1, along)))
+      colour = mix(
+        vec3(0.22, 0.46, 1.15),
+        vec3(1.5, 0.83, 0.3),
+        exp(along.mul(-12)),
+      ).mul(tinted)
       break
     }
     case 'disc': {
@@ -285,11 +299,8 @@ export interface LensFlare {
     occlusion: FlareVisibility,
     /**
      * How much of the artifact stack the lens is showing, 0..1. The flight
-     * camera is 1 — the whole point of `art.md` § the lens is that it admits
-     * it is a camera. The cinematic camera is a *different* camera and runs
-     * near 0: the reference edit's optics put a clean warm ball beside a
-     * planet with no ghost chain marching across the frame, and a scripted
-     * shot composed around that reads as broken with one.
+     * camera is 1. Each script chooses its coating response; the title
+     * sequence keeps a clean lens so ghosts do not cross its composition.
      */
     artifacts: number,
     /**
@@ -318,6 +329,8 @@ export interface LensFlare {
     lens: Lens,
     /** Enhanced and calibrated scripts own the analytic core; photographs use the PSF. */
     natural?: boolean,
+    /** Explicit coating streak, anchored to the same real star and visibility. */
+    anamorphicDrive?: number,
   ): void
   dispose(): void
 }
@@ -345,6 +358,14 @@ export function createLensFlare(): LensFlare {
   corona.renderOrder = 10
   group.add(corona)
 
+  const anamorphicParts = elementMaterial('anamorphic')
+  const anamorphic = new Mesh(quad, anamorphicParts.material)
+  anamorphic.name = 'anamorphic-sun-streak'
+  anamorphic.frustumCulled = false
+  anamorphic.renderOrder = 10
+  anamorphic.visible = false
+  group.add(anamorphic)
+
   const projected = new Vector3()
   const view = new Vector3()
   const occluderNdc = new Vector3()
@@ -362,6 +383,7 @@ export function createLensFlare(): LensFlare {
       coronaDrive,
       lens,
       natural = true,
+      anamorphicDrive = 0,
     ) {
       // Behind test in view space; NDC alone cannot tell front from back.
       view
@@ -401,6 +423,20 @@ export function createLensFlare(): LensFlare {
       // tracks the disk so a close pass reads as approaching a *sun*, not a
       // lamp.
       const bloom = 1 + Math.min(3, angularRadius * 30)
+      anamorphic.visible = anamorphicDrive > 0 && strength > 0
+      anamorphic.position.set(
+        projected.x * tanHalf * aspect * PLANE,
+        projected.y * tanHalf * PLANE,
+        -PLANE,
+      )
+      anamorphic.scale.set(frameHeight * aspect * 2.5, frameHeight * 0.18, 1)
+      anamorphicParts.intensity.value =
+        Math.max(0, Math.min(1, anamorphicDrive)) * strength * 0.75
+      anamorphicParts.tint.value.setRGB(
+        starColour.r,
+        starColour.g,
+        starColour.b,
+      )
 
       if (eclipse === null || coronaStrength < 0.003) {
         coronaParts.intensity.value = 0
@@ -523,7 +559,11 @@ export function createLensFlare(): LensFlare {
       }
     },
     dispose() {
-      for (const element of [...elements.map((e) => e.mesh), corona]) {
+      for (const element of [
+        ...elements.map((e) => e.mesh),
+        corona,
+        anamorphic,
+      ]) {
         element.removeFromParent()
         const material = element.material
         if (!Array.isArray(material)) material.dispose()
