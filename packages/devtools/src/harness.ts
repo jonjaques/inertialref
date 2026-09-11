@@ -34,6 +34,7 @@ import {
   snapshot,
   type World,
   type WorldSnapshot,
+  type SurfacePlacement,
 } from '@inertialref/simulation'
 import {
   type Body,
@@ -154,6 +155,7 @@ import {
 } from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
 import { TNG_INTRO } from './cutscenes/tngIntro.ts'
+import { MARS_LANDING } from './cutscenes/marsLanding.ts'
 import { ENTERPRISE_PORTRAITS } from './cutscenes/enterprisePortraits.ts'
 import type { CinematicSample } from '@inertialref/rendering'
 
@@ -435,6 +437,7 @@ export class GameHarness {
     this.#host = host
     this.#cutscenes = new CutsceneDirector(host, [
       TNG_INTRO,
+      MARS_LANDING,
       ENTERPRISE_PORTRAITS,
     ])
     this.#observatory = new Observatory(host)
@@ -1441,6 +1444,45 @@ export class GameHarness {
     this.#cutscenes.stop()
   }
 
+  /** Surface anchors, in degrees and meters at the harness boundary. */
+  structures() {
+    const degrees = 180 / Math.PI
+    return this.#host.world.structures.map((structure) => ({
+      ...structure,
+      latitude: structure.latitude * degrees,
+      longitude: structure.longitude * degrees,
+      heading: structure.heading * degrees,
+    }))
+  }
+
+  /** Place a durable structure; angles are degrees, height is above terrain. */
+  placeStructure(structure: SurfacePlacement): void {
+    const radians = Math.PI / 180
+    this.#host.world.placeStructure({
+      ...structure,
+      latitude: structure.latitude * radians,
+      longitude: structure.longitude * radians,
+      heading: structure.heading * radians,
+    })
+  }
+
+  removeStructure(id: string): void {
+    this.#host.world.removeStructure(id)
+  }
+
+  /** Stand above a structure in the planetarium, looking toward its northern approach. */
+  visitStructure(id: string, height = 100): ObserverStatus {
+    const structure = this.structures().find((candidate) => candidate.id === id)
+    if (structure === undefined) throw new Error(`No surface structure ${id}`)
+    return this.visit(structure.bodyAddress, {
+      latitude: structure.latitude,
+      longitude: structure.longitude,
+      height: height + structure.height,
+      heading: structure.heading,
+      pitch: -75,
+    })
+  }
+
   /**
    * Jump the playhead to a reference frame. Pause first for a frame-exact
    * still — that pairing is the verification pipeline's capture loop.
@@ -2189,6 +2231,8 @@ export class GameHarness {
           .map((c) => c.id)
           .join(', '),
       '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
+      '  ir.structures() / ir.placeStructure(record) / ir.removeStructure(id)',
+      '  ir.visitStructure(id, height?) surface anchors; angles in degrees, heights in meters',
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',

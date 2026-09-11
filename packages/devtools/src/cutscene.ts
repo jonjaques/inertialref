@@ -358,6 +358,22 @@ export function sampleIsFinite(sample: CinematicSample): boolean {
     finiteQuat(sample.camera.orientation) &&
     UV.isValid(sample.ship.position) &&
     finiteQuat(sample.ship.orientation) &&
+    (sample.presentationTime === undefined ||
+      Number.isFinite(sample.presentationTime)) &&
+    (sample.elapsedSeconds === undefined ||
+      Number.isFinite(sample.elapsedSeconds)) &&
+    (sample.stage === undefined ||
+      (UV.isValid(sample.stage.position) &&
+        finiteQuat(sample.stage.orientation))) &&
+    [
+      sample.ship.throttle,
+      sample.effects.entryHeat,
+      sample.effects.landingDust,
+    ].every(
+      (drive) =>
+        drive === undefined ||
+        (Number.isFinite(drive) && drive >= 0 && drive <= 1),
+    ) &&
     // The lens too, and it is the field with the shortest path to a black
     // frame: `CameraRig` writes `verticalFovDegrees(engine.lens)` straight into
     // `camera.fov`, so one non-finite focal length in a script is a NaN

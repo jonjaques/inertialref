@@ -13,6 +13,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { type WorkerFactory, WorkerPool } from '@inertialref/workers'
+import { MARS_PAD } from './structures.ts'
 import { MemorySaveStore, type SaveStore } from '@inertialref/persistence'
 import {
   type AuthorityPort,
@@ -133,6 +134,7 @@ export function openSession(options: SessionOptions = {}): Session {
   const catalog = options.catalog ?? SOL_ONLY_CATALOG
   let world = new World({ seed, catalog })
   const system = world.loadSystem(systemId(options.system ?? 'SOL'))
+  if (system.id === systemId('SOL')) world.placeStructure(MARS_PAD)
   const target = landingTarget(system)
 
   let player: EntityId | null = world.spawnShip(
