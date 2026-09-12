@@ -59,7 +59,7 @@ import {
  */
 
 /** What sits in the middle of the frame. */
-export type CompositionAim = 'centre' | 'limb' | 'specular'
+export type CompositionAim = 'center' | 'limb' | 'specular'
 
 /** How far out the camera stands. Exactly one of the two. */
 export type Standoff =
@@ -118,7 +118,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 20,
     tiltDeg: 10,
     standoff: fill(0.55),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'blue-marble',
@@ -127,7 +127,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 12,
     tiltDeg: 10,
     standoff: fill(0.72),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'close',
@@ -136,7 +136,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 35,
     tiltDeg: 12,
     standoff: fill(0.95),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'wide',
@@ -145,7 +145,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 25,
     tiltDeg: 15,
     standoff: fill(0.18),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'half-lit',
@@ -154,7 +154,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 90,
     tiltDeg: 6,
     standoff: fill(0.6),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'raking',
@@ -163,7 +163,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 88,
     tiltDeg: 30,
     standoff: fill(0.88),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'high-angle',
@@ -172,7 +172,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 62,
     tiltDeg: 72,
     standoff: fill(0.66),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'far-crescent',
@@ -181,7 +181,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 132,
     tiltDeg: 8,
     standoff: fill(0.32),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'backlit',
@@ -190,7 +190,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 172,
     tiltDeg: 5,
     standoff: fill(0.58),
-    aim: 'centre',
+    aim: 'center',
   },
 
   {
@@ -200,7 +200,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 12,
     tiltDeg: 8,
     standoff: radii(5.2),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'gibbous',
@@ -209,7 +209,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 55,
     tiltDeg: 10,
     standoff: radii(3.4),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'half',
@@ -218,7 +218,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 90,
     tiltDeg: 5,
     standoff: radii(3.2),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'crescent',
@@ -227,7 +227,7 @@ export const COMPOSITIONS: readonly Composition[] = [
     phaseDeg: 147,
     tiltDeg: 5,
     standoff: radii(4.0),
-    aim: 'centre',
+    aim: 'center',
   },
   {
     id: 'glint',
@@ -301,7 +301,7 @@ export function aimPoint(
   bodyRadius: Meters,
   sun: Vec3,
 ): Vec3 {
-  if (aim === 'centre') return Vec.ZERO
+  if (aim === 'center') return Vec.ZERO
 
   const radial = Vec.normalize(position)
   if (aim === 'specular') {
@@ -467,7 +467,7 @@ export function compositionLook(
   bodyRadius: Meters,
   sun: Vec3,
 ): LookOffset {
-  if (composition.aim === 'centre' && (composition.aimLift ?? 0) === 0) {
+  if (composition.aim === 'center' && (composition.aimLift ?? 0) === 0) {
     return NO_LOOK
   }
   const base = observerBase(position)

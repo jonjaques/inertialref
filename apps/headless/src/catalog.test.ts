@@ -36,6 +36,13 @@ const declared = (): Manifest =>
   JSON.parse(readFileSync(manifest, 'utf8')) as Manifest
 
 describe('the packed catalog and its manifest', () => {
+  it.each([volume, sky])('retains source licenses when reading %s', (file) => {
+    const sources = readCatalog(readFileSync(file)).metadata.sources
+    expect(sources.length).toBeGreaterThan(0)
+    for (const source of sources)
+      expect(source.license).toEqual(expect.any(String))
+  })
+
   it('state the same version', () => {
     const m = declared()
     expect(typeof m.version, 'manifest.json has no version string').toBe(

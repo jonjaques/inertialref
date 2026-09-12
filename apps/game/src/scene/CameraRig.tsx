@@ -150,7 +150,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
         ? flightCameraPose(
             scene,
             engine.harness.flightCamera.state,
-            engine.hull === null ? 6 : engine.hull.lengthMetres,
+            engine.hull === null ? 6 : engine.hull.lengthMeters,
             engine.hull === null ? CHASE_OFFSET : undefined,
           )
         : override.camera

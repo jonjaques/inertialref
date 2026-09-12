@@ -125,7 +125,7 @@ export function placeShot(
   // Horizon-level roll. Center-aimed shots hang the frame on the pole — north
   // up, like every printed photograph — but a limb shot looks *along* the
   // ground, where "level" means the local vertical, not the planet's axis.
-  const upHint = shot.aim === 'centre' ? pole : direction
+  const upHint = shot.aim === 'center' ? pole : direction
   const orientation = lookAlong(forward, upHint)
 
   // A tangential direction for a circular orbit, so the bookmark holds its
@@ -161,7 +161,7 @@ export const standoffShot = (
   phaseDeg,
   tiltDeg,
   standoff: { kind: 'radii', radii: distanceRadii },
-  aim: 'centre',
+  aim: 'center',
 })
 
 /*

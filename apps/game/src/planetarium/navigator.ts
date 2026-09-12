@@ -323,7 +323,7 @@ export interface Neighbour {
   readonly lightYears: number
   /** Where it sits on the rail, 0 at the observer and 1 at the survey edge. */
   readonly at: number
-  readonly colour: TravelTarget['colour']
+  readonly colour: TravelTarget['color']
   readonly loaded: boolean
 }
 
@@ -365,7 +365,7 @@ export function neighbours(
         name: row.name,
         lightYears,
         at: Math.sqrt(lightYears / limit),
-        colour: row.colour,
+        colour: row.color,
         loaded: row.loaded,
       }
     })

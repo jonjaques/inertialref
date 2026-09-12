@@ -38,7 +38,7 @@
 
 export type MapKind = 'albedo' | 'normal' | 'night' | 'clouds' | 'ring'
 
-export type Licence = 'public-domain' | 'cc-by-4.0'
+export type License = 'public-domain' | 'cc-by-4.0'
 
 export interface TextureSource {
   /** Body key, matching `BodyAppearance.texture`. */
@@ -47,7 +47,7 @@ export interface TextureSource {
   readonly url: string
   /** Cache filename under `.data/textures/`. */
   readonly file: string
-  readonly licence: Licence
+  readonly license: License
   readonly credit: string
   /**
    * `image` copies pixels through.
@@ -99,7 +99,7 @@ const sss = (
   map,
   url: `https://www.solarsystemscope.com/textures/download/${file}`,
   file,
-  licence: 'cc-by-4.0',
+  license: 'cc-by-4.0',
   credit: SSS,
   transform: 'image',
   width,
@@ -116,7 +116,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // which is 438 MB of download to feed a 4096-wide output.
     url: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg',
     file: 'earth_albedo.jpg',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: NASA,
     transform: 'image',
     width: 4_096,
@@ -131,7 +131,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
     url: 'https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144897/BlackMarble_2016_01deg_gray.jpg',
     file: 'earth_night_gray_2016.jpg',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: NASA,
     transform: 'image',
     width: 4_096,
@@ -141,7 +141,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'clouds',
     url: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_2048.jpg',
     file: 'earth_clouds.jpg',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: NASA,
     transform: 'luminance',
     width: 2_048,
@@ -155,7 +155,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // the ocean mask a threshold rather than a sign test.
     url: 'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73934/gebco_08_rev_elev_21600x10800.png',
     file: 'earth_elevation.png',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: NASA,
     transform: 'elevation',
     width: 4_096,
@@ -173,7 +173,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'albedo',
     url: 'https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_4k.tif',
     file: 'luna_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: `${NASA} / LRO LROC`,
     transform: 'image',
     width: 4_096,
@@ -186,7 +186,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // terminator relief it produces is where craters actually are.
     url: 'https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_16_uint.tif',
     file: 'luna_elevation.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: `${NASA} / LRO LOLA`,
     transform: 'elevation',
     width: 4_096,
@@ -201,7 +201,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'albedo',
     url: 'https://planetarymaps.usgs.gov/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_1km.tif',
     file: 'io_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS,
     transform: 'image',
     width: 4_096,
@@ -211,7 +211,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'albedo',
     url: 'https://planetarymaps.usgs.gov/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif',
     file: 'europa_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS,
     transform: 'image',
     width: 4_096,
@@ -221,7 +221,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'albedo',
     url: 'https://planetarymaps.usgs.gov/mosaic/Ganymede_Voyager_GalileoSSI_global_mosaic_1km.tif',
     file: 'ganymede_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS,
     transform: 'image',
     width: 4_096,
@@ -231,7 +231,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'albedo',
     url: 'https://planetarymaps.usgs.gov/mosaic/Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif',
     file: 'callisto_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS,
     transform: 'image',
     width: 4_096,
@@ -265,7 +265,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // went past at 14 km/s.
     url: 'https://planetarymaps.usgs.gov/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif',
     file: 'pluto_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS_ASC,
     transform: 'image',
     width: 4_096,
@@ -275,7 +275,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'albedo',
     url: 'https://planetarymaps.usgs.gov/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif',
     file: 'charon_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS_ASC,
     transform: 'image',
     width: 4_096,
@@ -287,7 +287,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // are salt deposits and they are the whole reason anybody looks at Ceres.
     url: 'https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif',
     file: 'ceres_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS_ASC,
     transform: 'image',
     width: 4_096,
@@ -297,7 +297,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     map: 'albedo',
     url: 'https://planetarymaps.usgs.gov/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif',
     file: 'vesta_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS_ASC,
     transform: 'image',
     width: 4_096,
@@ -309,7 +309,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // six times smaller, and it has Stickney lit.
     url: 'https://planetarymaps.usgs.gov/mosaic/Phobos_ME_SRC_Mosaic_Global_16ppd.tif',
     file: 'phobos_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: USGS_ASC,
     transform: 'image',
     width: 2_048,
@@ -322,7 +322,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     // map of anything, anywhere.
     url: 'https://planetarymaps.usgs.gov/mosaic/Bennu/Bennu_OSIRIS-REx_OCAMS_color_mosaic_25cm.tif',
     file: 'bennu_albedo.tif',
-    licence: 'public-domain',
+    license: 'public-domain',
     credit: OREX_MAP,
     transform: 'image',
     width: 2_048,

@@ -29,7 +29,7 @@ describe.each(LAID_OUT_SHIPS)('the %s layout', (id) => {
   const layout = thrusterLayoutFor(id)
   const spec = shipSpec(id)
   if (spec === undefined) throw new Error(`${id} is not in the manifest`)
-  const half = spec.lengthMetres / 2
+  const half = spec.lengthMeters / 2
 
   it('is inside the hull it was measured off', () => {
     for (const nozzle of layout.nozzles) {

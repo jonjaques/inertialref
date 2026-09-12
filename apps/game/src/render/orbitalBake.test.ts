@@ -44,7 +44,7 @@ function fixture() {
         resolve = done
         reject = fail
       })
-      const cancel = vi.fn(() => reject(new Error('cancelled')))
+      const cancel = vi.fn(() => reject(new Error('canceled')))
       jobs.push({
         cancel,
         reject,

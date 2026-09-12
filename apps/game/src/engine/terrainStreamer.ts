@@ -1440,7 +1440,7 @@ export class TerrainStreamer {
         // released and the next frame asks again. Holding it instead left the
         // surface in `#floorsAsked` with no answer and no job, and that body
         // never streamed again for the life of the session.
-        if (message === 'cancelled') {
+        if (message === 'canceled') {
           this.#floorsAsked.delete(surface)
           return
         }
@@ -1558,7 +1558,7 @@ export class TerrainStreamer {
           })
         })
         .catch((cause: unknown) => {
-          if (cause instanceof Error && cause.message === 'cancelled') return
+          if (cause instanceof Error && cause.message === 'canceled') return
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {

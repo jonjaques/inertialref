@@ -37,7 +37,7 @@ const row = (
   provenance: 'observed',
   bodyKind: 'rocky',
   spectralType: null,
-  colour: null,
+  color: null,
   radius: 1e6,
   semiMajorAxis: AU,
   children: 0,
@@ -54,7 +54,7 @@ const star = (
     bodyKind: null,
     parent: null,
     semiMajorAxis: 0,
-    colour: { r: 1, g: 0.9, b: 0.8 },
+    color: { r: 1, g: 0.9, b: 0.8 },
     ...over,
   })
 

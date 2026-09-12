@@ -32,7 +32,7 @@ beforeAll(async () => {
 afterAll(() => gpu.dispose())
 
 const pose = { position: vec3(0, 0, 0), orientation: Quaternion.IDENTITY }
-const HULL = { lengthMetres: 46, beamMetres: 16 }
+const HULL = { lengthMeters: 46, beamMetres: 16 }
 function view(entryHeat: number, landingDust: number): CinematicView {
   return {
     frame: 240,

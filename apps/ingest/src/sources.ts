@@ -28,7 +28,7 @@ export interface Source {
   readonly name: string
   readonly url: string
   readonly file: string
-  readonly licence: string
+  readonly license: string
   /** Decompress after download. */
   readonly gzip?: boolean
   /** Fail if the decompressed payload is smaller than this. */
@@ -82,7 +82,7 @@ export const SOURCES: readonly Source[] = [
     // `media/`, not `raw/` — see the header. The GitHub mirror is frozen at v4.1.
     url: 'https://codeberg.org/astronexus/hyg/media/branch/main/data/hyg/CURRENT/hyg_v44.csv.gz',
     file: 'hyg_v44.csv',
-    licence: 'CC BY-SA 4.0',
+    license: 'CC BY-SA 4.0',
     gzip: true,
     minimumBytes: 20_000_000,
   },
@@ -93,7 +93,7 @@ export const SOURCES: readonly Source[] = [
       'https://exoplanetarchive.ipac.caltech.edu/TAP/sync?format=csv&query=' +
       encodeURIComponent(EXOPLANET_QUERY),
     file: 'nea_pscomppars.csv',
-    licence: 'No license stated; acknowledgment requested',
+    license: 'No license stated; acknowledgment requested',
     minimumBytes: 100_000,
   },
 ]

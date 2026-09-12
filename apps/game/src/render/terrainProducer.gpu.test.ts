@@ -201,7 +201,7 @@ describe('the tile producer', () => {
     const delivered = outcomes.filter((o) => o.status === 'fulfilled').length
     const cancelled = outcomes.filter(
       (o) =>
-        o.status === 'rejected' && (o.reason as Error).message === 'cancelled',
+        o.status === 'rejected' && (o.reason as Error).message === 'canceled',
     ).length
     expect(delivered).toBe(16)
     expect(cancelled).toBe(24)

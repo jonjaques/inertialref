@@ -61,7 +61,7 @@ export function AboutPage() {
           it does not, the generator says so — a body is{' '}
           <span className="text-slate-300">observed</span> or{' '}
           <span className="text-slate-300">projected</span>, and the interface
-          never blurs the two. Licensed {SITE.licence}.
+          never blurs the two. Licensed {SITE.license}.
         </p>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">

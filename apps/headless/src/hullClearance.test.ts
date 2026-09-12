@@ -41,7 +41,7 @@ const manifest = JSON.parse(
   models: {
     id: string
     file: string
-    lengthMetres: number
+    lengthMeters: number
     nose: '+z' | '-z'
   }[]
 }
@@ -82,7 +82,7 @@ describe('cutscene camera against the hero hull', () => {
   const hull = (): HullField =>
     (decoded ??= readHullField(
       `${root}/data/models/${spec.file}`,
-      spec.lengthMetres,
+      spec.lengthMeters,
       spec.nose,
     ))
 
@@ -95,7 +95,7 @@ describe('cutscene camera against the hero hull', () => {
      * differently-shaped ship and passing. The manifest's length is the shared
      * input, and a Z extent that is not it means the transform has drifted.
      */
-    expect(hull().extent.z).toBeCloseTo(spec.lengthMetres, 1)
+    expect(hull().extent.z).toBeCloseTo(spec.lengthMeters, 1)
     // A Galaxy-class saucer is 463.7 m across and the hull 142 m deep; both
     // fall out of the same scale, so they are a second reading of it.
     expect(hull().extent.x).toBeGreaterThan(400)

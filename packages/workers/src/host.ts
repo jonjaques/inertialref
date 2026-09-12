@@ -123,7 +123,7 @@ export function serveTasks(
         })
         if (cancelled.has(request.job)) {
           cancelled.delete(request.job)
-          port.post({ kind: 'failure', job: request.job, error: 'cancelled' })
+          port.post({ kind: 'failure', job: request.job, error: 'canceled' })
           return
         }
         const transfer = task.transfers?.(result) ?? []

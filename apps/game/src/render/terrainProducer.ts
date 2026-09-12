@@ -273,7 +273,7 @@ export function createTileProducer(
       }
       taken.forEach((job, i) => {
         if (job.cancelled) {
-          job.reject(new Error('cancelled'))
+          job.reject(new Error('canceled'))
           return
         }
         job.resolve(
@@ -390,7 +390,7 @@ export function createTileProducer(
           // kernel runs it anyway, and the answer is discarded on arrival.
           if (at >= 0) {
             queue.splice(at, 1)
-            job.reject(new Error('cancelled'))
+            job.reject(new Error('canceled'))
           }
         },
       }

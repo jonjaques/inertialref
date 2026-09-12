@@ -239,7 +239,7 @@ export interface CatalogMetadata {
   readonly sources: readonly {
     readonly name: string
     readonly url: string
-    readonly licence: string
+    readonly license: string
     readonly retrieved: string
   }[]
   /**
@@ -603,7 +603,29 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
     `Star catalog is format ${version}; this build reads ${FORMAT_VERSION}. ` +
       `Re-run \`pnpm catalog:build\`.`,
   )
-  const metadata = JSON.parse(decodeUtf8(r.slice(r.u32()))) as CatalogMetadata
+  // Packed catalogs can outlive a deployment in a browser cache. Their source
+  // licenses must survive the spelling change without changing any star data.
+  type StoredSource = Omit<CatalogMetadata['sources'][number], 'license'> & {
+    readonly license?: string
+    readonly licence?: string
+  }
+  const stored = JSON.parse(decodeUtf8(r.slice(r.u32()))) as Omit<
+    CatalogMetadata,
+    'sources'
+  > & { readonly sources: readonly StoredSource[] }
+  const metadata: CatalogMetadata = {
+    ...stored,
+    sources: stored.sources.map((source) => {
+      const license = source.license ?? source['licence']
+      invariant(typeof license === 'string', 'Catalog source has no license')
+      return {
+        name: source.name,
+        url: source.url,
+        license,
+        retrieved: source.retrieved,
+      }
+    }),
+  }
   const starCount = r.u32()
   const planetCount = r.u32()
 

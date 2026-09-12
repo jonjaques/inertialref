@@ -162,7 +162,7 @@ describe('every composition', () => {
 
   it('gives a centre-aimed one no look offset at all', () => {
     for (const composition of COMPOSITIONS) {
-      if (composition.aim !== 'centre') continue
+      if (composition.aim !== 'center') continue
       const placement = placeComposition(
         composition,
         EARTH_RADIUS,

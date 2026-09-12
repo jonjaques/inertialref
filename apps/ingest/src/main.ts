@@ -185,7 +185,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   const sources = SOURCES.map((source, i) => ({
     name: source.name,
     url: source.url,
-    licence: source.licence,
+    license: source.license,
     // The digest of what was actually read, so a changed artifact can always
     // be traced to the input that changed it.
     retrieved: [hyg, exoplanets][i]?.sha256.slice(0, 16) ?? '',
@@ -345,7 +345,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   )
   writeFileSync(
     join(directory, 'LICENSE.md'),
-    licenceText(reread.metadata.attribution, reread.version),
+    licenseText(reread.metadata.attribution, reread.version),
   )
   console.log(`\n  written to ${OUTPUT_DIRECTORY}/`)
 }
@@ -359,7 +359,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
  * not to the code that reads it — the database is Adapted Material, its
  * individual contents are not.
  */
-const licenceText = (attribution: readonly string[], version: string): string =>
+const licenseText = (attribution: readonly string[], version: string): string =>
   `# Star catalog — license and attribution
 
 This directory contains a **derived database** built from published astronomical

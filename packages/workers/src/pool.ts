@@ -201,7 +201,7 @@ export class WorkerPool {
     if (queuedIndex >= 0) {
       const [job] = this.#queue.splice(queuedIndex, 1)
       this.#cancelled += 1
-      job?.reject(new Error('cancelled'))
+      job?.reject(new Error('canceled'))
       return
     }
     const active = this.#active.get(id)
@@ -344,9 +344,9 @@ export class WorkerPool {
       sample(this.#runSamples, message.durationMs)
       this.#completed += 1
       job.resolve(message.payload as never)
-    } else if (message.error === 'cancelled') {
+    } else if (message.error === 'canceled') {
       this.#cancelled += 1
-      job.reject(new Error('cancelled'))
+      job.reject(new Error('canceled'))
     } else {
       this.#failed += 1
       job.reject(new Error(message.error))

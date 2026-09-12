@@ -239,7 +239,7 @@ describe('worker pool', () => {
       cell: { x: 9, y: 9, z: 9 },
     })
     doomed.cancel()
-    await expect(doomed.result).rejects.toThrow(/cancelled/)
+    await expect(doomed.result).rejects.toThrow(/canceled/)
     await busy.result
     expect(p.stats().cancelled).toBe(1)
   })

@@ -350,7 +350,7 @@ describe('the packed format', () => {
           {
             name: 'HYG',
             url: 'https://x',
-            licence: 'CC BY-SA 4.0',
+            license: 'CC BY-SA 4.0',
             retrieved: 'abc',
           },
         ],

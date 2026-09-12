@@ -99,7 +99,7 @@ export class Heightfields {
       cancel() {
         if (settled) return
         settled = true
-        reject(new Error('cancelled'))
+        reject(new Error('canceled'))
         active?.cancel()
       },
     }

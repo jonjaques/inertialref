@@ -235,7 +235,7 @@ export function createLandingEffects() {
      */
     update(
       view: CinematicView | null,
-      hull: Pick<LoadedShip, 'lengthMetres' | 'beamMetres'> | null,
+      hull: Pick<LoadedShip, 'lengthMeters' | 'beamMetres'> | null,
       sunPosition?: Vec3,
     ) {
       const heating =
@@ -264,7 +264,7 @@ export function createLandingEffects() {
         ship.orientation.w,
       )
       if (hull !== null)
-        entry.scale.set(hull.beamMetres, hull.lengthMetres, hull.beamMetres)
+        entry.scale.set(hull.beamMetres, hull.lengthMeters, hull.beamMetres)
       const stage = view.stage
       if (stage !== undefined) {
         sunGlow.value = sunPosition === undefined ? 0 : 1

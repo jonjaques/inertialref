@@ -40,7 +40,7 @@ export interface TextureEntry {
   readonly width: number
   readonly height: number
   readonly bytes: number
-  readonly licence: string
+  readonly license: string
   readonly credit: string
   readonly source: string
   /** Digest of the *output*, so a rebuild that changes nothing changes nothing. */
@@ -298,7 +298,7 @@ async function buildTexture(
   const name = `${source.body}_${source.map}.webp`
   writeFileSync(join(directory, name), output)
   options.onProgress?.(
-    `  ${`${source.body}/${source.map}`.padEnd(24)} ${String(source.width).padStart(5)}px  ${(output.length / 1024).toFixed(0).padStart(6)} KB   ${source.licence}`,
+    `  ${`${source.body}/${source.map}`.padEnd(24)} ${String(source.width).padStart(5)}px  ${(output.length / 1024).toFixed(0).padStart(6)} KB   ${source.license}`,
   )
   return {
     body: source.body,
@@ -307,7 +307,7 @@ async function buildTexture(
     width: source.width,
     height: source.width / 2,
     bytes: output.length,
-    licence: source.licence,
+    license: source.license,
     credit: source.credit,
     source: source.url,
     sha256: createHash('sha256').update(output).digest('hex').slice(0, 16),

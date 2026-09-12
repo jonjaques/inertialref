@@ -74,7 +74,7 @@ export function NavigatorRow({
   onFocus: () => void
 }) {
   const Glyph = iconForKind(row.bodyKind)
-  const tint = starColour(row.colour)
+  const tint = starColour(row.color)
   const foldable = expanded !== undefined && onExpand !== undefined
   const Chevron = expanded === true ? ChevronDown : ChevronRight
   // The match lit inside the name when the name is what matched; when a

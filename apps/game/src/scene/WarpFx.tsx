@@ -17,7 +17,7 @@ export function WarpFx({ engine }: { engine: GameEngine }) {
   const scene = useThree((state) => state.scene)
   // Same memo-without-dispose shape as SunFlare, same StrictMode reason.
   const fx = useMemo(
-    () => createWarpEffects(() => engine.hull?.lengthMetres ?? 6),
+    () => createWarpEffects(() => engine.hull?.lengthMeters ?? 6),
     [engine],
   )
 

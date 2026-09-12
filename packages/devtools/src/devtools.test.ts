@@ -536,7 +536,7 @@ describe('travel targets', () => {
     // no display string to hide a record inside.
     expect(sirius?.spectralType).toMatch(/^A/)
     expect(sirius?.bodyKind).toBeNull()
-    expect(sirius?.colour).not.toBeNull()
+    expect(sirius?.color).not.toBeNull()
   })
 
   it('finds nothing rather than everything for an empty query', () => {

@@ -173,7 +173,7 @@ const GLB_MAGIC = 0x46546c67
  */
 export function readHullField(
   glbPath: string,
-  lengthMetres: number,
+  lengthMeters: number,
   nose: '+z' | '-z',
   cell = 8,
 ): HullField {
@@ -256,7 +256,7 @@ export function readHullField(
     (k) => ((low[k] as number) + (high[k] as number)) / 2,
   )
   const size = [0, 1, 2].map((k) => (high[k] as number) - (low[k] as number))
-  const scale = lengthMetres / (size[2] as number)
+  const scale = lengthMeters / (size[2] as number)
   // `+z` art turns half a turn about Y to face the game's −Z, which negates x
   // and z; `-z` art is already facing the right way.
   const flip = nose === '+z' ? -1 : 1
