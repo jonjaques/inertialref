@@ -120,6 +120,22 @@ const DEFAULT_LENS_VIEW: LensView = {
 const PREFETCH_SECONDS: Seconds = 2
 
 /**
+ * How often, in walks, a loosened tolerance is re-tested one rung finer
+ * whatever the last count predicts.
+ *
+ * Walks rather than frames, because a frame the memo holds has nothing to
+ * re-test: the eye, the optics and the cache are where they were, so the rung
+ * is too. The re-test is a guess `selectTerrain` refuses by climbing back,
+ * which is one extra walk cut short at the overflow — cheaper than a full one,
+ * since the balance pass is most of what a saturated walk would spend — so one
+ * in sixteen bounds the amortized cost at a sixteenth of the selection phase
+ * where the cap genuinely binds. The ladder is three rungs, so a rung that
+ * only the count's prediction held descends to 1× within 48 walks: under a
+ * second of a moving camera at 60 fps, which is the only kind that walks.
+ */
+const PROBE_EVERY = 16
+
+/**
  * Heightfields to queue in one frame.
  *
  * It was eight, against a quadtree that bottomed out around level 10. The band
@@ -564,8 +580,15 @@ export class TerrainStreamer {
    * request set aimed ~94 km from the ground under the camera, forever. The
    * body-fixed difference is the camera's track over the ground, which is the
    * thing a prefetch should lead.
+   *
+   * Two clocks, because they answer different questions. `time` is the
+   * presentation instant the eye was resolved at, and a jump in it says the
+   * body turned under the camera. `elapsed` is the engine's presentation
+   * clock, which is what a velocity is divided by: the instant can be held
+   * for a whole scene while the camera flies, and a held instant has no
+   * delta to divide by.
    */
-  #previous: { eye: Vec3; time: Seconds } | null = null
+  #previous: { eye: Vec3; time: Seconds; elapsed: Seconds } | null = null
   /**
    * Bumped by `clear()`. A worker answer landing after the world it was asked
    * about is gone must be dropped: the keys carry the body address but not the
@@ -638,9 +661,24 @@ export class TerrainStreamer {
    * finer is tried once the count at the current step would fit at the next
    * one, and a guess that turns out wrong costs one extra walk on that frame
    * and lands back where it was.
+   *
+   * Landing back where it was is the whole of what `selectTerrain` says about
+   * a refused guess: it climbs one rung and hands back exactly the pair that
+   * produced the guess, so with nothing else recorded the same guess is made
+   * and refused on every walk after, at a walk each. `#refusedAt` is the count
+   * the refusal came back with; the guess is not repeated until the count has
+   * fallen below it, since the count is the one thing the prediction reads.
+   *
+   * And the prediction can be false in the other direction. Where the tree is
+   * balance-limited the count barely moves with the tolerance, so a rung the
+   * cap once forced is a rung `#wanted × COARSEN_STEP < cap` never lets go of,
+   * even where 1× fits — a descent's hover kept the disk at 3.375× until the
+   * body changed. `PROBE_EVERY` re-tests one rung finer regardless of what the
+   * count predicts.
    */
   #coarsening = 1
   #wanted = 0
+  #refusedAt: number | null = null
 
   /**
    * The optics the selection is measured against.
@@ -700,6 +738,7 @@ export class TerrainStreamer {
     readonly starved: number
     readonly saturated: boolean
     readonly coarsening: number
+    readonly wanted: number
     readonly selections: number
     readonly lens: LensView | null
     readonly producer: string
@@ -739,6 +778,10 @@ export class TerrainStreamer {
       starved: this.#starved,
       saturated: this.#saturated,
       coarsening: this.#coarsening,
+      // What the ideal selection wanted at that tolerance — the count the
+      // next rung is predicted from, so a ladder that will not come down can
+      // be read against the cap rather than guessed at.
+      wanted: this.#wanted,
       // Total walks, not walks a second: a hover that stops re-selecting is
       // visible as this number standing still while the frame count climbs.
       selections: this.#selections,
@@ -805,10 +848,17 @@ export class TerrainStreamer {
    * everything the engine did — with `terrain.request` at 0.916 ms,
    * `terrain.build` at 0.225 ms and `terrain.scatter` at 0.046 ms behind it.
    * A figure measured at one operating point is a figure about that point.
+   *
+   * `renderTime` is the instant the ground is drawn at and `elapsed` is the
+   * engine's presentation clock — monotonic seconds that advance every frame
+   * whether or not the instant does. Both, because a scripted shot can hold
+   * one instant for a whole scene while its camera covers kilometers, and the
+   * look-ahead needs a delta that instant does not have.
    */
   update(
     world: World,
     renderTime: Seconds,
+    elapsed: Seconds,
     camera: UniverseVector,
     origin: RenderOrigin,
     body: RenderBody | null,
@@ -867,7 +917,7 @@ export class TerrainStreamer {
     }
 
     const eyeLocal = universeToLocal(spinPose, camera)
-    this.#previous = { eye: eyeLocal, time: renderTime }
+    this.#previous = { eye: eyeLocal, time: renderTime, elapsed }
     this.#pose = {
       position: body.placement.position,
       orientation: Q.multiply(
@@ -991,6 +1041,7 @@ export class TerrainStreamer {
         bodyPose.position,
         eyeLocal,
         renderTime,
+        elapsed,
         previous,
         eye,
         options,
@@ -1046,7 +1097,8 @@ export class TerrainStreamer {
     centre: UniverseVector,
     eyeLocal: Vec3,
     renderTime: Seconds,
-    previous: { eye: Vec3; time: Seconds } | null,
+    elapsed: Seconds,
+    previous: { eye: Vec3; time: Seconds; elapsed: Seconds } | null,
     eye: TerrainEye,
     options: {
       readonly maxLevel: number
@@ -1065,12 +1117,21 @@ export class TerrainStreamer {
      * the cap for as long as the cache is cold — it would report a tolerance
      * of 1 on every frame of an arrival and hand the drawn ground a level it
      * loses the moment the cache fills.
+     *
+     * The count predicts the room, and the prediction is trusted only while
+     * it has new information: the same count that was just refused is the
+     * same refusal. Every `PROBE_EVERY` walks the step is tried without it,
+     * because a balance-limited count predicts no room at any rung — see
+     * `#refusedAt`.
      */
+    const settled = this.#coarsening
+    const predicted =
+      this.#wanted * COARSEN_STEP <
+        (options.maxPatches ?? DEFAULT_MAX_PATCHES) &&
+      (this.#refusedAt === null || this.#wanted < this.#refusedAt)
+    const probe = this.#selections % PROBE_EVERY === 0
     const coarsening =
-      this.#coarsening > 1 &&
-      this.#wanted * COARSEN_STEP < (options.maxPatches ?? DEFAULT_MAX_PATCHES)
-        ? this.#coarsening / COARSEN_STEP
-        : this.#coarsening
+      settled > 1 && (predicted || probe) ? settled / COARSEN_STEP : settled
     // What to draw: refine only into ground already in the cache, so a patch
     // that has not arrived costs detail rather than leaving a hole.
     const drawn = selectTerrain(eye, {
@@ -1109,6 +1170,7 @@ export class TerrainStreamer {
         centre,
         eyeLocal,
         renderTime,
+        elapsed,
         previous,
         eye,
       ),
@@ -1116,6 +1178,16 @@ export class TerrainStreamer {
     )
     this.#coarsening = wanted.coarsening
     this.#wanted = wanted.patches.length
+    if (coarsening < settled && wanted.coarsening > coarsening) {
+      // The finer guess was refused: the count it came back with is the one
+      // the next guess has to beat.
+      this.#refusedAt = wanted.patches.length
+    } else if (wanted.coarsening !== settled) {
+      // The rung moved for a reason of its own — the cap climbed it, or a
+      // guess held — and a refusal recorded on another rung says nothing
+      // about this one.
+      this.#refusedAt = null
+    }
     // What the walks were made against, captured before `#build` and `#evict`
     // change it — see the method's own doc for why that ordering is the memo.
     const cacheEpoch = this.#cacheEpoch
@@ -1231,9 +1303,19 @@ export class TerrainStreamer {
    * shares while hovering, so the extrapolation aimed the request set tens of
    * kilometers along the orbit instead of along the camera's track over the
    * ground. Body-fixed, a hover collapses to the present and a descent leads
-   * where the descent is going. A frame boundary that is not a frame — a
-   * teleport, a resumed tab — produces a velocity that means nothing, so a step
-   * longer than a second or shorter than nothing falls back to the eye itself.
+   * where the descent is going.
+   *
+   * The velocity is over the engine's presentation clock, not over the
+   * instant the ground is drawn at. A scripted shot can pin that instant for
+   * a whole scene — the Mars landing holds one epoch for 46 s of the fastest
+   * camera in the game — and a held instant has no delta, so dividing by it
+   * is a prefetch switched off exactly where it is needed. A frame boundary
+   * that is not a frame — a teleport, a resumed tab — produces a velocity
+   * that means nothing, so an elapsed step longer than a second or shorter
+   * than nothing falls back to the eye itself. The instant is still checked,
+   * separately: a seek or an observatory jump turns the body under a camera
+   * that has not moved, and `eyeLocal` moves with the ground, so the
+   * difference is a rotation dressed as a velocity.
    */
   #lookAhead(
     body: Body,
@@ -1241,11 +1323,13 @@ export class TerrainStreamer {
     centre: UniverseVector,
     eyeLocal: Vec3,
     time: Seconds,
-    previous: { eye: Vec3; time: Seconds } | null,
+    elapsed: Seconds,
+    previous: { eye: Vec3; time: Seconds; elapsed: Seconds } | null,
     eye: TerrainEye,
   ): TerrainEye {
     if (previous === null) return eye
-    const step = time - previous.time
+    if (Math.abs(time - previous.time) > 1) return eye
+    const step = elapsed - previous.elapsed
     if (!(step > 0) || step > 1) return eye
     const drift = Vec.sub(eyeLocal, previous.eye)
     const ahead = localToUniverse(
@@ -1574,6 +1658,7 @@ export class TerrainStreamer {
     // The tolerance was settled for an eye over another body.
     this.#coarsening = 1
     this.#wanted = 0
+    this.#refusedAt = null
     /*
      * The in-flight window is cancelled and dropped, which is two fixes.
      *

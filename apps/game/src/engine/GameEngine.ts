@@ -1443,6 +1443,12 @@ export class GameEngine {
      * in the past, and terrain that disagrees with the ship about what time it
      * is drifts from under it by 800 m at orbital speed.
      *
+     * And `presentationTime` beside it, for the look-ahead's velocity. A
+     * cutscene that declares its own instant pins `shot.renderTime` for the
+     * whole scene, so a delta taken from it is zero on every frame of the
+     * fastest camera in the game; the presentation clock advances whether or
+     * not the instant does.
+     *
      * The whole `RenderBody` rather than its address, because a patch has to
      * ride the compression `placeAt` gave the body it sits on. Past
      * `NEAR_LIMIT` the sphere is drawn nearer and smaller so its angular size
@@ -1458,6 +1464,7 @@ export class GameEngine {
     this.#terrain.update(
       this.world,
       shot.renderTime,
+      this.presentationTime,
       eye,
       this.origin,
       this.#scene.terrainCandidates[0] ?? null,

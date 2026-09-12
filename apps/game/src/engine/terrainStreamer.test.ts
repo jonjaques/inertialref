@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { openSession, type Session } from '@inertialref/devtools'
 import { snapshot } from '@inertialref/simulation'
 import {
   buildScene,
+  COARSEN_STEP,
+  DEFAULT_LENS,
+  DEFAULT_MAX_PATCHES,
   originForCamera,
+  selectTerrain,
   type RenderBody,
 } from '@inertialref/rendering'
 import {
   UV,
   type UniverseVector,
+  Vec,
   vec3,
   type RenderOrigin,
 } from '@inertialref/spatial'
@@ -19,15 +24,33 @@ import {
   type HeightfieldSource,
 } from '@inertialref/workers'
 import {
+  bodyFixedDirection,
+  bodyFixedFrameId,
   bodyFrameId,
   COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
+  type HeightfieldRequest,
   heightfieldStride,
   parseAddress,
+  regionCentreDirection,
   type SurfaceParameters,
 } from '@inertialref/universe'
 import type { Seconds } from '@inertialref/shared'
 import { TerrainStreamer } from './terrainStreamer.ts'
+
+/*
+ * A transparent spy on the walk, for the rung it is started from.
+ *
+ * Nothing the streamer reports says where a walk *began*: a finer guess the
+ * cap refuses climbs back inside `selectTerrain` and returns the rung it was
+ * handed, so the only trace of the guess is the `coarsening` option that went
+ * in. The real function runs underneath; every other test in this file sees
+ * the walk it always saw.
+ */
+vi.mock('@inertialref/rendering', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@inertialref/rendering')>()
+  return { ...actual, selectTerrain: vi.fn(actual.selectTerrain) }
+})
 
 /*
  * The selection memo, from the outside.
@@ -41,6 +64,20 @@ import { TerrainStreamer } from './terrainStreamer.ts'
  */
 
 const EARTH = 'g:milky-way/s:SOL/b:2'
+
+/**
+ * The engine's presentation clock, stood in for: a frame apart each call.
+ *
+ * The streamer takes it beside the render time because the two can disagree —
+ * a scripted shot holds one instant while its camera flies — and the look-ahead
+ * divides by this one. Every `update` here passes a fresh reading, so the
+ * memo tests describe a clock that runs, which is the one the engine hands it.
+ */
+let presented = 0
+function frame(): Seconds {
+  presented += 1 / 60
+  return presented
+}
 
 interface GroundView {
   readonly renderTime: Seconds
@@ -66,6 +103,7 @@ async function walkOnce(
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       view.camera,
       view.origin,
       view.body,
@@ -74,6 +112,32 @@ async function walkOnce(
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
   throw new Error('the streamer never walked')
+}
+
+/**
+ * A flat field, not the real one.
+ *
+ * The claims made with it are about where a request goes and what the report
+ * says, and a fixture that ran the band stack for every tile of a whole-disk
+ * selection was ten seconds of the gate spent on a number the test never
+ * reads.
+ */
+function flatField(request: HeightfieldRequest): HeightfieldResponse {
+  const border = request.border ?? HEIGHTFIELD_BORDER
+  const stride = heightfieldStride({ resolution: request.resolution, border })
+  return {
+    // The streamer's own address, on this side of any wire: nothing here has
+    // crossed a clone, so there is nothing to range-check.
+    region: request.region,
+    resolution: request.resolution,
+    border,
+    elevations: new Float32Array(stride * stride),
+    cover: new Uint8Array(
+      request.resolution * request.resolution * COVER_CHANNELS,
+    ),
+    minElevation: 0,
+    maxElevation: 0,
+  }
 }
 
 /** Land the ship and read the frame the engine would hand the streamer. */
@@ -100,6 +164,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       view.camera,
       view.origin,
       view.body,
@@ -112,6 +177,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       view.camera,
       view.origin,
       view.body,
@@ -119,6 +185,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       view.camera,
       view.origin,
       view.body,
@@ -129,6 +196,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       UV.translate(view.camera, vec3(0.001, 0, 0)),
       view.origin,
       view.body,
@@ -139,6 +207,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       UV.translate(view.camera, vec3(10, 0, 0)),
       view.origin,
       view.body,
@@ -176,6 +245,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       view.camera,
       view.origin,
       view.body,
@@ -190,6 +260,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       view.camera,
       view.origin,
       view.body,
@@ -224,6 +295,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       view.camera,
       view.origin,
       null,
@@ -276,31 +348,11 @@ describe('the terrain streamer', () => {
       submit(surface, request) {
         asked += 1
         surfaces.add(surface)
-        /*
-         * A flat field, not the real one. The claims here are about where a
-         * request goes and what the report says, and a fixture that ran the
-         * band stack for every tile of a whole-disk selection was ten seconds
-         * of the gate spent on a number the test never reads.
-         */
-        const border = request.border ?? HEIGHTFIELD_BORDER
-        const stride = heightfieldStride({
-          resolution: request.resolution,
-          border,
-        })
-        const field: HeightfieldResponse = {
-          // The streamer's own address, on this side of any wire: nothing
-          // here has crossed a clone, so there is nothing to range-check.
-          region: request.region,
-          resolution: request.resolution,
-          border,
-          elevations: new Float32Array(stride * stride),
-          cover: new Uint8Array(
-            request.resolution * request.resolution * COVER_CHANNELS,
-          ),
-          minElevation: 0,
-          maxElevation: 0,
+        return {
+          id: asked,
+          result: Promise.resolve(flatField(request)),
+          cancel() {},
         }
-        return { id: asked, result: Promise.resolve(field), cancel() {} }
       },
     }
     streamer.heightfields.preferred = source
@@ -330,6 +382,7 @@ describe('the terrain streamer', () => {
       streamer.update(
         session.world,
         view.renderTime,
+        frame(),
         view.camera,
         view.origin,
         view.body,
@@ -346,6 +399,7 @@ describe('the terrain streamer', () => {
     streamer.update(
       session.world,
       view.renderTime,
+      frame(),
       UV.translate(view.camera, vec3(50, 0, 0)),
       view.origin,
       view.body,
@@ -429,6 +483,7 @@ describe('the terrain streamer', () => {
       streamer.update(
         session.world,
         view.renderTime,
+        frame(),
         view.camera,
         view.origin,
         view.body,
@@ -437,6 +492,259 @@ describe('the terrain streamer', () => {
     expect(asked).toBe(0)
 
     streamer.clear()
+    session.dispose()
+  })
+
+  /*
+   * The look-ahead, from the outside.
+   *
+   * The request set is taken from where the eye is going, and the velocity it
+   * is going at is over the engine's presentation clock — not over the instant
+   * the ground is drawn at, which a scripted shot can hold for a whole scene.
+   * What is asserted is the observable: with the instant pinned and the
+   * presentation clock running, the finest patches requested lie ahead of the
+   * camera along its track by most of the two-second lead; with the clock
+   * held as well there is no velocity, and they surround the camera itself.
+   */
+  it('leads the request set along the track while the presentation instant is held', async () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const view = groundView(session)
+    const address = parseAddress(EARTH)
+    const spinPose = session.world.frames.pose(
+      bodyFixedFrameId(address),
+      view.renderTime,
+    )
+    const centre = session.world.frames.pose(
+      bodyFrameId(address),
+      view.renderTime,
+    ).position
+    const planet = session.world.bodyAt(bodyFrameId(address))
+    if (planet === null) throw new Error('no body underfoot')
+
+    // Twenty meters a frame along the ground: 1,200 m/s at 60 fps, so the
+    // streamer's two-second lead is 2,400 m ahead of the camera.
+    const STEP = 20
+    const LEAD = 2 * STEP * 60
+    const up = Vec.normalize(UV.difference(view.camera, centre))
+    const east = Vec.normalize(Vec.cross(up, vec3(1, 0, 0)))
+    const cameraAt = (i: number): UniverseVector =>
+      UV.translate(view.camera, Vec.scale(east, i * STEP))
+    const track = Vec.normalize(
+      Vec.sub(
+        bodyFixedDirection(spinPose, cameraAt(1)),
+        bodyFixedDirection(spinPose, cameraAt(0)),
+      ),
+    )
+
+    /**
+     * Drive the track with the instant pinned, and say how far ahead of the
+     * camera the finest requested patch was, in meters along the track.
+     *
+     * Ninety frames, because the pyramid drains shallow first at twenty-four
+     * requests a frame and the lead only shows at the levels the walk refines
+     * around the eye; the answers land between frames, which is what moves
+     * the drawn set down to meet them.
+     */
+    const farthest = async (clockRuns: boolean): Promise<number> => {
+      const streamer = new TerrainStreamer(null)
+      let deepest = -1
+      let lead = -Infinity
+      let camera = bodyFixedDirection(spinPose, cameraAt(0))
+      let asked = 0
+      streamer.heightfields.preferred = {
+        kind: 'fake',
+        available: true,
+        submit(_surface, request) {
+          asked += 1
+          const ahead =
+            Vec.dot(
+              Vec.sub(regionCentreDirection(request.region), camera),
+              track,
+            ) * planet.radius
+          if (request.region.level > deepest) {
+            deepest = request.region.level
+            lead = ahead
+          } else if (request.region.level === deepest) {
+            lead = Math.max(lead, ahead)
+          }
+          return {
+            id: asked,
+            result: Promise.resolve(flatField(request)),
+            cancel() {},
+          }
+        },
+      }
+      let elapsed: Seconds = 1
+      for (let i = 0; i < 90; i += 1) {
+        camera = bodyFixedDirection(spinPose, cameraAt(i))
+        if (clockRuns) elapsed += 1 / 60
+        streamer.update(
+          session.world,
+          view.renderTime,
+          elapsed,
+          cameraAt(i),
+          view.origin,
+          view.body,
+        )
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+      streamer.clear()
+      return lead
+    }
+
+    // Half the lead, not all of it: a patch is requested by its centre and the
+    // finest ring is a few patches wide, so the farthest centre sits short of
+    // the extrapolated eye by up to a patch. Measured 2,647 m and 242 m at
+    // level 17 on Earth's landing site.
+    expect(await farthest(true)).toBeGreaterThan(LEAD / 2)
+    expect(await farthest(false)).toBeLessThan(LEAD / 2)
+
+    session.dispose()
+  })
+
+  /*
+   * The tolerance ladder, from the outside and through the spy.
+   *
+   * `selectTerrain` climbs a rung when the cap binds and hands the rung back;
+   * coming down is the streamer's guess, from last walk's count. A guess the
+   * cap refuses returns exactly the pair that produced it, so the observable
+   * of a refusal being remembered is the rung the *next* walk is started
+   * from — which only the spy on `selectTerrain` can see.
+   */
+  it('does not repeat a finer guess the cap refused until the count has fallen', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const view = groundView(session)
+    const address = parseAddress(EARTH)
+    const centre = session.world.frames.pose(
+      bodyFrameId(address),
+      view.renderTime,
+    ).position
+    const up = Vec.normalize(UV.difference(view.camera, centre))
+    const streamer = new TerrainStreamer(null)
+    streamer.lensView = {
+      lens: DEFAULT_LENS,
+      viewport: { width: 1600, height: 900 },
+    }
+    const walk = (camera: UniverseVector): void => {
+      streamer.update(
+        session.world,
+        view.renderTime,
+        frame(),
+        camera,
+        view.origin,
+        view.body,
+      )
+    }
+    const startedFrom = (): number[] =>
+      vi
+        .mocked(selectTerrain)
+        .mock.calls.map(([, options]) => options?.coarsening ?? 1)
+
+    /*
+     * Ten kilometers over the landing site at four pixels a cell, the eye
+     * wants 1,302 patches at 1× and 724 at 1.5×: the cap refuses the first,
+     * and the second predicts room for a finer step that is not there. A
+     * streamer arriving here climbs one rung and then guesses back every
+     * walk, refused every time, unless it remembers.
+     */
+    streamer.cellPixels = 4
+    const high = UV.translate(view.camera, Vec.scale(up, 10_000))
+    walk(high)
+    expect(streamer.summary().coarsening).toBe(COARSEN_STEP)
+    const settled = streamer.summary().wanted
+    expect(settled * COARSEN_STEP).toBeLessThan(DEFAULT_MAX_PATCHES)
+
+    // The guess is made once, and refused.
+    vi.mocked(selectTerrain).mockClear()
+    walk(UV.translate(high, vec3(0.01, 0, 0)))
+    expect(startedFrom()).toContain(1)
+    expect(streamer.summary().coarsening).toBe(COARSEN_STEP)
+
+    // A centimeter a frame, so the memo re-walks and the count stands still;
+    // ten walks, under the sixteen at which the probe would try regardless.
+    vi.mocked(selectTerrain).mockClear()
+    for (let i = 2; i < 12; i += 1) {
+      walk(UV.translate(high, vec3(0.01 * i, 0, 0)))
+      expect(streamer.summary().wanted).toBe(settled)
+    }
+    expect(new Set(startedFrom())).toEqual(new Set([COARSEN_STEP]))
+    expect(streamer.summary().coarsening).toBe(COARSEN_STEP)
+
+    // Thirty kilometers up the same rung wants 488, fewer than the 724 the
+    // refusal came back with, so the guess is worth making again — and holds.
+    // Two walks, because the prediction reads the count the last walk came
+    // back with: the first learns it, the second acts on it.
+    const higher = UV.translate(view.camera, Vec.scale(up, 30_000))
+    walk(higher)
+    expect(streamer.summary().coarsening).toBe(COARSEN_STEP)
+    expect(streamer.summary().wanted).toBeLessThan(settled)
+    walk(UV.translate(higher, vec3(0.01, 0, 0)))
+    expect(streamer.summary().coarsening).toBe(1)
+
+    session.dispose()
+  })
+
+  it('comes back down a rung the count alone would hold', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const view = groundView(session)
+    const viewport = { width: 1600, height: 900 }
+    const streamer = new TerrainStreamer(null)
+    streamer.lensView = { lens: DEFAULT_LENS, viewport }
+    let walks = 0
+    const walk = (): void => {
+      walks += 1
+      // A centimeter a frame: past the memo's epsilon, inside any patch.
+      streamer.update(
+        session.world,
+        view.renderTime,
+        frame(),
+        UV.translate(view.camera, vec3(0.01 * walks, 0, 0)),
+        view.origin,
+        view.body,
+      )
+    }
+
+    // Two pixels a cell on the landing site overflows every rung but the
+    // loosest.
+    streamer.cellPixels = 2
+    walk()
+    expect(streamer.summary().coarsening).toBe(COARSEN_STEP ** 3)
+
+    /*
+     * Six pixels a cell is balance-limited here: the graded tree's 2:1 rings
+     * set the count, and loosening the tolerance from 1× to 3.375× takes it
+     * from 1,113 to 868 — both inside the cap, and the coarse one still too
+     * many for the count to predict room one rung finer. A streamer that
+     * arrives at six pixels settles at 1×; one that arrives at two and then
+     * changes to six is held at the top of the ladder by its own prediction.
+     */
+    streamer.cellPixels = 6
+    walk()
+    expect(streamer.summary().coarsening).toBe(COARSEN_STEP ** 3)
+    expect(streamer.summary().wanted * COARSEN_STEP).toBeGreaterThanOrEqual(
+      DEFAULT_MAX_PATCHES,
+    )
+    const fresh = new TerrainStreamer(null)
+    fresh.lensView = { lens: DEFAULT_LENS, viewport }
+    fresh.cellPixels = 6
+    fresh.update(
+      session.world,
+      view.renderTime,
+      frame(),
+      view.camera,
+      view.origin,
+      view.body,
+    )
+    expect(fresh.summary().coarsening).toBe(1)
+
+    // Held for a while — the re-test is a cadence, not a guess every walk.
+    for (let i = 0; i < 8; i += 1) walk()
+    expect(streamer.summary().coarsening).toBe(COARSEN_STEP ** 3)
+
+    // Three rungs at one probe in sixteen walks: down within forty-eight.
+    while (walks < 2 + 3 * 16) walk()
+    expect(streamer.summary().coarsening).toBe(1)
+
     session.dispose()
   })
 })
