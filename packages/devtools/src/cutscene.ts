@@ -65,7 +65,8 @@ export interface PlayOptions {
    * `sample` keeps answering with that frame; `stop` restores as it always
    * does. Off, the final frame restores the player and returns null, which
    * is what a driver's `ir.play` and every measurement want. A seek away
-   * from a held end is the scene playing again, and clears the outcome.
+   * from a held end clears the outcome; the clock stays paused until a
+   * `resume`, as after any pause.
    */
   readonly hold?: boolean
 }
@@ -169,8 +170,12 @@ export class CutsceneDirector {
   status(): CutsceneStatus | null {
     const active = this.#active
     if (active === null) return null
-    const frame =
-      active.epoch === null || active.lastRenderTime === null
+    // A held end reports the last frame as a fact rather than as arithmetic:
+    // recomputed from the epoch it lands a fraction short, and the session's
+    // play-at-the-end test is an exact comparison. See `#heldAtEnd`.
+    const frame = this.#heldAtEnd(active)
+      ? active.script.durationFrames - 1
+      : active.epoch === null || active.lastRenderTime === null
         ? (active.pendingSeekFrame ?? 0)
         : (active.lastRenderTime - active.epoch) * active.script.fps
     return {
@@ -308,10 +313,21 @@ export class CutsceneDirector {
     } else {
       active.epoch = active.lastRenderTime - clamped / active.script.fps
     }
-    // A held end is over once the playhead leaves it: the scene is playing
-    // again, and its next ending is a new one. Only a held scene can be
-    // active with an outcome at all.
-    if (this.#last !== null && this.#last.ending === 'ended') this.#last = null
+    /*
+     * A held end is over once the playhead leaves it: the outcome is cleared
+     * because the next ending is a new one. Nothing else changes — the clock
+     * stays as it was, paused if the hold parked it, and `resume` is what
+     * runs it, as after any pause. Only a held scene can be active with an
+     * outcome at all.
+     *
+     * A seek *onto* the last frame is not a seek away — the player's "Stay
+     * on the last frame" is one — and it keeps the hold. Cleared, the
+     * playhead is arithmetic again, `(t − (t − last/fps)) × fps`, which
+     * reads short of the last frame at 14.3% of renderTimes; see
+     * `#heldAtEnd` for what an inexact last frame costs the Play button.
+     */
+    const stays = active.hold && clamped === active.script.durationFrames - 1
+    if (!stays && this.#last?.ending === 'ended') this.#last = null
     return this.status() as CutsceneStatus
   }
 
@@ -346,7 +362,7 @@ export class CutsceneDirector {
     }
 
     const frame = (renderTime - active.epoch) * active.script.fps
-    if (frame >= active.script.durationFrames) {
+    if (frame >= active.script.durationFrames || this.#heldAtEnd(active)) {
       if (active.hold) return this.#holdLastFrame(active, renderTime)
       // `ended`, not `stopped`. It is the same restore either way, and it is a
       // completely different thing to a player: one draws an end card, the
@@ -358,14 +374,35 @@ export class CutsceneDirector {
   }
 
   /**
+   * Whether the scene is parked on its last frame.
+   *
+   * A state, not a comparison of the playhead against the end. The playhead
+   * is arithmetic on `renderTime`, and parking pauses the clock, whose alpha
+   * is then 0: the next frame's `renderTime` is *lower* than the parking
+   * one by whatever the accumulator held, up to a tick, and even at a drop
+   * of zero `(t - epoch) * fps` rounds a fraction short of the last frame.
+   * Both read as "before the end", so the hold branch would not be taken and
+   * `status()` would publish a frame the session's exact play-at-the-end
+   * comparison rejects — Play resumed the clock, the scene walked off the
+   * end and re-parked a sample later with the outcome already written, and
+   * the card never came back. Only `#holdLastFrame` writes an `ended`
+   * outcome while a scene is active; `seek` and `play` clear it.
+   */
+  #heldAtEnd(active: ActiveCutscene): boolean {
+    return active.hold && this.#last?.ending === 'ended'
+  }
+
+  /**
    * Park on the last frame and stay there.
    *
-   * The epoch is re-based so the playhead reads exactly the last frame and
-   * the clock is paused so it stays put; a resume walks off the end on the
-   * next sample and lands back here, which is why the session's play at the
-   * end is a seek to the top. The outcome is written once, not per frame:
-   * this runs on every sample while the picture is held, and the clock being
-   * paused does not stop the host sampling.
+   * The epoch is re-based so the playhead reads exactly the last frame on
+   * the frame that parks, and the clock is paused so it stays put; every
+   * later sample takes this branch on `#heldAtEnd` rather than on the
+   * playhead. A resume walks off the end on the next sample and lands back
+   * here, which is why the session's play at the end is a seek to the top.
+   * The outcome is written once, not per frame: this runs on every sample
+   * while the picture is held, and the clock being paused does not stop the
+   * host sampling.
    */
   #holdLastFrame(active: ActiveCutscene, renderTime: number): CinematicSample {
     const last = active.script.durationFrames - 1
@@ -437,15 +474,6 @@ export function sampleIsFinite(sample: CinematicSample): boolean {
     (sample.stage === undefined ||
       (UV.isValid(sample.stage.position) &&
         finiteQuat(sample.stage.orientation))) &&
-    [
-      sample.ship.throttle,
-      sample.effects.entryHeat,
-      sample.effects.landingDust,
-    ].every(
-      (drive) =>
-        drive === undefined ||
-        (Number.isFinite(drive) && drive >= 0 && drive <= 1),
-    ) &&
     // The lens too, and it is the field with the shortest path to a black
     // frame: `CameraRig` writes `verticalFovDegrees(engine.lens)` straight into
     // `camera.fov`, so one non-finite focal length in a script is a NaN
@@ -453,14 +481,17 @@ export function sampleIsFinite(sample: CinematicSample): boolean {
     // slider's route in; a `CutsceneScript.sample()` builds its lens by hand
     // and has no clamp between it and the camera.
     isUsableLens(sample.lens) &&
+    // Every drive is optional and, when present, on the closed unit interval.
     [
+      sample.ship.throttle,
+      sample.effects.entryHeat,
+      sample.effects.landingDust,
       sample.effects.skyHaze,
       sample.effects.lensArtifacts,
       sample.effects.anamorphicFlare,
-    ].every(
-      (drive) =>
-        drive === undefined ||
-        (Number.isFinite(drive) && drive >= 0 && drive <= 1),
-    )
+    ].every(unitDrive)
   )
 }
+
+const unitDrive = (drive: number | undefined): boolean =>
+  drive === undefined || (Number.isFinite(drive) && drive >= 0 && drive <= 1)

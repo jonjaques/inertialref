@@ -237,6 +237,13 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // is up or was dismissed: the director holds that frame, so a resume
       // there would park again on the next sample and the button would do
       // nothing anybody could see.
+      //
+      // An exact comparison, which the director's contract makes safe: a
+      // held end reports `durationFrames - 1` as a fact, not as arithmetic
+      // on `renderTime`. Recomputed, the held frame lands a fraction short —
+      // the clock pauses on parking, its alpha drops to 0 and the next
+      // `renderTime` is lower than the parking one — and a fractional frame
+      // here is a Play that only resumes, walks off the end and parks again.
       const status = host.status()
       if (status !== null && status.frame >= status.durationFrames - 1) {
         host.seek(0)
