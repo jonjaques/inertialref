@@ -19,6 +19,7 @@ import {
   installSurfaceFrame,
   formatAddress,
   hasSolidSurface,
+  MARS_PAD,
   surfaceRadius,
   systemId,
   TEST_CATALOG,
@@ -175,6 +176,50 @@ describe('a structure supports ordinary flight', () => {
       expect(world.isLanded(hovering.id), body.name).toBe(false)
       expect(world.contactAsks, body.name).toBe(before + 8)
     }
+  })
+
+  it('takes a coaster off rails only for a structure on the body it is bound to', () => {
+    // A coaster in a generated world's frame and a pad going down on Mars: the
+    // two share nothing but the world, so the coast has to keep its epoch. A
+    // twin that never saw the pad is the reference; an epoch that was dropped
+    // and re-entered a tick later differs from the twin's in the low bits.
+    const open = () => {
+      const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
+      const system = world.loadSystem(systemId('HIP71683'))
+      const body = [...walkBodies(system)].find(
+        (candidate) => hasSolidSurface(candidate) && candidate.radius > 1e6,
+      )!
+      const radius = body.radius * 3
+      const ship = world.spawnShip(
+        'coaster',
+        bodyFrameId(body.address),
+        vec3(radius, 0, 0),
+        vec3(0, 0, -circularSpeed(body.mu, radius)),
+      )
+      world.runTicks(1)
+      expect(world.isCoasting(ship.id), body.name).toBe(true)
+      return { world, body, ship }
+    }
+    const { world, body, ship } = open()
+    const twin = open()
+    const epoch = world.entities.require(ship.id).rails
+    world.placeStructure(MARS_PAD)
+    expect(world.isCoasting(ship.id)).toBe(true)
+    expect(world.entities.require(ship.id).rails).toBe(epoch)
+    world.runTicks(300)
+    twin.world.runTicks(300)
+    expect(world.entities.require(ship.id)).toEqual(
+      twin.world.entities.require(twin.ship.id),
+    )
+
+    // The same pad on the coaster's own body is an obstacle its conic has
+    // not been checked against, and that does end the coast.
+    world.placeStructure({
+      ...MARS_PAD,
+      id: 'local-pad',
+      bodyAddress: formatAddress(body.address),
+    })
+    expect(world.isCoasting(ship.id)).toBe(false)
   })
 
   it('releases an occupant when its support is removed or moved away', () => {

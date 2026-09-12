@@ -207,7 +207,7 @@ export class World implements FlightWorld {
     )
     const stored = this.#validatedStructure(placement)
     this.#structures.set(stored.id, stored)
-    this.#structuresChanged()
+    this.#structuresChanged([stored.bodyAddress])
     return stored
   }
 
@@ -217,7 +217,10 @@ export class World implements FlightWorld {
     invariant(previous !== undefined, `Unknown structure ${placement.id}`)
     const stored = this.#validatedStructure(placement)
     this.#structures.set(stored.id, stored)
-    this.#structuresChanged(previous)
+    this.#structuresChanged(
+      [previous.bodyAddress, stored.bodyAddress],
+      previous,
+    )
     return stored
   }
 
@@ -258,7 +261,7 @@ export class World implements FlightWorld {
     const previous = this.#structures.get(id)
     if (previous === undefined) return false
     this.#structures.delete(id)
-    this.#structuresChanged(previous)
+    this.#structuresChanged([previous.bodyAddress], previous)
     return true
   }
 
@@ -304,7 +307,16 @@ export class World implements FlightWorld {
     return height
   }
 
-  #structuresChanged(previous?: SurfacePlacement): void {
+  /**
+   * Rebuild the indexes after a placement changes, and re-examine only the
+   * entities the change can reach: `affected` holds the formatted address of
+   * every body whose structures differ, and `previous` the placement a move
+   * or removal took away.
+   */
+  #structuresChanged(
+    affected: readonly string[],
+    previous?: SurfacePlacement,
+  ): void {
     this.#structureList = Object.freeze(
       [...this.#structures.values()].sort((a, b) =>
         a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
@@ -318,12 +330,26 @@ export class World implements FlightWorld {
     this.#contactHeight.clear()
     this.#groundAhead.clear()
     for (const entity of this.#entities.ordered()) {
-      // A new obstacle can intersect an otherwise eligible analytical coast.
-      this.#leaveRails(entity.id)
-      if (previous === undefined || !this.#landed.has(entity.id)) continue
+      // Only an entity bound to an affected body is touched. An entity on
+      // rails is in its attractor's own frame — `railsEpoch` refuses any
+      // other — so a structure on one body can intersect only the coasts
+      // bound to that body, and a coaster in the Sun's frame that later falls
+      // into this body's sphere is re-framed there, which re-evaluates its
+      // epoch against the contact band. Leaving rails for every entity in the
+      // world instead would re-integrate a coaster around a generated world
+      // for a tick because a pad went down on Mars, and the epoch it re-enters
+      // with is a different one: the hash carries it, and two worlds whose
+      // epochs differ diverge in the low bits (ADR-0025).
       const binding = this.binding(entity.state.frame)
       if (
         binding?.body == null ||
+        !affected.includes(formatAddress(binding.body.address))
+      )
+        continue
+      // A new obstacle can intersect an otherwise eligible analytical coast.
+      this.#leaveRails(entity.id)
+      if (previous === undefined || !this.#landed.has(entity.id)) continue
+      if (
         binding.spinFrame === null ||
         formatAddress(binding.body.address) !== previous.bodyAddress
       )
