@@ -369,6 +369,12 @@ GPU output on the measured rig, so fine intervals are concentrated around the
 dust plane. CPU convergence checks retain the complete quarter-parsec reference. Sampling profiles describe quadrature; the field manifest identifies the
 stellar and dust coefficients independently of active population generation.
 
+The GPU loop is capped at `GALAXY_MAX_STEPS`, 16,384 intervals. A fine
+diagnostic ray long enough to reach that cap returns a partial integral, where
+CPU integration has no cap at all — which is why the GPU convergence check is
+deliberately a short 128 pc ray rather than a longer unbounded one, and why the
+production probes are kept well below the limit.
+
 The journey preserves the player's selected mode and lens. Automatic adapts
 to the framed light on presentation time, Manual retains the chosen lens
 exposure, and Enhanced applies its declared composition. Only a named fixed
@@ -388,6 +394,31 @@ provides Earth Orbit, Travel Out, Return, Hold, and a progress slider. A full
 trip in either direction takes 36 seconds.
 
 ## Alternatives considered
+
+**A panorama.** ESO's and Gaia's all-sky images are what every planetarium
+uses, Stellarium included, and Gaia's is CC BY-NC besides. An image is a fixed
+exposure of one viewpoint with the star halos baked into it: it cannot be flown
+through, re-exposed, or made to agree with a foreground body's occlusion.
+
+**A point cloud with no volume.** Sprites sampled from a template alias, carry
+no dust, and saturate toward the center under additive blending — Gaia Sky's
+Figure 17 is that failure. From inside, it is a cloud of billboards that Gaia
+Sky had to dither-discard for occlusion until it added a volume anyway.
+
+**A 3D texture of the field for the outside view.** 256³ RGBA half-float is
+134 MB, and OpenSpace's 1024×1024×128 is the same idea larger. The analytic
+field is cheap enough to evaluate per sample, and a texture would be a second
+copy of the model to keep in step with the CPU reference. If a march ever
+measures over budget, the fallback is a 256×256×64 slab at 17 MB sampling the
+same kernel through a texture instead of a function.
+
+**A density-wave particle galaxy.** A two-dimensional tilted-ellipse model has
+no interior dust transport and no agreement with the catalog frame.
+
+**Baking only the smooth part of the sky, at low resolution, to save memory.**
+Emission behind dust and emission in front of it do not separate, so the
+product of the integral is what has to be stored — at the dust's resolution,
+not the smooth field's.
 
 **Activate the field in `stellarDensity` immediately.** Rejected because
 preview calibration would regenerate procedural systems and change saves

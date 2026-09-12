@@ -8,13 +8,12 @@ Operating points are named on every figure, because a figure measured at one is
 a figure about that point.
 
 [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md) makes Enhanced's visible
-sky an ordinary gameplay requirement. The camera acceptance matrix is
-[camera C5](the-camera.md#c5-acceptance-through-the-actual-image). Natural
-measurements below retain their named response; they do not establish the cost
-of that default. The completed cache, GPU star projection and bounded population
-are measured below. The [final galaxy record](the-galaxy.md#assembled-image-and-motion-record)
-adds complete-sensor costs and full outward/return casts, including the return's
-52.8 fps recording and frame-time spikes.
+sky an ordinary gameplay requirement and owns the camera's acceptance contract.
+Natural measurements below retain their named response; they do not establish
+the cost of that default. The completed cache, GPU star projection and bounded
+population are measured under [the galaxy](#the-galaxy); the complete-frame
+operating points, the two journeys and the return's 52.8 fps recording are
+under [the camera](#the-camera).
 Keep the upscaler and optional optical effects separate.
 
 **Where the numbers come from.** Two rigs. Stationary operating points — the
@@ -231,10 +230,15 @@ cache. Cache misses do not require a synchronous full 512² bake before any sky
 can appear. The archive does not write the save database.
 
 The measured corrected 512² drained bake is 3.829 s, with 36 MiB of resident
-cube targets. This is total isolated bake work, not time to first useful sky or
-a measured browser boot penalty. First visible sky, progressive convergence,
-archive-hit reload and peak whole-app memory still need the final assembled
-boot record. The old 120 ms full-bake estimate is not a performance claim.
+cube targets. **A drained full-bake time is not a boot time**, which is why that
+figure cannot be quoted as one: the tiers are 6, 96 and 1,536 tiles of 32×32
+pixels, two tiles a submitted frame, so a boot capture that completes all 1,638
+of them and writes one archive spreads the final tier over about 12.8 s at
+60 fps while earlier complete tiers stay on screen. Storage, readback and driver
+differences move cold and reload latency independently of the bake. First
+visible sky, progressive convergence, archive-hit reload and peak whole-app
+memory still need their own boot record. The old 120 ms full-bake estimate is
+not a performance claim.
 
 ## The galaxy
 
@@ -252,7 +256,6 @@ The completion branch stays on the user-selected
 [PR #72](https://github.com/jonjaques/inertialref/pull/72) base. Active versions
 are `galaxy@5`, `galaxy-field@5` and `galaxy-tsl@8`. The implementation and
 acceptance status are in
-[the galaxy plan](the-galaxy.md#completion-measurements-7-september-2026) and
 [ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md).
 
 The shared 2048² arm table replaces repeated analytic arm evaluation in both
@@ -312,7 +315,11 @@ candidates and 2,000 cells**. The actual default-seed operating points are:
 | 1 kpc toward the center |      37,423 |      322,669 / 512 |        511 |    172.355 ms |         17.415 ms |         180.87 MiB |
 | Galactic center         |      16,004 |      287,681 / 576 |          3 |    132.045 ms |          7.892 ms |         158.60 MiB |
 
-All retain V8 without duplicate identities or budget violations. The central
+The totals split procedural against catalog as 19,243 + 10,014 at Sol,
+36,634 + 789 a kiloparsec toward the center, and 16,001 + 3 at the center:
+the catalog runs out long before the procedural population does, which is what
+the level mask is bounding. All retain V8 without duplicate identities or budget
+violations. The central
 query admits levels 0–1 and leaves omitted levels fully diffuse. Node 26.5 runs
 the production worker and host selection inline for three clean timing repeats;
 a separate memory pass samples their combined heap. These are observed peaks,
@@ -327,12 +334,55 @@ the earlier Solar smoke capture still had 18,806 pending columns. That shader
 and backend check does not establish equal convergence time to WebGPU. See
 `webgl-smoke-summary.json`.
 
-- **Pending: final C5 image matrix and full outward/return journey.** The
-  central morphology remains approximate; broad photometric calibration does
-  not close exterior appearance acceptance.
-- **Pending: assembled gate and complete-frame/boot record.** Record the final
-  commit and checks after the last integration change. Isolated GPU timings
-  above exclude the native scene and sensor's remaining work.
+### The assembled journey, and where the return spends its frames
+
+Two 2,400-frame compositor casts over the same 36-second presentation journey,
+production build, Apple M5, Chrome 152, WebGPU, sRGB SDR, MSAA 4, native
+1920×1080 at DPR 1. Both preserve canonical hash `98b5b2be`, camera mode and
+lens.
+
+| Cast    | Rate                  | rAF interval p95 / p99 / maximum |
+| ------- | --------------------- | -------------------------------- |
+| Outward | 59.7 fps over 40.21 s | 18.0 / 18.7 / 50.9 ms            |
+| Return  | 52.8 fps over 45.49 s | 32.5 / 50.2 / 150 ms             |
+
+**The return is the measurement that matters, and it does not hold 60 fps.**
+113 of its 2,209 sampled intervals are over 25 ms and 26 are over 50 ms, and
+most of the slow ones land while the observer comes back in from outside the
+disk — the leg where a live volume, a fresh survey and an incomplete cube
+arrive together. A held frame does not cancel that: the same returned orbit,
+drained, is 2.765 ms.
+
+| Held complete-sensor cost, 60 queued frames | Result   |
+| ------------------------------------------- | -------- |
+| Enhanced Earth-band                         | 4.257 ms |
+| Automatic Earth                             | 4.562 ms |
+| Manual Earth-band, 2,400 s                  | 5.043 ms |
+| Journey exterior                            | 2.868 ms |
+| Returned orbit                              | 2.765 ms |
+| Edge-on instrument                          | 2.513 ms |
+
+Compositor rates, paced frame intervals and drained GPU submissions measure
+three different things; only the first is about a player. At a 1440×900 CSS
+viewport at DPR 2 the native scene is 2880×1800, the physical history holds its
+960×600 cap, and 60 held complete-sensor frames average 6.410 ms. Extended
+display-P3 and the resize both restore one finished archive, with no write and
+no failure.
+
+**A larger cube would not recover the missing dust structure, and that is
+measured rather than assumed.** At the reviewed Earth-band pose, removing cube
+filtering changes physical RGB by at most 0.38% across two 81-ray patches, and
+broad RMS contrast stays about 13.1% at 512 faces, at 1024, and unfiltered.
+Enhanced compresses that to about 10.0%. The smooth disks and Gaussian local
+clouds dominate the broad brown lobes, so the structure a reference photograph
+has is absent from the source rather than from the sampling. The night
+Automatic plate is the same shape of finding at the other end: its meter
+settles inside the comfort bounds at EV 8.388 and amplifies the hemisphere,
+because the colorized Black Marble map emits its blue land/ocean background
+together with the city lights. Forcing more gain amplifies the source error.
+
+The assembled gate at that source passes 2,010 regular tests in 153 files and
+eight slow tests; the physical GPU suite passes 107 tests in 36 files.
 
 ### Historical Natural Earth-orbit measurement
 
@@ -415,8 +465,112 @@ not needed to explain the measured implementation.
 The meter's treatment of orbit traces remains a separate sensor question.
 Traces present at one brightness at every exposure, but a histogram that samples
 scene pixels can still include them. No galaxy plate has established a need for
-a meter mask. Whole-frame and final image acceptance remain open as recorded
-above.
+a meter mask.
+
+## The camera
+
+Enhanced draws the sky in ordinary gameplay, so a camera figure is a whole-frame
+figure and not an isolated pass. The batch below is the production build on an
+Apple M5, Chrome 152, WebGPU, Standard sRGB and Enhanced. Orbit, free look and
+ground are six-second rAF probes without screencasting; descent records twelve
+seconds around an eight-second flight. Each probe holds its canonical hash, mode
+and lens, and cold orbit starts with an empty regenerable archive after first
+light, so it excludes browser launch and shader boot. A held cost is 60 complete
+sensor frames across a drained queue, submission included; free look restores
+its aim first, and the ground row owns descent's held cost.
+
+| Drawing buffer | Point      | rAF mean / p95 / maximum | Above 25 ms / intervals | Held complete-sensor cost |
+| -------------- | ---------- | ------------------------ | ----------------------- | ------------------------- |
+| 1920×1080      | Cold orbit | 16.67 / 17.60 / 17.70 ms | 0 / 360                 | —                         |
+| 1920×1080      | Warm orbit | 16.67 / 17.60 / 17.70 ms | 0 / 360                 | 4.28 ms                   |
+| 1920×1080      | Free look  | 16.67 / 17.60 / 17.80 ms | 0 / 360                 | 4.20 ms                   |
+| 1920×1080      | Descent    | 16.67 / 17.30 / 17.70 ms | 0 / 720                 | —                         |
+| 1920×1080      | Ground     | 16.67 / 17.40 / 17.60 ms | 0 / 360                 | 12.39 ms                  |
+| 2880×1800      | Cold orbit | 16.71 / 17.50 / 33.30 ms | 1 / 359                 | —                         |
+| 2880×1800      | Warm orbit | 16.67 / 17.40 / 17.70 ms | 0 / 360                 | 7.66 ms                   |
+| 2880×1800      | Free look  | 16.67 / 17.30 / 17.70 ms | 0 / 360                 | 7.09 ms                   |
+| 2880×1800      | Descent    | 23.90 / 34.40 / 50.70 ms | 192 / 502               | —                         |
+| 2880×1800      | Ground     | 29.26 / 33.90 / 34.40 ms | 155 / 205               | 26.20 ms                  |
+
+The Retina viewport is 1440×900 CSS at DPR 2. **Dense ground at that native
+point runs around 30–34 fps, and the Retina descent misses vsync on 192 of its
+502 intervals** — the two rows where the scene is terrain rather than sky, at
+four times the pixels. Nothing in this table claims sustained 60 fps; it accepts
+the bounded visible-sky and twelve-tap optical policy and names where that lands.
+The 37.13 ms Retina ground batch, the 21.52 ms aperture probe and this 26.20 ms
+one have different scene and session details, so their differences do not
+isolate the 1.338 ms optical saving.
+
+The two journeys travel for 36 seconds and then hold the endpoint. The 1080p
+batch includes the 2,400-frame compositor recordings, with independent rAF
+samples covering the first 40 seconds; the Retina batch records the same path
+without screencasting. Later cloud, touchdown-heading and small-defocus
+corrections do not change the orbital infinity-focus route.
+
+| Drawing buffer | Journey | rAF p95 / maximum | Above 25 ms / intervals | Held complete-sensor cost |
+| -------------- | ------- | ----------------- | ----------------------- | ------------------------- |
+| 1920×1080      | Outward | 18.70 / 52.00 ms  | 12 / 2,382              | 1.60 ms                   |
+| 1920×1080      | Return  | 18.50 / 66.70 ms  | 12 / 2,375              | 2.54 ms                   |
+| 2880×1800      | Outward | 17.70 / 66.80 ms  | 20 / 2,372              | 4.51 ms                   |
+| 2880×1800      | Return  | 17.60 / 50.10 ms  | 30 / 2,365              | 5.33 ms                   |
+
+### What a ground frame is made of, and what the queue actually sees
+
+The final ground records select 7,184,384 / 7,733,248 terrain triangles in
+877 / 944 patches at 1080p / Retina, with 380 / 388 scene calls before the
+sensor passes. Declared galaxy targets occupy 42,702,592 / 44,091,712 bytes;
+star projection and extinction declare 9,600,004 and 13,204,096 bytes at both
+points. Sampled V8 heap maxima are 612.32 / 592.65 MiB. Those are the named
+allocations and sampled heaps, not total GPU residency — the 512² cubes and the
+960-pixel physical history cap are both in force with Enhanced's sky visible.
+
+A held ground frame issues **eighteen renderer calls at either size**: one scene
+render, four defocus draws, twelve PSF draws and the final output, with both
+gathers reporting twelve samples. The intercepted WebGPU queue sees 22
+submissions and command buffers at 1080p and 18 at Retina, and the extra buffers
+have no attributed producer. Timing probes exclude that instrumentation, so it
+is a structural audit and not a cost.
+
+### Small defocus pays for four pixels of blur, not forty-eight
+
+Circles up to four pixels in the drawing buffer take twelve samples of the
+flight iris per near/far layer; larger circles retain 48, and the half-pixel
+bypass still submits no defocus work at all. Both variants warm against the same
+four textures, so the choice adds no pipeline. Six alternating batches of 60
+drained, isolated defocus frames measure median costs of **0.931 → 0.376 ms at
+1920×1080 and 2.259 → 0.921 ms at 2880×1800**. At the four-pixel boundary a
+striped near/far fixture differs from the 48-sample kernel by at most 0.01172 in
+a linear channel, mean absolute difference 0.00514, relative energy change
+0.00893%. This is the optical pass alone; it is not the complete scene and it is
+not a presented frame rate.
+
+### The matched return, and what a lower CPU span does not buy
+
+The 36-second return plus held tail runs Enhanced at 18.836226925409882 mm,
+f/2.8, 1/60 s and ISO 100. Both runs preserve their canonical hash, mode and
+lens, but their initial canonical hashes differ, so the comparison matches lens
+and route rather than an identical world state.
+
+| Measurement                                  | PR #73 baseline           | Camera `bface6f`         |
+| -------------------------------------------- | ------------------------- | ------------------------ |
+| Survey preparation, mean / p95 / maximum     | 0.532 / 2.799 / 7.900 ms  | 0.022 / 0.101 / 0.600 ms |
+| Starfield callback, mean / p95 / maximum     | 0.285 / 1.100 / 12.201 ms | 0.197 / 0.399 / 9.799 ms |
+| Host reply application, mean / p95 / maximum | 1.381 / 6.200 / 9.000 ms  | 1.512 / 6.301 / 9.201 ms |
+| Engine frame intervals above 25 ms           | 12 of 2,400               | 7 of 2,399               |
+| Engine frame interval p95 / maximum          | 18.399 / 42.701 ms        | 18.600 / 62.101 ms       |
+| Independent rAF interval p95 / maximum       | 18.2 / 34.7 ms            | 18.6 / 51.8 ms           |
+| Independent rAF intervals above 25 ms        | 1 of 2,398                | 1 of 2,397               |
+
+**Cheaper synchronous work is not a better worst frame, and this pair is the
+proof.** Survey preparation falls by an order and the count of late engine
+intervals falls with it, while the maximum grows from 42.7 to 62.1 ms. The two
+columns of intervals also have different boundaries — the engine callback's and
+an independent rAF's — and neither is a compositor recording or a drained GPU
+cost. Sampled extinction source writes fall from 162,122 to 63,046 as completed
+envelopes reach their consumers, while mapping writes and temporal resets rise,
+so less preparation does not mean every cache does less work. The sky worker's
+unchanged source values occupy about 38% fewer serialized bytes by omitting
+system properties the renderer never reads.
 
 ## Memory and the resident world
 
@@ -623,9 +777,11 @@ the experiment that would put a figure on the gate; it has not been run.
 
 1. **Shipped-build mode switches and docs pages.** Every figure is dev React at
    about five times the real cost. Measure before acting.
-2. **Final galaxy integration measurements.** The GPU shell and progressive
-   cache are implemented. Close C5, whole-frame/boot and journey acceptance at
-   the final capped operating points; retain the explicit CPU and WebGL limits.
+2. **The return leg, and the Retina ground and descent rows.** They are the
+   three operating points that miss vsync, and they are the ones a player is
+   moving through. The journey's 2,400-frame casts already localize the return's
+   spikes to the crossing back in from outside the disk; what is missing is the
+   attribution inside those frames.
 3. **Per-job heightfield time**, which is what fallback convergence is made of.
    One worker's first patch against its tenth on the same body separates the
    cold per-body caches from the grammar and the scheduler.
@@ -651,6 +807,12 @@ the experiment that would put a figure on the gate; it has not been run.
   `useDevicePixelRatio`'s media query does not re-fire under emulation. Terrain
   selection is measured in display pixels, so those are retina figures wearing a
   default-window label. The driver puts the flag on every URL it navigates to.
+- **`engine.gl` existing is not the frame being ready.** The warm-up cover can
+  still read "198/199" on a page whose renderer the driver already accepts, and
+  the driver waits only a bounded time for that cover to clear — so a completed
+  invocation is not evidence that the intended frame was drawn. Inspect the
+  image, `ready`, the versions and the buffer sizes inside the same attached
+  run before quoting anything from it.
 - **A measurement taken beside a test run is a measurement of the test run.**
   Not noise — a substitution. Finish the suite, let the machine settle, then
   measure, and take the browser down afterward so the suite gets the same
