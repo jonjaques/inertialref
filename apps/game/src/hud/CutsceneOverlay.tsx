@@ -1,11 +1,11 @@
 'use no memo'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLogger } from '@inertialref/shared'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
 import { soundtrackCandidates, soundtrackFor } from './cutsceneAudio.ts'
 import { labelStyle, textStyle } from './cutsceneText.ts'
 import { useAction, useKeyContext } from '../input/useKeymap.ts'
-import { useEngine } from '../state/engineStore.ts'
+import { engineStore, useEngine } from '../state/engineStore.ts'
 
 /*
  * The cutscene's screen-space layer: the blackout, the title cards, the
@@ -90,6 +90,12 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    * changes with the scene.
    */
   const playing = useRef<string | null>(null)
+  /*
+   * The scene library, listed once. It is fixed for the session, and this
+   * component re-renders at the sampler's 8 Hz while a scene is open; hand-
+   * written because `'use no memo'` keeps the compiler out of this file.
+   */
+  const scenes = useMemo(() => engine.harness.cutscenes(), [engine])
 
   /*
    * The text list, which is structure rather than a readout.
@@ -146,7 +152,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
     let cancelled = false
     const decoder = document.createElement('audio')
     const names = new Set<string>()
-    for (const scene of engine.harness.cutscenes()) {
+    for (const scene of scenes) {
       if (scene.soundtrack !== null) names.add(scene.soundtrack)
     }
     void (async () => {
@@ -183,7 +189,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
     return () => {
       cancelled = true
     }
-  }, [engine])
+  }, [engine, scenes])
 
   /*
    * Prime the element on the first user gesture, whatever that gesture is for.
@@ -229,10 +235,16 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
           // sounds and where it is. Left running only if a scene with music
           // is already playing, which is the case where this gesture was the
           // Play button.
+          //
+          // Paused is read off the published playhead, not the clock: there
+          // is one transport, and two readers of pause disagree for a frame.
+          // `playing` is already set from that playhead, so this branch is
+          // keyed to the same sample either way. The store rather than the
+          // hook because this closure is registered once, with `[engine]`.
           if (
             playing.current === null ||
             engine.cinematic === null ||
-            engine.world.clock.paused
+            (engineStore.getState().playhead?.paused ?? true)
           ) {
             element.pause()
             element.currentTime = 0
@@ -328,7 +340,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    * loop must leave it parked. The console's override stands in for every
    * declared track and for none of the undeclared ones.
    */
-  const soundtrack = soundtrackFor(engine.harness.cutscenes(), sceneId)
+  const soundtrack = soundtrackFor(scenes, sceneId)
   const track =
     soundtrack === null
       ? null
