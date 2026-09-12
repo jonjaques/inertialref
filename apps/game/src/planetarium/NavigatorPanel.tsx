@@ -13,7 +13,7 @@ import {
   usePersistentState,
 } from '../state/preferences.ts'
 import { NavigatorTree } from './NavigatorTree.tsx'
-import { NeighborhoodRail } from './NeighborhoodRail'
+import { NeighborhoodRail } from './NeighborhoodRail.tsx'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { TargetActions } from '../hud/TargetActions.tsx'
 import {
