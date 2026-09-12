@@ -11,6 +11,7 @@ import {
   bodyFixedDirection,
   bodyFixedFrameId,
   drawnSurfaceRadius,
+  MARS_PAD,
   systemId,
 } from '@inertialref/universe'
 import { verticalFovDegrees } from '@inertialref/rendering'
@@ -47,6 +48,23 @@ describe('Mars landing', () => {
       }),
       { numRuns: 60 },
     )
+  })
+
+  it('stages the seeded pad whatever the stored record says', () => {
+    // The sunset instant is solved for the seeded site. A pad the player has
+    // moved keeps its mesh where they put it, and the scene composes about
+    // the site the instant belongs to — with the stand-in stage, not the id.
+    const { world, harness } = openSession()
+    const seeded = MARS_LANDING.prepare(world).sample(1000)
+    expect(seeded.stage?.placementId).toBe(MARS_PAD.id)
+
+    const stored = harness.structures().find((one) => one.id === MARS_PAD.id)!
+    harness.moveStructure({ ...stored, longitude: stored.longitude + 10 })
+    const moved = MARS_LANDING.prepare(world).sample(1000)
+    expect(moved.stage?.placementId).toBeUndefined()
+    expect(moved.stage?.position).toEqual(seeded.stage?.position)
+    expect(moved.camera).toEqual(seeded.camera)
+    expect(moved.presentationTime).toBe(seeded.presentationTime)
   })
 
   it('keeps the camera above the drawn ground and outside the hull for every frame', () => {

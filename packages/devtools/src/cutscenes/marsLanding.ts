@@ -23,12 +23,14 @@ import {
 } from '@inertialref/rendering'
 import type { CutsceneScript } from '../cutscene.ts'
 
-/** A surveyed basin in the game's Mars relief; angles are radians, time is J2000 seconds. */
+/**
+ * The instant the scene is composed for, in J2000 seconds: the Sun 3° above
+ * the horizon and west of `MARS_PAD`, so the descent is shot into a sunset.
+ * It is solved for that one site, which is why the scene stages the seeded
+ * pad rather than whatever record carries its id.
+ */
 export const MARS_PAD_SITE = Object.freeze({
-  latitude: MARS_PAD.latitude,
-  longitude: MARS_PAD.longitude,
   presentationTime: 1133.5211610867814,
-  deckHeight: MARS_PAD.height,
 })
 
 export const MARS_LANDING: CutsceneScript = {
@@ -40,16 +42,25 @@ export const MARS_LANDING: CutsceneScript = {
   prepare(world) {
     const system = world.loadSystem(systemId('SOL'))
     const mars = system.planets[3]!
+    // The pose and the instant are one composition: ten degrees of longitude
+    // moves the horizon under a Sun the instant no longer lifts, and ninety
+    // degrees of heading puts it four frame-widths off screen. So the scene
+    // stages `MARS_PAD` itself, and the stored record lends only its id, and
+    // only while it still coincides — a pad the player has moved is drawn
+    // where they put it by the structure pass, and the stage stand-in here.
     const stored = world.structures.find(
       (structure) =>
         structure.id === MARS_PAD.id &&
         structure.bodyAddress === MARS_PAD.bodyAddress &&
-        structure.assetId === MARS_PAD.assetId,
+        structure.assetId === MARS_PAD.assetId &&
+        structure.latitude === MARS_PAD.latitude &&
+        structure.longitude === MARS_PAD.longitude &&
+        structure.height === MARS_PAD.height &&
+        structure.heading === MARS_PAD.heading,
     )
-    const placement = stored ?? MARS_PAD
-    const { latitude, longitude } = placement
+    const placement = MARS_PAD
     const { presentationTime } = MARS_PAD_SITE
-    const up = geodeticDirection(latitude, longitude)
+    const up = geodeticDirection(placement.latitude, placement.longitude)
     const spin = world.frames.pose(
       bodyFixedFrameId(mars.address),
       presentationTime,
@@ -69,10 +80,7 @@ export const MARS_LANDING: CutsceneScript = {
         const { offset, velocity } = marsApproach(seconds)
         const eye = marsLandingCamera(seconds)
         const reveal = smooth((seconds - 11) / 9) * 0.55
-        const target = Vec.add(
-          Vec.scale(offset, 1 - reveal),
-          Vec.scale(vec3(0, 26, 0), reveal),
-        )
+        const target = Vec.lerp(offset, vec3(0, 26, 0), reveal)
         // The tail faces the approach while braking; a fixed vertical attitude carries the final hold.
         const braking =
           Vec.length(velocity) > 1e-6
