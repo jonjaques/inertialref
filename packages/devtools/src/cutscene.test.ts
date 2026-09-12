@@ -1270,10 +1270,14 @@ describe('cutscene director lifecycle', () => {
       ),
     )
 
+    // A seek anchors to the last sampled render time, including a held drop.
+    const seekTime = parkedAt - TICK_DURATION
+    expect(harness.cutsceneSample(seekTime)!.frame).toBe(last)
+
     // The contrast: any other frame is a seek away, and the outcome goes.
     harness.seekCutscene(last - 1)
     expect(harness.cutsceneOutcome()).toBeNull()
-    expect(harness.cutsceneSample(parkedAt)!.frame).toBeCloseTo(last - 1, 6)
+    expect(harness.cutsceneSample(seekTime)!.frame).toBeCloseTo(last - 1, 6)
   })
 
   it('seeks to an exact reference frame', () => {

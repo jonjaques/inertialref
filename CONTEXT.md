@@ -9702,6 +9702,12 @@ A language-service file move under bundler resolution can shorten an import
 specifier. TypeScript accepts it, but the plain-Node preset loader fails.
 Moved source imports keep their explicit `.ts` or `.tsx` extensions.
 
+CI exposed a randomized cutscene-test failure: held samples changed the last
+render time, then the seek assertion sampled at the earlier parking time.
+A one-tick drop reproduces the 0.374625-frame discrepancy deterministically.
+The assertion now samples at the seek's actual time anchor; production timing
+is unchanged.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
