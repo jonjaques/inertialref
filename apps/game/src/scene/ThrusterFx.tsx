@@ -99,15 +99,16 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
     const root = group.current
     if (view === null || root === null) return
 
-    const hull = engine.hull
+    // The hull the frame draws, so the plumes are keyed on the same layout:
+    // a script's prop while it names one and has loaded, the player's hull
+    // otherwise. Never `engine.hull` under a named prop — that slot stays
+    // the player's, and the prop's plumes at the entity's pose would be the
+    // Rocinante's drive burning beside the Enterprise.
+    const hull = engine.hullOnStage
     const cinematic = engine.cinematic
     const visible =
       cinematic === null ? engine.showShip : cinematic.ship.visible
-    if (
-      hull === null ||
-      !visible ||
-      (cinematic?.ship.model !== undefined && cinematic.ship.model !== hull.id)
-    ) {
+    if (hull === null || !visible) {
       if (root.visible) {
         for (const held of built.values()) held.plumes.update(null, 0, 10)
       }

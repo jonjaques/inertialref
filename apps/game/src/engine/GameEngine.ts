@@ -718,6 +718,32 @@ export class GameEngine {
   hull: LoadedShip | null = null
 
   /*
+   * The hull a playing script names as its hero prop, once that glTF resolves.
+   *
+   * A second slot rather than a swap of `hull`, because `hull` is read as the
+   * player's: `CameraRig` solves the chase distance from its length, `WarpFx`
+   * scales the streaks from it and `ThrusterFx` keys the plumes on its id. A
+   * scene's prop written there flows into all three — for the frames between
+   * the script's last sample and the player's reload landing, the chase
+   * frames a 46 m Rocinante at the entity's pose and its plumes burn beside
+   * the Enterprise. Null means no script has asked for one yet, or the one
+   * asked for is still loading; `hullOnStage` resolves which slot the frame
+   * draws.
+   */
+  stagedHull: LoadedShip | null = null
+
+  /**
+   * The hull the frame draws: the script's prop while a playing scene names
+   * one, the player's otherwise. Null while a named prop is still loading,
+   * so nothing scales an effect from the wrong hull in the meantime.
+   */
+  get hullOnStage(): LoadedShip | null {
+    const model = this.cinematic?.ship.model
+    if (model === undefined) return this.hull
+    return this.stagedHull?.id === model ? this.stagedHull : null
+  }
+
+  /*
    * The frame's cinematic state, in render space, when a cutscene is playing.
    *
    * The director (in devtools) speaks universe coordinates; this is its output

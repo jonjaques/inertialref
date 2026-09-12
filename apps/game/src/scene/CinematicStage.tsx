@@ -28,14 +28,14 @@ export function CinematicStage({ engine }: { engine: GameEngine }) {
   }, [gl, camera, scene, effects])
 
   useTimedFrame('cinematicStage', () => {
-    const cinematic = engine.cinematic
+    // The sample goes through whole: the sky and the pad dust hang off the
+    // stage and need no hull, and holding them back until the prop resolves
+    // is a black sky for the frames the stars are already hidden. Only the
+    // entry sheath scales from the hull, and `hullOnStage` is null until the
+    // prop the script names is the one loaded.
     effects.update(
-      cinematic?.ship.model !== undefined &&
-        cinematic.ship.model !== engine.hull?.id
-        ? null
-        : cinematic,
-      engine.hull?.lengthMetres,
-      engine.hull?.beamMetres,
+      engine.cinematic,
+      engine.hullOnStage,
       engine.scene()?.stars[0]?.placement.position,
     )
   })

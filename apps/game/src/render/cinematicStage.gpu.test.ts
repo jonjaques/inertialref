@@ -32,6 +32,7 @@ beforeAll(async () => {
 afterAll(() => gpu.dispose())
 
 const pose = { position: vec3(0, 0, 0), orientation: Quaternion.IDENTITY }
+const HULL = { lengthMetres: 46, beamMetres: 16 }
 function view(entryHeat: number, landingDust: number): CinematicView {
   return {
     frame: 240,
@@ -58,7 +59,7 @@ it.each(['entry', 'dust'] as const)(
     scenePass.updateBeforeType = NodeUpdateType.RENDER
     try {
       setSceneExposure(gpu.renderer, 1 / SURFACE_LUMINANCE)
-      fx.update(view(kind === 'entry' ? 1 : 0, kind === 'dust' ? 1 : 0))
+      fx.update(view(kind === 'entry' ? 1 : 0, kind === 'dust' ? 1 : 0), HULL)
       const first = await gpu.drawGraph(scenePass, { float: true })
       let red = 0
       let blue = 0
@@ -70,14 +71,14 @@ it.each(['entry', 'dust'] as const)(
         }
       expect(red).toBeGreaterThan(0.5)
       expect(red).toBeGreaterThan(blue * 1.5)
-      fx.update(null)
+      fx.update(null, null)
       const off = await gpu.drawGraph(scenePass, { float: true })
       expect(
         off.data.every((value, index) => index % 4 === 3 || value === 0),
       ).toBe(true)
-      fx.update({ ...view(1, 1), elapsedSeconds: 48 })
+      fx.update({ ...view(1, 1), elapsedSeconds: 48 }, HULL)
       await gpu.drawGraph(scenePass, { float: true })
-      fx.update(view(kind === 'entry' ? 1 : 0, kind === 'dust' ? 1 : 0))
+      fx.update(view(kind === 'entry' ? 1 : 0, kind === 'dust' ? 1 : 0), HULL)
       const sought = await gpu.drawGraph(scenePass, { float: true })
       expect(sought.data).toEqual(first.data)
     } finally {
@@ -134,13 +135,15 @@ it('draws a dusty photographic sky with a cool halo at the Sun only when the scr
   const sample = { ...view(0, 0), effects: { ...NO_EFFECTS, skyHaze: 1 } }
   try {
     setSceneExposure(gpu.renderer, 1 / SURFACE_LUMINANCE)
-    fx.update(sample)
+    // A null hull throughout: the sky is the stage's, and it has to draw
+    // for the frames before the script's prop resolves.
+    fx.update(sample, null)
     const first = await gpu.drawGraph(scenePass, { float: true })
     const horizon = first.at(5, 52)
     expect(horizon[0]).toBeGreaterThan(0.05)
     expect(horizon[0]).toBeGreaterThan(horizon[2] * 1.5)
     expect(first.at(48, 48)[2]).toBeCloseTo(0.3, 3)
-    fx.update(sample, 46, 16, vec3(-5, 0, -10))
+    fx.update(sample, null, vec3(-5, 0, -10))
     const sunlit = await gpu.drawGraph(scenePass, { float: true })
     expect(sunlit.at(5, 52)[0]).toBeGreaterThan(horizon[0] * 1.3)
     expect(sunlit.at(5, 52)[0]).toBeGreaterThan(sunlit.at(90, 52)[0] * 1.3)
@@ -150,11 +153,11 @@ it('draws a dusty photographic sky with a cool halo at the Sun only when the scr
     expect(sunlit.at(5, 52)[2] / sunlit.at(5, 52)[0]).toBeGreaterThan(
       sunlit.at(90, 52)[2] / sunlit.at(90, 52)[0],
     )
-    fx.update(sample)
+    fx.update(sample, null)
     setSceneExposure(gpu.renderer, 0.25 / SURFACE_LUMINANCE)
     const dim = await gpu.drawGraph(scenePass, { float: true })
     expect(dim.at(5, 52)[0] / horizon[0]).toBeCloseTo(0.25, 3)
-    fx.update(view(0, 0))
+    fx.update(view(0, 0), null)
     const off = await gpu.drawGraph(scenePass, { float: true })
     expect(off.at(5, 48)[0]).toBe(0)
     expect(off.at(48, 48)[2]).toBeCloseTo(0.3, 3)
@@ -205,7 +208,7 @@ it.each([50, 5000])(
     scenePass.updateBeforeType = NodeUpdateType.RENDER
     try {
       setSceneExposure(gpu.renderer, 1 / SURFACE_LUMINANCE)
-      fx.update({ ...view(0, 0), effects: { ...NO_EFFECTS, skyHaze: 1 } })
+      fx.update({ ...view(0, 0), effects: { ...NO_EFFECTS, skyHaze: 1 } }, HULL)
       const baseline = await gpu.drawGraph(scenePass, { float: true })
       atmosphere.visible = true
       const composed = await gpu.drawGraph(scenePass, { float: true })
@@ -216,7 +219,7 @@ it.each([50, 5000])(
       expect(
         composed.data.some((value, index) => index % 4 === 0 && value === 2),
       ).toBe(true)
-      fx.update(view(0, 0))
+      fx.update(view(0, 0), HULL)
       const unmodified = await gpu.drawGraph(scenePass, { float: true })
       expect(unmodified.at(5, 20)[2]).toBeCloseTo(3, 3)
     } finally {
@@ -242,9 +245,9 @@ it('keeps the lower hemisphere dark even when the Sun is below the ground', asyn
   const sample = { ...view(0, 0), effects: { ...NO_EFFECTS, skyHaze: 1 } }
   try {
     setSceneExposure(gpu.renderer, 1 / SURFACE_LUMINANCE)
-    fx.update(sample)
+    fx.update(sample, HULL)
     const baseline = await gpu.drawGraph(scenePass, { float: true })
-    fx.update(sample, 46, 16, vec3(0, -5, -10))
+    fx.update(sample, HULL, vec3(0, -5, -10))
     const subterraneanSun = await gpu.drawGraph(scenePass, { float: true })
     expect(
       subterraneanSun.data.every(

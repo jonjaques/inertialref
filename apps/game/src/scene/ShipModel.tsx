@@ -1,6 +1,6 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
-import type { Group, Scene } from 'three/webgpu'
+import type { Camera, Group, Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { type LoadedShip, loadShipModel } from '../render/shipModels.ts'
 import { RENDER_SHIP, usePersistentState } from '../state/preferences.ts'
@@ -13,6 +13,12 @@ import { useTimedFrame } from './useTimedFrame.ts'
  * until then and whenever loading fails. The cone is the same degradation
  * story as the star catalog's Sol fallback — the flight model neither knows
  * nor cares what the hull looks like.
+ *
+ * A playing script that names a hero prop gets it drawn from the engine's
+ * second slot, `stagedHull`, never from `hull`: the chase distance, the warp
+ * and the plumes all read `hull` as the player's, and the scene's prop must
+ * not reach them for even the frame between the script's last sample and the
+ * player's hull coming back.
  */
 export function ShipModel({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
@@ -26,37 +32,43 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
   // reload of the page, which here would rebuild the renderer and lose the
   // camera. The loader caches by id, so switching back is instant.
   const [shipId] = usePersistentState(RENDER_SHIP)
-  const [requestedId, setRequestedId] = useState(
-    engine.cinematic?.ship.model ?? shipId,
-  )
   // Seeded from the engine so a Fast Refresh remount, whose effect may not
   // re-run, still renders the hull the session already loaded.
   const [hull, setHull] = useState<LoadedShip | null>(engine.hull)
+  // The prop the playing script asks for, and the hull loaded against it.
+  // `stagedId` is React state rather than a read of `engine.cinematic` at
+  // render time because the primitive below is chosen at render time: the
+  // frame loop writes it, React flushes, and only then does the group hold
+  // the prop — so the visibility gate in the frame callback compares against
+  // this, not the engine, and never shows the group holding the other hull.
+  const [stagedId, setStagedId] = useState<string | null>(
+    engine.cinematic?.ship.model ?? null,
+  )
+  const [staged, setStaged] = useState<LoadedShip | null>(engine.stagedHull)
 
-  useEffect(() => {
-    // The loader caches by id, so StrictMode's double-mount and the canvas
-    // remount on an HDR change reuse the same fetch and the same meshes.
-    let mounted = true
-    void loadShipModel(requestedId, anisotropy).then(async (ship) => {
-      if (ship !== null)
-        await warmCompile(warmRenderer(gl), {
-          object: ship.group,
-          camera,
-          scene: scene as Scene,
-        })
-      // Only apply if this is still the wanted hull: a fast switch resolves two
-      // cached promises and the last requested id must win, not the last to
-      // land. The old hull stays on stage until the new one is ready, so a
-      // switch never flashes the debug cone.
-      if (mounted && ship !== null) {
+  useEffect(
+    () =>
+      loadInto(shipId, anisotropy, gl, camera, scene as Scene, (ship) => {
         engine.hull = ship
         setHull(ship)
-      }
-    })
-    return () => {
-      mounted = false
-    }
-  }, [engine, anisotropy, requestedId, gl, camera, scene])
+      }),
+    [engine, anisotropy, shipId, gl, camera, scene],
+  )
+
+  useEffect(() => {
+    if (stagedId === null) return
+    return loadInto(
+      stagedId,
+      anisotropy,
+      gl,
+      camera,
+      scene as Scene,
+      (ship) => {
+        engine.stagedHull = ship
+        setStaged(ship)
+      },
+    )
+  }, [engine, anisotropy, stagedId, gl, camera, scene])
 
   useEffect(() => {
     warmAtMount({
@@ -76,21 +88,23 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
   }, [anisotropy, gl, camera, scene])
 
   useTimedFrame('shipModel', () => {
-    const desiredId = engine.cinematic?.ship.model ?? shipId
-    if (desiredId !== requestedId) setRequestedId(desiredId)
+    const wanted = engine.cinematic?.ship.model ?? null
+    if (wanted !== stagedId) setStagedId(wanted)
     const scene = engine.scene()
     if (scene === null || group.current === null) return
 
-    // A playing cutscene borrows the hull as its hero prop: the director says
-    // where it is and whether it is on stage at all, and the entity underneath
-    // — still simulating, chase-framed, wherever the player left it — is not
-    // drawn until the scene hands everything back.
+    // The group holds what the frame asks for: the player's hull when no
+    // script names a prop, the requested prop once it has loaded. Until then
+    // it is hidden rather than shown holding the other one.
+    const onStage =
+      stagedId === wanted && (wanted === null || staged?.id === wanted)
+
+    // A playing cutscene puts its hero prop where the director says, and the
+    // entity underneath — still simulating, chase-framed, wherever the player
+    // left it — is not drawn until the scene hands everything back.
     const cinematic = engine.cinematic
     if (cinematic !== null) {
-      group.current.visible =
-        cinematic.ship.visible &&
-        (cinematic.ship.model === undefined ||
-          cinematic.ship.model === hull?.id)
+      group.current.visible = cinematic.ship.visible && onStage
       group.current.position.set(
         cinematic.ship.position.x,
         cinematic.ship.position.y,
@@ -105,7 +119,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
       return
     }
 
-    group.current.visible = engine.showShip
+    group.current.visible = engine.showShip && onStage
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
     group.current.position.set(
@@ -121,13 +135,18 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     )
   })
 
+  const shown =
+    stagedId === null ? hull : staged?.id === stagedId ? staged : null
+
   // No dispose on unmount, and Starfield is the precedent: the loader owns the
   // hull for the life of the renderer, and R3F only detaches the primitive.
+  // The cone stands in for the player's hull only: a prop still loading is an
+  // empty group, because the cone at a scene's pose is a scene with a cone in it.
   return (
     <group ref={group}>
-      {hull !== null ? (
-        <primitive object={hull.group} />
-      ) : (
+      {shown !== null ? (
+        <primitive object={shown.group} />
+      ) : stagedId === null ? (
         <>
           {/* Nose along −Z, matching the forward convention the whole codebase uses. */}
           <mesh rotation={[-Math.PI / 2, 0, 0]} material={debugMaterials.hull}>
@@ -141,7 +160,37 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
             <cylinderGeometry args={[0.9, 1.2, 1.2, 12]} />
           </mesh>
         </>
-      )}
+      ) : null}
     </group>
   )
+}
+
+/**
+ * Load one hull, compile it against the live scene, and hand it over — unless
+ * the request has been superseded. Returns the effect's cleanup.
+ *
+ * The loader caches by id, so StrictMode's double-mount and the canvas remount
+ * on an HDR change reuse the same fetch and the same meshes. The handover is
+ * gated on the cleanup not having run: a fast switch resolves two cached
+ * promises and the last requested id must win, not the last to land. The hull
+ * already on stage stays there until the new one is ready, so a switch never
+ * flashes the debug cone.
+ */
+function loadInto(
+  id: string,
+  anisotropy: number,
+  gl: object,
+  camera: Camera,
+  scene: Scene,
+  apply: (ship: LoadedShip) => void,
+): () => void {
+  let mounted = true
+  void loadShipModel(id, anisotropy).then(async (ship) => {
+    if (ship === null) return
+    await warmCompile(warmRenderer(gl), { object: ship.group, camera, scene })
+    if (mounted) apply(ship)
+  })
+  return () => {
+    mounted = false
+  }
 }

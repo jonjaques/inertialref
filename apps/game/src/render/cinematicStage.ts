@@ -33,8 +33,10 @@ import {
   vec3,
 } from 'three/tsl'
 import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
+import { saturate } from '@inertialref/rendering'
 import type { CinematicView } from '../engine/GameEngine.ts'
 import { sensorRadiance } from './radiance.ts'
+import type { LoadedShip } from './shipModels.ts'
 
 function effectMaterial(additive: boolean): MeshBasicNodeMaterial {
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
@@ -224,25 +226,33 @@ export function createLandingEffects() {
 
   return {
     group,
+    /**
+     * `hull` is the one the frame draws, or null while a named prop is still
+     * loading. Only the entry sheath needs it — it is scaled from the beam and
+     * length — so a null hull switches the sheath off and nothing else: the
+     * sky and the dust hang off `view.stage`, and gating them on the hull is
+     * a black sky for the frames between the cut and the prop resolving.
+     */
     update(
       view: CinematicView | null,
-      lengthMetres = 46,
-      beamMetres = 16,
+      hull: Pick<LoadedShip, 'lengthMetres' | 'beamMetres'> | null,
       sunPosition?: Vec3,
     ) {
       const heating =
-        view?.ship.visible === true ? (view.effects.entryHeat ?? 0) : 0
+        hull !== null && view?.ship.visible === true
+          ? (view.effects.entryHeat ?? 0)
+          : 0
       const lifting =
         view?.stage === undefined ? 0 : (view.effects.landingDust ?? 0)
       const skyDrive =
         view?.stage === undefined ? 0 : (view.effects.skyHaze ?? 0)
       group.visible = heating > 0 || lifting > 0 || skyDrive > 0
       sky.visible = skyDrive > 0
-      haze.value = Math.max(0, Math.min(1, skyDrive))
+      haze.value = saturate(skyDrive)
       entryPose.visible = heating > 0
       dustPose.visible = lifting > 0
-      heat.value = Math.max(0, Math.min(1, heating))
-      dust.value = Math.max(0, Math.min(1, lifting))
+      heat.value = saturate(heating)
+      dust.value = saturate(lifting)
       seconds.value = view?.elapsedSeconds ?? 0
       if (view === null) return
       const ship = view.ship
@@ -253,7 +263,8 @@ export function createLandingEffects() {
         ship.orientation.z,
         ship.orientation.w,
       )
-      entry.scale.set(beamMetres, lengthMetres, beamMetres)
+      if (hull !== null)
+        entry.scale.set(hull.beamMetres, hull.lengthMetres, hull.beamMetres)
       const stage = view.stage
       if (stage !== undefined) {
         sunGlow.value = sunPosition === undefined ? 0 : 1
