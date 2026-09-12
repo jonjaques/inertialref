@@ -9345,6 +9345,77 @@ next 0.7 s, and first light is at 5–6 s. A still taken at 2.3 s and one at
 2.8 s were on opposite sides of that cliff, and a driven boot lifts the cover
 at first light, so a still past 5 s is the scene.
 
+## The cover has two forms, the admission is its first frame, and it sits below the dialogs (11 Sep 2026)
+
+A scene mode — flight, the planetarium, the cinema — gets the whole cover; a
+page that is readable without a scene — the front door, the reading room —
+gets a black ground under the page and draws one line of the ledger where its
+own layout has a line to spare. `hud/BootLine.tsx` is that line: the running
+stage, its count, the ring or the check. The front door sets it at the end of
+its footer row (`ml-auto`, so it wraps to its own right-aligned row on a
+phone); the reading room sets it in the horizon's readout in place of the
+framed body. That second one fixed a lie: the framing is solved before the
+picture exists, so the strip read "Earth · rocky · observed · 1.00 AU" over a
+band that was still the cover's black.
+
+**The pages read the cover's own store, never a copy.** `RuntimeSnapshot`
+carries `firstLight.store`, and `hud/useBoot.ts` reads it — or a prelude store
+while nothing is published — so there is one producer of which line is
+running. The prelude and the shapes live in `render/bootState.ts` with no
+imports, because the pages are server-rendered and `firstLight.ts` reaches the
+watchdog and the frame timing. `useBoot` answers `null` on the server, before
+hydration, and once the runtime has failed: a spinner in static HTML is a
+promise to a reader whose browser may never keep it, and one beside
+`RuntimeNotice` is the promise the notice just withdrew.
+
+**The admission is the cover's first frame.** Cold-loading `/planetarium`
+opened with a server-rendered title card — the mode's name, a sentence, two
+links, centered on a scrim — and the runtime then mounted a black screen with
+a different block in a different corner. Now `pages/ModeRoutes.tsx` draws
+`hud/BootLedger.tsx`, the block `BootOverlay` draws, one line shorter:
+`loading the runtime`, running. `firstLight.ts` opens its ledger with that
+line finished, so the runtime arriving is the ledger growing by a line rather
+than a screen being replaced. The mode's name and sentence stay in the markup
+for a reader, out of sight; the two links are the same two the cover offers
+bottom right (`hud/BootNav.tsx`), so the hand-off moves nothing a pointer was
+heading for. Bottom right and not bottom left, for the reason the ledger
+moved: the flight strip lands in the left corner at first light.
+
+**A server-rendered `motion` entrance is an inline `opacity: 0` nothing
+lifts.** The ledger's rows enter from above, and the admission's one row
+rendered with that entrance baked into its style attribute — invisible until
+hydration, which without JavaScript is never, so the no-script page had a
+wordmark, a rule and an empty column. `initial` is read once at mount, so
+`BootLedger` gates it on `useHydrated()`: the line the document arrives with
+is still, and every line the runtime appends streams in. The front door's
+poster has the same guard for the same reason.
+
+**The cover sits at `z-35`, below the dialog band.** At `z-50` it was above
+the overlay routes at `z-40`, and the dialogs are reachable from the first
+frame — `?` and the settings key are bound in every mode — so a sheet opened
+during boot rendered fully live under opaque black and took every click the
+cover did not. Thirty-five is above the cinema band and the notice at 30 and
+below the dialogs at 40; `PageShell` is the later sibling and wins a tie, so
+the gap is load-bearing. Verified by computed style under the driver, since
+Tailwind 4 emits any bare `z-<number>`.
+
+**A mode's chunk loads on hover and after first light, and the route renders
+nothing while it does.** `preloadMode` was called from an effect on the mode
+that had already been navigated to, so the first entry into any scene mode
+after boot flashed the admission — a black cover cut into a running scene —
+for the length of the fetch, and the planetarium's stance arrived a beat after
+the menu's had been released, which is a beat of the ship's camera between two
+pictures that are not it. `ModeLink` warms the chunk on pointer-enter and
+focus; `App` warms all three once the cover is off, so the fetches never
+compete with the census; and the `Suspense` fallback with a runtime present is
+`null`, because the scene behind the route, or the cover over it, is the right
+picture for that beat. Navigating from the front door to the planetarium
+mid-boot was already continuous — the canvas lives outside every route — and
+now reads as one ledger from the hop: at 0.25 s after the click the cover
+shows `loading the runtime ✓ / waking the renderer ✓ / warming surface maps
+14/71`, and the cover's Home link back lands on the poster with the same
+count in its footer.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
