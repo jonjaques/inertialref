@@ -79,12 +79,16 @@ observers belong to their device so a late error from a retired renderer cannot
 stop its replacement.
 
 A tab-scoped session-storage marker is set before the runtime import and
-cleared on an orderly `pagehide`. If a replacement document finds that marker,
-it leaves graphics stopped until an explicit retry. This bounds browser
-crash/reload loops without persisting a hardware ban. A browser that discards
+cleared on an orderly `pagehide`. It counts consecutive unclean ends: a
+replacement document that finds it takes one strike, and the second strike
+in a row leaves graphics stopped until an explicit retry. A session that has
+run for a minute resets the count, because a document that drew for that long
+and then vanished was discarded, slept or killed rather than crashed on boot.
+This bounds browser crash/reload loops without persisting a hardware ban and
+without refusing the routine reload of a hung tab. A browser that discards
 session storage during a crash cannot provide this evidence; storage denial
-does not itself reject graphics. The marker records an interrupted session,
-not proof of its cause.
+does not itself reject graphics. The marker records interrupted sessions,
+not proof of their cause.
 
 `site.ts` supplies route metadata. `documentHead.ts` renders the shared head,
 including the route's canonical address and social tags. Unknown paths return 404. The Worker continues to serve pre-rendered assets without an invocation;

@@ -556,12 +556,17 @@ async function clearStorage(send) {
   await send('Network.clearBrowserCookies')
   for (const origin of new Set([current, new URL(URL_).origin])) {
     if (origin === 'null') continue
+    // Session storage too: Chrome restores it with the tab after `--down`,
+    // and the app keeps its graphics-session strikes there. A rig whose every
+    // launch is a session that ended without `pagehide` would otherwise be
+    // refused the renderer on its second launch, with nothing on this side
+    // saying why. See `apps/game/src/graphicsSession.ts`.
     await send('Storage.clearDataForOrigin', {
       origin,
-      storageTypes: 'local_storage',
+      storageTypes: 'local_storage,session_storage',
     })
   }
-  note('cleared local storage and cookies')
+  note('cleared local, session storage and cookies')
 }
 
 const READY = DOCUMENT
