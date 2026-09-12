@@ -16,9 +16,8 @@ import { integratedSkyGain, sensorRadiance } from './radiance.ts'
  * So the trace carries the sensor's own inverse — `integratedSkyGain`, the
  * gain the naked-eye star sprites already present through — and comes out of
  * the response at the color written here at every exposure the lens can
- * reach. It still draws inside the scene pass, depth-tested against the
- * bodies and blended over the sky, which a pass after the response could
- * not be.
+ * reach. It draws inside the scene pass, clipped against the bodies in physical
+ * coordinates and blended over the sky.
  *
  * The sensor's instrument mask excludes covered pixels from metering.
  */
@@ -36,5 +35,8 @@ export function createOrbitTraceMaterial(): LineBasicNodeMaterial {
   // overlap; a low-alpha normal blend keeps ten traces readable as ten.
   line.opacity = 0.32
   line.depthWrite = false
+  // Visibility is clipped in physical coordinates. Body-dependent compression
+  // can reverse the depth ordering of a moon trace and its planet.
+  line.depthTest = false
   return line
 }
