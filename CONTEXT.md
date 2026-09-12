@@ -9459,6 +9459,28 @@ boot. The driver clears session storage along with local storage on every
 boot, so the rig's strikes never accumulate. ADR-0039's paragraph on the
 marker describes the count.
 
+## The cutscene overlay's transport is gone, and a stop is visible in the same task (11 Sep 2026)
+
+Leaving the player by the IR menu's mark — or the end card's Menu — showed
+the cutscene overlay's debug transport for a frame, then a black beat, then
+the front door. `hud/CutsceneTransport.tsx` is deleted: the cinema player is
+the one transport, with a timecode and a shareable link, and the overlay's
+was two playheads to disagree with, drawn behind the debug overlay for a scene
+started from another mode. `ir.pause()`, `ir.seekCutscene()` and Escape are
+the verbs outside the player.
+
+The beat had two causes, both about a stop that nothing could see yet.
+`PageShell` hides the mode band while the store says a scene is running and
+the mode is not the cinema, so the navigation's own commit unmounts the
+player and mounts nothing; the store learns the scene has stopped at the
+sampler's next tick, up to 125 ms later. Republishing from the player's exit
+was not enough on its own — sampled per frame, three frames of nothing
+remained — because `engine.cinematic` is written once a frame by `#step` and
+a sample taken in the stopping task still read the running scene. The
+engine's cutscene port now clears the field as it stops, and the player's
+unmount cleanup calls `sampleOnce` after `session.stop()`. Twenty frames
+sampled after the click: the front door is up on the first.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
