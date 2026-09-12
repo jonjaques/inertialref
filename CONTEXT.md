@@ -7285,7 +7285,7 @@ change that already happened, and it has to be spent by hand.
 
 ## The sensor owns the frame, and the picture that was one transfer too dark (4 Sep 2026)
 
-Phase 0 of [the sensor plan](design/plans/the-sensor.md) is on the default
+Phase 0 of the sensor chain is on the default
 path: `render/sensor.ts` draws every frame through one `PostProcessing` around
 the scene pass and the house curve, `scene/Sensor.tsx` takes the frame from R3F
 at priority 1, the renderer is built at zero samples with MSAA on the pass, and
@@ -7715,7 +7715,7 @@ exit alone is not evidence that an inspection batch executed.
 
 ## The naked-eye sky is a second catalog file (5 Sep 2026)
 
-M1 of `design/plans/the-galaxy.md`. The star field is a survey of the cells
+M1 of the galaxy sequence. The star field is a survey of the cells
 around the player — a 100 ly cube — and the constellations are not in it:
 Betelgeuse is 500 ly out, Rigel 860, Deneb 1,400. `data/catalog/stars-sky.irsc`
 is every HYG v4.4 source beyond 150 ly at apparent V ≤ 6.5: 7,515 systems from
@@ -7953,8 +7953,8 @@ Three.js Clock deprecation.
 ## Earth can leave the picture without moving the world (05 Sep 2026)
 
 M4 is open in [PR #66](https://github.com/jonjaques/inertialref/pull/66) on
-`codex/galaxy-earth-to-the-disk`, targeting M3's branch at `d980228`. The [execution plan](design/plans/galaxy-m4-earth-to-the-disk.md)
-records scope and verification; [ADR-0032](docs/adr/0032-the-stellar-field.md)
+`codex/galaxy-earth-to-the-disk`, targeting M3's branch at `d980228`.
+[ADR-0032](docs/adr/0032-the-stellar-field.md)
 records the camera and sensor contracts. The route's target, 30 kpc above the
 center, is about 101,400 ly from Earth: a literal 100,000 ly ceiling clips it.
 The ordinary observatory's ceiling is therefore 110,000 ly. The field stays
@@ -8121,8 +8121,7 @@ and target dimensions must accompany any subsequent measurement.
 At the user's request, feature work ends here and performance goes to a fresh
 agent. The reduced-resolution capture had no timing batches, a 45-second
 outer limit, and automatic Chrome shutdown. The test Chrome on port 9335 and
-preview server on 4173 are stopped. The
-[handoff](design/plans/galaxy-performance-handoff.md) distinguishes valid
+preview server on 4173 are stopped. The handoff distinguishes valid
 arithmetic/capture evidence from invalid timing, records the workload and
 numerical limitations, and leaves the performance design open.
 
@@ -8437,7 +8436,7 @@ why Natural's preserved daylight response is insufficient. The M4 exposure
 comparison remains useful physical evidence, but its clipped Earth is not the
 default image target. Display gamut and HDR output are separate choices.
 
-[The camera plan](design/plans/the-camera.md) owns the change, including
+The camera sequence owns the change, including
 radiance precision, preference and preset migration, and matched image gates.
 Galaxy M6 retains physical calibration independently; M7's visible cached sky
 is required before the production default changes. The galaxy plan drops its
@@ -8519,7 +8518,7 @@ promise its historical appearance. Ordinary galaxy travel no longer writes
 an instrument lens into the preference. The new mode controls and these
 compatibility decisions are described in
 [ADR-0037](docs/adr/0037-the-enhanced-camera.md); the remaining image gate stays
-in [the camera plan](design/plans/the-camera.md).
+with the camera sequence.
 
 The existing drag-to-land browser fixture initially failed its strict
 longitude comparison because the preset camera was still easing. The ground
@@ -8534,7 +8533,8 @@ radians. Product input handling did not change.
 
 The M7–M11 completion branch is stacked on PR #72 at `2847688`, by Jon's
 explicit choice. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
-records the architecture; [the galaxy plan](design/plans/the-galaxy.md) carries
+records the architecture, and
+[the performance plan](design/plans/perf.md#the-galaxy) carries
 the final evidence and quality budgets. The source model is now active
 `galaxy@5` / `galaxy-field@5`, with GPU port `galaxy-tsl@8`. Old `P` addresses
 still use the exact legacy generator. New `Q` addresses carry level, cell and
@@ -8638,8 +8638,10 @@ canonical hash `98b5b2be`, mode and lens. Outward averages 59.7 fps with a
 18.0 ms frame-interval p95; return averages 52.8 fps with 32.5 ms p95 and a
 150 ms maximum. Both complete the same 36-second presentation journey. The
 return has visible performance headroom to recover; the held 2.765 ms returned
-orbit does not cancel those spikes. [The evidence](design/plans/the-galaxy.md#assembled-image-and-motion-record)
-links the public images and both recordings.
+orbit does not cancel those spikes. The public images and both recordings are
+attached to PR #73, and
+[the performance plan](design/plans/perf.md#the-assembled-journey-and-where-the-return-spends-its-frames)
+keeps the interval counts.
 
 Two limits are source findings. At the reviewed Earth-band pose, unfiltered
 versus 512-filtered radiance differs by at most 0.38% across two 81-ray patches;
@@ -8670,10 +8672,10 @@ a shader or driver fix. All owned GPU processes have exited.
 ## The camera keeps the light through a change of origin (07 Sep 2026)
 
 The camera completion branch starts at PR #73's `9e26512`, with the physical
-field and its 960-pixel live-history cap intact. The
-[camera completion record](design/plans/the-camera.md#camera-completion-record)
-owns the matched images and complete-frame measurements; the sensor index
-points to the same C1–C5 sequence. Iris sampling, diffraction, spectral
+field and its 960-pixel live-history cap intact.
+[ADR-0037](docs/adr/0037-the-enhanced-camera.md) owns the three modes, and
+[the performance plan](design/plans/perf.md#the-camera) keeps the complete-frame
+measurements. Iris sampling, diffraction, spectral
 attachments, export, tether controls and headroom discovery remain separate
 follow-ups.
 
@@ -9638,6 +9640,45 @@ two seconds later, rebuilding at eight patches a frame under the End of Scene
 card. `play` takes `hold`; the cinema session uses it and the director parks
 the last frame with the clock paused. A measurement's `ir.play` keeps the
 frame-null ending every rig depends on.
+
+## The plans lose what landed, and three of them were quoting a tree that had moved (12 Sep 2026)
+
+`design/plans/` held nineteen plans, five of which were finished. The sensor,
+camera and galaxy plans were two thousand lines of completion record between
+them. They are deleted: unbuilt follow-ups to `docs/roadmap.md`, measured
+figures to `perf.md` or the owning ADR, and nothing to a plan page, which is
+what `documents.md` has always said.
+
+The check that made the deletion safe is worth keeping. Before a page went,
+every figure on it was swept against `CONTEXT.md`, `perf.md` and
+ADR-0032/0037/0038. Most were already duplicated; a dozen were not, and moved.
+ADR-0032 gained the five rejected representations — the panorama, the point
+cloud, the 134 MB 3D texture and its 17 MB slab fallback, density-wave
+particles, baking only the smooth sky — because that prose is the argument for
+the field rather than a record of building it, and it had no ADR.
+
+**`pnpm docs:build` does not validate relative links from `docs/` into
+`design/`.** A dead link to a nonexistent `design/plans/` file was added to
+`docs/roadmap.md` on a scratchpad copy and the build reported success.
+`documents.md` says the build "refuses rather than guessing", which is true of a
+file no wing lists and false of a cross-tree link. After moving or deleting
+anything under `design/`, sweep with `rg` for the old path; a green build is not
+the proof it looks like.
+
+Two figures the plans carried were wrong in ways that mattered. `test-speed.md`
+described a configuration that does not exist — the root config excludes
+`**/*.slow.test.ts`, so "with the descent running, `pnpm test` is 102.9 s"
+measures a run nobody makes — and it named `gameEngine.test.ts` where the
+descent is `gameEngine.descent.slow.test.ts`. At `91ca32f` the root suite is
+16.8 s at 796% CPU over 203 files and 2,312 tests; `pnpm test:slow` is 108.6 s,
+of which the descent file alone is 108.3 s at 100% CPU. And its proposed
+heightfield cache keyed on `(version, surface seed, region, resolution,
+border)`, which omits `seabed`: the same region has two correct answers and the
+wrong one hands a landing the trench under its sea. The task is at version 6
+for that reason.
+
+The spelling burn-down moved the wrong way while nobody was reading it: 315
+declarations in 86 files with 1,997 references is 456 in 117 with 3,409.
 
 ## Known gaps
 

@@ -210,13 +210,15 @@ pose, photographic time and lens; historical image equality is not promised.
 [ADR-0033](0033-presets-hold-a-photographic-instant.md) owns that portable format.
 
 Numerical tests establish exposure arithmetic, strict migration, histogram
-behavior, physical continuity and surface-light separation. The
-[camera completion record](../../design/plans/the-camera.md#camera-completion-record)
-combines inspected mode triplets with transition recordings, backend lifecycle
-checks and complete-frame costs. It distinguishes image acceptance from
-instrumented timing and preserves occasional long-frame limits. The source's
-smooth dust morphology remains an approximation; a camera response cannot
-recover missing structure. The
-[assembled galaxy record](../../design/plans/the-galaxy.md#assembled-image-and-motion-record)
-retains the historical measurements. [ADR-0038](0038-the-stars-and-the-diffuse-sky.md)
-owns the resolved-star and diffuse-sky implementation.
+behavior, physical continuity and surface-light separation. Image acceptance is
+a separate question from instrumented timing, and both are recorded rather than
+asserted: sixteen matched mode triplets, two transition recordings and four
+descent casts are inspected in [`CONTEXT.md`](../../CONTEXT.md), and the
+complete-frame operating points, the two journeys and the optical costs are in
+[the performance plan](../../design/plans/perf.md#the-camera). Enhanced draws
+the sky in ordinary gameplay, so those are whole-frame figures at named points
+and not a claim of sustained 60 fps — dense ground at a native Retina buffer
+runs around 30–34 fps. The source's smooth dust morphology remains an
+approximation; a camera response cannot recover missing structure.
+[ADR-0038](0038-the-stars-and-the-diffuse-sky.md) owns the resolved-star and
+diffuse-sky implementation.

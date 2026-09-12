@@ -3,8 +3,8 @@
 Camera alignment: authored cinematic exposures remain explicit staging under
 [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md). This plan's reference
 matching does not constrain ordinary Enhanced gameplay to Natural's image.
-Camera C4 verifies exposure override/release and rechecks the authored shots;
-it does not redesign their framing or bypass the existing director.
+A script retains its declared staging and releases it on exit; the mode
+controls do not redesign the authored framing or bypass the existing director.
 
 `tng-intro` (`packages/devtools/src/cutscenes/tngIntro.ts`) is a shot-for-shot
 study of the 1987 television title sequence, staged in the real Solar System.
@@ -130,11 +130,51 @@ it is at optical infinity.
 
 ---
 
-## 3. What a fresh capture says
+## 3. What the last full capture says
 
 `capture_render.mjs` over the whole piece, then `compare_render.py`, against the
 committed `analysis/render-diff.csv` baseline. Mean absolute per-frame error;
 the arrow is baseline → now.
+
+**The "now" column is `b50a1f2`, 6 September 2026, and the camera has moved
+under it.** Three pull requests land on 8 September: #72 reveals faint sky
+beside bright worlds, #73 holds resolved stars and the diffuse sky continuous
+across scales, and #74 carries the camera's light from orbit to the ground. #72
+and #74 each rewrite all fourteen committed preset renders — several to twice
+their file size at the same JPEG quality — so the luminance a given scene puts
+on the sensor is not the luminance this table scored, and #74 adds
+`apps/game/src/render/cameraSensor.gpu.test.ts` to hold the response it changed.
+
+`exposure` is mean luminance, so that column is stale by construction. `dw` is
+stale wherever a band's score rides on lit mass rather than silhouette, which §1
+says is the whole cruise: the subject channel scores the largest _lit_ mass, and
+the three pull requests change what is lit. `dcx` and `dcy` are choreography and
+move only where a centroid follows brightness. Read every figure below as a
+statement about `b50a1f2`, not about the current tree.
+
+**The next step is a re-capture**, before any band here is worked on:
+
+```bash
+pnpm dev                    # in the checkout of the revision under test
+cd ~/Developer/tng-inertial
+node scripts/capture_render.mjs --out .data/render --from 0 --to 2741 \
+  --url http://localhost:5173 --port 9222
+uv run scripts/compare_render.py .data/render --out /tmp/render-diff.csv
+```
+
+2742 frames. The 345-frame shot in
+[the cinematics guide](../../docs/guides/cinematics.md) costs about 45 s, so the
+whole piece is roughly six minutes of capture plus the compare pass. Three
+conditions decide whether the result is worth writing down. The GPU must be
+quiet — all four channels are image statistics, `capture_render.mjs` allows a
+fixed 45 ms of settle per frame and 1400 ms at each of its ten shot boundaries,
+and a frame captured before its textures stream reads as a body the render never
+drew, landing in `exposure` and `dw` as a choreography error. Both flags above
+are the defaults and both are worth writing out, because a worktree serves on
+its own port and `:5173` is whichever checkout claimed it first, and because
+`--port` keys the Chrome profile directory — two agents capturing at once need
+two of them. Never write the result to `analysis/render-diff.csv`: that file is
+the committed baseline the whole comparison is against.
 
 | band          | \|dcx\|       | \|dcy\|       | \|dw\|            | exposure    |
 | ------------- | ------------- | ------------- | ----------------- | ----------- |
@@ -164,6 +204,10 @@ exits **f1316–1322 / f1442–1449 / f1563–1570** (0.08).
 
 ### The three things the eyes found, in order
 
+Ranked from the same `b50a1f2` capture, so the first of them is the one the
+re-capture is most likely to rewrite: it is a claim about how the hull is lit,
+and #72 and #74 are changes to how everything is lit.
+
 1. **The hull is too dark, and it is not a staging problem.** Through the whole
    cruise the reference's ship carries bright red Bussards, a blazing blue
    deflector and lit window rows; ours is a grey disc. That is what
@@ -192,8 +236,10 @@ exits **f1316–1322 / f1442–1449 / f1563–1570** (0.08).
 
 ## 4. Acceptance criteria not yet met
 
-From `compare_render.py` on a full fresh capture. "Mean" is mean absolute
-per-frame error against the reference; signed where stated.
+From `compare_render.py` on a full capture. "Mean" is mean absolute per-frame
+error against the reference; signed where stated. **Which of these are unmet is
+a judgment against the `b50a1f2` table in §3**, so the first thing the
+re-capture settles is how many of them are still open at all.
 
 - **Choreography bands**: cruise close and descent-late signed dw within ±0.06;
   bank-away signed dcy within ±0.04; every band's mean |dcx| and |dcy| ≤ 0.03.

@@ -4,11 +4,10 @@ Status: accepted · 4 Sep 2026
 
 ## Context
 
-[Art](../design/art.md) says the canopy is a sensor, and
-[the sensor plan](../../design/plans/the-sensor.md) hangs everything a camera
-does to light — exposure, glare, defocus, the shutter, the response — off one
-chain that reads the scene's radiance before the curve sees it. Phase 0 is the
-spine of that chain and nothing else: a `RenderPipeline` around
+[Art](../design/art.md) says the canopy is a sensor, so everything a camera
+does to light — exposure, glare, defocus, the shutter, the response — hangs off
+one chain that reads the scene's radiance before the curve sees it. Phase 0 is
+the spine of that chain and nothing else: a `RenderPipeline` around
 `pass(scene, camera)` and the house tone curve, driven from a priority-1
 `useFrame` that takes the draw away from React Three Fiber. Its gate is that
 it changes nothing a viewer can see — a plate through the chain equal to the

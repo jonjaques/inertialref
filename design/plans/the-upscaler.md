@@ -1,14 +1,16 @@
 # The upscaler: the sensor draws small and reconstructs the display
 
-Status: separate, deferred performance proposal. Camera C1–C5 and galaxy M7
-establish a useful Enhanced image and visible-sky cost first. Whole-scene
-reconstruction is not required for the three camera modes. Revalidate the
+Status: separate, deferred performance proposal. The three camera modes and the
+progressive sky cache already give a useful Enhanced image at a measured cost
+([ADR-0037](../../docs/adr/0037-the-enhanced-camera.md),
+[ADR-0038](../../docs/adr/0038-the-stars-and-the-diffuse-sky.md)), so whole-scene
+reconstruction is not required for any of them. Revalidate the
 library integration and depth assumptions against the implementation tip before
 starting this work.
 
-[The sensor](the-sensor.md) owns the frame: one `RenderPipeline` around one
-scene pass and the house curve, and everything a camera does to light hangs
-off it. This page is the plan for the one thing that makes the scene pass
+[ADR-0029](../../docs/adr/0029-the-sensor-spine.md) owns the frame: one
+`RenderPipeline` around one scene pass and the house curve, and everything a
+camera does to light hangs off it. This page is the plan for the one thing that makes the scene pass
 cheaper rather than the picture richer — rendering the scene at a fraction of
 the display and reconstructing the display from it with
 [`@pmndrs/upscaler`](https://github.com/pmndrs/upscaler), AMD's FidelityFX
@@ -20,7 +22,7 @@ the sensor conditions, and guides whose reuse by the implemented motion pass
 requires a measured compatibility check.
 
 What this page is not: the sensor's exposure, glare and response are
-[the sensor](the-sensor.md); the ground's own detail levers are
+[ADR-0031](../../docs/adr/0031-the-sensor-response.md); the ground's own detail levers are
 [terrain](terrain.md); and the depth buffer this needs is a change the render
 coordinates record has been naming as complementary since
 [ADR-0003](../../docs/adr/0003-render-coordinates.md).
@@ -592,7 +594,9 @@ tables from § 6 as measurements.
 
 ## Not in this plan, deliberately
 
-- The exposure meter, the glare, the response: [the sensor](the-sensor.md).
+- The exposure meter, the glare, the response:
+  [ADR-0031](../../docs/adr/0031-the-sensor-response.md) and
+  [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md).
 - The ground's detail levers and the patch budget: [terrain](terrain.md);
   the one lever this plan names is § 6's and it is declined as a default.
 - Frame generation, dynamic resolution, a WebGL upscaler: § 7.
@@ -633,8 +637,9 @@ pnpm vitest run --config apps/game/vitest.gpu.config.ts upscale.gpu
 - [ADR-0015](../../docs/adr/0015-terrain-level-of-detail.md),
   [ADR-0017](../../docs/adr/0017-the-lens.md) — why selection and the pixel
   angle stay display-referred
-- [the sensor](the-sensor.md) — the exposure this couples to and the
-  implemented motion pass whose guide reuse needs verification
+- [ADR-0031](../../docs/adr/0031-the-sensor-response.md) — the exposure this
+  couples to and the implemented motion pass whose guide reuse needs
+  verification
 - [perf](perf.md) — the frame this is measured against
 - [art](../../docs/design/art.md#also-required) — the row that has been
   asking for reversed-Z

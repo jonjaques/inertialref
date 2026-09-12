@@ -23,8 +23,9 @@ does deleting the module concentrate complexity, or just move it — is what
 separates a candidate from a wrapper.
 
 This page is the remainder: three deepenings still worth making, each with the
-shape it should take, five smaller items, what the landed six deliberately
-left, and what is settled.
+shape it should take and the gate that closes it, five smaller items placed
+against them, the order the four phases are worth taking, what the landed six
+deliberately left, and what is settled.
 
 ---
 
@@ -58,9 +59,20 @@ what a bookmark that writes angular velocity and switches assist off does to
 the epoch — is answered in the module's header: every bookmark is a
 `teleport`, and `teleport` drops the epoch by construction (ADR-0025).
 
-**What tests hold it.** The "going places" tests move onto the returned record;
-`goToSystem`, `burnToward` and `face` get their own; the placement geometry in
-`shots.ts` keeps its property tests.
+**Gate.** No case in `devtools.test.ts` reads
+`session.world.entities.require(player).state.orientation` or recomputes a dot
+or a phase from `frames.pose`; every "going places" assertion is on
+`ManeuverResult` or on `ir.status().player.heading` / `.phase`, and "arrives
+looking at it" is `dot(player.heading, normalize(negate(player.local))) ≈ 1`.
+`goToSystem`, `burnToward` and `face` go from zero cases to their own — the
+test rewrite is the deliverable, not a follow-up. `shots.ts` keeps its
+placement property tests unchanged and green. `ir.land(...).player.landed` and
+`ir.shot`'s lens-carrying status still answer, because
+[`docs/guides/harness.md`](../../docs/guides/harness.md) documents them and the
+photo-mode metadata seam reads them. `pnpm graph` reports no cycle: the
+harness→maneuvers edge is the only runtime one, the return edge being a
+type-only import. With the `Degrees` brand below, a `Radians` value cannot
+reach `ir.land` — `pnpm typecheck` is the whole check.
 
 **Decisions from the reading pass** — resolved against the code, not yet
 written:
@@ -138,10 +150,14 @@ scene takes the eye the arms resolved, with the entity optional, so the
 no-player frame draws. Zero-caller members go: `loadedSystemIds()`, and
 `player()` / `pool()` as public methods the session already answers.
 
-**What tests hold it.** `gameEngine.test.ts` gains a playerless observatory
-frame that produces a scene; the survey and the cache get unit tests over a
-fake pool and a fake world generation, which they cannot have as private
-methods of a 1,500-line class.
+**Gate.** `gameEngine.test.ts` gains a playerless observatory frame that
+produces a scene; the survey and the cache get unit tests over a fake pool and
+a fake world generation, which they cannot have as private methods of a
+1,500-line class. The counter is held by a test that replaces the world and
+asserts every derived cache is cold — all eleven the hand-kept list names,
+counted, so the count is the gate — and by the jump of four light years the
+build log records the starfield surviving. `loadedSystemIds()`, `player()` and
+`pool()` are gone and `pnpm knip` reports no unused export in their place.
 
 ---
 
@@ -169,42 +185,121 @@ side. The frame closure applies the records, comparing before it writes. The
 eviction and the requeue-at-cap move into a small `scene/visualSet.ts` with
 its own test.
 
-**What tests hold it.** `bodyUniforms.test.ts` in Node: a figured body yields
-shells with no flattening; a mapped body's tuning; the star as a body.
-`visualSet.test.ts`: the cap, the requeue. The GPU suite keeps compiling the
-materials.
+**Gate.** `bodyUniforms.test.ts` in Node: a figured body yields shells with no
+flattening; a mapped body's tuning; the star as a body. `visualSet.test.ts`:
+the cap at `MAX_BODIES`, the requeue-at-cap, and the census `finish()` — the
+three "must not come back" items, reachable from Node for the first time, which
+is the whole point of the split. `pnpm test:gpu` keeps compiling the materials.
+The frame is unchanged: a plate either side at a figured body and at a mapped
+one, and a third with the star in frame, since the mapping is what draws.
 
 ---
 
 ## Smaller, each a line
+
+Four of the five sit in a file one of the three candidates already opens, so
+each is placed against the phase that opens it rather than given one of its
+own. The phase each rides in is named at the end of its line.
 
 - **The command table has two adapters the interface does not name.**
   `App.tsx` says every command exists exactly once; `TimePanel.tsx`
   re-implements pause, warp and real-time against `engine.world.clock`
   without the flash notice. `TimePanel` takes `commands: HudCommands` through
   the planetarium context, and a test holds `clock.setTimeScale` to one
-  writer in `apps/game/src` the way the `localStorage` rule is held.
+  writer in `apps/game/src` the way the `localStorage` rule is held. That test
+  is the gate, and it is the same shape as the generation counter's: one fact,
+  one writer, named once. **Phase 4.**
 - **The director is reached through three seams of the same eight verbs.**
   Eight harness forwards, eight `CutsceneHost` closures, and the playhead's
   `mine` guard defending against the console it sits on; the script registry
   is `[TNG_INTRO]` in the harness constructor. Expose the director as
   `ir.cutscene` the way `ir.observatory` is exposed, let `CutsceneHost` take
   it, and make the scripts a session option. ADR-0010 supports the director
-  itself.
+  itself. Gate: a cutscene test drives a fake script through a session option,
+  which it cannot do while the registry is a constructor literal; `tngIntro`
+  still plays to the same beats. **Phase 2.**
 - **The driver holds two app facts as strings the harness could answer.**
   Readiness is `window.engine.gl` and the boot cover is the selector
   `.hud-bleed.z-50.bg-black`; a rename costs twelve silent seconds a cold
   boot. `ir.status()` grows a `booted` answer from the presentation host,
-  which has `firstLight`'s phase, and the driver reads that.
+  which has `firstLight`'s phase, and the driver reads that. Gate: neither
+  string appears in [`scripts/drive.mjs`](../../scripts/drive.mjs), and a cold
+  `--status` boot reports ready at the wall-clock it reports today.
+  **Phase 2.**
 - **Radians at `ir.land` and `ir.observatory.*`, degrees everywhere else.**
   One console object, two conventions, and `Radians` a bare number — the
   2,578° defect. A branded `Degrees` at the harness seam; `ir.land` takes
   what every other verb takes; `simulateDescent` takes what `ir.sites`
-  prints.
+  prints. `ir.land` is one of the verbs moving into `maneuvers.ts`, so the
+  brand lands on the same signature the move rewrites. **Phase 1.**
 - **Six scene consumers re-derive "whose frame is this" from
   `engine.cinematic === null`.** A `frameOwner` the engine resolves once per
   frame in `#step` — cutscene, observatory, ship — and the consumers switch
-  on it. ADR-0010 chose the null check; this names the same fact once.
+  on it. ADR-0010 chose the null check; this names the same fact once. Gate:
+  `cinematic === null` appears only inside `GameEngine.ts`. **Phase 4** — with
+  the caveat that one of the six consumers is `scene/Bodies.tsx`, which phase 3
+  rewrites; see the order below.
+
+---
+
+## Phases
+
+Each phase lands green on its own and ends with the gate stated in the section
+it comes from. Nothing here is a rewrite in flight: every phase is a module
+lifted out behind an interface the callers already use, so the tree compiles
+between any two of them.
+
+| Phase | Lands                                                                                                                                                                           | Done when                                                                                                                                                                                                                                       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | § 1 — `packages/devtools/src/maneuvers.ts`, `ManeuverResult`, `headingOf` and `orbitalPhase` on `EntityInspection`, the harness verbs as two-line forwards; the `Degrees` brand | § 1's gate: no going-places case reads the world; `goToSystem`, `burnToward` and `face` go from zero cases to their own; `shots.ts` property tests unchanged; `pnpm graph` reports no cycle; `pnpm typecheck` holds the brand                   |
+| 2     | `ir.cutscene` as a sub-object, `CutsceneHost` taking it, the scripts as a session option; `ir.status().booted` from the presentation host, read by the driver                   | A cutscene test drives a fake script through a session option; `tngIntro` plays to the same beats; neither `window.engine.gl` nor `.hud-bleed.z-50.bg-black` appears in `scripts/drive.mjs`; a cold `--status` boot is no slower                |
+| 3     | § 3 — `apps/game/src/render/bodyUniforms.ts` and `scene/visualSet.ts`, the frame closure in `Bodies.tsx` reduced to applying records                                            | § 3's gate: `bodyUniforms.test.ts` and `visualSet.test.ts` in Node reach the cap, the requeue and the census `finish()`; `pnpm test:gpu` still compiles the materials; plates either side at a figured body, a mapped one, the star             |
+| 4     | § 2 — `engine/starSurvey.ts`, `engine/orbitTraces.ts`, one world generation, `buildScene` taking an eye; plus `frameOwner` and `TimePanel` through `HudCommands`                | § 2's gate: the playerless observatory frame produces a scene; the eleven caches are cold on a world replacement and the starfield does not survive four light years; `cinematic === null` is confined to `GameEngine.ts`; `pnpm knip` is clean |
+
+---
+
+## The order it is worth taking
+
+**All four are independent except 1 and 2, which are the same file.** Phase 1
+and phase 2 both rewrite `packages/devtools/src/harness.ts` and have to be
+taken in that order. Phases 3 and 4 share no file with them or with each other
+— `apps/game/src/render` and `scene/Bodies.tsx` against
+`apps/game/src/engine`, `scene/Starfield.tsx`, `scene/OrbitTraces.tsx` and
+`packages/rendering/src/scene.ts`. So there are three lanes, and they fan out
+across worktrees: `{1 then 2}`, `{3}`, `{4}`.
+
+The one seam between lanes is a single line. `frameOwner` reaches
+`scene/Bodies.tsx`, which phase 3 rewrites — a rebase conflict on one
+expression, not a design dependency. Whichever lands second takes it.
+
+1. **Phase 1 first.** It is the only phase whose deliverable includes tests
+   that do not exist: `goToSystem`, `burnToward` and `face` have no case at
+   all, and the module is what makes them assertable, because the interface
+   they are tested through is the one that cannot answer what they promise
+   today. Every headless verification in this repository crosses the harness,
+   so the interest compounds here and nowhere else.
+2. **Phase 2 after it, not beside it.** Same file, and it is cheap once the
+   largest block has already left: exposing a sub-object is the move phase 1
+   has just made for `Maneuvers`, and `ir.observatory` is the precedent both
+   follow.
+3. **Phase 3 is the smallest surface and can start immediately.** One pure
+   mapping, one small module, two new Node test files, and no interface anyone
+   outside `apps/game/src/scene` reads. It is also the only phase that makes a
+   "must not come back" item reachable from Node, which is the thing the
+   eviction, the requeue-at-cap and the census have been missing.
+4. **Phase 4 carries the risk, and the go/no-go is inside it.** The generation
+   counter has to cover all eleven caches the hand-kept list names; if one of
+   them keys on something the counter cannot see, the list stays and the two
+   extracted modules have nothing to key on, and the phase is the `buildScene`
+   change alone. It is also the phase that touches an interface another package
+   exports, so it is the one whose blast radius is not confined to `apps/game`.
+   Take it last, or take it first in its own worktree and find out early —
+   the argument for last is collision, and the argument for first is that it is
+   the only phase that can fail on its premise.
+
+Phase 4 is where the engine's half of a `Host.onWorldReplaced` subscription
+goes, per [What the landed six left](#what-the-landed-six-left-deliberately).
+That design is not in this plan; the counter is what it would be built on.
 
 ---
 

@@ -66,6 +66,7 @@ a production build. What follows is depth, not foundations.
 | Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field                                                                        |
 | Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                                                                                        |
 | Planetarium                         | ✅     | Free navigation, Navigator and predicate catalog search, body records, orbit traces, labels, portable photographs, held time and galaxy instruments — [design](design/planetarium.md) |
+| Camera and sensor                   | ✅     | Three modes over one chain — [ADR-0037](adr/0037-the-enhanced-camera.md); optics and export wait in [the camera beyond the three modes](#the-camera-beyond-the-three-modes)           |
 | Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)                                                                                      |
 | Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                                                                                                  |
 | Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                                                                                              |
@@ -90,7 +91,7 @@ change** — they are generators plus representations.
 | Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
 | Small-body figures       | ✅     | 92 of Sol's 129 bodies are not spheroids; 25 have published shape models and the rest are seeded — [ADR-0013](adr/0013-measured-figures.md)                                                                                     |
 | Diffuse galaxy and dust  | ✅     | Calibrated stellar populations, luminosity-level resolved stars and absorption share one field; ADR-0038                                                                                                                        |
-| Star clusters, nebulae   | ⬜     | Globular clusters, H II line emission and dust scattering remain separate additions; the existing diffuse galaxy does not implement them                                                                                        |
+| Star clusters, nebulae   | ⬜     | Globular clusters, H II line emission and dust scattering remain separate additions; the existing diffuse galaxy does not implement them — [the galaxy beyond the disk](#the-galaxy-beyond-the-disk)                            |
 | Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                                                                                                                                  |
 | Vegetation, flora, fauna | ⬜     | Region-seeded scatter on terrain — the `o:` address segment exists for this                                                                                                                                                     |
 | Structures, settlements  | ⬜     | First real consumer of [persistent mutations](#persistent-mutations)                                                                                                                                                            |
@@ -215,6 +216,56 @@ far half.
 | The mesh is built on the main thread      | 0.25 ms a patch, eight a frame — the queue, now that the heightfield is 10 ms for sixteen                                                           | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
 | Patch generation is over its budget       | 23.8 to 69.4 ms per bordered 65×65 patch across the zoo, against a documented ≤ 8 ms — and a landing now wants 700 to 1,077 of them                 | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
 | A coarse patch costs more than a fine one | Consecutive samples of a coarse patch land in different noise lattice cells                                                                         | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
+
+---
+
+## The galaxy beyond the disk
+
+The journey from Earth orbit to 30 kpc above the plane is built, and one
+calibrated field feeds the sky from inside, the volume from outside and the
+resolved star population, all transported through the same dust —
+[ADR-0032](adr/0032-the-stellar-field.md) and
+[ADR-0038](adr/0038-the-stars-and-the-diffuse-sky.md) own it. What the picture
+is missing is everything that is not a smooth population.
+
+| Gap                      | Consequence today                                                                                                                                                                                        | Seam                                                                                                                                                                                                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H II knots               | The arms are ridges of smooth young light. The pink clumps along them are in every photograph of a spiral and are the literature's primary arm tracer — Anderson et al. 2014 catalogs over 8,000 of them | Poisson-disc clumps seeded from the arm coordinate, on the young ridges within 40 pc of the plane, each a small Gaussian emitter at Hα's 656 nm with a shell of OB light. It is also the first thing in the game that emits a narrowband line                                         |
+| Globular clusters        | The halo is a smooth spheroidal profile with nothing in it a player can name, and Omega Centauri and 47 Tucanae are the two they would                                                                   | A catalog, not a generator: Harris 2010 lists 157 with positions, distances, half-light radii and magnitudes, and Vasiliev & Baumgardt 2021 give 162 Gaia distances. The ingest packs them like the star catalog; each draws as a sprite whose halo scales with its half-light radius |
+| The Clouds and Andromeda | The sky outside the Milky Way is empty. M31 at 770 kpc also lies outside the coordinate system's roughly 249,000 ly span, so it needs a far-field addressing decision before a parameter record helps    | The LMC at (280.46°, −32.89°) and 50 kpc, the SMC at (302.79°, −44.30°) and 62 kpc, M31 at (121.17°, −21.57°): each the same field with its own parameter record, drawn from outside at its real direction and size. One PR per neighbor                                              |
+| The horizon of knowledge | Catalog completeness is a declared magnitude-and-distance envelope, but the map does not draw it, so `observed` and `projected` look alike on screen                                                     | Derive the coverage surface from the completeness record itself; per-class coverage and observed/projected labeling. It is a map-interaction change more than a field one                                                                                                             |
+| Zodiacal light           | The Solar System's own dust does not exist, so the ecliptic has no glow seen from inside it                                                                                                              | A separate emitter with its own calibration and sampling plan, integrated at AU scale, reusing the sensor contract rather than the galactic kernel                                                                                                                                    |
+
+Three honest limits sit under all of it. **Central morphology is an
+approximation**: passing broad integrated V constraints does not establish a
+measured bulge/disk decomposition, and no camera response recovers structure the
+source does not contain. **Dust absorbs and does not scatter**, which is what
+separates the modeled lanes from a reference photograph's. And **deeper catalog
+completeness is an ingest and source review**, not something to infer from a
+histogram peak — the envelope is deliberately conservative where the data is.
+
+---
+
+## The camera beyond the three modes
+
+Enhanced, Automatic and Manual are implemented over one sensor chain
+([ADR-0037](adr/0037-the-enhanced-camera.md), [ADR-0029](adr/0029-the-sensor-spine.md)),
+and the optics they share are a lens, a histogram meter, a glare kernel and a
+defocus gather. Each row below is a separate piece of optics or workflow with
+its own evidence, and none of them gates the default image.
+
+| Gap                                | Consequence today                                                                                                              | Seam                                                                                                                                                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-glass iris sampling            | One iris shape serves the whole lens, so a particular glass cannot change the shape of the blur it makes                       | The glass records already exist; the check is blur shape plus the existing half-pixel defocus gate                                                                                                          |
+| FFT diffraction                    | Glare is a convolved kernel rather than a diffracted one, so an aperture's blade count never reaches the star                  | Iris sampling first, then kernel energy and orientation tests against a measured rebuild and convolution cost. The proposed 1 ms rebuild and 1.5 ms a frame at 1080p are unproven budgets, not measurements |
+| Spectral attachment and narrowband | Every channel is broadband, so there is no Hα, OIII or SII for a filter to pass                                                | Real line emission from the galaxy model — [H II knots](#the-galaxy-beyond-the-disk) is its supplier — with declared units, a channel mapping, and broadband equivalence when the filter is off             |
+| Photo export and the tether        | A photograph is a URL that restores a view; nothing writes a file, and nothing carries one to another device                   | Stable version 2 camera records; verify dimensions, color encoding, address and time metadata, and held-frame repeatability                                                                                 |
+| Display-headroom discovery         | Authored peak luminance is a setting because the browser exposes no measurement of the actual panel                            | A supported measurable signal. The authored peak limits and their fallback stay until one exists                                                                                                            |
+| Additional response styles         | The controls offer Enhanced's authored look and the shared neutral photographic look, plus imported Gentle and Crisp shoulders | Evidence that a further style adds a useful choice without changing mode, source lighting or metering. A curve that decides exposure is the thing ADR-0037 separated out                                    |
+
+[The upscaler](../design/plans/the-upscaler.md) is a separate performance
+proposal. Whole-scene temporal reconstruction, reversed-Z conversion and new
+reactive buffers are not prerequisites for any row here.
 
 ---
 

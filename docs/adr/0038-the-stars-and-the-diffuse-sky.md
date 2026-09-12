@@ -117,7 +117,11 @@ and external V luminosity; these are population-model means, not measured
 individual-star luminosity functions. The default-seed V residuals are
 +0.0765, +0.1785, −0.2800 and +0.0325 mag respectively, within the original
 0.3 mag limits. Local number density remains 0.1 star/pc³ and the reference
-cylinder contains 116.064 billion stars. The finer quadrature retains its
+cylinder contains 116.064 billion stars. Catalogue-plus-procedural counts in
+10, 25 and 50 pc balls around Sol are 389, 6,788 and 53,532, against field
+integrals of 418.924, 6,549.357 and 52,109.668 — −7.14%, +3.64% and +2.73%.
+Those are counts of one finite realization against the smooth integral it is
+drawn from, not a second calibration target. The finer quadrature retains its
 original convergence test.
 
 The young cohort contributes 15.31% of emergent ridge V at solar radius,
@@ -135,9 +139,10 @@ destinations continue to use their exact legacy generator.
 
 ### Physical cubes and temporal history
 
-Ordinary nearby views refine complete 32², 128² and 512² cubemaps. Two 32² tiles
-are submitted per frame; the boot census ends after the 128² tier, while the
-512² tier continues in the background. Each cube uses a conservative `2/N`
+Ordinary nearby views refine complete 32², 128² and 512² cubemaps. The three
+tiers hold 6, 96 and 1,536 tiles of 32×32 pixels; two are submitted per frame,
+so a complete refinement submits 1,638 of them. The boot census ends after the
+128² tier, while the 512² tier continues in the background. Each cube uses a conservative `2/N`
 radian angular texel footprint; the projection reaches that width at face
 centers. The archive fingerprint includes this filtering revision. Three
 target slots retain two completed
@@ -223,9 +228,9 @@ never both sets. These figures exclude the CPU slot lookup and scheduling maps. 
 quarter-resolution alternative at 1080p. These are declared allocations,
 excluding driver overhead and temporary JavaScript generation memory.
 
-The live 2 ms target is not a universal bound. The final performance record in
-[the galaxy plan](../../design/plans/the-galaxy.md) names the measured operating
-points and the chosen quality budget. Typical retained source replacement fits
+The live 2 ms target is not a universal bound.
+[The performance plan](../../design/plans/perf.md#the-galaxy) names the measured
+operating points and the chosen quality budget. Typical retained source replacement fits
 5 ms of main-thread preparation; cold entirely new populations and garbage
 collection can exceed it. GPU source updates and diffuse cache refinement are
 bounded separately from worker generation.

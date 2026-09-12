@@ -12,7 +12,7 @@ neutral response and do not use Direct channel clipping.
 
 ## Context
 
-[The sensor plan](../../design/plans/the-sensor.md) builds on
+This record builds on
 [ADR-0029](0029-the-sensor-spine.md): the scene already belongs to one chain,
 but exposure, focus and shutter have no effect on its output. A physically
 exposed sky and a luminance-only tone curve also change the production image:
