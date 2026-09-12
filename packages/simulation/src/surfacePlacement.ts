@@ -20,7 +20,7 @@ export type { SurfacePlacement }
 /**
  * Radius where a body-fixed ray meets this asset's horizontal support disk.
  *
- * The disk is metres across on a body thousands of kilometres across, so
+ * The disk is meters across on a body thousands of kilometers across, so
  * nearly every ray misses it, and the miss is decided before the terrain is
  * sampled. The ray's offset across the deck grows with the deck's radius, so a
  * deck no lower than the body's deepest ground rejects every ray the real one

@@ -12,7 +12,7 @@ import { isOverlayControl, isTyping } from '../hud/focus.ts'
 /*
  * The one window `keydown` listener, and everything it needs to decide.
  *
- * A plain object rather than a hook, because the thing being modelled outlives
+ * A plain object rather than a hook, because the thing being modeled outlives
  * every component that talks to it: a mode registers handlers on mount and
  * drops them on unmount, and the listener has to keep working across that
  * without being torn down and rebuilt — which on a touch device drops any

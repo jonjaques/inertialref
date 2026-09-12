@@ -344,7 +344,7 @@ describe('the derivations', () => {
     )
   })
 
-  it('recognises a lock in either direction of spin', () => {
+  it('recognizes a lock in either direction of spin', () => {
     const period = 27.3 * SECONDS_PER_DAY
     expect(
       tidallyLocked(

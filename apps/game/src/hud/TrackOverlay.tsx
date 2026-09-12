@@ -62,7 +62,7 @@ import {
  * flag is first turned on; see `referenceTrack.ts`.
  */
 
-/** Hull colours: the reference is warm, the render is cold, and never both. */
+/** Hull colors: the reference is warm, the render is cold, and never both. */
 const REFERENCE = '#fbbf24'
 const RENDER = '#38bdf8'
 const NOSE = '#6ee7b7'
@@ -330,7 +330,7 @@ export function TrackOverlay({ engine }: { engine: GameEngine }) {
       /*
        * The local half-frame difference, faint, under the smoothed chord.
        *
-       * Drawn rather than summarised away, because the gap between them is the
+       * Drawn rather than summarized away, because the gap between them is the
        * reading and neither one is the answer: where the two lie on top of each
        * other the hull is on a line and its heading is whatever they both say,
        * and where the faint one fans away from the dashed one the path is
@@ -448,7 +448,7 @@ export function TrackOverlay({ engine }: { engine: GameEngine }) {
           />
         </g>
       </svg>
-      {/* The corner readout, and the key to the four colours.
+      {/* The corner readout, and the key to the four colors.
           The words are structure and never change; only the numbers are
           written per frame, into the one span that holds them. */}
       <div

@@ -412,7 +412,7 @@ export function ridgedField(
      * carries it toward **−1**: the whole band slides off its own datum, which
      * is the bias measured at −0.644 for `damping: 1` and −0.890 at 6. Remapping
      * per octave, a damped octave contributes less of a quantity already
-     * centred on zero, so attenuation lands on the band's midpoint where it
+     * centered on zero, so attenuation lands on the band's midpoint where it
      * belongs.
      */
     value += a * (2 * r * r - 1)

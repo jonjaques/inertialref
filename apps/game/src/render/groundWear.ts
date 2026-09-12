@@ -261,7 +261,7 @@ export function wearGround(
  * sea.
  *
  * The grain origin is reduced here, in float64, from the *unrounded* anchor,
- * which is the whole trick and the reason it is not `anchor / GRAIN_METRES` in
+ * which is the whole trick and the reason it is not `anchor / GRAIN_METERS` in
  * the shader: that quotient is 2.5 × 10⁶ on Luna, where float32 resolves a
  * quarter of a wavelength; wrapped first it is under 64, where it resolves
  * four microns. A rock and the ground under it have to read the same field or

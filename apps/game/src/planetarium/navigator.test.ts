@@ -172,9 +172,9 @@ describe('orbital order', () => {
     /*
      * The bug the second argument exists for. Turning off "Asteroids" in Sol
      * left Dimorphos, Selam, Dactyl and six more sitting *above Mercury*: a
-     * moon of an asteroid orbits at a kilometre or two and the planets orbit at
+     * moon of an asteroid orbits at a kilometer or two and the planets orbit at
      * tenths of an AU, so promoting them to the top level put nine rocks nobody
-     * asked for at the head of the list, measured in kilometres in a column of
+     * asked for at the head of the list, measured in kilometers in a column of
      * AU.
      */
     const didymos = row({ address: 's:X/b:9', semiMajorAxis: 1.64 * AU })

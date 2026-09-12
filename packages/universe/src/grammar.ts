@@ -225,7 +225,7 @@ export interface SurfaceGrammar {
    * What stands as a liquid on this ground, if anything does. See `liquidKind`.
    *
    * On the grammar rather than derived at every reader because three of them
-   * disagree about what the answer is for: the sea's colour, whether the band
+   * disagree about what the answer is for: the sea's color, whether the band
    * stack carves valleys, and whether anything photosynthesises. Null on a
    * body whose ground is too hot or too cold for any of the three.
    */

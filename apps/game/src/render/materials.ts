@@ -324,7 +324,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const stretchGain = float(1)
       .div(max(flattening, float(1e-3)))
       .sub(1)
-    // Both relative to the center already, so `centre` drops out below.
+    // Both relative to the center already, so `center` drops out below.
     const eyeRelative = cameraPosition.sub(center)
     const eye = eyeRelative.add(
       axis.mul(dot(eyeRelative, axis).mul(stretchGain)),

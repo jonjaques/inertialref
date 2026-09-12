@@ -293,7 +293,7 @@ describe('search', () => {
     expect(searchDocs(INDEX, 'ock')).toEqual([])
   })
 
-  it('honours the limit', () => {
+  it('honors the limit', () => {
     expect(searchDocs(INDEX, 'frame', 2)).toHaveLength(2)
   })
 })

@@ -11,13 +11,13 @@ import { starColor } from './kinds.ts'
  * fact that one is twice as far as the other never lands. Drawn on a scale, it
  * lands immediately and costs 28 px.
  *
- * The dots are real stars at their real distances in their real colours —
- * `docs/design/art.md` puts a star's colour on the list of things this game may
+ * The dots are real stars at their real distances in their real colors —
+ * `docs/design/art.md` puts a star's color on the list of things this game may
  * not invent, so an M dwarf is the dim red one and looks it. Clicking a dot
  * flies the camera there, which makes this the fastest control in the mode for
  * the one gesture it is worth being fast at.
  *
- * The scale is `√r`, argued in `navigator.ts` § `neighbours`. The short version
+ * The scale is `√r`, argued in `navigator.ts` § `neighbors`. The short version
  * is that a survey's volume grows as r³, so linearly the whole neighborhood
  * piles into the left tenth of the rail.
  */

@@ -163,7 +163,7 @@ const MICRO_RELIEF = 0.25
  * across the zoo, and standing at two meters one of those cells is two hundred
  * display pixels across — so everything between a cell and a pixel is this
  * band's, and there was nothing there: the ground under the camera drew as a
- * smooth swell with `MICRO_METRES`'s seven-meter octave on it and no texture at
+ * smooth swell with `MICRO_METERS`'s seven-meter octave on it and no texture at
  * all.
  *
  * Seventy centimeters down to nine, at a slope of about fifteen degrees, which
@@ -210,10 +210,10 @@ export function createTerrainMaterial(): TerrainMaterial {
   const macroFrequency = uniform(1)
 
   /*
-   * One colour and one `(roughness, grain, bump)` triple per deposit.
+   * One color and one `(roughness, grain, bump)` triple per deposit.
    *
    * The three scalars ride in a vector so that laying one deposit over another
-   * is two `mix`es rather than five: whatever wins the colour has to win its
+   * is two `mix`es rather than five: whatever wins the color has to win its
    * roughness and its grain with it, and a slope that is half regolith and half
    * bedrock genuinely is half as smooth.
    */
@@ -241,11 +241,11 @@ export function createTerrainMaterial(): TerrainMaterial {
     new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
   )
   /*
-   * Whether the sea is a sheet over this ground or a colour painted on it.
+   * Whether the sea is a sheet over this ground or a color painted on it.
    *
    * One where `WaterPatches` draws the datum as a surface of its own, and the
    * ground under it is a seabed; zero where there is no sheet — a mapped body
-   * — and the flat clamped ground wears the water's colour.
+   * — and the flat clamped ground wears the water's color.
    */
   const seaSheet = uniform(0)
   const liquidGlow = uniform(new Color(0, 0, 0))
@@ -260,7 +260,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   const detailBands = uniform(groundBandsFor(DEFAULT_SURFACE_QUALITY.ground))
   /*
    * Bake mode: the graph answers "what does this ground reflect, and is it
-   * sea" instead of "what colour is this pixel". One graph rather than a
+   * sea" instead of "what color is this pixel". One graph rather than a
    * second material, so the sphere's picture of a body and the ground's are
    * the same deposits, the same tints and the same rivers by construction —
    * the one way the seam rule can hold for a bake without a second copy of
@@ -533,7 +533,7 @@ export function createTerrainMaterial(): TerrainMaterial {
         ),
       )
     })
-    // Meters-domain, so it stays sharp at arm's length. See `MICRO_METRES`.
+    // Meters-domain, so it stays sharp at arm's length. See `MICRO_METERS`.
     const micro = vec4(0).toVar()
     If(detailBands.greaterThan(1.5).and(microFade.greaterThan(0)), () => {
       const field = fbmFetch(
@@ -612,7 +612,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     const level = oneMinus(smoothstep(repose.mul(0.05), repose.mul(1), slope))
 
     /*
-     * Water is a different material, not a different colour — and it is decided
+     * Water is a different material, not a different color — and it is decided
      * *before* the deposits, because two of them are nonsense underneath it.
      *
      * `groundElevation` clamps the mesh **to** the sea datum, so an ocean is
@@ -623,7 +623,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * the shoreline shimmers, wider and it is a beach.
      *
      * **It runs upward from the datum, not across it, and that follows from the
-     * clamp.** No vertex is ever below the sea, so a band centred on the datum
+     * clamp.** No vertex is ever below the sea, so a band centered on the datum
      * has half of itself in ground that does not exist and the sea sits on its
      * midpoint: `water` saturates at 0.5, `dry` never falls below 0.5, and every
      * gate below that spends `dry` is half-open over open ocean — the mottle and
@@ -781,7 +781,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * The layout is `SphereGeometry`'s, which is what every albedo map in the
      * archive is authored against and what `buildShapeMesh` reproduces for the
      * small bodies — so the same photograph fits the sphere and the patches in
-     * front of it, and a descent does not cross a colour change.
+     * front of it, and a descent does not cross a color change.
      *
      * Sampled with **explicit gradients**, and the wrap is why. Longitude comes
      * out of an `atan2`, so it jumps by a whole turn along one meridian; the
@@ -844,17 +844,17 @@ export function createTerrainMaterial(): TerrainMaterial {
      * than reflectances, so clamping at the palette's end would clamp the
      * multiplier and flatten every contrast the photograph has. What may not
      * exceed one is the product: a surface that reflects more than it receives
-     * gains energy at every bounce and blows out to white while its neighbours
+     * gains energy at every bounce and blows out to white while its neighbors
      * are correctly exposed.
      */
     const raw = color.mul(published).mul(mineral).mul(mottle).mul(fresh)
     /*
-     * Ceilinged by the brightest channel, so the whole colour scales together.
+     * Ceilinged by the brightest channel, so the whole color scales together.
      *
-     * A per-channel `min` is the obvious form and it does not clamp a colour,
+     * A per-channel `min` is the obvious form and it does not clamp a color,
      * it *rotates* one: an evaporite whose red is over the ceiling and whose
      * blue is not comes back with its red clipped and its blue untouched, so
-     * the hue slides toward grey exactly where the surface is brightest. The
+     * the hue slides toward gray exactly where the surface is brightest. The
      * palette's reference ceiling keeps bedrock, regolith and basalt under the
      * line by construction; the deposits above the brightest one a body can
      * reach — an evaporite at 1.9 of the reference, on the ten Saturnian and
@@ -866,10 +866,10 @@ export function createTerrainMaterial(): TerrainMaterial {
     )
 
     /*
-     * The painted water's colour. Open sea — where there is no sheet — is
-     * the liquid's deep colour; a river is a few meters deep and shows its
+     * The painted water's color. Open sea — where there is no sheet — is
+     * the liquid's deep color; a river is a few meters deep and shows its
      * bed through the water, so the channel is the bed tinted rather than
-     * the deep colour laid on.
+     * the deep color laid on.
      */
     const riverColor = mix(ground.mul(0.55), oceanColor.mul(2.2), float(0.6))
     const surfaceAlbedo = mix(
@@ -1159,7 +1159,7 @@ export function createTerrainMaterial(): TerrainMaterial {
 /**
  * One body-fixed coordinate reduced into the grain field's own period.
  *
- * In grain wavelengths, so the shader adds `positionLocal / GRAIN_METRES` to it
+ * In grain wavelengths, so the shader adds `positionLocal / GRAIN_METERS` to it
  * directly. See `GRAIN_PERIOD` in `render/terrain.ts` for why the reduction has
  * to happen on this side of the uniform.
  */
@@ -1169,7 +1169,7 @@ export function grainWrap(meters: number): number {
 }
 
 /**
- * A texture read with explicit gradients, as a colour.
+ * A texture read with explicit gradients, as a color.
  *
  * `TextureNode.sample` and `.grad` each return a `TextureNode` and each are
  * *typed* as returning the base `Node`, so chaining them loses both the second
@@ -1208,10 +1208,10 @@ function write(into: Deposit, from: SurfaceMaterial): void {
 }
 
 /**
- * One palette colour into one uniform.
+ * One palette color into one uniform.
  *
  * Spelled out, each of these names its field three times, which is the shape a
- * `skyColour.b` pasted into the `hazeColour` block type-checks through and then
+ * `skyColor.b` pasted into the `hazeColor` block type-checks through and then
  * reads as an art choice rather than as a bug.
  */
 export function paint(into: { value: Color }, from: LinearRgb): void {

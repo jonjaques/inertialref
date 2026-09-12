@@ -12,7 +12,7 @@ import type { BodyKind } from './system.ts'
  * System's builder needs the liquid half of it too, and `system.ts` already
  * imports that builder. Everything here is a pure function of an `Rng` forked
  * from the surface seed and of the grammar — the same inputs the terrain is a
- * function of, so a world's colour is as deterministic as its coastline.
+ * function of, so a world's color is as deterministic as its coastline.
  */
 
 /**
@@ -22,7 +22,7 @@ import type { BodyKind } from './system.ts'
  * picture: water is blue in the deep and turquoise over a shelf because it
  * absorbs red first; a hydrocarbon sea is dark amber, clear in the red and
  * opaque in the blue; magma is not lit at all, it is the light. `absorption`
- * is what turns a depth into a colour — the sea sheet attenuates what it
+ * is what turns a depth into a color — the sea sheet attenuates what it
  * refracts by `e^(−absorption · path)` per channel — and it is the number
  * that makes a shoreline read as shallow before it reads as blue.
  */
@@ -38,18 +38,18 @@ export interface LiquidAppearance {
 
 /*
  * The palette a solid world is drawn from, and why it is a list of families
- * rather than a colour dial.
+ * rather than a color dial.
  *
  * A hue drawn uniformly from a wheel makes every world the same unlikely
  * pastel. Real surfaces cluster: the iron oxides that make Mars and half the
  * deserts on Earth, the dark basalt of every mare and every ocean floor, the
- * pale feldspar of a highland, olivine's grey-green, the sulfur Io wears, the
+ * pale feldspar of a highland, olivine's gray-green, the sulfur Io wears, the
  * tholins that stain every cold body in the outer system amber. Each row is
  * one of those, in linear sRGB, and a world draws one with a weight the
  * grammar bends — a hot world toward the sulfur and the dark basalt, a cold
  * one toward the tholins and the ice — and then a little chroma and value of
  * its own so two olivine worlds are not one world twice. The families are
- * deliberately more saturated than `KIND_COLOUR`'s class means, because a
+ * deliberately more saturated than `KIND_COLOR`'s class means, because a
  * generated world is drawn from this at every distance and the ground's own
  * deposits contrast *against* it; the tone curve and the deposits keep it
  * from reading as paint.
@@ -63,7 +63,7 @@ export interface ColorFamily {
 }
 
 const ROCK_FAMILIES: readonly ColorFamily[] = [
-  { color: { r: 0.25, g: 0.24, b: 0.23 }, weight: 2.0, warmest: null }, // basalt grey
+  { color: { r: 0.25, g: 0.24, b: 0.23 }, weight: 2.0, warmest: null }, // basalt gray
   { color: { r: 0.38, g: 0.23, b: 0.13 }, weight: 2.0, warmest: 300 }, // iron-oxide ochre
   { color: { r: 0.42, g: 0.17, b: 0.1 }, weight: 1.2, warmest: 400 }, // red desert
   { color: { r: 0.44, g: 0.41, b: 0.37 }, weight: 1.2, warmest: null }, // pale feldspar
@@ -73,7 +73,7 @@ const ROCK_FAMILIES: readonly ColorFamily[] = [
   { color: { r: 0.36, g: 0.25, b: 0.12 }, weight: 1.0, warmest: 120 }, // tholin amber
   { color: { r: 0.21, g: 0.32, b: 0.26 }, weight: 0.5, warmest: null }, // copper green
   { color: { r: 0.52, g: 0.46, b: 0.42 }, weight: 0.5, warmest: 350 }, // salt and dust
-  { color: { r: 0.28, g: 0.23, b: 0.31 }, weight: 0.5, warmest: null }, // violet grey
+  { color: { r: 0.28, g: 0.23, b: 0.31 }, weight: 0.5, warmest: null }, // violet gray
 ]
 
 const ICE_FAMILIES: readonly ColorFamily[] = [
@@ -102,7 +102,7 @@ function drawFamily(
   const base = (families[index] ?? families[0]) as ColorFamily
   /*
    * A little of its own: the value moves by a fifth and the chroma by a
-   * quarter about the family's luminance, so the family is recognisable and
+   * quarter about the family's luminance, so the family is recognizable and
    * the world is not a copy.
    */
   const value = rng.range(0.82, 1.2)
@@ -145,7 +145,7 @@ export function surfaceColorFor(
  * that override it. Suspended dust is Mars — a butterscotch sky and a blue
  * sunset, the exact inverse of Earth's. Sulfuric haze is Venus, a yellow-white
  * glare. Tholins are Titan, orange all the way round. Methane absorbs red and
- * turns a sky teal, which is Uranus's colour brought down to a surface. Each
+ * turns a sky teal, which is Uranus's color brought down to a surface. Each
  * is gated by the temperature its chemistry survives at.
  */
 export interface HazeFamily {
@@ -239,7 +239,7 @@ export function hazeFor(
  * molecules that do the same job with a different absorption band —
  * retinal's purple, the carotenoids' gold, phycoerythrin's red, and a
  * near-black pigment that takes everything a dim star offers. A world draws
- * one and keeps it, because a biosphere's colour is a property of its
+ * one and keeps it, because a biosphere's color is a property of its
  * chemistry rather than of a province.
  */
 export const PIGMENTS: readonly {
@@ -271,7 +271,7 @@ export function pigmentFor(rng: Rng): LinearRgb {
  * Water's absorption is the published one to within the eye's tolerance —
  * about 0.35 per meter in the red, 0.06 in the green and 0.02 in the blue —
  * scaled by a turbidity the seed draws, so one sea is a Bahamas shelf and
- * the next is silt. The deep colour is the open-ocean reflectance the sphere
+ * the next is silt. The deep color is the open-ocean reflectance the sphere
  * already uses, tinted between navy and teal.
  */
 export function liquidAppearance(

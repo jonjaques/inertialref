@@ -1008,11 +1008,11 @@ a {
 /*
  * The clear button inside the search field.
  *
- * WebKit draws one for `type="search"` and it is a light-grey glyph in nobody's
+ * WebKit draws one for `type="search"` and it is a light-gray glyph in nobody's
  * palette, sitting inside a control this system otherwise draws entirely — the
  * same class of thing as the scrollbar and the caret in `index.css` above, and
  * the cheapest tell that a page was assembled rather than built. It cannot be
- * recoloured, so it is replaced: the native appearance is dropped and the box
+ * recolored, so it is replaced: the native appearance is dropped and the box
  * is filled with `currentColor` through a mask of lucide's `x`, at the same
  * 24-unit grid and 1.5 stroke as every other icon in the interface.
  */
@@ -1182,7 +1182,7 @@ a {
  *
  * **A dashed underline means the link leaves the site.** That is the same
  * device the interface already uses for provenance — a dash pattern carrying
- * information no colour is allowed to carry alone — and it is why there is no
+ * information no color is allowed to carry alone — and it is why there is no
  * arrow glyph after these. An icon here would be a Unicode character standing
  * in for the icon set, in the middle of a paragraph, eight hundred times.
  */
@@ -1257,7 +1257,7 @@ a {
  * A callout in this corpus is a blockquote — every concept page opens with
  * "The question / The answer" in one — so it is typeset as the summary it is
  * rather than as a quotation. One hairline in the accent, because a heavier bar
- * is a colour field down the side of a paragraph and this system draws
+ * is a color field down the side of a paragraph and this system draws
  * structure with lines.
  */
 .doc-prose blockquote {
@@ -1453,7 +1453,7 @@ a {
   outline: 1px solid var(--color-sky-400);
 }
 
-/* Nominal Green, for a beat. The one status colour that means "it is there",
+/* Nominal Green, for a beat. The one status color that means "it is there",
    on the control that was pressed, instead of a notice somewhere else. */
 .doc-copy[data-copied] {
   opacity: 1;
@@ -1780,7 +1780,7 @@ a.t-link:hover {
 }
 
 /*
- * `@remarks`, `@defaultValue`, `@throws`, `@see` — a labelled aside rather than
+ * `@remarks`, `@defaultValue`, `@throws`, `@see` — a labeled aside rather than
  * a heading, because these belong to the member above them and a heading would
  * put them in the table of contents as though they were sections.
  */

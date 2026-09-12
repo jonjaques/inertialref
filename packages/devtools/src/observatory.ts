@@ -207,7 +207,7 @@ interface Descent {
   readonly arc: EntryArc
   /** The camera's orientation at release, in the body's rotating axes. */
   readonly from: Quat
-  /** Unit vector from the centre to the touchdown point. */
+  /** Unit vector from the center to the touchdown point. */
   readonly ground: Vec3
   readonly latitude: Radians
   readonly longitude: Radians
@@ -262,7 +262,7 @@ export const TRAVEL_TAU: Seconds = 0.55
  *
  * A tenth of a percent of the distance and a milliradian of orbit — under a
  * pixel at any framing. An exponential approach never actually reaches its
- * target, so without a floor `travelling` stays true forever and a panel that
+ * target, so without a floor `traveling` stays true forever and a panel that
  * shows it flickers a "moving" indicator for the rest of the session.
  */
 const ARRIVED_LOG_EPSILON = 1e-3
@@ -270,7 +270,7 @@ const ARRIVED_LOG_EPSILON = 1e-3
 /**
  * The opening framing for a newly picked target: a disk with space around it.
  *
- * 0.55 of the frame height rather than 0.9. Every recognisable photograph of a
+ * 0.55 of the frame height rather than 0.9. Every recognizable photograph of a
  * planet has sky around it, and a body that arrives edge-to-edge gives the eye
  * nothing to judge its size against. See `shots.ts`, which argues the same
  * thing in body radii.
@@ -323,9 +323,9 @@ const HOLD_ALTITUDE_SHARE = 0.2
  * How far the ring floats over the ground it follows, as a share of its own
  * radius.
  *
- * Proportional, and it has to be. A fixed lift is a metre-scale number, and the
+ * Proportional, and it has to be. A fixed lift is a meter-scale number, and the
  * vertex buffer holding it is float32 at a planetary radius — where one step is
- * half a metre — so a two-metre lift is a handful of bits and the loop z-fights
+ * half a meter — so a two-meter lift is a handful of bits and the loop z-fights
  * with the patch drawing the same height. Worse at a limb, where the ground is
  * edge-on and any lift is foreshortened to nothing. A twelfth of the ring's own
  * radius is clear at every distance the gesture spans and still reads as lying
@@ -945,7 +945,7 @@ export class Observatory {
    * one of them is wired straight through by `useObserverInput`, which has no
    * idea which arm is drawing. Without the refusal the gesture silently rewrites
    * the state `leaveSurface` returns to, so a scroll while standing lands the
-   * ascent on a framing nobody chose and leaves `travelling` true forever,
+   * ascent on a framing nobody chose and leaves `traveling` true forever,
    * because `sample` never runs the ease that would clear it.
    */
   /**
@@ -1463,7 +1463,7 @@ export class Observatory {
   /** Back to orbit, at whatever framing the camera had before the descent. */
   leaveSurface(): ObserverStatus {
     // A drop in flight is abandoned, not finished: the orbit state underneath
-    // is the one the camera left, so this is also how a drop is cancelled.
+    // is the one the camera left, so this is also how a drop is canceled.
     this.#descent = null
     this.#aim = null
     this.#stance = null
@@ -1846,7 +1846,7 @@ export class Observatory {
    * at a share of the body so it cannot wrap a small moon.
    *
    * Every point is sampled against `drawnSurfaceRadius`, so the loop lies on
-   * the ground rather than on the datum — on a slope the two are a kilometre
+   * the ground rather than on the datum — on a slope the two are a kilometer
    * apart, and a ring that floated over a crater rim would be pointing at
    * somewhere the camera does not land.
    */
@@ -1867,7 +1867,7 @@ export class Observatory {
       Vec.length(Vec.sub(local, Vec.scale(center, touchdownRadius))),
     )
     const across = Math.min(body.radius * 0.22, range * RING_ANGLE)
-    // The angle the ring subtends at the body's centre, which is what turns a
+    // The angle the ring subtends at the body's center, which is what turns a
     // distance across the ground into a rotation of the direction.
     const sweep = Math.min(Math.PI / 3, across / body.radius)
     const triad = localTriad(center)
@@ -2243,7 +2243,7 @@ export class Observatory {
       // `shortestAngle`, because that is the way `approachState` converges.
       // Against the raw difference, an azimuth more than half a turn from the
       // desired one settles at a difference near 2π that never falls below the
-      // epsilon — so `travelling` stays true for the rest of the session,
+      // epsilon — so `traveling` stays true for the rest of the session,
       // which is the exact failure this constant's docstring exists to
       // prevent. Azimuth accumulates as you drag; two headings naming the same
       // direction can be many turns apart numerically.

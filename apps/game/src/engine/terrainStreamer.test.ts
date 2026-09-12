@@ -592,8 +592,8 @@ describe('the terrain streamer', () => {
       return lead
     }
 
-    // Half the lead, not all of it: a patch is requested by its centre and the
-    // finest ring is a few patches wide, so the farthest centre sits short of
+    // Half the lead, not all of it: a patch is requested by its center and the
+    // finest ring is a few patches wide, so the farthest center sits short of
     // the extrapolated eye by up to a patch. Measured 2,647 m and 242 m at
     // level 17 on Earth's landing site.
     expect(await farthest(true)).toBeGreaterThan(LEAD / 2)

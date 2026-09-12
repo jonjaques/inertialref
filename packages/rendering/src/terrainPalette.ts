@@ -18,13 +18,13 @@ import { surfaceColor } from './surfaceColour.ts'
  * classifies anything. It says only what each of them *looks like*, on this
  * body, and it is plain data so that it can be read in Node.
  *
- * **Every material is a modifier on the body's own published colour rather than
- * a colour of its own.** That is the one decision here that shapes everything
- * else. A palette of absolute colours makes every rocky world the same shade of
+ * **Every material is a modifier on the body's own published color rather than
+ * a color of its own.** That is the one decision here that shapes everything
+ * else. A palette of absolute colors makes every rocky world the same shade of
  * sandstone — which is the thing this phase exists to end — and, worse, it
  * makes the terrain disagree with the datum sphere, the orbital tier and the
- * dossier's own swatch, all of which read `appearance.colour`. Expressed as
- * ratios, Mars stays ochre and Callisto stays grey while both get the same
+ * dossier's own swatch, all of which read `appearance.color`. Expressed as
+ * ratios, Mars stays ochre and Callisto stays gray while both get the same
  * internal contrast between a mare and a highland.
  *
  * The ratios are published where anyone has published them. Lunar mare is 0.07
@@ -127,7 +127,7 @@ export interface TerrainPalette {
   readonly oceanColor: LinearRgb
   /**
    * The liquid the sea sheet and the rivers are drawn in, or null where
-   * nothing runs. `oceanColour` is its deep colour where it exists; the
+   * nothing runs. `oceanColor` is its deep color where it exists; the
    * absorption and the glow are the sheet's alone.
    */
   readonly liquid: LiquidAppearance | null
@@ -152,16 +152,16 @@ export interface TerrainPalette {
    * at low sun is black, which no photograph of Mars has ever been.
    *
    * Normalized, because how much light the sky delivers is `airThickness` and
-   * this is only what colour it arrives in. Left as the haze's own values the
+   * this is only what color it arrives in. Left as the haze's own values the
    * two multiply and a thin warm sky is dimmer than a thin blue one for no
    * reason anybody could name.
    */
   readonly skyColor: LinearRgb
   /**
-   * The haze's own colour, unnormalized — what the air *in front of* the ground
+   * The haze's own color, unnormalized — what the air *in front of* the ground
    * looks like.
    *
-   * A different job from `skyColour` and therefore a different field. That one
+   * A different job from `skyColor` and therefore a different field. That one
    * is a tint on the light arriving at the surface and carries no brightness;
    * this one is the aerial veil, and its value is the veil's own.
    */
@@ -171,7 +171,7 @@ export interface TerrainPalette {
    *
    * A key, not a path, for the reason `BodyAppearance.texture` is one — and it
    * is here because it is what tells the material which of two things the
-   * colours beside it are: reflectances, or ratios to multiply a published map
+   * colors beside it are: reflectances, or ratios to multiply a published map
    * by.
    */
   readonly textureKey: string | null
@@ -197,8 +197,8 @@ function referenceReflectance(body: Body): LinearRgb {
   const color = surfaceColor(body.appearance)
   if (body.appearance.texture !== null) return color
   const gray = luminance(color)
-  // The hue is the colour's, normalized: a body whose swatch is warm grey stays
-  // warm grey whatever its brightness turns out to be.
+  // The hue is the color's, normalized: a body whose swatch is warm gray stays
+  // warm gray whatever its brightness turns out to be.
   /*
    * Ceilinged here rather than per deposit, and that is what keeps a bright
    * body from going featureless.
@@ -222,7 +222,7 @@ const BRIGHTEST_RATIO = 1.18
 const luminance = (c: LinearRgb): number =>
   0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 
-/** A colour rescaled to luminance 1, or white where there is none. */
+/** A color rescaled to luminance 1, or white where there is none. */
 function unitLuminance(color: LinearRgb | undefined): LinearRgb {
   if (color === undefined) return { r: 1, g: 1, b: 1 }
   const gray = luminance(color)
@@ -319,7 +319,7 @@ export function terrainPalette(body: Body): TerrainPalette {
    * had already drawn pale; at zero the gate is 1.7%.
    *
    * What the deposits carry on a mapped body is everything a map at ten
-   * kilometres a texel has no opinion on — the roughness, the grain, the bump,
+   * kilometers a texel has no opinion on — the roughness, the grain, the bump,
    * and which of them the slope under the camera exposes.
    *
    * `ice` is the exception, and the reason is that it is the one deposit that
@@ -377,7 +377,7 @@ export function terrainPalette(body: Body): TerrainPalette {
       bump: 0.15,
     },
     /*
-     * Ice is the one material that is not mostly the body's own colour: frozen
+     * Ice is the one material that is not mostly the body's own color: frozen
      * volatiles are frozen volatiles, and Mars's cap is white on an ochre
      * planet rather than a paler ochre. What survives of the base is the dust
      * mixed into it, which is why the cap is dirtier the more air there is to
@@ -417,10 +417,10 @@ export function terrainPalette(body: Body): TerrainPalette {
     },
 
     /*
-     * The compositional ramp's two ends, as tints rather than colours, and
-     * narrow. Wide ends make a body look painted in two colours; what a real
+     * The compositional ramp's two ends, as tints rather than colors, and
+     * narrow. Wide ends make a body look painted in two colors; what a real
      * surface shows is provinces that differ by ten or twenty percent — the
-     * lunar highlands are not a different colour from each other, they are the
+     * lunar highlands are not a different color from each other, they are the
      * same rock with different amounts of iron in it.
      */
     mineralLow: { r: 0.9, g: 0.93, b: 1.02 },
@@ -447,7 +447,7 @@ export function terrainPalette(body: Body): TerrainPalette {
     // mesh once disagreed about where an ocean was because two call sites each
     // typed the remap.
     seaLevel: seaDatumElevation(body.surface),
-    // The liquid's own deep colour where a body has one; open-ocean blue
+    // The liquid's own deep color where a body has one; open-ocean blue
     // otherwise, the same number the sphere draws a photographed sea in —
     // what orbit shows is water, not the bathymetry underneath it.
     oceanColor: body.appearance.liquid?.color ?? OPEN_OCEAN,
@@ -463,13 +463,13 @@ export function terrainPalette(body: Body): TerrainPalette {
 }
 
 /**
- * Scale a colour's value and its chroma about its own luminance.
+ * Scale a color's value and its chroma about its own luminance.
  *
  * Two knobs rather than three multipliers because that is how these materials
  * actually differ: an evaporite crust is brighter *and* paler than the rock it
  * sits on, and a basalt plain is darker and slightly less red. Expressing that
  * as per-channel factors puts the hue in three places and makes a body whose
- * base colour is unusual come out wrong in a way nothing local explains.
+ * base color is unusual come out wrong in a way nothing local explains.
  */
 function scale(base: LinearRgb, value: number, chroma: number): LinearRgb {
   const gray = luminance(base)

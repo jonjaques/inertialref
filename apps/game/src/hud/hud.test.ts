@@ -166,7 +166,7 @@ describe('the author’s instruments', () => {
     for (const panel of panels) {
       expect(['left', 'right']).toContain(panel.zone)
       // The menu is icon-only, so the hint is the panel's name to anyone who
-      // cannot see the glyph. An empty one is an unlabelled button.
+      // cannot see the glyph. An empty one is an unlabeled button.
       expect(panel.hint.length).toBeGreaterThan(0)
     }
     session.dispose()

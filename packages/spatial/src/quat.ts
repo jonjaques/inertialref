@@ -74,7 +74,7 @@ export const rotateInverse = (q: Quat, v: Vec3): Vec3 => rotate(conjugate(q), v)
  *
  * Exact rotation about the (constant over the step) angular velocity axis
  * rather than the usual first-order `q + 0.5*ω*q*dt`: the first-order form
- * denormalises, and at time-warp the accumulated drift is visible within a few
+ * denormalizes, and at time-warp the accumulated drift is visible within a few
  * seconds of wall clock.
  */
 export function integrate(q: Quat, angularVelocity: Vec3, dt: number): Quat {

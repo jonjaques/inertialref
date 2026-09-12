@@ -172,8 +172,8 @@ describe('the shipped Mars pad', () => {
     ).toEqual([-0.18])
   })
 
-  it('separates the guidance ring from the deck by ten centimetres', () => {
-    // At 200 m with a 0.1 m near plane, millimetre decals share depth bins.
+  it('separates the guidance ring from the deck by ten centimeters', () => {
+    // At 200 m with a 0.1 m near plane, millimeter decals share depth bins.
     expect(surfaceHeights(24.95, 0.7)).toEqual([0, 0.1])
   })
 })

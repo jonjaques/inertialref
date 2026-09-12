@@ -47,7 +47,7 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
  * Two files, fetched together and degrading separately. The volume is the
  * generation input and the one `main.tsx` cannot do without; the sky is the
  * distant bright stars the draw adds on top, and a volume without it is a
- * correct neighbourhood under a sky with no Orion in it — a smaller lie than
+ * correct neighborhood under a sky with no Orion in it — a smaller lie than
  * Sol alone, so the volume is kept when only the sky fails.
  */
 export async function loadStarCatalog(): Promise<StarCatalog> {

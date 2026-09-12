@@ -65,7 +65,7 @@ export function Workspace({
    * Every panel, guarded ones included, is `known` to the layout.
    *
    * Passing only the disclosed ones would make `normalizeLayout` drop the rest
-   * as unrecognised — so closing the instruments and opening them again would
+   * as unrecognized — so closing the instruments and opening them again would
    * find every one of them back in its default pane, having forgotten an
    * arrangement the disclosure had nothing to do with. What the disclosure
    * controls is what is *rendered*, which is `visiblePanels` below.

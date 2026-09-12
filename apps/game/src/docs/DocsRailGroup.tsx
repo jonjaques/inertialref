@@ -13,7 +13,7 @@ import { DocsRailLink } from './DocsRailLink.tsx'
  * when the reader collapses a different one. Held in React that is a piece of
  * state seeded from the route and then diverging from it; as an attribute it is
  * a default the element owns and the reader overrides, which is exactly the
- * behaviour wanted.
+ * behavior wanted.
  *
  * `key`ed on the group in `DocsRail`, so moving to another package re-mounts
  * these and the new group's default applies. Without the remount, `open` is a

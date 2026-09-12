@@ -219,7 +219,7 @@ function transmittanceFrom(
  * The transmittance table.
  *
  * u spans μ ∈ [−1, 1] linearly and v spans altitude — a deliberately naive
- * parameterisation against Bruneton's distance-warped one. Its weakness is
+ * parameterization against Bruneton's distance-warped one. Its weakness is
  * resolution exactly at the horizon, where T drops to zero within a texel;
  * bilinear filtering smears that edge across Δμ ≈ 0.004, about a quarter of
  * a degree — the width of a sun. A penumbra there is not a defect, it is the

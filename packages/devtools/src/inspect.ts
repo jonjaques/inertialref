@@ -90,7 +90,7 @@ export interface EntityInspection {
 
 /**
  * The orbit a ship is on, as the numbers a pilot reads: how high it goes and
- * how low, above the datum rather than from the centre, and how long a lap is.
+ * how low, above the datum rather than from the center, and how long a lap is.
  */
 export interface OrbitInspection {
   /** Lowest altitude above the datum, meters. Below zero is a ground track. */

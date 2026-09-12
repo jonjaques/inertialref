@@ -207,7 +207,7 @@ export function matchSystem(
  * also what keeps the catalog out of the worker — a stub is what the caller
  * already resolved, so nothing here needs a 200 KB table to answer with.
  *
- * `cancelled` is polled per system rather than per body, because a system is a
+ * `canceled` is polled per system rather than per body, because a system is a
  * millisecond and a body is microseconds: that bounds the wasted work without
  * the check costing more than the work it is guarding.
  */

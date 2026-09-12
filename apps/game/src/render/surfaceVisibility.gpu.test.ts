@@ -66,7 +66,7 @@ function sceneFor(mesh: Mesh): Scene {
   return scene
 }
 
-/** A uniform deposit isolates the source colour from geology and detail. */
+/** A uniform deposit isolates the source color from geology and detail. */
 function uniformPalette(body: Body): TerrainPalette {
   const palette = terrainPalette(body)
   const deposit = { ...palette.regolith, grain: 0, bump: 0 }

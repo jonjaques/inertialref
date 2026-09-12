@@ -286,7 +286,7 @@ describe('the observatory', () => {
      * `shortestAngle`. Azimuth accumulates as you drag, so after a couple of
      * turns the ease settles at a *difference* of 2π — the same heading, a
      * whole turn apart numerically — which never falls below
-     * `ARRIVED_LOG_EPSILON`. `travelling` then stayed true for the rest of the
+     * `ARRIVED_LOG_EPSILON`. `traveling` then stayed true for the rest of the
      * session, which is the exact failure that constant's docstring says it
      * exists to prevent: a panel flickering "moving" at a camera that is
      * perfectly still.
@@ -472,7 +472,7 @@ describe('the compositions, through the camera rather than the hull', () => {
     const orbiting = ir.compose('glint')
     expect(orbiting.surface).toBeNull()
     // An aimed composition is the one that has a look offset at all; the nine
-    // drawn framings are centre-aimed and must be bit-identical to their old
+    // drawn framings are center-aimed and must be bit-identical to their old
     // poses, which `packages/rendering` states as a property.
     expect(orbiting.aimed).toBe(true)
 
@@ -1073,7 +1073,7 @@ describe('a drop', () => {
     // The continuation passes under the ground and out the far side, which is
     // what makes the trajectory an entry rather than a capture.
     const through = preview?.through ?? []
-    // Near the centre rather than at it: the continuation is sampled evenly in
+    // Near the center rather than at it: the continuation is sampled evenly in
     // angle over 48 points, and none of them lands exactly on the midpoint —
     // the nearest is 1/47 of the sweep away, which is 2.1% of a radius.
     expect(Math.min(...through.map(radii))).toBeLessThan(0.05)

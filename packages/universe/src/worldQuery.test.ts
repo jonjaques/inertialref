@@ -275,7 +275,7 @@ describe('matching, as properties over generated systems', () => {
 
 describe('a match', () => {
   it('carries what a listing draws, from the record rather than a tag', () => {
-    // Measured from Sol itself: the universe origin is the galactic centre and
+    // Measured from Sol itself: the universe origin is the galactic center and
     // Sol is 26,673 light years out from it, so a distance taken from there is
     // a real number about the wrong question.
     const earth = matchSystem(sol, { kinds: ['rocky'] }, sol.position).find(

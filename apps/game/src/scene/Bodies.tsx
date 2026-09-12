@@ -588,7 +588,7 @@ export function Bodies({
             : null
         planet.setBake(bake)
         /*
-         * The sea the bake's mask keys is the liquid's colour, the same
+         * The sea the bake's mask keys is the liquid's color, the same
          * number the ground's palette and the sheet read, so a magma world
          * does not wear a blue sea from orbit and a red one at the gate.
          * Open-ocean blue where the record names no liquid: a photographed

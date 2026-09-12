@@ -7,7 +7,7 @@
  * argued with; a *wing* is a judgement about who is reading and what they came
  * for — `getting-started.md` lives in `docs/guides/` and belongs at the top of
  * the first wing, because somebody who has never run this needs it before they
- * need anything about how the repository is organised.
+ * need anything about how the repository is organized.
  *
  * A page listed here is a page in the site. A markdown file under `docs/` that
  * is not listed is a file the build reports and does not publish, which is the
@@ -29,7 +29,7 @@
  * screenshot cannot fake, and it costs a table.
  *
  * **The numbers are for a band, not for a frame, and that is why they look
- * wrong.** The observatory centres its subject in the whole canvas, and the
+ * wrong.** The observatory centers its subject in the whole canvas, and the
  * masthead is the top three hundred pixels of it — so a framing that fills half
  * the frame puts the entire body behind the reading plate, and what is left in
  * the band is the dark cap of a disk nobody can see. `fill` above 1 is the
@@ -280,7 +280,7 @@ export const REFERENCE = {
    * is a point of light behind the plate, and the masthead is black — and at a
    * framing large enough to reach the band it is a wall of blown white behind
    * the title. Neptune is the outermost thing in the catalogue with a real
-   * atmosphere, and it is the one body in Sol whose colour is this system's
+   * atmosphere, and it is the one body in Sol whose color is this system's
    * own accent.
    */
   framing: { address: 's:SOL/b:7', phase: -104, tilt: -34, fill: 2.1 },

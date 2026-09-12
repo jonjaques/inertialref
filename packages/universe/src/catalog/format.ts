@@ -45,14 +45,14 @@ export const MAGIC = 0x4952_5343
 export const FORMAT_VERSION = 1
 
 /**
- * Position quantisation step.
+ * Position quantization step.
  *
  * Positions are stored as signed 32-bit counts of this. At 1 AU per step the
  * representable range is ±2.1 × 10^9 AU ≈ ±34,000 ly, comfortably past the
- * 150 ly the file covers, and the quantisation error is bounded by half a step.
- * That sounds enormous until you compare it to what it is quantising: at 150 ly
+ * 150 ly the file covers, and the quantization error is bounded by half a step.
+ * That sounds enormous until you compare it to what it is quantizing: at 150 ly
  * the parallax uncertainty on a HYG position is several thousand AU, so the
- * quantiser is four orders of magnitude inside the measurement error and is,
+ * quantizer is four orders of magnitude inside the measurement error and is,
  * for practical purposes, free.
  */
 export const POSITION_STEP_AU = 1
@@ -603,27 +603,7 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
     `Star catalog is format ${version}; this build reads ${FORMAT_VERSION}. ` +
       `Re-run \`pnpm catalog:build\`.`,
   )
-  // Packed catalogs can outlive a deployment in a browser cache. Their source
-  // licenses must survive the spelling change without changing any star data.
-  type StoredSource = Omit<CatalogMetadata['sources'][number], 'license'> &
-    Partial<Record<'license' | 'licence', string>>
-  const stored = JSON.parse(decodeUtf8(r.slice(r.u32()))) as Omit<
-    CatalogMetadata,
-    'sources'
-  > & { readonly sources: readonly StoredSource[] }
-  const metadata: CatalogMetadata = {
-    ...stored,
-    sources: stored.sources.map((source) => {
-      const license = source.license ?? source['licence']
-      invariant(typeof license === 'string', 'Catalog source has no license')
-      return {
-        name: source.name,
-        url: source.url,
-        license,
-        retrieved: source.retrieved,
-      }
-    }),
-  }
+  const metadata = JSON.parse(decodeUtf8(r.slice(r.u32()))) as CatalogMetadata
   const starCount = r.u32()
   const planetCount = r.u32()
 

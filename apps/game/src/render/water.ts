@@ -57,7 +57,7 @@ import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
  * does is what a real surface of water does: it reflects the sky and the sun
  * by Fresnel's law, it refracts what is under it, and it absorbs that light
  * by the path it takes through the water, so a shelf is turquoise and the
- * deep is the liquid's own colour. The refraction is real rather than a tint:
+ * deep is the liquid's own color. The refraction is real rather than a tint:
  * the sheet reads the frame the opaque pass just drew — the seabed, lit —
  * through `viewportSharedTexture`, displaced by the wave slope, and attenuates
  * it by `e^(−absorption · path)`. What is not here is a reflection of the
@@ -71,7 +71,7 @@ import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
  * the same distance and the shoreline does not swim at a level boundary.
  *
  * The three liquids share the graph and differ in uniforms: water and a
- * hydrocarbon sea in colour and absorption, magma in a glow that is most of
+ * hydrocarbon sea in color and absorption, magma in a glow that is most of
  * the picture and an absorption that takes the seabed out of it.
  */
 
@@ -93,7 +93,7 @@ export interface WaterMaterial {
 
 /** What the graphics settings may turn down. */
 export interface WaterQuality {
-  /** Screen-space refraction of the seabed. Off reads the liquid's colour alone. */
+  /** Screen-space refraction of the seabed. Off reads the liquid's color alone. */
   readonly refraction: boolean
   /**
    * Wave fields: one is the swell, two adds the chop. Zero is a flat sheet
@@ -282,7 +282,7 @@ export function createWaterMaterial(
     })
     // The value, for the foam; the slope in meters per meter, for the normal.
     // `point` is in wavelengths, so a gradient per wavelength is one over
-    // `WAVE_METRES` per meter, and the chop's domain is four times finer.
+    // `WAVE_METERS` per meter, and the chop's domain is four times finer.
     const height = relief.x
       .mul(float(WAVE_RELIEF))
       .add(chop.x.mul(float(CHOP_RELIEF)))
@@ -345,7 +345,7 @@ export function createWaterMaterial(
       ? asVector(viewportSharedTexture(shifted).rgb.div(sceneRadianceGain))
       : liquid
     /*
-     * The liquid's own colour, lit: what scatters back out of the body of
+     * The liquid's own color, lit: what scatters back out of the body of
      * the water where the seabed's light has been absorbed. Lambert on the
      * datum normal plus the skylight, the way the ground is lit, so the sea
      * and the shore agree about how bright the day is.
@@ -367,7 +367,7 @@ export function createWaterMaterial(
     /* --- what reflects off it --------------------------------------------- */
 
     /*
-     * The sky, as the reflection: its colour at the day's strength, falling
+     * The sky, as the reflection: its color at the day's strength, falling
      * to the same floor the ground's night side keeps, and the sun in it as
      * the two-lobe glint the sphere and the ground already share — on the
      * wave normal now, because the wave field is in this geometry.

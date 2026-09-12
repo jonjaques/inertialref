@@ -75,7 +75,7 @@ export interface PatchInput {
 /**
  * The sea over a patch: the datum sphere, meshed on the patch's own grid.
  *
- * A second surface rather than a colour on the first, because a shore seen
+ * A second surface rather than a color on the first, because a shore seen
  * from a landed ship is a flat sheet meeting a slope, and the ground under it
  * is a seabed the sheet is looked *through*. The vertices are anchor-relative
  * for the reason the patch's are, and they morph onto the parent's grid for

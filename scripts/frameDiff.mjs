@@ -8,7 +8,7 @@
  * carries — differenced against each other.
  *
  * The signal that matters is not "how much changed". It is **a frame that
- * differs from both of its neighbours while those neighbours are identical to
+ * differs from both of its neighbors while those neighbors are identical to
  * each other**. That shape says the scene is static and one frame departed from
  * it, which is a strobe; anything genuinely moving makes every consecutive pair
  * differ and leaves no isolated frame at all. The lunar terrain strobe was found
@@ -108,7 +108,7 @@ const median = (values) => {
  * a strobe recurs at, which is the unit a bug report is written in — "two or
  * three times a second" — and the one no frame index can be compared against.
  */
-export async function analyseFrames(paths, timestamps = null) {
+export async function analyzeFrames(paths, timestamps = null) {
   const pairs = []
   for (let i = 1; i < paths.length; i += 1)
     pairs.push(await changed(paths[i - 1], paths[i]))
@@ -207,7 +207,7 @@ export function reportFrames(analysis, fps = null) {
   )
   for (const one of analysis.events.slice(0, 6))
     lines.push(
-      `  frame ${one.frame}: ${one.changed} px against its neighbours, ${one.skip} px between them`,
+      `  frame ${one.frame}: ${one.changed} px against its neighbors, ${one.skip} px between them`,
     )
   if (analysis.events.length > 6)
     lines.push(`  …and ${analysis.events.length - 6} more`)

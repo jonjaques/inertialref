@@ -861,12 +861,12 @@ describe('searching the volume for worlds', () => {
     expect(earth?.lightYears).toBeLessThan(1)
   })
 
-  it('stops when it is cancelled rather than finishing the volume', async () => {
+  it('stops when it is canceled rather than finishing the volume', async () => {
     const { harness: ir } = harness()
     const search = ir.findWorlds({}, { lightYears: 12 })
     search.cancel()
     const found = await search.done
-    // Whatever a cancelled sweep returns, it is not the whole volume — and it
+    // Whatever a canceled sweep returns, it is not the whole volume — and it
     // returns rather than hanging, which is what a second question needs.
     expect(Array.isArray(found)).toBe(true)
   })

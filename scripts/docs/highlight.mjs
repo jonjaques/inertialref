@@ -1,12 +1,12 @@
 import { createHighlighter } from 'shiki'
 
 /*
- * Syntax colour, in a system that has one accent.
+ * Syntax color, in a system that has one accent.
  *
  * A stock highlighter brings six or seven hues, and `DESIGN.md`'s One Accent
- * Rule says Instrument Blue is the only non-status colour in the interface — so
- * dropping a Dracula-coloured listing into a documentation page is not a small
- * inconsistency, it is the largest single block of colour on the page
+ * Rule says Instrument Blue is the only non-status color in the interface — so
+ * dropping a Dracula-colored listing into a documentation page is not a small
+ * inconsistency, it is the largest single block of color on the page
  * disagreeing with everything around it.
  *
  * The theme below spends **two hues and the graphite ramp**, and each one is
@@ -18,7 +18,7 @@ import { createHighlighter } from 'shiki'
  *                     language owns are the part that is not yours.
  *   Nominal Green     every literal: a string, a number, a boolean, a regex.
  *                     The status hue for "a real value is present", which is
- *                     exactly what a literal is. It is the one status colour
+ *                     exactly what a literal is. It is the one status color
  *                     that earns a place here, and it earns it by being
  *                     consistent — every literal, never anything else.
  *   Graphite 100      a name being *declared*. The brightest neutral, for the
@@ -190,7 +190,7 @@ export function languageFor(tag) {
 /**
  * One highlighted block, as the markup the article renders.
  *
- * Shiki writes its own background and colour onto the `<pre>`; both are
+ * Shiki writes its own background and color onto the `<pre>`; both are
  * stripped, because the block's ground has to be an alpha over whatever the
  * reading plate is over, and a baked hex is an opaque hole in it.
  *

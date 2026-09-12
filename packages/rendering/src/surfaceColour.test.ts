@@ -11,7 +11,7 @@ import { surfaceColor, surfaceVisibilityGain } from './surfaceColour.ts'
 const channel = fc.double({ min: 0.001, max: 1, noNaN: true })
 const color = fc.record({ r: channel, g: channel, b: channel })
 
-describe('surface source colour and visibility', () => {
+describe('surface source color and visibility', () => {
   it('keeps mapped brightness in the map while preserving the swatch’s hue', () => {
     fc.assert(
       fc.property(color, channel, (swatch, brightness) => {

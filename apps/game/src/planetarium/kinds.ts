@@ -151,7 +151,7 @@ export function acceptsRow(
 }
 
 /**
- * A star's own colour as a CSS string, or null for a body.
+ * A star's own color as a CSS string, or null for a body.
  *
  * The catalog carries **linear** sRGB — the value the renderer lights the sky
  * with — and CSS wants the gamma-encoded form, so this is the transfer function
@@ -166,7 +166,7 @@ export function acceptsRow(
  * get to be a nicer orange." At 0.45 it turned the whole neighborhood into pale
  * peach and Sirius into off-white, which is a rail of nine identical dots.
  *
- * It does not need one. `blackbodyColour` normalizes the brightest channel to
+ * It does not need one. `blackbodyColor` normalizes the brightest channel to
  * 1, so every star has a channel at full and no glyph can come out dim — the
  * legibility the floor was buying is already there, and the hue is what was
  * being spent for it.

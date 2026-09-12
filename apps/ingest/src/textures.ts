@@ -70,8 +70,8 @@ const WEBP = { quality: 82, effort: 6 } as const
 /*
  * Normal maps are encoded losslessly, and this is not an optimization knob.
  *
- * Lossy WebP is a *photographic* codec: VP8 quantises per block, and on the
- * smooth slope fields of a normal map that quantisation lands as whole 8-pixel
+ * Lossy WebP is a *photographic* codec: VP8 quantizes per block, and on the
+ * smooth slope fields of a normal map that quantization lands as whole 8-pixel
  * rows of the green channel offset by up to ±39 around neutral — measured on
  * the Moon's map, worst at high latitude where equirectangular stretching
  * makes the data smoothest. Each such row is a band of surface tilted ~15°
@@ -136,9 +136,9 @@ async function elevationToNormal(
   const relief = source.relief ?? 1_000
 
   /*
-   * `grey16`, not `b-w`, and this is the whole reason the Moon was flat.
+   * `gray16`, not `b-w`, and this is the whole reason the Moon was flat.
    *
-   * libvips calls 8-bit grayscale `b-w`, so `toColourspace('b-w')` on LOLA's
+   * libvips calls 8-bit grayscale `b-w`, so `toColorspace('b-w')` on LOLA's
    * 16-bit product *downcasts* it, and a following `raw({depth:'ushort'})`
    * widens the container back to two bytes without restoring the range. The
    * result is a valid file, a plausible-looking pipeline, and every gradient 256
@@ -147,7 +147,7 @@ async function elevationToNormal(
   const sixteen = (await open(bytes).metadata()).depth === 'ushort'
   const data = await open(bytes)
     .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
-    .toColourspace(sixteen ? 'grey16' : 'b-w')
+    .toColorspace(sixteen ? 'gray16' : 'b-w')
     .raw({ depth: sixteen ? 'ushort' : 'uchar' })
     .toBuffer()
 
@@ -237,7 +237,7 @@ async function luminanceToAlpha(
   const height = width / 2
   const gray = await open(bytes)
     .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
-    .toColourspace('b-w')
+    .toColorspace('b-w')
     .raw()
     .toBuffer()
 

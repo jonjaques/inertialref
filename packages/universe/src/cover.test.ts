@@ -82,7 +82,7 @@ describe('ray craters', () => {
         }
         const center = craterField(alone, grammar, crater.axis)
         // The median of a ring three radii out — past the ejecta blanket, and
-        // a median so that one neighbour cannot decide the comparison.
+        // a median so that one neighbor cannot decide the comparison.
         const ring: number[] = []
         for (let k = 0; k < 24; k += 1) {
           const azimuth = (k / 24) * 2 * Math.PI
@@ -157,7 +157,7 @@ describe('ray craters', () => {
    * The filaments start just outside the continuous deposit, and their
    * threshold is cleared on about a third of azimuths at that radius — so
    * un-faded they entered at full strength and drew a scalloped bright ring at
-   * 1.2 crater radii, a thirty-kilometre circle around a fifty-kilometre
+   * 1.2 crater radii, a thirty-kilometer circle around a fifty-kilometer
    * crater. Measured before the fade: 0.30 on Luna and 0.57 on Mars, against a
    * p99.9 adjacent-sample step of 3 × 10⁻⁷ just outside.
    *
@@ -302,7 +302,7 @@ describe('the cover field', () => {
     }))
     const flooded = samples.filter((s) => s.dark > 0.4)
     // Lunar mare is 16% of the whole surface. Between a twentieth and a third
-    // is the band this has to land in to be maria rather than a grey planet.
+    // is the band this has to land in to be maria rather than a gray planet.
     expect(flooded.length / samples.length).toBeGreaterThan(0.05)
     expect(flooded.length / samples.length).toBeLessThan(0.33)
 
@@ -315,7 +315,7 @@ describe('the cover field', () => {
     for (const s of flooded) bias = Vec.add(bias, s.d)
     // The hemisphere the sentence above names, not a number below it: a field
     // that pooled over a shape *less* concentrated than a half-sphere is the
-    // grey planet this test exists to reject. Measured here: 0.578.
+    // gray planet this test exists to reject. Measured here: 0.578.
     expect(Vec.length(bias) / flooded.length).toBeGreaterThan(0.5)
   })
 

@@ -194,7 +194,7 @@ export const TEST_CATALOG: StarCatalog = loadCatalog(TEST_VOLUME)
  * naked-eye bright, at their HYG v4.4 positions through the same projection
  * as the five above. Betelgeuse is the brightest red supergiant in the sky
  * and Rigel the brightest blue one, which is what makes the pair useful — a
- * colour test needs both ends of the ramp.
+ * color test needs both ends of the ramp.
  */
 const SKY_STARS: readonly PackedStar[] = [
   star({

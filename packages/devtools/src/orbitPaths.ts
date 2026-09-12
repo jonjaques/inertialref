@@ -184,7 +184,7 @@ export interface OrbitScopeContext {
   readonly grandparent: FrameId | null
   /** The subject's address, so its own orbit survives whatever its class. */
   readonly subject: string | null
-  /** `context` is the subject's neighbourhood; `all` is every trace loaded. */
+  /** `context` is the subject's neighborhood; `all` is every trace loaded. */
   readonly scope: 'context' | 'all'
 }
 

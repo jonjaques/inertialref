@@ -71,7 +71,7 @@ import { ROUNDING_RADIUS } from './rounding.ts'
  *
  * The astrophysics is deliberately shallow but not arbitrary: main-sequence
  * mass-luminosity, a frost line that scales with luminosity, densities that
- * separate rocky worlds from giants. Enough that the results are recognisable
+ * separate rocky worlds from giants. Enough that the results are recognizable
  * and that swapping in something better later is a change to this file only.
  *
  * ## Observed and projected
@@ -357,7 +357,7 @@ export interface Body {
  *
  * `texture` is a key, not a path. `packages/universe` cannot fetch anything and
  * must not know what a URL is; the host resolves the key against the manifest in
- * `data/textures/`, and a key it has no entry for falls back to `colour`.
+ * `data/textures/`, and a key it has no entry for falls back to `color`.
  */
 export type TextureMap =
   'albedo' | 'normal' | 'night' | 'water' | 'clouds' | 'ring'
@@ -440,9 +440,9 @@ export interface BodyAppearance {
   /** Used where there is no albedo map, and to tint one that is grayscale. */
   readonly color: LinearRgb
   /**
-   * The colour a biosphere paints the ground, where the cover says one grows.
+   * The color a biosphere paints the ground, where the cover says one grows.
    *
-   * A pigment rather than a modifier on `colour`: chlorophyll is green on
+   * A pigment rather than a modifier on `color`: chlorophyll is green on
    * basalt and green on sandstone. Which pigment is the seed's, weighted the
    * way the photochemistry argues — green is the common answer, and a purple
    * or a near-black one is a world that found a different molecule.
@@ -1033,7 +1033,7 @@ export const HYDROSTATIC_SPIN_LIMIT = 0.2
  * draw past 34° (1.7σ, about one planet in eleven) is stretched five times,
  * up to the 86° a magnitude can carry: the retrograde half of the circle
  * lives in the sign of the rotation period. One draw either way, so no
- * planet's moons, colour or ground move for the change.
+ * planet's moons, color or ground move for the change.
  */
 export function planetTilt(draw: number): Radians {
   const tilt = Math.abs(draw)
@@ -1269,10 +1269,10 @@ function proceduralAppearance(
         }
       : null
   /*
-   * The colours come from their own stream, off the surface seed.
+   * The colors come from their own stream, off the surface seed.
    *
    * `rng` is the body's, and every draw after this call — the rotation, the
-   * tilt, the moons — sits downstream of it in one stream. A colour family
+   * tilt, the moons — sits downstream of it in one stream. A color family
    * drawn from it would move all of them, which is a system version for a
    * change to a tint. Forked from the surface seed instead, the palette is a
    * function of the same seed the terrain is, and the rest of the body is

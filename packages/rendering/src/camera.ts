@@ -261,8 +261,8 @@ export function orbitToward(
  *
  * The chase view with no look offset is `chaseCameraPosition` and the ship's
  * own orientation, exactly — the frame every screenshot in the repository is
- * measured against. The orbit view looks at the ship's centre with the
- * horizon levelled to the local up, and both views lift the eye off the
+ * measured against. The orbit view looks at the ship's center with the
+ * horizon leveled to the local up, and both views lift the eye off the
  * ground by the same rule.
  */
 export function flightCameraPose(

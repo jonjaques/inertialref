@@ -203,9 +203,9 @@ export function groupBySystem(
  * a filter deciding what a *moon* is. But a promoted moon sorted by its own
  * semi-major axis is worse than either: turning off "Asteroids" in Sol left
  * Dimorphos, Selam, Dactyl and six more sitting *above Mercury*, because a moon
- * of an asteroid orbits at a kilometre or two and the planets orbit at tenths
+ * of an asteroid orbits at a kilometer or two and the planets orbit at tenths
  * of an AU. Nine rocks nobody asked for, at the top of the list, measured in
- * kilometres in a column of AU.
+ * kilometers in a column of AU.
  *
  * So the sort key for a promoted body is its parent's axis, taken from `all` —
  * the run before the filter. It lands where Didymos would have been, which is

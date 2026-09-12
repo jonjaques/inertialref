@@ -656,7 +656,7 @@ export class GameHarness {
    * has to be several jobs rather than one job that reports as it goes.
    *
    * `cancel` stops it — the queued jobs are dropped and the running ones are
-   * told through `TaskContext.cancelled`, which `findWorlds` polls once per
+   * told through `TaskContext.canceled`, which `findWorlds` polls once per
    * system. A second question therefore does not wait behind the first one's
    * whole volume.
    *
@@ -1156,7 +1156,7 @@ export class GameHarness {
       frame,
       // On the pad, which is what the origin of a surface frame *is*:
       // `installSurfaceFrame` derives the frame's elevation from the terrain at
-      // this exact quantised latitude/longitude, so local y = 0 is the ground.
+      // this exact quantized latitude/longitude, so local y = 0 is the ground.
       //
       // This used to be `vec3(0, 3, 0)` with `landed = true`, and the two
       // contradicted each other. `stepFlight` short-circuits to `stepLanded`
@@ -1644,8 +1644,8 @@ export class GameHarness {
    * pitch, so these are absolute — a compass bearing and an angle above the
    * horizon, which is what `ir.visit` already takes. `ir.aim(0, 0)` on the
    * ground therefore faces due north and level, which is a place rather than a
-   * recentring. The way back to the composed aim on either arm is
-   * `observatory.centre()` — the panel's Recentre button — which levels to the
+   * recentering. The way back to the composed aim on either arm is
+   * `observatory.center()` — the panel's Recenter button — which levels to the
    * horizon without touching the bearing.
    */
   aim(yaw = 0, pitch = 0): ObserverStatus {
@@ -2262,7 +2262,7 @@ export class GameHarness {
       '  ir.layers(false)              names and traces off, for a plate',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
       "  ir.view('orbit' | 'chase')     stand the flight camera beside the hull, or behind it",
-      '  ir.flightCamera               that camera itself — drag, turn, zoom, recentre',
+      '  ir.flightCamera               that camera itself — drag, turn, zoom, recenter',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',

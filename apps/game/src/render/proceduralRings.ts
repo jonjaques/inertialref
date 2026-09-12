@@ -79,19 +79,19 @@ type Architecture = 'sheet' | 'threads' | 'mixed'
 interface Character {
   readonly architecture: Architecture
   /**
-   * The particles' reflectance, as the strip's grey before tint, in the
+   * The particles' reflectance, as the strip's gray before tint, in the
    * strip's own sRGB encoding. Saturn's clean water ice is near 0.5; Uranus's
    * processed rubble is charcoal at 0.03.
    */
   readonly albedo: number
-  /** The population's colour, as per-lane multipliers on the albedo. */
+  /** The population's color, as per-lane multipliers on the albedo. */
   readonly tint: Rgb
   /** The thread count, where the record states one. */
   readonly threads: number | null
 }
 
 /*
- * The palette the population's colour is drawn from. Real rings run from
+ * The palette the population's color is drawn from. Real rings run from
  * Saturn's cream — water ice with a trace of tholin — through Uranus's
  * neutral charcoal to the reddened dust of a Jovian ring; the pale blue is
  * the license, for fresh ice that has not been weathered, and it is drawn
@@ -145,7 +145,7 @@ const PUBLISHED: ReadonlyMap<string, Character> = new Map<string, Character>([
   /*
    * Uranus: thirteen narrow rings of charcoal rubble, ε widest and brightest
    * at the outer edge. Karkoschka's albedo for the particles is 0.03; the
-   * strip's grey encodes sRGB, so the same darkness is 0.06 here.
+   * strip's gray encodes sRGB, so the same darkness is 0.06 here.
    */
   [
     'g:milky-way/s:SOL/b:6',
@@ -246,7 +246,7 @@ function character(
 /**
  * One band of the radial profile.
  *
- * A band is a plateau `half` wide about `centre`, falling off over `inner`
+ * A band is a plateau `half` wide about `center`, falling off over `inner`
  * on the planetward side and `outer` on the far side — Saturn's A ring has a
  * diffuse inner edge and a knife-sharp outer one held by Janus, and drawing
  * both sides alike is the first thing that reads as a decal. `ripple` is the
@@ -277,7 +277,7 @@ interface Profile {
   readonly divisions: readonly Division[]
 }
 
-/** The population's colour with one band's jitter about it. */
+/** The population's color with one band's jitter about it. */
 function bandColor(
   albedo: number,
   tint: Rgb,

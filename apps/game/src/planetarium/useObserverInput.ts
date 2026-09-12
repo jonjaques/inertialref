@@ -213,7 +213,7 @@ export function useObserverInput(
         traveled = 0
         looking =
           event.button === 2 || latest.current.freeLook || observatory.standing
-        // Client coordinates, not `phase.centre`. The gesture arithmetic only
+        // Client coordinates, not `phase.center`. The gesture arithmetic only
         // ever reads *differences*, so the element's own offset cancels out of
         // it; a pick is an absolute position and the projection it is tested
         // against is in client space. See `onPick`.

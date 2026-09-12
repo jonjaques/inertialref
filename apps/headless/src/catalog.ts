@@ -30,7 +30,7 @@ const SKY = new URL('../../../data/catalog/stars-sky.irsc', import.meta.url)
  * the runner's job is to prove the simulation core works, and it can do that
  * without 7,123 real stars. `pnpm catalog:build` is what puts it back. The two
  * files degrade separately — a volume without its sky is the local
- * neighbourhood under a sky with no Orion in it, which is a smaller lie than
+ * neighborhood under a sky with no Orion in it, which is a smaller lie than
  * Sol alone.
  */
 export function loadStarCatalog(): StarCatalog {

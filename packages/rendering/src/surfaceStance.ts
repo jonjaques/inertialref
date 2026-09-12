@@ -247,7 +247,7 @@ export function surfaceStancePose(
       Vec.scale(triad.up, Math.sin(pitch)),
     ),
   )
-  // Levelled against the *local* up rather than the pole: standing at 60° north
+  // Leveled against the *local* up rather than the pole: standing at 60° north
   // with the pole as the hint tilts the horizon by the co-latitude, which reads
   // as the whole world being on a slope.
   return { offset, orientation: lookAlong(forward, triad.up) }

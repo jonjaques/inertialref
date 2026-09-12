@@ -1287,7 +1287,7 @@ describe('surface frame ids round-trip', () => {
           if (parsed === null) return
           expect(formatAddress(parsed.address)).toBe(formatAddress(ADDRESS))
           // Re-formatting what we parsed must give the identical id. That is the
-          // property the whole quantisation dance exists to provide.
+          // property the whole quantization dance exists to provide.
           expect(
             surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude),
           ).toBe(id)

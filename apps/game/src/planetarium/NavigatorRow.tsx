@@ -14,7 +14,7 @@ import type { Highlight } from './navigator.ts'
  * shapes; a glyph chosen by the address's *depth* drew Ganymede and Pluto
  * identically and Bennu as Earth.
  *
- * **The tint is the sky.** A star carries its own colour, computed from its
+ * **The tint is the sky.** A star carries its own color, computed from its
  * effective temperature, because `docs/design/art.md` puts that on the list of
  * things this game may not invent: a K dwarf is orange and does not get to be a
  * nicer orange. A body has no light of its own, so it takes the interface's
@@ -168,7 +168,7 @@ export function NavigatorRow({
                 ? 'text-sky-400/80'
                 : 'text-slate-400'
           }`}
-          // A star's measured colour beats the palette; nothing else has one.
+          // A star's measured color beats the palette; nothing else has one.
           // Dimmed until the system is generated, which is the same claim the
           // slate glyph makes for a body and the only one left to make here.
           style={

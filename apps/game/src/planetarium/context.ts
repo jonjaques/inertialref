@@ -82,7 +82,7 @@ export interface PlanetariumContext {
    * The *framing* act, and it solves rather than restores: `DEFAULT_FILL` of
    * the frame height at whatever lens is fitted, which is what `F` and the
    * shot presets run. Nothing stores the fill a viewer dollied to, so this
-   * cannot put one back — and a control labelled for an intent the code does
+   * cannot put one back — and a control labeled for an intent the code does
    * not keep would be the panel describing a coupling nobody wired all over
    * again.
    */

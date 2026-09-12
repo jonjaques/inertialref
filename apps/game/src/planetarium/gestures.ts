@@ -183,7 +183,7 @@ export interface GestureStep extends GesturePhase {
  * not already mean — unlike a map, where two-finger pan and pinch are genuinely
  * different gestures.
  *
- * `travelled` is reported for any finger count, because the caller's click test
+ * `traveled` is reported for any finger count, because the caller's click test
  * needs a distance and the answer "you moved" is true however many fingers did
  * it.
  */

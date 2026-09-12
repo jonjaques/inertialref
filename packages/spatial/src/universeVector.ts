@@ -11,14 +11,14 @@ import { type Vec3, vec3 } from './vec3.ts'
  * claim to be an absolute position (ADR-0001).
  *
  * Why not a plain double vector: the galaxy is ~1e21 m across and a double has
- * ~2.2e-16 relative precision, so absolute doubles quantise to ~100 km out at
+ * ~2.2e-16 relative precision, so absolute doubles quantize to ~100 km out at
  * the rim. Inch-scale interaction needs ~1e-2 m, i.e. ~24 orders of magnitude
  * of dynamic range, which no single float format gives you.
  *
  * Why not int64 (BigInt) millimeters: 2^63 mm is only ~0.97 light-years, so you
  * need 128-bit integers, and BigInt arithmetic in the inner loop of a 64 Hz
  * simulation is roughly an order of magnitude slower than double math, plus it
- * serialises badly.
+ * serializes badly.
  *
  * Why a *power-of-two* sector size: normalization (carrying an out-of-range
  * offset into the sector index) is then exact in IEEE-754. `o / SECTOR_SIZE` is
@@ -150,7 +150,7 @@ export function translate(uv: UniverseVector, delta: Vec3): UniverseVector {
  * `a - b` as a displacement in meters.
  *
  * Valid at any separation: the result is a double, so a galaxy-crossing
- * difference is quantised to ~1e5 m, while the near-field differences that
+ * difference is quantized to ~1e5 m, while the near-field differences that
  * actually feed physics and rendering keep full double precision.
  */
 export function difference(a: UniverseVector, b: UniverseVector): Vec3 {

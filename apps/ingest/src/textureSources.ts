@@ -249,7 +249,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
    * spent a year mapping. That is a one-time download into `.data/`, and it is
    * worth it for the same reason the Moon's LOLA map is: these are the bodies
    * whose *appearance* is the thing people know. Pluto's heart is the most
-   * recognisable feature in the outer Solar System, and there is no way to get
+   * recognizable feature in the outer Solar System, and there is no way to get
    * it except from the map that has it in.
    *
    * Deimos, Eros, Itokawa and Ryugu have no global mosaic in this archive and

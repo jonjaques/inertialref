@@ -51,7 +51,7 @@ describe.each(LAID_OUT_SHIPS)('the %s layout', (id) => {
       expect(Vec.length(nozzle.exhaust)).toBeCloseTo(1, 2)
   })
 
-  it('is mirror-symmetric about the centreline', () => {
+  it('is mirror-symmetric about the centerline', () => {
     const key = (v: Vec3) =>
       `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`
     const seen = new Set(
@@ -119,7 +119,7 @@ describe('the Rocinante in particular', () => {
 
   it('pushes ahead on the stern corners, and burns on the drive alone', () => {
     // The thrusters ahead: the four stern corners lean a quarter aft and
-    // take it, nothing forward of the centre opens, and the drive stays cold
+    // take it, nothing forward of the center opens, and the drive stays cold
     // — it is its own number, and a full burn opens no valve at all.
     const firing = fire(layout, vec3(0, 0, -1), Vec.ZERO)
     for (const n of layout.nozzles.keys())

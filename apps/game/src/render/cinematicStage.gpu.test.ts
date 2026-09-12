@@ -171,7 +171,7 @@ it('draws a dusty photographic sky with a cool halo at the Sun only when the scr
 })
 
 it.each([50, 5000])(
-  'replaces transparent atmospheric radiance at %i metres without covering foreground or the Sun',
+  'replaces transparent atmospheric radiance at %i meters without covering foreground or the Sun',
   async (distance) => {
     const camera = new PerspectiveCamera(55, 1, 0.1, 10000)
     const scene = new Scene()

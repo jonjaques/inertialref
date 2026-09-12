@@ -352,7 +352,7 @@ describe('the dwarf planets, against the same table', () => {
      * Jacobi ellipsoid whose long axis is nearly twice its short one, and whose
      * volume-equivalent radius from the 2017 occultation (Ortiz et al., Nature
      * 550, 219) is 798 km rather than the 715 km that Spitzer and Herschel
-     * thermal modelling gave. That is two measurements disagreeing, not a
+     * thermal modeling gave. That is two measurements disagreeing, not a
      * transcription error, and the newer one is what the data file uses.
      */
     if (name === 'Haumea') {
@@ -377,7 +377,7 @@ describe('the dwarf planets, against the same table', () => {
   it('makes Pluto and Charon the double body they are', () => {
     const pluto = find('Pluto')
     const charon = find('Charon')
-    // The barycentre is outside Pluto's surface, which is true of no other
+    // The barycenter is outside Pluto's surface, which is true of no other
     // planet–satellite pair in the Solar System.
     const barycenter =
       (charon.elements.semiMajorAxis * charon.mass) / (pluto.mass + charon.mass)
@@ -453,8 +453,8 @@ describe('the satellites, against the JPL satellite tables', () => {
        *
        * Two things are going on and both are real.
        *
-       * **The barycentre.** Styx, Nix, Kerberos and Hydra orbit the
-       * Pluto–Charon barycentre, and Charon is 12.2% of Pluto's mass. The
+       * **The barycenter.** Styx, Nix, Kerberos and Hydra orbit the
+       * Pluto–Charon barycenter, and Charon is 12.2% of Pluto's mass. The
        * engine is a patched-conic hierarchy — a moon orbits its parent, full
        * stop — so it propagates them about `G(M_Pluto + m_moon)` and leaves
        * Charon out. A period goes as `M^(-1/2)`, so every one comes out

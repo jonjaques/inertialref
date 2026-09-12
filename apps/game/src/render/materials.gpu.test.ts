@@ -596,7 +596,7 @@ describe('the orbital bake', () => {
 })
 
 /**
- * A cube target whose six faces hold one colour, the way a bake's arrive:
+ * A cube target whose six faces hold one color, the way a bake's arrive:
  * the same type and filtering the baker builds, cleared rather than drawn.
  */
 function filledCube(
@@ -636,12 +636,12 @@ describe('the sphere wearing a bake', () => {
    *
    * Drawn rather than inferred from the WGSL: the signature test above holds
    * the binding count, and this holds what the count is for. A sphere facing
-   * both the camera and the star, at its centre, is its reflectance times
+   * both the camera and the star, at its center, is its reflectance times
    * one — every photometric term is unity there — so a bake of 0.8 with a
    * relief record saying dry ground and no slope draws 0.8. Read through the
    * reflectance instead, the record says a slope of 0.6 and a sea mask of
-   * 0.8: the normal tilts off the star, the albedo goes to the ocean colour,
-   * and the centre is the sun-glint.
+   * 0.8: the normal tilts off the star, the albedo goes to the ocean color,
+   * and the center is the sun-glint.
    */
   async function center(
     relief: readonly [number, number, number],
@@ -687,7 +687,7 @@ describe('the sphere wearing a bake', () => {
   it('draws the sea where the relief record says so, and nothing else moved', async () => {
     const [dryRed] = await center([0.5, 0.5, 0])
     const [red, , blue] = await center([0.5, 0.5, 1])
-    // The ocean colour is a deep blue: darker than the ice, and bluer.
+    // The ocean color is a deep blue: darker than the ice, and bluer.
     expect(red).toBeLessThan(dryRed * 0.6)
     expect(blue).toBeGreaterThan(red)
   })

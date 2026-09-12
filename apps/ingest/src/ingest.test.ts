@@ -50,7 +50,7 @@ const MANIFEST = new URL('../../../data/catalog/manifest.json', import.meta.url)
 
 /*
  * Two readings of the same files. `volume()` is the 150 ly file alone, which
- * is what every claim about the neighbourhood is a claim about; `catalog()` is
+ * is what every claim about the neighborhood is a claim about; `catalog()` is
  * the pair as a host loads them, which is what the sky's claims are about and
  * what the survey checks are held against.
  */
@@ -244,7 +244,7 @@ describe('the sky asset', () => {
       if (star === undefined) throw new Error(id)
       // At the star's own distance, not a unit vector: a universe position is
       // 2.5 × 10²⁰ m from the origin, where a double resolves to tens of
-      // kilometres, and a one-metre offset from the Sun is rounding noise.
+      // kilometers, and a one-meter offset from the Sun is rounding noise.
       const published = galacticToCartesian(
         equatorialToGalactic(ra, dec),
         star.distanceLightYears * LIGHT_YEAR,

@@ -117,7 +117,7 @@ describe('the terrain palette', () => {
   })
 
   /*
-   * The two meanings of `BodyAppearance.colour`, which differ by a factor of
+   * The two meanings of `BodyAppearance.color`, which differ by a factor of
    * six and are the reason this function has a branch in it at all.
    */
   it('reads a mapless body as a reflectance and a mapped one as a ratio', () => {
@@ -189,8 +189,8 @@ describe('the terrain palette', () => {
 
   it('separates the sky it is lit by from the haze it is seen through', () => {
     /*
-     * Two fields with two jobs. `skyColour` tints the light arriving at the
-     * surface and carries no brightness of its own; `hazeColour` is the aerial
+     * Two fields with two jobs. `skyColor` tints the light arriving at the
+     * surface and carries no brightness of its own; `hazeColor` is the aerial
      * veil in front of it, and its value is the veil's.
      */
     const mars = terrainPalette(find('Mars'))
@@ -205,7 +205,7 @@ describe('the terrain palette', () => {
   it('carries the sky as a tint rather than as a brightness', () => {
     /*
      * How much light the sky delivers is `airThickness`; this is only what
-     * colour it arrives in. Multiplied together instead, a thin warm sky is
+     * color it arrives in. Multiplied together instead, a thin warm sky is
      * dimmer than a thin blue one for no reason anybody could name.
      */
     for (const name of ['Earth', 'Mars', 'Titan', 'Luna']) {

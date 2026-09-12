@@ -153,7 +153,7 @@ describe('the orbit frame', () => {
 })
 
 describe('the flight camera pose', () => {
-  it('in the chase view with the head centred is the chase camera exactly (property)', () => {
+  it('in the chase view with the head centered is the chase camera exactly (property)', () => {
     fc.assert(
       fc.property(point, rotation, hull, (position, orientation, length) => {
         const scene = sceneWith(position, orientation)

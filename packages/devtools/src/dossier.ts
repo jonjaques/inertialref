@@ -634,7 +634,7 @@ function physicalGroup(body: Body): FactGroup {
   facts.push(
     noData(
       'Composition',
-      'the mean density says what this body weighs per litre and nothing about what is where. Separating a core from a mantle takes a gravity map from orbit, or a seismometer on the ground',
+      'the mean density says what this body weighs per liter and nothing about what is where. Separating a core from a mantle takes a gravity map from orbit, or a seismometer on the ground',
       'density implies it; nothing states it',
     ),
   )
@@ -752,7 +752,7 @@ function orbitGroup(
   facts.push(
     noData(
       'Resonances',
-      'whether this orbit is locked to a neighbour’s — 3:2, 1:2:4 — is a relationship between two records, and nothing holds it',
+      'whether this orbit is locked to a neighbor’s — 3:2, 1:2:4 — is a relationship between two records, and nothing holds it',
     ),
   )
 
@@ -972,7 +972,7 @@ function atmosphereGroup(body: Body): FactGroup {
     /*
      * An airless body still gets the group, and the first row is a *fact*
      * rather than an empty field: "none" is an answer, and collapsing it into
-     * the same grey as "nobody has looked" would throw away the difference this
+     * the same gray as "nobody has looked" would throw away the difference this
      * whole design exists to keep.
      */
     return {
@@ -1043,7 +1043,7 @@ function atmosphereGroup(body: Body): FactGroup {
   facts.push(
     noData(
       'Composition',
-      'the column has a density, a scale height and a colour. Which gases add up to that needs a transmission spectrum, and none has been taken',
+      'the column has a density, a scale height and a color. Which gases add up to that needs a transmission spectrum, and none has been taken',
     ),
   )
   facts.push(

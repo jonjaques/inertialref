@@ -49,7 +49,7 @@ export function DocsRail({
    * By hand rather than `scrollIntoView`, and that is the whole reason this is
    * eight lines. `scrollIntoView` scrolls *every* scrollable ancestor, so on a
    * wide screen it would also scroll the article — the rail is a sticky column
-   * inside the same box the document is in, and centring a rail entry would
+   * inside the same box the document is in, and centering a rail entry would
    * throw the reader four paragraphs down the page they just opened.
    */
   useEffect(() => {

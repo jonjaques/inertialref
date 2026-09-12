@@ -48,7 +48,7 @@ describe('Mars approach', () => {
   })
 
   it('holds the drive through the settle and cuts it only after the deck takes the weight', () => {
-    // Nothing else holds the hull up while the last metre is descended, so
+    // Nothing else holds the hull up while the last meter is descended, so
     // the throttle cannot fall between the start of the hover and contact.
     const hover = marsLandingDrives(38).throttle
     expect(hover).toBeGreaterThan(0.1)

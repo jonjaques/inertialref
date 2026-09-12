@@ -94,10 +94,10 @@ export interface TravelTarget {
   /** Spectral type on a system row, null on a body. */
   readonly spectralType: string | null
   /**
-   * The star's own colour, linear sRGB, or null on a body row.
+   * The star's own color, linear sRGB, or null on a body row.
    *
    * A measurement rather than decoration: `docs/design/art.md` puts a star's
-   * colour on the list of things the game may not invent, because it follows
+   * color on the list of things the game may not invent, because it follows
    * from the effective temperature. A K dwarf is orange and does not get to be
    * a nicer orange. Carried here rather than looked up from the class letter,
    * so the glyph in the catalog and the disk in the sky are the same number.
@@ -158,7 +158,7 @@ type ByIdentity<T> = [T] extends [string | number | boolean | null | undefined]
  * moment the field is declared, which is the only moment anyone is looking.
  *
  * Two keys are deliberately not in it. `distance` is the exclusion
- * `sameTargets` is about. `colour` is a nested value, so `!==` on it is true on
+ * `sameTargets` is about. `color` is a nested value, so `!==` on it is true on
  * every sweep and would defeat the whole bail-out; it is compared component-wise
  * below.
  */
@@ -446,7 +446,7 @@ function bodyTarget(
  * Three records can describe a system — the loaded `StarSystem`, the
  * `CatalogStar`, and a procedural stub — and a listing has to draw the same
  * row from any of them. The loaded record wins because it alone knows the
- * planet count; the catalog star carries the measured colour and the confirmed
+ * planet count; the catalog star carries the measured color and the confirmed
  * planets; the stub is what a generated star has. `undefined` when the id
  * names nothing at all.
  */

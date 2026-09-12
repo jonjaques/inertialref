@@ -71,7 +71,7 @@ export class FlightCamera {
    * Entering the orbit opens it where the chase camera was standing — the
    * chase offset, turned by the ship's attitude, read off this frame's scene
    * — so the switch is a change of what the camera does next rather than a
-   * jump. The head is centred on every switch: a look is an offset from the
+   * jump. The head is centered on every switch: a look is an offset from the
    * view's own aim, and the aim it was measured against is gone.
    */
   setView(view: FlightView): FlightCameraStatus {

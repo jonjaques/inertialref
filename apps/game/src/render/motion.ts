@@ -64,7 +64,7 @@ export class MotionNode extends TempNode<'vec4'> {
     this.motionNode = texture(motion.value)
     this.updateBeforeType = NodeUpdateType.RENDER
     // A tile maximum is a per-tile fact. Fetched linearly between two tile
-    // centres whose velocities oppose, it averages toward zero and the blur
+    // centers whose velocities oppose, it averages toward zero and the blur
     // cuts off in a band along the tile edge that moves with the tiling.
     for (const { target } of this.#stages.slice(0, 2)) {
       target.texture.minFilter = NearestFilter

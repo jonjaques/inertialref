@@ -13,7 +13,7 @@
  * `"nav"` from before the tabs were renamed parses perfectly and renders no
  * panel at all and no active tab, and the only way back is devtools. A stored
  * `camera.lens` whose focal length is `NaN` or zero reaches the projection
- * matrix. Every key therefore says what it will accept, and an unrecognised
+ * matrix. Every key therefore says what it will accept, and an unrecognized
  * value is treated exactly like an absent one.
  */
 

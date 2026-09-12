@@ -13,7 +13,7 @@
  * anamorphic blade. That was the right call while the reason stood — a
  * screenshot pipeline would put a GPU in the build, and a frame captured on
  * every regeneration would make `pnpm brand --check` mean nothing — and it
- * produced a cyan marble with grey amoebas on it, because six bezier blobs is
+ * produced a cyan marble with gray amoebas on it, because six bezier blobs is
  * not what Earth looks like and a drawn flare is not what a lens does.
  *
  * Both objections are about the *build*, not about the picture, and a
@@ -35,7 +35,7 @@
  * star clear of the horizon so the flare has room. In `pnpm dev` at
  * `/play/solo`, with `engine.showShip = false`:
  *
- *     camera 1.16 body radii from Earth's centre
+ *     camera 1.16 body radii from Earth's center
  *     phase (sun–body–camera) 95°, so the near ground is at dusk
  *     the camera around the terminator ring far enough to bring the Red Sea
  *       and the Gulf under it, rolled 6° so the limb climbs to the right
@@ -43,7 +43,7 @@
  *     captured at 3200x1680 and reduced to 1200x630, which is the only
  *       antialiasing the limb gets
  *
- * Every colour below is a Tailwind step already in `index.css`, written as a
+ * Every color below is a Tailwind step already in `index.css`, written as a
  * hex literal with the step named — the same convention that file uses, and for
  * the same reason: a bare triple is unreadable next to the palette it belongs
  * to. The type steps are quoted from `index.css` too, axis by axis, so a change
@@ -170,7 +170,7 @@ export async function composeOgCard() {
       into the column — the star's third ghost, a dark red ring that lands
       behind the rule, and the limb climbing into the bottom left — and to sink
       the sky from the render's pure black to the site's slate-950, so the card
-      and the page it opens are the same colour.
+      and the page it opens are the same color.
 
       It therefore ends at 62%, well short of the terminator. A slab wide enough
       to cover the old planet would erase the sunrise, which is the picture.

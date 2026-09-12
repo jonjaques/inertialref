@@ -361,7 +361,7 @@ export const SOLAR_SMALL_BODIES: readonly SolarBody[] = [
       discoveryYear: 1930,
       moons: [
         /*
-         * Half Pluto's diameter, orbiting a barycentre outside Pluto itself — the
+         * Half Pluto's diameter, orbiting a barycenter outside Pluto itself — the
          * only true double body in the Solar System.
          */
         satellite(

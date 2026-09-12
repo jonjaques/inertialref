@@ -44,7 +44,7 @@ export const cellCenter = (cell: GalacticCell): UniverseVector =>
     vec3(CELL_SIZE / 2, CELL_SIZE / 2, CELL_SIZE / 2),
   )
 
-/** Every cell touching the axis-aligned box of `radius` around `centre`. */
+/** Every cell touching the axis-aligned box of `radius` around `center`. */
 export function cellsWithin(
   center: UniverseVector,
   radius: Meters,

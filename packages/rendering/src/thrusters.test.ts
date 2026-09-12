@@ -50,7 +50,7 @@ const mirrorX = (v: Vec3): Vec3 => vec3(-v.x, v.y, v.z)
 const mirrorSpin = (v: Vec3): Vec3 => vec3(v.x, -v.y, -v.z)
 
 describe('the wrench of one nozzle', () => {
-  it('thrusts against the exhaust and turns about the centre by the right hand', () => {
+  it('thrusts against the exhaust and turns about the center by the right hand', () => {
     // A jet at the bow, on the axis, blowing up: thrust is down, and pushing
     // the nose down pitches the ship nose-down — a negative turn about +X.
     const bow = nozzleWrench({
@@ -64,7 +64,7 @@ describe('the wrench of one nozzle', () => {
     expect(bow.leverage).toBe(1)
   })
 
-  it('has no torque direction on the centre of mass, and less leverage near it (property)', () => {
+  it('has no torque direction on the center of mass, and less leverage near it (property)', () => {
     fc.assert(
       fc.property(direction, (exhaust) => {
         const centered = nozzleWrench({

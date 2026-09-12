@@ -223,7 +223,7 @@ function elementMaterial(kind: ElementKind): {
        * banked toward the star through the whole approach — spilling over the
        * upper-left limb at f264, still brightest there at f272 — and a uniform
        * annulus reads as a graphic rather than as light bending past a body.
-       * `asymmetry` is how far off-centre the star sits as a fraction of the
+       * `asymmetry` is how far off-center the star sits as a fraction of the
        * occluder's own radius, so this term vanishes on its own at alignment
        * and no script has to remember to turn it off.
        *
@@ -231,8 +231,8 @@ function elementMaterial(kind: ElementKind): {
        * black, and a term that reaches zero puts a hard seam across the ring
        * exactly where the eye is looking for the silhouette's edge.
        */
-      // `centred / max(r, eps)` rather than `normalize(centred)`: the quad's
-      // exact centre is the zero vector, `normalize` of that is 0/0, and the
+      // `centered / max(r, eps)` rather than `normalize(centered)`: the quad's
+      // exact center is the zero vector, `normalize` of that is 0/0, and the
       // NaN is not killed by the radial gate below — `0 * NaN` is NaN, and
       // `mix(1, NaN, 0)` is NaN too, so an additive quad would stamp it into
       // the frame at the middle of the silhouette.
@@ -255,7 +255,7 @@ function elementMaterial(kind: ElementKind): {
     }
   }
 
-  // An overlay: the quads hang twenty metres in front of the lens, and the
+  // An overlay: the quads hang twenty meters in front of the lens, and the
   // sensor must not take that for the distance of the sky behind the Sun.
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.colorNode = color.mul(profile).mul(intensity)

@@ -363,7 +363,7 @@ export type CompositionPlacement =
       readonly azimuth: number
       readonly elevation: number
       readonly distance: Meters
-      /** Zero for a centre-aimed composition, and exactly zero. */
+      /** Zero for a center-aimed composition, and exactly zero. */
       readonly look: LookOffset
     }
   | {
@@ -410,7 +410,7 @@ export function placeComposition(
    * radius up, and that is the picture. A `fill` standoff below it is the
    * *lens* making a framing impossible: `close` wants 1.95 radii at 65° and
    * 1.27 at 110°, and letting that become a stance turns a framing button into
-   * a centre-aimed one staring at the nadir, with a heading solved from
+   * a center-aimed one staring at the nadir, with a heading solved from
    * `atan2(0, 0)`. Clamped to the floor, it stays the closest framing the orbit
    * arm can give, which is what the press asked for.
    */
@@ -454,10 +454,10 @@ export function placeComposition(
 /**
  * The free-look offset an aimed composition needs from the orbit arm's pose.
  *
- * `NO_LOOK` for a centre-aimed one, and by construction rather than by
+ * `NO_LOOK` for a center-aimed one, and by construction rather than by
  * rounding: `aimPoint` returns the origin, the forward is the negated offset,
  * and putting that back through the solve would return zeros to within an ulp
- * rather than exactly. The nine drawn framings are all centre-aimed, so this is
+ * rather than exactly. The nine drawn framings are all center-aimed, so this is
  * also what keeps them bit-identical to the pose they had before free look
  * existed.
  */
@@ -476,6 +476,6 @@ export function compositionLook(
   return lookToward(Q.rotateInverse(base, forward))
 }
 
-/** The orbit arm's centre-aimed orientation for a camera at this offset. */
+/** The orbit arm's center-aimed orientation for a camera at this offset. */
 const observerBase = (position: Vec3): Quat =>
   lookAlong(Vec.negate(position), vec3(0, 1, 0))

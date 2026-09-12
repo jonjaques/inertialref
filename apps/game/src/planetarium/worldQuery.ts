@@ -75,7 +75,7 @@ export interface WorldFlagOption {
  *
  * "Has a sea" rather than "has water": the generator's answer is whether the
  * ground temperature admits a *liquid*, and on a cold world that liquid is
- * methane. Labelling it water would be the interface inventing a fact the
+ * methane. Labeling it water would be the interface inventing a fact the
  * simulation is careful not to claim ([ADR-0026](../../../../docs/adr/0026-the-liquid.md)).
  */
 export const WORLD_FLAGS: readonly WorldFlagOption[] = [

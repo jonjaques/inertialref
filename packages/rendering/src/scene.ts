@@ -157,7 +157,7 @@ export interface RenderEntity {
 export interface RenderHorizon {
   /** The address of the body it is measured against. */
   readonly body: string
-  /** Away from the body's centre, unit. */
+  /** Away from the body's center, unit. */
   readonly up: Vec3
   /** The body's pole, flattened onto the horizon, unit. */
   readonly north: Vec3

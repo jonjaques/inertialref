@@ -78,11 +78,11 @@ export async function drawDiagrams(container: HTMLElement): Promise<void> {
 /*
  * The palette, restated for a library that cannot read a stylesheet.
  *
- * Mermaid computes its own derived colours — a node's border from its fill, a
+ * Mermaid computes its own derived colors — a node's border from its fill, a
  * label's ink from its background — so it takes hex values rather than the
  * custom properties everything else in this interface uses. Each line names the
  * step in `DESIGN.md` it is, because a bare hex three files from the palette is
- * a colour nobody can check.
+ * a color nobody can check.
  *
  * The whole diagram is drawn in the graphite ramp with the accent on the edges,
  * which is the One Accent Rule applied to a picture: a flowchart is structure,

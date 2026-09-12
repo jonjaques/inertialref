@@ -109,7 +109,7 @@ export function TimePanel(context: PlanetariumContext) {
          * label already saying "1×". Never disabled, though it was for one
          * revision: at 1× the disabled style took it to 35% opacity, which
          * hides the *readout* — the one number this row exists to show — in
-         * order to grey out an action that is a no-op anyway. A reset that is
+         * order to gray out an action that is a no-op anyway. A reset that is
          * already reset is a control asserting a state, not a dead one.
          */}
         {/* Pushed to the far end, because it is a readout that happens to be

@@ -8,7 +8,7 @@ import { NavigatorPanel } from '../planetarium/NavigatorPanel.tsx'
  *
  * One panel, and the fact that it is the *same* panel the planetarium draws is
  * the point. There were two navigators: the Catalog, which looked, and the
- * author's Navigate panel, which travelled — and in the planetarium Navigate's
+ * author's Navigate panel, which traveled — and in the planetarium Navigate's
  * Go to, Orbit and Land teleported a ship nobody could see, so the panel
  * appeared to do nothing, while in flight it was the only way to go anywhere at
  * all. Two navigators is the ambiguity this removes; one panel with a verb that

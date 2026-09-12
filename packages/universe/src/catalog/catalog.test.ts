@@ -418,7 +418,7 @@ describe('the packed format', () => {
     })
     for (const [i, row] of original.stars.entries()) {
       const decodedStar = decoded.stars[i] as PackedStar
-      // Position is quantised to 1 AU, which is four orders of magnitude inside
+      // Position is quantized to 1 AU, which is four orders of magnitude inside
       // the parallax error at this distance. Everything else is exact.
       expect(Math.abs(decodedStar.x - row.x)).toBeLessThan(1.5e11)
       expect({ ...decodedStar, x: 0, y: 0, z: 0 }).toEqual({

@@ -206,7 +206,7 @@ export function DropHandle({
       node.releasePointerCapture(event.pointerId)
     setAim(null)
     engine.harness.observatory.previewDrop(null)
-    // A press that never travelled is somebody discovering the control, not a
+    // A press that never traveled is somebody discovering the control, not a
     // drop onto whatever happens to be under a resting cursor.
     if (event.type === 'pointerup' && traveled.current < CLICK_SLOP) {
       onNotice(`Drag onto ${name ?? 'the world'} to stand there.`)

@@ -292,7 +292,7 @@ export const COAST_SHAPE = {
  *
  * **The arc computes its own, and sharing this one was wrong.** `ARC_MARGIN` is
  * inside `BELT_MARGIN`, which reads as the arc asking for strictly less — but
- * `convergence` returns `total/weight`, a normalised mean, and re-weighting a
+ * `convergence` returns `total/weight`, a normalized mean, and re-weighting a
  * mean moves it in either direction rather than shrinking it. Measured on Earth
  * over the 11,833 of 40,000 directions the arc actually reads: the two disagree
  * in 3,510 of them, worst case a belt reading of 0.0005 — pure transform, no arc

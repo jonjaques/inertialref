@@ -321,8 +321,8 @@ export function observerPose(
  * and to the left arrives rolled — the horizon goes off level for a gesture
  * that never asked it to.
  *
- * A centred offset returns the base quaternion itself rather than its product
- * with the identity. The product is exact for every field, but `isCentred` is
+ * A centered offset returns the base quaternion itself rather than its product
+ * with the identity. The product is exact for every field, but `isCentered` is
  * the claim the compositions rest on and stating it as a branch is what makes
  * it hold under a later change to `multiply`.
  */

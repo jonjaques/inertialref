@@ -306,7 +306,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   const hazeLimb = uniform(new Color(0.92, 0.42, 0.2))
   const hazeStrength = uniform(0)
   // Open-ocean reflectance to start; `Bodies` writes the body's own liquid
-  // over it every frame, so a bake's sea is the colour the ground gives it.
+  // over it every frame, so a bake's sea is the color the ground gives it.
   const oceanColor = uniform(
     new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
   )
@@ -774,7 +774,7 @@ export function createRingMaterial(): RingMaterial {
   // so a clear fallback zeroes the thickness and a mapless ring — every
   // procedural giant's, and Jupiter's, Uranus's and Neptune's — renders fully
   // transparent. White makes it a uniform slab whose density comes from
-  // `opticalDepth` and whose color comes from `baseColour`.
+  // `opticalDepth` and whose color comes from `baseColor`.
   const map = texture(WHITE)
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColor = uniform(new Color(1, 1, 1))
@@ -787,7 +787,7 @@ export function createRingMaterial(): RingMaterial {
 
   // The geometry is an annulus in its own XZ plane with an outer radius of 1, so
   // the radial coordinate is available without a UV channel — and without the
-  // seam that any UV parameterisation of a disk has to put somewhere.
+  // seam that any UV parameterization of a disk has to put somewhere.
   const radius = length(vec2(positionLocal.x, positionLocal.z))
   const across = saturate(
     radius.sub(innerFraction).div(max(oneMinus(innerFraction), float(1e-3))),
@@ -818,7 +818,7 @@ export function createRingMaterial(): RingMaterial {
    * rings turn edge-on to the *sun*, which is the seasonal cycle that took
    * Cassini seven years to watch once.
    *
-   * `ω₀ = 0.9` is clean water ice in the visible. The strip's colour
+   * `ω₀ = 0.9` is clean water ice in the visible. The strip's color
    * multiplies it, and the strip is where the darkening lives — Saturn's B
    * ring is 0.51 in its photograph and Uranus's rubble 0.06 — so the two
    * together are the particle albedo Cassini measured, 0.5 to 0.6 for the

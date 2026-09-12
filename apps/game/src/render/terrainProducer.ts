@@ -202,7 +202,7 @@ export function createTileProducer(
   async function pump(): Promise<void> {
     scheduled = false
     if (inFlight > 0 || !available) return
-    // Drop what was cancelled while queued; a batch of nothing is no batch.
+    // Drop what was canceled while queued; a batch of nothing is no batch.
     while (queue.length > 0 && (queue[0] as Queued).canceled) queue.shift()
     if (queue.length === 0) return
     const head = queue[0] as Queued

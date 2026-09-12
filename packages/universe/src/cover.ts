@@ -55,8 +55,8 @@ export interface SurfaceCover {
    * Where this crust sits on the body's own compositional ramp, 0.5 neutral.
    *
    * One scalar rather than a color because the *ends* of the ramp are a
-   * property of the body — Mars runs dust-ochre to basalt-grey, Europa runs
-   * clean ice to sulphur-stained — and only the position along it is a property
+   * property of the body — Mars runs dust-ochre to basalt-gray, Europa runs
+   * clean ice to sulfur-stained — and only the position along it is a property
    * of the ground.
    */
   readonly mineral: number
@@ -76,7 +76,7 @@ export interface SurfaceCover {
    *
    * The pigment of a biosphere, laid where the temperature, the air and the
    * rainfall allow it. The design bible's flora is post-MVP; this is the
-   * colour it leaves on the ground when it arrives, and the reason a temperate
+   * color it leaves on the ground when it arrives, and the reason a temperate
    * world reads as one from orbit rather than as a wet desert.
    */
   readonly biota: number
@@ -154,7 +154,7 @@ export const COVER_SHAPE = {
  * Narrow, and offset well above zero, so that the gate is a *decision* rather
  * than a modulation: the basins on the near side flood and the basins on the
  * far side are dry highland. Opened wide instead, every basin on the body
- * floods a little, which is a world with grey basins rather than one with
+ * floods a little, which is a world with gray basins rather than one with
  * maria — and no threshold on the basin depth produces the asymmetry, because
  * the basins are not asymmetric. The flooding is.
  */
@@ -165,8 +165,8 @@ export const GATE_HI = 0.45
  * Where water ice stops subliming away in vacuum, Kelvin.
  *
  * Not the melting point. A surface in vacuum loses ice by sublimation, and the
- * rate falls off exponentially with temperature — around 145 K a millimetre a
- * billion years, around 170 K a metre a year. So this is the line between a
+ * rate falls off exponentially with temperature — around 145 K a millimeter a
+ * billion years, around 170 K a meter a year. So this is the line between a
  * body that keeps exposed ice for geological time and one that does not, and it
  * is why Mercury's poles hold ice at 1,600 K of subsolar heat: the floors of
  * their polar craters never see the sun.

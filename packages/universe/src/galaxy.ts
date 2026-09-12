@@ -95,7 +95,7 @@ export interface SystemStub {
   readonly planets: readonly CatalogPlanet[]
 }
 
-export { CELL_SIZE, cellCenter as cellCentre, cellKey, cellOf, cellOrigin }
+export { CELL_SIZE, cellCenter as cellCenter, cellKey, cellOf, cellOrigin }
 export type { GalacticCell }
 
 /** Zigzag encoding, so negative cell coordinates survive the id character set. */

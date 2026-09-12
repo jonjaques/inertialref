@@ -215,14 +215,14 @@ export function NavBall({
 const shortName = (address: string): string =>
   address.slice(address.lastIndexOf('/') + 1)
 
-/** A projected point: pixels from the centre, and how much it faces us. */
+/** A projected point: pixels from the center, and how much it faces us. */
 interface Projected {
   readonly x: number
   readonly y: number
   readonly depth: number
 }
 
-/** A direction in horizon axes, on the face, in pixels about the centre. */
+/** A direction in horizon axes, on the face, in pixels about the center. */
 function project(local: Quat, direction: Vec3, radius: number): Projected {
   const on = onBall(local, direction)
   return { x: on.x * radius, y: -on.y * radius, depth: on.depth }

@@ -441,7 +441,7 @@ const anglePhi = (x: number, z: number): number => {
 }
 
 /**
- * Samples no face covered, filled from their neighbours.
+ * Samples no face covered, filled from their neighbors.
  *
  * Should be none for a closed mesh, and is a handful in practice at the poles
  * of a model whose facets are a hair smaller than the grid. The count is

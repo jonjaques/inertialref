@@ -141,7 +141,7 @@ describe('the entry arc', () => {
     const samples = arcSamples(arc, 5)
     expect(samples.map((p) => p.z)).toEqual([5e6, 4e6, 3e6, 2e6, 1e6])
     for (const p of samples) expect(Math.hypot(p.x, p.y)).toBe(0)
-    // Through the centre and out the other side.
+    // Through the center and out the other side.
     const through = arcContinuation(arc, 3)
     expect(through.map((p) => p.z)).toEqual([1e6, 0, -1e6])
   })
