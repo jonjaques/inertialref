@@ -51,7 +51,7 @@ it.each([
       )
       // Ten presented seconds let this independent reference finish its ease.
       for (let index = 0; index < 600; index++) ir.observerSample(1 / 60)
-      expect(ir.observerStatus().travelling).toBe(false)
+      expect(ir.observerStatus().traveling).toBe(false)
       const reference = ir.capturePicture('reference', 'Reference')
       const picture = cameraReviewPictures().find(
         (one) => one.id === `camera-review-${id}-enhanced`,

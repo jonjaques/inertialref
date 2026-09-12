@@ -104,7 +104,7 @@ describe('the shipped Mars pad', () => {
       author: 'InertialRef',
       source: 'design/structures/mars-pad.blend',
       generator: 'apps/ingest/models/build_mars_pad.py',
-      units: 'metres',
+      units: 'meters',
       upAxis: '+y',
       landingHeightMeters: 0,
       landingRadiusMeters: 25,
