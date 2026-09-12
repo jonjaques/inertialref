@@ -61,8 +61,10 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
+import { preloadMode } from './pages/modeLoader.ts'
 import {
   KEYS,
+  MODES,
   modeForPath,
   overlayState,
   resolvedLocation,
@@ -589,9 +591,32 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }
 
   useEffect(() => {
-    publishRuntime({ engine, dev, render: renderState, onNotice: flash })
+    publishRuntime({
+      engine,
+      dev,
+      render: renderState,
+      onNotice: flash,
+      boot: firstLight.store,
+    })
   })
   useEffect(() => () => publishRuntime(null), [])
+
+  /*
+   * Every mode's chunk, fetched once the cover is off.
+   *
+   * A mode's code loads when its route first renders, and the route renders
+   * nothing until the code lands — so the first door opened after first
+   * light was the scene with no chrome for the length of a chunk fetch, and
+   * the planetarium's stance arrived a beat after the menu's had been
+   * released, which is a beat of the ship's camera between two pictures that
+   * are not it. After `done` rather than at mount, so the three fetches never
+   * compete with the census for the network; `ModeLink` also warms the one
+   * under the pointer, which is the door most likely to open first.
+   */
+  useEffect(() => {
+    if (boot !== 'done') return
+    for (const mode of MODES) void preloadMode(mode)?.catch(() => {})
+  }, [boot])
 
   /*
    * The transport verbs, bound in every mode.
@@ -811,10 +836,18 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
           {/* Public pages remain readable above the cover while their backdrop
               warms. Keep the fade mounted in every mode: onRevealed completes
-              firstLight and releases its warm-up machinery. */}
+              firstLight and releases its warm-up machinery.
+
+              `z-35` over a scene mode: above the mode's chrome and the cinema
+              band at 30, and *below* the dialog band at 40. The dialogs are
+              reachable during boot — `?` and the settings key are bound from
+              the first frame — and at 50 the cover swallowed them: a live
+              sheet under opaque black, taking every click the cover did not.
+              `PageShell` is the later sibling and wins a tie, so the gap
+              between the two is not decorative. */}
           {boot !== 'done' && (
             <div
-              className={`pointer-events-none absolute inset-0 ${coverUnderPage ? 'z-0' : 'z-50'}`}
+              className={`pointer-events-none absolute inset-0 ${coverUnderPage ? 'z-0' : 'z-35'}`}
             >
               <ErrorBoundary
                 what="the loading screen"

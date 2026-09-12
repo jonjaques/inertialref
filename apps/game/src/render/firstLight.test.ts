@@ -249,7 +249,11 @@ describe('first light', () => {
 
   it('keeps a ledger of every stage it has shown, with the census at each', () => {
     const { light } = harness()
+    // The runtime's own line is already finished: this is built by `App`,
+    // which exists only once the chunk and the catalog are in hand, and the
+    // document's admission has been showing that line as running until now.
     expect(light.store.getState().stages).toEqual([
+      { label: 'loading the runtime', count: null },
       { label: 'waking the renderer', count: null },
     ])
     expect(light.store.getState().fraction).toBe(0)
@@ -261,6 +265,7 @@ describe('first light', () => {
     light.progress({ label: 'baking atmospheres', done: 19, total: 55 })
     light.progress({ label: 'baking atmospheres', done: 22, total: 55 })
     expect(light.store.getState().stages).toEqual([
+      { label: 'loading the runtime', count: null },
       { label: 'waking the renderer', count: null },
       { label: 'warming surface maps', count: '19/55' },
       { label: 'baking atmospheres', count: '22/55' },
@@ -277,7 +282,7 @@ describe('first light', () => {
     // A renderer rebuild re-runs the warm-up mid-session. The ledger is what
     // the cover showed, and it closed at first light.
     light.progress({ label: 'warming surface maps', done: 3, total: 55 })
-    expect(light.store.getState().stages).toHaveLength(4)
+    expect(light.store.getState().stages).toHaveLength(5)
     expect(light.store.getState().stages.at(-1)).toEqual({
       label: 'first light',
       count: null,
@@ -288,6 +293,7 @@ describe('first light', () => {
     const { light } = harness()
     light.progress({ label: '', done: 0, total: 3 })
     expect(light.store.getState().stages).toEqual([
+      { label: 'loading the runtime', count: null },
       { label: 'waking the renderer', count: null },
     ])
   })

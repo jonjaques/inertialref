@@ -200,6 +200,10 @@ describe('the HTML page before the renderer starts', () => {
       expect(html).toContain('Enable JavaScript to enter')
       expect(html).toContain('href="/docs"')
       expect(html).not.toContain('<canvas')
+      // The admission is the cover's first frame: the ledger's prelude line,
+      // which the runtime's cover continues rather than replaces.
+      expect(html).toContain('aria-label="Loading"')
+      expect(html).toContain('loading the runtime')
     },
   )
 })

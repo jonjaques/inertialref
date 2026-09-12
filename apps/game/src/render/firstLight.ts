@@ -1,9 +1,16 @@
 import { getLogger, getTimer } from '@inertialref/shared'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import { BOOT_MARKER, BOOT_PHASE } from '../engine/frameTiming.ts'
+import { type FirstLightState, RUNTIME_STAGE } from './bootState.ts'
 import type { RendererDescription } from './output.ts'
 import { replayMeasurement, watchPresentation } from './presentationWatchdog.ts'
 import type { BootProgress } from './warmup.ts'
+
+export type {
+  BootStage,
+  FirstLightPhase,
+  FirstLightState,
+} from './bootState.ts'
 
 /*
  * When the cover comes off.
@@ -36,7 +43,9 @@ import type { BootProgress } from './warmup.ts'
  *     canvas key and the only thing that bumps it is the watchdog's last rung.
  *   - one **measurement replay**, where there were three implementations in two
  *     files, each with a comment explaining why the other two were insufficient.
- *   - the status line, and the ledger of every line the cover has shown.
+ *   - the status line, and the ledger of every line the cover has shown. The
+ *     shapes it publishes are `render/bootState.ts`'s, so the pages can read
+ *     the ledger without this module's engine imports reaching the server.
  *
  * All of it is a plain state machine over injected signals, so the transitions,
  * the latch and the release are assertable in Node.
@@ -44,40 +53,6 @@ import type { BootProgress } from './warmup.ts'
 
 const log = getLogger('game.firstlight')
 const timer = getTimer('game.firstlight')
-
-export type FirstLightPhase = 'booting' | 'revealing' | 'done'
-
-/** One line of the cover's ledger. */
-export interface BootStage {
-  readonly label: string
-  /**
-   * The census as this stage last reported it — `done/total` across every
-   * producer — or `null` while there was no fraction worth showing. A finished
-   * stage keeps the count it ended on, so the ledger reads as a running total
-   * rather than as one number that moves from line to line.
-   */
-  readonly count: string | null
-}
-
-/** Everything the shell renders from. */
-export interface FirstLightState {
-  readonly phase: FirstLightPhase
-  /** The cover's status line: the running stage, with its count. */
-  readonly status: string
-  /**
-   * Every stage the cover has shown, oldest first. The last one is running
-   * and `status` is its line; every earlier one is finished. Append-only, so
-   * the cover can stream them down rather than replace one with the next.
-   */
-  readonly stages: readonly BootStage[]
-  /** Units finished over units expected, 0 to 1, for the progress rule. */
-  readonly fraction: number
-  /**
-   * How many times the canvas has been rebuilt. Part of the canvas key, and
-   * bumped by the watchdog's last rung and by nothing else.
-   */
-  readonly epoch: number
-}
 
 /* ------------------------------------------------------------------------- */
 /* The seam                                                                   */
@@ -268,10 +243,17 @@ export function createFirstLight(
 ): FirstLight {
   const signal = deps.signal ?? signalFor
   const replay = deps.replay ?? replayMeasurement
+  // The ledger opens with the runtime's own line already finished: this is
+  // built by `App`, which exists only once `GameLoader` has the chunk and the
+  // catalog in hand, and the document has been showing that line as running
+  // since before there was a runtime. `render/bootState.ts` has the argument.
   const store = createStore<FirstLightState>(() => ({
     phase: 'booting',
     status: bootStatusLine(null, false),
-    stages: [{ label: bootStageLabel(null, false), count: null }],
+    stages: [
+      RUNTIME_STAGE,
+      { label: bootStageLabel(null, false), count: null },
+    ],
     fraction: 0,
     epoch: 0,
   }))
