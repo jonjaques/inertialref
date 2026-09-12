@@ -554,6 +554,76 @@ caveat as below.
 
 ---
 
+## The Mars landing and the surface structures
+
+Measured 11 September 2026 on `codex/roci-lands-on-mars` rebased onto
+`main`, dev React, the driver's Chrome, a quiet machine. Two operating points
+for the scene: the entry at 8 s (ground telephoto, sky dome only) and the
+hover at 35 s (terrain at level 16, the pad, the dust, the dome). The orbit
+figure is the Rocinante at 400 km over Mars in the flight arm.
+
+| Operating point            | 1600×900 at DPR 1 | 3200×1800 at DPR 2 |
+| -------------------------- | ----------------- | ------------------ |
+| Mars orbit, flight         | 4.0 ms GPU        | not measured       |
+| Landing at 8 s, entry      | not measured      | 12.6 ms GPU        |
+| Landing at 35 s, the hover | 7.95 ms GPU       | 21.9 ms GPU        |
+
+`ir.gpu(120)` for the GPU column. The frame at 35 s is vsync at DPR 1 (mean
+16.6 ms, none over 25) and 27 ms mean, 40 ms p95 at DPR 2 — the scene misses
+60 Hz on a retina window during the ground phase, and the 2.8× between the
+two columns for 4× the pixels says it is fill. The CPU side is 3.3 ms of
+engine a frame, 1.9 of it `terrain.select`, which walks every frame because
+the scripted camera never converges. No strobe: a 240-frame cast at 60.3 fps
+over the approach reported no isolated frames.
+
+### Every tick samples the pad's support disk, at any altitude
+
+`flight.ts` calls `world.contactRadius` on every integrated tick with a body
+binding, unconditionally, where `groundAltitude` beside it skips terrain
+outside `groundBand`. `world.ts` then evaluates `surfaceSupportRadius` per
+placement, and that function samples `surfaceRadius` — a terrain noise call —
+before the cheap disk rejection. A ship in a 400 km Mars orbit pays a frame
+pose, a canonical position, an address format and a noise sample a tick for a
+pad it cannot reach. Not visible in the 4.0 ms orbit figure with one pad in
+the world; it is a per-placement cost on the tick, and the tick is the thing
+that runs at warp. The experiment: `pnpm sim` tick benchmark at 400 km with
+zero, one and twenty placements on Mars. The fix is two reorders — the disk
+test on `body.radius + height` before the noise sample, and the whole branch
+behind `datum > groundBand + contactHeight`.
+
+### The body frame pose is evaluated twice per body per frame
+
+`snapshot.ts` resolves the spin pose once for the structures and then
+re-evaluates the same `frames.pose` for the body's own orientation two
+statements later, for every body in every loaded system, every frame.
+`formatAddress` runs per placement inside the loop and once more after it.
+Unmeasured; `Engine/snapshot` is 0.24–0.32 ms a frame with Sol loaded, so the
+ceiling is that.
+
+### A structure whose glTF fails to load is requested again every frame
+
+`surfaceModels.ts` deletes the cache entry when the load rejects and resolves
+`null`; `SurfaceStructures.tsx` clears its pending key on resolve, finds no
+instance next frame and calls the loader again — a new `GLTFLoader` and a
+network request at the frame rate for as long as the structure is in view. A
+404 or an unfetched LFS pointer is the trigger. Cache the failure. Not
+measured; the shape is enough.
+
+### Per-frame allocations in the structure pass, in every mode
+
+`SurfaceStructures.tsx` builds a `Set` and a mapped array each frame, and in
+the cinema spreads the stage into a new array and object; `World.structures`
+sorts and freezes a fresh array on every `snapshot()`. Small, and outside the
+cinema it is the one worth removing because it runs in every mode with a
+scene. `cinematicStage.ts` allocates through `Vec` and `Q` for the Sun
+direction each frame, cinema only.
+
+### Every surface asset is fetched and compiled at boot
+
+`SurfaceStructures` warms every entry of `SURFACE_ASSETS` at mount, wherever
+the player is. One 1.5 MB asset today; the pattern is a boot cost that grows
+with the catalog of structures rather than with what is near.
+
 ## The order it is worth taking
 
 1. **Shipped-build mode switches and docs pages.** Every figure is dev React at
