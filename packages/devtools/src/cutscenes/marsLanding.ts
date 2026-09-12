@@ -128,8 +128,12 @@ export const MARS_LANDING: CutsceneScript = {
             entryHeat,
             landingDust,
             skyHaze: 1,
-            lensArtifacts: 0.65,
-            anamorphicFlare: 0.9,
+            // The flight stance's coating response, so the Sun over the pad
+            // is the lens the player already knows from orbit. The anamorphic
+            // streak's core is 0.66 px tall at 1600×900 and aliases into a
+            // full-width hairline at the Sun's height, so it stays off here.
+            lensArtifacts: 1,
+            anamorphicFlare: 0,
           },
           texts: [],
           done: frame >= MARS_LANDING_FPS * MARS_LANDING_SECONDS,
