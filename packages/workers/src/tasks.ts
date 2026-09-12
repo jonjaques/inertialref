@@ -10,7 +10,7 @@ import {
   createGalaxyField,
   selectPopulationSky,
   cellKey,
-  NO_CATALOGUE,
+  NO_CATALOG,
   type GalacticCell,
   galaxyId,
   generateCell,
@@ -74,7 +74,7 @@ export interface GeneratedStar {
   readonly temperature: number
   readonly color: readonly [number, number, number]
   readonly components: number
-  readonly catalogued: boolean
+  readonly cataloged: boolean
   readonly planets: readonly CatalogPlanet[]
 }
 
@@ -107,7 +107,7 @@ export const encodeStub = (stub: SystemStub): GeneratedStar => ({
   solarRadii: stub.solarRadii,
   temperature: stub.temperature,
   components: stub.components,
-  catalogued: stub.catalogued,
+  cataloged: stub.cataloged,
   planets: stub.planets,
 })
 
@@ -134,7 +134,7 @@ export const decodeStub = (wire: GeneratedStar): SystemStub => ({
   temperature: wire.temperature,
   color: { r: wire.color[0], g: wire.color[1], b: wire.color[2] },
   components: wire.components,
-  catalogued: wire.catalogued,
+  cataloged: wire.cataloged,
   planets: wire.planets,
 })
 
@@ -152,7 +152,7 @@ export const generateCellTask = defineTask<
   run({ seed, cell, context }) {
     return {
       cell,
-      stars: generateCell(parseSeed(seed), cell, context ?? NO_CATALOGUE).map(
+      stars: generateCell(parseSeed(seed), cell, context ?? NO_CATALOG).map(
         encodeStub,
       ),
     }
@@ -165,7 +165,7 @@ export interface SurveyRegionRequest {
   readonly min: GalacticCell
   readonly max: GalacticCell
   /** Cataloged star counts by `cellKey`; absent cells are zero. */
-  readonly catalogued?: Readonly<Record<string, number>>
+  readonly cataloged?: Readonly<Record<string, number>>
   /** Radius inside which the catalog is complete; see `CellContext`. */
   readonly completeRadius?: number
   readonly magnitudeCoverage?: PopulationCoverage
@@ -178,7 +178,7 @@ export const surveyRegionTask = defineTask<
   name: 'universe.surveyRegion',
   version: 3,
   run(
-    { seed, min, max, catalogued, completeRadius, magnitudeCoverage },
+    { seed, min, max, cataloged, completeRadius, magnitudeCoverage },
     context,
   ) {
     const parsed = parseSeed(seed)
@@ -192,7 +192,7 @@ export const surveyRegionTask = defineTask<
           if (context.canceled()) return out
           const cell = { x, y, z }
           const stars = generateCell(parsed, cell, {
-            catalogued: catalogued?.[cellKey(cell)] ?? 0,
+            cataloged: cataloged?.[cellKey(cell)] ?? 0,
             completeRadius: completeRadius ?? 0,
             magnitudeCoverage,
           })

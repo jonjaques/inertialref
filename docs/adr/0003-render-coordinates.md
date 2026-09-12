@@ -20,7 +20,7 @@ whenever the camera drifts more than 4096 m, and **snaps to a 1024 m grid**.
 Snapping is what makes it exact: the shift is an integer multiple of a power of
 two, so it is exactly representable in float64 and float32 alike. 10,000 rebases
 accumulate zero drift rather than 10,000 roundings, which `origin.test.ts`
-asserts by checking the origin is still exactly on the grid afterwards.
+asserts by checking the origin is still exactly on the grid afterward.
 
 **2. Logarithmic depth compression.** Anything whose _surface_ is more than
 2e6 m away is moved onto a compressed radial scale:

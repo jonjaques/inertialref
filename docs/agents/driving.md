@@ -273,7 +273,7 @@ after `ir.visit` reports zeros for a reason that is not the gate above.
 ## Why was that frame slow
 
 The panel answers "is it fast right now" while you fly; the timeline answers
-"why was that frame slow" afterwards, and it is the only instrument here with a
+"why was that frame slow" afterward, and it is the only instrument here with a
 time axis the others can be laid against.
 
 ```bash

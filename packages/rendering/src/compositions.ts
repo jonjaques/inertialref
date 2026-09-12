@@ -429,7 +429,7 @@ export function placeComposition(
      *
      * The sub-camera point is where the eye stands, which makes the standoff a
      * height above the ground and the aim a heading and a pitch. The horizon
-     * levelling comes free: `surfaceStancePose` levels against the *local* up,
+     * leveling comes free: `surfaceStancePose` levels against the *local* up,
      * which is what a limb shot wants and what `placeShot` has to ask for
      * explicitly through its `upHint`.
      */

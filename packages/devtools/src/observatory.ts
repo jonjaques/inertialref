@@ -121,7 +121,7 @@ import type { Host } from './harness.ts'
  * One deliberate difference from the cutscene director, worth naming because it
  * looks like a violation of that module's rule: **`sample` here does touch the
  * world.** A cutscene resolves its stage once at `prepare` and is a pure
- * function of the frame afterwards, because a scripted scene must be
+ * function of the frame afterward, because a scripted scene must be
  * reproducible frame for frame. The observatory is the opposite kind of object
  * — it is *following* something that moves, and a planetarium that resolved
  * Jupiter's position once and then orbited where Jupiter used to be would drift

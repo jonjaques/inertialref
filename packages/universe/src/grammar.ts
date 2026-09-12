@@ -181,7 +181,7 @@ export interface SurfaceGrammar {
    * flown over the body and the archive overrides all three.
    *
    * Recorded rather than re-derived, because `reliefLimit` is not always what
-   * bound the body and the comparison cannot tell afterwards. See
+   * bound the body and the comparison cannot tell afterward. See
    * `reliefLimitSource`.
    */
   readonly reliefSource: ReliefSource

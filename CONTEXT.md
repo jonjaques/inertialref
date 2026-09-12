@@ -843,7 +843,7 @@ a byte-identical hash to one opened without.
   update however much intent it is handed. An authority echoing a client's own
   ship back at it would fight the local simulation every tick.
 - **`status().partition` is recomputed, never remembered.** A remembered one is
-  right until the first frame transition and quietly wrong afterwards. Flying
+  right until the first frame transition and quietly wrong afterward. Flying
   Sol → Alpha Centauri moves the reported authority from `s:SOL` to
   `s:HIP71683` with nothing driving it, so ADR-0008's open handoff question is
   now something you watch on the overlay rather than discover inside a Durable
@@ -880,7 +880,7 @@ The catalog stopped being 18 hand-transcribed stars and became an ingest.
 planets** out to 150 light-years, built by `apps/ingest` from HYG v4.4 and the
 NASA Exoplanet Archive, committed at 458 KB (179 KB brotli), and fetched at
 runtime as its own asset. Operating it is
-[`docs/guides/catalogue.md`](docs/guides/catalogue.md); the design it implements
+[`docs/guides/catalog.md`](docs/guides/catalog.md); the design it implements
 is [`docs/design/galaxy.md`](docs/design/galaxy.md).
 
 The old `catalog.ts` said its shape was chosen "so that swapping the source does
@@ -1036,7 +1036,7 @@ atmospheres, from the NASA/JPL fact sheets. And they are drawn from photographs 
 19 surface, elevation, cloud and ring maps, 10.7 MB, built by `apps/ingest` from
 NASA, USGS and Solar System Scope imagery.
 
-Operating it is [`docs/guides/catalogue.md`](docs/guides/catalogue.md#planetary-surface-maps);
+Operating it is [`docs/guides/catalog.md`](docs/guides/catalog.md#planetary-surface-maps);
 the shading is [`docs/concepts/rendering.md`](docs/concepts/rendering.md#planetary-surfaces).
 
 ### Sol is the one special case in the generator, and it earns it
@@ -1555,7 +1555,7 @@ Lessons with teeth:
   says 0.80 and 0.595, which had every credit 19% too large and the logotype
   15% too small — and once the sizes were right, the tracking that had been
   compensating for them fell out at zero.
-- **A light's screen position is a product.** With `lookAlong` levelling
+- **A light's screen position is a product.** With `lookAlong` leveling
   against the pole, the star lands at `−dot(toStar, forward)·dot(pole, forward)`
   for anything near the ecliptic, so _both_ terms must carry the right sign.
   The first cruise had the second one negative, put the key 32° below the axis,
@@ -1747,7 +1747,7 @@ dark-adapted interface.
 
 Not built — recorded so the archaeology is not repeated. `SystemStub`
 (`packages/universe/src/galaxy.ts`) already carries `temperature`, a computed
-blackbody `color`, `catalogued` (which is provenance) and the confirmed
+blackbody `color`, `cataloged` (which is provenance) and the confirmed
 `planets`. **`TravelTarget` in `packages/devtools/src/travel.ts` carries none of
 it** — the destination list gets a pre-formatted `detail` string and a boolean.
 
@@ -1944,7 +1944,7 @@ moment the planetarium can move the ship, the survey game has a free mode that
 plays it for you.
 
 It differs from `CutsceneDirector` in one deliberate way: **its `sample` touches
-the world.** A script resolves its stage once and is pure afterwards because a
+the world.** A script resolves its stage once and is pure afterward because a
 scene must be reproducible frame for frame; the observatory is _following_
 something that moves, and one that resolved Jupiter's position once would orbit
 where Jupiter used to be within a minute of time warp.
@@ -2851,7 +2851,7 @@ for different jobs.
   [`docs/guides/client.md`](docs/guides/client.md) and
   [`docs/guides/cinematics.md`](docs/guides/cinematics.md).
 - British spelling in the docs was converted where it was safe. Identifiers,
-  filenames (`catalogue.md`), and `canceled()` are left for a later pass.
+  filenames (`catalog.md`), and `canceled()` are left for a later pass.
 
 ## The first look was the expensive one, so everything loads at boot (23 Aug 2026)
 
@@ -2920,8 +2920,8 @@ frames. Pace with `queue.onSubmittedWorkDone()` before believing any number.
 
 British spelling in user-facing copy, labels, comments, and documentation is
 now American: _color_, _center_, _meter_, _catalog_, _behavior_, _license_,
-_gray_, _artifact_, _toward_. Identifiers, panel ids (`catalogue`), JSON keys
-(`license`), enum values (`center`), and filenames (`catalogue.md`) were left
+_gray_, _artifact_, _toward_. Identifiers, panel ids (`catalog`), JSON keys
+(`license`), enum values (`center`), and filenames (`catalog.md`) were left
 alone for a later programmatic rename. [`STYLE.md`](STYLE.md)
 already stated the policy; this pass applies it to the rest of the tree.
 
@@ -2967,7 +2967,7 @@ light years from where it was. The Worker states its catalog version from
 manifest to the packed file beside it, because they are now read by different
 things. `docs/roadmap.md`'s open square closes.
 
-**`TravelTarget` dropped `catalogued`,** so a real star and an invented one
+**`TravelTarget` dropped `cataloged`,** so a real star and an invented one
 rendered identically — against a PRODUCT.md commitment — while `loaded`, a
 streaming fact about this session, sat in the slot the epistemic fact belonged
 in. One field forward, mapped to the domain word (`observed` / `projected`) at
@@ -3892,7 +3892,7 @@ Two bugs the volume check found on the way:
   pole, then reported three axes as `[eq, eq, polar]` — so no body ever had a
   distinct intermediate axis and Eros came out 17.6 × 17.6 × 6.1.
 
-Measured against JPL afterwards, the reconstructions land: Phobos's
+Measured against JPL afterward, the reconstructions land: Phobos's
 volume-equivalent radius is 11.115 km against a published 11.08, Epimetheus's is
 58.32 against 58.2, Amalthea's 81.8 against 83.5.
 
@@ -4109,7 +4109,7 @@ recording because they were wrong in a way that would not have shown up:
   bundle while the Phobos entry never set `texture: 'phobos'`, so the tint that
   had just been halved _to compensate for that map_ was landing on nothing.
 - **`system.planets.length` beside the literal word "planets"** in four display
-  sites, now that the array holds every body orbiting the star: the catalogue
+  sites, now that the array holds every body orbiting the star: the catalog
   row read "Sol · 66 planets".
 - **`Set<string>` in three files** for the same "which kinds are worlds"
   partition, so a ninth `BodyKind` would compile against all three and land in
@@ -4174,7 +4174,7 @@ these carries a different half of it:
 | [Planetarium](docs/design/planetarium.md)                          | The four orbit-trace rules, including sampling in eccentric anomaly                                                             |
 | [Exploration](docs/design/exploration.md)                          | A figure is a Tier 2 scan yield, and on a small body it is the headline one                                                     |
 | [Roadmap](docs/roadmap.md#small-bodies-and-their-figures)          | Photometric normalization, the archives the ingest cannot reach, what `radius` means, polyhedral gravity, belts as a population |
-| [Catalog guide](docs/guides/catalogue.md#shape-models)             | `pnpm shapes:build`, `pnpm solar:fetch`, and the volume check that refuses a model the format cannot hold                       |
+| [Catalog guide](docs/guides/catalog.md#shape-models)               | `pnpm shapes:build`, `pnpm solar:fetch`, and the volume check that refuses a model the format cannot hold                       |
 | [Testing guide](docs/guides/testing.md)                            | Three ways a regression test failed to fail; timeouts as hang guards; distributions; derived quantities                         |
 | [Extending guide](docs/guides/extending.md)                        | Adding a body kind; calibrating a generator against a measurement; intra-package cycles                                         |
 | [Architecture](docs/architecture.md#where-the-universe-comes-from) | The generation inputs, and that the observed/generated split runs per field                                                     |
@@ -4437,7 +4437,7 @@ answer than a date. It reads **Antiquity** now, and Uranus still reads 1781.
 
 The same class of bug, one clause along: `starSummary` divides by the Sun's
 luminosity and quotes a distance from Sol, so without a branch for the Sun
-itself it wrote "catalogued at 0.00 light years, putting out 1.000 times
+itself it wrote "cataloged at 0.00 light years, putting out 1.000 times
 fainter than the Sun" — wrong twice, about the one star every reader looks at
 first.
 
@@ -4715,7 +4715,7 @@ request one, taken from where the eye is going — and together they are six
 hundred to twelve hundred regions. Every frame evicted ground the next frame
 wanted. **A still could not have shown this**; the sample could.
 
-### What the invariant audit found afterwards
+### What the invariant audit found afterward
 
 Three, and the first is the one worth remembering. **`surfaceDetailFloor`
 memoized on `radius * 1e6 + resolution + tolerance`**, which folds three numbers
@@ -8287,7 +8287,7 @@ checks. The driver does not maintain a separate camera restoration path.
 ## The navigator, the drop and a search over the volume (6 Sep 2026)
 
 The catalog panel is the **Navigator** in both workspaces. Its id and its three
-preference keys keep `catalogue`, because those are what a stored layout and a
+preference keys keep `catalog`, because those are what a stored layout and a
 stored radius remember; a rename that reset every reader's chips would be a
 rename of the wrong thing.
 
@@ -8390,7 +8390,7 @@ zenith mean, Zucker's 165 pc is a radius, and Licquia's V magnitude is reported
 with `5 log h` removed. [ADR-0032](docs/adr/0032-the-stellar-field.md#the-local-sky-and-linear-calibration-m6)
 records their replacement targets and the model approximations.
 
-The Lallement FITS header uses magnitudes per parsec despite the catalogue
+The Lallement FITS header uses magnitudes per parsec despite the catalog
 ReadMe's nanomagnitude label. Nine Gaussian cloud approximations derive from
 explicit windows in that cube; source hashes and columns accompany the runtime
 records. A solar-centered 165 pc cavity reduces the smooth dust to 20% locally,
@@ -8581,10 +8581,10 @@ Sixteen dust samples missed nearby thin columns by as much as 0.82 in
 transmission. Distance-aware quadrature uses 32/64/512 samples and the shared
 16 MiB arm table. A frozen observer owns each finite queue: restarting on
 motion starves it forever. GPU batches of 1024 sources cost about 1.5–1.7 ms
-steady or 3.1 ms for cold catalogue reference plus current columns. Unchanged
+steady or 3.1 ms for cold catalog reference plus current columns. Unchanged
 sources retain their last column through six-submission optical-depth blending;
 new sources begin hidden. The WebGL fallback computes one source per
-submission and exposes its slower convergence. Catalogue magnitudes receive
+submission and exposes its slower convergence. Catalog magnitudes receive
 an observer/Solar transmission ratio, so Sol does not count extinction twice.
 
 A 512² physical cube is 12 MiB. Its final 72-direction GPU comparison has

@@ -1347,7 +1347,7 @@ function starSummary(
    * Three clauses, and each has a case that only shows up on one star.
    *
    * The Sun is the denominator of two of them, so writing the sentence without
-   * a branch for it produces "catalogued at 0.00 light years, putting out 1.000
+   * a branch for it produces "cataloged at 0.00 light years, putting out 1.000
    * times fainter than the Sun" — which is wrong twice about the one star every
    * reader will look at first.
    */
@@ -1367,7 +1367,7 @@ function starSummary(
       ? 'Charted from stellar parameters'
       : cataloged.distanceLightYears < 0.001
         ? 'The star every distance in this catalog is measured from'
-        : `Catalogued at ${round(cataloged.distanceLightYears, 2)} light years`
+        : `Cataloged at ${round(cataloged.distanceLightYears, 2)} light years`
   return `${seen}: ${colorWord(star.temperature)}, ${round(star.temperature, 0)} K, putting out ${brightness}. ${worlds}.`
 }
 

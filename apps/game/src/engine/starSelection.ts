@@ -10,7 +10,7 @@ export const STAR_SPRITE_CEILING = 100_000
 
 export interface StarField {
   readonly ids: readonly string[]
-  readonly catalogued: readonly boolean[]
+  readonly cataloged: readonly boolean[]
   readonly positions: readonly UniverseVector[]
   readonly names: readonly string[]
   /**
@@ -39,12 +39,12 @@ export interface StarCandidate {
   readonly color: readonly [number, number, number]
   readonly solarLuminosities: number
   readonly visualLuminosities?: number
-  readonly catalogued?: boolean
+  readonly cataloged?: boolean
 }
 
 export const EMPTY_STAR_FIELD: StarField = {
   ids: [],
-  catalogued: [],
+  cataloged: [],
   positions: [],
   names: [],
   colors: [],
@@ -108,7 +108,7 @@ export function selectStars(
 
   const positions: UniverseVector[] = new Array(chosen.length)
   const ids: string[] = new Array(chosen.length)
-  const catalogued: boolean[] = new Array(chosen.length)
+  const cataloged: boolean[] = new Array(chosen.length)
   const names: string[] = new Array(chosen.length)
   const colors: [number, number, number][] = new Array(chosen.length)
   const luminosities: number[] = new Array(chosen.length)
@@ -116,7 +116,7 @@ export function selectStars(
   for (let i = 0; i < chosen.length; i += 1) {
     const star = chosen[i]!.star
     ids[i] = star.id
-    catalogued[i] = star.catalogued ?? false
+    cataloged[i] = star.cataloged ?? false
     positions[i] = star.position
     names[i] = star.name
     colors[i] = [star.color[0], star.color[1], star.color[2]]
@@ -125,7 +125,7 @@ export function selectStars(
   }
   return {
     ids,
-    catalogued,
+    cataloged,
     positions,
     names,
     colors,

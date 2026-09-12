@@ -31,14 +31,14 @@ const panel = (id: string, zone: DockPanelDefinition['zone']) =>
   ({
     id,
     title: id,
-    icon: id === 'catalogue' ? Star : id === 'object' ? Globe : Circle,
+    icon: id === 'catalog' ? Star : id === 'object' ? Globe : Circle,
     zone,
     hint: `the ${id} panel`,
     render: () => createElement('p', null, `${id} body`),
   }) satisfies DockPanelDefinition
 
 const PANELS = [
-  panel('catalogue', 'left'),
+  panel('catalog', 'left'),
   panel('object', 'right'),
   panel('time', 'float'),
   panel('closed', 'right'),
@@ -47,7 +47,7 @@ const PANELS = [
 const LAYOUT: DockLayout = movePanel(
   {
     ...EMPTY_LAYOUT,
-    left: ['catalogue'],
+    left: ['catalog'],
     right: ['object'],
     float: ['time'],
   },
@@ -89,7 +89,7 @@ describe('the compact dock', () => {
      * that it was the right list.
      */
     expect(openPanels(PANELS, LAYOUT).map((panel) => panel.id)).toEqual([
-      'catalogue',
+      'catalog',
       'object',
       'time',
     ])

@@ -181,7 +181,7 @@ describe('the local authority', () => {
       position: vec3(3e16, 0, 0),
     })
     // A remembered partition would be right until the first frame transition
-    // and quietly wrong afterwards — which is the H4 handoff question, made
+    // and quietly wrong afterward — which is the H4 handoff question, made
     // visible a milestone early instead of discovered inside a Durable Object.
     expect(authority.status().partition?.startsWith('c:')).toBe(true)
   })

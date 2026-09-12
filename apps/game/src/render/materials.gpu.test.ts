@@ -653,7 +653,7 @@ describe('the sphere wearing a bake', () => {
     const scene = staged(mesh)
     /*
      * In the boot's order: the program is compiled over the stand-ins first
-     * and the bake is bound into it afterwards. Bound before the compile,
+     * and the bake is bound into it afterward. Bound before the compile,
      * two distinct cubes get two bindings whatever the stand-ins share, and
      * the draw passes over the defect it exists to hold. The target is held
      * still across both draws for the same reason — a pipeline is keyed on

@@ -246,7 +246,7 @@ catalog panel's own — 5, 10, 25, 50 ly — and the default is 10. Generation
 runs where the data is, in a `universe.findWorlds` task on the existing pool:
 it takes the query and a list of stubs, generates each system, matches, and
 returns only the matching bodies with the fields the reply needs. The task is
-cancellable through `TaskContext.canceled` and a second question cancels the
+cancelable through `TaskContext.canceled` and a second question cancels the
 first. `surveySystemTask` is left at version 2; it answers a different question
 and its response carries neither `seaLevel` nor a temperature.
 

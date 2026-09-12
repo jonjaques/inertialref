@@ -14,7 +14,7 @@ import { QUERY } from '../pages/paths.ts'
  * It reads it *inside an animation frame*, and that is the whole trick.
  * Between frames a WebGPU canvas has no readable image: Chrome hands the drawn
  * texture to the compositor when the frame's task ends, and `drawImage`
- * afterwards yields transparent black whether the canvas presented or not — a
+ * afterward yields transparent black whether the canvas presented or not — a
  * sample taken from a timer says "never presented" about every canvas there
  * is, and the ladder below then runs to exhaustion on a healthy boot, nudging
  * and rebuilding a renderer that was fine. A `requestAnimationFrame` callback

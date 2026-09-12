@@ -1259,7 +1259,7 @@ const BANK_CRUISE: readonly AttitudeBeat[] = [
  * Authored rather than derived: a finite difference of the world path gives
  * the camera's own heading whenever the two share a frame, and the reference
  * plainly shows the hull nose-on to the lens through the whole approach.
- * Levelling against the camera's up is what makes the top/underside views come
+ * Leveling against the camera's up is what makes the top/underside views come
  * out right for free — a level ship below the frame's center shows its dorsal,
  * above it shows its belly, which is exactly what the reference does at f820
  * and f892.

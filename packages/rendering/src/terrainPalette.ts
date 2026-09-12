@@ -5,7 +5,7 @@ import {
   type LiquidAppearance,
   seaDatumElevation,
 } from '@inertialref/universe'
-import { surfaceColor } from './surfaceColour.ts'
+import { surfaceColor } from './surfaceColor'
 
 /*
  * What the six surface materials look like on one body.

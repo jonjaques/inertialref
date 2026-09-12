@@ -326,7 +326,7 @@ sentinel and must be dropped, not clamped).
 > planets** — 25.8 bytes per system against the 16 estimated here, for names that
 > turned out to be the difference between "HIP71683" and "Alpha Centauri" on the
 > HUD. See [`design/galaxy.md`](design/galaxy.md#ingest-pipeline) and
-> [`guides/catalogue.md`](guides/catalogue.md).
+> [`guides/catalog.md`](guides/catalog.md).
 
 ### The packed record
 

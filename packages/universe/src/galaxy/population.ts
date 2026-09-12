@@ -78,7 +78,7 @@ export interface PopulationCoverage {
   readonly outerMagnitude: number
   readonly completeRadiusParsecs: number
   /** Known stars outside the complete magnitude envelope, by owning level and cell. */
-  readonly cataloguedByCell?: Readonly<Record<string, number>>
+  readonly catalogedByCell?: Readonly<Record<string, number>>
 }
 
 const coverageByCatalog = new WeakMap<StarCatalog, PopulationCoverage>()
@@ -99,7 +99,7 @@ export function populationCoverage(catalog: StarCatalog): PopulationCoverage {
     outerMagnitude: catalog.metadata.sky?.apparentMagnitudeLimit ?? -Infinity,
     completeRadiusParsecs: catalog.completeRadius / PARSEC,
   }
-  const cataloguedByCell: Record<string, number> = {}
+  const catalogedByCell: Record<string, number> = {}
   for (const star of catalog.stars) {
     const absolute = star.physical.absoluteMagnitude
     if (absolute === null) continue
@@ -118,11 +118,11 @@ export function populationCoverage(catalog: StarCatalog): PopulationCoverage {
     )
     if (band === undefined) continue
     const key = `${band.level}:${cellKey(populationCellOf(star.position, band.level))}`
-    cataloguedByCell[key] = (cataloguedByCell[key] ?? 0) + 1
+    catalogedByCell[key] = (catalogedByCell[key] ?? 0) + 1
   }
   const result = Object.freeze({
     ...coverage,
-    cataloguedByCell: Object.freeze(cataloguedByCell),
+    catalogedByCell: Object.freeze(catalogedByCell),
   })
   coverageByCatalog.set(catalog, result)
   return result
@@ -355,8 +355,8 @@ export function createPopulationGenerator(field: GalaxyField) {
     cell: GalacticCell,
     coverage?: PopulationCoverage,
   ): PopulationCellPlan => {
-    const catalogued = coverage?.cataloguedByCell?.[keyOf(level, cell)] ?? 0
-    const key = `${keyOf(level, cell)}:${catalogued}`
+    const cataloged = coverage?.catalogedByCell?.[keyOf(level, cell)] ?? 0
+    const key = `${keyOf(level, cell)}:${cataloged}`
     const held = plans.get(key)
     if (held !== undefined) return held
     const size = populationCellSize(level)
@@ -394,7 +394,7 @@ export function createPopulationGenerator(field: GalaxyField) {
     )
     const totalExpected = expectations.reduce((a, b) => a + b, 0)
     const fraction =
-      totalExpected === 0 ? 0 : Math.max(0, 1 - catalogued / totalExpected)
+      totalExpected === 0 ? 0 : Math.max(0, 1 - cataloged / totalExpected)
     const counts = POPULATION_NAMES.map((name, i) => {
       const expected = expectations[i]! * fraction
       const whole = Math.floor(expected)
@@ -510,7 +510,7 @@ export function createPopulationGenerator(field: GalaxyField) {
       temperature,
       color: blackbodyColor(temperature),
       components: 1,
-      catalogued: false,
+      cataloged: false,
       planets: [],
     }
   }

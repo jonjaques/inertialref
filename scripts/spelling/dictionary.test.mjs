@@ -3,6 +3,14 @@ import { americanize, rulesFiring } from './dictionary.mjs'
 
 describe('American spelling', () => {
   it.each([
+    ['catalogued', 'cataloged'],
+    ['cataloguing', 'cataloging'],
+    ['cataloguer', 'cataloger'],
+    ['catalogue', 'catalog'],
+    ['cancellable', 'cancelable'],
+    ['levelling', 'leveling'],
+    ['afterwards', 'afterward'],
+    ['polarisation', 'polarization'],
     ['colourIndex', 'colorIndex'],
     ['COLOUR_LUT', 'COLOR_LUT'],
     ['Centred', 'Centered'],

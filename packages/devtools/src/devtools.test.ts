@@ -455,7 +455,7 @@ describe('travel targets', () => {
 
   it('says whether a destination was observed or is a projection', () => {
     /*
-     * The projection onto `TravelTarget` used to drop `stub.catalogued`, so a
+     * The projection onto `TravelTarget` used to drop `stub.cataloged`, so a
      * real star and an invented one rendered identically — against the one
      * claim PRODUCT.md says the interface always makes. It is not `loaded`:
      * Proxima is a stub nobody has generated yet and is still a real star.

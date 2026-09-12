@@ -25,7 +25,7 @@ import {
  * **Derived, not authored, and that is what makes them test fixtures.** A
  * hand-written list of coordinates is stale the moment the generator changes;
  * "the highest ground on this body" survives regeneration by construction and
- * is *still the interesting place* afterwards. The same call therefore serves
+ * is *still the interesting place* afterward. The same call therefore serves
  * the site picker and the regression suite — a plate of `summit` before and
  * after a change is a comparison of the same question, not of the same numbers.
  *

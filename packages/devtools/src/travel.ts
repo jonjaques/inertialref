@@ -311,10 +311,10 @@ export function travelTargets(
       detail: `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`,
       spectralType: stub.spectralType,
       color: stub.color,
-      // The domain word, not the storage boolean. `catalogued` says which table
+      // The domain word, not the storage boolean. `cataloged` says which table
       // the row came out of; `observed` says somebody pointed a telescope at it,
       // which is what the listing is actually claiming.
-      provenance: stub.catalogued ? 'observed' : 'projected',
+      provenance: stub.cataloged ? 'observed' : 'projected',
     })
   }
   for (const system of loaded.values()) {
@@ -326,7 +326,7 @@ export function travelTargets(
       color: system.star.color,
       // A loaded system may be outside the survey radius, so this cannot be
       // inherited from the sweep above. Asked of the catalog directly, which is
-      // the same question `catalogStub` answers with `catalogued: true` — and
+      // the same question `catalogStub` answers with `cataloged: true` — and
       // not of `observedPlanets`, which is 0 for a real star nobody has found
       // a planet around yet.
       provenance:

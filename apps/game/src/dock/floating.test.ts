@@ -105,13 +105,13 @@ describe('moving one by a drag', () => {
       fc.property(point, point, size, size, (from, delta, panel, viewport) => {
         const next = nudgeFloat(
           NO_FLOATS,
-          'catalogue',
+          'catalog',
           delta,
           clampFloat(from, panel, viewport),
           panel,
           viewport,
         )
-        const at = next.catalogue
+        const at = next.catalog
         expect(at).toBeDefined()
         if (at !== undefined) expectReachable(at, panel, viewport)
       }),

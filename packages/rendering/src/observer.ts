@@ -85,7 +85,7 @@ export const isCentered = (look: LookOffset): boolean =>
  * How close to a pole the camera may get, radians.
  *
  * Not π/2. At exactly the pole the orbit's azimuth is undefined and the
- * horizon-levelling `upHint` becomes parallel to the view direction, so the
+ * horizon-leveling `upHint` becomes parallel to the view direction, so the
  * frame rolls through a half turn in one mouse-pixel. Two degrees of margin is
  * invisible and removes the singularity rather than special-casing it.
  */

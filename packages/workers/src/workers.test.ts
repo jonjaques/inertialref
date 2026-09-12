@@ -454,7 +454,7 @@ describe('terrain task', () => {
     const filled = await pool().run(generateCellTask, {
       seed: formatSeed(GALAXY_SEED),
       cell,
-      context: { catalogued: 5, completeRadius: 1e22 },
+      context: { cataloged: 5, completeRadius: 1e22 },
     })
     expect(bare.stars.length).toBeGreaterThan(0)
     expect(filled.stars).toEqual([])
@@ -487,7 +487,7 @@ describe('the inline transport matches the browser one', () => {
     const box = { n: 1 }
     const result = await pool.run(registry.get('peek') as never, { box })
     box.n = 99
-    // The task saw the value at post time, not the mutation afterwards.
+    // The task saw the value at post time, not the mutation afterward.
     expect(result).toEqual({ n: 1 })
     pool.terminate()
   })

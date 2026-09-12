@@ -90,7 +90,7 @@ Where the bible and [vision.md](vision.md) disagree, vision.md wins.
 | [Cinematics](guides/cinematics.md)                 | Authoring scripted scenes                                                                                |
 | [Surface structures](guides/surface-structures.md) | Placing, saving, and landing on body-fixed facilities                                                    |
 | [The harness](guides/harness.md)                   | Driving the simulation from a console, a test, or an agent                                               |
-| [The star catalog](guides/catalogue.md)            | Where the real astronomy comes from — stars, planets, surface maps, shape models — and how to rebuild it |
+| [The star catalog](guides/catalog.md)              | Where the real astronomy comes from — stars, planets, surface maps, shape models — and how to rebuild it |
 | [Testing](guides/testing.md)                       | What to test, which style, and how to write an honest assertion                                          |
 | [Extending](guides/extending.md)                   | Adding generated content, a worker task, a body type, a frame                                            |
 

@@ -6,7 +6,7 @@ import {
   resolveCameraPolicy,
 } from './exposure.ts'
 import { LENS_PRESETS } from './lens.ts'
-import { surfaceColor, surfaceVisibilityGain } from './surfaceColour.ts'
+import { surfaceColor, surfaceVisibilityGain } from './surfaceColor'
 
 const channel = fc.double({ min: 0.001, max: 1, noNaN: true })
 const color = fc.record({ r: channel, g: channel, b: channel })

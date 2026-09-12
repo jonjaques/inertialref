@@ -90,7 +90,7 @@ export interface SystemStub {
   readonly color: LinearRgb
   /** Number of stellar components; >1 means the system is being simplified. */
   readonly components: number
-  readonly catalogued: boolean
+  readonly cataloged: boolean
   /** Confirmed planets. Empty for anything the catalog does not know. */
   readonly planets: readonly CatalogPlanet[]
 }
@@ -207,7 +207,7 @@ export function mainSequenceProperties(solarMasses: number): {
  */
 export interface CellContext {
   /** Cataloged stars already in this cell, for legacy P-address generation. */
-  readonly catalogued: number
+  readonly cataloged: number
   /**
    * Distance from the Sun inside which the catalog is complete for the kind of
    * star this generator makes, and procedural fill is therefore suppressed.
@@ -231,8 +231,8 @@ export interface CellContext {
 }
 
 /** No catalog at all: fill everything, suppress nothing. */
-export const NO_CATALOGUE: CellContext = Object.freeze({
-  catalogued: 0,
+export const NO_CATALOG: CellContext = Object.freeze({
+  cataloged: 0,
   completeRadius: 0,
 })
 
@@ -240,13 +240,13 @@ export const NO_CATALOGUE: CellContext = Object.freeze({
 export function proceduralCount(
   rng: Rng,
   cell: GalacticCell,
-  cataloguedCount: number,
+  catalogedCount: number,
   galaxySeed: Seed,
 ): number {
   return roundedPopulationCount(
     rng,
     stellarDensity(cellCenter(cell), galaxySeed) * CELL_SIZE ** 3 -
-      cataloguedCount,
+      catalogedCount,
   )
 }
 
@@ -260,14 +260,13 @@ function roundedPopulationCount(rng: Rng, expected: number): number {
 function generateLegacyCell(
   galaxySeed: Seed,
   cell: GalacticCell,
-  context: CellContext = NO_CATALOGUE,
+  context: CellContext = NO_CATALOG,
 ): readonly SystemStub[] {
   const seed = derivePath(galaxySeed, ['cell', cellKey(cell)])
   const rng = new Rng(seed)
   const count = roundedPopulationCount(
     rng,
-    legacyStellarDensity(cellCenter(cell)) * CELL_SIZE ** 3 -
-      context.catalogued,
+    legacyStellarDensity(cellCenter(cell)) * CELL_SIZE ** 3 - context.cataloged,
   )
 
   const stars: SystemStub[] = []
@@ -305,7 +304,7 @@ function generateLegacyCell(
       ...properties,
       color: blackbodyColor(properties.temperature),
       components: 1,
-      catalogued: false,
+      cataloged: false,
       planets: [],
     })
   }
@@ -316,7 +315,7 @@ function generateLegacyCell(
 export function generateCell(
   galaxySeed: Seed,
   cell: GalacticCell,
-  context: CellContext = NO_CATALOGUE,
+  context: CellContext = NO_CATALOG,
 ): readonly SystemStub[] {
   const generator = populationGenerator(galaxySeed)
   const center = cellCenter(cell)
@@ -366,7 +365,7 @@ export const catalogStub = (star: CatalogStar): SystemStub => ({
   temperature: star.physical.temperature,
   color: star.physical.color,
   components: star.components,
-  catalogued: true,
+  cataloged: true,
   planets: star.planets,
 })
 
@@ -382,8 +381,8 @@ export function resolveSystem(
   catalog: StarCatalog,
   id: SystemId,
 ): SystemStub | undefined {
-  const catalogued = catalog.get(id)
-  if (catalogued !== undefined) return catalogStub(catalogued)
+  const cataloged = catalog.get(id)
+  if (cataloged !== undefined) return catalogStub(cataloged)
   const population = parsePopulationSystemId(id)
   if (population !== null)
     return populationGenerator(galaxySeed).star(
@@ -407,7 +406,7 @@ export const cellContext = (
   catalog: StarCatalog,
   cell: GalacticCell,
 ): CellContext => ({
-  catalogued: catalog.inCell(cell).length,
+  cataloged: catalog.inCell(cell).length,
   completeRadius: catalog.completeRadius,
   magnitudeCoverage: populationCoverage(catalog),
 })

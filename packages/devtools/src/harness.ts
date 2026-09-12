@@ -2149,7 +2149,7 @@ export class GameHarness {
    * than a screenshot and a p95. It returns structured data and a `.text`
    * block, the shape `terrainBaseline` already established.
    *
-   * The level is restored afterwards rather than left at `full`, so a profile
+   * The level is restored afterward rather than left at `full`, so a profile
    * taken mid-session does not silently leave the retained timeline growing for
    * the rest of it.
    */

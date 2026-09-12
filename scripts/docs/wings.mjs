@@ -240,7 +240,7 @@ export const WINGS = [
           'docs/guides/extending.md',
           'docs/guides/cinematics.md',
           'docs/guides/surface-structures.md',
-          ['docs/guides/catalogue.md', 'The Star Catalog'],
+          ['docs/guides/catalog.md', 'The Star Catalog'],
           'docs/hosting.md',
         ],
       },
@@ -279,7 +279,7 @@ export const REFERENCE = {
    * limb to cut a band out of — at any framing that keeps it off the plate it
    * is a point of light behind the plate, and the masthead is black — and at a
    * framing large enough to reach the band it is a wall of blown white behind
-   * the title. Neptune is the outermost thing in the catalogue with a real
+   * the title. Neptune is the outermost thing in the catalog with a real
    * atmosphere, and it is the one body in Sol whose color is this system's
    * own accent.
    */

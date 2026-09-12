@@ -130,7 +130,7 @@ None of the four data commands are needed to build or run the game — their
 outputs are committed. Run one when the upstream publishes; the diff is the news.
 `textures:build` and `shapes:build` download 1.5 GB between them into the
 gitignored `.data/`, and only the processed outputs are committed. The
-[catalog guide](catalogue.md) has the provenance rules each of them follows.
+[catalog guide](catalog.md) has the provenance rules each of them follows.
 
 The site deploys to the `inertialrefd` Worker. Canonical URL:
 <https://inertialref.app>. It also serves <https://inertialref.jonjaques.com>

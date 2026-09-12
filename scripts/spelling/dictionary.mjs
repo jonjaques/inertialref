@@ -24,16 +24,17 @@
  *    search for it is a false positive generator and nothing else.
  *  - No `programme`, `storey`, `kerb`, `plough`, `pyjamas`. None occurs, and an
  *    unexercised rule is a rule nobody has checked.
- *  - No `analogue`/`catalogue` → `analog`/`catalog` in this table. `catalogue`
- *    is real here and it is a rename of files as well as identifiers, which is
- *    a different operation with a different blast radius; it is handled as its
- *    own step rather than smuggled in beside `colour`.
  *
  * Fragments match case-insensitively and the replacement adopts the case of the
  * text it replaces, so one rule serves `colour`, `Colour` and `COLOUR`.
  */
 export const RULES = [
   // -- inflections that are not a plain substitution of their stem ----------
+  ['catalogued', 'cataloged'],
+  ['cataloguing', 'cataloging'],
+  ['cataloguer', 'cataloger'],
+  ['cancellable', 'cancelable'],
+  ['levelling', 'leveling'],
   ['centred', 'centered'],
   ['centring', 'centering'],
   ['modelling', 'modeling'],
@@ -50,6 +51,8 @@ export const RULES = [
   ['levelled', 'leveled'],
 
   // -- stems ---------------------------------------------------------------
+  ['catalogue', 'catalog'],
+  ['afterwards', 'afterward'],
   ['colour', 'color'],
   ['centre', 'center'],
   ['metre', 'meter'],

@@ -2,7 +2,7 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { deriveSeed, rootSeed } from '@inertialref/procedural'
 import { UNIVERSE_ORIGIN } from '@inertialref/spatial'
-import { catalogStub, generateCell, MILKY_WAY, NO_CATALOGUE } from './galaxy.ts'
+import { catalogStub, generateCell, MILKY_WAY, NO_CATALOG } from './galaxy.ts'
 import { TEST_CATALOG } from './catalog/fixture.ts'
 import { systemId } from './address.ts'
 import { generateSystem, isLandable, walkBodies } from './system.ts'
@@ -30,7 +30,7 @@ const SEED = rootSeed('inertialref')
 const cell = generateCell(
   deriveSeed(SEED, `g:${MILKY_WAY}`),
   { x: 3, y: 0, z: 2 },
-  NO_CATALOGUE,
+  NO_CATALOG,
 )
 
 /*
@@ -208,7 +208,7 @@ describe('matching, as properties over generated systems', () => {
   })
 
   it('stops where it is told, rather than finishing the batch', () => {
-    // What makes a search cancellable at all: a second question must not wait
+    // What makes a search cancelable at all: a second question must not wait
     // for the first one's whole volume.
     let seen = 0
     const stopped = findWorlds(

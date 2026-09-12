@@ -9,7 +9,7 @@ import { readCatalog } from '@inertialref/universe'
  * `pnpm catalog:build` writes all of them — the version inside each packed
  * `.irsc`, and `data/catalog/manifest.json` beside them, whose top-level
  * `version` is the pair's — so they agree by construction on the day they are
- * written. They are read by different things afterwards: the game and the
+ * written. They are read by different things afterward: the game and the
  * headless runner decode the packed files, and the Worker imports the
  * manifest, because a script that serves 900 KB of binary has no reason to
  * decode it to answer `/api/health`.

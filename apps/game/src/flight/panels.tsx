@@ -25,8 +25,7 @@ export function flightPanels(
 ): readonly DockPanelDefinition[] {
   return [
     {
-      // The id is what a stored layout remembers; see `planetarium/registry.tsx`.
-      id: 'catalogue',
+      id: 'catalog',
       title: 'Navigator',
       icon: Neighborhood,
       zone: 'right',

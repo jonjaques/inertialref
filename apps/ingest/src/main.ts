@@ -442,7 +442,7 @@ ${attribution.map((line) => `- ${line}`).join('\n\n')}
 
 Per-file provenance — source URL, license and output digest — is in
 \`manifest.json\`. Rebuild with \`pnpm textures:build\`; see
-\`docs/guides/catalogue.md\`.
+\`docs/guides/catalog.md\`.
 `
 
 /**

@@ -28,10 +28,7 @@ export function planetariumPanels(
 ): readonly DockPanelDefinition[] {
   return [
     {
-      // The id keeps its old word. It is what a stored layout remembers, and
-      // renaming it would put every reader's navigator back in its default
-      // slot on the next visit. The title is what a person reads.
-      id: 'catalogue',
+      id: 'catalog',
       title: 'Navigator',
       // The neighborhood rather than the span between two stars: this panel is
       // "what is around here", and `StellarSpan` is a *dimension* — a measure

@@ -77,7 +77,7 @@ describe('selecting the drawn stars', () => {
       position: UV.fromMeters(LIGHT_YEAR, 0, 0),
       color: [1, 0.5, 0.2],
       solarLuminosities: 1,
-      catalogued: true,
+      cataloged: true,
     }
     expect(
       selectStars(center, [[star]], 10, {
@@ -117,7 +117,7 @@ describe('selecting the drawn stars', () => {
       color: [1, 1, 1],
       solarLuminosities: 100 - visualLuminosities,
       visualLuminosities,
-      catalogued: id === 'known',
+      cataloged: id === 'known',
     })
     const stars = [make('faint', 1), make('bright', 10), make('known', 100)]
     const result = selectStars(center, [stars], 2, {
@@ -126,7 +126,7 @@ describe('selecting the drawn stars', () => {
       levelMask: 511,
     })
     expect(result.ids).toEqual(['known', 'bright'])
-    expect(result.catalogued).toEqual([true, false])
+    expect(result.cataloged).toEqual([true, false])
     expect(result.visualLuminosities).toEqual([100, 10])
     expect(result.resolved!.apparentMagnitudeLimit).toBeLessThan(10)
     const repeated = selectStars(

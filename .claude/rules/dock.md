@@ -26,7 +26,7 @@ Reasoning: ADR-0012, `AGENTS.md` § "The rules that actually matter", DESIGN.md 
   left.
 - **React DnD drives the gesture and nothing else.** What a drop _means_ is arithmetic.
   The backend is chosen once at mount from `(pointer: coarse)` because `DndProvider`
-  cannot be handed a different one afterwards.
+  cannot be handed a different one afterward.
 - **`defaultOpen: false` is not `zone: 'hidden'`.** The first says where a panel starts;
   the second would also say where reopening puts it, making the menu toggle a no-op.
 - **The compact arrangement carries the way out of the mode.** Below 900px `Workspace`

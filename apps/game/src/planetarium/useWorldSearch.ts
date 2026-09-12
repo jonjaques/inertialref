@@ -79,7 +79,7 @@ export function useWorldSearch(engine: GameEngine): WorldSearch {
         onBatch: (found, progress, total) => {
           // The identity check is the guard against a canceled sweep writing
           // over the one that replaced it: `cancel` drops the reference, and a
-          // batch already in flight lands here afterwards.
+          // batch already in flight lands here afterward.
           if (live.current !== handle) return
           setState((held) => ({
             ...held,

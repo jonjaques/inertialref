@@ -31,7 +31,7 @@ import {
  */
 
 const PANELS = [
-  { id: 'catalogue', zone: 'left' as DockZone },
+  { id: 'catalog', zone: 'left' as DockZone },
   { id: 'object', zone: 'right' as DockZone },
   { id: 'view', zone: 'right' as DockZone },
   { id: 'time', zone: 'left' as DockZone },
@@ -99,9 +99,9 @@ describe('the layout invariant', () => {
 
 describe('moving a panel', () => {
   it('puts it where it was asked for', () => {
-    const layout = movePanel(defaultLayout(PANELS), 'catalogue', 'right', 0)
-    expect(layout.right[0]).toBe('catalogue')
-    expect(layout.left).not.toContain('catalogue')
+    const layout = movePanel(defaultLayout(PANELS), 'catalog', 'right', 0)
+    expect(layout.right[0]).toBe('catalog')
+    expect(layout.left).not.toContain('catalog')
   })
 
   it('means "one further down" inside its own zone', () => {
@@ -236,29 +236,29 @@ describe('a drop measured among the rendered panels only', () => {
     // by the visible number alone, this composed to a silent no-op.
     const layout: DockLayout = {
       ...EMPTY_LAYOUT,
-      left: ['telemetry', 'catalogue', 'time'],
+      left: ['telemetry', 'catalog', 'time'],
     }
-    const visible = ['catalogue', 'time']
+    const visible = ['catalog', 'time']
     const at = slotIndex(layout.left, visible, 2)
     expect(
       movePanel(
         layout,
-        'catalogue',
+        'catalog',
         'left',
-        dropIndex(layout, 'catalogue', 'left', at),
+        dropIndex(layout, 'catalog', 'left', at),
       ).left,
-    ).toEqual(['telemetry', 'time', 'catalogue'])
+    ).toEqual(['telemetry', 'time', 'catalog'])
   })
 
   it('inserts before the anchor, wherever it sits in the full list', () => {
     const layout: DockLayout = {
       ...EMPTY_LAYOUT,
-      left: ['telemetry', 'catalogue', 'time'],
+      left: ['telemetry', 'catalog', 'time'],
       right: ['object'],
     }
     // The line between catalog and time is visible slot 1; its anchor is
     // `time`, at full index 2.
-    const at = slotIndex(layout.left, ['catalogue', 'time'], 1)
+    const at = slotIndex(layout.left, ['catalog', 'time'], 1)
     expect(at).toBe(2)
     expect(
       movePanel(
@@ -267,7 +267,7 @@ describe('a drop measured among the rendered panels only', () => {
         'left',
         dropIndex(layout, 'object', 'left', at),
       ).left,
-    ).toEqual(['telemetry', 'catalogue', 'object', 'time'])
+    ).toEqual(['telemetry', 'catalog', 'object', 'time'])
   })
 
   it('appends for a slot past the end, or an anchor the layout lost', () => {
@@ -303,17 +303,17 @@ describe('normalizing a stored layout', () => {
     // nothing and reporting nothing.
     const stored: DockLayout = {
       ...EMPTY_LAYOUT,
-      left: ['catalogue', 'a-panel-from-2025'],
+      left: ['catalog', 'a-panel-from-2025'],
     }
     const layout = normalizeLayout(stored, PANELS)
-    expect(layout.left).toContain('catalogue')
+    expect(layout.left).toContain('catalog')
     expect(census(layout)).not.toContain('a-panel-from-2025')
   })
 
   it('places a panel the stored layout has never heard of', () => {
     // The worse half: a new panel that appears in no zone is unreachable, and
     // there is no UI for opening something that does not exist anywhere.
-    const stored: DockLayout = { ...EMPTY_LAYOUT, left: ['catalogue'] }
+    const stored: DockLayout = { ...EMPTY_LAYOUT, left: ['catalog'] }
     const layout = normalizeLayout(stored, PANELS)
     expectIntact(layout)
     expect(layout.left).toContain('time')

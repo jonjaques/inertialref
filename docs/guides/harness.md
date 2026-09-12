@@ -131,7 +131,7 @@ pnpm exec prettier -w packages/universe/src/galaxy/localClouds.generated.ts pack
 
 The inputs are the uncompressed Lallement 2022 FITS cube and GAMBONS supplemental
 sky map; source links, hashes and exact selection windows accompany the output in
-`data/reference/galaxy.json`. No catalogue or procedural systems are regenerated.
+`data/reference/galaxy.json`. No catalog or procedural systems are regenerated.
 
 In the browser's planetarium, `ir.galaxyView('face-on')` and
 `ir.galaxyView('edge-on')` select the fixed external instruments also available
@@ -438,7 +438,7 @@ framing it left. [ADR-0034](../adr/0034-the-drop.md).
 
 Sites are derived from the body's own terrain rather than authored, so
 "the highest ground on this world" survives regeneration and is still the
-interesting place afterwards. Four come from a beam search — `summit`, `basin`,
+interesting place afterward. Four come from a beam search — `summit`, `basin`,
 `shore`, `rough` — and two are chosen outright for the renderer: `corner`, where
 three faces of the addressing cube meet, and `pole`, where the east/north basis
 is singular. On a body with no solid surface `ir.sites` returns an empty list:

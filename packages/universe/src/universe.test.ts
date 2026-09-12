@@ -152,7 +152,7 @@ describe('galaxy', () => {
       SOL.position,
       5 * LIGHT_YEAR,
     )
-    const names = near.filter((s) => s.catalogued).map((s) => s.name)
+    const names = near.filter((s) => s.cataloged).map((s) => s.name)
     expect(names).toContain('Proxima Centauri')
     expect(names).toContain('Alpha Centauri')
     expect(names).not.toContain('Sirius')

@@ -189,7 +189,7 @@ const asCandidate = (star: CatalogStar): StarCandidate => ({
       ? undefined
       : 10 **
         ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
-  catalogued: true,
+  cataloged: true,
 })
 
 /**
@@ -1615,7 +1615,7 @@ export class GameEngine {
           color: star.color,
           solarLuminosities: star.solarLuminosities,
           visualLuminosities: star.visualLuminosities,
-          catalogued: false,
+          cataloged: false,
         }))
         this.#starField = selectStars(
           center,
@@ -1630,7 +1630,7 @@ export class GameEngine {
         applying.end()
         log.info('starfield surveyed', {
           stars: this.#starField.positions.length,
-          catalogued: known.length,
+          cataloged: known.length,
           fill: fill.length,
           cells: selection.cellsVisited,
           candidates: selection.candidateCount,

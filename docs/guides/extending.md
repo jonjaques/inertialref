@@ -245,7 +245,7 @@ flowchart TB
 
 **The trap.** Capturing a field but not restoring it. The hashes match at rest
 and diverge later — which is exactly how the missing control-input bug was
-caught, and why the round-trip test steps both worlds afterwards.
+caught, and why the round-trip test steps both worlds afterward.
 
 ---
 

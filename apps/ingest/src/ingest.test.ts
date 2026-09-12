@@ -308,8 +308,8 @@ describe('the sky asset', () => {
     for (const cell of cellsWithin(sol.position, 150 * LIGHT_YEAR))
       expect(c.inCell(cell).length).toBe(v.inCell(cell).length)
     expect(c.within(sol.position, 150 * LIGHT_YEAR).length).toBe(v.stars.length)
-    const ids = (catalogue: StarCatalog) =>
-      systemsWithin(GALAXY_SEED, catalogue, sol.position, 40 * LIGHT_YEAR).map(
+    const ids = (catalog: StarCatalog) =>
+      systemsWithin(GALAXY_SEED, catalog, sol.position, 40 * LIGHT_YEAR).map(
         (s) => s.id,
       )
     expect(ids(c)).toEqual(ids(v))
@@ -605,7 +605,7 @@ describe('the galaxy the catalog produces', () => {
     if (sol === undefined) throw new Error('no Sol')
     for (const cell of cellsWithin(sol.position, 25 * LIGHT_YEAR))
       for (const stub of generateCell(GALAXY_SEED, cell, {
-        catalogued: c.inCell(cell).length,
+        cataloged: c.inCell(cell).length,
         completeRadius: c.completeRadius,
       }))
         expect(
@@ -618,7 +618,7 @@ describe('the galaxy the catalog produces', () => {
     const sol = c.get('SOL' as never)
     if (sol === undefined) throw new Error('no Sol')
     const near = systemsWithin(GALAXY_SEED, c, sol.position, 10 * LIGHT_YEAR)
-      .filter((s) => s.catalogued && s.id !== 'SOL')
+      .filter((s) => s.cataloged && s.id !== 'SOL')
       .map((s) => ({
         name: s.name,
         ly: UV.distance(s.position, sol.position) / LIGHT_YEAR,
@@ -645,13 +645,13 @@ describe('the galaxy the catalog produces', () => {
       z: 0,
     })
     const cell = cellOf(far)
-    const catalogued = c.inCell(cell).length
+    const cataloged = c.inCell(cell).length
     const procedural = generateCell(GALAXY_SEED, cell, {
-      catalogued,
+      cataloged,
       completeRadius: c.completeRadius,
     }).length
-    expect(catalogued).toBeGreaterThan(0)
-    expect(procedural).toBeGreaterThan(catalogued)
+    expect(cataloged).toBeGreaterThan(0)
+    expect(procedural).toBeGreaterThan(cataloged)
   })
 })
 

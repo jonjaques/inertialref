@@ -178,7 +178,7 @@ describe('the stance pose', () => {
     /*
      * The bug the local-up hint exists to prevent.
      *
-     * Levelling against the pole instead of against the local up tilts the
+     * Leveling against the pole instead of against the local up tilts the
      * frame by the co-latitude — at 60° north the whole world appears to be on
      * a 30° slope. The test is that the camera's own right vector stays
      * perpendicular to local up, which is what "level" means on a sphere.

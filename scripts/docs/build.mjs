@@ -287,7 +287,7 @@ async function assertNothingUnlisted(listed) {
  * at a renamed symbol a build failure rather than words that link nowhere — but
  * `convert()` does not run it. Only `app.validate(project)` does, and it
  * reports through the logger rather than by throwing, so the count has to be
- * read afterwards. Left out, the option is configured and inert: a broken
+ * read afterward. Left out, the option is configured and inert: a broken
  * cross-reference converts cleanly, emits no warning, and ships.
  */
 async function convert() {

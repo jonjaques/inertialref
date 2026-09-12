@@ -1280,7 +1280,7 @@ other three channels. `LensSection` is the one preference explicitly drawn in tw
 simultaneously-mounted places — the planetarium dock's `CameraPanel` and
 `/settings/camera` over it — which is the exact pairing the new bullet's own text
 names. Also `pages/ControlsSection.tsx:98` (`{...overrides, [id]: chord}`) and
-`:111`, and `planetarium/CataloguePanel.tsx:306` (`setFiltering(!filtering)`).
+`:111`, and `planetarium/CatalogPanel.tsx:306` (`setFiltering(!filtering)`).
 Clean: `dock/useWorkspace.ts` is updater-form throughout; `firstLight.ts`'s
 `{...store.getState()}` is a live read, not a snapshot.
 

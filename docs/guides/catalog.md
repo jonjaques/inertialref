@@ -328,7 +328,7 @@ sphere; `inCell` and `within` retain the volume-only index. This avoids treating
 a few bright distant stars as a complete volume. The draw
 reaches the sky through `StarCatalog.sky`, and `apps/game/src/engine/starSelection.ts`
 joins it to the independent magnitude query: one record per id within the
-actual V threshold and a 100,000-sprite ceiling. The query uses catalogue
+actual V threshold and a 100,000-sprite ceiling. The query uses catalog
 completeness to bound procedural fill in each luminosity band. Travel queries
 retain their own spatial scope; they do not inherit a camera's sprite budget.
 [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records the active

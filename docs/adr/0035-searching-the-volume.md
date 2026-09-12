@@ -63,7 +63,7 @@ last worker holds the whole answer.
 The stub permits rejecting a nonmatching host class before generating its
 system. The share of work avoided depends on the selected population and
 query; there is no fixed rejection ratio. `matchSystem` checks the generated
-star against its parsed class afterwards.
+star against its parsed class afterward.
 
 ### The nearest thousand are kept, and the rest are counted
 
@@ -130,7 +130,7 @@ no bodies at all.
 - The reading room can be asked its own question, over a volume nobody has
   looked at, and the answer is about the worlds the generator actually makes.
 - The list fills in continuously: measured at 1600×900, 3,335 rows by 3% of a
-  37,929-system sweep and 16,805 by 17%, cancellable at any point.
+  37,929-system sweep and 16,805 by 17%, cancelable at any point.
 - `ir.findWorlds(query, { lightYears, onBatch })` is the console's own verb, so
   a script can ask the same question.
 - The predicate is pure and testable without a world: properties assert that

@@ -109,7 +109,7 @@ Neither is cheap — the pair over one branch runs to most of half a million
 subagent tokens and several minutes — and both read a diff the gate, the review
 and the author have already been over. `/ship` names the one it would have
 triggered and opens the PR without it; ask for either by name when the change
-is worth it, and its findings are edited into the PR afterwards.
+is worth it, and its findings are edited into the PR afterward.
 
 **Cloud sessions need one manual step.** Cloud images ship Node 20/21/22;
 this repository needs Node 26 for type stripping. Paste

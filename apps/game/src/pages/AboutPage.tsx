@@ -82,7 +82,7 @@ export function AboutPage() {
           <Reference
             icon={StellarSpan}
             label="The Catalog Guide"
-            detail="docs/guides/catalogue.md"
+            detail="docs/guides/catalog.md"
           />
           <Reference
             icon={TerminalSquare}

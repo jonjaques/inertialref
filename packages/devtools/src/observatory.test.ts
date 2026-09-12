@@ -234,7 +234,7 @@ describe('the observatory', () => {
   it('follows a body as it moves, rather than orbiting where it was', () => {
     /*
      * The one behavior that separates this from the cutscene director. A
-     * script resolves its stage once and is pure afterwards; the observatory
+     * script resolves its stage once and is pure afterward; the observatory
      * must re-ask, or a minute of time warp leaves the camera orbiting empty
      * space where Jupiter used to be.
      */

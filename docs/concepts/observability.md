@@ -21,7 +21,7 @@ flowchart TB
     INSPECT --> TEST["assertions<br/><i>a test checks it</i>"]
     INSPECT --> AGENT["an automated driver<br/><i>reads it over CDP</i>"]
     WORLD --> TIMER["Timer<br/><i>write-only spans</i>"]
-    TIMER --> TIMELINE["the browser's timeline<br/><i>a profile, afterwards</i>"]
+    TIMER --> TIMELINE["the browser's timeline<br/><i>a profile, afterward</i>"]
 
     style INSPECT fill:#0369a1,stroke:#0c4a6e,color:#fff
     style TIMER fill:#14532d,stroke:#052e16,color:#fff
@@ -45,7 +45,7 @@ landed at _t_" cannot be put beside each other. The timeline is not a seventh
 instrument; it is the shared axis the other six are missing.
 
 The split to hold on to: the performance panel answers _"is it fast right now"_
-while you fly, and the timeline answers _"why was that frame slow"_ afterwards.
+while you fly, and the timeline answers _"why was that frame slow"_ afterward.
 The panel is better at p95 against a drawn budget and at stating an absence
 honestly; a timeline reproduces both badly. `ir.profile(ms)` is the terminal's
 door onto it, and `pnpm timing` reads a recorded trace.

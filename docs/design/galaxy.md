@@ -24,7 +24,7 @@ The sky selects disjoint luminosity levels within a V 8 request and a
 projection follows the observer without rewriting all source positions; the
 shared field removes the expected emission represented by those sources.
 [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records population
-activation, catalogue completeness, legacy addresses and the approximation
+activation, catalog completeness, legacy addresses and the approximation
 limits of the resolved/diffuse partition.
 
 Open Presets → Milky Way, or call `ir.galaxyView('face-on')` for a fixed
@@ -115,7 +115,7 @@ numbers beside it, not a blanket claim about the object.
 ## Data sources
 
 The catalog is an **ingest**, not a hand-transcription. ✅ **Built** — see
-[`docs/guides/catalogue.md`](../guides/catalogue.md) for how to operate it.
+[`docs/guides/catalog.md`](../guides/catalog.md) for how to operate it.
 `data/catalog/stars-150ly.irsc` holds **7,123 systems and 702 confirmed
 planets**, 178 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
 Exoplanet Archive and committed. It replaced 18 hand-entered stars, which is the
@@ -190,7 +190,7 @@ discovery record referring to those bodies is silently wrong.
 **Rule 1 — the catalog version is an explicit generation input.**
 
 ```
-bodies(system, seed, catalogueVersion) → BodyManifest
+bodies(system, seed, catalogVersion) → BodyManifest
 ```
 
 Same seed and same catalog version produce the same universe, forever, on any
@@ -244,7 +244,7 @@ about a projection that was always a guess.
 The mechanic. A revision is a **diegetic event**, not a patch note.
 
 ```
-┌─ CATALOGUE REVISION ────────────────────────── hyg-4.1 → hyg-4.2 ─┐
+┌─ CATALOG REVISION ────────────────────────── hyg-4.1 → hyg-4.2 ─┐
 │                                                                   │
 │  3 systems in your Almanac are affected.                          │
 │                                                                   │
@@ -467,7 +467,7 @@ where the thinking happens.
 ## Ingest pipeline
 
 🟡 **Built, except the diff gate.** `apps/ingest`, operated through
-[`docs/guides/catalogue.md`](../guides/catalogue.md).
+[`docs/guides/catalog.md`](../guides/catalog.md).
 
 Not a design question so much as a named piece of work, because it is on the
 critical path for everything above.

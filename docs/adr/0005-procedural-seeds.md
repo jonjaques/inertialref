@@ -20,7 +20,7 @@ rng.next()
 rng.next()
 ```
 
-Inserting one planet shifts every value drawn afterwards, so adding a body to a
+Inserting one planet shifts every value drawn afterward, so adding a body to a
 system silently rewrites its neighbors, and two workers generating regions in
 different orders produce two different universes.
 

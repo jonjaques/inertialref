@@ -527,7 +527,7 @@ Share-alike attaches to the database and not to the software that reads it —
 CC BY-SA 4.0 § 4(b) says "but not its individual contents" — so Apache-2.0 on
 `packages/*` and CC BY-SA 4.0 on the catalog cover different works and do not
 conflict. See [`NOTICE`](NOTICE), `data/catalog/LICENSE.md`, and
-[the catalog guide](docs/guides/catalogue.md).
+[the catalog guide](docs/guides/catalog.md).
 
 ---
 

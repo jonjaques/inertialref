@@ -35,7 +35,7 @@ const selection = (ids: readonly string[]): StarExtinctionSelection => ({
   positions: ids.map((id) =>
     UV.translate(SUN_POSITION, vec3((Number(id) + 1) * 10 * PARSEC, 0, 0)),
   ),
-  catalogued: ids.map(() => false),
+  cataloged: ids.map(() => false),
 })
 
 it('preserves source slots and completed columns through selection reorder and local observer motion', () => {
@@ -114,14 +114,14 @@ it('never assigns one slot to two current identities across bounded replacements
   )
 })
 
-it('keeps catalogue flux calibrated at Sol and reuses its reference column on the CPU fallback', async () => {
+it('keeps catalog flux calibrated at Sol and reuses its reference column on the CPU fallback', async () => {
   const cache = new StarExtinctionCache(4, field, {
     cpu: true,
     cpuBatchSize: 2,
   })
   const stars = {
       ...selection(['0', '1', '2', '3']),
-      catalogued: [true, true, true, true],
+      cataloged: [true, true, true, true],
     },
     renderer = {} as WebGPURenderer
   cache.configure(stars, SUN_POSITION)
@@ -205,11 +205,11 @@ it('finishes a finite observer cycle during continuous travel before refreshing 
   expect(schedule.diagnostics.pending).toBe(12)
 })
 
-it('does not rewrite catalogue reference columns during idle Sol frames', () => {
+it('does not rewrite catalog reference columns during idle Sol frames', () => {
   const schedule = new StarExtinctionSchedule(3)
   const stars = {
     ...selection(['0', '1', '2']),
-    catalogued: [true, true, true],
+    cataloged: [true, true, true],
   }
   schedule.configure(stars, SUN_POSITION, field)
   const columns = schedule.selected.map((source) => source.corrected)
@@ -254,7 +254,7 @@ it('rejects a repeated identity even when its first occurrence replaced the old 
           UV.translate(stars.positions[1]!, vec3(1, 0, 0)),
           stars.positions[1]!,
         ],
-        catalogued: [false, false],
+        cataloged: [false, false],
       },
       SUN_POSITION,
       field,

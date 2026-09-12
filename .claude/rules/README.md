@@ -60,7 +60,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | `rendering.md`   | `render/`, `scene/`, `engine/`, `packages/rendering`, the observatory |
 | `cutscenes.md`   | the cinematic director, its scripts, or `cinema/`                     |
 | `dock.md`        | `apps/game/src/dock`                                                  |
-| `catalogue.md`   | the star catalog or the ingest app                                    |
+| `catalog.md`     | the star catalog or the ingest app                                    |
 | `record.md`      | the object dossier or any planetarium panel                           |
 | `server.md`      | the Worker, net, protocol or persistence                              |
 | `testing.md`     | any `*.test.ts`                                                       |
