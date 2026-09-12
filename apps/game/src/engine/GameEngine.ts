@@ -787,15 +787,18 @@ export class GameEngine {
   #orbitsAllKey = ''
 
   /**
-   * URL of an audio track the cutscene overlay should sync to the playhead.
+   * URL of an audio track that stands in for a scene's declared soundtrack.
    *
-   * The reference edit is timed against a piece of music this repository does
-   * not carry; `scripts/media.mjs` pulls it out of the site's R2 bucket at
-   * build time into `apps/game/public/media/`, and `hud/CutsceneOverlay.tsx`
-   * probes for it and adopts it when it is there. Set from the console
+   * A script names its music (`CutsceneScript.soundtrack`); the title
+   * sequence is timed against a piece this repository does not carry, which
+   * `scripts/media.mjs` pulls out of the site's R2 bucket at build time into
+   * `apps/game/public/media/`, and `hud/CutsceneOverlay.tsx` probes for it
+   * and adopts it when it is there. Set from the console
    * (`engine.cutsceneAudio = '/media/other.m4a'` after dropping a local file
-   * into `apps/game/public/media/`) and the overlay keeps the element within a
-   * lip-sync tolerance of the reference clock.
+   * into `apps/game/public/media/`) and the overlay plays that file instead,
+   * kept within a lip-sync tolerance of the reference clock — for a scene
+   * that declares a soundtrack. A scene without one stays silent whatever
+   * this holds: sound is staging, and the script is where staging is set.
    */
   cutsceneAudio: string | null = null
 

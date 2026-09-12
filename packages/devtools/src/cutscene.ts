@@ -39,6 +39,19 @@ export interface CutsceneScript {
   /** Frames per second of the reference edit this script is timed against. */
   readonly fps: number
   readonly durationFrames: number
+  /**
+   * The name of the track the scene is cut to, under the site's `/media/`,
+   * without its extension — the overlay asks for it in whichever encoding
+   * the browser decodes. Absent for a scene with no music, which plays
+   * silent.
+   *
+   * Sound is staging, so the script declares it, the same way a script turns
+   * an effect on. A track chosen by the overlay is a track for every scene:
+   * the title sequence's music played over the Mars landing, from the first
+   * frame of the entry burn, because the overlay owned one track and started
+   * it for whatever was open.
+   */
+  readonly soundtrack?: string
   prepare(world: World): PreparedCutscene
 }
 
@@ -121,11 +134,17 @@ export class CutsceneDirector {
     this.#scripts = scripts
   }
 
-  list(): readonly { id: string; description: string; seconds: number }[] {
+  list(): readonly {
+    id: string
+    description: string
+    seconds: number
+    soundtrack: string | null
+  }[] {
     return this.#scripts.map((script) => ({
       id: script.id,
       description: script.description,
       seconds: script.durationFrames / script.fps,
+      soundtrack: script.soundtrack ?? null,
     }))
   }
 

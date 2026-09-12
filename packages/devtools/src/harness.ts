@@ -1500,7 +1500,13 @@ export class GameHarness {
   }
 
   /** The scripted scenes `play` accepts, described. */
-  cutscenes(): readonly { id: string; description: string; seconds: number }[] {
+  cutscenes(): readonly {
+    id: string
+    description: string
+    seconds: number
+    /** The track the scene is cut to, by name under `/media/`, or null. */
+    soundtrack: string | null
+  }[] {
     return this.#cutscenes.list()
   }
 

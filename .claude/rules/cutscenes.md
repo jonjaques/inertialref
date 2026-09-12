@@ -77,6 +77,11 @@ second scene** — the traps below are the index, not the explanation.
   frame and the streamer drops every patch of the body the scene was on; the reopened
   frame then rebuilt the Mars hover's ground from the cube faces up under the card.
   Never reopen a scene to put its last frame back.
+- **Sound is staging, so a script declares it** — `soundtrack: 'tng-intro'`, by name
+  under `/media/`. The overlay adopts each declared track this deployment serves and
+  plays only the open scene's; a scene without one is silent whatever the console's
+  `engine.cutsceneAudio` holds. One track owned by the overlay played the title music
+  over the Mars landing from its first frame.
 - **One playhead, one set of verbs, one transport.** `apps/game/src/cinema/session.ts`
   publishes the playhead through the engine store's sampler; the player, the overlay
   and the mode all read that, and none reads `world.clock.paused` for itself. The
