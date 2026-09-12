@@ -77,6 +77,9 @@ changing the player's ship preference.
 
 The deck and cinematic poses share the placement resolver. The sunset
 presentation instant holds Mars, its terrain, and its light together while
-the scene advances. The Sun is three degrees above the site's horizon;
-the warm haze and blue/gold horizontal flare follow its actual direction.
+the scene advances. The Sun is three degrees above the site's horizon, and
+the dome follows its actual direction: a Martian sunset, with a cool
+blue-grey halo of forward-scattered dust around the Sun and a dim tan sky
+everywhere else, darkening to brown-grey at the zenith. The flare is the
+flight lens's own.
 Leaving Cinema returns control to the player's world.

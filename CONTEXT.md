@@ -9385,6 +9385,26 @@ background pixels with it enabled or disabled, while preserving the opaque
 foreground and Sun. The lower hemisphere carries dark regolith and no solar
 glow; sunlight belongs above the ground.
 
+## The Mars sunset is blue at the Sun and tan everywhere else (11 Sep 2026)
+
+The landing's dome was an Earth sunset — orange horizon, magenta upper sky, a
+peach glow at the Sun — and a hairline across the frame at the Sun's height
+that was the scene's own anamorphic streak: its core falls off as
+exp(−120·y) over a quad 0.18 frame heights tall, 0.66 px at 1600×900, so it
+aliased into a full-width line 8 sRGB units bright 1500 px from the Sun.
+The scene now drives the flight lens's flare and leaves the streak at zero.
+
+The dome is authored from the rover plates: micron dust scatters forward, so
+the sky is a dim, desaturated butterscotch except for a cool blue-grey halo
+some twenty degrees across the Sun, and the zenith goes brown-grey. Two
+things cost a round trip. Radiance is linear, so a band authored near
+neutral (1 : 0.71 : 0.64) reads mauve on the plate; tan on the plate is
+authored near 1 : 0.58 : 0.32. And TSL's `.mix` method takes its receiver as
+the interpolant — `base.mix(colour, halo)` lerps from the colour to the halo
+weight by the base — which painted the whole dome lavender and failed the
+lower-hemisphere regression with a red of 0.298 where it asks for under
+0.01. The function form `mix(base, colour, halo)` is the one that composes.
+
 ## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
 
 The cover's readout is a column now rather than a line. `render/firstLight.ts`

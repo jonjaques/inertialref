@@ -118,7 +118,7 @@ it('seeks the drive turbulence and throttle independently of rendered history', 
   }
 })
 
-it('draws a warm photographic sky behind the scene only when the script requests it', async () => {
+it('draws a dusty photographic sky with a cool halo at the Sun only when the script requests it', async () => {
   const camera = new PerspectiveCamera(55, 1, 0.1, 10000)
   const scene = new Scene()
   const fx = createLandingEffects()
@@ -144,6 +144,12 @@ it('draws a warm photographic sky behind the scene only when the script requests
     const sunlit = await gpu.drawGraph(scenePass, { float: true })
     expect(sunlit.at(5, 52)[0]).toBeGreaterThan(horizon[0] * 1.3)
     expect(sunlit.at(5, 52)[0]).toBeGreaterThan(sunlit.at(90, 52)[0] * 1.3)
+    // The halo is the blue of a Martian sunset, not a brighter tan: blue
+    // rises faster than red toward the Sun, and the far sky stays warm.
+    expect(sunlit.at(5, 52)[2]).toBeGreaterThan(sunlit.at(90, 52)[2] * 2)
+    expect(sunlit.at(5, 52)[2] / sunlit.at(5, 52)[0]).toBeGreaterThan(
+      sunlit.at(90, 52)[2] / sunlit.at(90, 52)[0],
+    )
     fx.update(sample)
     setSceneExposure(gpu.renderer, 0.25 / SURFACE_LUMINANCE)
     const dim = await gpu.drawGraph(scenePass, { float: true })

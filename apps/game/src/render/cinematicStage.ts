@@ -70,24 +70,43 @@ export function createLandingEffects() {
   skyMaterial.fog = false
   const elevation = positionLocal.normalize().y
   const aboveGround = smoothstep(0, 0.025, elevation)
-  const rose = mix(
-    vec3(0.27, 0.105, 0.042),
-    vec3(0.074, 0.027, 0.041),
+  // A Martian sunset is the inverse of an Earth one. Micron dust scatters
+  // forward, so the sky is a desaturated butterscotch everywhere except a
+  // cool blue-grey halo some twenty degrees across the Sun, where the blue
+  // light that survives the long dust path is what reaches the eye; the
+  // horizon band is dim tan, and the zenith goes brown-grey rather than
+  // magenta. The halo replaces the tan instead of adding to it: an additive
+  // blue over a warm band is a grey, and the reference plates are not grey.
+  // Radiance is linear, so a colour that reads tan on the plate is far
+  // redder here than its sRGB: a sky that looks 1 : 0.8 : 0.6 is authored
+  // near 1 : 0.58 : 0.32, and a band authored near neutral reads mauve.
+  const tan = mix(
+    vec3(0.19, 0.11, 0.06),
+    vec3(0.075, 0.046, 0.026),
     smoothstep(0.015, 0.35, elevation),
   )
   const upper = mix(
-    rose,
-    vec3(0.017, 0.011, 0.022),
+    tan,
+    vec3(0.014, 0.0095, 0.006),
     smoothstep(0.15, 0.92, elevation),
   )
   const sunAngle = dot(positionLocal.normalize(), sunward)
-  const solarGlow = exp(sunAngle.sub(1).mul(18))
-    .mul(0.6)
-    .add(exp(sunAngle.sub(1).mul(200)).mul(0.35))
+  // e-folds at 17° and at 7°: the halo the rover plates show, and the
+  // brighter disc of forward scatter inside it.
+  const halo = exp(sunAngle.sub(1).mul(24))
+    .mul(0.75)
     .mul(sunGlow)
     .mul(aboveGround)
-  skyMaterial.colorNode = mix(vec3(0.006, 0.0018, 0.0008), upper, aboveGround)
-    .add(vec3(0.55, 0.22, 0.072).mul(solarGlow))
+  const core = exp(sunAngle.sub(1).mul(140))
+    .mul(0.35)
+    .mul(sunGlow)
+    .mul(aboveGround)
+  // The function form: TSL's `.mix` method takes the receiver as the
+  // interpolant, so `base.mix(colour, halo)` lerps from the colour to the
+  // halo weight by the base and paints the whole dome lavender.
+  const dome = mix(vec3(0.006, 0.0018, 0.0008), upper, aboveGround)
+  skyMaterial.colorNode = mix(dome, vec3(0.2, 0.245, 0.35), halo)
+    .add(vec3(0.5, 0.55, 0.65).mul(core))
     .mul(haze)
   const sky = new Mesh(new SphereGeometry(1000, 48, 32), skyMaterial)
   sky.name = 'cinematic-sky'
