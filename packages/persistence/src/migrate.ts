@@ -1,5 +1,6 @@
 import { err, ok, type Result } from '@inertialref/shared'
 import { SAVE_SCHEMA_VERSION } from '@inertialref/protocol'
+import { MARS_PAD, MILKY_WAY } from '@inertialref/universe'
 
 /*
  * Save migrations.
@@ -55,11 +56,23 @@ const v0ToV1: Migration = {
   },
 }
 
+/**
+ * v1 → v2.
+ *
+ * A v1 save predates structures, so it is a game whose Mars pad was never
+ * written down; the facility a new Sol session seeds goes in here, or the
+ * landing scene stages a pad the player cannot land on. A save from another
+ * galaxy has no Mars, and its list is empty.
+ */
 const v1ToV2: Migration = {
   from: 1,
   to: 2,
-  describe: 'add durable surface structures',
-  migrate: (raw) => ({ ...raw, schemaVersion: 2, structures: [] }),
+  describe: 'add durable surface structures, seeding the Mars pad',
+  migrate: (raw) => ({
+    ...raw,
+    schemaVersion: 2,
+    structures: raw['galaxy'] === MILKY_WAY ? [{ ...MARS_PAD }] : [],
+  }),
 }
 
 export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2]

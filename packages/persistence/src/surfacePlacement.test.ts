@@ -6,6 +6,7 @@ import {
   bodyFrameId,
   dynamicEntityId,
   installSurfaceFrame,
+  MARS_PAD,
   systemId,
 } from '@inertialref/universe'
 import { captureSave, parseSave, restoreSave, serializeSave } from './save.ts'
@@ -80,12 +81,26 @@ describe('saved surface structures', () => {
     world.runTicks(300)
     expect(restored.stateHash()).toBe(world.stateHash())
   })
-  it('migrates v1 to an empty placement collection without respawning authored scenery', () => {
+  it('migrates a v1 save to the seeded Mars pad, and a save from another galaxy to nothing', () => {
     const saved = captureSave(new World({ seed: 'inertialref' }), null)
     const old = { ...saved, schemaVersion: 1, structures: undefined }
     const parsed = unwrap(parseSave(JSON.stringify(old)), 'parse')
     expect(parsed.schemaVersion).toBe(2)
-    expect(parsed.structures).toEqual([])
+    expect(parsed.structures).toEqual([MARS_PAD])
+    const restored = unwrap(restoreSave(parsed), 'restore').world
+    expect(restored.structures).toEqual([MARS_PAD])
+    // Seeded once: a v2 save that removed the pad stays without it.
+    restored.removeStructure(MARS_PAD.id)
+    const again = unwrap(
+      parseSave(serializeSave(captureSave(restored, null))),
+      'parse',
+    )
+    expect(again.structures).toEqual([])
+    const elsewhere = unwrap(
+      parseSave(JSON.stringify({ ...old, galaxy: 'elsewhere' })),
+      'parse',
+    )
+    expect(elsewhere.structures).toEqual([])
   })
   it('rejects corrupt fields and duplicate placement ids', () => {
     const world = new World({ seed: 'inertialref' })

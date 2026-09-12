@@ -4,6 +4,7 @@ import {
   bodyFixedFrameId,
   drawnSurfaceRadius,
   geodeticDirection,
+  MARS_PAD,
   systemId,
 } from '@inertialref/universe'
 import {
@@ -21,7 +22,6 @@ import {
   MARS_LANDING_SECONDS,
 } from '@inertialref/rendering'
 import type { CutsceneScript } from '../cutscene.ts'
-import { MARS_PAD } from '../structures.ts'
 
 /** A surveyed basin in the game's Mars relief; angles are radians, time is J2000 seconds. */
 export const MARS_PAD_SITE = Object.freeze({

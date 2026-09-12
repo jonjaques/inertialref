@@ -9360,7 +9360,10 @@ The pad's saved record belongs to World; the Cinema stage borrows it.
 canonical/drawn terrain split and schema migration. Support is a flat disk
 in the existing point-entity contact model, not a hull or ramp collision mesh.
 Moving a placement is atomic and cannot leave a partially replaced record;
-removing the seeded pad stays removed after save/load.
+removing the seeded pad stays removed after save/load. A schema-1 save
+predates structures, so the migration seeds the pad into a Milky Way save
+rather than an empty list: without it an old game watches the landing scene
+stage a pad it cannot land on.
 
 The 46-second Mars scene holds the sunset ephemeris while the director keeps
 advancing from simulation render time. Holding the director's clock instead

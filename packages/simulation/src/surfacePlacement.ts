@@ -1,4 +1,4 @@
-import { invariant, type Meters, type Radians } from '@inertialref/shared'
+import { invariant, type Meters } from '@inertialref/shared'
 import {
   type FramePose,
   Quaternion as Q,
@@ -10,22 +10,12 @@ import {
   type Body,
   type BodyFixedDirection,
   geodeticDirection,
+  type SurfacePlacement,
   surfaceAsset,
   surfaceRadius,
 } from '@inertialref/universe'
 
-/** Authored state only. Geometry and body-fixed poses derive from this record. */
-export interface SurfacePlacement {
-  readonly id: string
-  readonly assetId: string
-  readonly bodyAddress: string
-  readonly latitude: Radians
-  readonly longitude: Radians
-  /** Asset origin above the canonical ground, meters. */
-  readonly height: Meters
-  /** Compass heading, radians clockwise from north. */
-  readonly heading: Radians
-}
+export type { SurfacePlacement }
 
 /** Radius where a body-fixed ray meets this asset's horizontal support disk. */
 export function surfaceSupportRadius(

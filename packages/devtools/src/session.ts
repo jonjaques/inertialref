@@ -6,6 +6,7 @@ import {
   bodyFrameId,
   type EntityId,
   isLandable,
+  MARS_PAD,
   SOL_ONLY_CATALOG,
   type StarCatalog,
   type StarSystem,
@@ -13,7 +14,6 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { type WorkerFactory, WorkerPool } from '@inertialref/workers'
-import { MARS_PAD } from './structures.ts'
 import { MemorySaveStore, type SaveStore } from '@inertialref/persistence'
 import {
   type AuthorityPort,

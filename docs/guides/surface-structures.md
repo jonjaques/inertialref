@@ -31,8 +31,11 @@ removing a structure change the world and are included in its next save.
 an ID with `placeStructure` is an error. Removal remains in effect after loading.
 
 The facility `mars-basin-pad` is seeded in new Sol games at 34.560341698° N,
-85.053877851° E. It sits two meters above the local terrain. This is a basin
-surveyed in the game's relief, not a named real-world landing site.
+85.053877851° E, and into a save written before structures existed when that
+save loads. It sits two meters above the local terrain. This is a basin
+surveyed in the game's relief, not a named real-world landing site. The record
+is `MARS_PAD` in `packages/universe/src/structures.ts`, beside the asset it
+places.
 
 ## Add an asset
 

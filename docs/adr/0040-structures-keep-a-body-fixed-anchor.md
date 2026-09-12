@@ -35,8 +35,10 @@ compression can separate a full-size building from its body.
 
 The initial Mars pad is an ordinary placement seeded in a new Sol session.
 Loading a save restores its records without seeding the pad again. Save
-schema 2 carries a typed structures array; schema 1 migrates to an empty
-array. Asset geometry, terrain samples, and derived positions are not saved.
+schema 2 carries a typed structures array; schema 1 predates structures, so
+a Milky Way save migrates to the seeded pad and any other galaxy to an empty
+array, and a removal made after that migration is what the next save carries.
+Asset geometry, terrain samples, and derived positions are not saved.
 
 Cinema borrows a placement and the same pose resolver. Its script may hold a
 presentation instant for the body, terrain, and lighting while the director
