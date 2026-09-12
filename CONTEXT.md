@@ -67,6 +67,13 @@ React runtime adds the live scene. Public content remains readable without
 JavaScript; request-time rendering can use the same shell when needed.
 [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
 
+Surface structures have durable body-fixed anchors, shared by flight,
+planetarium, and Cinema. Save schema 2 carries placements; World verbs place,
+move, and remove them. Flat support disks participate in surface contact.
+The Blender-authored Mars pad and its sunset Rocinante landing are the first
+consumer. [ADR-0040](docs/adr/0040-structures-keep-a-body-fixed-anchor.md)
+records the boundary; placement controls currently live in the harness.
+
 The application hosts also include `apps/ingest`, which builds committed
 astronomical assets offline, and `apps/server`, the Cloudflare adapter. All
 package layers match their `package.json` declarations in the 9 Sep 2026 review.
@@ -9295,6 +9302,123 @@ signal handlers are in the `logs` follower — so after every Ctrl-C the file
 names a pid that is gone, and the port message trusts it only while that pid
 is alive and on 5173.
 
+## The Rocinante keeps its paint in six batches (10 Sep 2026)
+
+The Rocinante master in `design/ships/rocinante.blend` retains the source parts
+and Tachi markings. Its Principled materials distinguish dielectric armor and
+safety paint from gunmetal and titanium. The ingest exporter combines static
+parts into six mesh primitives, down from 355, with all 140,863 triangles intact.
+Unused UV streams and exported tangents are absent; normal mapping derives its
+frame from UV0. Ten 1024-pixel PNG maps remain shared. The GLB is 14,983,688 bytes,
+down from 19,590,524 bytes. These are asset counts, not a frame-rate claim.
+
+The ship loader previously copied textures but dropped `baseColorFactor` and
+ambient occlusion. A material that looked charcoal in Blender consequently
+arrived with a white factor and lost its recess shading. The conversion keeps
+paint, AO, normal-map settings and vertex-color flags. Four focused regressions
+fail with the old conversion. Exact vertex bounds keep batching from shifting
+the hull's center through transformed bounding-box overestimation; the exported
+bounds agree with the source within 1 mm in game meters.
+
+The meter, foot and inch reference cubes no longer follow the player. Their
+precision claim remains covered by the coordinate tests.
+
+## The white hull markings hold their depth (11 Sep 2026)
+
+MCRN, NAVY and 158 sit about 1.9 mm above the armor in the source asset. Tachi
+sits 6.7 mm above it. Blender's viewport spans 0.01 to 5,000 model units with
+an eye 650 units away, so the lettering competes with the underlying depth
+samples as the view moves. Batching preserves those gaps and does not cause
+this defect.
+
+Each marking plane gains 20 mm of outward clearance in the editable master;
+the exported game geometry carries the same correction. The viewport clips
+from 1 to 2,000 model units. A regression samples 48 points across all six
+panels and requires 15–35 mm of clearance over the underlying hull. It fails
+on the source and passes on the corrected export. The six batches and 140,863
+triangles remain; the GLB is 14,983,892 bytes including the modification record.
+
+## A landing pad stays with Mars (11 Sep 2026)
+
+The useful landing site was a shallow basin in the game's Mars relief at
+34.560341698° N, 85.053877851° E. Sampling a 100 m square on a 2 m grid found
+1.362 m of height variation about its tangent plane. The deck sits 2 m above
+the center; the six-meter skirt reaches the ground across that footprint.
+The site's relief is generated, so these coordinates do not claim a named
+real-world Martian facility.
+
+The Blender master retains 595 editable parts. The shipped pad has 29,348
+triangles in ten material batches and occupies 1,583,188 bytes. Initial
+captures exposed overlapping slab tops and millimeter hazard decals sharing
+depth bins from the ground camera. Removing the hidden faces and cutting
+actual gaps between hazard sectors fixed the export. The asset regression
+ray-traces the shipped triangles, so a visually correct Blender preview alone
+cannot conceal the same defect again.
+
+The pad's saved record belongs to World; the Cinema stage borrows it.
+[ADR-0040](docs/adr/0040-structures-keep-a-body-fixed-anchor.md) explains the
+canonical/drawn terrain split and schema migration. Support is a flat disk
+in the existing point-entity contact model, not a hull or ramp collision mesh.
+Moving a placement is atomic and cannot leave a partially replaced record;
+removing the seeded pad stays removed after save/load. A schema-1 save
+predates structures, so the migration seeds the pad into a Milky Way save
+rather than an empty list: without it an old game watches the landing scene
+stage a pad it cannot land on.
+
+The contact test is gated on the datum. The first version asked the world for
+a deck on every integrated tick with a body binding, and the deck test sampled
+the terrain under the pad before rejecting the ray, so an orbiter at 400 km
+paid a spin pose, a canonical position and a noise call a tick for a pad it
+could not reach — 640 asks in 640 ticks, now none. Inside the ground band one
+direction and one terrain sample serve the ground and the deck, the tallest
+deck per body is a cached number, and a miss is decided on the body radius.
+
+The 46-second Mars scene holds the sunset ephemeris while the director keeps
+advancing from simulation render time. Holding the director's clock instead
+freezes the film. The chosen instant puts the Sun 3° above the horizon at
+azimuth 266.677°; rotating the pad heading to 246° keeps that real Sun beside
+the Roci during the pullback. The opening three-quarter profile is framed by
+a 0.3–0.9° ground telephoto. Touchdown occurs at 41 seconds with zero sampled
+velocity and the drive still carrying the hull: the last metre of the approach
+is a hover, so the cut begins at contact and is out three quarters of a second
+later, and the dust settles from the same instant. Heat, plume, and dust are
+functions of the playhead.
+
+Cinema's direct URL initially returned 404 even though the director could
+play the scene: Astro's document routes had their own list. Both now consume
+the same script registry, and a regression checks every registered scene's
+cold route. Projection tests keep the entry hull readable and the sunset
+beside the pad; every frame is checked for ground and hull clearance.
+
+An opaque sunset dome did not replace the physical sky: the atmosphere's
+transparent pass ran afterward and added its scattering over the authored
+color. The sky now composites at far depth after the atmosphere and before
+the lens effects, with alpha one and depth writes disabled. A GPU regression
+places physical atmosphere on both sides of the dome and checks identical
+background pixels with it enabled or disabled, while preserving the opaque
+foreground and Sun. The lower hemisphere carries dark regolith and no solar
+glow; sunlight belongs above the ground.
+
+## The Mars sunset is blue at the Sun and tan everywhere else (11 Sep 2026)
+
+The landing's dome was an Earth sunset — orange horizon, magenta upper sky, a
+peach glow at the Sun — and a hairline across the frame at the Sun's height
+that was the scene's own anamorphic streak: its core falls off as
+exp(−120·y) over a quad 0.18 frame heights tall, 0.66 px at 1600×900, so it
+aliased into a full-width line 8 sRGB units bright 1500 px from the Sun.
+The scene now drives the flight lens's flare and leaves the streak at zero.
+
+The dome is authored from the rover plates: micron dust scatters forward, so
+the sky is a dim, desaturated butterscotch except for a cool blue-grey halo
+some twenty degrees across the Sun, and the zenith goes brown-grey. Two
+things cost a round trip. Radiance is linear, so a band authored near
+neutral (1 : 0.71 : 0.64) reads mauve on the plate; tan on the plate is
+authored near 1 : 0.58 : 0.32. And TSL's `.mix` method takes its receiver as
+the interpolant — `base.mix(colour, halo)` lerps from the colour to the halo
+weight by the base — which painted the whole dome lavender and failed the
+lower-hemisphere regression with a red of 0.298 where it asks for under
+0.01. The function form `mix(base, colour, halo)` is the one that composes.
+
 ## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
 
 The cover's readout is a column now rather than a line. `render/firstLight.ts`
@@ -9480,6 +9604,40 @@ a sample taken in the stopping task still read the running scene. The
 engine's cutscene port now clears the field as it stops, and the player's
 unmount cleanup calls `sampleOnce` after `session.stop()`. Twenty frames
 sampled after the click: the front door is up on the first.
+
+## The landing went smooth under the Roci, and the last frame rebuilt Mars (12 Sep 2026)
+
+Three defects in Cinema, all invisible at the driver's default window and
+all found by asking headlessly first. The title theme played over the Mars
+landing from its first frame because the overlay owned one track and started
+it for whatever was open; a script now declares its `soundtrack` by name and
+the overlay drives only the open scene's.
+
+The craters under the ship went smooth in steps during the last ten seconds
+of the landing, and only on a retina window. The per-frame selection through
+the scene's own camera and lens is stable at 1600×900 — 874 patches, level
+16 underfoot from 41 s on — but at 3200×1800 display pixels the hover wants
+1,583 against the cap of 1,280, and the breadth-first cut took the deepest
+level from the whole disk at once, including the node the camera stands in:
+16→15→14→13 between 32 s and 37.5 s as the lens narrowed 46°→34° through the
+settle, eight times the cell a meter off the ground. The cap is met by
+loosening the tolerance now — 1.5× the cell pixels, up to three steps — and
+only cut past that; loosened once the same eye wants 1,011 with level 16
+still underfoot, since a node the eye is inside is at distance zero. The
+ladder does nothing where the tree is balance-limited: at the flight lens
+over the same window the 2:1 grading sets the count and 3.4× the tolerance
+removes under 5% of the patches across thirty-six eyes on Mars and Earth.
+Through the 34° lens one step removes at least 20% of every one of them.
+
+The whole scene regenerated on the final frame because the director restored
+the player there and the session reopened the scene two frames short a
+sample later. In between the camera fell to the ship — Earth orbit, for a
+player who came from the menu — and the streamer, which follows the eye,
+dropped every Mars patch: 2,170 to zero on the ending frame, 221 and level 6
+two seconds later, rebuilding at eight patches a frame under the End of Scene
+card. `play` takes `hold`; the cinema session uses it and the director parks
+the last frame with the clock paused. A measurement's `ir.play` keeps the
+frame-null ending every rig depends on.
 
 ## Known gaps
 

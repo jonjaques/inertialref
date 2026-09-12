@@ -1,5 +1,6 @@
 import { err, ok, type Result } from '@inertialref/shared'
 import { SAVE_SCHEMA_VERSION } from '@inertialref/protocol'
+import { type GalaxyId, initialStructures } from '@inertialref/universe'
 
 /*
  * Save migrations.
@@ -55,7 +56,32 @@ const v0ToV1: Migration = {
   },
 }
 
-export const MIGRATIONS: readonly Migration[] = [v0ToV1]
+/**
+ * v1 → v2.
+ *
+ * A v1 save predates structures, so it is a game whose Mars pad was never
+ * written down; the facilities a new session in its galaxy seeds go in here,
+ * or the landing scene stages a pad the player cannot land on. A save from
+ * another galaxy has no Mars, and its list is empty. Fresh copies, because
+ * the parser and the world both treat a save's records as their own.
+ */
+const v1ToV2: Migration = {
+  from: 1,
+  to: 2,
+  describe: 'add durable surface structures, seeding the Mars pad',
+  migrate: (raw) => ({
+    ...raw,
+    schemaVersion: 2,
+    structures:
+      typeof raw['galaxy'] === 'string'
+        ? initialStructures(raw['galaxy'] as GalaxyId).map((placement) => ({
+            ...placement,
+          }))
+        : [],
+  }),
+}
+
+export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2]
 
 export function migrateSave(
   raw: unknown,

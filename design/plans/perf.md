@@ -554,6 +554,71 @@ caveat as below.
 
 ---
 
+## The Mars landing and the surface structures
+
+Measured 11 September 2026 on `codex/roci-lands-on-mars` rebased onto
+`main`, dev React, the driver's Chrome, a quiet machine. Two operating points
+for the scene: the entry at 8 s (ground telephoto, sky dome only) and the
+hover at 35 s (terrain at level 16, the pad, the dust, the dome). The orbit
+figure is the Rocinante at 400 km over Mars in the flight arm.
+
+| Operating point            | 1600×900 at DPR 1 | 3200×1800 at DPR 2 |
+| -------------------------- | ----------------- | ------------------ |
+| Mars orbit, flight         | 4.0 ms GPU        | not measured       |
+| Landing at 8 s, entry      | not measured      | 12.6 ms GPU        |
+| Landing at 35 s, the hover | 7.95 ms GPU       | 21.9 ms GPU        |
+
+`ir.gpu(120)` for the GPU column. The frame at 35 s is vsync at DPR 1 (mean
+16.6 ms, none over 25) and 27 ms mean, 40 ms p95 at DPR 2 — the scene misses
+60 Hz on a retina window during the ground phase, and the 2.8× between the
+two columns for 4× the pixels says it is fill. The CPU side is 3.3 ms of
+engine a frame, 1.9 of it `terrain.select`, which walks every frame because
+the scripted camera never converges. No strobe: a 240-frame cast at 60.3 fps
+over the approach reported no isolated frames.
+
+At DPR 2 the hover's selection is over the patch cap — 1,583 wanted against
+1,280 — and the cap is met by loosening the cell tolerance to 1.5×
+(`terrainSelect.ts` § `COARSEN_STEP`), which draws 1,011 patches with level
+16 underfoot rather than the cut tree's 1,184 at level 13. In Node the walk
+is 1.51 ms warm at that eye and 1.98 ms on the frame that climbs a step; the
+streamer hands the settled multiple back, so the step is paid once per
+crossing rather than per frame. The fill figure above is unchanged by it.
+
+### What a placement costs the tick and the frame
+
+The integrator's contact test is gated on the datum: above the ground band
+and the body's tallest deck a tick touches neither the spin pose, the terrain
+nor the body's placements, and inside the band one direction and one terrain
+sample serve the ground and the deck alike. `contactHeight` is a number
+cached on the world per body, and the placements are indexed per body; both
+are rebuilt when a placement changes, never at the call. A ray that misses a
+deck is rejected on the body's radius before the terrain under the pad is
+sampled, so a ship hovering over Mars pays one noise call a tick for the
+ground and none for a pad it is not above. The regression in
+`structureContact.test.ts` counts the asks: an orbiter at 400 km with the
+drive lit makes none over 640 ticks, a probe 60 m over the pad makes one a
+tick.
+
+The snapshot resolves each body's rotating pose once, for the placements it
+carries and for its own visible orientation, and formats its address once.
+`Engine/snapshot` is 0.24–0.32 ms a frame with Sol loaded; the pose it
+resolves once is a Kepler solve up the chain per body, unmeasured on its own.
+
+A glTF that fails to load stays failed until the page reloads, in the loader
+and in the structure pass, because the pass asks for every instance it lacks
+on every frame. The pass allocates nothing per frame: one reused set of
+active ids, and the Cinema stage goes through the same placement path as a
+world structure rather than being spread into a fresh list. Boot warms the
+assets of the structures placed in loaded systems, so the cover's cost grows
+with what is built near the player and not with the catalog; a structure
+elsewhere compiles on first sight.
+
+Still open, and unmeasured: `buildScene` samples the drawn terrain radius
+under every visible structure every frame, and `cinematicStage.ts` allocates
+through `Vec` and `Q` for the Sun direction each frame, cinema only. The
+`pnpm sim` tick benchmark at 400 km with zero, one and twenty placements is
+the experiment that would put a figure on the gate; it has not been run.
+
 ## The order it is worth taking
 
 1. **Shipped-build mode switches and docs pages.** Every figure is dev React at

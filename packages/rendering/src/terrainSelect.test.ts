@@ -9,7 +9,7 @@ import {
   regionNeighbor,
   regionParent,
 } from '@inertialref/universe'
-import { pixelsPerRadian } from './lens.ts'
+import { lensForFov, pixelsPerRadian } from './lens.ts'
 import {
   DEFAULT_CELL_PIXELS,
   DEFAULT_LENS,
@@ -40,6 +40,8 @@ import {
 const EARTH = 6_371_000
 /** Miranda: 4.8 km of Verona Rupes on a 235.8 km moon, which is 2% of it. */
 const MIRANDA = { radius: 235_800, relief: 5_000 }
+/** Mars, with the game's own relief bound — the body the landing measures. */
+const MARS = { radius: 3_389_500, relief: 14_700 }
 
 const directions = fc
   .tuple(
@@ -244,6 +246,88 @@ describe('the terrain quadtree', () => {
     expect(
       capped.patches.filter((patch) => contains(patch, direction)),
     ).toHaveLength(1)
+  })
+
+  it('loosens the tolerance before it cuts the tree, so the ground underfoot keeps the floor (property)', () => {
+    /*
+     * The Mars landing at 3200×1800 display pixels: the hover wants 1,583
+     * patches against a cap of 1,280, and the breadth-first cut answered by
+     * stopping the whole disk at level 13 with the camera a meter off ground
+     * whose floor is 16 — eight times the cell, arriving in steps as the lens
+     * narrowed. Loosened to 1.5× the same eye wants 1,011 and the ground
+     * under the camera is still at the floor, because the node the eye is
+     * inside is at distance zero and refines at any tolerance.
+     *
+     * So the claim: a cap that binds within the loosening ladder costs the
+     * far field a fraction of a level and the patch underfoot nothing.
+     *
+     * Through the landing's own lens, because the ladder only bites where the
+     * predicate is what binds. At the flight lens over this window the 2:1
+     * grading sets the count and 3.4× the tolerance cuts under 5% — measured
+     * across thirty-six eyes, corners included — where at 34° one step cuts
+     * at least 20% of every one of them. The cap is set inside that step.
+     */
+    const landing = {
+      lens: lensForFov(34),
+      viewport: { width: 3200, height: 1800 },
+      maxLevel: 16,
+    }
+    fc.assert(
+      fc.property(
+        directions,
+        fc.double({ min: 0.85, max: 0.95, noNaN: true }),
+        (direction, fraction) => {
+          const eye = eyeAt(MARS.radius, MARS.relief, 1, direction)
+          const full = selectTerrain(eye, { ...landing, maxPatches: 100_000 })
+          const capped = selectTerrain(eye, {
+            ...landing,
+            maxPatches: Math.floor(full.patches.length * fraction),
+          })
+          expect(capped.saturated).toBe(false)
+          expect(capped.coarsening).toBe(1.5)
+          expect(capped.patches.length).toBeLessThan(full.patches.length)
+          const underfoot = capped.patches.filter((patch) =>
+            contains(patch, direction),
+          )
+          expect(underfoot).toHaveLength(1)
+          expect(underfoot[0]!.region.level).toBe(full.deepestLevel)
+          expect(capped.deepestLevel).toBe(full.deepestLevel)
+        },
+      ),
+      { numRuns: 12 },
+    )
+  })
+
+  it('starts from the tolerance it is handed and reports the one it used', () => {
+    const direction = regionDirection(regionAddress(2, 0, 0, 0), 0.4, 0.6)
+    const eye = eyeAt(MARS.radius, MARS.relief, 1, direction)
+    const landing = {
+      lens: lensForFov(34),
+      viewport: { width: 3200, height: 1800 },
+      maxLevel: 16,
+    }
+    const full = selectTerrain(eye, { ...landing, maxPatches: 100_000 })
+    const cap = Math.floor(full.patches.length * 0.9)
+    const cold = selectTerrain(eye, { ...landing, maxPatches: cap })
+    expect(cold.coarsening).toBe(1.5)
+    const warm = selectTerrain(eye, {
+      ...landing,
+      maxPatches: cap,
+      coarsening: cold.coarsening,
+    })
+    expect(warm.coarsening).toBe(cold.coarsening)
+    expect(warm.patches.length).toBe(cold.patches.length)
+    // Handed a tolerance looser than it needs, it keeps it: coming back down
+    // is the caller's decision, because only the caller has last frame's
+    // count.
+    const loose = selectTerrain(eye, {
+      ...landing,
+      maxPatches: cap,
+      coarsening: 2.25,
+    })
+    expect(loose.coarsening).toBe(2.25)
+    // And unbound, the tolerance is the one asked for.
+    expect(full.coarsening).toBe(1)
   })
 
   it('is fully morphed wherever a coarser patch abuts it (property)', () => {

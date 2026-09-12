@@ -1,9 +1,10 @@
 import { useThree } from '@react-three/fiber'
-import { useMemo } from 'react'
-import type { PerspectiveCamera } from 'three/webgpu'
+import { useEffect, useMemo } from 'react'
+import type { PerspectiveCamera, Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createLensFlare } from '../render/flare.ts'
 import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
+import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
@@ -14,6 +15,8 @@ import { useTimedFrame } from './useTimedFrame.ts'
  */
 export function SunFlare({ engine }: { engine: GameEngine }) {
   const camera = useThree((state) => state.camera)
+  const gl = useThree((state) => state.gl)
+  const scene = useThree((state) => state.scene)
   // No dispose-on-unmount effect, deliberately, and `Starfield` is the
   // precedent: StrictMode remounts run cleanup against the *memoized*
   // instance and then mount it again, so a dispose here empties the group
@@ -21,6 +24,21 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
   // primitive from the scene on unmount; the handful of GPU objects live as
   // long as the renderer, like the starfield's do.
   const flare = useMemo(createLensFlare, [])
+
+  useEffect(() => {
+    warmAtMount({
+      label: 'compiling the solar lens',
+      units: 1,
+      run: async (done) => {
+        await warmCompile(warmRenderer(gl), {
+          object: flare.group,
+          camera,
+          scene: scene as Scene,
+        })
+        done()
+      },
+    })
+  }, [flare, gl, camera, scene])
 
   useTimedFrame('sunFlare', () => {
     const scene = engine.scene()
@@ -56,14 +74,11 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       star.brightness * (1 - filling * 0.85),
       star.placement.angularRadius,
       sunVisibility(scene.camera.position, star.placement.position, occluders),
-      // The cinematic camera is a cleaner lens than the flight one; see the
-      // `artifacts` note in `flare.ts`. 0.05 rather than 0 so a scripted shot
-      // still has a lens, just not one that argues with the composition: at
-      // 0.12 the iris ghosts were still three visible gray disks marching
-      // across an empty half-frame beside Jupiter. Off a script, the host
-      // decides — the front door runs a nearly clean lens because its ghosts
-      // land on the poster's type. See `GameEngine.flareArtifacts`.
-      engine.cinematic === null ? engine.flareArtifacts : 0.05,
+      // Scripts choose their coating response. The clean default keeps the
+      // reference-matched title shots free of ghost chains crossing the type.
+      engine.cinematic === null
+        ? engine.flareArtifacts
+        : (engine.cinematic.effects.lensArtifacts ?? 0.05),
       // The corona is staging, and only a script stages. Zero everywhere else,
       // which is what keeps a crescent preset in the planetarium from turning
       // into an eclipse nobody asked for.
@@ -76,6 +91,8 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // script that opted into calibrated staging — the intro's eclipse beats
       // are staged around this glow whatever response the player chose.
       engine.visibilityProcessing,
+      engine.cinematic?.effects.anamorphicFlare ?? 0,
+      1 - 0.94 * (engine.cinematic?.effects.skyHaze ?? 0),
     )
   })
 

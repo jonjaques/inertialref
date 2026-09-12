@@ -1,16 +1,8 @@
-import { sensorRadiance } from './radiance.ts'
-import {
-  Box3,
-  Group,
-  Mesh,
-  type MeshPhysicalMaterial,
-  MeshStandardNodeMaterial,
-  type Texture,
-  Vector3,
-} from 'three/webgpu'
+import { Box3, Group, Vector3 } from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { getLogger } from '@inertialref/shared'
 import { type ShipModelSpec, shipSpec } from './ships.ts'
+import { rebuildMaterials } from './shipMaterial.ts'
 
 /*
  * Modeled ship hulls, loaded from `data/models/`.
@@ -22,7 +14,7 @@ import { type ShipModelSpec, shipSpec } from './ships.ts'
  *
  * `GLTFLoader` is the one sanctioned crossing of the "never import from
  * `three`" rule, and it never touches the renderer: the loader builds classic
- * `MeshPhysicalMaterial`s, and every one is rebuilt below as a
+ * `MeshStandardMaterial`s, and every one is rebuilt as a
  * `MeshStandardNodeMaterial` from `three/webgpu` before the hull is handed
  * out. The classes the loader *shares* with the node build — `Mesh`,
  * `BufferGeometry`, `Texture` — come from `three.core.js`, so identity holds
@@ -52,56 +44,6 @@ export interface LoadedShip {
   readonly beamMetres: number
 }
 
-/**
- * Rebuild one of GLTFLoader's classic materials as a node material.
- *
- * Copied rather than converted-in-place because the WebGPU renderer converting
- * a classic material "behind your back" is exactly what AGENTS.md forbids
- * relying on. The loader has already set color spaces (sRGB for base color
- * and emissive, linear for data maps) and `flipY` on every texture, so the
- * maps move across as-is. `KHR_materials_specular` is dropped deliberately:
- * its intensities in these assets are ≤1 and the standard model's default is
- * visually identical under a single key light.
- */
-function rebuildMaterial(
-  source: MeshPhysicalMaterial,
-  anisotropy: number,
-): MeshStandardNodeMaterial {
-  const material = sensorRadiance(new MeshStandardNodeMaterial())
-  material.name = source.name
-  material.map = source.map
-  material.normalMap = source.normalMap
-  if (source.normalMap !== null) material.normalScale.copy(source.normalScale)
-  material.metalnessMap = source.metalnessMap
-  material.roughnessMap = source.roughnessMap
-  material.metalness = source.metalness
-  material.roughness = source.roughness
-  // KHR_materials_emissive_strength lands here: the lit windows and nacelle
-  // grilles are emissive maps with intensity above 1, which is what keeps them
-  // glowing on the night side of the hull.
-  material.emissive.copy(source.emissive)
-  material.emissiveMap = source.emissiveMap
-  material.emissiveIntensity = source.emissiveIntensity
-  material.transparent = source.transparent
-  material.opacity = source.opacity
-  material.alphaTest = source.alphaTest
-  material.depthWrite = source.depthWrite
-  material.side = source.side
-  // A hull seen bow-on is all glancing angles; without anisotropy the window
-  // rows smear into gray bands exactly where the eye reads the scale.
-  const maps: ReadonlyArray<Texture | null> = [
-    source.map,
-    source.normalMap,
-    source.metalnessMap,
-    source.roughnessMap,
-    source.emissiveMap,
-  ]
-  for (const texture of maps) {
-    if (texture !== null) texture.anisotropy = anisotropy
-  }
-  return material
-}
-
 async function build(
   spec: ShipModelSpec,
   anisotropy: number,
@@ -113,26 +55,11 @@ async function build(
 
   // Recenter on the bounding-box middle so the hull yaws and pitches about its
   // own center; exported origins land wherever the artist left them.
-  const box = new Box3().setFromObject(hull)
+  const box = new Box3().setFromObject(hull, true)
   const size = box.getSize(new Vector3())
   hull.position.sub(box.getCenter(new Vector3()))
 
-  const rebuilt = new Map<MeshPhysicalMaterial, MeshStandardNodeMaterial>()
-  const swap = (source: MeshPhysicalMaterial): MeshStandardNodeMaterial => {
-    let material = rebuilt.get(source)
-    if (material === undefined) {
-      material = rebuildMaterial(source, anisotropy)
-      rebuilt.set(source, material)
-      source.dispose()
-    }
-    return material
-  }
-  hull.traverse((object) => {
-    if (!(object instanceof Mesh)) return
-    object.material = Array.isArray(object.material)
-      ? object.material.map((m) => swap(m as MeshPhysicalMaterial))
-      : swap(object.material as MeshPhysicalMaterial)
-  })
+  rebuildMaterials(hull, anisotropy)
 
   const scale = spec.lengthMetres / size.z
   const oriented = new Group()

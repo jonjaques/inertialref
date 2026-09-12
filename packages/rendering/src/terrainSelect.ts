@@ -158,22 +158,69 @@ export const DEFAULT_MAX_LEVEL = 12
  * attributes below float32 halves both and is the outstanding lever; it is
  * measured-before-optimized rather than done here.
  *
- * **It binds at the telephoto end, and by how much is measured rather than
- * adjectival.** At 20° the same descents want two to three times the flight
- * lens's count, which degrades the disk by a level on most of their steps and
- * is reported as `saturated`. That is the right trade: one level coarser is a
- * 4-pixel error rather than a 2-pixel one, on a lens the player has narrowed
- * deliberately.
+ * **It binds at the telephoto end and on a retina window, and by how much is
+ * measured rather than adjectival.** At 20° the same descents want two to
+ * three times the flight lens's count; a 1600×900 window at DPR 2 is 3200×1800
+ * display pixels, one level deeper everywhere, and the Mars landing's hover
+ * wants 1,583 patches there against 874 at DPR 1. What the cap does when it
+ * binds is `COARSEN_STEP` below: the tolerance is loosened and the walk
+ * retaken, so the disk goes coarse by a stated fraction of a level everywhere
+ * the eye is not standing, and the ground underfoot keeps the floor.
  *
  * **The zoom channel goes three levels past that, and no cap covers it.** At 20°
  * with the zoom racked to 8× the picture is a 2.5° field at 24,500 px/rad, and
  * Miranda's basin descent wanted **20,174** patches at the old detail floor —
- * an order of magnitude past any cap, `saturated` on every step. That is a
- * telephoto held on a subject rather than a lens anything is flown behind, and
- * the honest answer is the one the cap already gives: the disk goes coarse, by
- * a stated amount, rather than the frame going away.
+ * an order of magnitude past any cap, past the loosest tolerance, and
+ * `saturated` on every step. That is a telephoto held on a subject rather than
+ * a lens anything is flown behind, and the honest answer is the one the cap
+ * gives: the disk goes coarse, by a stated amount, rather than the frame going
+ * away.
  */
 export const DEFAULT_MAX_PATCHES = 1_280
+
+/**
+ * How the tolerance is loosened when the cap binds, and how far.
+ *
+ * A selection over `maxPatches` is not truncated at the level that overflowed.
+ * It is retaken with `cellPixels` multiplied by this, and again, up to
+ * `COARSEN_STEPS` times, until it fits; only past the loosest tolerance is the
+ * tree cut off where it stands and reported `saturated`.
+ *
+ * The breadth-first cut is the wrong degradation for a camera on the ground,
+ * and the Mars landing is where it showed. It takes the deepest level from
+ * everybody at once, and everybody includes the node the eye is standing in:
+ * at 3200×1800 display pixels the hover wants 1,583 patches against 1,280, and
+ * the cut tree stops at level 13 with the camera a meter off ground whose
+ * floor is 16 — three levels, eight times the cell, and it arrives in steps,
+ * 16→15→14→13, as the lens narrows through the settle. Loosened to 1.5× the
+ * same eye wants 1,011 and the ground underfoot is still level 16, because a
+ * node the eye is inside is at distance zero and refines at any tolerance.
+ * Every ring further out moves in by the step instead — a fraction of a level
+ * spread over the whole disk, which the morph carries, rather than a level
+ * taken from the one place the picture is looking.
+ *
+ * Crack-free by construction: a coarsened walk is the same predicate with a
+ * different constant, so the handover argument in `regionSpacing` holds
+ * unchanged. The step is 1.5 rather than 2 because 2 is a whole level and a
+ * whole level arriving in one frame is the pop this exists to remove; three
+ * steps reach 3.4×, a level and three quarters, which covers a DPR 2 window at
+ * the telephoto end and stops short of pretending a racked zoom fits. The
+ * retry is a second walk on the frames it fires — the first walk stops at the
+ * overflow and skips the balance pass, so it costs less than a full one — and
+ * a caller that hands back `coarsening` pays it on the frame the cap first
+ * binds rather than on every frame after.
+ *
+ * **It buys nothing where the tree is balance-limited**, and the cut is the
+ * answer there as before. `DEFAULT_CELL_PIXELS` says the graded tree has a
+ * floor of its own; at the flight lens over 3200×1800, a meter off the
+ * ground, the 2:1 rings are what set the count and the predicate is not what
+ * binds — loosening 16 px to 54 px cuts under 5% of the patches across
+ * thirty-six eyes on Mars and on Earth. The ladder is climbed and reports
+ * `saturated` at the top. Where the predicate binds, the same eyes through
+ * the landing's 34° lens, one step is the 1,583 → 1,011 above.
+ */
+export const COARSEN_STEP = 1.5
+export const COARSEN_STEPS = 3
 
 /**
  * Where a patch starts and finishes sliding onto its parent's grid, as
@@ -304,6 +351,16 @@ export interface TerrainSelectOptions {
   readonly resolution?: number
   readonly maxPatches?: number
   /**
+   * The multiple of `cellPixels` to start from — the `coarsening` the last
+   * selection settled at, handed back by a caller that walks every frame.
+   *
+   * Starting from 1 every frame is a wasted walk on every frame the cap
+   * binds; starting from the last answer is one walk while nothing changes.
+   * The caller decides when to try a finer tolerance again, because only it
+   * knows how far under the cap the last selection came in.
+   */
+  readonly coarsening?: number
+  /**
    * Refine only into regions this says are drawable.
    *
    * The streamer's answer is "its geometry is built" — the mesh rather than the
@@ -355,11 +412,18 @@ export interface TerrainSelection {
    */
   readonly starved: readonly RegionAddress[]
   /**
-   * True when `maxPatches` stopped the refinement a level early — or when the
-   * balance pass, which never leaves a 2:1 violation unsplit, carried a
-   * saturated selection past the cap. The cap is a safety net, not a bound:
-   * an unsplit violation is a lit crack, which is strictly worse than a
-   * flagged overrun.
+   * The multiple of `cellPixels` the selection is made at: 1 when the cap
+   * never bound, a power of `COARSEN_STEP` when it did. Reported so a count
+   * can be read beside the tolerance that produced it, and handed back as
+   * the next walk's `coarsening`.
+   */
+  readonly coarsening: number
+  /**
+   * True when `maxPatches` stopped the refinement a level early at the
+   * loosest tolerance — or when the balance pass, which never leaves a 2:1
+   * violation unsplit, carried a saturated selection past the cap. The cap is
+   * a safety net, not a bound: an unsplit violation is a lit crack, which is
+   * strictly worse than a flagged overrun.
    */
   readonly saturated: boolean
 }
@@ -429,7 +493,10 @@ interface Node {
   readonly cone: RegionCone
   readonly spacing: Meters
   readonly distance: Meters
-  /** Distance at which this patch's cells subtend exactly `cellPixels`. */
+  /**
+   * Distance at which this patch's cells subtend exactly the tolerance —
+   * `cellPixels` times the walk's coarsening.
+   */
   readonly range: Meters
 }
 
@@ -447,14 +514,40 @@ export function selectTerrain(
   eye: TerrainEye,
   options: TerrainSelectOptions = {},
 ): TerrainSelection {
-  const maxLevel = options.maxLevel ?? DEFAULT_MAX_LEVEL
   const cellPixels = options.cellPixels ?? DEFAULT_CELL_PIXELS
   const lens = options.lens ?? DEFAULT_LENS
   const viewport = options.viewport ?? DEFAULT_VIEWPORT
+  const optics = pixelsPerRadian(lens, viewport)
+  const loosest = COARSEN_STEP ** COARSEN_STEPS
+  let coarsening = Math.max(1, options.coarsening ?? 1)
+  for (;;) {
+    // The loosest tolerance takes the cut tree; every tighter one hands the
+    // overflow to the next step instead.
+    const last = coarsening * COARSEN_STEP > loosest * (1 + 1e-9)
+    const selection = walk(eye, options, optics / (cellPixels * coarsening), {
+      coarsening,
+      last,
+    })
+    if (selection !== null) return selection
+    coarsening *= COARSEN_STEP
+  }
+}
+
+/**
+ * One walk at one tolerance, or null when it overflowed the cap and a looser
+ * tolerance is still to be tried — returned before the balance pass, which
+ * is most of what a saturated walk would otherwise spend.
+ */
+function walk(
+  eye: TerrainEye,
+  options: TerrainSelectOptions,
+  scale: number,
+  attempt: { readonly coarsening: number; readonly last: boolean },
+): TerrainSelection | null {
+  const maxLevel = options.maxLevel ?? DEFAULT_MAX_LEVEL
   const resolution = options.resolution ?? HEIGHTFIELD_RESOLUTION
   const maxPatches = options.maxPatches ?? DEFAULT_MAX_PATCHES
   const ready = options.ready
-  const scale = pixelsPerRadian(lens, viewport) / cellPixels
   const reach = horizonReach(eye)
 
   let visited = 0
@@ -520,6 +613,7 @@ export function selectTerrain(
        * half of a traversal is a planet with a seam down the middle of it.
        */
       saturated = true
+      if (!attempt.last) return null
       done.push(...keep, ...refining)
       break
     }
@@ -562,6 +656,7 @@ export function selectTerrain(
     visited,
     culled,
     starved,
+    coarsening: attempt.coarsening,
     saturated: saturated || patches.length > maxPatches,
   }
 }

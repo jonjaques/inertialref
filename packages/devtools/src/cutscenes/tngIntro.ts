@@ -1566,6 +1566,9 @@ export const TNG_INTRO: CutsceneScript = {
     'shot-for-shot study of the 1987 title sequence, staged in Sol (114 s)',
   fps: FPS,
   durationFrames: DURATION,
+  // The reference edit's own music; `apps/server/src/media.ts` says where it
+  // is served from and why it is not in the repository.
+  soundtrack: 'tng-intro',
   prepare(world: World): PreparedCutscene {
     const stage = buildStage(world)
     return { sample: (frame) => sample(stage, frame) }
@@ -2772,6 +2775,7 @@ function effectsAt(frame: number): CinematicEffects {
   }
 
   return {
+    motionSmear: 1,
     blackout,
     flash,
     streaks,

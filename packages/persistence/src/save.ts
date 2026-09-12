@@ -11,6 +11,7 @@ import {
   encodeVec3,
   SAVE_SCHEMA_VERSION,
   type SaveEntity,
+  type SaveSurfacePlacement,
   type SaveGame,
   type VersionDrift,
   versionDrift,
@@ -20,6 +21,7 @@ import {
   DEBUG_SHIP_THRUSTERS,
   type EntityKind,
   type RailsEpoch as SimulationRailsEpoch,
+  type SurfacePlacement,
   World,
 } from '@inertialref/simulation'
 import {
@@ -62,6 +64,13 @@ type EpochsAgree = [
 ]
 const _epochsAgree: EpochsAgree = [true, true, true]
 void _epochsAgree
+
+const _placementsAgree: [
+  SameKeys<SurfacePlacement, SaveSurfacePlacement>,
+  SurfacePlacement extends SaveSurfacePlacement ? true : never,
+  SaveSurfacePlacement extends SurfacePlacement ? true : never,
+] = [true, true, true]
+void _placementsAgree
 
 /*
  * Turning a world into a save and back.
@@ -116,6 +125,7 @@ export function captureSave(
     // reloaded against `hyg-4.5` may find a body the catalog has moved.
     catalog: world.catalog.version,
     entities,
+    structures: world.structures,
     playerEntity,
     dynamicIdCounter: world.entities.dynamicIdCounter,
     loadedSystems: world.loadedSystems().map((system) => system.id),
@@ -199,6 +209,15 @@ export function restoreSave(
   }
 
   const landed: EntityId[] = []
+  for (const structure of save.structures) {
+    try {
+      world.placeStructure(structure)
+    } catch (cause) {
+      return err(
+        `structure ${structure.id}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    }
+  }
   for (const entity of save.entities) {
     const state = decode(decodeFrameState, entity.state)
     if (!state.ok) return err(`entity ${entity.id}: ${state.error}`)

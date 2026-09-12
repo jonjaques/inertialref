@@ -1,4 +1,4 @@
-import { ENTERPRISE_PORTRAITS, TNG_INTRO } from '@inertialref/devtools'
+import { CUTSCENES } from '@inertialref/devtools'
 import {
   ABOUT,
   AUTH_CALLBACK,
@@ -37,5 +37,5 @@ export const shellPaths = [
   SIGN_IN,
   SIGN_UP,
   ...['display', 'camera', 'controls', 'data'].map(settingsSection),
-  ...[TNG_INTRO, ENTERPRISE_PORTRAITS].map((script) => cinemaScene(script.id)),
+  ...CUTSCENES.map((script) => cinemaScene(script.id)),
 ]

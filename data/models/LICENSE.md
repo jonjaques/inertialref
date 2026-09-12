@@ -11,8 +11,10 @@ the source code.**
 
 - Rocinante / MCRN Tachi (`rocinante.glb`): “MCRN Tachi [Expanse TV Show]” by
   Jakub.Vildomec (https://sketchfab.com/Jakub.Vildomec), licensed CC BY 4.0
-  (https://creativecommons.org/licenses/by/4.0/). Used as published, and its
-  glTF `asset.extras` block carries the same attribution. The model wears the
+  (https://creativecommons.org/licenses/by/4.0/). Modified in InertialRef with
+  authored PBR finishes, reduced normal relief and static mesh batching. The
+  editable master is `design/ships/rocinante.blend`; its source credit and
+  modification record travel in the exported glTF `asset.extras` block. The model wears the
   MCRN _Tachi_ livery (hull 158); the ship is renamed _Rocinante_ in the story
   and is the same hull under either name.
 

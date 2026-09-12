@@ -205,10 +205,20 @@ const asCandidate = (star: CatalogStar): StarCandidate => ({
  */
 export interface CinematicView {
   readonly frame: number
+  readonly presentationTime?: number
+  readonly elapsedSeconds?: number
+  readonly stage?: {
+    readonly model: string
+    readonly placementId?: string
+    readonly position: Vec3
+    readonly orientation: Quat
+  }
   /** The shot's own lens. `engine.lens` resolves it against the flight one. */
   readonly lens: Lens
   readonly camera: { readonly position: Vec3; readonly orientation: Quat }
   readonly ship: {
+    readonly model?: string
+    readonly throttle?: number
     readonly position: Vec3
     readonly orientation: Quat
     readonly visible: boolean
@@ -696,9 +706,8 @@ export class GameEngine {
   /*
    * The modeled hull the player is flying, once its glTF resolves.
    *
-   * Three scene components need it every frame — `ShipModel` mounts it,
-   * `CameraRig` scales the chase distance from its length, `NearFieldProps`
-   * steps aside from its beam — and it changes exactly once per session. On
+   * `ShipModel` mounts it and `CameraRig` scales the chase distance from its
+   * length. The selected hull can change during a session. It lives on
    * the engine rather than in module state in `SceneView`, because Vite
    * re-evaluates an edited render module while Fast Refresh preserves the
    * mounted components' hook state: a module-level copy resets to null mid-
@@ -707,6 +716,32 @@ export class GameEngine {
    * Null means the debug cone is standing in.
    */
   hull: LoadedShip | null = null
+
+  /*
+   * The hull a playing script names as its hero prop, once that glTF resolves.
+   *
+   * A second slot rather than a swap of `hull`, because `hull` is read as the
+   * player's: `CameraRig` solves the chase distance from its length, `WarpFx`
+   * scales the streaks from it and `ThrusterFx` keys the plumes on its id. A
+   * scene's prop written there flows into all three — for the frames between
+   * the script's last sample and the player's reload landing, the chase
+   * frames a 46 m Rocinante at the entity's pose and its plumes burn beside
+   * the Enterprise. Null means no script has asked for one yet, or the one
+   * asked for is still loading; `hullOnStage` resolves which slot the frame
+   * draws.
+   */
+  stagedHull: LoadedShip | null = null
+
+  /**
+   * The hull the frame draws: the script's prop while a playing scene names
+   * one, the player's otherwise. Null while a named prop is still loading,
+   * so nothing scales an effect from the wrong hull in the meantime.
+   */
+  get hullOnStage(): LoadedShip | null {
+    const model = this.cinematic?.ship.model
+    if (model === undefined) return this.hull
+    return this.stagedHull?.id === model ? this.stagedHull : null
+  }
 
   /*
    * The frame's cinematic state, in render space, when a cutscene is playing.
@@ -778,15 +813,18 @@ export class GameEngine {
   #orbitsAllKey = ''
 
   /**
-   * URL of an audio track the cutscene overlay should sync to the playhead.
+   * URL of an audio track that stands in for a scene's declared soundtrack.
    *
-   * The reference edit is timed against a piece of music this repository does
-   * not carry; `scripts/media.mjs` pulls it out of the site's R2 bucket at
-   * build time into `apps/game/public/media/`, and `hud/CutsceneOverlay.tsx`
-   * probes for it and adopts it when it is there. Set from the console
+   * A script names its music (`CutsceneScript.soundtrack`); the title
+   * sequence is timed against a piece this repository does not carry, which
+   * `scripts/media.mjs` pulls out of the site's R2 bucket at build time into
+   * `apps/game/public/media/`, and `hud/CutsceneOverlay.tsx` probes for it
+   * and adopts it when it is there. Set from the console
    * (`engine.cutsceneAudio = '/media/other.m4a'` after dropping a local file
-   * into `apps/game/public/media/`) and the overlay keeps the element within a
-   * lip-sync tolerance of the reference clock.
+   * into `apps/game/public/media/`) and the overlay plays that file instead,
+   * kept within a lip-sync tolerance of the reference clock — for a scene
+   * that declares a soundtrack. A scene without one stays silent whatever
+   * this holds: sound is staging, and the script is where staging is set.
    */
   cutsceneAudio: string | null = null
 
@@ -873,7 +911,11 @@ export class GameEngine {
       // The one reader of this field on the presentation side. It used to have
       // three, in three components, answering the same question.
       paused: () => this.world.clock.paused,
-      play: (id) => this.harness.play(id),
+      // Held, because this is watching: the last frame stays on stage under
+      // the end card. Without it the ending frame hands the camera to the
+      // ship and the streamer drops the ground — `cinema/session.ts` has the
+      // measurement.
+      play: (id) => this.harness.play(id, { hold: true }),
       seek: (frame) => void this.harness.seekCutscene(frame),
       pause: () => this.harness.pause(),
       resume: () => this.harness.resume(),
@@ -1252,37 +1294,22 @@ export class GameEngine {
       this.harness.observatory.target !== null
     )
       this.harness.observatory.advanceTime(delta)
+    // A surface stage holds its ephemeris epoch while the director samples
+    // live render time. Feeding the held snapshot time back freezes the playhead.
+    // Sampling before the player lookup also lets a scene end during a hand-off.
+    const cinematic = this.harness.cutsceneSample(this.world.clock.renderTime)
+    this.#phases.step('cutscene', ENGINE_PHASE)
     const shot = snapshot(
       this.world,
       undefined,
-      this.harness.cutsceneStatus() === null &&
-        this.harness.observatory.target !== null
-        ? this.harness.observatory.time
-        : undefined,
+      cinematic?.presentationTime ??
+        (cinematic === null && this.harness.observatory.target !== null
+          ? this.harness.observatory.time
+          : undefined),
     )
     this.snapshot = shot
     this.#phases.step('snapshot', ENGINE_PHASE)
 
-    /*
-     * The cutscene director's per-frame ask, against `renderTime` so a paused
-     * or stepped clock gives frame-exact stills. Everything downstream — the
-     * origin, the scene build, terrain, the star survey — follows the
-     * *cinematic* eye when there is one: the origin must stay within its
-     * rebase window of wherever the camera actually is, and a scene built
-     * around a ship an AU behind the shot would light and sort for nobody.
-     *
-     * **Above the missing-player returns below, and it has to be.** A cutscene
-     * owns the camera precisely when the ship does not matter, so the cutscene
-     * arm of the precedence order must not depend on the ship arm resolving.
-     * With the sample underneath them, a single frame during a load or an
-     * authority hand-off — `session.player()` null for one frame — meant the
-     * director was never asked again: it kept `#active`, `this.cinematic` kept
-     * its last non-null value for the rest of the session, `engineStore`
-     * published `cinema: true` forever, and every piece of chrome unmounted,
-     * including the control that stops it.
-     */
-    const cinematic = this.harness.cutsceneSample(shot.renderTime)
-    this.#phases.step('cutscene', ENGINE_PHASE)
     /*
      * The observatory's eye, when a cutscene is not already holding the camera.
      *
@@ -1339,6 +1366,23 @@ export class GameEngine {
         ? null
         : {
             frame: cinematic.frame,
+            presentationTime: cinematic.presentationTime,
+            elapsedSeconds: cinematic.elapsedSeconds,
+            stage:
+              cinematic.stage === undefined
+                ? undefined
+                : {
+                    model: cinematic.stage.model,
+                    placementId: cinematic.stage.placementId,
+                    position: toRenderSpace(
+                      this.origin,
+                      cinematic.stage.position,
+                    ),
+                    orientation: orientationToRenderSpace(
+                      this.origin,
+                      cinematic.stage.orientation,
+                    ),
+                  },
             lens: cinematic.lens,
             camera: {
               position: toRenderSpace(this.origin, cinematic.camera.position),
@@ -1354,6 +1398,8 @@ export class GameEngine {
                 cinematic.ship.orientation,
               ),
               visible: cinematic.ship.visible,
+              model: cinematic.ship.model,
+              throttle: cinematic.ship.throttle,
             },
             texts: cinematic.texts,
             effects: cinematic.effects,
@@ -1397,6 +1443,12 @@ export class GameEngine {
      * in the past, and terrain that disagrees with the ship about what time it
      * is drifts from under it by 800 m at orbital speed.
      *
+     * And `presentationTime` beside it, for the look-ahead's velocity. A
+     * cutscene that declares its own instant pins `shot.renderTime` for the
+     * whole scene, so a delta taken from it is zero on every frame of the
+     * fastest camera in the game; the presentation clock advances whether or
+     * not the instant does.
+     *
      * The whole `RenderBody` rather than its address, because a patch has to
      * ride the compression `placeAt` gave the body it sits on. Past
      * `NEAR_LIMIT` the sphere is drawn nearer and smaller so its angular size
@@ -1412,6 +1464,7 @@ export class GameEngine {
     this.#terrain.update(
       this.world,
       shot.renderTime,
+      this.presentationTime,
       eye,
       this.origin,
       this.#scene.terrainCandidates[0] ?? null,

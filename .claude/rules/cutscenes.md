@@ -20,7 +20,7 @@ second scene** — the traps below are the index, not the explanation.
   in Node. The director and scripts live in `packages/devtools`. A script's
   `prepare(world)` resolves the stage once; its `sample(frame)` is pure; time derives from
   `renderTime`, never a wall clock. A new scene is a new file exporting a `CutsceneScript`,
-  registered in `harness.ts`.
+  registered in `cutscenes/index.ts`, which both the director and document routes read.
 - **A scene is a shot list, not a camera move.** Each shot owns its camera, placed against
   its own subject; cuts hide in darkness, behind a flash, or under a body filling the
   frame. Authored as one continuous spline, a scene becomes a camera crossing astronomical
@@ -71,6 +71,17 @@ second scene** — the traps below are the index, not the explanation.
   card and keeps its transport, the others close it. Never reconstruct the answer from a
   remembered playhead: a stop near the final frame produces identical evidence, which is
   exactly the bug that made the player undo a console `stopCutscene` within 100 ms.
+- **The cinema session plays with `hold`; a measurement does not.** Held, the director
+  parks the last frame with the clock paused and `status()` live, so the end card sits
+  over the last shot. Restoring on the final frame hands the camera to the ship for a
+  frame and the streamer drops every patch of the body the scene was on; the reopened
+  frame then rebuilt the Mars hover's ground from the cube faces up under the card.
+  Never reopen a scene to put its last frame back.
+- **Sound is staging, so a script declares it** — `soundtrack: 'tng-intro'`, by name
+  under `/media/`. The overlay adopts each declared track this deployment serves and
+  plays only the open scene's; a scene without one is silent whatever the console's
+  `engine.cutsceneAudio` holds. One track owned by the overlay played the title music
+  over the Mars landing from its first frame.
 - **One playhead, one set of verbs, one transport.** `apps/game/src/cinema/session.ts`
   publishes the playhead through the engine store's sampler; the player, the overlay
   and the mode all read that, and none reads `world.clock.paused` for itself. The

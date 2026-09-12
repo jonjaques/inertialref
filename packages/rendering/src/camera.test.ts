@@ -45,6 +45,7 @@ function sceneWith(
     stars: [],
     entities: [],
     terrainCandidates: [],
+    structures: [],
   }
 }
 

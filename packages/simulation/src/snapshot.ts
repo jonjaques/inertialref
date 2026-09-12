@@ -3,6 +3,7 @@ import {
   canonicalOrientation,
   canonicalPosition,
   canonicalVelocity,
+  type FramePose,
   type FrameId,
   type FrameState,
   type Quat,
@@ -13,6 +14,7 @@ import {
 } from '@inertialref/spatial'
 import {
   type BodyAppearance,
+  type Body,
   type BodyFigure,
   bodyFixedFrameId,
   bodyFrameId,
@@ -24,6 +26,19 @@ import { TICK_DURATION } from './clock.ts'
 import type { Entity, EntityKind } from './entity.ts'
 import { type ThrustDemand, thrustDemand } from './flight.ts'
 import type { World, WorldEvent } from './world.ts'
+import {
+  type SurfacePlacement,
+  surfacePlacementPose,
+} from './surfacePlacement.ts'
+
+/** A placement carried by its body at the snapshot's presentation instant. */
+export interface SnapshotStructure extends SurfacePlacement {
+  readonly position: UniverseVector
+  readonly orientation: Quat
+  /** Immutable terrain inputs let rendering derive its drawn-ground correction. */
+  readonly body: Body
+  readonly spin: FramePose
+}
 
 /*
  * The presentation bridge.
@@ -128,6 +143,7 @@ export interface WorldSnapshot {
   readonly paused: boolean
   readonly droppedTicks: number
   readonly entities: readonly EntitySnapshot[]
+  readonly structures: readonly SnapshotStructure[]
   readonly bodies: readonly BodySnapshot[]
   readonly stars: readonly StarSnapshot[]
   readonly events: readonly WorldEvent[]
@@ -217,6 +233,7 @@ export function snapshot(
     entities.push(entitySnapshot(world, entity, alpha))
 
   const bodies: BodySnapshot[] = []
+  const structures: SnapshotStructure[] = []
   const stars: StarSnapshot[] = []
   for (const system of world.loadedSystems()) {
     stars.push({
@@ -228,14 +245,28 @@ export function snapshot(
       luminosity: system.star.luminosity,
     })
     const collect = (body: (typeof system.planets)[number]): void => {
+      const address = formatAddress(body.address)
       const frame = bodyFrameId(body.address)
       const pose = world.frames.pose(frame, renderTime)
-      // The rotating frame, resolved once. It was spelled out twice inside the
-      // ternary below — `has` and then the read — which is two template
-      // strings and two address formats per body per frame for one answer.
+      // The rotating frame's pose, resolved once per body: it carries the
+      // body's placements and it is the body's visible orientation, and a
+      // pose is a Kepler solve up the chain for every body in every loaded
+      // system, every frame.
       const spin = bodyFixedFrameId(body.address)
+      const spinPose = world.frames.pose(
+        world.frames.has(spin) ? spin : frame,
+        renderTime,
+      )
+      for (const placement of world.structuresOn(address)) {
+        structures.push({
+          ...placement,
+          body,
+          spin: spinPose,
+          ...surfacePlacementPose(placement, body, spinPose),
+        })
+      }
       bodies.push({
-        address: formatAddress(body.address),
+        address,
         name: body.name,
         kind: body.kind,
         radius: body.radius,
@@ -245,10 +276,7 @@ export function snapshot(
         appearance: body.appearance,
         position: pose.position,
         // The visible orientation is the rotating one, not the orbital frame.
-        orientation: world.frames.pose(
-          world.frames.has(spin) ? spin : frame,
-          renderTime,
-        ).orientation,
+        orientation: spinPose.orientation,
         frame,
         hasAtmosphere: body.atmosphere !== null,
         atmosphereCeiling: body.atmosphere?.ceiling ?? 0,
@@ -268,6 +296,9 @@ export function snapshot(
     paused: status.paused,
     droppedTicks: status.droppedTicks,
     entities,
+    structures: structures.sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    ),
     bodies,
     stars,
     events: world.events(16),

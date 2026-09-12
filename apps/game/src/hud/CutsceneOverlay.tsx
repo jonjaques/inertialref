@@ -1,11 +1,11 @@
 'use no memo'
-import { useEffect, useRef, useState } from 'react'
-import { mediaPath } from '@inertialref/protocol'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLogger } from '@inertialref/shared'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
+import { soundtrackCandidates, soundtrackFor } from './cutsceneAudio.ts'
 import { labelStyle, textStyle } from './cutsceneText.ts'
 import { useAction, useKeyContext } from '../input/useKeymap.ts'
-import { useEngine } from '../state/engineStore.ts'
+import { engineStore, useEngine } from '../state/engineStore.ts'
 
 /*
  * The cutscene's screen-space layer: the blackout, the title cards, the
@@ -39,28 +39,6 @@ const log = getLogger('game.cutscene')
 const AUDIO_TOLERANCE = 0.08
 
 /**
- * Where the reference track is served from, in the order it is preferred.
- *
- * `/media/` is the site's object storage, not the bundle: the file is
- * copyrighted music that never enters the repository, so the build pulls it out
- * of R2 and the Worker falls back to the same bucket when a build could not.
- * `apps/server/src/media.ts` is the arrangement — including why one track has
- * two encodings and why AAC comes first — and the paths are spelled by
- * `mediaPath` so this file, the router and `run_worker_first` cannot drift.
- *
- * The `codecs` parameter is not decoration. `canPlayType('audio/mp4')` alone
- * answers `maybe` on a browser that has the container and not the profile, and
- * `maybe` is indistinguishable from `probably` here — both are non-empty, and
- * both would have this adopt a file it cannot decode and then play the scene
- * silent with no error to read. Naming `mp4a.40.2` asks the question that has
- * an answer.
- */
-const CUTSCENE_AUDIO = [
-  { src: mediaPath('tng-intro.m4a'), type: 'audio/mp4; codecs="mp4a.40.2"' },
-  { src: mediaPath('tng-intro.mp3'), type: 'audio/mpeg' },
-] as const
-
-/**
  * The events that carry a user activation, on every engine that has one.
  *
  * Broader than it looks like it needs to be, and deliberately: the spec's list
@@ -92,18 +70,32 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
   const audio = useRef<HTMLAudioElement>(null)
   const lines = useRef(new Map<string, HTMLDivElement>())
   /*
-   * The adopted track, mirrored into state.
+   * The tracks this deployment serves, by the name a script declares them
+   * under, mirrored into state.
    *
    * `engine.cutsceneAudio` is a plain field and writing one schedules nothing,
    * so on the field alone the element mounted whenever something *else*
    * re-rendered this component — which, before a scene is open, is never. The
    * element has to exist before the first gesture (see the primer below), so
-   * the probe's answer has to be able to cause a render. The field is still
-   * read first, so a console write retargets the element as it always did.
+   * the probe's answer has to be able to cause a render.
    */
-  const [adopted, setAdopted] = useState<string | null>(null)
+  const [adopted, setAdopted] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  )
   /** Whether a refused `play()` has already been reported. See the rAF loop. */
   const refused = useRef(false)
+  /**
+   * The file the open scene is cut to, or null for silence — read by the rAF
+   * loop through a ref because the loop is registered once and the answer
+   * changes with the scene.
+   */
+  const playing = useRef<string | null>(null)
+  /*
+   * The scene library, listed once. It is fixed for the session, and this
+   * component re-renders at the sampler's 8 Hz while a scene is open; hand-
+   * written because `'use no memo'` keeps the compiler out of this file.
+   */
+  const scenes = useMemo(() => engine.harness.cutscenes(), [engine])
 
   /*
    * The text list, which is structure rather than a readout.
@@ -137,55 +129,67 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
   })
 
   /*
-   * Adopt the reference audio when this deployment has it, in a format this
+   * Adopt each declared soundtrack this deployment has, in a format this
    * browser can decode.
    *
-   * The track is copyrighted music and never enters the repository — the path
+   * A track is copyrighted music and never enters the repository — the path
    * is gitignored, and `scripts/media.mjs` pulls it out of the site's R2 bucket
    * at build time — so a fork, a checkout without credentials and a local build
    * before the first pull all legitimately have no file there. Hence a probe
-   * rather than an assumption: the cutscene plays silent when it is absent,
+   * rather than an assumption: the scene plays silent when it is absent,
    * which is a scene without music rather than a broken one.
    *
    * Two questions per candidate, and both have to be asked. `canPlayType` is
    * free and local; the HEAD is neither, so it runs only for a format that
    * would be used. A deployment may carry one encoding, both, or neither.
    *
-   * `engine.cutsceneAudio` stays writable from the console for a differently
-   * named local file, and takes precedence over whatever this adopted.
+   * The names come from the scene library, so a scene with no soundtrack
+   * asks for nothing. `engine.cutsceneAudio` stands in for every declared
+   * track, for a differently named local file, and skips the probe.
    */
   useEffect(() => {
     if (engine.cutsceneAudio !== null) return
     let cancelled = false
     const decoder = document.createElement('audio')
+    const names = new Set<string>()
+    for (const scene of scenes) {
+      if (scene.soundtrack !== null) names.add(scene.soundtrack)
+    }
     void (async () => {
-      for (const candidate of CUTSCENE_AUDIO) {
-        if (decoder.canPlayType(candidate.type) === '') continue
-        const response = await fetch(candidate.src, { method: 'HEAD' }).catch(
-          () => null,
-        )
-        if (cancelled) return
-        /*
-         * `ok` is not enough, and the reason is the same one the Worker's own
-         * media handler carries: a single-page fallback answers a path it does
-         * not have with the document and a **200**. In production the Worker
-         * now 404s an unlisted name, but Vite's dev server does not — so
-         * without the content-type check, a developer who has never run
-         * `pnpm media:pull` hands an `<audio>` element `index.html` and gets a
-         * decode error instead of a silent cutscene.
-         */
-        const type = response?.headers.get('content-type') ?? ''
-        if (response?.ok !== true || !type.startsWith('audio/')) continue
-        engine.cutsceneAudio = candidate.src
-        setAdopted(candidate.src)
-        return
+      for (const name of names) {
+        let found = false
+        for (const candidate of soundtrackCandidates(name)) {
+          if (decoder.canPlayType(candidate.type) === '') continue
+          const response = await fetch(candidate.src, { method: 'HEAD' }).catch(
+            () => null,
+          )
+          if (cancelled) return
+          /*
+           * `ok` is not enough, and the reason is the same one the Worker's
+           * own media handler carries: a single-page fallback answers a path
+           * it does not have with the document and a **200**. In production
+           * the Worker 404s an unlisted name, but Vite's dev server does not —
+           * so without the content-type check, a developer who has never run
+           * `pnpm media:pull` hands an `<audio>` element `index.html` and gets
+           * a decode error instead of a silent cutscene.
+           */
+          const type = response?.headers.get('content-type') ?? ''
+          if (response?.ok !== true || !type.startsWith('audio/')) continue
+          setAdopted((held) => new Map(held).set(name, candidate.src))
+          found = true
+          break
+        }
+        if (!found) {
+          log.info('a soundtrack is not served here; its scene plays silent', {
+            soundtrack: name,
+          })
+        }
       }
-      log.info('no reference track is served here; the scene plays silent')
     })()
     return () => {
       cancelled = true
     }
-  }, [engine])
+  }, [engine, scenes])
 
   /*
    * Prime the element on the first user gesture, whatever that gesture is for.
@@ -198,12 +202,13 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    * exactly why the defect is invisible on a desktop.
    *
    * So the unlock is separated from the playback: one `play()` inside a real
-   * gesture, and the element is permitted for the rest of the page's life. It
-   * is inaudible — the reference track opens on two seconds of digital silence
-   * and this lasts a frame — and it is why the element is mounted as soon as a
-   * track is adopted rather than when a scene starts. The gesture that starts
-   * the scene is the click on the library card, and an element that mounts in
-   * response to that click has already missed it.
+   * gesture, and the element is permitted for the rest of the page's life,
+   * whichever file it is later pointed at. It is inaudible — the reference
+   * track opens on two seconds of digital silence and this lasts a frame — and
+   * it is why the element is mounted as soon as any track is adopted rather
+   * than when a scene starts. The gesture that starts the scene is the click
+   * on the library card, and an element that mounts in response to that click
+   * has already missed it.
    *
    * The listeners come off on the first `play()` that resolves, and not before:
    * a refusal has to be able to try the next gesture. Capture phase, so a
@@ -227,9 +232,20 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
           unlocked = true
           remove()
           // Unlocking, not starting: the rAF loop below owns whether the track
-          // sounds and where it is. Left running only if a scene is already
-          // playing, which is the case where this gesture was the Play button.
-          if (engine.cinematic === null || engine.world.clock.paused) {
+          // sounds and where it is. Left running only if a scene with music
+          // is already playing, which is the case where this gesture was the
+          // Play button.
+          //
+          // Paused is read off the published playhead, not the clock: there
+          // is one transport, and two readers of pause disagree for a frame.
+          // `playing` is already set from that playhead, so this branch is
+          // keyed to the same sample either way. The store rather than the
+          // hook because this closure is registered once, with `[engine]`.
+          if (
+            playing.current === null ||
+            engine.cinematic === null ||
+            (engineStore.getState().playhead?.paused ?? true)
+          ) {
             element.pause()
             element.currentTime = 0
           }
@@ -272,10 +288,12 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
       }
 
       // Audio: chase the reference clock, correct only outside lip-sync
-      // tolerance — seeking every frame stutters the element.
+      // tolerance — seeking every frame stutters the element. Only for a
+      // scene that declares a track: a silent scene leaves the element
+      // parked, whatever file it holds from the last one.
       const element = audio.current
       if (element !== null) {
-        if (view === null) {
+        if (view === null || playing.current === null) {
           if (!element.paused) element.pause()
         } else {
           const status = engine.harness.cutsceneStatus()
@@ -313,7 +331,23 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
     return () => window.cancelAnimationFrame(handle)
   }, [engine])
 
-  const source = engine.cutsceneAudio ?? adopted
+  /*
+   * The file for the open scene, and the file the element carries.
+   *
+   * The two differ when no scene is open, or the open one is silent: the
+   * element then keeps whichever adopted track it has, so it exists to be
+   * primed and the unlock survives between scenes, while `playing` says the
+   * loop must leave it parked. The console's override stands in for every
+   * declared track and for none of the undeclared ones.
+   */
+  const soundtrack = soundtrackFor(scenes, sceneId)
+  const track =
+    soundtrack === null
+      ? null
+      : (engine.cutsceneAudio ?? adopted.get(soundtrack) ?? null)
+  playing.current = track
+  const source =
+    track ?? engine.cutsceneAudio ?? adopted.values().next().value ?? null
 
   return (
     <div className="pointer-events-none absolute inset-0">

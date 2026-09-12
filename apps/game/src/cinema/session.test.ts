@@ -26,7 +26,8 @@ function fake(): { host: CutsceneHost; calls: string[]; director: Director } {
       status: () => director.status,
       outcome: () => director.outcome,
       paused: () => director.paused,
-      play: (id) => director.play(id),
+      // The session's play is a held one; see `CutsceneHost.play`.
+      play: (id) => director.play(id, true),
       seek: (frame) => director.seek(frame),
       pause: () => {
         calls.push('pause')
@@ -45,28 +46,51 @@ class Director {
   status: CutsceneStatus | null = null
   outcome: CutsceneOutcome | null = null
   paused = false
-  /** Makes `play` throw, for the reopen that cannot succeed. */
-  refusePlay = false
+  hold = false
   readonly calls: string[]
 
   constructor(calls: string[]) {
     this.calls = calls
   }
 
-  play(id: string): CutsceneStatus {
+  play(id: string, hold = false): CutsceneStatus {
     this.calls.push(`play:${id}`)
-    if (id === 'nothing' || this.refusePlay) {
-      throw new Error(`Unknown cutscene "${id}"`)
-    }
+    if (id === 'nothing') throw new Error(`Unknown cutscene "${id}"`)
     this.status = { id, frame: 0, durationFrames: DURATION, fps: FPS }
     this.outcome = null
     this.paused = false
+    this.hold = hold
     return this.status
   }
 
   seek(frame: number): void {
     this.calls.push(`seek:${frame}`)
     if (this.status !== null) this.status = { ...this.status, frame }
+    // A seek away from a held end clears the outcome: the playhead has left
+    // the end, and the next ending is a new one. The clock is untouched —
+    // `resume` is what runs it, as after any pause.
+    if (this.outcome?.ending === 'ended') this.outcome = null
+  }
+
+  /** The playhead runs off the end: held, it parks; otherwise it leaves. */
+  end(): void {
+    const open = this.status
+    if (open === null) return
+    if (!this.hold) {
+      this.finish('ended')
+      return
+    }
+    this.calls.push('hold')
+    // Exactly the last frame, which is the real director's contract for a
+    // held end and what `toggle`'s play-at-the-end comparison relies on.
+    this.status = { ...open, frame: DURATION - 1 }
+    this.paused = true
+    this.outcome = {
+      id: open.id,
+      ending: 'ended',
+      durationFrames: DURATION,
+      fps: FPS,
+    }
   }
 
   /** What the director does when a scene leaves, whichever way it left. */
@@ -80,31 +104,36 @@ class Director {
 }
 
 describe('a cutscene session', () => {
-  it('reports a scene that ran out as ended, and puts its last frame back', () => {
+  it('reports a scene that ran out as ended, on its last frame', () => {
     const { host, director, calls } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
     expect(session.sample()?.ended).toBe(false)
 
-    director.finish('ended')
+    director.end()
     const playhead = session.sample()
 
     expect(playhead?.ended).toBe(true)
-    expect(playhead?.durationFrames).toBe(DURATION)
-    // The director stops on the final frame and hands the camera back, which
-    // leaves whatever the chase camera sees on screen — a composition nobody
-    // wrote, as a hard cut on the last beat. Two frames short, not one: the
-    // director reports done *on* the final frame, so a re-open at the end
-    // would end again on the next sample and loop.
-    expect(calls).toContain(`seek:${DURATION - 2}`)
+    expect(playhead?.frame).toBe(DURATION - 1)
+    expect(playhead?.paused).toBe(true)
+    /*
+     * THE REGRESSION. A director that restores the player on the final
+     * frame has the session reopen the scene two frames short a sample
+     * later — up to 125 ms of the chase camera on whatever body the ship was
+     * left at, and a terrain streamer that has dropped every patch of the
+     * one the scene was on. The last frame is held on stage; nothing here
+     * plays or seeks to put it back.
+     */
+    expect(calls.filter((one) => one.startsWith('play:'))).toHaveLength(1)
+    expect(calls.filter((one) => one.startsWith('seek:'))).toHaveLength(0)
   })
 
   it('reports a scene stopped by hand as no scene at all', () => {
     /*
-     * THE REGRESSION. `stopCutscene` — the console, the Navigate panel's Stop,
-     * the player unmounting — produced exactly the evidence the old heuristic
-     * read as an ending, so a stop near the end of a scene reopened it within
-     * 100 ms and undid itself.
+     * `stopCutscene` — the console, the Navigate panel's Stop, the player
+     * unmounting — produced exactly the evidence the old heuristic read as an
+     * ending, so a stop near the end of a scene reopened it within 100 ms and
+     * undid itself.
      */
     const { host, director } = fake()
     const session = createCutsceneSession(host)
@@ -124,35 +153,14 @@ describe('a cutscene session', () => {
     expect(session.sample()).toBeNull()
   })
 
-  it('handles an ending once, however many times it is sampled', () => {
-    const { host, director, calls } = fake()
+  it('keeps the card up, however many times the held end is sampled', () => {
+    const { host, director } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
-    director.finish('ended')
-    session.sample()
-    session.sample()
-    session.sample()
-    expect(calls.filter((one) => one === 'play:tng-intro')).toHaveLength(2)
-  })
-
-  it('does not retry a reopen that will never work', () => {
-    /*
-     * The loop the old `restored === outcome.id` guard was really protecting
-     * against, restated against the new one. A reopen that throws leaves the
-     * director ended, so without a marker the next sample would try again, and
-     * the one after that, for the rest of the session.
-     */
-    const { host, director, calls } = fake()
-    const session = createCutsceneSession(host)
-    session.open('tng-intro', 0, true)
-    director.finish('ended')
-    director.refusePlay = true
-
-    calls.length = 0
+    director.end()
     expect(session.sample()?.ended).toBe(true)
-    session.sample()
-    session.sample()
-    expect(calls.filter((one) => one.startsWith('play:'))).toHaveLength(1)
+    expect(session.sample()?.ended).toBe(true)
+    expect(session.sample()?.ended).toBe(true)
   })
 
   it('dismisses the end card on a seek, and keeps the scene', () => {
@@ -161,7 +169,7 @@ describe('a cutscene session', () => {
     const { host, director } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
-    director.finish('ended')
+    director.end()
     expect(session.sample()?.ended).toBe(true)
 
     session.seek(100)
@@ -172,10 +180,10 @@ describe('a cutscene session', () => {
 
   it('shows the end card after a scene that was paused and resumed on the way', () => {
     /*
-     * THE REGRESSION the review found. `dismissed` conflated two things: "hide
-     * the card that is up" and "suppress any future card". Pausing mid-scene is
-     * an ordinary act — the debug transport exists for it — and it silently
-     * cost the ending its card, and with it the Replay button that lives there.
+     * One `dismissed` flag conflates two things: "hide the card that is up"
+     * and "suppress any future card". Pausing mid-scene is an ordinary act —
+     * the transport exists for it — and under one flag it silently costs the
+     * ending its card, and with it the Replay button that lives there.
      */
     const { host, director } = fake()
     const session = createCutsceneSession(host)
@@ -183,38 +191,58 @@ describe('a cutscene session', () => {
     session.toggle() // pause, part way through
     session.toggle() // and carry on
 
-    director.finish('ended')
+    director.end()
     expect(session.sample()?.ended).toBe(true)
   })
 
   it('shows the card again when a dismissed scene is played to its end once more', () => {
-    // The other half of the same conflation: the reopen was guarded on the
-    // scene's *id*, so a second genuine ending of the same scene neither
-    // restored the last frame nor raised the card.
-    const { host, director, calls } = fake()
+    // The other half of the same conflation: a second genuine ending of the
+    // same scene has to raise a second card.
+    const { host, director } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
-    director.finish('ended')
+    director.end()
     expect(session.sample()?.ended).toBe(true)
 
     session.seek(100) // dismiss the card and go back into the scene
     expect(session.sample()?.ended).toBe(false)
 
-    calls.length = 0
-    director.finish('ended')
+    director.end()
     expect(session.sample()?.ended).toBe(true)
-    expect(calls).toContain(`seek:${DURATION - 2}`)
   })
 
-  it('dismisses the end card on play, because that is watching it again', () => {
-    const { host, director } = fake()
+  it('plays an ended scene again from the top', () => {
+    /*
+     * The director holds the last frame, so a plain resume there walks off
+     * the end on the next sample and parks again — a Play button that does
+     * nothing anybody can see. Play at the end is watching it again.
+     */
+    const { host, director, calls } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
-    director.finish('ended')
+    director.end()
     session.sample()
 
+    calls.length = 0
     session.toggle()
+    expect(calls).toEqual(['seek:0', 'resume'])
     expect(session.sample()?.ended).toBe(false)
+    expect(session.sample()?.frame).toBe(0)
+  })
+
+  it('plays from the top after the card was dismissed on the last frame', () => {
+    // "Stay on the last frame", then Play: the playhead is still on the last
+    // frame, so the same rule applies whether or not the card is up.
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+    director.end()
+    session.sample()
+    session.seek(DURATION - 1)
+
+    calls.length = 0
+    session.toggle()
+    expect(calls).toEqual(['seek:0', 'resume'])
   })
 
   it('toggles against the clock, from one place', () => {
@@ -239,7 +267,7 @@ describe('a cutscene session', () => {
     const { host, director, calls } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 1150, false)
-    director.finish('ended')
+    director.end()
     session.sample()
 
     calls.length = 0
@@ -304,11 +332,11 @@ describe('a cutscene session', () => {
     /*
      * THE FROZEN WORLD. `sample()` runs on the engine store's sampler, which
      * is session-wide and keeps running with no cinema mounted — so a scene
-     * started from the console (`ir.play('tngIntro')`, which every driven
-     * measurement does) ended, the director restored the clock, and this
-     * reopened it two frames short and paused the clock again to hold a
-     * picture nobody had asked for. Every flight and warp figure taken after
-     * that described a world that was not advancing, with nothing on screen to
+     * started from the console (`ir.play('tng-intro')`, which every driven
+     * measurement does) ends by restoring the player and the clock, and a
+     * session that claimed it would have paused the clock to hold a picture
+     * nobody had asked for. Every flight and warp figure taken after that
+     * described a world that was not advancing, with nothing on screen to
      * say so.
      */
     const { host, director, calls } = fake()
@@ -318,29 +346,37 @@ describe('a cutscene session', () => {
     director.play('tng-intro')
     expect(session.sample()?.id).toBe('tng-intro')
 
-    director.finish('ended')
+    director.end()
     expect(session.sample()).toBeNull()
     expect(calls).not.toContain('pause')
     expect(director.paused).toBe(false)
   })
 
+  it('raises no card for a held scene somebody else opened', () => {
+    // `ir.play(id, { hold: true })` from the console: the director parks the
+    // last frame, and that is all anybody asked for.
+    const { host, director } = fake()
+    const session = createCutsceneSession(host)
+    director.play('tng-intro', true)
+    director.end()
+    const playhead = session.sample()
+    expect(playhead?.frame).toBe(DURATION - 1)
+    expect(playhead?.ended).toBe(false)
+  })
+
   it('stops reacting to an ending the moment the player leaves', () => {
     // The window is one sample wide and the sampler is 8 Hz. `stop()` drops the
     // claim *before* it stops the director, so an ending that arrives in the
-    // same beat the player navigates away has nothing left to react to it: the
-    // unmount stops the director, and a session still holding the ending would
-    // reopen and pause after there is nobody to read the card.
+    // same beat the player navigates away has nothing left to react to it.
     const { host, director, calls } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
 
-    director.finish('ended')
+    director.end()
     session.stop()
-    session.sample()
-    session.sample()
-
-    expect(calls).not.toContain(`seek:${DURATION - 2}`)
-    expect(director.paused).toBe(false)
+    expect(session.sample()).toBeNull()
+    expect(session.sample()).toBeNull()
+    expect(calls).toContain('finish:stopped')
   })
 
   it('drops its claim when an open fails, rather than keeping the last one', () => {
@@ -348,22 +384,19 @@ describe('a cutscene session', () => {
      * The claim is the *id*, and it is cleared before `host.play` rather than
      * after. A session that opened A and then fails to open B has no scene of
      * its own — but a flag set by the last successful open still reads as one,
-     * so whatever ends next gets reopened and the clock paused for a reader
-     * who is looking at an error message.
+     * so whatever ends next gets a card for a reader who is looking at an
+     * error message.
      */
-    const { host, director, calls } = fake()
+    const { host, director } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
     expect(session.open('nothing', 0, true)).toContain('Unknown cutscene')
 
-    // Something else entirely, from the console.
-    director.play('tng-intro')
-    calls.length = 0
-    director.finish('ended')
+    // Something else entirely, from the console, held.
+    director.play('tng-intro', true)
+    director.end()
 
-    expect(session.sample()).toBeNull()
-    expect(calls).not.toContain('pause')
-    expect(director.paused).toBe(false)
+    expect(session.sample()?.ended).toBe(false)
   })
 
   it('says nothing at all before a scene has ever been opened', () => {

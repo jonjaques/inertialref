@@ -101,3 +101,6 @@ apps/game/public/media/
 
 # Astro generated type declarations and build cache.
 apps/game/.astro/
+
+# Blender's numbered backups are local; the editable master is versioned.
+*.blend[0-9]*

@@ -76,15 +76,17 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
       label: 'compiling the plumes',
       units: 1,
       run: async (done) => {
-        const staged = stageFor(read(RENDER_SHIP))
-        staged.firing.fill(1)
-        staged.plumes.update(staged.firing, 1, 1)
-        await warmCompile(warmRenderer(gl), {
-          object: staged.plumes.group,
-          camera,
-          scene: scene as Scene,
-        })
-        staged.plumes.update(null, 0, 10)
+        for (const id of new Set([read(RENDER_SHIP), 'rocinante'])) {
+          const staged = stageFor(id)
+          staged.firing.fill(1)
+          staged.plumes.update(staged.firing, 1, 1)
+          await warmCompile(warmRenderer(gl), {
+            object: staged.plumes.group,
+            camera,
+            scene: scene as Scene,
+          })
+          staged.plumes.update(null, 0, 10)
+        }
         done()
       },
     })
@@ -97,13 +99,16 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
     const root = group.current
     if (view === null || root === null) return
 
-    /*
-     * Nothing while a cutscene has the hull as its prop, or while the hull is
-     * hidden, or before there is a hull: the debug cone is debug hardware and
-     * a plume on a cone would be a claim about a ship nobody is flying.
-     */
-    const hull = engine.hull
-    if (hull === null || engine.cinematic !== null || !engine.showShip) {
+    // The hull the frame draws, so the plumes are keyed on the same layout:
+    // a script's prop while it names one and has loaded, the player's hull
+    // otherwise. Never `engine.hull` under a named prop — that slot stays
+    // the player's, and the prop's plumes at the entity's pose would be the
+    // Rocinante's drive burning beside the Enterprise.
+    const hull = engine.hullOnStage
+    const cinematic = engine.cinematic
+    const visible =
+      cinematic === null ? engine.showShip : cinematic.ship.visible
+    if (hull === null || !visible) {
       if (root.visible) {
         for (const held of built.values()) held.plumes.update(null, 0, 10)
       }
@@ -116,6 +121,26 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
       staged.plumes.update(null, 0, 10)
       root.add(staged.plumes.group)
       mounted.current = hull.id
+    }
+
+    if (cinematic !== null) {
+      root.visible = true
+      root.position.set(
+        cinematic.ship.position.x,
+        cinematic.ship.position.y,
+        cinematic.ship.position.z,
+      )
+      root.quaternion.set(
+        cinematic.ship.orientation.x,
+        cinematic.ship.orientation.y,
+        cinematic.ship.orientation.z,
+        cinematic.ship.orientation.w,
+      )
+      staged.plumes.sample(
+        cinematic.ship.throttle ?? 0,
+        cinematic.elapsedSeconds ?? 0,
+      )
+      return
     }
 
     const ship = view.entities.find((entity) => entity.isCamera)

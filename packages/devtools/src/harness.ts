@@ -12,10 +12,13 @@ import {
 import { GalaxyInspector, type GalaxyRenderReport } from './galaxy.ts'
 import {
   AU,
+  type Degrees,
+  degreesToRadians,
   getLogger,
   LIGHT_YEAR,
   logHub,
   type LogRecord,
+  radiansToDegrees,
   type Result,
   RingBufferSink,
 } from '@inertialref/shared'
@@ -34,6 +37,7 @@ import {
   snapshot,
   type World,
   type WorldSnapshot,
+  type SurfacePlacement,
 } from '@inertialref/simulation'
 import {
   type Body,
@@ -125,6 +129,7 @@ import {
   CutsceneDirector,
   type CutsceneOutcome,
   type CutsceneStatus,
+  type PlayOptions,
 } from './cutscene.ts'
 import {
   Observatory,
@@ -153,8 +158,7 @@ import {
   type TimingVerb,
 } from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
-import { TNG_INTRO } from './cutscenes/tngIntro.ts'
-import { ENTERPRISE_PORTRAITS } from './cutscenes/enterprisePortraits.ts'
+import { CUTSCENES } from './cutscenes/index.ts'
 import type { CinematicSample } from '@inertialref/rendering'
 
 /*
@@ -409,6 +413,20 @@ export interface LoadOutcome {
 
 const log = getLogger('devtools.harness')
 
+/**
+ * The harness speaks degrees and the world radians; both verbs that write a
+ * placement cross that line, so they share the one conversion. The fields
+ * arrive as plain numbers from the console, hence the brand at the boundary.
+ */
+function placementInRadians(structure: SurfacePlacement): SurfacePlacement {
+  return {
+    ...structure,
+    latitude: degreesToRadians(structure.latitude as Degrees),
+    longitude: degreesToRadians(structure.longitude as Degrees),
+    heading: degreesToRadians(structure.heading as Degrees),
+  }
+}
+
 /** A 500 ly box fits the 200,000-cell travel budget at every grid alignment. */
 function boundedTravelRadius(lightYears: number): number {
   const bounded = Number.isNaN(lightYears)
@@ -433,10 +451,7 @@ export class GameHarness {
 
   constructor(host: Host) {
     this.#host = host
-    this.#cutscenes = new CutsceneDirector(host, [
-      TNG_INTRO,
-      ENTERPRISE_PORTRAITS,
-    ])
+    this.#cutscenes = new CutsceneDirector(host, CUTSCENES)
     this.#observatory = new Observatory(host)
     this.#flightCamera = new FlightCamera(host)
     logHub.addSink(this.#logSink)
@@ -1430,15 +1445,54 @@ export class GameHarness {
    * follow the script while the world keeps ticking, and stopping — or the
    * script ending — restores the player's captured state, clock settings
    * included. The game boots exactly as it always did; this runs only when
-   * asked to, from the dock's cutscene section or here.
+   * asked to, from the dock's cutscene section or here. `hold` keeps the last
+   * frame on stage instead of restoring on it — the cinema player's way of
+   * watching; a measurement wants the default.
    */
-  play(id = 'tng-intro'): CutsceneStatus {
-    return this.#cutscenes.play(id)
+  play(id = 'tng-intro', options?: PlayOptions): CutsceneStatus {
+    return this.#cutscenes.play(id, options)
   }
 
   /** Stop the running cutscene and restore the player. Safe when idle. */
   stopCutscene(): void {
     this.#cutscenes.stop()
+  }
+
+  /** Surface anchors, in degrees and meters at the harness boundary. */
+  structures() {
+    return this.#host.world.structures.map((structure) => ({
+      ...structure,
+      latitude: radiansToDegrees(structure.latitude),
+      longitude: radiansToDegrees(structure.longitude),
+      heading: radiansToDegrees(structure.heading),
+    }))
+  }
+
+  /** Place a durable structure; angles are degrees, height is above terrain. */
+  placeStructure(structure: SurfacePlacement): void {
+    this.#host.world.placeStructure(placementInRadians(structure))
+  }
+
+  removeStructure(id: string): void {
+    this.#host.world.removeStructure(id)
+  }
+
+  /** Move a structure atomically; invalid coordinates leave its existing anchor intact. */
+  moveStructure(structure: SurfacePlacement): void {
+    this.#host.world.moveStructure(placementInRadians(structure))
+  }
+
+  /** Stand above a structure in the planetarium, looking toward its northern approach. */
+  visitStructure(id: string, height = 100): ObserverStatus {
+    const structure = this.structures().find((candidate) => candidate.id === id)
+    if (structure === undefined) throw new Error(`No surface structure ${id}`)
+    return this.visit(structure.bodyAddress, {
+      latitude: structure.latitude,
+      longitude: structure.longitude,
+      height: height + structure.height,
+      heading: structure.heading,
+      pitch: -75,
+    })
   }
 
   /**
@@ -1450,7 +1504,13 @@ export class GameHarness {
   }
 
   /** The scripted scenes `play` accepts, described. */
-  cutscenes(): readonly { id: string; description: string; seconds: number }[] {
+  cutscenes(): readonly {
+    id: string
+    description: string
+    seconds: number
+    /** The track the scene is cut to, by name under `/media/`, or null. */
+    soundtrack: string | null
+  }[] {
     return this.#cutscenes.list()
   }
 
@@ -2189,6 +2249,9 @@ export class GameHarness {
           .map((c) => c.id)
           .join(', '),
       '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
+      '  ir.structures() / ir.placeStructure(record) / ir.removeStructure(id)',
+      '  ir.moveStructure(record)      replace an existing anchor atomically',
+      '  ir.visitStructure(id, height?) surface anchors; angles in degrees, heights in meters',
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',

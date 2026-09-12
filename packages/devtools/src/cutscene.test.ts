@@ -9,6 +9,7 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import { systemFrameId, systemId } from '@inertialref/universe'
+import { TICK_DURATION } from '@inertialref/simulation'
 import {
   apparentWidth,
   type LinePath,
@@ -1160,6 +1161,121 @@ describe('cutscene director lifecycle', () => {
     expect(harness.cutsceneStatus()).toBeNull()
   })
 
+  it('holds the last frame on stage when asked, and pauses the clock', () => {
+    /*
+     * The cinema player's way of watching. Restoring on the final frame hands
+     * the camera to the ship for a frame, wherever the ship is, and the
+     * terrain streamer drops the body the scene was on: measured at 3200×1800
+     * the Mars hover's 2,170 patches went to zero on that frame and the
+     * reopened last frame rebuilt them from the cube faces up.
+     */
+    const session = openSession()
+    const harness = session.harness
+    const player = session.player()!
+    const before = { ...session.world.entities.require(player).state.position }
+    harness.play('tng-intro', { hold: true })
+    const at = (frame: number) => harness.cutsceneSample(100 + frame / FPS)
+    expect(at(0)).not.toBeNull()
+
+    const last = TNG_INTRO.durationFrames - 1
+    const held = at(TNG_INTRO.durationFrames + 5)
+    expect(held).not.toBeNull()
+    expect(held!.frame).toBe(last)
+    expect(harness.cutsceneStatus()?.frame).toBeCloseTo(last, 6)
+    expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+    expect(session.world.clock.paused).toBe(true)
+    // Still on stage: the player has not been given back.
+    expect(session.world.entities.require(player).state.position).toEqual(
+      before,
+    )
+
+    // Every later sample is the same still, and the outcome is written once.
+    const outcome = harness.cutsceneOutcome()
+    expect(at(TNG_INTRO.durationFrames + 50)!.frame).toBe(last)
+    expect(harness.cutsceneOutcome()).toBe(outcome)
+
+    // A seek away is the scene playing again.
+    harness.seekCutscene(100)
+    expect(harness.cutsceneOutcome()).toBeNull()
+    expect(at(TNG_INTRO.durationFrames + 50)!.frame).toBeCloseTo(100, 6)
+
+    // And a stop restores, as it always does.
+    harness.stopCutscene()
+    expect(harness.cutsceneStatus()).toBeNull()
+    expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
+    expect(session.world.clock.paused).toBe(false)
+  })
+
+  it('reports the last frame exactly while held, whatever renderTime the host brings', () => {
+    /*
+     * Parking pauses the clock, and a paused clock's alpha is 0 — so the
+     * `renderTime` of the frame after the one that parked is *lower* than the
+     * parking one, by whatever the accumulator held, up to a tick. Recomputed
+     * from the epoch, the playhead then reads a fraction below the last frame,
+     * and the session's play-at-the-end test (`frame >= durationFrames - 1`)
+     * is false: Play resumed the clock, the scene re-parked a sample later
+     * with its outcome already written, and the end card never came back.
+     * Held is a state the director reports, not a float it recomputes.
+     */
+    const session = openSession()
+    const harness = session.harness
+    harness.play('tng-intro', { hold: true })
+    expect(harness.cutsceneSample(100)).not.toBeNull()
+    const last = TNG_INTRO.durationFrames - 1
+    const parkedAt = 100 + (TNG_INTRO.durationFrames + 5) / FPS
+    expect(harness.cutsceneSample(parkedAt)!.frame).toBe(last)
+    expect(harness.cutsceneStatus()?.frame).toBe(last)
+
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: TICK_DURATION, noNaN: true }),
+        (drop) => {
+          const held = harness.cutsceneSample(parkedAt - drop)
+          expect(held!.frame).toBe(last)
+          expect(harness.cutsceneStatus()?.frame).toBe(last)
+          expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+        },
+      ),
+    )
+    expect(session.world.clock.paused).toBe(true)
+  })
+
+  it('keeps the hold through a seek onto the last frame, and drops it for any other', () => {
+    /*
+     * "Stay on the last frame" in the player is a seek to the frame the
+     * playhead is already on. Treated as a seek *away*, it clears the hold
+     * and the playhead is arithmetic again — `(t − (t − last/fps)) × fps`,
+     * which reads short of the last frame at 14.3% of renderTimes (200,000
+     * sampled; worst 2740.9999999999945) — so Play after "Stay" resumes,
+     * walks off the end and raises the card again instead of replaying.
+     */
+    const session = openSession()
+    const harness = session.harness
+    harness.play('tng-intro', { hold: true })
+    expect(harness.cutsceneSample(100)).not.toBeNull()
+    const last = TNG_INTRO.durationFrames - 1
+    const parkedAt = 100 + (TNG_INTRO.durationFrames + 5) / FPS
+    expect(harness.cutsceneSample(parkedAt)!.frame).toBe(last)
+
+    harness.seekCutscene(last)
+    expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: TICK_DURATION, noNaN: true }),
+        (drop) => {
+          expect(harness.cutsceneSample(parkedAt - drop)!.frame).toBe(last)
+          expect(harness.cutsceneStatus()?.frame).toBe(last)
+          expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+        },
+      ),
+    )
+
+    // The contrast: any other frame is a seek away, and the outcome goes.
+    harness.seekCutscene(last - 1)
+    expect(harness.cutsceneOutcome()).toBeNull()
+    expect(harness.cutsceneSample(parkedAt)!.frame).toBeCloseTo(last - 1, 6)
+  })
+
   it('seeks to an exact reference frame', () => {
     const { harness, at } = playing()
     at(500)
@@ -1340,4 +1456,40 @@ describe('tng-intro lighting geometry', () => {
     }
     expect(worstPair).toBeLessThan(0)
   })
+})
+
+describe('cinematic atmosphere and lens drive validation', () => {
+  it.each(['skyHaze', 'lensArtifacts', 'anamorphicFlare'] as const)(
+    'rejects non-finite and out-of-range %s drives',
+    (field) => {
+      const { at } = playing()
+      const sample = at(96)!
+      for (const value of [NaN, Infinity, -Infinity, -0.001, 1.001]) {
+        expect(
+          sampleIsFinite({
+            ...sample,
+            effects: { ...sample.effects, [field]: value },
+          }),
+          `${field}=${value}`,
+        ).toBe(false)
+      }
+    },
+  )
+
+  it.each(['skyHaze', 'lensArtifacts', 'anamorphicFlare'] as const)(
+    'accepts an omitted %s drive and its inclusive unit interval',
+    (field) => {
+      const { at } = playing()
+      const sample = at(96)!
+      for (const value of [undefined, 0, 0.5, 1]) {
+        expect(
+          sampleIsFinite({
+            ...sample,
+            effects: { ...sample.effects, [field]: value },
+          }),
+          `${field}=${value}`,
+        ).toBe(true)
+      }
+    },
+  )
 })

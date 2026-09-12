@@ -23,6 +23,8 @@ A save contains exactly:
 - which entity the player is, and the counter that mints dynamic ids,
 - which systems were loaded,
 - `mutations` — deliberate departures from what generation would produce,
+- `structures` — durable body-fixed asset placements, as defined in
+  [ADR-0040](0040-structures-keep-a-body-fixed-anchor.md),
 - `meta` — free-form strings, so a build can record something without a
   schema bump.
 

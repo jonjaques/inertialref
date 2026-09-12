@@ -1,6 +1,7 @@
 export * from './atmosphere.ts'
 export * from './camera.ts'
 export * from './cinematic.ts'
+export * from './marsLanding.ts'
 export * from './compositions.ts'
 export * from './datum.ts'
 export * from './entryArc.ts'

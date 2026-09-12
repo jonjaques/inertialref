@@ -159,6 +159,10 @@ export const WINGS = [
             'docs/adr/0039-the-shell-before-the-scene.md',
             'The shell before the scene',
           ],
+          [
+            'docs/adr/0040-structures-keep-a-body-fixed-anchor.md',
+            'Body-fixed structures',
+          ],
         ],
       },
     ],
@@ -235,6 +239,7 @@ export const WINGS = [
           'docs/guides/testing.md',
           'docs/guides/extending.md',
           'docs/guides/cinematics.md',
+          'docs/guides/surface-structures.md',
           ['docs/guides/catalogue.md', 'The Star Catalog'],
           'docs/hosting.md',
         ],

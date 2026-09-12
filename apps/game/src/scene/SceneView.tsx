@@ -4,14 +4,15 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { createTerrainMaterial } from '../render/terrain.ts'
 import { createWaterMaterial } from '../render/water.ts'
 import { Bodies } from './Bodies.tsx'
+import { CinematicStage } from './CinematicStage.tsx'
 import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
-import { NearFieldProps } from './NearFieldProps.tsx'
 import { EntryTrace } from './EntryTrace.tsx'
 import { OrbitTraces } from './OrbitTraces.tsx'
 import { Sensor } from './Sensor.tsx'
 import { ShipModel } from './ShipModel.tsx'
 import { Starfield } from './Starfield.tsx'
+import { SurfaceStructures } from './SurfaceStructures.tsx'
 import { SunFlare } from './SunFlare.tsx'
 import { ScatterRocks } from './ScatterRocks.tsx'
 import { TerrainPatches } from './TerrainPatches.tsx'
@@ -80,9 +81,10 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <OrbitTraces engine={engine} />
       <EntryTrace engine={engine} />
       <SunFlare engine={engine} />
+      <SurfaceStructures engine={engine} />
       <ShipModel engine={engine} />
       <ThrusterFx engine={engine} />
-      <NearFieldProps engine={engine} />
+      <CinematicStage engine={engine} />
       <WarpFx engine={engine} />
       {/* Last, and at priority 1: the sensor takes the frame away from R3F
           once every priority-0 consumer above has written its uniforms, and

@@ -117,6 +117,9 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     const current = field.current
     if (scene === null || current === null) return
     const { projection, material, sprite } = current
+    // The authored daylight sky replaces stellar sprites; additive sprites
+    // otherwise draw over its far-depth dome and the terrain below it.
+    sprite.visible = (engine.cinematic?.effects.skyHaze ?? 0) < 1
     const stars = engine.starField
     if (current.world !== engine.world) {
       current.world = engine.world

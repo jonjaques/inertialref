@@ -27,12 +27,16 @@ import {
 } from '@inertialref/spatial'
 import {
   type Body,
+  type BodyFixedDirection,
+  bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
   directionToGeodetic,
   dynamicEntityId,
   type EntityId,
   findBody,
+  formatAddress,
+  hasSolidSurface,
   type GalaxyId,
   galaxySeedOf,
   generateSystem,
@@ -40,6 +44,10 @@ import {
   installSystemFrames,
   MILKY_WAY,
   parseSurfaceFrameId,
+  parseAddress,
+  surfaceAsset,
+  surfaceRadius,
+  geodeticDirection,
   resolveSystem,
   SOL_ONLY_CATALOG,
   type StarCatalog,
@@ -72,6 +80,13 @@ import {
   type SoiWatch,
   stepFlight,
 } from './flight.ts'
+import {
+  type SurfacePlacement,
+  surfaceSupportRadius,
+  validateSurfacePlacement,
+} from './surfacePlacement.ts'
+
+const NO_PLACEMENTS: readonly SurfacePlacement[] = Object.freeze([])
 
 /*
  * The world.
@@ -163,6 +178,197 @@ export class World implements FlightWorld {
   }
 
   readonly #systems = new Map<SystemId, StarSystem>()
+  readonly #structures = new Map<string, SurfacePlacement>()
+  /*
+   * Derived from `#structures` and rebuilt when it changes: the sorted list
+   * the snapshot and the hash read, the per-body index the contact test walks,
+   * and each body's tallest deck. The snapshot reads the list every frame and
+   * the integrator asks for the deck every tick, so neither can be a sort or
+   * a walk over every placement in the world at the call.
+   */
+  #structureList: readonly SurfacePlacement[] = NO_PLACEMENTS
+  readonly #structuresByBody = new Map<string, readonly SurfacePlacement[]>()
+  readonly #contactHeight = new Map<string, Meters>()
+
+  /** Stable, immutable authored placements, including those in unloaded systems. */
+  get structures(): readonly SurfacePlacement[] {
+    return this.#structureList
+  }
+
+  /** The placements on one body, by its formatted address; empty for a body with none. */
+  structuresOn(bodyAddress: string): readonly SurfacePlacement[] {
+    return this.#structuresByBody.get(bodyAddress) ?? NO_PLACEMENTS
+  }
+
+  placeStructure(placement: SurfacePlacement): SurfacePlacement {
+    invariant(
+      !this.#structures.has(placement.id),
+      `Structure ${placement.id} already exists`,
+    )
+    const stored = this.#validatedStructure(placement)
+    this.#structures.set(stored.id, stored)
+    this.#structuresChanged([stored.bodyAddress])
+    return stored
+  }
+
+  /** A replacement is fully validated before the existing placement is touched. */
+  moveStructure(placement: SurfacePlacement): SurfacePlacement {
+    const previous = this.#structures.get(placement.id)
+    invariant(previous !== undefined, `Unknown structure ${placement.id}`)
+    const stored = this.#validatedStructure(placement)
+    this.#structures.set(stored.id, stored)
+    this.#structuresChanged(
+      [previous.bodyAddress, stored.bodyAddress],
+      previous,
+    )
+    return stored
+  }
+
+  #validatedStructure(placement: SurfacePlacement): SurfacePlacement {
+    validateSurfacePlacement(placement)
+    invariant(
+      surfaceAsset(placement.assetId) !== undefined,
+      `Unknown surface asset ${placement.assetId}`,
+    )
+    const address = parseAddress(placement.bodyAddress)
+    invariant(
+      address.kind === 'body' && address.galaxy === this.galaxy,
+      'A structure needs a body in this galaxy',
+    )
+    const stub = resolveSystem(this.galaxySeed, this.catalog, address.system)
+    invariant(stub !== undefined, `Unknown system ${address.system}`)
+    // Validation must not install a system, or a rejected body address changes the world.
+    const system =
+      this.system(address.system) ??
+      generateSystem(this.rootSeed, this.galaxy, stub)
+    const body = findBody(system, address.body)
+    invariant(
+      body !== undefined && hasSolidSurface(body),
+      'A structure needs a solid body',
+    )
+    return Object.freeze({
+      id: placement.id,
+      assetId: placement.assetId,
+      bodyAddress: formatAddress(body.address),
+      latitude: placement.latitude,
+      longitude: placement.longitude,
+      height: placement.height,
+      heading: placement.heading,
+    })
+  }
+
+  removeStructure(id: string): boolean {
+    const previous = this.#structures.get(id)
+    if (previous === undefined) return false
+    this.#structures.delete(id)
+    this.#structuresChanged([previous.bodyAddress], previous)
+    return true
+  }
+
+  /** Terrain and any placed support disk compete by height, never insertion order. */
+  contactRadius(
+    body: Body,
+    direction: BodyFixedDirection,
+    terrain = surfaceRadius(body, direction),
+  ): Meters {
+    let radius = terrain
+    for (const placement of this.structuresOn(formatAddress(body.address))) {
+      const support = surfaceSupportRadius(placement, body, direction)
+      if (support !== null && support > radius) radius = support
+    }
+    return radius
+  }
+
+  /**
+   * Highest support above the body datum: the integrator's rails boundary,
+   * and the band above which a tick cannot touch anything on this body.
+   * Cached, because the integrator asks on every tick with a body binding and
+   * each answer is a terrain sample per placement.
+   */
+  contactHeight(body: Body): Meters {
+    const address = formatAddress(body.address)
+    const cached = this.#contactHeight.get(address)
+    if (cached !== undefined) return cached
+    let height = 0
+    for (const placement of this.structuresOn(address)) {
+      const support = surfaceAsset(placement.assetId)?.supportRadius
+      if (support === null || support === undefined) continue
+      height = Math.max(
+        height,
+        surfaceRadius(
+          body,
+          geodeticDirection(placement.latitude, placement.longitude),
+        ) +
+          placement.height -
+          body.radius,
+      )
+    }
+    this.#contactHeight.set(address, height)
+    return height
+  }
+
+  /**
+   * Rebuild the indexes after a placement changes, and re-examine only the
+   * entities the change can reach: `affected` holds the formatted address of
+   * every body whose structures differ, and `previous` the placement a move
+   * or removal took away.
+   */
+  #structuresChanged(
+    affected: readonly string[],
+    previous?: SurfacePlacement,
+  ): void {
+    this.#structureList = Object.freeze(
+      [...this.#structures.values()].sort((a, b) =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      ),
+    )
+    this.#structuresByBody.clear()
+    for (const placement of this.#structureList) {
+      const on = this.#structuresByBody.get(placement.bodyAddress) ?? []
+      this.#structuresByBody.set(placement.bodyAddress, [...on, placement])
+    }
+    this.#contactHeight.clear()
+    this.#groundAhead.clear()
+    for (const entity of this.#entities.ordered()) {
+      // Only an entity bound to an affected body is touched. An entity on
+      // rails is in its attractor's own frame — `railsEpoch` refuses any
+      // other — so a structure on one body can intersect only the coasts
+      // bound to that body, and a coaster in the Sun's frame that later falls
+      // into this body's sphere is re-framed there, which re-evaluates its
+      // epoch against the contact band. Leaving rails for every entity in the
+      // world instead would re-integrate a coaster around a generated world
+      // for a tick because a pad went down on Mars, and the epoch it re-enters
+      // with is a different one: the hash carries it, and two worlds whose
+      // epochs differ diverge in the low bits (ADR-0025).
+      const binding = this.binding(entity.state.frame)
+      if (
+        binding?.body == null ||
+        !affected.includes(formatAddress(binding.body.address))
+      )
+        continue
+      // A new obstacle can intersect an otherwise eligible analytical coast.
+      this.#leaveRails(entity.id)
+      if (previous === undefined || !this.#landed.has(entity.id)) continue
+      if (
+        binding.spinFrame === null ||
+        formatAddress(binding.body.address) !== previous.bodyAddress
+      )
+        continue
+      const time = this.clock.time
+      const spin = this.frames.pose(binding.spinFrame, time)
+      const position = canonicalPosition(this.frames, entity.state, time)
+      const direction = bodyFixedDirection(spin, position)
+      const before = surfaceSupportRadius(previous, binding.body, direction)
+      if (before === null) continue
+      const now = this.contactRadius(binding.body, direction)
+      if (
+        now < before - 1e-3 &&
+        UV.distance(position, spin.position) > now + 1e-3
+      ) {
+        this.#liftOff(entity.id, time)
+      }
+    }
+  }
   readonly #bindings = new Map<FrameId, FrameBinding>()
   readonly #children = new Map<FrameId, FrameBinding[]>()
   readonly #landed = new Set<EntityId>()
@@ -858,6 +1064,22 @@ export class World implements FlightWorld {
     const { latitude, longitude } = directionToGeodetic(bodyFixed)
     const frame = installSurfaceFrame(this.frames, body, latitude, longitude)
     const landedState = reframe(this.frames, entity.state, frame, time)
+    const direction = bodyFixedDirection(spinPose, universe)
+    const terrainRadius = surfaceRadius(body, direction)
+    const contactRadius = this.contactRadius(body, direction, terrainRadius)
+    const supported =
+      contactRadius > terrainRadius
+        ? universeToLocal(
+            this.frames.pose(frame, time),
+            UV.translate(
+              spinPose.position,
+              Q.rotate(
+                spinPose.orientation,
+                Vec.scale(direction, contactRadius),
+              ),
+            ),
+          )
+        : null
     this.#entities.update(id, {
       state: {
         ...landedState,
@@ -865,7 +1087,7 @@ export class World implements FlightWorld {
         // test fires on the tick that crosses zero, which is usually just past.
         position: vec3(
           landedState.position.x,
-          Math.max(0, landedState.position.y),
+          Math.max(0, landedState.position.y, supported?.y ?? 0),
           landedState.position.z,
         ),
         // Attached to the ground: no residual motion in the surface frame.
@@ -983,6 +1205,8 @@ export class World implements FlightWorld {
    */
   stateHash(): string {
     const parts: string[] = [`t=${this.clock.tick}`, `seed=${this.seedText}`]
+    for (const structure of this.structures)
+      parts.push(`structure:${JSON.stringify(structure)}`)
     for (const entity of this.#entities.ordered()) {
       const s = entity.state
       const c = entity.control

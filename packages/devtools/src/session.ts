@@ -5,6 +5,7 @@ import {
   type Body,
   bodyFrameId,
   type EntityId,
+  initialStructures,
   isLandable,
   SOL_ONLY_CATALOG,
   type StarCatalog,
@@ -133,6 +134,10 @@ export function openSession(options: SessionOptions = {}): Session {
   const catalog = options.catalog ?? SOL_ONLY_CATALOG
   let world = new World({ seed, catalog })
   const system = world.loadSystem(systemId(options.system ?? 'SOL'))
+  // Seeded by galaxy, not by start system: the pad is on Mars whichever
+  // system the session opens in, and a save's migration decides the same way.
+  for (const placement of initialStructures(world.galaxy))
+    world.placeStructure(placement)
   const target = landingTarget(system)
 
   let player: EntityId | null = world.spawnShip(
