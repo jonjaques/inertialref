@@ -5,18 +5,21 @@
 // The rule it enforces is the one already written down: a change is not finished
 // because the browser renders something, it is finished when the layering holds, the
 // types check and the tests pass. Enforcing it here rather than trusting a checklist
-// costs about twelve seconds:
+// costs about half a minute:
 //
-//     graph 0.21s -> lint 0.23s -> typecheck 4.89s -> test 6.5s
+//     graph 0.04s -> lint 0.07s -> typecheck 17.2s -> test 15.8s
 //
 // `pnpm test` is that cheap because the terrain descent lives in the slow suite —
 // `gameEngine.descent.slow.test.ts`, which `pnpm test:slow` runs from `pnpm check` and
 // CI and never from here. Running, it generates a landing's worth of ground through an
-// inline worker in about a hundred seconds, in one `beforeAll`: ninety percent of what
-// the gate would otherwise cost. Both figures move whenever the field gets deeper, so
-// treat them as measured rather than fixed, and re-measure before tightening any budget
-// below rather than reading one off this comment. `design/plans/test-speed.md` has the
-// accounting and what would make the landing itself cheaper.
+// inline worker in 106.9s on one core, in one `beforeAll`: seven times what the rest of
+// the gate costs. Every figure here moves whenever the field gets deeper, so treat them
+// as measured rather than fixed, and re-measure before tightening any budget below
+// rather than reading one off this comment — quoting the CPU percentage beside the wall
+// clock, because a suite started while the last run's workers are still exiting reads
+// 35.7s at 456% where a settled machine reads 15.8s at 890%.
+// `design/plans/test-speed.md` has the accounting, the conditions these were taken
+// under, and what would make the landing itself cheaper.
 //
 // `pnpm build` is deliberately not in that list, and not for the reason it looks like:
 // its marginal cost is only the 1.7s of vite bundling, because `pnpm build` is
