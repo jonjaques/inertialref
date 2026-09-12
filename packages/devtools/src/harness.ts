@@ -12,10 +12,13 @@ import {
 import { GalaxyInspector, type GalaxyRenderReport } from './galaxy.ts'
 import {
   AU,
+  type Degrees,
+  degreesToRadians,
   getLogger,
   LIGHT_YEAR,
   logHub,
   type LogRecord,
+  radiansToDegrees,
   type Result,
   RingBufferSink,
 } from '@inertialref/shared'
@@ -409,6 +412,20 @@ export interface LoadOutcome {
 }
 
 const log = getLogger('devtools.harness')
+
+/**
+ * The harness speaks degrees and the world radians; both verbs that write a
+ * placement cross that line, so they share the one conversion. The fields
+ * arrive as plain numbers from the console, hence the brand at the boundary.
+ */
+function placementInRadians(structure: SurfacePlacement): SurfacePlacement {
+  return {
+    ...structure,
+    latitude: degreesToRadians(structure.latitude as Degrees),
+    longitude: degreesToRadians(structure.longitude as Degrees),
+    heading: degreesToRadians(structure.heading as Degrees),
+  }
+}
 
 /** A 500 ly box fits the 200,000-cell travel budget at every grid alignment. */
 function boundedTravelRadius(lightYears: number): number {
@@ -1443,24 +1460,17 @@ export class GameHarness {
 
   /** Surface anchors, in degrees and meters at the harness boundary. */
   structures() {
-    const degrees = 180 / Math.PI
     return this.#host.world.structures.map((structure) => ({
       ...structure,
-      latitude: structure.latitude * degrees,
-      longitude: structure.longitude * degrees,
-      heading: structure.heading * degrees,
+      latitude: radiansToDegrees(structure.latitude),
+      longitude: radiansToDegrees(structure.longitude),
+      heading: radiansToDegrees(structure.heading),
     }))
   }
 
   /** Place a durable structure; angles are degrees, height is above terrain. */
   placeStructure(structure: SurfacePlacement): void {
-    const radians = Math.PI / 180
-    this.#host.world.placeStructure({
-      ...structure,
-      latitude: structure.latitude * radians,
-      longitude: structure.longitude * radians,
-      heading: structure.heading * radians,
-    })
+    this.#host.world.placeStructure(placementInRadians(structure))
   }
 
   removeStructure(id: string): void {
@@ -1469,13 +1479,7 @@ export class GameHarness {
 
   /** Move a structure atomically; invalid coordinates leave its existing anchor intact. */
   moveStructure(structure: SurfacePlacement): void {
-    const radians = Math.PI / 180
-    this.#host.world.moveStructure({
-      ...structure,
-      latitude: structure.latitude * radians,
-      longitude: structure.longitude * radians,
-      heading: structure.heading * radians,
-    })
+    this.#host.world.moveStructure(placementInRadians(structure))
   }
 
   /** Stand above a structure in the planetarium, looking toward its northern approach. */

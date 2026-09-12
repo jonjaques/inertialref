@@ -1,12 +1,7 @@
-import {
-  Group,
-  Mesh,
-  type MeshStandardMaterial,
-  type MeshStandardNodeMaterial,
-} from 'three/webgpu'
+import type { Group } from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { getLogger } from '@inertialref/shared'
-import { rebuildShipMaterial } from './shipMaterial.ts'
+import { rebuildMaterials } from './shipMaterial.ts'
 
 const log = getLogger('game.surface-model')
 const URLS = import.meta.glob<string>('../../../../data/models/*.glb', {
@@ -17,24 +12,7 @@ const URLS = import.meta.glob<string>('../../../../data/models/*.glb', {
 
 /** The glTF owns the deck datum and its meters; only materials cross here. */
 export function prepareSurfaceModel(model: Group, anisotropy: number): Group {
-  const rebuilt = new Map<MeshStandardMaterial, MeshStandardNodeMaterial>()
-  const swap = (source: MeshStandardMaterial): MeshStandardNodeMaterial => {
-    let material = rebuilt.get(source)
-    if (material === undefined) {
-      material = rebuildShipMaterial(source, anisotropy)
-      rebuilt.set(source, material)
-      source.dispose()
-    }
-    return material
-  }
-  model.traverse((object) => {
-    if (!(object instanceof Mesh)) return
-    object.material = Array.isArray(object.material)
-      ? object.material.map((material) =>
-          swap(material as MeshStandardMaterial),
-        )
-      : swap(object.material as MeshStandardMaterial)
-  })
+  rebuildMaterials(model, anisotropy)
   return model
 }
 

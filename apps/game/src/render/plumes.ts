@@ -615,6 +615,7 @@ export function createThrusterPlumes(layout: ThrusterLayout): ThrusterPlumes {
     nozzleCount: layout.nozzles.length,
     update: write,
     sample(throttle, elapsedSeconds) {
+      // The scalar clamp is spelled out: `saturate` in this file is TSL's node.
       write(null, Math.max(0, Math.min(1, throttle)), 0, false, elapsedSeconds)
     },
     dispose() {

@@ -28,7 +28,7 @@ import {
   uv,
   vec3,
 } from 'three/tsl'
-import { type Lens, verticalFov } from '@inertialref/rendering'
+import { type Lens, saturate, verticalFov } from '@inertialref/rendering'
 import { asVector } from './noiseNodes.ts'
 import { edgeFade, type FlareVisibility, ghostPosition } from './flareMath.ts'
 
@@ -434,7 +434,7 @@ export function createLensFlare(): LensFlare {
       )
       anamorphic.scale.set(frameHeight * aspect * 2.5, frameHeight * 0.18, 1)
       anamorphicParts.intensity.value =
-        Math.max(0, Math.min(1, anamorphicDrive)) * strength * 0.75
+        saturate(anamorphicDrive) * strength * 0.75
       anamorphicParts.tint.value.setRGB(
         starColour.r,
         starColour.g,

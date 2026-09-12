@@ -1,6 +1,8 @@
 import {
+  Mesh,
   type MeshStandardMaterial,
   MeshStandardNodeMaterial,
+  type Object3D,
   type Texture,
 } from 'three/webgpu'
 import { sensorRadiance } from './radiance.ts'
@@ -58,4 +60,31 @@ export function rebuildShipMaterial(
     if (texture !== null) texture.anisotropy = anisotropy
   }
   return material
+}
+
+/**
+ * Rebuild every loader material under `root` in place, once per source.
+ *
+ * A glTF shares one material across many meshes, so the walk memoises on the
+ * source and disposes it after the first rebuild; a second loader that walks
+ * its own way would be a second place for that order to go wrong, which is
+ * why the hull and the surface assets both come through here.
+ */
+export function rebuildMaterials(root: Object3D, anisotropy: number): void {
+  const rebuilt = new Map<MeshStandardMaterial, MeshStandardNodeMaterial>()
+  const swap = (source: MeshStandardMaterial): MeshStandardNodeMaterial => {
+    let material = rebuilt.get(source)
+    if (material === undefined) {
+      material = rebuildShipMaterial(source, anisotropy)
+      rebuilt.set(source, material)
+      source.dispose()
+    }
+    return material
+  }
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return
+    object.material = Array.isArray(object.material)
+      ? object.material.map((m) => swap(m as MeshStandardMaterial))
+      : swap(object.material as MeshStandardMaterial)
+  })
 }

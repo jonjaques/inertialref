@@ -1,15 +1,8 @@
-import {
-  Box3,
-  Group,
-  Mesh,
-  type MeshStandardMaterial,
-  type MeshStandardNodeMaterial,
-  Vector3,
-} from 'three/webgpu'
+import { Box3, Group, Vector3 } from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { getLogger } from '@inertialref/shared'
 import { type ShipModelSpec, shipSpec } from './ships.ts'
-import { rebuildShipMaterial } from './shipMaterial.ts'
+import { rebuildMaterials } from './shipMaterial.ts'
 
 /*
  * Modeled ship hulls, loaded from `data/models/`.
@@ -66,22 +59,7 @@ async function build(
   const size = box.getSize(new Vector3())
   hull.position.sub(box.getCenter(new Vector3()))
 
-  const rebuilt = new Map<MeshStandardMaterial, MeshStandardNodeMaterial>()
-  const swap = (source: MeshStandardMaterial): MeshStandardNodeMaterial => {
-    let material = rebuilt.get(source)
-    if (material === undefined) {
-      material = rebuildShipMaterial(source, anisotropy)
-      rebuilt.set(source, material)
-      source.dispose()
-    }
-    return material
-  }
-  hull.traverse((object) => {
-    if (!(object instanceof Mesh)) return
-    object.material = Array.isArray(object.material)
-      ? object.material.map((m) => swap(m as MeshStandardMaterial))
-      : swap(object.material as MeshStandardMaterial)
-  })
+  rebuildMaterials(hull, anisotropy)
 
   const scale = spec.lengthMetres / size.z
   const oriented = new Group()
