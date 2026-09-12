@@ -3,10 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { mediaPath } from '@inertialref/protocol'
 import { getLogger } from '@inertialref/shared'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
-import { CutsceneTransport } from './CutsceneTransport.tsx'
 import { labelStyle, textStyle } from './cutsceneText.ts'
 import { useAction, useKeyContext } from '../input/useKeymap.ts'
-import { useScrubber } from './useScrubber.ts'
 import { useEngine } from '../state/engineStore.ts'
 
 /*
@@ -19,12 +17,20 @@ import { useEngine } from '../state/engineStore.ts'
  * masking a video capture, which cares nothing for how the pixels were made.
  *
  * `'use no memo'`: the render body reads `engine.cutsceneAudio`, a plain field
- * the console may write — the PerfPanel case exactly. The transport's readout
- * no longer needs it: that is a published playhead now, and its selector bails
- * out honestly. React renders only the *structure* (once per cutscene
- * start/stop); the per-frame opacity and transform writes go straight to the
- * DOM nodes from a rAF loop, because 24-fps-timed fades re-rendered through
- * React at display rate would be all reconcile and no picture.
+ * the console may write — the PerfPanel case exactly. React renders only the
+ * *structure* (once per cutscene start/stop); the per-frame opacity and
+ * transform writes go straight to the DOM nodes from a rAF loop, because
+ * 24-fps-timed fades re-rendered through React at display rate would be all
+ * reconcile and no picture.
+ *
+ * No transport and no frame counter. The cinema player owns the playhead's
+ * controls, with a timecode and a shareable link, and a second transport here
+ * — behind the debug overlay, for a scene started from another mode — was two
+ * playheads a person could disagree with. It also had one frame to itself on
+ * every way out of the player: the mode band leaves in the click's commit and
+ * the store learns the scene has stopped a sample later, and the transport
+ * rendered into that gap. `ir.pause()`, `ir.seekCutscene()` and Escape are
+ * the verbs outside the player.
  */
 
 const log = getLogger('game.cutscene')
@@ -73,37 +79,16 @@ const GESTURES = [
   'click',
 ] as const
 
-export function CutsceneOverlay({
-  engine,
-  transport: showTransport = false,
-}: {
-  engine: GameEngine
-  /**
-   * Whether to draw the scrubber and the pause button.
-   *
-   * Off by default, because there are now two things that can put a transport
-   * on screen — this and the cinema player — and two playheads a person can
-   * disagree with is worse than none. `apps/game/src/App.tsx` turns it on with
-   * the debug overlay, which is where a scrub-while-flying belongs; the cinema
-   * mode has its own, with a timecode and a shareable link.
-   */
-  transport?: boolean
-}) {
+export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
   // Structure state only: which cutscene's text set is mounted. Polled slowly
   // — starting and stopping are human-rate events.
   const [texts, setTexts] = useState<readonly CinematicTextState[] | null>(null)
   /*
-   * The transport's readout: the same published playhead the cinema player
-   * reads, so the two cannot disagree and neither costs a timer. This file used
-   * to poll the director every 100 ms and read `world.clock.paused` for itself.
+   * Which scene is open, from the same published playhead the cinema player
+   * reads, so the two cannot disagree and neither costs a timer.
    */
   const transport = useEngine((snapshot) => snapshot.playhead)
-  const chrome = useEngine((snapshot) => snapshot.presentation.chrome)
-  // The pointer latch and the guarded seek, shared with the cinema player's
-  // transport — see `useScrubber.ts` for what each of them is for.
-  const { grab, seek } = useScrubber(engine)
   const blackout = useRef<HTMLDivElement>(null)
-  const hint = useRef<HTMLDivElement>(null)
   const audio = useRef<HTMLAudioElement>(null)
   const lines = useRef(new Map<string, HTMLDivElement>())
   /*
@@ -270,12 +255,6 @@ export function CutsceneOverlay({
         blackout.current.style.opacity =
           view === null ? '0' : String(view.effects.blackout)
       }
-      if (hint.current !== null) {
-        hint.current.style.opacity = view === null ? '0' : '1'
-        if (view !== null) {
-          hint.current.textContent = `f${Math.floor(view.frame)} · esc skips`
-        }
-      }
       for (const [id, node] of lines.current) {
         const state = view?.texts.find((text) => text.id === id)
         if (state === undefined) {
@@ -379,34 +358,6 @@ export function CutsceneOverlay({
               {text.text}
             </div>
           ))}
-          {/* The frame counter and the skip hint ride the debug transport: the
-          cinema player has its own timecode and its own way out, and a second
-          frame number in the corner of every capture is exactly the chrome a
-          scene is supposed to be free of. */}
-          {showTransport && chrome && (
-            <div
-              ref={hint}
-              className="type-micro absolute right-3 bottom-2 text-slate-400"
-              style={{ opacity: 0 }}
-            />
-          )}
-
-          {showTransport && chrome && transport !== null && (
-            <CutsceneTransport
-              frame={transport.frame}
-              durationFrames={transport.durationFrames}
-              paused={transport.paused}
-              onGrab={grab}
-              onSeek={(frame) => {
-                if (!seek(frame)) return
-                engine.cutscene.seek(frame)
-              }}
-              // The same verb the cinema player's play button calls. It used to be
-              // written out here as well, identically, against the clock.
-              onTogglePlay={() => engine.cutscene.toggle()}
-              onStop={() => engine.cutscene.stop()}
-            />
-          )}
         </>
       )}
     </div>

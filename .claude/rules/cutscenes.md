@@ -71,8 +71,10 @@ second scene** — the traps below are the index, not the explanation.
   card and keeps its transport, the others close it. Never reconstruct the answer from a
   remembered playhead: a stop near the final frame produces identical evidence, which is
   exactly the bug that made the player undo a console `stopCutscene` within 100 ms.
-- **One playhead, one set of verbs.** `apps/game/src/cinema/session.ts` publishes it
-  through the engine store's sampler; the player, the debug transport and the mode all
-  read that. None of them reads `world.clock.paused` for itself.
+- **One playhead, one set of verbs, one transport.** `apps/game/src/cinema/session.ts`
+  publishes the playhead through the engine store's sampler; the player, the overlay
+  and the mode all read that, and none reads `world.clock.paused` for itself. The
+  cinema player is the only transport: a second one in the cutscene overlay was two
+  playheads to disagree with, and it drew for a frame on every way out of the player.
 - Drive it with `ir.play('tng-intro')`, `ir.pause()`, and `ir.seekCutscene(1150)` for
   frame-exact stills against the reference.

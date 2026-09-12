@@ -760,15 +760,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               what="the cutscene overlay"
               className="type-readout pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80%] -translate-x-1/2"
             >
-              {/* The scene's own screen-space layer: blackout, titles, audio. Its
-                transport is the *debug* one — the cinema player provides the
-                real controls, and two transports on screen at once would be two
-                playheads a person could disagree with, so it is off in the
-                cinema mode however the debug overlay is set. */}
-              <CutsceneOverlay
-                engine={engine}
-                transport={debug && mode !== 'cinema'}
-              />
+              {/* The scene's own screen-space layer: blackout, titles, audio.
+                No transport: the cinema player provides the controls, and the
+                overlay's header says why a second set is not drawn here. */}
+              <CutsceneOverlay engine={engine} />
             </ErrorBoundary>
             {/* The reference edit's tracked subject over the render, behind
               `ir.trackOverlay(true)` and drawn by nothing else. After the
