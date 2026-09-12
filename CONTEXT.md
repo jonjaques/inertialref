@@ -9365,6 +9365,14 @@ predates structures, so the migration seeds the pad into a Milky Way save
 rather than an empty list: without it an old game watches the landing scene
 stage a pad it cannot land on.
 
+The contact test is gated on the datum. The first version asked the world for
+a deck on every integrated tick with a body binding, and the deck test sampled
+the terrain under the pad before rejecting the ray, so an orbiter at 400 km
+paid a spin pose, a canonical position and a noise call a tick for a pad it
+could not reach — 640 asks in 640 ticks, now none. Inside the ground band one
+direction and one terrain sample serve the ground and the deck, the tallest
+deck per body is a cached number, and a miss is decided on the body radius.
+
 The 46-second Mars scene holds the sunset ephemeris while the director keeps
 advancing from simulation render time. Holding the director's clock instead
 freezes the film. The chosen instant puts the Sun 3° above the horizon at

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { tick } from '@inertialref/shared'
+import { type Meters, tick } from '@inertialref/shared'
+import { circularSpeed } from '@inertialref/physics'
 import {
   canonicalPosition,
   reframe,
@@ -9,6 +10,8 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import {
+  type Body,
+  type BodyFixedDirection,
   bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
@@ -18,6 +21,19 @@ import {
   systemId,
 } from '@inertialref/universe'
 import { World } from './world.ts'
+
+/** A world that counts how often the integrator asks it about decks. */
+class CountingWorld extends World {
+  contactAsks = 0
+  override contactRadius(
+    body: Body,
+    direction: BodyFixedDirection,
+    terrain?: Meters,
+  ): Meters {
+    this.contactAsks += 1
+    return super.contactRadius(body, direction, terrain)
+  }
+}
 
 const make = (time = 0, east = 0) => {
   const world = new World({ seed: 'inertialref', startTick: tick(time * 64) })
@@ -85,6 +101,55 @@ describe('a structure supports ordinary flight', () => {
     expect(world.isLanded(ship.id)).toBe(true)
     expect(height()).toBeLessThan(1)
   })
+  it('is never asked about a deck from orbit, and asked once a tick over one', () => {
+    const world = new CountingWorld({ seed: 'inertialref' })
+    const body = world.loadSystem(systemId('SOL')).planets[3]!
+    const placement = world.placeStructure({
+      id: 'pad',
+      assetId: 'mars-pad',
+      bodyAddress: 'g:milky-way/s:SOL/b:3',
+      latitude: 0.6031917532451286,
+      longitude: 1.4844702100937137,
+      height: 30,
+      heading: 0,
+    })
+    // The drive is lit so every tick is integrated rather than coasted on
+    // rails, which is the tick that pays for the deck when it is asked.
+    const radius = body.radius + 400_000
+    const orbiter = world.spawnShip(
+      'orbiter',
+      bodyFrameId(body.address),
+      vec3(radius, 0, 0),
+      vec3(0, 0, -circularSpeed(body.mu, radius)),
+    )
+    world.setControl(orbiter.id, vec3(0, 0, 1), Vec.ZERO)
+    world.runTicks(640)
+    expect(world.isLanded(orbiter.id)).toBe(false)
+    expect(world.contactAsks).toBe(0)
+
+    const frame = installSurfaceFrame(
+      world.frames,
+      body,
+      placement.latitude,
+      placement.longitude,
+    )
+    const hovering = world.spawn({
+      id: dynamicEntityId(98),
+      kind: 'probe',
+      name: 'hover probe',
+      state: reframe(
+        world.frames,
+        { ...restState(frame), position: vec3(0, 60, 0) },
+        bodyFrameId(body.address),
+        world.clock.time,
+      ),
+    })
+    const before = world.contactAsks
+    world.runTicks(8)
+    expect(world.isLanded(hovering.id)).toBe(false)
+    expect(world.contactAsks).toBe(before + 8)
+  })
+
   it('releases an occupant when its support is removed or moved away', () => {
     for (const operation of ['remove', 'move']) {
       const { world, ship, placement, height } = make()

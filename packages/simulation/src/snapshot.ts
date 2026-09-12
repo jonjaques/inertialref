@@ -234,7 +234,6 @@ export function snapshot(
 
   const bodies: BodySnapshot[] = []
   const structures: SnapshotStructure[] = []
-  const placements = world.structures
   const stars: StarSnapshot[] = []
   for (const system of world.loadedSystems()) {
     stars.push({
@@ -246,18 +245,19 @@ export function snapshot(
       luminosity: system.star.luminosity,
     })
     const collect = (body: (typeof system.planets)[number]): void => {
+      const address = formatAddress(body.address)
       const frame = bodyFrameId(body.address)
       const pose = world.frames.pose(frame, renderTime)
-      // The rotating frame, resolved once. It was spelled out twice inside the
-      // ternary below — `has` and then the read — which is two template
-      // strings and two address formats per body per frame for one answer.
+      // The rotating frame's pose, resolved once per body: it carries the
+      // body's placements and it is the body's visible orientation, and a
+      // pose is a Kepler solve up the chain for every body in every loaded
+      // system, every frame.
       const spin = bodyFixedFrameId(body.address)
       const spinPose = world.frames.pose(
         world.frames.has(spin) ? spin : frame,
         renderTime,
       )
-      for (const placement of placements) {
-        if (placement.bodyAddress !== formatAddress(body.address)) continue
+      for (const placement of world.structuresOn(address)) {
         structures.push({
           ...placement,
           body,
@@ -266,7 +266,7 @@ export function snapshot(
         })
       }
       bodies.push({
-        address: formatAddress(body.address),
+        address,
         name: body.name,
         kind: body.kind,
         radius: body.radius,
@@ -276,10 +276,7 @@ export function snapshot(
         appearance: body.appearance,
         position: pose.position,
         // The visible orientation is the rotating one, not the orbital frame.
-        orientation: world.frames.pose(
-          world.frames.has(spin) ? spin : frame,
-          renderTime,
-        ).orientation,
+        orientation: spinPose.orientation,
         frame,
         hasAtmosphere: body.atmosphere !== null,
         atmosphereCeiling: body.atmosphere?.ceiling ?? 0,

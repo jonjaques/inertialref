@@ -17,7 +17,16 @@ import {
 
 export type { SurfacePlacement }
 
-/** Radius where a body-fixed ray meets this asset's horizontal support disk. */
+/**
+ * Radius where a body-fixed ray meets this asset's horizontal support disk.
+ *
+ * The disk is metres across on a body thousands of kilometres across, so
+ * nearly every ray misses it, and the miss is decided before the terrain is
+ * sampled. The ray's offset across the deck grows with the deck's radius, so a
+ * deck no lower than the body's deepest ground rejects every ray the real one
+ * rejects, and only a ray that survives that pays for the noise stack under
+ * the pad. This runs per placement per tick for every ship in the ground band.
+ */
 export function surfaceSupportRadius(
   placement: SurfacePlacement,
   body: Body,
@@ -28,12 +37,20 @@ export function surfaceSupportRadius(
   const up = geodeticDirection(placement.latitude, placement.longitude)
   const cosine = Vec.dot(up, direction)
   if (cosine <= 0) return null
+  const tangent = Vec.lengthSquared(Vec.sub(direction, Vec.scale(up, cosine)))
+  const limit = support * support * cosine * cosine
+  // Every band is bounded by the relief and the datum by the polar radius;
+  // twice the relief is the margin that keeps a crater floor honest.
+  const floor = Math.max(
+    0,
+    Math.min(body.radius, body.polarRadius) -
+      2 * body.surface.maxElevation +
+      placement.height,
+  )
+  if (tangent * floor * floor > limit) return null
   const deck = surfaceRadius(body, up) + placement.height
-  const radius = deck / cosine
-  const tangent = Vec.sub(direction, Vec.scale(up, cosine))
-  if (Vec.lengthSquared(tangent) * radius * radius > support * support)
-    return null
-  return radius
+  if (tangent * deck * deck > limit) return null
+  return deck / cosine
 }
 
 /** Validate before resolving a body, so a rejected placement has no world effects. */

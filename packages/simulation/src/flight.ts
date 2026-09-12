@@ -304,25 +304,36 @@ export function stepFlight(
     altitude !== null
   ) {
     const radiusAfter = radiusVector(world, state, binding, after)
-    const afterAltitude = groundAltitude(
-      world,
-      moved,
-      binding,
-      radiusAfter,
-      Vec.length(radiusAfter),
-      after,
-    )
-    const speed = Vec.length(state.velocity)
     const distanceAfter = Vec.length(radiusAfter)
-    const contactAltitude =
-      world.contactRadius === undefined
-        ? afterAltitude
-        : distanceAfter -
-          world.contactRadius(
-            binding.body,
-            groundDirection(world, moved, binding, radiusAfter, after),
-            distanceAfter - afterAltitude,
-          )
+    const datumAfter = distanceAfter - binding.radius
+    const speed = Vec.length(state.velocity)
+    let afterAltitude = datumAfter
+    let contactAltitude = datumAfter
+    // Above the ground band and the body's tallest deck there is nothing to
+    // touch, and the tick pays for neither the spin pose, the terrain sample
+    // nor a walk over the body's placements — `contactHeight` is a cached
+    // number. Inside it, one direction and one terrain sample serve the
+    // ground and the deck alike; the deck test only ever raises the answer.
+    const contactBand =
+      world.contactHeight === undefined
+        ? 0
+        : world.contactHeight(binding.body) + LANDING_CLEARANCE
+    if (datumAfter <= Math.max(groundBand(binding), contactBand)) {
+      const direction = groundDirection(
+        world,
+        moved,
+        binding,
+        radiusAfter,
+        after,
+      )
+      const terrain = surfaceRadius(binding.body, direction)
+      afterAltitude = distanceAfter - terrain
+      contactAltitude =
+        world.contactRadius === undefined
+          ? afterAltitude
+          : distanceAfter -
+            world.contactRadius(binding.body, direction, terrain)
+    }
     const contact =
       contactAltitude <= 0 ||
       (contactAltitude <= LANDING_CLEARANCE && speed < LANDING_SPEED_LIMIT)

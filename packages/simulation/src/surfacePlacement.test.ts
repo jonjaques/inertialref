@@ -1,8 +1,11 @@
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 import {
+  type BodyFixedDirection,
   bodyFixedFrameId,
   geodeticDirection,
+  surfaceAsset,
   surfaceRadius,
   systemId,
 } from '@inertialref/universe'
@@ -11,6 +14,7 @@ import { snapshot } from './snapshot.ts'
 import {
   type SurfacePlacement,
   surfacePlacementPose,
+  surfaceSupportRadius,
 } from './surfacePlacement.ts'
 
 const placement: SurfacePlacement = {
@@ -122,6 +126,76 @@ describe('body-fixed structures', () => {
     const first = snapshot(world, 0, 0).structures[0]!
     const later = snapshot(world, 0, body.rotationPeriod / 4).structures[0]!
     expect(Q.approxEquals(first.orientation, later.orientation)).toBe(false)
+  })
+  it('decides a miss on the body radius exactly where the terrain sample would', () => {
+    const world = create(),
+      body = world.loadSystem(systemId('SOL')).planets[3]!
+    const support = surfaceAsset(placement.assetId)!.supportRadius!
+    const up = geodeticDirection(placement.latitude, placement.longitude)
+    const east = Vec.normalize(Vec.cross(vec3(0, 1, 0), up))
+    const north = Vec.cross(up, east)
+    // The definition, with the terrain sampled before the disk is tested.
+    const sampled = (direction: BodyFixedDirection): number | null => {
+      const cosine = Vec.dot(up, direction)
+      if (cosine <= 0) return null
+      const radius = (surfaceRadius(body, up) + placement.height) / cosine
+      const tangent = Vec.sub(direction, Vec.scale(up, cosine))
+      return Vec.lengthSquared(tangent) * radius * radius > support * support
+        ? null
+        : radius
+    }
+    // Offsets in units of the disk's angular radius, so the edge is at unit
+    // distance and both sides of it are sampled densely.
+    const angle = support / body.radius
+    fc.assert(
+      fc.property(
+        fc.double({ min: -3, max: 3, noNaN: true }),
+        fc.double({ min: -3, max: 3, noNaN: true }),
+        (a, b) => {
+          const direction = Vec.normalize(
+            Vec.add(
+              up,
+              Vec.add(Vec.scale(east, a * angle), Vec.scale(north, b * angle)),
+            ),
+          ) as BodyFixedDirection
+          expect(surfaceSupportRadius(placement, body, direction)).toBe(
+            sampled(direction),
+          )
+        },
+      ),
+      { numRuns: 400 },
+    )
+    expect(
+      surfaceSupportRadius(placement, body, up as BodyFixedDirection),
+    ).not.toBeNull()
+  })
+  it('indexes placements by body and keeps the tallest deck current', () => {
+    const world = create(),
+      body = world.loadSystem(systemId('SOL')).planets[3]!
+    expect(world.structuresOn(placement.bodyAddress)).toEqual([])
+    expect(world.contactHeight(body)).toBe(0)
+    world.placeStructure(placement)
+    expect(world.structuresOn(placement.bodyAddress)).toEqual([placement])
+    expect(world.structuresOn('g:milky-way/s:SOL/b:2')).toEqual([])
+    const deck =
+      surfaceRadius(
+        body,
+        geodeticDirection(placement.latitude, placement.longitude),
+      ) -
+      body.radius +
+      placement.height
+    // The basin is below the datum sphere, so the seeded deck is inside the
+    // ground band and the band above it is zero; a tower clears the datum.
+    expect(world.contactHeight(body)).toBeCloseTo(Math.max(0, deck), 6)
+    world.moveStructure({ ...placement, height: 6000 })
+    expect(world.contactHeight(body)).toBeCloseTo(
+      Math.max(0, deck + 6000 - placement.height),
+      6,
+    )
+    expect(world.contactHeight(body)).toBeGreaterThan(0)
+    world.removeStructure(placement.id)
+    expect(world.contactHeight(body)).toBe(0)
+    expect(world.structuresOn(placement.bodyAddress)).toEqual([])
   })
   it('retains unloaded placements without retaining their system frames', () => {
     const world = create()

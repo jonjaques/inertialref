@@ -86,6 +86,8 @@ import {
   validateSurfacePlacement,
 } from './surfacePlacement.ts'
 
+const NO_PLACEMENTS: readonly SurfacePlacement[] = Object.freeze([])
+
 /*
  * The world.
  *
@@ -177,14 +179,25 @@ export class World implements FlightWorld {
 
   readonly #systems = new Map<SystemId, StarSystem>()
   readonly #structures = new Map<string, SurfacePlacement>()
+  /*
+   * Derived from `#structures` and rebuilt when it changes: the sorted list
+   * the snapshot and the hash read, the per-body index the contact test walks,
+   * and each body's tallest deck. The snapshot reads the list every frame and
+   * the integrator asks for the deck every tick, so neither can be a sort or
+   * a walk over every placement in the world at the call.
+   */
+  #structureList: readonly SurfacePlacement[] = NO_PLACEMENTS
+  readonly #structuresByBody = new Map<string, readonly SurfacePlacement[]>()
+  readonly #contactHeight = new Map<string, Meters>()
 
   /** Stable, immutable authored placements, including those in unloaded systems. */
   get structures(): readonly SurfacePlacement[] {
-    return Object.freeze(
-      [...this.#structures.values()].sort((a, b) =>
-        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-      ),
-    )
+    return this.#structureList
+  }
+
+  /** The placements on one body, by its formatted address; empty for a body with none. */
+  structuresOn(bodyAddress: string): readonly SurfacePlacement[] {
+    return this.#structuresByBody.get(bodyAddress) ?? NO_PLACEMENTS
   }
 
   placeStructure(placement: SurfacePlacement): SurfacePlacement {
@@ -256,27 +269,27 @@ export class World implements FlightWorld {
     terrain = surfaceRadius(body, direction),
   ): Meters {
     let radius = terrain
-    const address = formatAddress(body.address)
-    for (const placement of this.#structures.values()) {
-      if (placement.bodyAddress !== address) continue
-      radius = Math.max(
-        radius,
-        surfaceSupportRadius(placement, body, direction) ?? terrain,
-      )
+    for (const placement of this.structuresOn(formatAddress(body.address))) {
+      const support = surfaceSupportRadius(placement, body, direction)
+      if (support !== null && support > radius) radius = support
     }
     return radius
   }
 
-  /** Highest support above the body datum, for the integrator's rails boundary. */
+  /**
+   * Highest support above the body datum: the integrator's rails boundary,
+   * and the band above which a tick cannot touch anything on this body.
+   * Cached, because the integrator asks on every tick with a body binding and
+   * each answer is a terrain sample per placement.
+   */
   contactHeight(body: Body): Meters {
-    let height = 0
     const address = formatAddress(body.address)
-    for (const placement of this.#structures.values()) {
-      if (
-        placement.bodyAddress !== address ||
-        surfaceAsset(placement.assetId)?.supportRadius === null
-      )
-        continue
+    const cached = this.#contactHeight.get(address)
+    if (cached !== undefined) return cached
+    let height = 0
+    for (const placement of this.structuresOn(address)) {
+      const support = surfaceAsset(placement.assetId)?.supportRadius
+      if (support === null || support === undefined) continue
       height = Math.max(
         height,
         surfaceRadius(
@@ -287,10 +300,22 @@ export class World implements FlightWorld {
           body.radius,
       )
     }
+    this.#contactHeight.set(address, height)
     return height
   }
 
   #structuresChanged(previous?: SurfacePlacement): void {
+    this.#structureList = Object.freeze(
+      [...this.#structures.values()].sort((a, b) =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      ),
+    )
+    this.#structuresByBody.clear()
+    for (const placement of this.#structureList) {
+      const on = this.#structuresByBody.get(placement.bodyAddress) ?? []
+      this.#structuresByBody.set(placement.bodyAddress, [...on, placement])
+    }
+    this.#contactHeight.clear()
     this.#groundAhead.clear()
     for (const entity of this.#entities.ordered()) {
       // A new obstacle can intersect an otherwise eligible analytical coast.
