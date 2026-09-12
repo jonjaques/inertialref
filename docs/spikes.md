@@ -290,7 +290,7 @@ evaluated per-pixel per-frame at any language's speed.
 ### Still unmeasured
 
 Full Bruneton multiple scattering with LUT precomputation, the precompute cost and
-whether it amortises across frames, register pressure (no tooling exposes it), and
+whether it amortizes across frames, register pressure (no tooling exposes it), and
 behavior on the 2023-class integrated GPU that is the actual target. **The ratio
 is what transfers between machines; the absolute milliseconds do not.**
 

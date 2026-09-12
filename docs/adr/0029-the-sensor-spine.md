@@ -40,7 +40,7 @@ walk and fills in the GPU object when `createRenderPipelineAsync` resolves.
 `WebGPUBackend.draw` skips a pipeline that failed to build and not one that is
 pending, so a frame drawn between the walk and the promise hands
 `setPipeline` an undefined and throws out of the whole render. The build-ahead
-in `Bodies.tsx` materialises a body that is already in view and warms it in
+in `Bodies.tsx` materializes a body that is already in view and warms it in
 the same task, so the next frame throws — twice at every boot of the plain
 app, measured in the driver's log, and once per body at every build-ahead in
 flight. Without the chain that costs the frame; with it, the frame and the

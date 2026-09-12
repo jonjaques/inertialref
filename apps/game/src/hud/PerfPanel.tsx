@@ -46,7 +46,7 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
   /*
    * React Compiler is on, and it is exactly wrong about this component.
    *
-   * It memoises derived values against their inputs, and every input here is a
+   * It memoizes derived values against their inputs, and every input here is a
    * `GameEngine` that never changes identity — so `metrics.period.summarize()`
    * is a pure call on a stable object as far as the compiler can see, and gets
    * computed once. It is not pure: it reads a ring buffer that the frame loop

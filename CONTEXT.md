@@ -409,7 +409,7 @@ again in a neighboring system.
   screen was always the datum sphere 11 km below, dead flat; the only terrain
   ever drawn was the far slopes of ridges poking above eye level, leaking
   through as a thin terrain-colored band floating over the horizon — visible
-  landed, gone by ~100 m up, which is what finally localised it. No
+  landed, gone by ~100 m up, which is what finally localized it. No
   distance-based test could catch it: winding is invisible to arithmetic about
   vertex positions, and the strobe test's invariant (constant ship–patch
   separation) holds in either order. Found by rebuilding the exact scene in
@@ -499,7 +499,7 @@ again in a neighboring system.
   out of the whole render.** The warm-up's walk registers the pipeline and the
   promise fills in the GPU object later; `WebGPUBackend.draw` in r182 skips a
   pipeline that failed and not one that is pending, so `setPipeline` gets an
-  undefined. The build-ahead materialises a body in view and warms it in the
+  undefined. The build-ahead materializes a body in view and warms it in the
   same task, so the next frame threw — twice at every boot, once per body in
   flight, one lost frame each without the chain and the picture with it.
   `patches/three@0.182.0.patch` skips the draw instead; `warmup.gpu.test.ts`
@@ -1210,7 +1210,7 @@ configuring the one canvas context. A context belongs to the device that
 configured it last, so whenever that was the corpse's, the surviving
 renderer's every present targeted a foreign device's swapchain texture —
 invalid command buffers, dropped silently by Dawn, forever. The fix is one
-invariant: **one build per (canvas, preference)**. The factory memoises, so
+invariant: **one build per (canvas, preference)**. The factory memoizes, so
 the StrictMode re-invocation adopts the same renderer; a real rebuild (the
 HDR preference remounting the canvas) queues behind whatever is in flight, so
 release-then-configure is atomic and the last build always belongs to the
@@ -1715,7 +1715,7 @@ swallows Space — the pause key — and turns it into a second click on itself.
 Blurring unconditionally solved that by making the dock untraversable; a
 keyboard user who activated anything was returned to the top of the document.
 
-`hud/focus.ts` blurs only when `event.detail > 0`. A click synthesised from
+`hud/focus.ts` blurs only when `event.detail > 0`. A click synthesized from
 Enter or Space on a focused button reports `detail === 0` in every engine, so a
 pointer keeps the old behavior exactly and a keyboard keeps its place — and a
 focused button swallowing Space is correct there, because Space is what
@@ -2850,8 +2850,8 @@ for different jobs.
   cutscene authoring moved out of `AGENTS.md` into
   [`docs/guides/client.md`](docs/guides/client.md) and
   [`docs/guides/cinematics.md`](docs/guides/cinematics.md).
-- British spelling in the docs was converted where it was safe. Identifiers,
-  filenames (`catalog.md`), and `canceled()` are left for a later pass.
+- The prose conversion deliberately excluded identifiers, stored keys, and
+  filenames for a separate rename.
 
 ## The first look was the expensive one, so everything loads at boot (23 Aug 2026)
 
@@ -2918,12 +2918,9 @@ frames. Pace with `queue.onSubmittedWorkDone()` before believing any number.
 
 ## American English in copy, comments, and docs (23 Aug 2026)
 
-British spelling in user-facing copy, labels, comments, and documentation is
-now American: _color_, _center_, _meter_, _catalog_, _behavior_, _license_,
-_gray_, _artifact_, _toward_. Identifiers, panel ids (`catalog`), JSON keys
-(`license`), enum values (`center`), and filenames (`catalog.md`) were left
-alone for a later programmatic rename. [`STYLE.md`](STYLE.md)
-already stated the policy; this pass applies it to the rest of the tree.
+User-facing copy, labels, comments, and documentation adopted American
+English. The pass deferred identifiers, panel ids, JSON keys, enum values and
+filenames to a programmatic rename. [`STYLE.md`](STYLE.md) supplied the policy.
 
 ## Twelve shallow modules, deepened (23 Aug 2026)
 
@@ -9679,6 +9676,31 @@ for that reason.
 
 The spelling burn-down moved the wrong way while nobody was reading it: 315
 declarations in 86 files with 1,997 references is 456 in 117 with 3,409.
+
+## American spelling reaches the stored keys (12 Sep 2026)
+
+The identifier migration uses the TypeScript language service before rewriting
+comments and prose. Cancellation messages, manifest keys, and the catalog
+fields move with their producers and consumers. Stored panel ids and preference
+keys use the same spelling as the source; published paths advance directly.
+
+Source licenses also live inside both packed star catalogs. The attribution
+test failed when only the TypeScript field moved, and passed after migrating
+the binary metadata. Every star and planet byte stays intact; compressed size
+measurements reflect the new metadata. The Mars pad's metric keys also live in
+its GLB, Python generator and Blender source. Updating the GLB preserves its
+geometry bytes, and reopening the Blender source verifies identical object
+transforms and mesh geometry.
+
+The dictionary needs camel-case boundaries and guarded verb suffixes.
+`DescentReport` spans two words; `realistic`, `optimism`, `characteristic`, and
+`Polaris` are already American. Regression tests reproduced false rewrites
+before those rules were corrected. `pnpm spelling:check` rejects British
+identifier declarations as part of `pnpm check`.
+
+A language-service file move under bundler resolution can shorten an import
+specifier. TypeScript accepts it, but the plain-Node preset loader fails.
+Moved source imports keep their explicit `.ts` or `.tsx` extensions.
 
 ## Known gaps
 

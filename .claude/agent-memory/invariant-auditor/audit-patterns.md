@@ -1376,7 +1376,7 @@ section in a plan is a `--stat` you can run.
 wrong. `CONTEXT.md` in the same commit says "a floor of 15", which is right; the
 docstring carried the pre-tail figure verbatim through its own rewrite.
 
-The generalisation is the other half: "Measured across the zoo the detail floor does not
+The generalization is the other half: "Measured across the zoo the detail floor does not
 move" is true of the zoo's four members (Gliese 1061 d 19→19, Gliese 1061 IV 17→17,
 Iapetus 14→14, Miranda 12→12) and false on 8 of 192 Sol+fixture bodies — **Earth 15→17**,
 Proxima Centauri II 14→16, Alpha Centauri IX b 10→12, Mars 15→16, Barnard's b/c 16→17,

@@ -3,6 +3,27 @@ import { americanize, rulesFiring } from './dictionary.mjs'
 
 describe('American spelling', () => {
   it.each([
+    ['alphabetising', 'alphabetizing'],
+    ['amortises', 'amortizes'],
+    ['capitalised', 'capitalized'],
+    ['centralised', 'centralized'],
+    ['Circularises', 'Circularizes'],
+    ['customisation', 'customization'],
+    ['generalisation', 'generalization'],
+    ['hybridisation', 'hybridization'],
+    ['internalising', 'internalizing'],
+    ['localised', 'localized'],
+    ['materialised', 'materialized'],
+    ['memoised', 'memoized'],
+    ['memorising', 'memorizing'],
+    ['modernised', 'modernized'],
+    ['Monetisation', 'Monetization'],
+    ['personalisation', 'personalization'],
+    ['photosynthesises', 'photosynthesizes'],
+    ['physicalised', 'physicalized'],
+    ['pressurised', 'pressurized'],
+    ['rationalisation', 'rationalization'],
+    ['analysing', 'analyzing'],
     ['catalogued', 'cataloged'],
     ['cataloguing', 'cataloging'],
     ['cataloguer', 'cataloger'],
@@ -23,6 +44,11 @@ describe('American spelling', () => {
     expect(rulesFiring(source).length).toBeGreaterThan(0)
   })
   it.each([
+    'analyses',
+    'synthesis',
+    'photosynthesis',
+    'generalist',
+    'rationalism',
     'realistic',
     'realism',
     'organism',

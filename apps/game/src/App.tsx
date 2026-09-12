@@ -92,7 +92,7 @@ import {
  * Every command below exists exactly once and is bound to both a key and a
  * button. Two implementations of "time warp" that drift by one step is a bug
  * nobody would find, and the dock is what makes the game drivable without
- * memorising the keyboard first.
+ * memorizing the keyboard first.
  */
 
 let singleton: GameEngine | null = null

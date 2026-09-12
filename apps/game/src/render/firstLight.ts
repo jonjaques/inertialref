@@ -145,7 +145,7 @@ export function signalFor(
  * What boot is doing right now, in the cover's own voice.
  *
  * Lowercase, because the cover keeps every one of these as a line of a ledger
- * and a capitalised sentence per stage would read as a column of headings.
+ * and a capitalized sentence per stage would read as a column of headings.
  * The two lines this module owns — before the first producer reports, and
  * after the last one has — are in the same register as the producers' own.
  */

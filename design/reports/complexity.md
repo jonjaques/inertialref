@@ -248,7 +248,7 @@ Highest score in the repository (90.30) and highest cyclo (144), at 95%
 statements and 88% branches — well tested, and still the file most likely to be
 hard to change. Its last 170 lines are a general number-and-unit vocabulary:
 `round`, `significant`, `exponential`, `superscript`, `kilometers`, `period`,
-`pressurised`, `arcs`, `degrees`, `density`, `colorWord`. None of that is about
+`pressurized`, `arcs`, `degrees`, `density`, `colorWord`. None of that is about
 dossiers, and some of it exists twice already:
 
 - `superscript` — `dossier.ts:1576` and `universe/src/catalog/designations.ts:183`

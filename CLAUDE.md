@@ -132,7 +132,7 @@ import.
   because the arithmetic described a floor and the defect lived above it.
 - **A figure measured at one operating point is a figure about that point.**
   Earthrise is a hover, and a keep set measured there is invariant in a way it
-  is not once the camera moves; the generalisation reached an ADR before an
+  is not once the camera moves; the generalization reached an ADR before an
   audit caught it. Measure at two points that differ in the variable you are
   about to claim does not matter, and name the point in the sentence.
 - **Do not perturb the tree while a read-only subagent is auditing it.**

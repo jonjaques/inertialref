@@ -21,7 +21,7 @@ problem. Five of them exist today:
 ```mermaid
 flowchart TB
     EXIST["<b>universe existence</b><br/>a function of the seed<br/><i>everything, always</i>"]
-    GEN["<b>generated state</b><br/>materialised on demand<br/><i>systems, bodies, patches</i>"]
+    GEN["<b>generated state</b><br/>materialized on demand<br/><i>systems, bodies, patches</i>"]
     SIM["<b>simulation state</b><br/>frames installed, entities stepping"]
     REND["<b>render visibility</b><br/>in the scene this frame"]
     PERS["<b>persistent state</b><br/>mutations that survive"]

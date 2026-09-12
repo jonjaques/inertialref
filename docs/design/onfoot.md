@@ -237,8 +237,8 @@ that can be entered is a structure whose doors have state.
 Stated so it does not get added by accident:
 
 - **No third-person view.** Pillar 4.
-- **No character customisation screen.** You have a suit and a helmet, and you
-  see your hands. There is no body to customise and no mirror to see it in.
+- **No character customization screen.** You have a suit and a helmet, and you
+  see your hands. There is no body to customize and no mirror to see it in.
 - **No stamina bar as a distinct resource.** Exertion costs oxygen. One gauge.
 - **No crafting tree.** Samples are data, not ingredients.
 - **No base building.** Out of scope and it fights pillar 4 immediately, because

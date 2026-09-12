@@ -323,7 +323,7 @@ names them — **Instrument** text is monospace, uppercase, abbreviated;
 **Record** text is proportional, mixed case, precise, carrying units;
 **Correspondence** is proportional prose — and once all three were drawn in one
 monospace stack, so the only thing separating a heading from a number was
-capitalisation. The faces map onto them almost exactly:
+capitalization. The faces map onto them almost exactly:
 
 | Face                | Register                | What it sets                      |
 | ------------------- | ----------------------- | --------------------------------- |

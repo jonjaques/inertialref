@@ -292,7 +292,7 @@ flowchart TB
     POS --> AIM
 ```
 
-Two notes worth internalising:
+Two notes worth internalizing:
 
 - **`orbit` is not a teleport to coordinates** — it sets a state that solves the
   two-body problem, so the ship stays in that orbit. It also places the ship on

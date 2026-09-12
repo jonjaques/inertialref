@@ -158,11 +158,13 @@ touches and what was verified. The template is
 Use American spelling and usage: _color_, _center_, _meter_, _license_,
 _behavior_, _catalog_, _modeling_, _traveling_, _artifact_, _toward_.
 
-Do not rename files or identifiers in this pass just to match. `catalog.md`
-and `canceled()` stay until a dedicated rename. Prose follows American English;
-code follows the identifier that exists.
+Files, identifiers, data keys, comments, and prose follow the same spelling.
+`pnpm spelling:check` rejects British identifier declarations as part of
+`pnpm check`. Rename producers, consumers, and checked-in data together.
 
-Quoted third-party legal text keeps its original spelling.
+Quoted third-party legal text, source names and citations, and generated
+external API declarations keep their original spelling. The spelling checker's
+examples deliberately exercise both forms.
 
 ---
 

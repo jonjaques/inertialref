@@ -177,7 +177,7 @@ export const WINGS = [
       {
         // The bible's own chapter order, from `docs/design/README.md`. It is an
         // argued sequence — charter before loops before progression — and
-        // re-alphabetising it here would throw away the argument.
+        // re-alphabetizing it here would throw away the argument.
         label: 'The Bible',
         pages: [
           ['docs/design/README.md', 'Contents'],

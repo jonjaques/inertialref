@@ -55,7 +55,7 @@ reopening one is a deliberate act rather than a drift.
 | Nebulae     | **Narrowband composite, declared on the canopy, filter selectable.** The license becomes a mechanic.                                                  |
 | System map  | **Two tiers of one overlay** — compact for routine targeting (< 200 ms), planning for expeditions.                                                    |
 | Pausing     | **Solo modes pause; the persistent universe does not.** Costs nothing architecturally — the host stops calling `advance`, and the clock is untouched. |
-| Annunciator | **Synthesised speech, twelve fixed strings.** Nobody is performing; an instrument is annunciating.                                                    |
+| Annunciator | **Synthesized speech, twelve fixed strings.** Nobody is performing; an instrument is annunciating.                                                    |
 
 ### World and naming
 

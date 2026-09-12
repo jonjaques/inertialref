@@ -258,7 +258,7 @@ export function gameVite(
       requireRealModels(),
       requireSourceMaps(),
       ...(standalone ? [react()] : []),
-      // React Compiler handles memoisation, so components here do not hand-write
+      // React Compiler handles memoization, so components here do not hand-write
       // useMemo/useCallback around render work.
       babel({ presets: [reactCompilerPreset()] }),
       tailwindcss(),

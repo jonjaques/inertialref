@@ -397,7 +397,7 @@ export function Bodies({
       return false
     }
 
-    const materialise = (
+    const materialize = (
       key: string,
       star: boolean,
       clouded: boolean,
@@ -461,7 +461,7 @@ export function Bodies({
       let visual = visuals.get(key)
       if (visual === undefined) {
         if (visuals.size >= MAX_BODIES && !evictStale()) return
-        visual = materialise(
+        visual = materialize(
           key,
           star !== null,
           appearance.clouds !== null,
@@ -925,7 +925,7 @@ export function Bodies({
        * task back rather than dropping it.
        *
        * It was shifted off and then silently discarded when `visuals.size`
-       * reached the cap: not materialised, not requeued, and `ticket.done()`
+       * reached the cap: not materialized, not requeued, and `ticket.done()`
        * never called, while `ticket.finish()` below credited the shortfall so
        * the boot bar still read 100%. The queue is only rebuilt on a system
        * change, so the build-ahead for every body past the cap was gone until
@@ -944,7 +944,7 @@ export function Bodies({
         ticket.finish()
       }
       if (task !== undefined && visuals.size < MAX_BODIES) {
-        const visual = materialise(
+        const visual = materialize(
           task.key,
           task.star,
           task.clouded,

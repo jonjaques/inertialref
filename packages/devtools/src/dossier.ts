@@ -1001,7 +1001,7 @@ function atmosphereGroup(body: Body): FactGroup {
   const facts: Fact[] = [
     {
       label: 'Surface pressure',
-      value: pressurised(pressure),
+      value: pressurized(pressure),
       note: `${significant(pressure / 101_325)} atm`,
     },
     {
@@ -1607,7 +1607,7 @@ function period(seconds: Seconds): string {
   return `${round(s, 1)} s`
 }
 
-function pressurised(pascals: number): string {
+function pressurized(pascals: number): string {
   if (pascals >= 1e5) return `${significant(pascals / 1e5)} bar`
   if (pascals >= 100) return `${significant(pascals / 1000)} kPa`
   return `${significant(pascals)} Pa`

@@ -30,6 +30,7 @@
     "knip": "knip --no-config-hints --no-exit-code",
     "knip:check": "knip --no-config-hints --include files,dependencies,unlisted,unresolved",
     "spelling": "node scripts/spelling/scan.mjs",
+    "spelling:check": "node scripts/spelling/scan.mjs --check",
     "graph": "node scripts/check-graph.mjs",
     "brand": "node scripts/brand/build.mjs",
     "brand:check": "node scripts/brand/build.mjs --check",
@@ -45,7 +46,7 @@
     "solar:fetch": "node apps/ingest/src/main.ts solar",
     "shapes:build": "node apps/ingest/src/main.ts shapes",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
-    "check": "pnpm graph && pnpm brand:check && pnpm presets:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:slow && pnpm build"
+    "check": "pnpm graph && pnpm spelling:check && pnpm brand:check && pnpm presets:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:slow && pnpm build"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",

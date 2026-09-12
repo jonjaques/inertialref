@@ -569,7 +569,7 @@ destinations and the population is the scenery between them.
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | ~~No CI configuration~~ ✅     | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                              |
 | ~~No formatter~~ ✅            | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review |
-| No stored save fixture         | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk                          |
+| No stored save fixture         | Compatibility testing currently synthesizes old saves in-test rather than loading a real one from disk                          |
 | No controlled performance gate | Physical GPU correctness tests exist; timing regression needs stable hardware, see above                                        |
 | No automated image comparison  | Preset plates and scripted camera frames supply reproducible fixtures; automated visual comparison still needs stable GPU CI    |
 

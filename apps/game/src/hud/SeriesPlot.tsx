@@ -45,7 +45,7 @@ export function SeriesPlot({
 }) {
   // The series reference is stable and its contents are not, which is the same
   // trap `PerfPanel` describes. The `useMemo` below is the other kind — a stable
-  // object, not a memoised computation — and stays.
+  // object, not a memoized computation — and stays.
   'use no memo'
 
   // Allocated once per mount and written into every read. The panel re-renders
