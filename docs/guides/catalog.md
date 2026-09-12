@@ -448,7 +448,8 @@ vertical smear. The scale calibrates itself against the height field's own range
 rather than a documented unit, which is the fix for a bug that produced a valid
 file and a **perfectly flat Moon**: `toColorspace('b-w')` is 8-bit in libvips,
 so it silently downcast LOLA's 16-bit product and every gradient came out 256
-times too small. `gray16` is the one that preserves it.
+times too small. `grey16` is the one that preserves it, and it keeps the British
+spelling because it is a libvips interpretation nickname rather than a word.
 
 **Luminance to alpha.** A cloud map published as a grayscale JPEG is a coverage
 mask wearing a color image's clothes. Drawn as color it is a gray shell over

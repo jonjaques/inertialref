@@ -1079,7 +1079,9 @@ scatter through the standard slab result rather than a Lambert stand-in.
 `raw({depth:'ushort'})` widened the container back to two bytes without restoring
 the range. Every gradient came out 256× too small and the Moon's normal map was
 _perfectly flat_ — a valid file, a plausible pipeline, and no error anywhere.
-`gray16` is the one that preserves it, and the meters-per-value scale now
+`grey16` is the one that preserves it — a libvips interpretation nickname, which
+is why it keeps the British spelling; sharp accepts `gray16` and silently leaves
+the pipeline in three-channel sRGB16. The meters-per-value scale now
 calibrates itself against the field's own range so a unit bug of this class
 cannot recur.
 

@@ -65,7 +65,7 @@ above. It is written to be read.
 - `docs/architecture.md` — the system in one sitting
 - `docs/adr/` — the twelve foundational decisions, with their alternatives
 - `docs/design/` — the game design bible
-- `docs/guides/catalogue.md` — how the star catalog is built and what it stores
+- `docs/guides/catalog.md` — how the star catalog is built and what it stores
 - `CONTEXT.md` — the build log
 
 ## Attribution

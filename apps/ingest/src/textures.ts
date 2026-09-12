@@ -136,18 +136,26 @@ async function elevationToNormal(
   const relief = source.relief ?? 1_000
 
   /*
-   * `gray16`, not `b-w`, and this is the whole reason the Moon was flat.
+   * `grey16`, not `b-w`, and this is the whole reason the Moon was flat.
    *
    * libvips calls 8-bit grayscale `b-w`, so `toColorspace('b-w')` on LOLA's
    * 16-bit product *downcasts* it, and a following `raw({depth:'ushort'})`
    * widens the container back to two bytes without restoring the range. The
    * result is a valid file, a plausible-looking pipeline, and every gradient 256
    * times too small.
+   *
+   * `grey16` keeps its British spelling because it is not a word here: it is a
+   * `VipsInterpretation` nickname, and libvips publishes no `gray16`. Sharp
+   * does not reject the American spelling — it passes the string through, the
+   * pipeline stays in three-channel sRGB16, and `data` comes back three times
+   * as long with the samples interleaved, so `at` reads the wrong pixel and the
+   * flat Moon comes back. Measured on sharp 0.35.4 with an 8×8 single-channel
+   * 16-bit source: `grey16` returns 128 bytes, `gray16` returns 384.
    */
   const sixteen = (await open(bytes).metadata()).depth === 'ushort'
   const data = await open(bytes)
     .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
-    .toColorspace(sixteen ? 'gray16' : 'b-w')
+    .toColorspace(sixteen ? 'grey16' : 'b-w')
     .raw({ depth: sixteen ? 'ushort' : 'uchar' })
     .toBuffer()
 

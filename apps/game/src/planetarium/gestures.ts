@@ -199,8 +199,8 @@ export function gestureStep(
   return {
     orbit: pinching ? { x: 0, y: 0 } : moved,
     zoom: pinching ? pinchFactor(previous.spread, currentSpread) : 1,
-    center: center,
+    center,
     spread: currentSpread,
-    traveled: traveled,
+    traveled,
   }
 }

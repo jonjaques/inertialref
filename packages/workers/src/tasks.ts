@@ -148,7 +148,8 @@ export const generateCellTask = defineTask<
   GenerateCellResponse
 >({
   name: 'universe.generateCell',
-  version: 3,
+  // 4: `GeneratedStar` spells the fields `color` and `cataloged`.
+  version: 4,
   run({ seed, cell, context }) {
     return {
       cell,
@@ -176,7 +177,8 @@ export const surveyRegionTask = defineTask<
   GenerateCellResponse[]
 >({
   name: 'universe.surveyRegion',
-  version: 3,
+  // 4: the request key is `cataloged`, and the reply carries a v4 star.
+  version: 4,
   run(
     { seed, min, max, cataloged, completeRadius, magnitudeCoverage },
     context,
@@ -224,7 +226,8 @@ export interface SurveySkyResponse {
 }
 export const surveySkyTask = defineTask<SurveySkyRequest, SurveySkyResponse>({
   name: 'universe.surveySky',
-  version: 2,
+  // 3: `SkyStar` spells the field `color`.
+  version: 3,
   run(request, context) {
     const result = selectPopulationSky(
       createGalaxyField(parseSeed(request.seed)),

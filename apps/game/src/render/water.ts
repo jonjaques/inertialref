@@ -444,7 +444,7 @@ export function createWaterMaterial(
   return {
     material,
     sunDirection,
-    sunColor: sunColor,
+    sunColor,
     sunIntensity,
     time,
     setPixelAngle(radians) {

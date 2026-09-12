@@ -461,11 +461,11 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
 
   return {
     material,
-    center: center,
+    center,
     outerRadius,
     innerRadius,
     sunDirection,
-    sunColor: sunColor,
+    sunColor,
     spinAxis,
     flattening,
     setScattering(recipe, transmittance, multiScatter) {
@@ -635,7 +635,7 @@ export function createStarfieldMaterial(
   return {
     material,
     positions,
-    colors: colors,
+    colors,
     prominence,
     visibility,
     integrated,
