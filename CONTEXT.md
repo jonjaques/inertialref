@@ -9379,7 +9379,10 @@ freezes the film. The chosen instant puts the Sun 3° above the horizon at
 azimuth 266.677°; rotating the pad heading to 246° keeps that real Sun beside
 the Roci during the pullback. The opening three-quarter profile is framed by
 a 0.3–0.9° ground telephoto. Touchdown occurs at 41 seconds with zero sampled
-velocity and no burn. Heat, plume, and dust are functions of the playhead.
+velocity and the drive still carrying the hull: the last metre of the approach
+is a hover, so the cut begins at contact and is out three quarters of a second
+later, and the dust settles from the same instant. Heat, plume, and dust are
+functions of the playhead.
 
 Cinema's direct URL initially returned 404 even though the director could
 play the scene: Astro's document routes had their own list. Both now consume

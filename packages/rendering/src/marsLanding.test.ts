@@ -4,6 +4,7 @@ import { Vec } from '@inertialref/spatial'
 import {
   marsApproach,
   marsLandingDrives,
+  MARS_CUTOFF_SECONDS,
   MARS_TOUCHDOWN_SECONDS,
 } from './marsLanding.ts'
 
@@ -41,6 +42,23 @@ describe('Mars approach', () => {
     expect(marsLandingDrives(12).throttle).toBe(1)
     expect(marsLandingDrives(20).entryHeat).toBe(0)
     expect(marsLandingDrives(38).landingDust).toBeGreaterThan(0.6)
-    expect(marsLandingDrives(41).throttle).toBe(0)
+    expect(
+      marsLandingDrives(MARS_TOUCHDOWN_SECONDS + MARS_CUTOFF_SECONDS).throttle,
+    ).toBe(0)
+  })
+
+  it('holds the drive through the settle and cuts it only after the deck takes the weight', () => {
+    // Nothing else holds the hull up while the last metre is descended, so
+    // the throttle cannot fall between the start of the hover and contact.
+    const hover = marsLandingDrives(38).throttle
+    expect(hover).toBeGreaterThan(0.1)
+    for (let seconds = 38; seconds <= MARS_TOUCHDOWN_SECONDS; seconds += 0.25)
+      expect(marsLandingDrives(seconds).throttle).toBeCloseTo(hover, 6)
+    expect(
+      marsLandingDrives(MARS_TOUCHDOWN_SECONDS + 0.3).throttle,
+    ).toBeLessThan(hover)
+    expect(
+      marsLandingDrives(MARS_TOUCHDOWN_SECONDS + 0.3).throttle,
+    ).toBeGreaterThan(0)
   })
 })

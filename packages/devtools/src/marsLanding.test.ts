@@ -81,7 +81,10 @@ describe('Mars landing', () => {
   it('meets the pad upright, extinguishes the burn, and holds the landed photograph', () => {
     const { world } = openSession()
     const script = MARS_LANDING.prepare(world)
-    const end = script.sample(41 * 24)
+    // The deck takes the weight at 41 s with the drive still lit; the burn is
+    // out by 42 s and the photograph holds from there.
+    expect(script.sample(41 * 24).ship.throttle).toBeGreaterThan(0)
+    const end = script.sample(42 * 24)
     const stage = end.stage!
     const offset = Q.rotateInverse(
       stage.orientation,

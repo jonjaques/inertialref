@@ -100,15 +100,25 @@ export function marsLandingFov(seconds: number): number {
   return 34
 }
 
+/** The drive is out three quarters of a second after the deck takes the weight. */
+export const MARS_CUTOFF_SECONDS = 0.75
+
 export function marsLandingDrives(seconds: number) {
   const { offset } = marsApproach(seconds)
   const ignition = smooth((seconds - 8) / 2)
-  const cutoff = 1 - smooth((seconds - 39.5) / 1.5)
+  // The drive carries the ship until the deck does. The last metre of the
+  // approach is a hover, and a burn that fades through it leaves nothing
+  // holding the hull up at contact; the cut begins at touchdown.
+  const cutoff =
+    1 - smooth((seconds - MARS_TOUCHDOWN_SECONDS) / MARS_CUTOFF_SECONDS)
   return {
     entryHeat:
       (0.55 + 0.45 * smooth(seconds / 3)) * (1 - smooth((seconds - 9) / 8)),
     throttle: ignition * (1 - 0.82 * smooth((seconds - 12) / 26)) * cutoff,
+    // Dust is what the plume raises, so it settles once the plume is out.
     landingDust:
-      0.7 * smooth((130 - offset.y) / 100) * (1 - smooth((seconds - 40) / 5)),
+      0.7 *
+      smooth((130 - offset.y) / 100) *
+      (1 - smooth((seconds - MARS_TOUCHDOWN_SECONDS) / 4)),
   }
 }
