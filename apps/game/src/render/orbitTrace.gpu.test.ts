@@ -3,10 +3,16 @@ import {
   BufferAttribute,
   BufferGeometry,
   Line,
+  LineSegments,
+  Mesh,
+  MeshBasicNodeMaterial,
+  SphereGeometry,
   LineBasicNodeMaterial,
   OrthographicCamera,
   Scene,
 } from 'three/webgpu'
+import { Quaternion as Q, vec3 } from '@inertialref/spatial'
+import { clipOccludedSegment, type Occluder } from '@inertialref/rendering'
 import { createOrbitTraceMaterial } from './orbitTrace.ts'
 import { sensorRadiance, setSceneExposure } from './radiance.ts'
 import { openGpu, type GpuSession, type Pixels } from './gpuHarness.ts'
@@ -74,5 +80,73 @@ it('presents at one brightness from a 1/40,000 s snapshot to a 2,400 s instrumen
     setSceneExposure(renderer, null)
     trace.dispose()
     exposed.dispose()
+  }
+})
+
+it('draws the visible pieces around an opaque disk and preserves a foreground transit', async () => {
+  const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 10)
+  camera.position.z = 1
+  camera.updateMatrixWorld()
+  const material = createOrbitTraceMaterial()
+  const diskMaterial = new MeshBasicNodeMaterial({ color: 0xff0000 })
+  const diskGeometry = new SphereGeometry(0.2, 32, 16)
+  const disk = new Mesh(diskGeometry, diskMaterial)
+  const scene = new Scene()
+  scene.add(disk)
+  const occluder: Occluder = {
+    address: 'planet',
+    center: vec3(0, 0, -10),
+    axes: vec3(2, 2, 2),
+    inverse: Q.IDENTITY,
+    bounds: [-Infinity, Infinity, -Infinity, Infinity],
+  }
+  const trace = (z: number): LineSegments => {
+    const values: number[] = []
+    clipOccludedSegment(
+      vec3(z / 2, 0, z),
+      vec3(-z / 2, 0, z),
+      [occluder],
+      (a, b) => {
+        for (const p of [a, b]) values.push(p.x / -p.z, p.y / -p.z, 0.5)
+      },
+    )
+    const geometry = new BufferGeometry()
+    geometry.setAttribute(
+      'position',
+      new BufferAttribute(new Float32Array(values), 3),
+    )
+    return new LineSegments(geometry, material)
+  }
+  const behind = trace(-20),
+    front = trace(-5)
+  try {
+    scene.add(behind)
+    scene.updateMatrixWorld(true)
+    const hidden = await gpu.draw(scene, camera, {
+      width: 64,
+      height: 64,
+      float: true,
+    })
+    for (let y = 31; y <= 32; y++)
+      for (let x = 28; x <= 35; x++)
+        expect(hidden.at(x, y)[2]).toBeLessThan(0.001)
+    expect(brightest(hidden)[0]).toBeGreaterThan(0.9)
+    scene.remove(behind)
+    scene.add(front)
+    scene.updateMatrixWorld(true)
+    const transit = await gpu.draw(scene, camera, {
+      width: 64,
+      height: 64,
+      float: true,
+    })
+    expect(
+      Math.max(transit.at(32, 31)[2], transit.at(32, 32)[2]),
+    ).toBeGreaterThan(0.2)
+  } finally {
+    behind.geometry.dispose()
+    front.geometry.dispose()
+    material.dispose()
+    diskMaterial.dispose()
+    diskGeometry.dispose()
   }
 })

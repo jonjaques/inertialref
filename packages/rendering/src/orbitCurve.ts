@@ -64,7 +64,9 @@ export function tessellateOrbit(
   pixelsPerRadian: number,
   size: { width: number; height: number },
   emit: (a: Vec3, b: Vec3) => void,
-): void {
+): number {
+  let nearDepth = Infinity
+  let splits = 0
   const at = (t: number): Vec3 =>
     Vec.add(
       curve.center,
@@ -118,13 +120,15 @@ export function tessellateOrbit(
     )
     if (outside([a, b, control])) return
     if (
-      depth < 8 &&
+      depth < 24 &&
+      splits < 4096 - 16 &&
       Math.max(
         error(a, b, m),
         error(a, b, at((lo + mid) / 2)),
         error(a, b, at((mid + hi) / 2)),
       ) > 0.25
     ) {
+      splits++
       walk(lo, mid, a, m, depth + 1)
       walk(mid, hi, m, b, depth + 1)
     } else {
@@ -132,6 +136,7 @@ export function tessellateOrbit(
       if (a.z >= -1 && b.z >= -1) return
       if (a.z >= -1) a = Vec.lerp(a, b, (-1 - a.z) / (b.z - a.z))
       if (b.z >= -1) b = Vec.lerp(a, b, (-1 - a.z) / (b.z - a.z))
+      nearDepth = Math.min(nearDepth, -a.z, -b.z, -control.z)
       emit(a, b)
     }
   }
@@ -140,4 +145,32 @@ export function tessellateOrbit(
       hi = ((i + 1) * Math.PI * 2) / 16
     walk(lo, hi, at(lo), at(hi), 0)
   }
+  return nearDepth
+}
+
+/** Conservative screen displacement for a translated/rotated ellipse's visible arcs. */
+export function orbitViewChange(
+  before: Omit<OrbitCurve, 'anchor'>,
+  after: Omit<OrbitCurve, 'anchor'>,
+  nearDepth: number,
+  perRadian: number,
+  size: { width: number; height: number },
+): number {
+  if (nearDepth === Infinity) {
+    return tessellateOrbit(after, perRadian, size, () => {}) === Infinity
+      ? 0
+      : Infinity
+  }
+  if (!Number.isFinite(nearDepth) || nearDepth <= 0) return Infinity
+  const movement = (axis: 'x' | 'y' | 'z'): number =>
+    Math.abs(before.center[axis] - after.center[axis]) +
+    Math.hypot(
+      before.cosine[axis] - after.cosine[axis],
+      before.sine[axis] - after.sine[axis],
+    )
+  const dz = movement('z')
+  if (dz >= nearDepth) return Infinity
+  const dx = movement('x') + (size.width / (2 * perRadian)) * dz
+  const dy = movement('y') + (size.height / (2 * perRadian)) * dz
+  return (perRadian * Math.hypot(dx, dy)) / (nearDepth - dz)
 }

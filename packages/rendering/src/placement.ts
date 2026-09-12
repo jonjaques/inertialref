@@ -23,8 +23,9 @@ import { type LodThresholds, type LodTier, selectLod } from './lod.ts'
  * Everything beyond the near field is therefore moved onto a logarithmically
  * compressed radial scale and scaled by the same factor. Because position and
  * radius are scaled together, the *angular* size is preserved exactly — the
- * image is correct, only the depth is a lie. The compression is monotonic in
- * distance, so occlusion ordering survives, which a single far shell would not.
+ * image is correct, only the depth is a lie. The mapping is monotonic for a
+ * fixed radius; different radii can reverse depth ordering. Orbit traces and
+ * labels therefore resolve visibility in physical coordinates (`occlusion.ts`).
  *
  * Radial *from the eye*, which is why every entry point here takes one. The
  * render origin is a nearby grid point, not the camera, and compressing about
@@ -190,20 +191,11 @@ export function placeAt(
 /**
  * Place a whole path into a vertex buffer, the way `placeAt` places one point.
  *
- * Same arithmetic, no `RenderPlacement`. `OrbitTraces` re-places every vertex
- * of every visible trace every frame — correctly, because compression is
- * radial about the eye and the eye moves — and eight traces of 97 points was
- * ~800 `placeAt` calls and several thousand short-lived objects a frame: the
- * span read 0.57 ms on the shipped build in the planetarium and fed the
- * scavenger that eats 3-5% of an idle main thread. Per point it was a
- * `UV.translate` (three `carry` objects and a result), a `difference`, a
- * `conjugate`, a `rotate`, three more vectors through `Vec.sub`/`scale`/`add`,
- * and a placement record — for three floats. It also spent a `Math.asin` and
- * an LOD selection on an angular radius and a tier that a line has no use for.
- *
- * What survives per point is the one call this must not inline: `difference`
- * is the sector arithmetic and `spatial` owns it. A copy of it in the R3F layer
- * is the defect `placeOnStarShell` exists to keep out of that layer.
+ * Same arithmetic, without allocating a `RenderPlacement`, evaluating an
+ * angular radius, or selecting an LOD tier for each point. `difference` stays
+ * in the loop because sector arithmetic belongs to `spatial`. Orbit traces
+ * use physical clipping instead; this helper preserves body-relative depth
+ * for paths that need the same placement as a body.
  *
  * @param shift - a universe-axes displacement added to every point first. The
  * caller's `UV.translate` per point was four allocations to express something

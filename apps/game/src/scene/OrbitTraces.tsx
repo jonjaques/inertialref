@@ -10,12 +10,16 @@ import { UV, Vec, type Vec3 } from '@inertialref/spatial'
 import {
   clipOccludedSegment,
   orbitCurve,
+  orbitViewChange,
+  occluderViewChange,
   pixelsPerRadian,
   sceneOccluders,
   tessellateOrbit,
   viewOrbit,
   type OrbitCurve,
+  type Occluder,
 } from '@inertialref/rendering'
+import type { OrbitPath } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createOrbitTraceMaterial } from '../render/orbitTrace.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -27,6 +31,20 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const lines = useRef(new Map<string, LineSegments>())
   const curves = useRef(new WeakMap<object, OrbitCurve>())
+  const previous = useRef(
+    new Map<
+      string,
+      {
+        path: OrbitPath
+        occluders: readonly Occluder[]
+        curve: Omit<OrbitCurve, 'anchor'>
+        nearDepth: number
+        perRadian: number
+        width: number
+        height: number
+      }
+    >(),
+  )
   const material = useMemo(() => createOrbitTraceMaterial(), [])
 
   useEffect(() => {
@@ -37,6 +55,7 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
         line.geometry.dispose()
       }
       held.clear()
+      previous.current.clear()
       material.dispose()
     }
   }, [material])
@@ -53,31 +72,21 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
     parent.position.copy(scene.camera.position)
     parent.quaternion.copy(scene.camera.orientation)
     const perRadian = pixelsPerRadian(engine.lens, size)
-    const occluders = sceneOccluders(scene)
-    const live = new Set<string>()
+    const halfX = size.width / (2 * perRadian),
+      halfY = size.height / (2 * perRadian)
+    const occluders = sceneOccluders(scene).filter(
+      ({ bounds: [left, right, bottom, top] }) =>
+        left <= halfX && right >= -halfX && bottom <= halfY && top >= -halfY,
+    )
     // A primary's translation is shared by every satellite trace.
     const shifts = new Map<string, Vec3>()
+    const prepared = []
     for (const path of engine.orbits) {
       if (path.points.length < 9) continue
-      live.add(path.address)
       let curve = curves.current.get(path.points)
       if (curve === undefined) {
         curve = orbitCurve(path.points)
         curves.current.set(path.points, curve)
-      }
-      let line = lines.current.get(path.address)
-      if (line === undefined) {
-        const geometry = new BufferGeometry()
-        geometry.setAttribute(
-          'position',
-          new BufferAttribute(new Float32Array(512 * 6), 3).setUsage(
-            DynamicDrawUsage,
-          ),
-        )
-        line = new LineSegments(geometry, material)
-        line.frustumCulled = false
-        lines.current.set(path.address, line)
-        parent.add(line)
       }
       let shift = shifts.get(path.parent)
       if (shift === undefined) {
@@ -93,6 +102,37 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
             )
           : Vec.ZERO
         shifts.set(path.parent, shift)
+      }
+      prepared.push({ path, curve: viewOrbit(curve, shift, scene) })
+    }
+    const live = new Set<string>()
+    for (const { path, curve } of prepared) {
+      live.add(path.address)
+      const held = previous.current.get(path.address)
+      if (
+        held !== undefined &&
+        held.path === path &&
+        held.width === size.width &&
+        held.height === size.height &&
+        held.perRadian === perRadian &&
+        occluderViewChange(held.occluders, occluders, perRadian, size) < 0.05 &&
+        orbitViewChange(held.curve, curve, held.nearDepth, perRadian, size) <
+          0.05
+      )
+        continue
+      let line = lines.current.get(path.address)
+      if (line === undefined) {
+        const geometry = new BufferGeometry()
+        geometry.setAttribute(
+          'position',
+          new BufferAttribute(new Float32Array(512 * 6), 3).setUsage(
+            DynamicDrawUsage,
+          ),
+        )
+        line = new LineSegments(geometry, material)
+        line.frustumCulled = false
+        lines.current.set(path.address, line)
+        parent.add(line)
       }
       let attribute = line.geometry.getAttribute('position') as BufferAttribute
       let buffer = attribute.array as Float32Array
@@ -110,9 +150,18 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
           buffer[count++] = p.z * factor
         }
       }
-      tessellateOrbit(viewOrbit(curve, shift, scene), perRadian, size, (a, b) =>
+      const nearDepth = tessellateOrbit(curve, perRadian, size, (a, b) =>
         clipOccludedSegment(a, b, occluders, emit),
       )
+      previous.current.set(path.address, {
+        path,
+        curve,
+        nearDepth,
+        occluders,
+        perRadian,
+        width: size.width,
+        height: size.height,
+      })
       if (buffer !== attribute.array) {
         // Replacing a GPU-backed attribute alone leaves its old allocation
         // alive. This line owns its geometry and shares no index buffer.
@@ -132,6 +181,7 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
       parent.remove(line)
       line.geometry.dispose()
       lines.current.delete(address)
+      previous.current.delete(address)
     }
   })
   return <group ref={group} />

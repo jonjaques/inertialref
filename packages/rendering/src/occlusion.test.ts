@@ -1,7 +1,12 @@
 import fc from 'fast-check'
 import { expect, it } from 'vitest'
 import { Quaternion as Q, Vec, vec3, type Vec3 } from '@inertialref/spatial'
-import { clipOccludedSegment, occludedAt, type Occluder } from './occlusion.ts'
+import {
+  clipOccludedSegment,
+  occludedAt,
+  occluderViewChange,
+  type Occluder,
+} from './occlusion.ts'
 
 const sphere: Occluder = {
   address: 'body',
@@ -82,4 +87,18 @@ it('agrees with ray intersections at interior points across random segments', ()
     ),
     { numRuns: 500 },
   )
+})
+
+it('does not rebuild for a sphere spinning about its axis, but notices silhouette motion', () => {
+  const spun = { ...sphere, inverse: Q.fromAxisAngle(Vec.UNIT_Y, 1) }
+  const size = { width: 1000, height: 1000 }
+  expect(occluderViewChange([sphere], [spun], 1000, size)).toBe(0)
+  expect(
+    occluderViewChange(
+      [sphere],
+      [{ ...sphere, center: vec3(0.1, 0, -10) }],
+      1000,
+      size,
+    ),
+  ).toBeGreaterThan(1)
 })

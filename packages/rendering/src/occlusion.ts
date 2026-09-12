@@ -186,3 +186,50 @@ export function clipOccludedSegment(
   for (const [lo, hi] of visible)
     emit(lo === 0 ? a : Vec.lerp(a, b, lo), hi === 1 ? b : Vec.lerp(a, b, hi))
 }
+
+/** Screen-motion bound for the solid silhouettes, including their axial rotation. */
+export function occluderViewChange(
+  before: readonly Occluder[],
+  after: readonly Occluder[],
+  perRadian: number,
+  size: { width: number; height: number },
+): number {
+  if (before.length !== after.length) return Infinity
+  let worst = 0
+  for (let i = 0; i < before.length; i++) {
+    const a = before[i]!,
+      b = after[i]!
+    if (a.address !== b.address) return Infinity
+    const radius = Math.max(
+      a.axes.x,
+      a.axes.y,
+      a.axes.z,
+      b.axes.x,
+      b.axes.y,
+      b.axes.z,
+    )
+    const dot = Math.abs(
+      a.inverse.x * b.inverse.x +
+        a.inverse.y * b.inverse.y +
+        a.inverse.z * b.inverse.z +
+        a.inverse.w * b.inverse.w,
+    )
+    const rotation =
+      2 *
+      (radius -
+        Math.min(a.axes.x, a.axes.y, a.axes.z, b.axes.x, b.axes.y, b.axes.z)) *
+      Math.sqrt(Math.max(0, 1 - Math.min(1, dot) * Math.min(1, dot)))
+    const movement =
+      Vec.distance(a.center, b.center) + Vec.distance(a.axes, b.axes) + rotation
+    const depth = Math.min(-a.center.z, -b.center.z) - radius - movement
+    if (depth <= 0) return Infinity
+    worst = Math.max(
+      worst,
+      (perRadian *
+        movement *
+        (1 + Math.hypot(size.width, size.height) / (2 * perRadian))) /
+        depth,
+    )
+  }
+  return worst
+}
