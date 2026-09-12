@@ -33,7 +33,9 @@ terrain; physical support samples canonical terrain. Nearby structures share
 the camera's render origin. Distant structures are culled before planetary
 compression can separate a full-size building from its body.
 
-The initial Mars pad is an ordinary placement seeded in a new Sol session.
+The initial Mars pad is an ordinary placement seeded in a new Milky Way
+session, whichever system it starts in; `initialStructures(galaxy)` is the
+one list a new session and a migrating save both read.
 Loading a save restores its records without seeding the pad again. Save
 schema 2 carries a typed structures array; schema 1 predates structures, so
 a Milky Way save migrates to the seeded pad and any other galaxy to an empty

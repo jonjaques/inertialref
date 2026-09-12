@@ -6,6 +6,7 @@ import type { AuthorityPort, ClientHello } from '@inertialref/net'
 import {
   bodyFrameId,
   formatAddress,
+  MARS_PAD,
   parseAddress,
   partitionForAddress,
   type PartitionKey,
@@ -119,6 +120,23 @@ describe('harness', () => {
     expect(partial.harness.world).toBe(other.world)
     other.dispose()
     partial.dispose()
+  })
+
+  it('seeds the Mars pad by galaxy, whichever system the session starts in', () => {
+    // A session opened at Alpha Centauri is still a Milky Way game with a
+    // Mars in it, and its first save migrates the pad in by galaxy; a session
+    // that seeded by start system would open without the pad its own save
+    // then carries.
+    for (const system of ['SOL', 'HIP71683']) {
+      const session = openSession({
+        seed: 'inertialref',
+        workers: null,
+        catalog: TEST_CATALOG,
+        system,
+      })
+      expect(session.world.structures, system).toEqual([MARS_PAD])
+      session.dispose()
+    }
   })
 
   it('drives the simulation deterministically', () => {

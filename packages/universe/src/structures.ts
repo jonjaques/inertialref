@@ -1,4 +1,6 @@
 import type { Meters, Radians } from '@inertialref/shared'
+import type { GalaxyId } from './address.ts'
+import { MILKY_WAY } from './galaxy.ts'
 
 /** Authored state only. Geometry and body-fixed poses derive from this record. */
 export interface SurfacePlacement {
@@ -14,11 +16,11 @@ export interface SurfacePlacement {
 }
 
 /**
- * The facility every Sol game starts with: a surveyed basin in the game's
- * Mars relief, not a named real-world site. A new Sol session places it, and
- * a save written before structures existed receives it on migration, so the
- * pad the landing scene stages is one the player can land on in every world
- * that has a Mars.
+ * The facility every Milky Way game starts with: a surveyed basin in the
+ * game's Mars relief, not a named real-world site. A new session places it
+ * through `initialStructures`, and a save written before structures existed
+ * receives it on migration, so the pad the landing scene stages is one the
+ * player can land on in every world that has a Mars.
  */
 export const MARS_PAD: SurfacePlacement = Object.freeze({
   id: 'mars-basin-pad',
@@ -29,6 +31,17 @@ export const MARS_PAD: SurfacePlacement = Object.freeze({
   height: 2,
   heading: (246 * Math.PI) / 180,
 })
+
+/**
+ * The structures a world in this galaxy begins with; a galaxy without a Mars
+ * has none. The one predicate for a new session and for a migrating save —
+ * the two decide separately, and deciding on the start system at one and the
+ * galaxy at the other leaves a world started outside Sol without the pad its
+ * own save then migrates into.
+ */
+export const initialStructures = (
+  galaxy: GalaxyId,
+): readonly SurfacePlacement[] => (galaxy === MILKY_WAY ? [MARS_PAD] : [])
 
 /** Physical dimensions of reusable scenery; the host chooses its artwork. */
 export interface SurfaceAssetDefinition {

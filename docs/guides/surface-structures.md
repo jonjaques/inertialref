@@ -30,12 +30,14 @@ removing a structure change the world and are included in its next save.
 `ir.moveStructure(record)` replaces an existing placement atomically. Reusing
 an ID with `placeStructure` is an error. Removal remains in effect after loading.
 
-The facility `mars-basin-pad` is seeded in new Sol games at 34.560341698° N,
-85.053877851° E, and into a save written before structures existed when that
-save loads. It sits two meters above the local terrain. This is a basin
-surveyed in the game's relief, not a named real-world landing site. The record
-is `MARS_PAD` in `packages/universe/src/structures.ts`, beside the asset it
-places.
+The facility `mars-basin-pad` is seeded in every new Milky Way game, whichever
+system it starts in, at 34.560341698° N, 85.053877851° E, and into a save
+written before structures existed when that save loads. It sits two meters
+above the local terrain. This is a basin surveyed in the game's relief, not a
+named real-world landing site. The record is `MARS_PAD` in
+`packages/universe/src/structures.ts`, beside the asset it places;
+`initialStructures(galaxy)` there is the one list a new session and a
+migrating save both seed from, so the two cannot disagree.
 
 ## Add an asset
 
