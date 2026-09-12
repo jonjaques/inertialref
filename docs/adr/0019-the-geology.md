@@ -186,7 +186,7 @@ a factor of three in depth. Sizing at three times the budget and letting the
 soft ceiling fold the depth back gives a thousand-kilometer basin 2.4 km deep,
 against Caloris's measured 1,550 km and ~3 km.
 
-**A step at `ICE_ROCK_DENSITY` for every icy behaviour.** The archetypes are a
+**A step at `ICE_ROCK_DENSITY` for every icy behavior.** The archetypes are a
 classification and the geology is continuous: Callisto (1,834 kg/m³) and Titan
 (1,881) are two thirds ice while Europa (3,013) is a silicate body with an ocean
 on it, and a step at 2,000 says they are the same thing. The four archetypes

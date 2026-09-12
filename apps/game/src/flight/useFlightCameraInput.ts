@@ -23,7 +23,7 @@ import {
  * What a drag *does* is the flight camera's decision, not this hook's: in
  * the orbit view it orbits, in the chase it turns the head, and the
  * secondary button turns the head in either. The keys are the same shape —
- * `flight.view` cycles the view and `flight.recentre` levels the head — and
+ * `flight.view` cycles the view and `flight.recenter` levels the head — and
  * they are ids, so the hint that names them reads the live chord.
  */
 
@@ -37,8 +37,8 @@ export function useFlightCameraInput(
   useActions(['flight.view'], () => {
     engine.harness.flightCamera.cycleView()
   })
-  useActions(['flight.recentre'], () => {
-    engine.harness.flightCamera.recentre()
+  useActions(['flight.recenter'], () => {
+    engine.harness.flightCamera.recenter()
   })
 
   useEffect(() => {
@@ -72,7 +72,7 @@ export function useFlightCameraInput(
       node.setPointerCapture(event.pointerId)
       down.set(event.pointerId, local(event))
       const points = [...down.values()]
-      phase = { centre: centroid(points), spread: spread(points) }
+      phase = { center: centroid(points), spread: spread(points) }
       if (down.size === 1) looking = event.button === 2
     }
 
@@ -100,7 +100,7 @@ export function useFlightCameraInput(
       }
       // A finger lifted from a pinch: re-seed, or the camera lurches.
       const points = [...down.values()]
-      phase = { centre: centroid(points), spread: spread(points) }
+      phase = { center: centroid(points), spread: spread(points) }
     }
 
     const onWheel = (event: WheelEvent): void => {

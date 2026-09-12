@@ -11,7 +11,7 @@
  * point.** A label is a word — the Record register, proportional, sentence
  * case — and a value is a reading the simulation produced — the Instrument
  * register, monospaced and tabular. They used to be the same monospace at the
- * same size in two grades of grey, which meant a column of forty rows had one
+ * same size in two grades of gray, which meant a column of forty rows had one
  * texture and the eye had nothing to catch on. Face is the strongest axis
  * available for a distinction this repetitive, and it costs no space at all.
  */

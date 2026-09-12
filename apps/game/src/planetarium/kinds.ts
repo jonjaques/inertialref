@@ -151,7 +151,7 @@ export function acceptsRow(
 }
 
 /**
- * A star's own colour as a CSS string, or null for a body.
+ * A star's own color as a CSS string, or null for a body.
  *
  * The catalog carries **linear** sRGB — the value the renderer lights the sky
  * with — and CSS wants the gamma-encoded form, so this is the transfer function
@@ -166,13 +166,13 @@ export function acceptsRow(
  * get to be a nicer orange." At 0.45 it turned the whole neighborhood into pale
  * peach and Sirius into off-white, which is a rail of nine identical dots.
  *
- * It does not need one. `blackbodyColour` normalizes the brightest channel to
+ * It does not need one. `blackbodyColor` normalizes the brightest channel to
  * 1, so every star has a channel at full and no glyph can come out dim — the
  * legibility the floor was buying is already there, and the hue is what was
  * being spent for it.
  */
-export function starColour(colour: TravelTarget['colour']): string | null {
-  if (colour === null) return null
+export function starColor(color: TravelTarget['color']): string | null {
+  if (color === null) return null
   const channel = (linear: number): number => {
     const value = Math.min(1, Math.max(0, linear))
     const encoded =
@@ -181,7 +181,7 @@ export function starColour(colour: TravelTarget['colour']): string | null {
         : 1.055 * Math.pow(value, 1 / 2.4) - 0.055
     return Math.round(encoded * 255)
   }
-  return `rgb(${channel(colour.r)} ${channel(colour.g)} ${channel(colour.b)})`
+  return `rgb(${channel(color.r)} ${channel(color.g)} ${channel(color.b)})`
 }
 
 /**

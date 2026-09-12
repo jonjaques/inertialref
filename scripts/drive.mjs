@@ -52,7 +52,7 @@ import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile, rm } from 'node:fs/promises'
 import { parseArgs, promisify } from 'node:util'
-import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
+import { analyzeFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveUrl } from './driveUrl.mjs'
@@ -152,7 +152,7 @@ Steps run in the order they are written, in one browser session:
                      min..max summary. A still cannot show a strobe
   --cast <n>         n rendered frames over a screencast, written to
                      .data/drive/cast/ and differenced: reports the frames that
-                     differ from both neighbours while the neighbours match each
+                     differ from both neighbors while the neighbors match each
                      other, their period, and the rate in Hz. That shape is a
                      strobe; motion produces none. Writes cast.mp4 when ffmpeg
                      is installed, which is the artifact worth attaching
@@ -1032,7 +1032,7 @@ async function main() {
         const dir = path.join(RIG, 'cast')
         await rm(dir, { recursive: true, force: true })
         const cast = await castFrames(send, subscribe, n, dir)
-        const analysis = await analyseFrames(cast.paths, cast.timestamps)
+        const analysis = await analyzeFrames(cast.paths, cast.timestamps)
         // The map is the answer to "where", which the counts never give. Only
         // for the first isolated frame: one picture makes the point and a
         // hundred is a directory nobody opens.

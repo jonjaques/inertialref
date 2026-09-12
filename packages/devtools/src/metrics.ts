@@ -11,7 +11,7 @@
  * - **`push` runs once per frame and must not allocate.** An overlay that adds
  *   garbage-collection pressure to the frame it is measuring is measuring
  *   itself. It is a write into a preallocated `Float64Array` and an index bump.
- * - **`summarise` runs at the rate a human reads**, eight times a second, over a
+ * - **`summarize` runs at the rate a human reads**, eight times a second, over a
  *   few hundred samples. It sorts, because a p95 wants sorting and 240 elements
  *   is nothing at 8 Hz; the scratch buffer it sorts in is allocated once.
  *
@@ -91,7 +91,7 @@ export class Series {
     return written
   }
 
-  summarise(): SeriesStats {
+  summarize(): SeriesStats {
     if (this.#count === 0) return EMPTY
     // Reading slots `0..count` covers the window in both states and needs no
     // wrap: before the ring has filled, those are exactly the samples written;

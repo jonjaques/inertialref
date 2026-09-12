@@ -29,7 +29,7 @@ import {
   type SkySelection,
 } from './format.ts'
 import {
-  blackbodyColour,
+  blackbodyColor,
   effectiveTemperature,
   estimateMass,
   type LinearRgb,
@@ -89,11 +89,11 @@ export interface StarPhysical {
   readonly massBasis: 'derived' | 'typical'
   readonly temperature: Kelvin
   /** Linear sRGB of a blackbody at `temperature`, brightest channel normalized. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   /** Absolute visual magnitude as published, or null. */
   readonly absoluteMagnitude: number | null
   /** Color index B−V as published, or null. */
-  readonly colourIndex: number | null
+  readonly colorIndex: number | null
   /**
    * True when the physical values above rest on a fallback rather than a
    * measurement — no magnitude, or no classification. The system panel says so
@@ -174,7 +174,7 @@ export interface StarCatalog {
    */
   search(text: string, limit?: number): readonly CatalogStar[]
   /** Every star of the volume within `radius` of a point, unordered. */
-  within(centre: UniverseVector, radius: Meters): readonly CatalogStar[]
+  within(center: UniverseVector, radius: Meters): readonly CatalogStar[]
   /**
    * The volume's stars in one generation cell. The procedural fill needs the
    * count, which is why the sky's stars are not here; see `sky`.
@@ -192,11 +192,11 @@ const FALLBACK_LUMINOSITY = 0.02
 
 function derivePhysical(packed: PackedStar, type: SpectralType): StarPhysical {
   const temperature =
-    effectiveTemperature(type, packed.colourIndex) ?? FALLBACK_TEMPERATURE
+    effectiveTemperature(type, packed.colorIndex) ?? FALLBACK_TEMPERATURE
   const evolved = isGiant(type)
   const estimated =
     packed.absoluteMagnitude === null ||
-    (packed.colourIndex === null && type.spectralClass === null)
+    (packed.colorIndex === null && type.spectralClass === null)
 
   const solarLuminosities =
     packed.absoluteMagnitude === null
@@ -213,9 +213,9 @@ function derivePhysical(packed: PackedStar, type: SpectralType): StarPhysical {
     solarMasses: mass.solarMasses,
     massBasis: mass.basis,
     temperature,
-    colour: blackbodyColour(temperature),
+    color: blackbodyColor(temperature),
     absoluteMagnitude: packed.absoluteMagnitude,
-    colourIndex: packed.colourIndex,
+    colorIndex: packed.colorIndex,
     estimated,
   }
 }
@@ -694,11 +694,11 @@ class DecodedCatalog implements StarCatalog {
     return this.#byCell.get(cellKey(cell)) ?? []
   }
 
-  within(centre: UniverseVector, radius: Meters): readonly CatalogStar[] {
+  within(center: UniverseVector, radius: Meters): readonly CatalogStar[] {
     const found: CatalogStar[] = []
-    for (const cell of cellsWithin(centre, radius))
+    for (const cell of cellsWithin(center, radius))
       for (const star of this.inCell(cell))
-        if (UV.distance(star.position, centre) <= radius) found.push(star)
+        if (UV.distance(star.position, center) <= radius) found.push(star)
     return found
   }
 }
@@ -745,7 +745,7 @@ const SOL_ROW: PackedStar = {
   y: 0,
   z: 0,
   absoluteMagnitude: 4.85,
-  colourIndex: 0.656,
+  colorIndex: 0.656,
   spectralType: 'G2V',
   components: 1,
   provenance: 'observed',

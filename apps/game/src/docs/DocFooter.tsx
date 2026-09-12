@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
 import type { DocManifest, DocPage } from './content.ts'
-import { neighbours } from './docsNav.ts'
+import { neighbors } from './docsNav.ts'
 
 /**
  * The end of a page: where to go next, and where the words are kept.
@@ -26,7 +26,7 @@ export function DocFooter({
   route: string
   page: DocPage
 }) {
-  const { previous, next } = neighbours(manifest, route)
+  const { previous, next } = neighbors(manifest, route)
   const label = (at: string): string =>
     manifest.pages[at]?.label ?? manifest.pages[at]?.title ?? at
 

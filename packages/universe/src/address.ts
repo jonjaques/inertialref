@@ -372,7 +372,7 @@ export function systemOf(address: UniverseAddress): SystemId | null {
 /**
  * Runtime identity of a simulated thing.
  *
- * Two flavours, deliberately distinguishable at a glance:
+ * Two flavors, deliberately distinguishable at a glance:
  *
  *   `@g:milky-way/s:SOL/b:2`  — a generated entity, identity is its address
  *   `#7`                      — a dynamic entity (player ship, spawned object)

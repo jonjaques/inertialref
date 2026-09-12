@@ -94,15 +94,15 @@ export interface TravelTarget {
   /** Spectral type on a system row, null on a body. */
   readonly spectralType: string | null
   /**
-   * The star's own colour, linear sRGB, or null on a body row.
+   * The star's own color, linear sRGB, or null on a body row.
    *
    * A measurement rather than decoration: `docs/design/art.md` puts a star's
-   * colour on the list of things the game may not invent, because it follows
+   * color on the list of things the game may not invent, because it follows
    * from the effective temperature. A K dwarf is orange and does not get to be
    * a nicer orange. Carried here rather than looked up from the class letter,
    * so the glyph in the catalog and the disk in the sky are the same number.
    */
-  readonly colour: {
+  readonly color: {
     readonly r: number
     readonly g: number
     readonly b: number
@@ -123,7 +123,7 @@ export interface TravelTarget {
 }
 
 /** The scalar half of a row: every field `sameTargets` compares with `!==`. */
-type ComparedField = Exclude<keyof TravelTarget, 'distance' | 'colour'>
+type ComparedField = Exclude<keyof TravelTarget, 'distance' | 'color'>
 
 /**
  * `true` for a field `!==` can decide, and `never` for one it cannot.
@@ -158,7 +158,7 @@ type ByIdentity<T> = [T] extends [string | number | boolean | null | undefined]
  * moment the field is declared, which is the only moment anyone is looking.
  *
  * Two keys are deliberately not in it. `distance` is the exclusion
- * `sameTargets` is about. `colour` is a nested value, so `!==` on it is true on
+ * `sameTargets` is about. `color` is a nested value, so `!==` on it is true on
  * every sweep and would defeat the whole bail-out; it is compared component-wise
  * below.
  */
@@ -206,8 +206,8 @@ export function sameTargets(
     const x = a[i] as TravelTarget
     const y = b[i] as TravelTarget
     for (const key of COMPARED_KEYS) if (x[key] !== y[key]) return false
-    const cx = x.colour
-    const cy = y.colour
+    const cx = x.color
+    const cy = y.color
     if (cx === null || cy === null) {
       if (cx !== cy) return false
     } else if (cx.r !== cy.r || cx.g !== cy.g || cx.b !== cy.b) {
@@ -295,7 +295,7 @@ export function travelTargets(
       position: UniverseVector
       detail: string
       spectralType: string
-      colour: LinearRgb
+      color: LinearRgb
       provenance: BodyProvenance
     }
   >()
@@ -310,11 +310,11 @@ export function travelTargets(
       position: stub.position,
       detail: `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`,
       spectralType: stub.spectralType,
-      colour: stub.colour,
-      // The domain word, not the storage boolean. `catalogued` says which table
+      color: stub.color,
+      // The domain word, not the storage boolean. `cataloged` says which table
       // the row came out of; `observed` says somebody pointed a telescope at it,
       // which is what the listing is actually claiming.
-      provenance: stub.catalogued ? 'observed' : 'projected',
+      provenance: stub.cataloged ? 'observed' : 'projected',
     })
   }
   for (const system of loaded.values()) {
@@ -323,10 +323,10 @@ export function travelTargets(
       position: system.position,
       detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
       spectralType: system.star.spectralType,
-      colour: system.star.colour,
+      color: system.star.color,
       // A loaded system may be outside the survey radius, so this cannot be
       // inherited from the sweep above. Asked of the catalog directly, which is
-      // the same question `catalogStub` answers with `catalogued: true` — and
+      // the same question `catalogStub` answers with `cataloged: true` — and
       // not of `observedPlanets`, which is 0 for a real star nobody has found
       // a planet around yet.
       provenance:
@@ -367,7 +367,7 @@ export function travelTargets(
       provenance: star.provenance,
       bodyKind: null,
       spectralType: star.spectralType,
-      colour: star.colour,
+      color: star.color,
       radius: system?.star.radius ?? 0,
       semiMajorAxis: 0,
       children: system === undefined ? 0 : planetCount(system),
@@ -424,7 +424,7 @@ function bodyTarget(
     provenance: body.provenance,
     bodyKind: body.kind,
     spectralType: null,
-    colour: null,
+    color: null,
     radius: body.radius,
     semiMajorAxis: body.elements.semiMajorAxis,
     children: body.moons.length,
@@ -446,7 +446,7 @@ function bodyTarget(
  * Three records can describe a system — the loaded `StarSystem`, the
  * `CatalogStar`, and a procedural stub — and a listing has to draw the same
  * row from any of them. The loaded record wins because it alone knows the
- * planet count; the catalog star carries the measured colour and the confirmed
+ * planet count; the catalog star carries the measured color and the confirmed
  * planets; the stub is what a generated star has. `undefined` when the id
  * names nothing at all.
  */
@@ -479,7 +479,7 @@ function systemTarget(
     provenance: 'projected',
     bodyKind: null,
     spectralType: system?.star.spectralType ?? stub.spectralType,
-    colour: system?.star.colour ?? stub.colour,
+    color: system?.star.color ?? stub.color,
     radius: system?.star.radius ?? 0,
     semiMajorAxis: 0,
     children: system === undefined ? 0 : planetCount(system),
@@ -636,7 +636,7 @@ function catalogStarTarget(
     provenance: 'observed' as const,
     bodyKind: null,
     spectralType: formatSpectralType(star.spectralType),
-    colour: system?.star.colour ?? star.physical.colour,
+    color: system?.star.color ?? star.physical.color,
     radius: system?.star.radius ?? 0,
     semiMajorAxis: 0,
     children: system === undefined ? star.planets.length : planetCount(system),

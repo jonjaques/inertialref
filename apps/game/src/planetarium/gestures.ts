@@ -99,11 +99,11 @@ export function centroid(points: readonly Point[]): Point | null {
  * smoothly because it is defined for any number of touches.
  */
 export function spread(points: readonly Point[]): number {
-  const centre = centroid(points)
-  if (centre === null || points.length < 2) return 0
+  const center = centroid(points)
+  if (center === null || points.length < 2) return 0
   let total = 0
   for (const point of points) {
-    total += Math.hypot(point.x - centre.x, point.y - centre.y)
+    total += Math.hypot(point.x - center.x, point.y - center.y)
   }
   return total / points.length
 }
@@ -150,12 +150,12 @@ export function delta(previous: Point | null, current: Point | null): Point {
 /** What the live pointers were doing last time this was asked. */
 export interface GesturePhase {
   /** The previous centroid, or null at the start of a gesture. */
-  readonly centre: Point | null
+  readonly center: Point | null
   /** The previous spread. Zero at the start, and with fewer than two pointers. */
   readonly spread: number
 }
 
-export const GESTURE_START: GesturePhase = { centre: null, spread: 0 }
+export const GESTURE_START: GesturePhase = { center: null, spread: 0 }
 
 /** What one move of the live pointers does to the camera. */
 export interface GestureStep extends GesturePhase {
@@ -164,7 +164,7 @@ export interface GestureStep extends GesturePhase {
   /** Multiplier on distance. Always 1 with fewer than two pointers. */
   readonly zoom: number
   /** Pixels the centroid moved, for the caller's click-versus-drag decision. */
-  readonly travelled: number
+  readonly traveled: number
 }
 
 /**
@@ -183,7 +183,7 @@ export interface GestureStep extends GesturePhase {
  * not already mean — unlike a map, where two-finger pan and pinch are genuinely
  * different gestures.
  *
- * `travelled` is reported for any finger count, because the caller's click test
+ * `traveled` is reported for any finger count, because the caller's click test
  * needs a distance and the answer "you moved" is true however many fingers did
  * it.
  */
@@ -191,16 +191,16 @@ export function gestureStep(
   previous: GesturePhase,
   points: readonly Point[],
 ): GestureStep {
-  const centre = centroid(points)
+  const center = centroid(points)
   const currentSpread = spread(points)
-  const moved = delta(previous.centre, centre)
-  const travelled = Math.hypot(moved.x, moved.y)
+  const moved = delta(previous.center, center)
+  const traveled = Math.hypot(moved.x, moved.y)
   const pinching = points.length >= 2
   return {
     orbit: pinching ? { x: 0, y: 0 } : moved,
     zoom: pinching ? pinchFactor(previous.spread, currentSpread) : 1,
-    centre,
+    center,
     spread: currentSpread,
-    travelled,
+    traveled,
   }
 }

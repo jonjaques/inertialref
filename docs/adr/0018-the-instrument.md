@@ -72,7 +72,7 @@ step further out.
 
 ### The aim is an offset on the pose, and it persists until the pose is replaced
 
-`observerPose` takes a `LookOffset` — two angles composed after the centre-aim
+`observerPose` takes a `LookOffset` — two angles composed after the center-aim
 orientation, yaw first so a look that is up and to the left does not arrive
 rolled. On the ground the offset _is_ the heading and the pitch, which the
 stance already holds.
@@ -101,7 +101,7 @@ and this is one of the things it is for.
 
 ### Compositions are one list with two placers
 
-`aim: centre | limb | specular` is a solve for a look offset — where the point
+`aim: center | limb | specular` is a solve for a look offset — where the point
 falls on the sphere, and the two angles that put it in the middle of the frame.
 With the solve in `packages/rendering`, the ship bookmarks and the drawn shots
 are one list, with two placers: the ship's, which teleports, and the

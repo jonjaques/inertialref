@@ -8,21 +8,21 @@ import { MIN_STANCE_HEIGHT } from './surfaceStance.ts'
  *
  * A viewer in orbit drags a figure onto a world and the camera goes down to
  * stand where it landed. The path it takes is the conic an unpowered body
- * would follow — a Keplerian orbit about the body's centre through the eye and
+ * would follow — a Keplerian orbit about the body's center through the eye and
  * the touchdown point, with its apoapsis at the eye. Its periapsis lies under
  * the ground, which is what makes it an *entry* rather than an orbit, and it is
  * the shape the aid draws while the figure is being dragged: the arc from the
  * eye to the point, and the rest of the conic continuing through the body.
  *
- * All of it is arithmetic over displacements from the centre, in whatever axes
+ * All of it is arithmetic over displacements from the center, in whatever axes
  * the caller supplies — body-fixed, in practice, so the touchdown point stays
  * put while the body turns — and none of it knows what a body, a frame or a
  * stance is. `devtools/observatory.ts` resolves those, exactly as it does for
  * the two arms it already has.
  *
- * Two points and a centre fix the conic once the apoapsis is placed at the eye.
+ * Two points and a center fix the conic once the apoapsis is placed at the eye.
  * With `r_a` the eye's radius, `r_t` the touchdown radius and `φ` the angle at
- * the centre between them, the polar form `r(ψ) = p / (1 − e cos ψ)` measured
+ * the center between them, the polar form `r(ψ) = p / (1 − e cos ψ)` measured
  * from apoapsis gives `r(0) = r_a` and `r(φ) = r_t`, so
  *
  *     1 − e = 2 r_t sin²(φ/2) / (r_a − r_t cos φ)      p = r_a (1 − e)
@@ -39,25 +39,25 @@ import { MIN_STANCE_HEIGHT } from './surfaceStance.ts'
 
 /** A ballistic entry, as the numbers that fix it. */
 export interface EntryArc {
-  /** The eye's distance from the centre — the conic's apoapsis. */
+  /** The eye's distance from the center — the conic's apoapsis. */
   readonly apoapsis: Meters
-  /** The touchdown point's distance from the centre. Below `apoapsis`. */
+  /** The touchdown point's distance from the center. Below `apoapsis`. */
   readonly touchdown: Meters
-  /** Angle at the centre from the eye to the touchdown point, `[0, π)`. */
+  /** Angle at the center from the eye to the touchdown point, `[0, π)`. */
   readonly sweep: Radians
   readonly eccentricity: number
   /** `1 − eccentricity`, held exactly; see the header. Zero on the radial line. */
   readonly complement: number
   /** The semi-latus rectum `p`. Zero for the radial case. */
   readonly latusRectum: Meters
-  /** Unit vector from the centre toward the eye. */
+  /** Unit vector from the center toward the eye. */
   readonly toEye: Vec3
   /** Unit vector perpendicular to `toEye`, in the plane, toward the touchdown. */
   readonly across: Vec3
 }
 
 /**
- * The conic from `eye` down to `ground`, both displacements from the centre in
+ * The conic from `eye` down to `ground`, both displacements from the center in
  * the same axes, or `null` when the eye is not above the ground.
  *
  * `ground` carries the touchdown *radius* as its length, so a caller that
@@ -111,7 +111,7 @@ export function entryArc(eye: Vec3, ground: Vec3): EntryArc | null {
 export const isRadial = (arc: EntryArc): boolean => arc.complement <= 0
 
 /**
- * Distance from the centre at an angle `psi` from apoapsis.
+ * Distance from the center at an angle `psi` from apoapsis.
  *
  * On the radial line the angle means nothing and the radius is not a function
  * of it; callers there parametrize by radius through `arcAnomaly`, which is
@@ -140,7 +140,7 @@ export function arcAnomaly(arc: EntryArc, radius: Meters): Radians {
 }
 
 /**
- * A point of the conic, as a displacement from the centre.
+ * A point of the conic, as a displacement from the center.
  *
  * `psi` from apoapsis; `radius` overrides the conic's own — the radial case
  * has no other way to say where along the line it is, and a descent that has
@@ -190,7 +190,7 @@ export function arcSamples(arc: EntryArc, count: number): readonly Vec3[] {
  *
  * What the aid draws *through* the body: the trajectory the camera does not
  * follow, which is what says the path is an entry and not an orbit. On the
- * radial line it is the chord through the centre.
+ * radial line it is the chord through the center.
  */
 export function arcContinuation(arc: EntryArc, count: number): readonly Vec3[] {
   const steps = Math.max(1, Math.floor(count) - 1)

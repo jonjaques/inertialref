@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { blackbodyColour } from '@inertialref/universe'
+import { blackbodyColor } from '@inertialref/universe'
 import {
   ACESFilmicToneMapping,
   CustomToneMapping,
@@ -25,15 +25,15 @@ const degreesApart = (a: number, b: number) =>
 it('preserves the catalog blackbody hue through the entire highlight range', async () => {
   installToneCurve(gpu.renderer, 1).natural.value = 0
   const scale = uniform(1)
-  const colour = uniform(vec3(1))
+  const color = uniform(vec3(1))
   const graph = renderOutput(
-    vec4(colour.mul(scale), 1),
+    vec4(color.mul(scale), 1),
     CustomToneMapping,
     LinearSRGBColorSpace,
   )
   for (const temperature of [3000, 10000]) {
-    const rgb = blackbodyColour(temperature)
-    colour.value.set(rgb.r, rgb.g, rgb.b)
+    const rgb = blackbodyColor(temperature)
+    color.value.set(rgb.r, rgb.g, rgb.b)
     const original = hue([rgb.r, rgb.g, rgb.b])
     let worst = 0
     for (const light of [0.1, 0.3, 1, 3, 10, 30, 100]) {

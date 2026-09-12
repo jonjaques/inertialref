@@ -1,6 +1,6 @@
-import type { Neighbour } from './navigator.ts'
+import type { Neighbor } from './navigator.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
-import { starColour } from './kinds.ts'
+import { starColor } from './kinds.ts'
 
 /**
  * Where you are, and what is around you — one rail, a few light years wide.
@@ -11,23 +11,23 @@ import { starColour } from './kinds.ts'
  * fact that one is twice as far as the other never lands. Drawn on a scale, it
  * lands immediately and costs 28 px.
  *
- * The dots are real stars at their real distances in their real colours —
- * `docs/design/art.md` puts a star's colour on the list of things this game may
+ * The dots are real stars at their real distances in their real colors —
+ * `docs/design/art.md` puts a star's color on the list of things this game may
  * not invent, so an M dwarf is the dim red one and looks it. Clicking a dot
  * flies the camera there, which makes this the fastest control in the mode for
  * the one gesture it is worth being fast at.
  *
- * The scale is `√r`, argued in `navigator.ts` § `neighbours`. The short version
+ * The scale is `√r`, argued in `navigator.ts` § `neighbors`. The short version
  * is that a survey's volume grows as r³, so linearly the whole neighborhood
  * piles into the left tenth of the rail.
  */
-export function NeighbourhoodRail({
+export function NeighborhoodRail({
   stars,
   radiusLightYears,
   target,
   onFocus,
 }: {
-  stars: readonly Neighbour[]
+  stars: readonly Neighbor[]
   radiusLightYears: number
   /** The system the camera is in, so its dot can be marked. */
   target: string | null
@@ -60,7 +60,7 @@ export function NeighbourhoodRail({
         />
         {stars.map((star) => {
           const here = star.address === target
-          const tint = starColour(star.colour)
+          const tint = starColor(star.color)
           return (
             <button
               key={star.address}

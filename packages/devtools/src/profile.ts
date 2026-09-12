@@ -291,7 +291,7 @@ export function summarizeProfile(
 
   const spans: SpanSummary[] = []
   for (const held of buckets.values()) {
-    const stats = held.series?.summarise()
+    const stats = held.series?.summarize()
     spans.push({
       track: held.track,
       name: held.name,

@@ -30,7 +30,7 @@ import { createStarExtinction, starExtinctionOrigin } from './starExtinction.ts'
 import { disposeAttributes } from './disposeAttributes.ts'
 
 export const STAR_EXTINCTION_CACHE_RADIUS_PARSECS = 0.15
-/** Shared-table M5 means: 1.5–1.7 ms; a cold catalogue correction is 3.1 ms. */
+/** Shared-table M5 means: 1.5–1.7 ms; a cold catalog correction is 3.1 ms. */
 export const STAR_EXTINCTION_BATCH_SIZE = 1024
 /** Measured M5 mean at 1–6 kpc: 0.85 ms per column, 1.65 ms with a cold Sol reference. */
 export const STAR_EXTINCTION_CPU_BATCH_SIZE = 1
@@ -41,13 +41,13 @@ const FADE_SUBMISSIONS = 6
 export interface StarExtinctionSelection {
   readonly ids: readonly string[]
   readonly positions: readonly UniverseVector[]
-  readonly catalogued: readonly boolean[]
+  readonly cataloged: readonly boolean[]
 }
 interface Source {
   readonly id: string
   slot: number
   readonly position: UniverseVector
-  readonly catalogued: boolean
+  readonly cataloged: boolean
   readonly version: number
   written: number
   queued: number
@@ -100,7 +100,7 @@ export class StarExtinctionSchedule {
     const changedSelection =
       selection.ids !== this.#selection?.ids ||
       selection.positions !== this.#selection?.positions ||
-      selection.catalogued !== this.#selection?.catalogued
+      selection.cataloged !== this.#selection?.cataloged
     this.#observer = observer
     const moved =
       observer === null ||
@@ -134,7 +134,7 @@ export class StarExtinctionSchedule {
     if (changedField || changedSelection) {
       invariant(
         selection.ids.length === selection.positions.length &&
-          selection.ids.length === selection.catalogued.length &&
+          selection.ids.length === selection.cataloged.length &&
           selection.ids.length <= this.capacity,
         'Star extinction selection arrays must agree and fit their capacity',
       )
@@ -144,7 +144,7 @@ export class StarExtinctionSchedule {
       for (let index = 0; index < selection.ids.length; index++) {
         const id = selection.ids[index]!,
           position = selection.positions[index]!,
-          catalogued = selection.catalogued[index]!
+          cataloged = selection.cataloged[index]!
         // Worker replies clone coordinates, but most identities keep their index.
         const atIndex = this.#selected[index]
         const previous = atIndex?.id === id ? atIndex : this.#sources.get(id)
@@ -156,7 +156,7 @@ export class StarExtinctionSchedule {
         if (
           previous !== undefined &&
           !changedField &&
-          previous.catalogued === catalogued &&
+          previous.cataloged === cataloged &&
           UV.equals(previous.position, position)
         ) {
           previous.selection = epoch
@@ -165,7 +165,7 @@ export class StarExtinctionSchedule {
           const source: Source = {
             id,
             position: { ...position },
-            catalogued,
+            cataloged,
             slot: previous?.slot ?? -1,
             version: ++this.#version,
             written: 0,
@@ -196,7 +196,7 @@ export class StarExtinctionSchedule {
       UV.distance(this.#origin, SUN_POSITION) === 0
     )
       for (const source of this.#selected)
-        if (source.catalogued && source.written !== this.#generation) {
+        if (source.cataloged && source.written !== this.#generation) {
           source.written = this.#generation
           source.corrected = [1, 1, 1]
           source.previous = undefined
@@ -340,7 +340,7 @@ function cpuColumns(capacity: number) {
   }
 }
 
-/** Bounded retained RGB transport, with the catalogue calibrated at its actual observing origin. */
+/** Bounded retained RGB transport, with the catalog calibrated at its actual observing origin. */
 export class StarExtinctionCache {
   readonly schedule: StarExtinctionSchedule
   readonly #gpu: ReturnType<typeof gpuColumns> | null
@@ -414,16 +414,16 @@ export class StarExtinctionCache {
           source = positions.element(index).toVar(),
           version = versions.element(index).toVar()
         const metadata = stamp.element(index).toVar()
-        const catalogued = source.w.greaterThan(0.5)
+        const cataloged = source.w.greaterThan(0.5)
         const depth = vec3(0).toVar()
-        If(catalogued.and(this.#atSol).not(), () => {
+        If(cataloged.and(this.#atSol).not(), () => {
           depth.assign(
             this.#extinction!.opticalDepth(
               this.#origin,
               source.xyz.sub(this.#origin),
             ).negate(),
           )
-          If(catalogued, () => {
+          If(cataloged, () => {
             const saved = reference.element(index).toVar()
             If(metadata.z.notEqual(version), () => {
               const sol = vec3(starExtinctionOrigin(SUN_POSITION))
@@ -535,12 +535,12 @@ export class StarExtinctionCache {
       .add(1)
       .div(FADE_SUBMISSIONS)
       .clamp()
-    const catalogueAtSol = mapped.z
+    const catalogAtSol = mapped.z
       .greaterThan(0)
       .and(this.#atSol)
       .or(mapped.w.greaterThan(0).and(stamp.x.notEqual(this.#generation)))
     return this.#active.select(
-      catalogueAtSol.select(
+      catalogAtSol.select(
         vec3(1),
         valid.select(displayedColumn(value.rgb, previous, visibility), vec3(0)),
       ),
@@ -558,7 +558,7 @@ export class StarExtinctionCache {
       field !== this.#field ||
       selection.ids !== this.#selection?.ids ||
       selection.positions !== this.#selection?.positions ||
-      selection.catalogued !== this.#selection?.catalogued
+      selection.cataloged !== this.#selection?.cataloged
     if (field !== this.#field) {
       this.#field = field
       this.#extinction?.setField(field)
@@ -596,8 +596,8 @@ export class StarExtinctionCache {
           offset = slot * 4,
           mapped = index * 4
         const atSol = source.published === -1 ? 1 : 0
-        const catalogued = source.catalogued ? 1 : 0
-        const flag = catalogued + atSol
+        const cataloged = source.cataloged ? 1 : 0
+        const flag = cataloged + atSol
         if (versions[slot] !== source.version) {
           const p = starExtinctionOrigin(source.position)
           positions[offset] = p.x
@@ -618,12 +618,12 @@ export class StarExtinctionCache {
         if (
           mapping[mapped] !== slot ||
           mapping[mapped + 1] !== source.version ||
-          mapping[mapped + 2] !== catalogued ||
+          mapping[mapped + 2] !== cataloged ||
           mapping[mapped + 3] !== atSol
         ) {
           mapping[mapped] = slot
           mapping[mapped + 1] = source.version
-          mapping[mapped + 2] = catalogued
+          mapping[mapped + 2] = cataloged
           mapping[mapped + 3] = atSol
           mappingLo = Math.min(mappingLo, index)
           mappingHi = Math.max(mappingHi, index)
@@ -668,13 +668,13 @@ export class StarExtinctionCache {
       const origin = this.schedule.origin!
       for (const source of batch.sources) {
         let depth: readonly number[] = [0, 0, 0]
-        if (!source.catalogued || !this.#atSol.value) {
+        if (!source.cataloged || !this.#atSol.value) {
           depth = integrateStarExtinction(
             this.#field,
             origin,
             source.position,
           ).opticalDepthRgb.map((value) => -value)
-          if (source.catalogued) {
+          if (source.cataloged) {
             source.reference ??= integrateStarExtinction(
               this.#field,
               SUN_POSITION,
@@ -752,7 +752,7 @@ export class StarExtinctionCache {
       sourceRecordsWritten: this.#sourceRecordsWritten,
       mappingRecordsWritten: this.#mappingRecordsWritten,
       radiusParsecs: STAR_EXTINCTION_CACHE_RADIUS_PARSECS,
-      reference: 'catalogue-at-sol' as const,
+      reference: 'catalog-at-sol' as const,
       maxLogGain: STAR_EXTINCTION_MAX_LOG_GAIN,
       saturated: this.#cpu ? this.#saturated : null,
       saturationStoredOnGpu: !this.#cpu,

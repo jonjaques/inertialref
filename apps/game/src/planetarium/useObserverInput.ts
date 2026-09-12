@@ -163,7 +163,7 @@ export function useObserverInput(
      */
     const down = new Map<number, Point>()
     let phase: GesturePhase = GESTURE_START
-    let travelled = 0
+    let traveled = 0
     let pressedAt: Point | null = null
     /** Whether the gesture in flight is a look rather than an orbit. */
     let looking = false
@@ -208,12 +208,12 @@ export function useObserverInput(
       node.setPointerCapture(event.pointerId)
       down.set(event.pointerId, local(event))
       const points = [...down.values()]
-      phase = { centre: centroid(points), spread: spread(points) }
+      phase = { center: centroid(points), spread: spread(points) }
       if (down.size === 1) {
-        travelled = 0
+        traveled = 0
         looking =
           event.button === 2 || latest.current.freeLook || observatory.standing
-        // Client coordinates, not `phase.centre`. The gesture arithmetic only
+        // Client coordinates, not `phase.center`. The gesture arithmetic only
         // ever reads *differences*, so the element's own offset cancels out of
         // it; a pick is an absolute position and the projection it is tested
         // against is in client space. See `onPick`.
@@ -233,7 +233,7 @@ export function useObserverInput(
       // Node beside the rest of the gesture arithmetic. What is here is the
       // bookkeeping only a browser has.
       const step = gestureStep(phase, [...down.values()])
-      travelled += step.travelled
+      traveled += step.traveled
       if (step.orbit.x !== 0 || step.orbit.y !== 0) {
         // The sensitivity is the lens's own pixel angle, so the ground under
         // the pointer follows the pointer at any focal length. A constant
@@ -264,7 +264,7 @@ export function useObserverInput(
         // for and did not get, not a pick.
         if (
           pressedAt !== null &&
-          travelled < CLICK_SLOP &&
+          traveled < CLICK_SLOP &&
           event.type === 'pointerup' &&
           event.button !== 2
         ) {
@@ -278,7 +278,7 @@ export function useObserverInput(
       // A finger lifted from a multi-touch gesture: the centroid and spread
       // both jump, and re-seeding them is what stops the camera lurching.
       const points = [...down.values()]
-      phase = { centre: centroid(points), spread: spread(points) }
+      phase = { center: centroid(points), spread: spread(points) }
       pressedAt = null
     }
 

@@ -752,7 +752,7 @@ export function rangeForWidth(
 
 /**
  * The orientation that puts one world-space target at one screen position,
- * horizon levelled against `upHint`.
+ * horizon leveled against `upHint`.
  *
  * The single-target relative of `frameTwoTargets`: aim at the target, then
  * rotate the *screen point's* view direction onto the forward axis, so the
@@ -1114,7 +1114,7 @@ export function trackedPose(
 /* ------------------------------------------------------------------------- */
 
 /**
- * The attitude for flying a `LinePath`: nose along the line, horizon levelled
+ * The attitude for flying a `LinePath`: nose along the line, horizon leveled
  * against `upHint`.
  *
  * It takes the path rather than a frame because the answer does not depend on

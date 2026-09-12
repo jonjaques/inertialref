@@ -86,11 +86,11 @@ export function cameraReviewPictures() {
       // Recipes ease toward their framing; capture must record the destination.
       for (
         let index = 0;
-        ir.observerStatus().travelling && index < 1800;
+        ir.observerStatus().traveling && index < 1800;
         index++
       )
         ir.observerSample(1 / 60)
-      if (ir.observerStatus().travelling)
+      if (ir.observerStatus().traveling)
         throw new Error(`The ${scene.label} camera did not finish framing.`)
       // Arrival is a tolerance check; the next sample commits the exact pose.
       ir.observerSample(0)

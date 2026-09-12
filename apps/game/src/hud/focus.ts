@@ -31,7 +31,7 @@ export const FOCUS_RING =
  * Blurring unconditionally solves it by making the dock untraversable: a
  * keyboard user who activates anything is returned to the top of the document
  * and has to tab back in, which across five tabs of collapsible sections is not
- * navigation. `detail` is the click count, and a click synthesised from Enter
+ * navigation. `detail` is the click count, and a click synthesized from Enter
  * or Space on a focused button reports 0 in every engine — so a pointer keeps
  * the old behavior exactly and a keyboard keeps its place.
  *

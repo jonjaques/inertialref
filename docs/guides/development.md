@@ -27,12 +27,13 @@ pnpm presets:plates   # recapture the built-in preset thumbnails through the ren
 pnpm presets:check    # every picture has a plate, every composition it names resolves
 pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Astro build
-pnpm check            # graph, brand, presets, format, lint, typecheck, test, test:slow, build
+pnpm check            # graph, spelling, brand, presets, format, lint, typecheck, test, test:slow, build
 
-# The four instruments. They read the tree; none of them gates it.
+# Reports describe the tree; spelling:check also gates it.
 pnpm fta              # complexity per file; fta:check exits 1 above a score of 91
 pnpm knip             # what nothing imports; knip:check narrows to the four hard classes
-pnpm spelling         # British spellings left in the source, graded by rename cost
+pnpm spelling         # British declarations and their references
+pnpm spelling:check   # reject British declarations; part of pnpm check
 pnpm test:coverage    # the suite again, writing coverage/coverage-final.json
 
 pnpm sim --self-test           # headless run plus the twelve capability checks
@@ -110,27 +111,27 @@ built-in. After any change to `wrangler.jsonc`, regenerate
 
 `pnpm check` is the gate. Do not report a task complete without it passing.
 
-**None of the four instruments is in it, and that is deliberate.**
-`fta` scores complexity and coverage counts what the suite executed; `knip`
-asks the question neither of them can, which is whether a file needs to exist
-at all, since something nothing imports scores and covers like anything else.
-`pnpm spelling` reads declarations through the TypeScript checker rather than a
-regex, because an identifier that also appears as a key in checked-in data is a
-rename with a second half the compiler cannot perform. `fta` and `knip` each
-pair a report that always exits 0 with a `:check` that exits 1, and the
-threshold lives on the command line rather than in `fta.json` or `knip.jsonc` —
-a severity in the config applies to the report too, which turns the report into
-something that exits 1 while printing the answer. `knip:check` is red today, and
-a ratchet installed while it already fails teaches people to pass
-`--no-exit-code`. The findings, and the case for wiring any of them into the
-gate, are [the complexity report](../../design/reports/complexity.md) and
-[the spelling plan](../../design/plans/british-english.md).
+Complexity, unused-code and coverage reports stay outside the gate. `fta`
+scores complexity, coverage counts what the suite executed, and `knip` asks
+whether a file needs to exist at all. `fta` and `knip` each pair a report that
+exits 0 with a `:check` that exits 1 when its threshold is exceeded. The
+threshold belongs on the command line so the report remains usable while
+there is existing debt. The findings are in
+[the complexity report](../../design/reports/complexity.md).
+
+`pnpm spelling` reads identifier declarations through the TypeScript checker
+and reports their references and boundary sites. `pnpm spelling -- --json`
+prints the inventory as JSON. `pnpm spelling:check` rejects any British
+declaration and runs in `pnpm check`. Strings, comments and data need separate
+review: an identifier can also be a stored key that the compiler cannot move.
+Generated external declarations and quoted third-party names retain their
+spelling under [the house style](../../STYLE.md#american-english).
 
 None of the four data commands are needed to build or run the game — their
 outputs are committed. Run one when the upstream publishes; the diff is the news.
 `textures:build` and `shapes:build` download 1.5 GB between them into the
 gitignored `.data/`, and only the processed outputs are committed. The
-[catalog guide](catalogue.md) has the provenance rules each of them follows.
+[catalog guide](catalog.md) has the provenance rules each of them follows.
 
 The site deploys to the `inertialrefd` Worker. Canonical URL:
 <https://inertialref.app>. It also serves <https://inertialref.jonjaques.com>

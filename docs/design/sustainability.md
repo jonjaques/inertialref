@@ -3,7 +3,7 @@
 Licensing, governance, contribution, and the one question that actually has a
 cost attached: who pays for the persistent universe.
 
-> This page replaces §13 Monetisation. There is none — see
+> This page replaces §13 Monetization. There is none — see
 > [charter](charter.md#business-posture). What replaces it is a set of decisions
 > about how an open, non-commercial project stays alive.
 
@@ -20,7 +20,7 @@ awkward for anyone who read carefully. That is now fixed.
 
 | What                               | License                 | Why                                                                                                                                                  |
 | ---------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/*` — the simulation core | **Apache-2.0**          | Permissive maximises adoption, and the engine identity is an asset for a project that wants contributors. The explicit patent grant is worth having. |
+| `packages/*` — the simulation core | **Apache-2.0**          | Permissive maximizes adoption, and the engine identity is an asset for a project that wants contributors. The explicit patent grant is worth having. |
 | `apps/*` — the game client         | **Apache-2.0**          | Same tree, same terms; splitting licenses within one repository creates confusion for no benefit here                                                |
 | Ingested catalog data              | **Inherits its source** | Non-negotiable — see below                                                                                                                           |
 | Authored art and audio             | **CC BY-SA 4.0**        | Standard for game assets; keeps derivative asset work open                                                                                           |
@@ -36,7 +36,7 @@ The right way to be a non-commercial project is to **use a genuine open license
 and simply not commercialize it**. Copyleft (AGPL-3.0) is the stronger option if
 the concern is somebody else running a paid hosted version; permissive
 (Apache-2.0) is the better option if the concern is adoption. **Recommendation:
-Apache-2.0** — the risk of someone monetising a browser space sim built on this
+Apache-2.0** — the risk of someone monetizing a browser space sim built on this
 engine is small, and the value of being trivially adoptable is large.
 
 **Resolved: Apache-2.0.** The risk copyleft would cover — somebody running a paid
@@ -156,7 +156,7 @@ so up front is worth more than a generic invitation.
 | Ship and interior parts         | Same                                                                                                |
 | Terrain and noise algorithms    | Pure functions with golden vectors                                                                  |
 | Accessibility work              | Well-specified in [ux](ux.md#accessibility) and independently verifiable                            |
-| Translations                    | Text is centralised and there is no voice acting                                                    |
+| Translations                    | Text is centralized and there is no voice acting                                                    |
 
 | Hard to contribute                            | Why                                                                                                               |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |

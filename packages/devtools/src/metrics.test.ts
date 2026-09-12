@@ -44,7 +44,7 @@ describe('Series', () => {
         fc.integer({ min: 1, max: 64 }),
         (values, capacity) => {
           const expected = window(values, capacity)
-          const stats = fill(values, capacity).summarise()
+          const stats = fill(values, capacity).summarize()
           expect(stats.count).toBe(expected.length)
           if (expected.length > 0)
             expect(stats.last).toBe(expected[expected.length - 1])
@@ -65,11 +65,11 @@ describe('Series', () => {
      * other way, and nothing had reported it because the property stops at the
      * first failed assertion.
      */
-    const both = fill([0, -0], 2).summarise()
+    const both = fill([0, -0], 2).summarize()
     expect(both.min).toBe(Math.min(0, -0))
     expect(both.max).toBe(Math.max(0, -0))
 
-    const reversed = fill([-0, 0], 2).summarise()
+    const reversed = fill([-0, 0], 2).summarize()
     expect(reversed.min).toBe(Math.min(-0, 0))
     expect(reversed.max).toBe(Math.max(-0, 0))
   })
@@ -82,7 +82,7 @@ describe('Series', () => {
         (values, capacity) => {
           const expected = window(values, capacity)
           if (expected.length === 0) return
-          const stats = fill(values, capacity).summarise()
+          const stats = fill(values, capacity).summarize()
           const sorted = [...expected].sort(ascending)
           const rank = Math.min(
             sorted.length - 1,
@@ -133,7 +133,7 @@ describe('Series', () => {
     // on the first frame of a resumed tab. One of those reaching `min` would
     // make every statistic in the panel read NaN until a reload.
     const series = fill([10, Number.NaN, 20, Number.POSITIVE_INFINITY, 30], 8)
-    const stats = series.summarise()
+    const stats = series.summarize()
     expect(stats.count).toBe(3)
     expect(stats.mean).toBe(20)
     expect(stats.last).toBe(30)
@@ -143,7 +143,7 @@ describe('Series', () => {
     // The panel renders before the first frame is sampled. `Math.min()` of
     // nothing is Infinity, and an overlay opening on "min Infinity ms" reads as
     // a bug in the thing being measured.
-    expect(new Series(16).summarise()).toEqual({
+    expect(new Series(16).summarize()).toEqual({
       count: 0,
       last: 0,
       min: 0,

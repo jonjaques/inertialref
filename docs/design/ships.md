@@ -79,7 +79,7 @@ called the _Meridian_.
 it came from — which is worth more than any amount of invented backstory, and
 costs one table.
 
-**Naming your own ship is the game's only cosmetic personalisation**, it is free,
+**Naming your own ship is the game's only cosmetic personalization**, it is free,
 and it appears in the Almanac, on discovery records, and on any distress beacon
 you ever transmit.
 
@@ -329,7 +329,7 @@ autopilot deletes the game.
 | --------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | **Attitude hold**     | Holds current orientation or a selected vector                                                                       | Choose a vector                                                              |
 | **Burn assist**       | Executes a burn solution _you plotted_ — holds alignment, calls and performs the flip, manages the decelerating half | Choose the target, choose the acceleration, or re-plot after an interruption |
-| **Orbital insertion** | Circularises at a commanded altitude                                                                                 | Choose the altitude                                                          |
+| **Orbital insertion** | Circularizes at a commanded altitude                                                                                 | Choose the altitude                                                          |
 | **Docking**           | Final approach on an accepted landing pad                                                                            | Request the pad                                                              |
 | **Station-keeping**   | Holds relative position to a selected object                                                                         | —                                                                            |
 

@@ -107,11 +107,11 @@ function groundRadius(world: World, body: Body): number {
     bodyFixedFrameId(body.address),
     world.clock.time,
   )
-  const centre = world.frames.pose(
+  const center = world.frames.pose(
     bodyFrameId(body.address),
     world.clock.time,
   ).position
-  const above = UV.translate(centre, vec3(body.radius, 0, 0))
+  const above = UV.translate(center, vec3(body.radius, 0, 0))
   return surfaceRadius(body, bodyFixedDirection(spin, above))
 }
 

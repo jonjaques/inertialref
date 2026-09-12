@@ -21,7 +21,7 @@ import type { Workspace } from './useWorkspace.ts'
  *
  * `'use no memo'`: `useDrag`'s collected state changes on every pointer move
  * during a gesture, which is not something a compiler that assumes render is a
- * pure function of props can memoise. Same opt-out as `DockPanel`.
+ * pure function of props can memoize. Same opt-out as `DockPanel`.
  */
 export function FloatingPanel({
   definition,
@@ -51,7 +51,7 @@ export function FloatingPanel({
        * The fallback path, and only the fallback path.
        *
        * `FloatField` handles the ordinary release by reading the drag preview's
-       * projected top-left, which is exact. The touch backend synthesises drags
+       * projected top-left, which is exact. The touch backend synthesizes drags
        * and does not always produce one, and a release that lands on nothing —
        * outside the window, over a portalled tooltip — never reaches a drop
        * target at all. Both end here, where a delta from where the panel

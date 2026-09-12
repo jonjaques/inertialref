@@ -153,7 +153,7 @@ tails span four to five sigma. All clouds contribute to the same extinction
 sum; overlapping windows or a nearest-cloud ranking never select a field value.
 
 The FITS header declares `A0(550nm)/parsec`, in magnitudes per parsec. Its actual
-floating-point values must not be interpreted using the catalogue ReadMe's
+floating-point values must not be interpreted using the catalog ReadMe's
 nanomagnitude label. The grid uses 10 pc cells and half-index solar coordinates;
 cell centers span −3,000…3,000 pc in the plane. Ingest records the source hash,
 selection windows, centers, sigmas, amplitudes and columns in

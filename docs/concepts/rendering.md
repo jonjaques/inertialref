@@ -351,7 +351,7 @@ is drawn one full relief below the datum, and patches always win.
 
 A body is shaded from its own photometry, and from measured maps where a map
 exists. `apps/game/src/render/planet.ts` is the material;
-[the catalog guide](../guides/catalogue.md#planetary-surface-maps) is where the
+[the catalog guide](../guides/catalog.md#planetary-surface-maps) is where the
 maps come from.
 
 ### The lighting is hand-written, and the reason is not performance
@@ -479,7 +479,7 @@ half-extents, through the same builder, so there is one code path for "not a
 sphere" and it does not know which kind it is holding.
 
 What it cannot represent is an overhang, which is the cost and is measured
-rather than assumed — see the [catalog guide](../guides/catalogue.md#shape-models)
+rather than assumed — see the [catalog guide](../guides/catalog.md#shape-models)
 for the volume check that refuses a model the format cannot hold.
 
 ### Exposure, at both ends
@@ -620,7 +620,7 @@ is a fact about friction rather than about a planet.
 values.** `packages/rendering/src/terrainPalette.ts` holds it. Absolute colors
 make every rocky world the same sandstone, and they make the ground disagree
 with the datum sphere, the orbital tier and the dossier swatch, all of which
-read `appearance.colour`. As ratios, Mars stays ochre and Callisto stays grey
+read `appearance.color`. As ratios, Mars stays ochre and Callisto stays gray
 while both get the same internal contrast — lunar mare is 0.07 geometric albedo
 against 0.13 for the highlands, so basalt is 0.54 of the reference.
 

@@ -65,7 +65,7 @@ use an in-memory store.
 - **Snapshot everything.** Simple, and it makes the save the source of truth —
   which throws away the entire benefit of determinism and grows without bound.
 - **Store generated content lazily as a cache with the seed as the key.** A
-  reasonable _optimisation_ later; as a persistence model it confuses the cache
+  reasonable _optimization_ later; as a persistence model it confuses the cache
   with the record.
 
 ## Consequences

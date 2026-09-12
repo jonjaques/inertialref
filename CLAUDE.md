@@ -109,7 +109,7 @@ Neither is cheap — the pair over one branch runs to most of half a million
 subagent tokens and several minutes — and both read a diff the gate, the review
 and the author have already been over. `/ship` names the one it would have
 triggered and opens the PR without it; ask for either by name when the change
-is worth it, and its findings are edited into the PR afterwards.
+is worth it, and its findings are edited into the PR afterward.
 
 **Cloud sessions need one manual step.** Cloud images ship Node 20/21/22;
 this repository needs Node 26 for type stripping. Paste
@@ -132,7 +132,7 @@ import.
   because the arithmetic described a floor and the defect lived above it.
 - **A figure measured at one operating point is a figure about that point.**
   Earthrise is a hover, and a keep set measured there is invariant in a way it
-  is not once the camera moves; the generalisation reached an ADR before an
+  is not once the camera moves; the generalization reached an ADR before an
   audit caught it. Measure at two points that differ in the variable you are
   about to claim does not matter, and name the point in the sentence.
 - **Do not perturb the tree while a read-only subagent is auditing it.**

@@ -7,7 +7,7 @@ import {
   DEFAULT_FLIGHT_CAMERA,
   type FlightCameraState,
   type FlightView,
-  isCentred,
+  isCentered,
   type LookOffset,
   NO_LOOK,
   type ObserverState,
@@ -61,7 +61,7 @@ export class FlightCamera {
       view: this.#state.view,
       orbit: this.#state.orbit,
       look: this.#state.look,
-      aimed: !isCentred(this.#state.look),
+      aimed: !isCentered(this.#state.look),
     }
   }
 
@@ -71,7 +71,7 @@ export class FlightCamera {
    * Entering the orbit opens it where the chase camera was standing — the
    * chase offset, turned by the ship's attitude, read off this frame's scene
    * — so the switch is a change of what the camera does next rather than a
-   * jump. The head is centred on every switch: a look is an offset from the
+   * jump. The head is centered on every switch: a look is an offset from the
    * view's own aim, and the aim it was measured against is gone.
    */
   setView(view: FlightView): FlightCameraStatus {
@@ -148,7 +148,7 @@ export class FlightCamera {
   }
 
   /** Look where the view aims again. */
-  recentre(): FlightCameraStatus {
+  recenter(): FlightCameraStatus {
     this.#state = { ...this.#state, look: NO_LOOK }
     return this.status()
   }

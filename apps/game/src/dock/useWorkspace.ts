@@ -169,7 +169,7 @@ export function useWorkspace(
    * Every updater takes the previous state, never the value rendered above.
    *
    * One pointer gesture can deliver more than one drop — nested targets, a
-   * synthesised drag, a hand that releases over a boundary — and two moves
+   * synthesized drag, a hand that releases over a boundary — and two moves
    * composed against the same captured snapshot silently discard the first.
    * `dock/layout.ts` was written to make composing them safe; this is where
    * that is actually taken advantage of.

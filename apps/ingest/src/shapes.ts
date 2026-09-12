@@ -159,7 +159,7 @@ function readObj(text: string, source: ShapeSource): Mesh {
       )
     }
   }
-  return centre({
+  return center({
     vertices: Float64Array.from(vertices),
     faces: Uint32Array.from(faces),
   })
@@ -189,7 +189,7 @@ function readVertexTable(text: string, source: ShapeSource): Mesh {
     faces[i * 3 + 1] = Number.parseInt(parts[2] as string, 10) - 1
     faces[i * 3 + 2] = Number.parseInt(parts[3] as string, 10) - 1
   }
-  return centre({ vertices, faces })
+  return center({ vertices, faces })
 }
 
 /* ------------------------------------------------------------------------- */
@@ -252,7 +252,7 @@ function volumeAndCentroid(mesh: Mesh): {
  * subtends from it, and it is also what "the body's center" means physically
  * for a uniform-density rubble pile.
  */
-function centre(mesh: Mesh): Mesh {
+function center(mesh: Mesh): Mesh {
   const { centroid } = volumeAndCentroid(mesh)
   const [dx, dy, dz] = centroid
   const vertices = mesh.vertices.slice()
@@ -441,7 +441,7 @@ const anglePhi = (x: number, z: number): number => {
 }
 
 /**
- * Samples no face covered, filled from their neighbours.
+ * Samples no face covered, filled from their neighbors.
  *
  * Should be none for a closed mesh, and is a handful in practice at the poles
  * of a model whose facets are a hair smaller than the grid. The count is
@@ -680,8 +680,8 @@ export async function buildShapes({
     onProgress(
       `  ${source.name.padEnd(18)} ${sourceDetail.padEnd(20)} → ${width}×${height}  ` +
         `${String((bytes.length / 1024).toFixed(0)).padStart(4)} KB  ` +
-        `r̄ ${formatMetres(extent.meanRadius).padStart(9)}  ` +
-        `axes ${extent.semiAxes.map((a) => formatMetres(a)).join(' × ')}  ` +
+        `r̄ ${formatMeters(extent.meanRadius).padStart(9)}  ` +
+        `axes ${extent.semiAxes.map((a) => formatMeters(a)).join(' × ')}  ` +
         `vol ${(volumeRatio * 100).toFixed(1)}%`,
     )
   }
@@ -693,7 +693,7 @@ export async function buildShapes({
   }
 }
 
-const formatMetres = (metres: number): string =>
-  metres >= 1_000
-    ? `${(metres / 1_000).toFixed(1)} km`
-    : `${metres.toFixed(0)} m`
+const formatMeters = (meters: number): string =>
+  meters >= 1_000
+    ? `${(meters / 1_000).toFixed(1)} km`
+    : `${meters.toFixed(0)} m`

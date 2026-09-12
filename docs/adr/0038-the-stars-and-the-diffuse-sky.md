@@ -15,7 +15,7 @@ sprite ceiling makes every camera translation rewrite more positions. Drawing
 those sources over the integrated stellar field also counts their light twice.
 
 Dust must end at each star. A background sky column would obscure foreground
-stars, while applying an observer-to-star column directly to a catalogue's
+stars, while applying an observer-to-star column directly to a catalog's
 observed magnitude would count the Solar observer's extinction a second time.
 Sixteen integration samples miss thin and nearby clouds. Starting a new cache
 cycle on every observer movement prevents any distant column from completing.
@@ -49,17 +49,17 @@ emission of exactly those bands. Omitted levels remain diffuse. This conserves
 ensemble light; individual stochastic realizations retain finite sampling
 noise and do not guarantee identical radiance in every pixel.
 
-Catalogue completeness is a magnitude-and-distance envelope, independent of
+Catalog completeness is a magnitude-and-distance envelope, independent of
 search UI. Known faint neighbors remain protected inside 25 light-years;
 Hipparcos supplies a conservative V 7.3 envelope inside 150 light-years and the
-shipped distant sky supplies V 6.5 beyond it. Sparse catalogue counts outside
+shipped distant sky supplies V 6.5 beyond it. Sparse catalog counts outside
 the complete envelope reduce the corresponding procedural cell and band.
-Catalogue records retain their measured identities and flux convention.
+Catalog records retain their measured identities and flux convention.
 
 A pending survey retains the completed source field and its exact diffuse
 selection envelope, including a completed empty exterior field. The next reply
-replaces both atomically. Only a new world publishes the initial catalogue
-fallback. Catalogue candidates and completeness coverage are derived once per
+replaces both atomically. Only a new world publishes the initial catalog
+fallback. Catalog candidates and completeness coverage are derived once per
 world. The version 2 sky-task response carries only source identity, name,
 position, color and the two luminosities the renderer consumes. Other system
 queries retain their full records.
@@ -74,11 +74,11 @@ absolute V, so a different brightest star cannot brighten every other sprite.
 
 The resolved-star dust cache integrates only to the source. It uses 32 samples
 through 64 pc, 64 through 512 pc and 512 for longer paths, concentrating work
-around the shared warped dust plane. A catalogue source uses
+around the shared warped dust plane. A catalog source uses
 `T(observer, source) / T(Sol, source)`; a procedural source uses the full current
-transmission. At Sol the catalogue correction is exactly unity. Optical-depth
+transmission. At Sol the catalog correction is exactly unity. Optical-depth
 storage preserves strongly obscured channels, with an explicit finite gain
-ceiling for catalogue corrections.
+ceiling for catalog corrections.
 
 A frozen observer starts each finite update cycle. Its queue completes before
 another cycle starts, including during continuous travel. Unchanged sources
@@ -117,7 +117,7 @@ and external V luminosity; these are population-model means, not measured
 individual-star luminosity functions. The default-seed V residuals are
 +0.0765, +0.1785, −0.2800 and +0.0325 mag respectively, within the original
 0.3 mag limits. Local number density remains 0.1 star/pc³ and the reference
-cylinder contains 116.064 billion stars. Catalogue-plus-procedural counts in
+cylinder contains 116.064 billion stars. Catalog-plus-procedural counts in
 10, 25 and 50 pc balls around Sol are 389, 6,788 and 53,532, against field
 integrals of 418.924, 6,549.357 and 52,109.668 — −7.14%, +3.64% and +2.73%.
 Those are counts of one finite realization against the smooth integral it is
@@ -191,7 +191,7 @@ settles and every phase completes, the target is held until something changes.
 
 **Generate a larger uniform local survey.** Faint stars dominate its work and
 memory before its visible reach approaches the galaxy. The sky and travel
-catalogue answer different queries.
+catalog answer different queries.
 
 **Subtract the whole population inside a distance sphere.** Bright distant
 sources and faint nearby sources cross that sphere differently. Luminosity

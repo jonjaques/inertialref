@@ -13,7 +13,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 719554,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio",
       "source": "https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg",
       "sha256": "29275bc344ac7788"
@@ -25,7 +25,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 145144,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio",
       "source": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/imagerecords/144000/144897/BlackMarble_2016_01deg_gray.jpg",
       "sha256": "ad1dcb5a0d970933"
@@ -37,7 +37,7 @@
       "width": 2048,
       "height": 1024,
       "bytes": 1331220,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio",
       "source": "https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_2048.jpg",
       "sha256": "3f7ccc419f8344a2"
@@ -49,7 +49,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 1460054,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio",
       "source": "https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73934/gebco_08_rev_elev_21600x10800.png",
       "sha256": "99ce6a9f20b574ac"
@@ -61,7 +61,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 988228,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio / LRO LROC",
       "source": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_4k.tif",
       "sha256": "6d9c1952d8bdcb84"
@@ -73,7 +73,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 7524966,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio / LRO LOLA",
       "source": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_16_uint.tif",
       "sha256": "f2a64ad2ee5d18bf"
@@ -85,7 +85,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 272014,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / JPL / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_1km.tif",
       "sha256": "13e8f8041ecf0eae"
@@ -97,7 +97,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 1168068,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / JPL / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif",
       "sha256": "cbe51f664186e2d3"
@@ -109,7 +109,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 868172,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / JPL / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Ganymede_Voyager_GalileoSSI_global_mosaic_1km.tif",
       "sha256": "10bd0408a69082f6"
@@ -121,7 +121,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 906602,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / JPL / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif",
       "sha256": "8e3eec67b4a28a6b"
@@ -133,7 +133,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 713106,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif",
       "sha256": "d76d9739853bec8a"
@@ -145,7 +145,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 522406,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif",
       "sha256": "00c96aabceb83a54"
@@ -157,7 +157,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 1607902,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif",
       "sha256": "98da54cdf07d461c"
@@ -169,7 +169,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 693460,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif",
       "sha256": "1feef1255ba734de"
@@ -181,7 +181,7 @@
       "width": 2048,
       "height": 1024,
       "bytes": 113434,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Phobos_ME_SRC_Mosaic_Global_16ppd.tif",
       "sha256": "9dae1214f0893121"
@@ -193,7 +193,7 @@
       "width": 2048,
       "height": 1024,
       "bytes": 2531906,
-      "licence": "public-domain",
+      "license": "public-domain",
       "credit": "NASA / Goddard / University of Arizona (OSIRIS-REx), via USGS Astrogeology",
       "source": "https://planetarymaps.usgs.gov/mosaic/Bennu/Bennu_OSIRIS-REx_OCAMS_color_mosaic_25cm.tif",
       "sha256": "a4f2d0b4228522a1"
@@ -205,7 +205,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 1989584,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/8k_mercury.jpg",
       "sha256": "58274eeccf66734e"
@@ -217,7 +217,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 1253848,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/8k_venus_surface.jpg",
       "sha256": "f25a3f0ab39a9b74"
@@ -229,7 +229,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 106036,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/4k_venus_atmosphere.jpg",
       "sha256": "fdd5b07218bc97d8"
@@ -241,7 +241,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 731168,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/8k_mars.jpg",
       "sha256": "d7d0dd2aecaedc2c"
@@ -253,7 +253,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 311846,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/8k_jupiter.jpg",
       "sha256": "58ec0075d3cdeaa7"
@@ -265,7 +265,7 @@
       "width": 4096,
       "height": 2048,
       "bytes": 93288,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/8k_saturn.jpg",
       "sha256": "e65c8659f9f3ee3c"
@@ -277,7 +277,7 @@
       "width": 2048,
       "height": 1024,
       "bytes": 16812,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/8k_saturn_ring_alpha.png",
       "sha256": "ff7b74315ba13a08"
@@ -289,7 +289,7 @@
       "width": 2048,
       "height": 1024,
       "bytes": 8250,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/2k_uranus.jpg",
       "sha256": "c2540fc8beda358f"
@@ -301,7 +301,7 @@
       "width": 2048,
       "height": 1024,
       "bytes": 15774,
-      "licence": "cc-by-4.0",
+      "license": "cc-by-4.0",
       "credit": "Solar System Scope (solarsystemscope.com), CC BY 4.0",
       "source": "https://www.solarsystemscope.com/textures/download/2k_neptune.jpg",
       "sha256": "e6e49d2fe109c9ea"

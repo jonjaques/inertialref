@@ -148,7 +148,7 @@ flowchart TB
     NOTEX["that frame does not exist<br/>in a fresh world"]
     PARSE["parse the id → body address + lat/lon"]
     LOAD["load the system"]
-    TERR["sample terrain at the quantised direction<br/><i>deterministic, so identical</i>"]
+    TERR["sample terrain at the quantized direction<br/><i>deterministic, so identical</i>"]
     INSTALL["install the surface frame"]
     DONE(["ship is back on the exact same rock"])
 

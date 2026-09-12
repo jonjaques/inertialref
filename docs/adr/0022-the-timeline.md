@@ -199,7 +199,7 @@ plot, colors the trace entry and bounds `ir.profile`'s verdict.
 
 **The panel keeps its job and the split is worth stating.** The panel answers
 _"is it fast right now"_ while you fly; the timeline answers _"why was that
-frame slow"_ afterwards. The panel is better at p95 against a drawn budget and
+frame slow"_ afterward. The panel is better at p95 against a drawn budget and
 at honest absences; a timeline reproduces both badly.
 
 **A share of frame time is undefined for concurrent spans**, and this cost a

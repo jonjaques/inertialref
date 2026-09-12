@@ -47,7 +47,7 @@ a production build. What follows is depth, not foundations.
 | Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                                                            |
 | Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                                                             |
 | Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                                                              |
-| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly, and the 7,514 naked-eye stars beyond; 129 Solar System bodies; [guide](guides/catalogue.md)                                              |
+| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly, and the 7,514 naked-eye stars beyond; 129 Solar System bodies; [guide](guides/catalog.md)                                                |
 | Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                                                            |
 | Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                                                                 |
 | Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                                                             |
@@ -81,7 +81,7 @@ change** — they are generators plus representations.
 
 | Thing                    | Status | Seam                                                                                                                                                                                                                            |
 | ------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                                                                                                                                    |
+| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalog.md)                                                                                                                                                      |
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                                                                                                                               |
 | Moons of real planets    | 🟡     | Sol's 62 are `observed` and measured; every exoplanet's moon is a projection, and `PackedPlanet` still has no moon list to change that                                                                                          |
 | Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel                                                                                                                |
@@ -569,7 +569,7 @@ destinations and the population is the scenery between them.
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | ~~No CI configuration~~ ✅     | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                              |
 | ~~No formatter~~ ✅            | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review |
-| No stored save fixture         | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk                          |
+| No stored save fixture         | Compatibility testing currently synthesizes old saves in-test rather than loading a real one from disk                          |
 | No controlled performance gate | Physical GPU correctness tests exist; timing regression needs stable hardware, see above                                        |
 | No automated image comparison  | Preset plates and scripted camera frames supply reproducible fixtures; automated visual comparison still needs stable GPU CI    |
 

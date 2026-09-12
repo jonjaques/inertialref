@@ -18,7 +18,7 @@ export interface ShipModelSpec {
   readonly label: string
   readonly file: string
   /** True overall length, which is also the model's extent along its nose axis. */
-  readonly lengthMetres: number
+  readonly lengthMeters: number
   /** Which way the artist pointed the bow. The game's forward is −Z. */
   readonly nose: '+z' | '-z'
   readonly author: string

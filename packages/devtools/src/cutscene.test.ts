@@ -255,8 +255,8 @@ describe('tng-intro ship choreography', () => {
     // what lets the camera hold still through the whole pass.
     /*
      * The exit mark is the reference's **area centroid** at f1080, 0.489 — not
-     * its box centre, 0.63. The two disagree by 0.15 of the frame here because
-     * the lit mass is not centred on the hull, and `compare_render.py` scores
+     * its box center, 0.63. The two disagree by 0.15 of the frame here because
+     * the lit mass is not centered on the hull, and `compare_render.py` scores
      * the centroid, so that is the one the beats are authored against.
      */
     const leaving = track(at(1080)!)
@@ -306,7 +306,7 @@ describe('tng-intro ship choreography', () => {
      *
      * The span is the *shared* one, f1292–f1319 — second knot to
      * second-to-last. The three wipes are concatenated into one Catmull-Rom,
-     * so the first and last segment of each sees different neighbouring
+     * so the first and last segment of each sees different neighboring
      * knots: wipe one opens on a clamped end, wipe three opens on wipe two's
      * exit at (2.1, −0.5), and wipe one's exit runs into wipe two's entry
      * where wipe three's simply holds. Inside the shared span the reuse is
@@ -387,7 +387,7 @@ describe('tng-intro ship choreography', () => {
      * measured mark at f1800 is 0.462 and the fitted line puts the hull at
      * 0.440 — inside the residual the pass is fitted at, and asserted as a
      * residual rather than as a coordinate by "reproduces the measured tracks"
-     * below. What stays here is the shape of the shot: high, left of centre,
+     * below. What stays here is the shape of the shot: high, left of center,
      * and coming down.
      */
     expect(early.x).toBeGreaterThan(0.4)
@@ -609,7 +609,7 @@ describe('tng-intro flight dynamics', () => {
      *    wobble whose direction is not a flight direction at all: it peaks at
      *    142.8° from the nose at f778. A Catmull-Rom segment is shaped by the
      *    knots either side of it, so the exclusion is the reversing pair's two
-     *    neighbouring knots, not just the pair.
+     *    neighboring knots, not just the pair.
      *  - **f2036–2080 of the descent.** The authored x jags by 0.126 of the
      *    frame's width between f2065 and f2075 (0.483 → 0.357) where the refit
      *    splices the box channel to the Bussard-cap channel. No straight line
@@ -706,7 +706,7 @@ describe('tng-intro flight dynamics', () => {
     /*
      * Each list is cut where its beats stop being measurements. The wipe's at
      * f1315: by f1316 the hull is 0.798 of the frame wide and one frame from
-     * the lens, so its box is against all four edges and its centre is a
+     * the lens, so its box is against all four edges and its center is a
      * statement about the edges. The descent's at f2130, where the leg ends and
      * the skim — which the reference cannot measure at all — takes over.
      */
@@ -1270,10 +1270,14 @@ describe('cutscene director lifecycle', () => {
       ),
     )
 
+    // A seek anchors to the last sampled render time, including a held drop.
+    const seekTime = parkedAt - TICK_DURATION
+    expect(harness.cutsceneSample(seekTime)!.frame).toBe(last)
+
     // The contrast: any other frame is a seek away, and the outcome goes.
     harness.seekCutscene(last - 1)
     expect(harness.cutsceneOutcome()).toBeNull()
-    expect(harness.cutsceneSample(parkedAt)!.frame).toBeCloseTo(last - 1, 6)
+    expect(harness.cutsceneSample(seekTime)!.frame).toBeCloseTo(last - 1, 6)
   })
 
   it('seeks to an exact reference frame', () => {
@@ -1441,7 +1445,7 @@ describe('tng-intro lighting geometry', () => {
     )
     // Grazing or worse. A Lambert face at 0.2 of full key is already down in
     // the toe, and the detector in `compare_render.py` keeps pixels above
-    // grey 45 — which such a face does not reach.
+    // gray 45 — which such a face does not reach.
     expect(worst).toBeLessThan(0.2)
   })
 

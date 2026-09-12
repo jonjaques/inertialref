@@ -56,7 +56,7 @@ function formatters(): NonNullable<typeof cached> {
 /** The reader's IANA zone, e.g. `Europe/London`. Named under the readout. */
 export const localZone = (): string => formatters().zone
 
-/** The simulated instant as a date and a time, already localised. */
+/** The simulated instant as a date and a time, already localized. */
 export function simulationInstant(seconds: number): {
   readonly date: string
   readonly time: string

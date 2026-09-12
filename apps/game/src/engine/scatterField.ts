@@ -7,7 +7,7 @@ import {
   packCover,
   type RegionAddress,
   drawnElevation,
-  regionCentreDirection,
+  regionCenterDirection,
   regionScatter,
   rockRise,
   type ScatterRock,
@@ -246,7 +246,7 @@ export class ScatterField {
      * rebuild below is one rebuild rather than two.
      */
     const home = wanted[0] as RegionAddress
-    const anchor = Vec.scale(regionCentreDirection(home), body.radius)
+    const anchor = Vec.scale(regionCenterDirection(home), body.radius)
     const range = scatterRange(lensView.lens, lensView.viewport)
     const ready = wanted.filter(
       (region) =>

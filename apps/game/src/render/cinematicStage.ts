@@ -74,12 +74,12 @@ export function createLandingEffects() {
   const aboveGround = smoothstep(0, 0.025, elevation)
   // A Martian sunset is the inverse of an Earth one. Micron dust scatters
   // forward, so the sky is a desaturated butterscotch everywhere except a
-  // cool blue-grey halo some twenty degrees across the Sun, where the blue
+  // cool blue-gray halo some twenty degrees across the Sun, where the blue
   // light that survives the long dust path is what reaches the eye; the
-  // horizon band is dim tan, and the zenith goes brown-grey rather than
+  // horizon band is dim tan, and the zenith goes brown-gray rather than
   // magenta. The halo replaces the tan instead of adding to it: an additive
-  // blue over a warm band is a grey, and the reference plates are not grey.
-  // Radiance is linear, so a colour that reads tan on the plate is far
+  // blue over a warm band is a gray, and the reference plates are not gray.
+  // Radiance is linear, so a color that reads tan on the plate is far
   // redder here than its sRGB: a sky that looks 1 : 0.8 : 0.6 is authored
   // near 1 : 0.58 : 0.32, and a band authored near neutral reads mauve.
   const tan = mix(
@@ -104,7 +104,7 @@ export function createLandingEffects() {
     .mul(sunGlow)
     .mul(aboveGround)
   // The function form: TSL's `.mix` method takes the receiver as the
-  // interpolant, so `base.mix(colour, halo)` lerps from the colour to the
+  // interpolant, so `base.mix(color, halo)` lerps from the color to the
   // halo weight by the base and paints the whole dome lavender.
   const dome = mix(vec3(0.006, 0.0018, 0.0008), upper, aboveGround)
   skyMaterial.colorNode = mix(dome, vec3(0.2, 0.245, 0.35), halo)
@@ -235,7 +235,7 @@ export function createLandingEffects() {
      */
     update(
       view: CinematicView | null,
-      hull: Pick<LoadedShip, 'lengthMetres' | 'beamMetres'> | null,
+      hull: Pick<LoadedShip, 'lengthMeters' | 'beamMeters'> | null,
       sunPosition?: Vec3,
     ) {
       const heating =
@@ -264,7 +264,7 @@ export function createLandingEffects() {
         ship.orientation.w,
       )
       if (hull !== null)
-        entry.scale.set(hull.beamMetres, hull.lengthMetres, hull.beamMetres)
+        entry.scale.set(hull.beamMeters, hull.lengthMeters, hull.beamMeters)
       const stage = view.stage
       if (stage !== undefined) {
         sunGlow.value = sunPosition === undefined ? 0 : 1

@@ -157,7 +157,7 @@ export function regionForDirection(
 }
 
 /** Direction of a region's center. */
-export function regionCentreDirection(region: RegionAddress): Vec3 {
+export function regionCenterDirection(region: RegionAddress): Vec3 {
   const span = 2 ** region.level
   const u = ((region.i + 0.5) / span) * 2 - 1
   const v = ((region.j + 0.5) / span) * 2 - 1
@@ -362,7 +362,7 @@ function evaluate(
    *
    * Running liquid works the ground the plates and the swell have made, so the
    * carve reads the height *those* bands produced and takes a fraction of it;
-   * a crater dug afterwards sits in the valley the way a young crater sits on
+   * a crater dug afterward sits in the valley the way a young crater sits on
    * any surface. The cover reads the same two fields, which is why they are
    * kept rather than recomputed — each is three octaves of noise, and the
    * riverbed is decided from the same number the floor was cut to.
@@ -457,7 +457,7 @@ export const coastWidth = (surface: SurfaceParameters): Meters =>
  * `seabed` set.
  *
  * The micro tail goes in **before** the clamp rather than after it, and that is
- * what keeps a shoreline continuous. Added afterwards it would rough up the
+ * what keeps a shoreline continuous. Added afterward it would rough up the
  * open sea by the whole bound — the one surface in this model that is flat by
  * definition — and a gate on "is this dry" would put a step at the waterline of
  * the same height. Under the clamp, submarine grit is flattened by the

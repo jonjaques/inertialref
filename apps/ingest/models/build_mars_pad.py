@@ -4,7 +4,7 @@ Run from the repository root:
   blender -b --python apps/ingest/models/build_mars_pad.py
 
 The editable master keeps every panel, rib, light and service unit separate.
-Export applies modifiers and joins by material. Metres and deck height survive
+Export applies modifiers and joins by material. Meters and deck height survive
 unchanged, with Blender +Z mapped to glTF +Y by the exporter.
 """
 
@@ -25,12 +25,12 @@ PROVENANCE = {
     "source": "design/structures/mars-pad.blend",
     "generator": "apps/ingest/models/build_mars_pad.py",
     "description": "Original octagonal refractory landing pad with buried skirt",
-    "units": "metres",
+    "units": "meters",
     "upAxis": "+y",
-    "landingHeightMetres": 0,
-    "landingRadiusMetres": 25,
-    "foundationRadiusMetres": 45,
-    "skirtDepthMetres": 6,
+    "landingHeightMeters": 0,
+    "landingRadiusMeters": 25,
+    "foundationRadiusMeters": 45,
+    "skirtDepthMeters": 6,
     "revision": 2,
 }
 PARTS = []
@@ -410,7 +410,7 @@ def build():
             rotation=theta,
         )
 
-    # The short ramp reaches terrain three metres below the landing datum.
+    # The short ramp reaches terrain three meters below the landing datum.
     ramp = bpy.data.meshes.new("Ramp")
     ramp.from_pydata(
         [

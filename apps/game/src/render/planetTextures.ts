@@ -98,7 +98,7 @@ const pending = new Map<string, Promise<void>>()
  * cloud edge moves. The result looks almost right, which is the worst kind of
  * wrong to debug.
  */
-const COLOUR_SPACE: Readonly<Record<string, string>> = {
+const COLOR_SPACE: Readonly<Record<string, string>> = {
   albedo: SRGBColorSpace,
   night: SRGBColorSpace,
   ring: SRGBColorSpace,
@@ -142,7 +142,7 @@ function load(entry: Entry, anisotropy: number): Texture | null {
       settle()
     },
   )
-  texture.colorSpace = COLOUR_SPACE[entry.map] ?? NoColorSpace
+  texture.colorSpace = COLOR_SPACE[entry.map] ?? NoColorSpace
   // Longitude wraps and latitude does not. Clamping longitude leaves a seam down
   // the anti-meridian; repeating latitude mirrors the arctic onto the antarctic.
   texture.wrapS = RepeatWrapping

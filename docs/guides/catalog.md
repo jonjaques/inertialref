@@ -328,7 +328,7 @@ sphere; `inCell` and `within` retain the volume-only index. This avoids treating
 a few bright distant stars as a complete volume. The draw
 reaches the sky through `StarCatalog.sky`, and `apps/game/src/engine/starSelection.ts`
 joins it to the independent magnitude query: one record per id within the
-actual V threshold and a 100,000-sprite ceiling. The query uses catalogue
+actual V threshold and a 100,000-sprite ceiling. The query uses catalog
 completeness to bound procedural fill in each luminosity band. Travel queries
 retain their own spatial scope; they do not inherit a camera's sprite budget.
 [ADR-0038](../adr/0038-the-stars-and-the-diffuse-sky.md) records the active
@@ -446,9 +446,10 @@ degree of longitude at 80° north is a sixth of a degree at the equator, so the
 horizontal gradient is divided by cos(latitude) or the poles come out as
 vertical smear. The scale calibrates itself against the height field's own range
 rather than a documented unit, which is the fix for a bug that produced a valid
-file and a **perfectly flat Moon**: `toColourspace('b-w')` is 8-bit in libvips,
+file and a **perfectly flat Moon**: `toColorspace('b-w')` is 8-bit in libvips,
 so it silently downcast LOLA's 16-bit product and every gradient came out 256
-times too small. `grey16` is the one that preserves it.
+times too small. `grey16` is the one that preserves it, and it keeps the British
+spelling because it is a libvips interpretation nickname rather than a word.
 
 **Luminance to alpha.** A cloud map published as a grayscale JPEG is a coverage
 mask wearing a color image's clothes. Drawn as color it is a gray shell over

@@ -6,7 +6,7 @@ paths:
 
 # The star catalog
 
-Reasoning: `docs/guides/catalogue.md`, `docs/design/galaxy.md` Rule 1.
+Reasoning: `docs/guides/catalog.md`, `docs/design/galaxy.md` Rule 1.
 
 - **Never store what the catalog can derive.** HYG ships a `lum` column that is its own
   `absmag` restated in the wrong band. The packed file carries _measurements_;

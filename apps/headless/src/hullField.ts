@@ -173,7 +173,7 @@ const GLB_MAGIC = 0x46546c67
  */
 export function readHullField(
   glbPath: string,
-  lengthMetres: number,
+  lengthMeters: number,
   nose: '+z' | '-z',
   cell = 8,
 ): HullField {
@@ -252,11 +252,11 @@ export function readHullField(
       if ((p[k] as number) < (low[k] as number)) low[k] = p[k] as number
       if ((p[k] as number) > (high[k] as number)) high[k] = p[k] as number
     }
-  const centre = [0, 1, 2].map(
+  const center = [0, 1, 2].map(
     (k) => ((low[k] as number) + (high[k] as number)) / 2,
   )
   const size = [0, 1, 2].map((k) => (high[k] as number) - (low[k] as number))
-  const scale = lengthMetres / (size[2] as number)
+  const scale = lengthMeters / (size[2] as number)
   // `+z` art turns half a turn about Y to face the game's −Z, which negates x
   // and z; `-z` art is already facing the right way.
   const flip = nose === '+z' ? -1 : 1
@@ -264,9 +264,9 @@ export function readHullField(
   const columns = new Map<number, [number, number]>()
   const extent = { x: 0, y: 0, z: 0 }
   for (const p of points) {
-    const x = flip * ((p[0] as number) - (centre[0] as number)) * scale
-    const y = ((p[1] as number) - (centre[1] as number)) * scale
-    const z = flip * ((p[2] as number) - (centre[2] as number)) * scale
+    const x = flip * ((p[0] as number) - (center[0] as number)) * scale
+    const y = ((p[1] as number) - (center[1] as number)) * scale
+    const z = flip * ((p[2] as number) - (center[2] as number)) * scale
     extent.x = Math.max(extent.x, Math.abs(x) * 2)
     extent.y = Math.max(extent.y, Math.abs(y) * 2)
     extent.z = Math.max(extent.z, Math.abs(z) * 2)

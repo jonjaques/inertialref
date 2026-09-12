@@ -263,7 +263,7 @@ function ico(images) {
     // 0 means 256 in this field, which is why it is a byte and why 256 works.
     entry.writeUInt8(size >= 256 ? 0 : size, 0)
     entry.writeUInt8(size >= 256 ? 0 : size, 1)
-    entry.writeUInt8(0, 2) // palette size — none, this is truecolour
+    entry.writeUInt8(0, 2) // palette size — none, this is truecolor
     entry.writeUInt8(0, 3) // reserved
     entry.writeUInt16LE(1, 4) // color planes
     entry.writeUInt16LE(32, 6) // bits per pixel

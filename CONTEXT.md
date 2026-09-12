@@ -409,7 +409,7 @@ again in a neighboring system.
   screen was always the datum sphere 11 km below, dead flat; the only terrain
   ever drawn was the far slopes of ridges poking above eye level, leaking
   through as a thin terrain-colored band floating over the horizon — visible
-  landed, gone by ~100 m up, which is what finally localised it. No
+  landed, gone by ~100 m up, which is what finally localized it. No
   distance-based test could catch it: winding is invisible to arithmetic about
   vertex positions, and the strobe test's invariant (constant ship–patch
   separation) holds in either order. Found by rebuilding the exact scene in
@@ -499,7 +499,7 @@ again in a neighboring system.
   out of the whole render.** The warm-up's walk registers the pipeline and the
   promise fills in the GPU object later; `WebGPUBackend.draw` in r182 skips a
   pipeline that failed and not one that is pending, so `setPipeline` gets an
-  undefined. The build-ahead materialises a body in view and warms it in the
+  undefined. The build-ahead materializes a body in view and warms it in the
   same task, so the next frame threw — twice at every boot, once per body in
   flight, one lost frame each without the chain and the picture with it.
   `patches/three@0.182.0.patch` skips the draw instead; `warmup.gpu.test.ts`
@@ -750,7 +750,7 @@ calls; 66–74 MB heap.
   counter. `autoReset` is off and `GameEngine.frame` resets it after sampling.
 - **React Compiler froze the entire overlay on its first render.** Every input to
   the panel is a `GameEngine` that never changes identity, so
-  `metrics.period.summarise()` looks like a pure call on a stable object and is
+  `metrics.period.summarize()` looks like a pure call on a stable object and is
   computed once. It is not pure — it reads a ring buffer the frame loop is still
   writing to. The panel showed its first frame's numbers for the rest of the
   session, reporting `starting…` for a renderer that had been live for minutes.
@@ -843,7 +843,7 @@ a byte-identical hash to one opened without.
   update however much intent it is handed. An authority echoing a client's own
   ship back at it would fight the local simulation every tick.
 - **`status().partition` is recomputed, never remembered.** A remembered one is
-  right until the first frame transition and quietly wrong afterwards. Flying
+  right until the first frame transition and quietly wrong afterward. Flying
   Sol → Alpha Centauri moves the reported authority from `s:SOL` to
   `s:HIP71683` with nothing driving it, so ADR-0008's open handoff question is
   now something you watch on the overlay rather than discover inside a Durable
@@ -880,7 +880,7 @@ The catalog stopped being 18 hand-transcribed stars and became an ingest.
 planets** out to 150 light-years, built by `apps/ingest` from HYG v4.4 and the
 NASA Exoplanet Archive, committed at 458 KB (179 KB brotli), and fetched at
 runtime as its own asset. Operating it is
-[`docs/guides/catalogue.md`](docs/guides/catalogue.md); the design it implements
+[`docs/guides/catalog.md`](docs/guides/catalog.md); the design it implements
 is [`docs/design/galaxy.md`](docs/design/galaxy.md).
 
 The old `catalog.ts` said its shape was chosen "so that swapping the source does
@@ -1036,7 +1036,7 @@ atmospheres, from the NASA/JPL fact sheets. And they are drawn from photographs 
 19 surface, elevation, cloud and ring maps, 10.7 MB, built by `apps/ingest` from
 NASA, USGS and Solar System Scope imagery.
 
-Operating it is [`docs/guides/catalogue.md`](docs/guides/catalogue.md#planetary-surface-maps);
+Operating it is [`docs/guides/catalog.md`](docs/guides/catalog.md#planetary-surface-maps);
 the shading is [`docs/concepts/rendering.md`](docs/concepts/rendering.md#planetary-surfaces).
 
 ### Sol is the one special case in the generator, and it earns it
@@ -1074,12 +1074,14 @@ scatter through the standard slab result rather than a Lambert stand-in.
 
 ### Bugs worth not reintroducing
 
-**`toColourspace('b-w')` downcasts 16-bit elevation, silently.** libvips calls
+**`toColorspace('b-w')` downcasts 16-bit elevation, silently.** libvips calls
 8-bit grayscale `b-w`, so it truncated LOLA's 16-bit product; a following
 `raw({depth:'ushort'})` widened the container back to two bytes without restoring
 the range. Every gradient came out 256× too small and the Moon's normal map was
 _perfectly flat_ — a valid file, a plausible pipeline, and no error anywhere.
-`grey16` is the one that preserves it, and the meters-per-value scale now
+`grey16` is the one that preserves it — a libvips interpretation nickname, which
+is why it keeps the British spelling; sharp accepts `gray16` and silently leaves
+the pipeline in three-channel sRGB16. The meters-per-value scale now
 calibrates itself against the field's own range so a unit bug of this class
 cannot recur.
 
@@ -1210,7 +1212,7 @@ configuring the one canvas context. A context belongs to the device that
 configured it last, so whenever that was the corpse's, the surviving
 renderer's every present targeted a foreign device's swapchain texture —
 invalid command buffers, dropped silently by Dawn, forever. The fix is one
-invariant: **one build per (canvas, preference)**. The factory memoises, so
+invariant: **one build per (canvas, preference)**. The factory memoizes, so
 the StrictMode re-invocation adopts the same renderer; a real rebuild (the
 HDR preference remounting the canvas) queues behind whatever is in flight, so
 release-then-configure is atomic and the last build always belongs to the
@@ -1276,7 +1278,7 @@ renderer the moment the window surfaced.
 
 **Normal maps are lossless, and the ocean mask moved to blue** (21 Aug 2026,
 `ingest/textures.ts`, `render/planet.ts`). Two compounding artifacts, one
-autopsy. Lossy WebP block-quantised the smooth slope fields: whole 8-pixel
+autopsy. Lossy WebP block-quantized the smooth slope fields: whole 8-pixel
 rows of the Moon's green channel offset ±39 around neutral — bands of surface
 tilted ~15°, invisible face-on, black latitude-parallel scratches under the
 grazing light at every full-phase limb. Re-encoding losslessly then erased the
@@ -1555,7 +1557,7 @@ Lessons with teeth:
   says 0.80 and 0.595, which had every credit 19% too large and the logotype
   15% too small — and once the sizes were right, the tracking that had been
   compensating for them fell out at zero.
-- **A light's screen position is a product.** With `lookAlong` levelling
+- **A light's screen position is a product.** With `lookAlong` leveling
   against the pole, the star lands at `−dot(toStar, forward)·dot(pole, forward)`
   for anything near the ecliptic, so _both_ terms must carry the right sign.
   The first cruise had the second one negative, put the key 32° below the axis,
@@ -1705,7 +1707,7 @@ uncaught error React has unmounted the tree and still owns that container.
   cleanly, matches no tab, and renders an empty dock with no active tab and no
   way back that is not devtools. A `camera.fov` of `NaN` or `5000` reaches the
   projection matrix. Every caller now passes an `Accept<T>` predicate and an
-  unrecognised value is treated exactly like an absent one.
+  unrecognized value is treated exactly like an absent one.
 
 ### The focus contract, which is subtler than it looks
 
@@ -1715,7 +1717,7 @@ swallows Space — the pause key — and turns it into a second click on itself.
 Blurring unconditionally solved that by making the dock untraversable; a
 keyboard user who activated anything was returned to the top of the document.
 
-`hud/focus.ts` blurs only when `event.detail > 0`. A click synthesised from
+`hud/focus.ts` blurs only when `event.detail > 0`. A click synthesized from
 Enter or Space on a focused button reports `detail === 0` in every engine, so a
 pointer keeps the old behavior exactly and a keyboard keeps its place — and a
 focused button swallowing Space is correct there, because Space is what
@@ -1747,7 +1749,7 @@ dark-adapted interface.
 
 Not built — recorded so the archaeology is not repeated. `SystemStub`
 (`packages/universe/src/galaxy.ts`) already carries `temperature`, a computed
-blackbody `color`, `catalogued` (which is provenance) and the confirmed
+blackbody `color`, `cataloged` (which is provenance) and the confirmed
 `planets`. **`TravelTarget` in `packages/devtools/src/travel.ts` carries none of
 it** — the destination list gets a pre-formatted `detail` string and a boolean.
 
@@ -1944,7 +1946,7 @@ moment the planetarium can move the ship, the survey game has a free mode that
 plays it for you.
 
 It differs from `CutsceneDirector` in one deliberate way: **its `sample` touches
-the world.** A script resolves its stage once and is pure afterwards because a
+the world.** A script resolves its stage once and is pure afterward because a
 scene must be reproducible frame for frame; the observatory is _following_
 something that moves, and one that resolved Jupiter's position once would orbit
 where Jupiter used to be within a minute of time warp.
@@ -2850,8 +2852,8 @@ for different jobs.
   cutscene authoring moved out of `AGENTS.md` into
   [`docs/guides/client.md`](docs/guides/client.md) and
   [`docs/guides/cinematics.md`](docs/guides/cinematics.md).
-- British spelling in the docs was converted where it was safe. Identifiers,
-  filenames (`catalogue.md`), and `cancelled()` are left for a later pass.
+- The prose conversion deliberately excluded identifiers, stored keys, and
+  filenames for a separate rename.
 
 ## The first look was the expensive one, so everything loads at boot (23 Aug 2026)
 
@@ -2918,12 +2920,9 @@ frames. Pace with `queue.onSubmittedWorkDone()` before believing any number.
 
 ## American English in copy, comments, and docs (23 Aug 2026)
 
-British spelling in user-facing copy, labels, comments, and documentation is
-now American: _color_, _center_, _meter_, _catalog_, _behavior_, _license_,
-_gray_, _artifact_, _toward_. Identifiers, panel ids (`catalogue`), JSON keys
-(`licence`), enum values (`centre`), and filenames (`catalogue.md`) were left
-alone for a later programmatic rename. [`STYLE.md`](STYLE.md)
-already stated the policy; this pass applies it to the rest of the tree.
+User-facing copy, labels, comments, and documentation adopted American
+English. The pass deferred identifiers, panel ids, JSON keys, enum values and
+filenames to a programmatic rename. [`STYLE.md`](STYLE.md) supplied the policy.
 
 ## Twelve shallow modules, deepened (23 Aug 2026)
 
@@ -2967,7 +2966,7 @@ light years from where it was. The Worker states its catalog version from
 manifest to the packed file beside it, because they are now read by different
 things. `docs/roadmap.md`'s open square closes.
 
-**`TravelTarget` dropped `catalogued`,** so a real star and an invented one
+**`TravelTarget` dropped `cataloged`,** so a real star and an invented one
 rendered identically — against a PRODUCT.md commitment — while `loaded`, a
 streaming fact about this session, sat in the slot the epistemic fact belonged
 in. One field forward, mapped to the domain word (`observed` / `projected`) at
@@ -3103,7 +3102,7 @@ rule had just been written down.
 
 `openSession` was accreting width: `presentation` and `onWorldReplaced` folded
 into one `host` parameter — they are both the host's render side and always
-travelled together — and, more to the point, the render answers are _named_
+traveled together — and, more to the point, the render answers are _named_
 rather than spread. The spread landed last in the session object, so a stray
 `world` key would have shadowed the getter the module exists to protect. That
 bug class is unrepresentable now rather than commented against. `shipName` had
@@ -3739,7 +3738,7 @@ captured once and committed answers both: `design/brand/og-plate.png` sits
 beside `brandmark.svg` as the second thing the brand is drawn from, `sharp`
 composites the type over it, and re-shooting it is a deliberate commit rather
 than a build step. The drawing it replaced was six bezier continents and a
-hand-built anamorphic blade, and at 300 px it read as grey amoebas on a blue
+hand-built anamorphic blade, and at 300 px it read as gray amoebas on a blue
 ball.
 
 **The plate is a real orbital sunrise, not a beauty pass.** Earth at 1.16 body
@@ -3752,7 +3751,7 @@ terminator stairsteps.
 
 **Shot at `flareArtifacts = 0.35`, which is the menu's stance and not the
 flight camera's.** `GameEngine.flareArtifacts` already documents why: the
-ghosts march along the line from the star through frame centre, so a star on
+ghosts march along the line from the star through frame center, so a star on
 the right of a poster puts the red aperture ring squarely on the paragraph on
 the left. The first plate was shot at 1 and had a 150 px hoop behind the rule.
 The value that was already correct for the front door was already correct for
@@ -3843,7 +3842,7 @@ citation rather than tolerated by a loose bound:
   measurements, and the newer one is used.
 - **Hartley 2 is 1.6 km in SBDB and 1.16 to EPOXI**, which flew past it.
 - **Pluto's four small moons come out 6 to 10% slow.** They orbit the
-  Pluto–Charon barycentre and the engine is a patched-conic hierarchy that
+  Pluto–Charon barycenter and the engine is a patched-conic hierarchy that
   propagates them about Pluto alone, so `sqrt(1 + M_Charon/M_Pluto)` = 5.9% of it
   is the engine's and the rest is a resonant six-body system that a two-body
   relation describes to a few percent whoever computes it. The test asserts the
@@ -3892,7 +3891,7 @@ Two bugs the volume check found on the way:
   pole, then reported three axes as `[eq, eq, polar]` — so no body ever had a
   distinct intermediate axis and Eros came out 17.6 × 17.6 × 6.1.
 
-Measured against JPL afterwards, the reconstructions land: Phobos's
+Measured against JPL afterward, the reconstructions land: Phobos's
 volume-equivalent radius is 11.115 km against a published 11.08, Epimetheus's is
 58.32 against 58.2, Amalthea's 81.8 against 83.5.
 
@@ -4109,7 +4108,7 @@ recording because they were wrong in a way that would not have shown up:
   bundle while the Phobos entry never set `texture: 'phobos'`, so the tint that
   had just been halved _to compensate for that map_ was landing on nothing.
 - **`system.planets.length` beside the literal word "planets"** in four display
-  sites, now that the array holds every body orbiting the star: the catalogue
+  sites, now that the array holds every body orbiting the star: the catalog
   row read "Sol · 66 planets".
 - **`Set<string>` in three files** for the same "which kinds are worlds"
   partition, so a ninth `BodyKind` would compile against all three and land in
@@ -4174,7 +4173,7 @@ these carries a different half of it:
 | [Planetarium](docs/design/planetarium.md)                          | The four orbit-trace rules, including sampling in eccentric anomaly                                                             |
 | [Exploration](docs/design/exploration.md)                          | A figure is a Tier 2 scan yield, and on a small body it is the headline one                                                     |
 | [Roadmap](docs/roadmap.md#small-bodies-and-their-figures)          | Photometric normalization, the archives the ingest cannot reach, what `radius` means, polyhedral gravity, belts as a population |
-| [Catalog guide](docs/guides/catalogue.md#shape-models)             | `pnpm shapes:build`, `pnpm solar:fetch`, and the volume check that refuses a model the format cannot hold                       |
+| [Catalog guide](docs/guides/catalog.md#shape-models)               | `pnpm shapes:build`, `pnpm solar:fetch`, and the volume check that refuses a model the format cannot hold                       |
 | [Testing guide](docs/guides/testing.md)                            | Three ways a regression test failed to fail; timeouts as hang guards; distributions; derived quantities                         |
 | [Extending guide](docs/guides/extending.md)                        | Adding a body kind; calibrating a generator against a measurement; intra-package cycles                                         |
 | [Architecture](docs/architecture.md#where-the-universe-comes-from) | The generation inputs, and that the observed/generated split runs per field                                                     |
@@ -4422,7 +4421,7 @@ version lifted every channel toward white by 0.45 so a saturated M-dwarf red
 would be legible at 12 px over slate. It turned the whole neighborhood into
 pale peach and Sirius into off-white: a rail of nine identical dots.
 
-It did not need one. `blackbodyColour` normalizes the brightest channel to 1,
+It did not need one. `blackbodyColor` normalizes the brightest channel to 1,
 so every star already has a channel at full and no glyph can come out dim. What
 the floor was buying was already there, and the hue was what was being spent
 for it. The transfer function stays — linear to gamma-encoded sRGB, because an
@@ -4437,7 +4436,7 @@ answer than a date. It reads **Antiquity** now, and Uranus still reads 1781.
 
 The same class of bug, one clause along: `starSummary` divides by the Sun's
 luminosity and quotes a distance from Sol, so without a branch for the Sun
-itself it wrote "catalogued at 0.00 light years, putting out 1.000 times
+itself it wrote "cataloged at 0.00 light years, putting out 1.000 times
 fainter than the Sun" — wrong twice, about the one star every reader looks at
 first.
 
@@ -4715,7 +4714,7 @@ request one, taken from where the eye is going — and together they are six
 hundred to twelve hundred regions. Every frame evicted ground the next frame
 wanted. **A still could not have shown this**; the sample could.
 
-### What the invariant audit found afterwards
+### What the invariant audit found afterward
 
 Three, and the first is the one worth remembering. **`surfaceDetailFloor`
 memoized on `radius * 1e6 + resolution + tolerance`**, which folds three numbers
@@ -4959,7 +4958,7 @@ carries the decision and the four alternatives it beat; what follows is what the
 building measured.
 
 **The masthead is where all the surprises were.** The design is a band of live
-simulation across the top of every page, and the observatory centres its subject
+simulation across the top of every page, and the observatory centers its subject
 in the _whole canvas_ — so a framing that fills half the frame puts the body
 entirely behind the reading plate and leaves the dark cap of a disk in the band.
 Every intuition about `fill` is therefore backwards here: the working values are
@@ -5403,7 +5402,7 @@ not move; the baseline reports "budget bit on 0 steps" on every body.
 **The regression test measures continuity rather than steepness.** A large
 adjacent jump is not a defect; what separates steep from discontinuous is
 whether the gap closes as the two samples are brought together. `geology.test.ts`
-finds the worst jump on a great circle, bisects sixty times to a sub-nanometre
+finds the worst jump on a great circle, bisects sixty times to a sub-nanometer
 separation, and asserts the gap went with it — 1 m bound against a 2.4 mm worst
 survivor and a 590 m defect. Reintroducing the step fails it on Luna by three
 orders of magnitude.
@@ -5492,7 +5491,7 @@ either side of one on Proxima Centauri II: the same nearest plate, base 0.432,
 with the second jumping from base 0.224 to −0.894 at a `boundary` of 5.72e-2.
 
 A sample now carries every plate within a quarter-radian of the nearest and a
-band reads a property as a normalised weighted average over all of them, so no
+band reads a property as a normalized weighted average over all of them, so no
 rank identity enters and continuity is by construction — the same argument the
 crater lattice makes about the cube corner. `convergence` is weighted over
 _pairs_, because a convergence taken from the nearest plate and whichever is
@@ -5660,7 +5659,7 @@ with the geometry, bit-exactly, for the same reason the normal does.
 its own radii where its apron reaches 2.6, and a lattice walk that wide is
 hundreds of cells a sample. `rayCraters` enumerates the coarse rungs once per
 body and keeps the youngest sixteen, reading every field back from the same two
-hashes the height walk reads — so a ray system is centred on a bowl the field
+hashes the height walk reads — so a ray system is centered on a bowl the field
 actually digs. The test silences every other rung to say so, because comparing
 the whole field against itself cannot: a fresh 60 km crater on the inward slope
 of a 700 km basin reads _higher_ than the ground beside it, and four of Luna's
@@ -5897,7 +5896,7 @@ fine: a one-meter crater on a 1,700 km body subtends 3 × 10⁻⁷, so the expre
 is 4 × 10⁻¹⁴ against a float64 ulp of 2 × 10⁻¹⁶ — half a percent, which is a
 millimeter on the crater's own depth and, worse, a millimeter that **differs
 between two patches that computed the same direction by different routes**. The
-sum of squared component differences is the same number with nothing cancelling
+sum of squared component differences is the same number with nothing canceling
 and costs two divides a crater. `ChordForm` is the parameter; the canonical
 ladder keeps the cheap form deliberately, because changing it would move
 `elevationAt` in its last bits on every body.
@@ -5935,7 +5934,7 @@ And `sink` is a fraction of the rock spent against `rock.radius`, which is half
 its _longest_ dimension while it is drawn 0.62 to 0.82 of that tall — so the
 median rock sat entirely below the surface. `rockRise` is the drawn half-extent
 now and the seat, the sink and the instance scale all read it. The fixed
-twelve-centimetre seat then buried the small end on its own, because it is
+twelve-centimeter seat then buried the small end on its own, because it is
 taller than a 25 cm rock's own 17 cm of stand: **0 buried across 14,727 rocks
 against 3,588 before**, in every size class.
 
@@ -5952,7 +5951,7 @@ same way was invisible until the real draw hit the same wall.
 ### The band between a mesh cell and a pixel
 
 A patch at the detail floor is 0.35 to 1.41 m a cell, and standing at two meters
-one of those cells is two hundred display pixels across. `MICRO_METRES` is a
+one of those cells is two hundred display pixels across. `MICRO_METERS` is a
 seven-meter octave and there was nothing under it, so the near ground drew as a
 smooth swell. The grain band is 0.7 m down to 9 cm at about fifteen degrees of
 slope, which is what lunar regolith measures at centimeter baselines.
@@ -6185,7 +6184,7 @@ completion, so a departure left up to 128 of them queued ahead of everything
 the next view wanted. `#inFlight` holds the `JobHandle` now and `clear()`
 cancels it. Landed on Mars and then looking away: queued 124 to 0 within 60 ms,
 at a 264 ms mean run — 33 seconds of worker time not spent. At the cap all but
-`poolSize()` of the window are still in the pool's queue, where cancelling is a
+`poolSize()` of the window are still in the pool's queue, where canceling is a
 splice and the work never happens.
 
 **The pool ceiling was four on a ten-core machine and nothing had measured it.**
@@ -6251,7 +6250,7 @@ and the same ratio on Mars (40.3/34.0) and Luna (48.6/42.8). Its own docstring
 already said nothing about it needs the main thread, so it is a pool task and
 the streamer holds the ground back for the frames it takes. And `placePathInto`
 replaced `placeAt` per orbit vertex; its property test shrank to a shift of
-eight micrometres and reported the _reference_ as wrong, because a universe
+eight micrometers and reported the _reference_ as wrong, because a universe
 offset runs to 2^40 m where a double resolves 0.24 mm, so `UV.translate` rounds
 a fine shift away and adding it after the difference does not.
 
@@ -6402,7 +6401,7 @@ thread at 0.25 ms a patch; the kernel's level-0 offset term is the
 A dev boot comes up black under a live HUD, the CPU lights up, the frame
 strobes, and Earthrise arrives about ten seconds in. Reproduced in headless
 Chrome, where nothing can occlude the window, so every reading below is a
-composited screenshot or an in-frame readback and not a rig artefact. The
+composited screenshot or an in-frame readback and not a rig artifact. The
 reading that named it: 789,603 triangles and 1,728 lines submitted a frame,
 the canvas opaque black inside the frame, and `camera.aspect === 0` on the
 camera being rendered with, while the R3F store held `size 1600×900` and a
@@ -6536,7 +6535,7 @@ knip's defaults are wrong here twice over, both reading as dozens of false
 them in the workspace holding the vitest config, of which this repository has
 exactly one covering all sixteen; and `packages/*` publishes nothing, so
 `exports` points at `./src/index.ts` with no build step and no `dist`. One
-false positive survives and is worth recognising rather than re-diagnosing:
+false positive survives and is worth recognizing rather than re-diagnosing:
 `tngIntro.ts` declares a local helper named `require` that looks a body up by
 name, so knip reads `require('Earth')` as a CommonJS import and reports Earth,
 Mars, Jupiter and Saturn as unlisted dependencies.
@@ -6964,7 +6963,7 @@ version.
 
 ## The generated sphere gets its mountains back (3 Sep 2026)
 
-The orbital bake's second pass wrote the sea mask as a grey and nothing
+The orbital bake's second pass wrote the sea mask as a gray and nothing
 else, so a generated body's disk had the ground's reflectance — its lakes,
 its maria, its biosphere — laid over a normal that was flat everywhere. The
 mountains were in the near half of a descent and gone in the far half, which
@@ -7006,7 +7005,7 @@ none of its four members draws one.
 ## Every mapless moon in Sol was a dark disk under a sun-glint — it was one stand-in bound twice (3 Sep 2026)
 
 Enceladus, looked at from the planetarium: a black sphere, a bright soft
-hot-spot left of centre, a grey marbling on the lit limb. Rhea, Mimas, every
+hot-spot left of center, a gray marbling on the lit limb. Rhea, Mimas, every
 Saturnian and Uranian moon without a vendored map the same. The three obvious
 guesses were the bake, the relief encoding and the tone curve, and the bake was
 the first thing measured: its two cube targets read back through
@@ -7024,7 +7023,7 @@ the reflectance node. The warm-up freezes the program there, and `setBake`'s
 later value swap on the relief node binds nothing. The sphere then decoded the
 ice's 0.8 of albedo as a slope of 0.6 east and north and a sea mask of 0.8:
 the normal tilted off the star, the albedo went two thirds of the way to the
-ocean colour, and the glint landed on it. The same collapse was already in
+ocean color, and the glint landed on it. The same collapse was already in
 `planet.ts` for the 2D maps, and `RING_WHITE` exists because of it; the cube
 stand-in was written once and used twice anyway. Two stand-ins now,
 `BLANK_REFLECTANCE` and `BLANK_RELIEF`, and the invariant is in `AGENTS.md`.
@@ -7045,7 +7044,7 @@ that was fixed a `compile` followed by a `draw` into a fresh target still
 passed, because a pipeline is keyed on its attachment and the second draw
 built a second program over the bake. The test holds one float target across
 a stand-in draw and the bake draw — the boot's own sequence — and only then
-reads 0.36 at the centre against the shared stand-in where the fix reads 0.80.
+reads 0.36 at the center against the shared stand-in where the fix reads 0.80.
 
 With the sphere wearing relief for the first time on a Sol moon, Enceladus's
 tiger stripes are visible from orbit as four hairlines running pole to pole.
@@ -7114,7 +7113,7 @@ catalog both ways — every key a mapless ringed body in Sol, every such body a
 key — because the small bodies are keyed by issue-ordinal addresses nothing
 else in the file can see.
 
-**The ring's albedo was in the product twice.** The strip's colour multiplies
+**The ring's albedo was in the product twice.** The strip's color multiplies
 `ω₀` and the strip is where the darkening lives — Saturn's B ring is 0.51 in
 its photograph, Uranus's rubble 0.06 — so at 0.6 a τ 1 sheet's lit face sat
 at a sixth of its planet. `ω₀` is 0.9, clean water ice in the visible, on
@@ -7638,7 +7637,7 @@ still anchors the integrated ramp, which had re-normalized the whole sky on
 Sirius the frame the disk resolved.
 
 The motion attachment had no blend mode, so the flare's quads at twenty
-metres replaced the depth of the sky behind the Sun over their footprint; at
+meters replaced the depth of the sky behind the Sun over their footprint; at
 1.5× zoom or f/1.4 on a retina window that was enough to enable defocus and
 smear the pixels under the glow. Overlays now write a zero motion vector under
 an alpha blend on that attachment, through `sensorRadiance(material, true)`.
@@ -7784,7 +7783,7 @@ work has to measure: the faint sky beside a sunlit body, through each
 response.
 
 **Two test mistakes worth not repeating.** A published direction scaled to
-one metre: a universe position is 2.5 × 10²⁰ m from the origin, a double
+one meter: a universe position is 2.5 × 10²⁰ m from the origin, a double
 resolves about 3 × 10⁴ m there, and the expected direction came out 65° off
 as rounding noise — scale to the star's own distance. And `search('rig')`
 returns Rigil Kentaurus first, at 4 ly, above Rigel at 860; that is the
@@ -8287,7 +8286,7 @@ checks. The driver does not maintain a separate camera restoration path.
 ## The navigator, the drop and a search over the volume (6 Sep 2026)
 
 The catalog panel is the **Navigator** in both workspaces. Its id and its three
-preference keys keep `catalogue`, because those are what a stored layout and a
+preference keys keep `catalog`, because those are what a stored layout and a
 stored radius remember; a rename that reset every reader's chips would be a
 rename of the wrong thing.
 
@@ -8390,7 +8389,7 @@ zenith mean, Zucker's 165 pc is a radius, and Licquia's V magnitude is reported
 with `5 log h` removed. [ADR-0032](docs/adr/0032-the-stellar-field.md#the-local-sky-and-linear-calibration-m6)
 records their replacement targets and the model approximations.
 
-The Lallement FITS header uses magnitudes per parsec despite the catalogue
+The Lallement FITS header uses magnitudes per parsec despite the catalog
 ReadMe's nanomagnitude label. Nine Gaussian cloud approximations derive from
 explicit windows in that cube; source hashes and columns accompany the runtime
 records. A solar-centered 165 pc cavity reduces the smooth dust to 20% locally,
@@ -8581,10 +8580,10 @@ Sixteen dust samples missed nearby thin columns by as much as 0.82 in
 transmission. Distance-aware quadrature uses 32/64/512 samples and the shared
 16 MiB arm table. A frozen observer owns each finite queue: restarting on
 motion starves it forever. GPU batches of 1024 sources cost about 1.5–1.7 ms
-steady or 3.1 ms for cold catalogue reference plus current columns. Unchanged
+steady or 3.1 ms for cold catalog reference plus current columns. Unchanged
 sources retain their last column through six-submission optical-depth blending;
 new sources begin hidden. The WebGL fallback computes one source per
-submission and exposes its slower convergence. Catalogue magnitudes receive
+submission and exposes its slower convergence. Catalog magnitudes receive
 an observer/Solar transmission ratio, so Sol does not count extinction twice.
 
 A 512² physical cube is 12 MiB. Its final 72-direction GPU comparison has
@@ -8894,7 +8893,7 @@ burns when it burns. Three layers, each testable without the one above it:
   one, clamped to 0..1, and the physics — which applied the demand exactly —
   makes the ship move as if the set were perfect. Torque is by direction and
   not by lever so a pitch is drawn as a couple rather than as the nose alone,
-  with `TORQUE_LEVER` (2 m) scaling only valves near the centre of mass. A
+  with `TORQUE_LEVER` (2 m) scaling only valves near the center of mass. A
   hull with a drive burns ahead on the drive alone; the valves never see the
   forward half of the demand, or a stern pod leaning aft would glow through
   every burn. `thrusters.test.ts` holds it to nine properties, the mirror
@@ -8903,7 +8902,7 @@ burns when it burns. Three layers, each testable without the one above it:
   `fast-check` rather than by eye.
 - **The layout is measured, never drawn.** `scripts/nozzles.mjs` parses the
   GLB itself and walks each matching mesh into shells, reporting centroids,
-  mean face normals and boundary loops in the game's hull axes — recentred,
+  mean face normals and boundary loops in the game's hull axes — recentered,
   scaled, bow turned — so a number it prints is copied into
   `render/thrusterLayouts.ts` as it stands. The reading found that these
   nozzles are capped bumps whose open loop is the _attachment_: the exhaust
@@ -8922,7 +8921,7 @@ pods are each one shell instanced by four attributes — mouth, axis, size,
 firing — of which only the last is written per frame; the drive is the same
 shell at a torch's profile with filaments scrolling aft and a crown of spikes
 at the rim, plus a disk at the exit plane carrying the turbulent core the
-reference plates show filling the cone. Additive in colour and silent in
+reference plates show filling the cone. Additive in color and silent in
 alpha on the flare's discipline, depth-tested against the hull, with the
 facing term carried down from the vertex stage so a shell seen edge-on
 softens and one seen down its axis shows the cap as a burning disk. No
@@ -8930,7 +8929,7 @@ light: a point light on the skirt would be a second program for every
 material in the scene. `materials.gpu.test.ts` compiles all four.
 
 The ship arm of the camera precedence has two views. **Chase** is what it
-was, exactly — `flightCameraPose` with the head centred reproduces
+was, exactly — `flightCameraPose` with the head centered reproduces
 `chaseCameraPosition` and the ship's orientation bit for bit, and
 `camera.test.ts` says so — with a drag now turning the head. **Orbit** stands
 off in the world's own axes, pole on the scene's local up, distance in hull
@@ -9182,11 +9181,11 @@ not: fast-check seed `-1913150845`, eccentricity 0.9869367908579146, nearly
 fifty revolutions from periapsis. The universal propagator follows the rounded
 epoch state; the comparison follows the original elements. Their periods
 differ by 4.885 microseconds. Near the next periapsis that becomes about
-201 metres and 0.208 m/s, enough to cross the velocity comparison's bound.
+201 meters and 0.208 m/s, enough to cross the velocity comparison's bound.
 Both the property and propagator are unchanged from `main`.
 
 An independent eccentricity-vector and Kepler calculation, agreeing at 90
-and 100 decimal digits, places the propagator within 2.173 metres and
+and 100 decimal digits, places the propagator within 2.173 meters and
 0.002244 m/s of its actual input orbit. Binary64 period reconstruction
 accounts for that remaining error. The solver stays unchanged. The property
 retains its base tolerance and adds a phase allowance derived from input
@@ -9381,7 +9380,7 @@ freezes the film. The chosen instant puts the Sun 3° above the horizon at
 azimuth 266.677°; rotating the pad heading to 246° keeps that real Sun beside
 the Roci during the pullback. The opening three-quarter profile is framed by
 a 0.3–0.9° ground telephoto. Touchdown occurs at 41 seconds with zero sampled
-velocity and the drive still carrying the hull: the last metre of the approach
+velocity and the drive still carrying the hull: the last meter of the approach
 is a hover, so the cut begins at contact and is out three quarters of a second
 later, and the dust settles from the same instant. Heat, plume, and dust are
 functions of the playhead.
@@ -9411,15 +9410,15 @@ aliased into a full-width line 8 sRGB units bright 1500 px from the Sun.
 The scene now drives the flight lens's flare and leaves the streak at zero.
 
 The dome is authored from the rover plates: micron dust scatters forward, so
-the sky is a dim, desaturated butterscotch except for a cool blue-grey halo
-some twenty degrees across the Sun, and the zenith goes brown-grey. Two
+the sky is a dim, desaturated butterscotch except for a cool blue-gray halo
+some twenty degrees across the Sun, and the zenith goes brown-gray. Two
 things cost a round trip. Radiance is linear, so a band authored near
 neutral (1 : 0.71 : 0.64) reads mauve on the plate; tan on the plate is
 authored near 1 : 0.58 : 0.32. And TSL's `.mix` method takes its receiver as
-the interpolant — `base.mix(colour, halo)` lerps from the colour to the halo
+the interpolant — `base.mix(color, halo)` lerps from the color to the halo
 weight by the base — which painted the whole dome lavender and failed the
 lower-hemisphere regression with a red of 0.298 where it asks for under
-0.01. The function form `mix(base, colour, halo)` is the one that composes.
+0.01. The function form `mix(base, color, halo)` is the one that composes.
 
 ## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
 
@@ -9679,6 +9678,42 @@ for that reason.
 
 The spelling burn-down moved the wrong way while nobody was reading it: 315
 declarations in 86 files with 1,997 references is 456 in 117 with 3,409.
+
+## American spelling reaches the stored keys (12 Sep 2026)
+
+The identifier migration uses the TypeScript language service before rewriting
+comments and prose. Cancellation messages, manifest keys, and the catalog
+fields move with their producers and consumers. Stored panel ids and preference
+keys use the same spelling as the source; published paths advance directly. The
+action ids inside `controls.keymap` are stored keys too, and `resolveBindings`
+drops an override naming an id this build does not have: a rebound Recenter
+comes back as Home, and the unread `flight.recentre` entry stays behind it. The
+loss is deliberate for the same reason as the rest — a compatibility reader for
+one rename is a reader nothing ever removes.
+
+Source licenses also live inside both packed star catalogs. The attribution
+test failed when only the TypeScript field moved, and passed after migrating
+the binary metadata. Every star and planet byte stays intact; compressed size
+measurements reflect the new metadata. The Mars pad's metric keys also live in
+its GLB, Python generator and Blender source. Updating the GLB preserves its
+geometry bytes, and reopening the Blender source verifies identical object
+transforms and mesh geometry.
+
+The dictionary needs camel-case boundaries and guarded verb suffixes.
+`DescentReport` spans two words; `realistic`, `optimism`, `characteristic`, and
+`Polaris` are already American. Regression tests reproduced false rewrites
+before those rules were corrected. `pnpm spelling:check` rejects British
+identifier declarations as part of `pnpm check`.
+
+A language-service file move under bundler resolution can shorten an import
+specifier. TypeScript accepts it, but the plain-Node preset loader fails.
+Moved source imports keep their explicit `.ts` or `.tsx` extensions.
+
+CI exposed a randomized cutscene-test failure: held samples changed the last
+render time, then the seek assertion sampled at the earlier parking time.
+A one-tick drop reproduces the 0.374625-frame discrepancy deterministically.
+The assertion now samples at the seek's actual time anchor; production timing
+is unchanged.
 
 ## Known gaps
 

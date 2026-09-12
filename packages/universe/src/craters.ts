@@ -860,7 +860,7 @@ export function rayCraters(
            * Rejected here rather than after the sort, because after it the cell
            * has already spent one of the sixteen slots and skipping it leaves
            * the body with fifteen ray systems for no reason anybody could name.
-           * It is the cell whose jittered centre lands on the origin, which is
+           * It is the cell whose jittered center lands on the origin, which is
            * one cell in the whole lattice and only when the jitter cancels the
            * index — but the youngest sixteen is a *ranking*, and a ranking that
            * can carry an entry it will then drop is a ranking of the wrong set.

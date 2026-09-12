@@ -18,11 +18,11 @@
  *     assets is a capped bump whose open loop is the *attachment* to the hull,
  *     so the mean normal — which leans away from the hull — is the exhaust
  *     axis, and the loop's normal is not.
- *   - each boundary loop (edges owned by one triangle), with its centre,
+ *   - each boundary loop (edges owned by one triangle), with its center,
  *     radius and Newell normal. A bell exported as an open shell has its
  *     mouth here, and the loop's radius is the mouth's.
  *
- * Coordinates are given twice: the artist's, and the game's — recentred on
+ * Coordinates are given twice: the artist's, and the game's — recentered on
  * the bounding-box middle, scaled to the manifest's length, and turned a half
  * turn about +Y when the bow points +Z — which is precisely what
  * `render/shipModels.ts` does to the hull, so a number printed here can be
@@ -174,18 +174,18 @@ function walk(index, parent) {
 }
 for (const root of json.scenes[json.scene ?? 0].nodes) walk(root, IDENTITY)
 
-const centre = min.map((a, i) => (a + max[i]) / 2)
+const center = min.map((a, i) => (a + max[i]) / 2)
 const size = min.map((a, i) => max[i] - a)
 const scale = LENGTH / size[2]
 const toGame = (p) => {
-  const r = sub(p, centre).map((v) => v * scale)
+  const r = sub(p, center).map((v) => v * scale)
   return HALF_TURN ? [-r[0], r[1], -r[2]] : r
 }
 const dirToGame = (d) => (HALF_TURN ? [-d[0], d[1], -d[2]] : d)
 const f = (v) => `(${v.map((x) => x.toFixed(3)).join(', ')})`
 
 console.log(
-  `model: centre ${f(centre)}, size ${f(size)}, ${scale.toFixed(5)} m per unit at ${LENGTH} m${HALF_TURN ? ', bow +Z turned to −Z' : ''}`,
+  `model: center ${f(center)}, size ${f(size)}, ${scale.toFixed(5)} m per unit at ${LENGTH} m${HALF_TURN ? ', bow +Z turned to −Z' : ''}`,
 )
 
 for (const { name, points, indices } of matched) {
@@ -299,7 +299,7 @@ for (const { name, points, indices } of matched) {
       const radius =
         loop.reduce((s, v) => s + len(sub(verts[v], lc)), 0) / loop.length
       console.log(
-        `    loop ×${loop.length}: centre model ${f(lc)}  game ${f(toGame(lc))}  radius ${(radius * scale).toFixed(3)} m  normal game ${f(dirToGame(n))}`,
+        `    loop ×${loop.length}: center model ${f(lc)}  game ${f(toGame(lc))}  radius ${(radius * scale).toFixed(3)} m  normal game ${f(dirToGame(n))}`,
       )
     }
   }

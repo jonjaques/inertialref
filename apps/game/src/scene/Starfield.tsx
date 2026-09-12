@@ -102,7 +102,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       // A Sprite shares its quad geometry. Its instanced buffers belong here.
       disposeAttributes(gl as unknown as WebGPURenderer, [
         created.material.positions,
-        created.material.colours,
+        created.material.colors,
         created.material.prominence,
         created.material.visibility,
         created.material.enabled,

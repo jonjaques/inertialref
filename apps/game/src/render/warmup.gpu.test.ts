@@ -111,7 +111,7 @@ describe('warmCompile', () => {
      * `Renderer._renderObjectDirect` draws nothing for it — `Pipelines.isReady`
      * gates the backend's draw. Without that gate the backend hands
      * `setPipeline` an undefined and throws out of the whole render: one lost
-     * frame on every body the build-ahead materialises and, inside the sensor
+     * frame on every body the build-ahead materializes and, inside the sensor
      * chain, the throw `sensor.gpu.test.ts` guards the renderer against.
      * This holds the gate, because an upgrade could lose it: the frame before
      * the promise is quiet, empty and builds no second pipeline, and the

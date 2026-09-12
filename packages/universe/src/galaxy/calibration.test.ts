@@ -8,7 +8,7 @@ import { galaxyVMagnitude, galaxyDisplayRgb } from './photometry.ts'
 
 it('holds the polar stellar sky within 0.3 V magnitude of the GAMBONS astrophysical sky', () => {
   const field = createGalaxyField(rootSeed('inertialref'))
-  // A broad polar average removes the shot noise of individually bright catalogue stars.
+  // A broad polar average removes the shot noise of individually bright catalog stars.
   let total = 0
   for (let i = 0; i < 4; i++)
     for (let j = 0; j < 12; j++)

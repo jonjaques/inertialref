@@ -92,8 +92,8 @@ describe('render placement', () => {
     // of a 2,864 km planet is far beyond the near limit, but its surface — and
     // the streamed patches on it — are right in front of the camera.
     const radius = 2.864e6
-    const centre = UV.translate(ORIGIN.position, vec3(radius + 400e3, 0, 0))
-    const planet = placeAt(ORIGIN, centre, radius, AT_ORIGIN)
+    const center = UV.translate(ORIGIN.position, vec3(radius + 400e3, 0, 0))
+    const planet = placeAt(ORIGIN, center, radius, AT_ORIGIN)
     expect(planet.compressed).toBe(false)
     // The rendered near surface sits exactly at the true altitude.
     expect(Vec.length(planet.position) - planet.scale).toBeCloseTo(400e3, 3)
@@ -459,16 +459,16 @@ describe('scene', () => {
 
   it('culls what would be smaller than a pixel', () => {
     const { shot, ship } = sceneFixture()
-    const galacticCentre = UV.fromMeters(0, 0, 0)
+    const galacticCenter = UV.fromMeters(0, 0, 0)
     // The *eye* is what culls, not the origin. Moving only the origin used to
     // read as "viewed from the galactic center" and no longer does: placement
     // measures from the eye, so an origin parked 26,000 light years away with
     // the ship still at Sol now describes a camera at Sol, which sees planets.
     const scene = buildScene(
       shot,
-      createRenderOrigin(galacticCentre),
+      createRenderOrigin(galacticCenter),
       ship.id,
-      { position: galacticCentre, orientation: Q.IDENTITY },
+      { position: galacticCenter, orientation: Q.IDENTITY },
     )
     // From the galactic center, Sol's planets are far below one pixel.
     expect(scene.bodies).toHaveLength(0)
@@ -768,9 +768,9 @@ describe('terrain mesh', () => {
     // Requirement 8 of the milestone, checked at the level that decides it: a
     // vertex a meter from its neighbor must still be a meter from it after
     // going through render space, four light-years out.
-    const centre = UV.fromMeters(4.2 * LIGHT_YEAR, 0, 0)
-    const a = UV.translate(centre, vec3(6.371e6, 0, 0))
-    const b = UV.translate(centre, vec3(6.371e6, 1, 0))
+    const center = UV.fromMeters(4.2 * LIGHT_YEAR, 0, 0)
+    const a = UV.translate(center, vec3(6.371e6, 0, 0))
+    const b = UV.translate(center, vec3(6.371e6, 1, 0))
     // The origin follows the camera, so the ground under the player is always
     // in the uncompressed near field. That is what makes meter-scale objects
     // exact four light-years from anywhere.
@@ -785,7 +785,7 @@ describe('terrain mesh', () => {
     // Sanity: from an origin at the planet's center those same two points *are*
     // compressed, and the meter between them shrinks. Compression is a property
     // of the far field, and the far field is not where gameplay happens.
-    const distant = createRenderOrigin(centre)
+    const distant = createRenderOrigin(center)
     expect(placeAt(distant, a, 1, AT_ORIGIN).compressed).toBe(true)
     expect(AU).toBeGreaterThan(0)
   })
@@ -798,9 +798,9 @@ describe('the star shell', () => {
    * cover. `placePoint` — written for exactly this — had no callers.
    */
   it("puts every star on the shell, in the origin's axes", () => {
-    const centre = universeVector(3, -1, 7, 100, 200, 300)
-    const origin = createRenderOrigin(centre)
-    const star = UV.translate(centre, vec3(4 * LIGHT_YEAR, 0, 0))
+    const center = universeVector(3, -1, 7, 100, 200, 300)
+    const origin = createRenderOrigin(center)
+    const star = UV.translate(center, vec3(4 * LIGHT_YEAR, 0, 0))
 
     const point = placeOnStarShell(origin, star)
     if (point === null)
@@ -814,7 +814,7 @@ describe('the star shell', () => {
   })
 
   it('has no direction for a star at the origin', () => {
-    const centre = universeVector(0, 0, 0, 0, 0, 0)
-    expect(placeOnStarShell(createRenderOrigin(centre), centre)).toBeNull()
+    const center = universeVector(0, 0, 0, 0, 0, 0)
+    expect(placeOnStarShell(createRenderOrigin(center), center)).toBeNull()
   })
 })

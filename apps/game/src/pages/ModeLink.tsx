@@ -38,7 +38,7 @@ export function ModeLink({ mode }: { mode: ModeCard }) {
       onFocus={warm}
       // The surfaces are near-opaque rather than a wash. They sit over a sunlit
       // planet at the brightest end of the frame, and a 50% slate over that is
-      // a lighter grey than the type on it.
+      // a lighter gray than the type on it.
       className={`group flex items-center gap-4 rounded-lg border px-4 py-3.5 backdrop-blur-sm transition-colors ${FOCUS_RING} ${
         mode.accent
           ? 'border-sky-500/40 bg-sky-950/70 hover:border-sky-400/70 hover:bg-sky-900/60'

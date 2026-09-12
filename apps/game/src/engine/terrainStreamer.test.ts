@@ -32,7 +32,7 @@ import {
   type HeightfieldRequest,
   heightfieldStride,
   parseAddress,
-  regionCentreDirection,
+  regionCenterDirection,
   type SurfaceParameters,
 } from '@inertialref/universe'
 import type { Seconds } from '@inertialref/shared'
@@ -288,7 +288,7 @@ describe('the terrain streamer', () => {
     // cancellation is for.
     expect(streamer.summary().pending).toBeGreaterThan(pool.stats().workers)
 
-    const before = pool.stats().cancelled
+    const before = pool.stats().canceled
     // `null` is what the engine hands a frame with no ground under it: a
     // retarget, a jump, the cutscene. Nothing this streamer asked for is
     // wanted any more.
@@ -301,7 +301,7 @@ describe('the terrain streamer', () => {
       null,
     )
     expect(streamer.summary().pending).toBe(0)
-    expect(pool.stats().cancelled).toBeGreaterThan(before)
+    expect(pool.stats().canceled).toBeGreaterThan(before)
     // Queued jobs are spliced out synchronously, so the pool is not merely
     // going to stop — it already has.
     expect(pool.queued).toBe(0)
@@ -514,7 +514,7 @@ describe('the terrain streamer', () => {
       bodyFixedFrameId(address),
       view.renderTime,
     )
-    const centre = session.world.frames.pose(
+    const center = session.world.frames.pose(
       bodyFrameId(address),
       view.renderTime,
     ).position
@@ -525,7 +525,7 @@ describe('the terrain streamer', () => {
     // streamer's two-second lead is 2,400 m ahead of the camera.
     const STEP = 20
     const LEAD = 2 * STEP * 60
-    const up = Vec.normalize(UV.difference(view.camera, centre))
+    const up = Vec.normalize(UV.difference(view.camera, center))
     const east = Vec.normalize(Vec.cross(up, vec3(1, 0, 0)))
     const cameraAt = (i: number): UniverseVector =>
       UV.translate(view.camera, Vec.scale(east, i * STEP))
@@ -558,7 +558,7 @@ describe('the terrain streamer', () => {
           asked += 1
           const ahead =
             Vec.dot(
-              Vec.sub(regionCentreDirection(request.region), camera),
+              Vec.sub(regionCenterDirection(request.region), camera),
               track,
             ) * planet.radius
           if (request.region.level > deepest) {
@@ -592,8 +592,8 @@ describe('the terrain streamer', () => {
       return lead
     }
 
-    // Half the lead, not all of it: a patch is requested by its centre and the
-    // finest ring is a few patches wide, so the farthest centre sits short of
+    // Half the lead, not all of it: a patch is requested by its center and the
+    // finest ring is a few patches wide, so the farthest center sits short of
     // the extrapolated eye by up to a patch. Measured 2,647 m and 242 m at
     // level 17 on Earth's landing site.
     expect(await farthest(true)).toBeGreaterThan(LEAD / 2)
@@ -615,11 +615,11 @@ describe('the terrain streamer', () => {
     const session = openSession({ seed: 'inertialref', workers: null })
     const view = groundView(session)
     const address = parseAddress(EARTH)
-    const centre = session.world.frames.pose(
+    const center = session.world.frames.pose(
       bodyFrameId(address),
       view.renderTime,
     ).position
-    const up = Vec.normalize(UV.difference(view.camera, centre))
+    const up = Vec.normalize(UV.difference(view.camera, center))
     const streamer = new TerrainStreamer(null)
     streamer.lensView = {
       lens: DEFAULT_LENS,

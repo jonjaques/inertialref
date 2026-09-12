@@ -5,7 +5,7 @@
  * Wide` and `Blue Marble · Raking · Earthrise · Backlit · High Angle · First
  * Light` — and there was no way to tell from either of them what would happen.
  * Nine identical rectangles of type, and the only two things that separate a
- * shot from its neighbour are *how much of the frame the body fills* and *where
+ * shot from its neighbor are *how much of the frame the body fills* and *where
  * the terminator falls*, both of which are pictures. So they are drawn.
  *
  * The geometry is the real geometry rather than an illustrator's guess:
@@ -45,7 +45,7 @@ export function ShotThumb({
   /*
    * The terminator's projected half-width, and which side it bulges to.
    *
-   * `cos φ > 0` puts the apex left of centre — more than half the disk is lit,
+   * `cos φ > 0` puts the apex left of center — more than half the disk is lit,
    * which is gibbous. `cos φ < 0` puts it right, which is a crescent. The sweep
    * flag follows from that and nothing else: an arc from the bottom of the disk
    * to the top is clockwise in SVG's y-down space when it passes on the left.

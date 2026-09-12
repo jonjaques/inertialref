@@ -3,7 +3,7 @@ import type { DocEntry, DocManifest, DocWing, SearchIndex } from './content.ts'
 import { DocsMissingError, docRoute, loadManifest } from './content.ts'
 import {
   groupFor,
-  neighbours,
+  neighbors,
   opensEveryGroup,
   pagesOf,
   parentOf,
@@ -158,7 +158,7 @@ describe('where a route sits', () => {
 
 describe('previous and next', () => {
   it('walks the wing in reading order', () => {
-    expect(neighbours(MANIFEST, '/docs/concepts/time')).toEqual({
+    expect(neighbors(MANIFEST, '/docs/concepts/time')).toEqual({
       previous: '/docs/concepts/frames',
       next: '/docs/adr',
     })
@@ -170,8 +170,8 @@ describe('previous and next', () => {
    * arrows that quietly changes the subject is worse than a pair that stops.
    */
   it('stops at the end of a wing rather than crossing into another', () => {
-    expect(neighbours(MANIFEST, '/docs/adr/0001').next).toBeNull()
-    expect(neighbours(MANIFEST, '/docs').previous).toBeNull()
+    expect(neighbors(MANIFEST, '/docs/adr/0001').next).toBeNull()
+    expect(neighbors(MANIFEST, '/docs').previous).toBeNull()
   })
 })
 
@@ -293,7 +293,7 @@ describe('search', () => {
     expect(searchDocs(INDEX, 'ock')).toEqual([])
   })
 
-  it('honours the limit', () => {
+  it('honors the limit', () => {
     expect(searchDocs(INDEX, 'frame', 2)).toHaveLength(2)
   })
 })

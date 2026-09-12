@@ -35,7 +35,7 @@ export function DocsHorizon({ framed }: { framed: FramedBody | null }) {
        *
        * The readout is eleven-pixel mono over whatever the camera is pointed
        * at, and "whatever" includes a sunlit limb. A scrim across the whole
-       * strip would put a grey band over the picture the strip exists to show;
+       * strip would put a gray band over the picture the strip exists to show;
        * ten rem of it under the words is the smallest thing that makes them
        * legible, and over empty sky it is invisible.
        */}

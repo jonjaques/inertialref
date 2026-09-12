@@ -182,18 +182,14 @@ const asCandidate = (star: CatalogStar): StarCandidate => ({
   id: star.id,
   name: star.name,
   position: star.position,
-  colour: [
-    star.physical.colour.r,
-    star.physical.colour.g,
-    star.physical.colour.b,
-  ],
+  color: [star.physical.color.r, star.physical.color.g, star.physical.color.b],
   solarLuminosities: star.physical.solarLuminosities,
   visualLuminosities:
     star.physical.absoluteMagnitude === null
       ? undefined
       : 10 **
         ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
-  catalogued: true,
+  cataloged: true,
 })
 
 /**
@@ -617,7 +613,7 @@ export class GameEngine {
       spriteCount: this.#starField.positions.length,
       spriteCeiling: STAR_SPRITE_CEILING,
       pending: this.#starFieldPending,
-      center: this.#starFieldCentre,
+      center: this.#starFieldCenter,
     }
   }
 
@@ -854,7 +850,7 @@ export class GameEngine {
   #starField: StarField = EMPTY_STAR_FIELD
   #starFieldKnown: readonly StarCandidate[] | null = null
   #starFieldCoverage: ReturnType<typeof populationCoverage> | null = null
-  #starFieldCentre: UniverseVector | null = null
+  #starFieldCenter: UniverseVector | null = null
   #starFieldPending = false
   /*
    * Which world the in-flight survey belongs to. A survey is asynchronous and
@@ -1092,7 +1088,7 @@ export class GameEngine {
     this.#starField = EMPTY_STAR_FIELD
     this.#starFieldKnown = null
     this.#starFieldCoverage = null
-    this.#starFieldCentre = null
+    this.#starFieldCenter = null
     this.#starFieldWorld += 1
     this.orbits = []
     this.#orbitsSystems = ''
@@ -1574,21 +1570,21 @@ export class GameEngine {
   }
 
   /** A bounded magnitude survey is independent of the travel query's spatial radius. */
-  #maybeSurveyStars(centre: UniverseVector): void {
+  #maybeSurveyStars(center: UniverseVector): void {
     if (this.#starFieldPending) return
     if (
-      this.#starFieldCentre !== null &&
-      UV.distance(this.#starFieldCentre, centre) <= STARFIELD_HYSTERESIS
+      this.#starFieldCenter !== null &&
+      UV.distance(this.#starFieldCenter, center) <= STARFIELD_HYSTERESIS
     )
       return
-    this.#starFieldCentre = centre
+    this.#starFieldCenter = center
     this.#starFieldPending = true
     const world = this.#starFieldWorld
     const catalog = this.world.catalog
     const known = (this.#starFieldKnown ??= catalog.stars.map(asCandidate))
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
-      origin: encodeUniverseVector(centre),
+      origin: encodeUniverseVector(center),
       coverage: (this.#starFieldCoverage ??= populationCoverage(catalog)),
       spriteCeiling: STAR_SPRITE_CEILING,
       cellCeiling: STARFIELD_CELL_CEILING,
@@ -1599,14 +1595,14 @@ export class GameEngine {
     // same light partition during travel. Publishing only the catalog between
     // replies removes procedural sources and resets their dust and sky history.
     if (this.#starField.resolved === undefined)
-      this.#starField = selectStars(centre, [known])
+      this.#starField = selectStars(center, [known])
     const pool = this.pool()
     // Inline execution can throw before returning a promise. Start it inside the
     // chain so it has the same failure and pending-state lifetime as a worker.
     void Promise.resolve()
       .then(() =>
         pool === null
-          ? surveySkyTask.run(payload, { cancelled: () => false })
+          ? surveySkyTask.run(payload, { canceled: () => false })
           : pool.run(surveySkyTask, payload),
       )
       .then((selection) => {
@@ -1616,17 +1612,17 @@ export class GameEngine {
           id: star.id,
           name: star.name,
           position: UV.universeVector(...star.position),
-          colour: star.colour,
+          color: star.color,
           solarLuminosities: star.solarLuminosities,
           visualLuminosities: star.visualLuminosities,
-          catalogued: false,
+          cataloged: false,
         }))
         this.#starField = selectStars(
-          centre,
+          center,
           [known, fill],
           STAR_SPRITE_CEILING,
           {
-            origin: centre,
+            origin: center,
             apparentMagnitudeLimit: selection.apparentMagnitudeLimit,
             levelMask: selection.levelMask,
           },
@@ -1634,7 +1630,7 @@ export class GameEngine {
         applying.end()
         log.info('starfield surveyed', {
           stars: this.#starField.positions.length,
-          catalogued: known.length,
+          cataloged: known.length,
           fill: fill.length,
           cells: selection.cellsVisited,
           candidates: selection.candidateCount,

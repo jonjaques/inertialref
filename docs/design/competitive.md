@@ -40,7 +40,7 @@ raised and thirteen-plus years in development, still without a 1.0 release
 [Source: CIG's published funding tracker at robertsspaceindustries.com/funding —
 figure moves continuously; validate before external use].
 
-**What it does better than anything.** Seamless ship interiors, physicalised
+**What it does better than anything.** Seamless ship interiors, physicalized
 first-person interaction, and a sense of _presence_ in a machine that nothing
 else matches. When it works, standing in a ship's hold while it maneuvers is the
 best thing in the genre.
@@ -54,7 +54,7 @@ than a 120 GB install. And a defined, shippable MVP.
 
 **The lesson.** Star Citizen's scope has no floor, and it is the clearest
 cautionary example available of what happens when a design document contains no
-prioritisation. Every milestone in [production](production.md) exists partly to
+prioritization. Every milestone in [production](production.md) exists partly to
 avoid this outcome.
 
 ---
@@ -127,7 +127,7 @@ fill, seamless scale from intergalactic to surface. Everything this project
 claims as its technical differentiator, done first and done well.
 
 **What we take.** Proof that the approach works, and a great deal of prior art on
-catalog-plus-procedural hybridisation.
+catalog-plus-procedural hybridization.
 
 **What we do differently.** It is a **planetarium, not a game.** There is no
 loop, no reward, no ship you operate as a machine, no reason to be anywhere in

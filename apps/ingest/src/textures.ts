@@ -40,7 +40,7 @@ export interface TextureEntry {
   readonly width: number
   readonly height: number
   readonly bytes: number
-  readonly licence: string
+  readonly license: string
   readonly credit: string
   readonly source: string
   /** Digest of the *output*, so a rebuild that changes nothing changes nothing. */
@@ -70,8 +70,8 @@ const WEBP = { quality: 82, effort: 6 } as const
 /*
  * Normal maps are encoded losslessly, and this is not an optimization knob.
  *
- * Lossy WebP is a *photographic* codec: VP8 quantises per block, and on the
- * smooth slope fields of a normal map that quantisation lands as whole 8-pixel
+ * Lossy WebP is a *photographic* codec: VP8 quantizes per block, and on the
+ * smooth slope fields of a normal map that quantization lands as whole 8-pixel
  * rows of the green channel offset by up to ±39 around neutral — measured on
  * the Moon's map, worst at high latitude where equirectangular stretching
  * makes the data smoothest. Each such row is a band of surface tilted ~15°
@@ -138,16 +138,24 @@ async function elevationToNormal(
   /*
    * `grey16`, not `b-w`, and this is the whole reason the Moon was flat.
    *
-   * libvips calls 8-bit grayscale `b-w`, so `toColourspace('b-w')` on LOLA's
+   * libvips calls 8-bit grayscale `b-w`, so `toColorspace('b-w')` on LOLA's
    * 16-bit product *downcasts* it, and a following `raw({depth:'ushort'})`
    * widens the container back to two bytes without restoring the range. The
    * result is a valid file, a plausible-looking pipeline, and every gradient 256
    * times too small.
+   *
+   * `grey16` keeps its British spelling because it is not a word here: it is a
+   * `VipsInterpretation` nickname, and libvips publishes no `gray16`. Sharp
+   * does not reject the American spelling — it passes the string through, the
+   * pipeline stays in three-channel sRGB16, and `data` comes back three times
+   * as long with the samples interleaved, so `at` reads the wrong pixel and the
+   * flat Moon comes back. Measured on sharp 0.35.4 with an 8×8 single-channel
+   * 16-bit source: `grey16` returns 128 bytes, `gray16` returns 384.
    */
   const sixteen = (await open(bytes).metadata()).depth === 'ushort'
   const data = await open(bytes)
     .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
-    .toColourspace(sixteen ? 'grey16' : 'b-w')
+    .toColorspace(sixteen ? 'grey16' : 'b-w')
     .raw({ depth: sixteen ? 'ushort' : 'uchar' })
     .toBuffer()
 
@@ -168,7 +176,7 @@ async function elevationToNormal(
     if (value < low) low = value
     if (value > high) high = value
   }
-  const metresPerValue = high > low ? relief / (high - low) : 0
+  const metersPerValue = high > low ? relief / (high - low) : 0
   const oceanLevel =
     source.oceanBelow === undefined
       ? -Infinity
@@ -177,7 +185,7 @@ async function elevationToNormal(
   // Meters per pixel on the ground, north–south. The equirectangular grid is
   // uniform in angle, so this is a constant; east–west is this times
   // cos(latitude), which is the whole reason for the correction below.
-  const metresPerPixel = (Math.PI * radius) / height
+  const metersPerPixel = (Math.PI * radius) / height
 
   const out = Buffer.alloc(width * height * 3)
   for (let y = 0; y < height; y += 1) {
@@ -185,10 +193,10 @@ async function elevationToNormal(
     const cosLatitude = Math.max(POLE_CLAMP, Math.cos(latitude))
     for (let x = 0; x < width; x += 1) {
       const east =
-        ((at(x + 1, y) - at(x - 1, y)) * metresPerValue) /
-        (2 * metresPerPixel * cosLatitude)
+        ((at(x + 1, y) - at(x - 1, y)) * metersPerValue) /
+        (2 * metersPerPixel * cosLatitude)
       const south =
-        ((at(x, y + 1) - at(x, y - 1)) * metresPerValue) / (2 * metresPerPixel)
+        ((at(x, y + 1) - at(x, y - 1)) * metersPerValue) / (2 * metersPerPixel)
 
       /*
        * Tangent space, +X east, +Y north, +Z out of the surface.
@@ -235,15 +243,15 @@ async function luminanceToAlpha(
 ): Promise<Buffer> {
   const width = source.width
   const height = width / 2
-  const grey = await open(bytes)
+  const gray = await open(bytes)
     .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
-    .toColourspace('b-w')
+    .toColorspace('b-w')
     .raw()
     .toBuffer()
 
   const out = Buffer.alloc(width * height * 4)
   for (let i = 0; i < width * height; i += 1) {
-    const value = grey[i] as number
+    const value = gray[i] as number
     // White cloud, alpha from brightness. Cloud tops are very nearly a perfect
     // Lambertian white — the brightest natural surface there is — so the color
     // channels are constant and only the coverage varies.
@@ -298,7 +306,7 @@ async function buildTexture(
   const name = `${source.body}_${source.map}.webp`
   writeFileSync(join(directory, name), output)
   options.onProgress?.(
-    `  ${`${source.body}/${source.map}`.padEnd(24)} ${String(source.width).padStart(5)}px  ${(output.length / 1024).toFixed(0).padStart(6)} KB   ${source.licence}`,
+    `  ${`${source.body}/${source.map}`.padEnd(24)} ${String(source.width).padStart(5)}px  ${(output.length / 1024).toFixed(0).padStart(6)} KB   ${source.license}`,
   )
   return {
     body: source.body,
@@ -307,7 +315,7 @@ async function buildTexture(
     width: source.width,
     height: source.width / 2,
     bytes: output.length,
-    licence: source.licence,
+    license: source.license,
     credit: source.credit,
     source: source.url,
     sha256: createHash('sha256').update(output).digest('hex').slice(0, 16),

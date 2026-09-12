@@ -170,7 +170,7 @@ const fade = (
  */
 const NAME_Y = 0.5032
 const LOW_NAME_Y = 0.7644
-const CENTRE_X = 0.5
+const CENTER_X = 0.5
 
 const TITLES: readonly TitleSpec[] = [
   // Shot 01 — the opening card, over pure black. The reference's is the
@@ -180,7 +180,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'card-title',
     style: 'card',
     text: 'INERTIAL REF',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: 0.327,
     window: fade(3, 84, 104, 17),
   },
@@ -192,7 +192,7 @@ const TITLES: readonly TitleSpec[] = [
     // same sentence spills off both edges. The card's job is the attribution,
     // not the whole sentence.
     text: 'AN ENGINE STUDY · AFTER 1987',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: 0.5347,
     window: fade(3, 84, 104, 17),
   },
@@ -232,7 +232,7 @@ const TITLES: readonly TitleSpec[] = [
     style: 'name',
     label: 'Starring',
     text: 'PATRICK STEWART',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(1326, 1392, 1398),
   },
@@ -240,7 +240,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'c2',
     style: 'name',
     text: 'JONATHAN FRAKES',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(1453, 1519, 1525),
   },
@@ -249,7 +249,7 @@ const TITLES: readonly TitleSpec[] = [
     style: 'name',
     label: 'Also Starring',
     text: 'LEVAR BURTON',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(1574, 1632, 1638),
   },
@@ -257,7 +257,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'c4',
     style: 'name',
     text: 'DENISE CROSBY',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(1654, 1698, 1703),
   },
@@ -265,7 +265,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'c5',
     style: 'name',
     text: 'MICHAEL DORN',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(1719, 1764, 1769),
   },
@@ -273,7 +273,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'c6',
     style: 'name',
     text: 'GATES McFADDEN',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(1786, 1830, 1835),
   },
@@ -281,7 +281,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'c7',
     style: 'name',
     text: 'MARINA SIRTIS',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(1851, 1896, 1901),
   },
@@ -289,7 +289,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'c8',
     style: 'name',
     text: 'BRENT SPINER',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: LOW_NAME_Y,
     window: fade(1918, 1962, 1967),
   },
@@ -298,7 +298,7 @@ const TITLES: readonly TitleSpec[] = [
     id: 'c9',
     style: 'name',
     text: 'WIL WHEATON',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: LOW_NAME_Y,
     window: fade(1983, 2028, 2031),
   },
@@ -310,7 +310,7 @@ const TITLES: readonly TitleSpec[] = [
     style: 'name',
     label: 'Executive Producer',
     text: 'GENE RODDENBERRY',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: NAME_Y,
     window: fade(2440, 2498, 2504, 6),
   },
@@ -319,7 +319,7 @@ const TITLES: readonly TitleSpec[] = [
     style: 'name',
     label: 'Starship Model By',
     text: 'LOGANROLPHH',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: 0.2486,
     window: fade(2530, 2604, 2613, 10),
   },
@@ -328,7 +328,7 @@ const TITLES: readonly TitleSpec[] = [
     style: 'name',
     label: 'Planet Textures By',
     text: 'NASA / USGS',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: 0.5125,
     window: fade(2530, 2604, 2613, 10),
   },
@@ -337,7 +337,7 @@ const TITLES: readonly TitleSpec[] = [
     style: 'name',
     label: 'Engine By',
     text: 'INERTIALREF',
-    x: CENTRE_X,
+    x: CENTER_X,
     y: 0.8074,
     window: fade(2530, 2604, 2613, 10),
   },
@@ -504,7 +504,7 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
    * own effective width, measured as its tracked width times its authored
    * range over f700–890, is 618 m — near the hull's 642.5 — because our hull
    * is lit along its length where the reference's reads as a disc. Two errors
-   * have been cancelling, which is exactly why the cruise entry scores +0.013.
+   * have been canceling, which is exactly why the cruise entry scores +0.013.
    * Correcting one alone would break the best stretch in the piece. Both are
    * written down here so whoever unwinds them unwinds both.
    */
@@ -536,9 +536,9 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
   /*
    * Interior again from here, so these are measurements — of the **area
    * centroid**, which is the channel the diff scores and which is not the box's
-   * centre. The two disagree by up to 0.15 of the frame across this stretch
-   * (f1056: centroid 0.536, box centre 0.689) because the lit mass is not
-   * centred on the hull, and authoring against the wrong one of them put the
+   * center. The two disagree by up to 0.15 of the frame across this stretch
+   * (f1056: centroid 0.536, box center 0.689) because the lit mass is not
+   * centered on the hull, and authoring against the wrong one of them put the
    * exit 0.09 too far right and 0.12 too high in the capture.
    *
    * Widths carry a factor of 1.32, and that is a measurement too: at these
@@ -596,7 +596,7 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
  * now, and it is this list's own first beat repeated: change one and change
  * the other.
  *
- * The track is the reference's, frame by frame: centred and still under the
+ * The track is the reference's, frame by frame: centered and still under the
  * whiteout, then thrown to the lower right over eight frames and gone by
  * f1108. The reference means 0.4 from f1108 to f1118 — the frame is genuinely
  * empty between the ship leaving and the lens spike arriving — which is why
@@ -607,7 +607,7 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
  * lens spike marks.
  *
  * A receding ship's screen position converges to the projection of its own
- * velocity, so the spike's measured centre and the departure heading are one
+ * velocity, so the spike's measured center and the departure heading are one
  * number stated twice. Derived from `SPARKS[0]` rather than typed beside it, so
  * the two cannot drift: move the spike and the ship follows it out.
  */
@@ -1002,7 +1002,7 @@ const SHIP_RETURN: readonly ScreenBeat[] = [
    * f2234–2281, by up to 3.5 m, and within 1–4 m either side of that. What
    * that looks like is the saucer's interior: at f2188 the camera sits 8 m over
    * the dorsal plating with the engineering hull's battle bridge visible
-   * *through* it, which is the shot reading as a modelling error rather than as
+   * *through* it, which is the shot reading as a modeling error rather than as
    * speed.
    *
    * The camera's elevation over the hull's own plane falls from 38° to 14°
@@ -1021,7 +1021,7 @@ const SHIP_RETURN: readonly ScreenBeat[] = [
   /*
    * f2355 is a knot placed to stop an *undershoot*, not to stage anything. The
    * log-range Catmull-Rom between f2330 and f2380 was pulled down by its
-   * neighbours far enough to dip the range from 301 m to 242 m in the middle of
+   * neighbors far enough to dip the range from 301 m to 242 m in the middle of
    * a stretch that is supposed to be opening out, which put the camera back
    * within 11 m of the saucer's rim at f2352 — inside the margin, on a segment
    * where every authored knot is clear. Three knots make the tail monotone.
@@ -1259,7 +1259,7 @@ const BANK_CRUISE: readonly AttitudeBeat[] = [
  * Authored rather than derived: a finite difference of the world path gives
  * the camera's own heading whenever the two share a frame, and the reference
  * plainly shows the hull nose-on to the lens through the whole approach.
- * Levelling against the camera's up is what makes the top/underside views come
+ * Leveling against the camera's up is what makes the top/underside views come
  * out right for free — a level ship below the frame's center shows its dorsal,
  * above it shows its belly, which is exactly what the reference does at f820
  * and f892.
@@ -1306,12 +1306,12 @@ interface FacingBeat {
  * - The **wipes** were authored nose-down at (0.06, −0.20, 0.98) and fit
  *   (0.369, 0.074, 0.926) — essentially level, and the three wipes' own fits
  *   agree with each other to 0.22°. The old comment argued the hull must be
- *   diving because its dorsal is lit; a level hull below the frame's centre
+ *   diving because its dorsal is lit; a level hull below the frame's center
  *   shows its dorsal too, which is the simpler explanation and the measured
  *   one.
  *
  * **Each vector's uncertainty, because the tests are held to it.** A direction
- * fitted to the cap-pair midpoints and one fitted to the lit-mass box centre
+ * fitted to the cap-pair midpoints and one fitted to the lit-mass box center
  * are not the same line, and their spread is the honest error bar: **6.8° on
  * the cruise**, **15.0° on the descent**, **0.22° on the wipes** (that last is
  * the three wipes' own fits against each other, which is why the wipes are the
@@ -1653,7 +1653,7 @@ function buildStage(world: World): Stage {
 
   interface StandoffBeat {
     readonly frame: number
-    /** Distance from the body's centre, in its own radii. */
+    /** Distance from the body's center, in its own radii. */
     readonly radii: number
     readonly phaseDeg: number
     readonly elevationDeg: number
@@ -2014,7 +2014,7 @@ function buildStage(world: World): Stage {
              * The approach to totality and the recovery from it, so the marks
              * curve through the frames the pair is suspended over rather than
              * spanning them in one 32-frame segment. Read off the reference at
-             * f268 and f276, either side of the disk's own centring.
+             * f268 and f276, either side of the disk's own centering.
              */
             { frame: 268, px: 0.51, py: 0.515, sx: 0.487, sy: 0.472 },
             // Totality itself: the star's mark *is* the disk's, because the

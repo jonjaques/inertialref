@@ -26,7 +26,7 @@ const star = (
   y: 0,
   z: 0,
   absoluteMagnitude: null,
-  colourIndex: null,
+  colorIndex: null,
   spectralType: '',
   components: 1,
   provenance: 'observed',
@@ -58,7 +58,7 @@ const STARS: readonly PackedStar[] = [
     proper: 'Sol',
     spectralType: 'G2V',
     absoluteMagnitude: 4.85,
-    colourIndex: 0.656,
+    colorIndex: 0.656,
   }),
   star({
     id: 'HIP70890',
@@ -68,7 +68,7 @@ const STARS: readonly PackedStar[] = [
     hip: 70_890,
     spectralType: 'M5Ve',
     absoluteMagnitude: 15.447,
-    colourIndex: 1.807,
+    colorIndex: 1.807,
     constellation: 18, // Cen
     x: 2.9315 * LY,
     y: -3.0415 * LY,
@@ -85,7 +85,7 @@ const STARS: readonly PackedStar[] = [
     components: 2,
     spectralType: 'G2V',
     absoluteMagnitude: 4.379,
-    colourIndex: 0.71,
+    colorIndex: 0.71,
     constellation: 18, // Cen
     bayer: 0, // Alp
     bayerSuperscript: 1,
@@ -101,7 +101,7 @@ const STARS: readonly PackedStar[] = [
     hip: 87_937,
     spectralType: 'sdM4',
     absoluteMagnitude: 13.235,
-    colourIndex: 1.57,
+    colorIndex: 1.57,
     constellation: 58, // Oph
     x: 4.9455 * LY,
     y: 2.9726 * LY,
@@ -118,7 +118,7 @@ const STARS: readonly PackedStar[] = [
     components: 2,
     spectralType: 'A0m...',
     absoluteMagnitude: 1.454,
-    colourIndex: 0.009,
+    colorIndex: 0.009,
     constellation: 13, // CMa
     bayer: 0, // Alp
     flamsteed: 9,
@@ -194,7 +194,7 @@ export const TEST_CATALOG: StarCatalog = loadCatalog(TEST_VOLUME)
  * naked-eye bright, at their HYG v4.4 positions through the same projection
  * as the five above. Betelgeuse is the brightest red supergiant in the sky
  * and Rigel the brightest blue one, which is what makes the pair useful — a
- * colour test needs both ends of the ramp.
+ * color test needs both ends of the ramp.
  */
 const SKY_STARS: readonly PackedStar[] = [
   star({
@@ -206,7 +206,7 @@ const SKY_STARS: readonly PackedStar[] = [
     hr: 2_061,
     spectralType: 'M2Ib',
     absoluteMagnitude: -5.469,
-    colourIndex: 1.5,
+    colorIndex: 1.5,
     constellation: 59, // Ori
     bayer: 0, // Alp
     flamsteed: 58,
@@ -223,7 +223,7 @@ const SKY_STARS: readonly PackedStar[] = [
     hr: 1_713,
     spectralType: 'B8Ia',
     absoluteMagnitude: -6.933,
-    colourIndex: -0.03,
+    colorIndex: -0.03,
     constellation: 59, // Ori
     bayer: 1, // Bet
     flamsteed: 19,

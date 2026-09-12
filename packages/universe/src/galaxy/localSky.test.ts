@@ -20,7 +20,7 @@ import {
   localCloudExtinction,
 } from './localDust.ts'
 
-it('keeps the Galactic center, north pole and Aquila in the catalogue frame', () => {
+it('keeps the Galactic center, north pole and Aquila in the catalog frame', () => {
   const pole = equatorialToGalactic(192.85948, 27.12825)
   expect(pole.b).toBeCloseTo(Math.PI / 2, 7)
   const center = equatorialToGalactic(266.4051, -28.936175)

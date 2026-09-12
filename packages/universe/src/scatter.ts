@@ -355,7 +355,7 @@ export function regionScatter(
        * last week. So the sink rises with size and falls with `bright`.
        *
        * Capped so that what is left standing clears `MIN_PROUD` of the rock's
-       * own height with the seat already spent. On a two-metre boulder the seat
+       * own height with the seat already spent. On a two-meter boulder the seat
        * is 6% of it and the cap never binds; on a pebble it is a third, and the
        * cap is what keeps the pebble a rock rather than a buried one.
        */

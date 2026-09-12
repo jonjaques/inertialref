@@ -39,9 +39,9 @@ export interface LoadedShip {
   readonly id: string
   readonly group: Group
   /** The manifest's true length — what the hull was scaled to. */
-  readonly lengthMetres: number
+  readonly lengthMeters: number
   /** Measured off the scaled bounding box, for placing things beside the hull. */
-  readonly beamMetres: number
+  readonly beamMeters: number
 }
 
 async function build(
@@ -61,7 +61,7 @@ async function build(
 
   rebuildMaterials(hull, anisotropy)
 
-  const scale = spec.lengthMetres / size.z
+  const scale = spec.lengthMeters / size.z
   const oriented = new Group()
   oriented.add(hull)
   if (spec.nose === '+z') oriented.rotation.y = Math.PI
@@ -73,8 +73,8 @@ async function build(
   return {
     id: spec.id,
     group: ship,
-    lengthMetres: spec.lengthMetres,
-    beamMetres: size.x * scale,
+    lengthMeters: spec.lengthMeters,
+    beamMeters: size.x * scale,
   }
 }
 
@@ -109,8 +109,8 @@ export function loadShipModel(
     (ship) => {
       log.info('ship model ready', {
         id: spec.id,
-        length: spec.lengthMetres,
-        beam: Math.round(ship.beamMetres),
+        length: spec.lengthMeters,
+        beam: Math.round(ship.beamMeters),
       })
       return ship
     },

@@ -126,7 +126,7 @@ game's input latency and a solo team's netcode lose to the competition.
 | System            | Slot          | Effect                                                    |
 | ----------------- | ------------- | --------------------------------------------------------- |
 | **Shields**       | Optional      | Rechargeable buffer, recharges from SYS. Not mandatory.   |
-| **Armour**        | Hull property | Flat damage reduction; heavy, so it costs jump range      |
+| **Armor**         | Hull property | Flat damage reduction; heavy, so it costs jump range      |
 | **Point defense** | Utility       | Automatic; engages missiles inside 800 m                  |
 | **Chaff**         | Utility       | Breaks missile and subsystem locks for 6 s; 20 s cooldown |
 | **Heat sinks**    | Utility       | Dumps 40% of current heat; 20 s cooldown                  |

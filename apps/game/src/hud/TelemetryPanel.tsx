@@ -39,7 +39,7 @@ import { Section } from './Section.tsx'
  */
 const CAPPED_ITEMS = 8
 
-function summarise(items: readonly string[]): string {
+function summarize(items: readonly string[]): string {
   if (items.length === 0) return '—'
   if (items.length <= CAPPED_ITEMS) return items.join(', ')
   return `${items.slice(0, CAPPED_ITEMS).join(', ')} · +${items.length - CAPPED_ITEMS} more`
@@ -201,7 +201,7 @@ export function TelemetryPanel({
           <Row label="Stars" value={String(render.starCount)} />
           <Row
             label="Streaming"
-            value={summarise(render.terrainCandidates)}
+            value={summarize(render.terrainCandidates)}
             wrap
           />
           <div className="mt-1 border-t border-slate-800 pt-1">
@@ -232,7 +232,7 @@ export function TelemetryPanel({
       >
         <Row
           label="Systems"
-          value={summarise(
+          value={summarize(
             world.loadedSystems.map((s) => `${s.name} (${s.bodies})`),
           )}
           wrap

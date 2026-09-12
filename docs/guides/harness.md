@@ -131,7 +131,7 @@ pnpm exec prettier -w packages/universe/src/galaxy/localClouds.generated.ts pack
 
 The inputs are the uncompressed Lallement 2022 FITS cube and GAMBONS supplemental
 sky map; source links, hashes and exact selection windows accompany the output in
-`data/reference/galaxy.json`. No catalogue or procedural systems are regenerated.
+`data/reference/galaxy.json`. No catalog or procedural systems are regenerated.
 
 In the browser's planetarium, `ir.galaxyView('face-on')` and
 `ir.galaxyView('edge-on')` select the fixed external instruments also available
@@ -292,7 +292,7 @@ flowchart TB
     POS --> AIM
 ```
 
-Two notes worth internalising:
+Two notes worth internalizing:
 
 - **`orbit` is not a teleport to coordinates** — it sets a state that solves the
   two-body problem, so the ship stays in that orbit. It also places the ship on
@@ -355,7 +355,7 @@ behind the hull; `ir.view()` cycles. `ir.flightCamera` is the camera itself:
 ir.flightCamera.drag(dx, dy) // orbit, or turn the head in the chase
 ir.flightCamera.turn(dx, dy) // turn the head in either view
 ir.flightCamera.zoom(factor) // dolly the orbit; above 1 retreats
-ir.flightCamera.recentre() // look where the view aims again
+ir.flightCamera.recenter() // look where the view aims again
 ```
 
 The orbit is measured in hull lengths about the ship in the world's own axes,
@@ -438,7 +438,7 @@ framing it left. [ADR-0034](../adr/0034-the-drop.md).
 
 Sites are derived from the body's own terrain rather than authored, so
 "the highest ground on this world" survives regeneration and is still the
-interesting place afterwards. Four come from a beam search — `summit`, `basin`,
+interesting place afterward. Four come from a beam search — `summit`, `basin`,
 `shore`, `rough` — and two are chosen outright for the renderer: `corner`, where
 three faces of the addressing cube meet, and `pole`, where the east/north basis
 is singular. On a body with no solid surface `ir.sites` returns an empty list:

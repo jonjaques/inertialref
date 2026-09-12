@@ -7,7 +7,7 @@ this record declined is built
 ## Context
 
 [ADR-0019](0019-the-geology.md) made the ground a geology. What draws it is a
-`MeshStandardNodeMaterial` with one flat colour, lit by the scene's ambient
+`MeshStandardNodeMaterial` with one flat color, lit by the scene's ambient
 light and nothing else. That was survivable while terrain was nine patches under
 a landing ship; since [ADR-0015](0015-terrain-level-of-detail.md) the quadtree
 draws the whole disk, so the ground **is** the picture of the planet — and a
@@ -18,7 +18,7 @@ Two things have to be true at once. The design bible says a biome is derived,
 never authored, from latitude, altitude and slope plus the body's own facts
 ([content § biomes](../design/content.md#biomes)). The art doctrine says a
 published map is not negotiable ([art](../design/art.md)) — Mars really is that
-colour and the generator does not get a vote. Fifteen of the bodies a player
+color and the generator does not get a vote. Fifteen of the bodies a player
 can land on have a map; every generated world has none.
 
 And the descent has to hold together. Terrain streams only once relief covers
@@ -56,11 +56,11 @@ chain can tell from a float.
 thin bright ejecta lying on darker mature ground, not a shape; Tycho's cast no
 shadow at any sun angle and reach twenty times farther than its apron. So they
 are not a term in the height profile, and they are not walked on the crater
-lattice either — sixteen radii of reach is a neighbourhood hundreds of cells
+lattice either — sixteen radii of reach is a neighborhood hundreds of cells
 wide, which is a whole ladder's cost per sample for a handful of craters.
 `rayCraters` enumerates the coarse rungs once per body and keeps the youngest
 sixteen; every field on them is read back from the same two hashes
-`levelContribution` reads, so a ray system is centred on a bowl the height field
+`levelContribution` reads, so a ray system is centered on a bowl the height field
 actually digs.
 
 **The cover morphs with the geometry.** A patch already carries where each
@@ -70,11 +70,11 @@ exactly while the albedo does not is worse than a pop — every ray edge and mar
 margin slides by one child cell across the morph band and keeps sliding as the
 camera moves.
 
-**The palette is ratios against the body's own colour, never absolute.** A
-palette of absolute colours makes every rocky world the same sandstone and makes
+**The palette is ratios against the body's own color, never absolute.** A
+palette of absolute colors makes every rocky world the same sandstone and makes
 the terrain disagree with the datum sphere, the orbital tier and the dossier's
-swatch, all of which read `appearance.colour`. Expressed as ratios, Mars stays
-ochre and Callisto stays grey while both get the same internal contrast. Lunar
+swatch, all of which read `appearance.color`. Expressed as ratios, Mars stays
+ochre and Callisto stays gray while both get the same internal contrast. Lunar
 mare is 0.07 geometric albedo against 0.13 for the highlands, so basalt is 0.54
 of the reference.
 
@@ -89,7 +89,7 @@ painting deep water wherever the generated sea datum says so puts open sea over
 the map's continents. A second set of claims on top of the first is two
 disagreeing planets in one frame.
 
-What the deposits keep there is everything a map at ten kilometres a texel has
+What the deposits keep there is everything a map at ten kilometers a texel has
 no opinion on: the roughness, the grain, the bump, and which of them the slope
 under the camera exposes. Ice is the one exception among them, because it is the
 deposit that _post-dates_ the photograph — a cap advances and retreats, and a
@@ -139,13 +139,13 @@ its photograph. It is the right answer and it is not in this phase: it needs a
 worker task, a cube texture with a slot allocator, and a second consumer in
 `render/planet.ts`. What it buys is the far half of the descent on bodies with
 no map; what this phase leaves true is that the near half is the geology and the
-far half is a plausible flat tint of the same colour.
+far half is a plausible flat tint of the same color.
 [ADR-0026](0026-the-liquid.md) builds it, reflectance and relief both.
 
 **One absolute palette, tuned to look right.** Rejected on the first render: it
 made every world sandstone, which is the thing this phase exists to end.
 
-**Reading `BodyAppearance.colour` as a reflectance everywhere.** It is a
+**Reading `BodyAppearance.color` as a reflectance everywhere.** It is a
 reflectance on a mapless body and a _tint_ on a mapped one — its own docstring
 says so, and on Luna it is (1, 1, 1). Read as a reflectance it made lunar
 regolith 0.88 against a published 0.136, and the lit side blew out to a white
@@ -161,9 +161,9 @@ keeps its cap with bedrock showing on the scarps.
 
 **Altitude may not be a difference of two planetary radii.** `length(anchor +
 local) − datumRadius` puts both terms at 6.4 × 10⁶ on Earth where one float32
-step is half a metre, so the water test — a band four metres wide — read a
+step is half a meter, so the water test — a band four meters wide — read a
 quantized value, and the morph walked it across those steps every frame. Two
-kilometres above an island chain that is the coastline visibly warping several
+kilometers above an island chain that is the coastline visibly warping several
 times a second. The algebraic form `(2(a·l) + l·l)/(|p| + |a|)` never lets the
 large numbers meet.
 

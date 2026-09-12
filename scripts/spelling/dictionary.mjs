@@ -24,16 +24,19 @@
  *    search for it is a false positive generator and nothing else.
  *  - No `programme`, `storey`, `kerb`, `plough`, `pyjamas`. None occurs, and an
  *    unexercised rule is a rule nobody has checked.
- *  - No `analogue`/`catalogue` → `analog`/`catalog` in this table. `catalogue`
- *    is real here and it is a rename of files as well as identifiers, which is
- *    a different operation with a different blast radius; it is handled as its
- *    own step rather than smuggled in beside `colour`.
  *
  * Fragments match case-insensitively and the replacement adopts the case of the
  * text it replaces, so one rule serves `colour`, `Colour` and `COLOUR`.
  */
 export const RULES = [
   // -- inflections that are not a plain substitution of their stem ----------
+  ['analysed', 'analyzed'],
+  ['analysing', 'analyzing'],
+  ['catalogued', 'cataloged'],
+  ['cataloguing', 'cataloging'],
+  ['cataloguer', 'cataloger'],
+  ['cancellable', 'cancelable'],
+  ['levelling', 'leveling'],
   ['centred', 'centered'],
   ['centring', 'centering'],
   ['modelling', 'modeling'],
@@ -50,6 +53,8 @@ export const RULES = [
   ['levelled', 'leveled'],
 
   // -- stems ---------------------------------------------------------------
+  ['catalogue', 'catalog'],
+  ['afterwards', 'afterward'],
   ['colour', 'color'],
   ['centre', 'center'],
   ['metre', 'meter'],
@@ -88,6 +93,26 @@ export const RULES = [
   ['analyse', 'analyze'],
   ['paralyse', 'paralyze'],
   ['catalyse', 'catalyze'],
+  ['alphabetis', 'alphabetiz'],
+  ['amortis', 'amortiz'],
+  ['capitalis', 'capitaliz'],
+  ['centralis', 'centraliz'],
+  ['circularis', 'circulariz'],
+  ['customis', 'customiz'],
+  ['generalis', 'generaliz'],
+  ['hybridis', 'hybridiz'],
+  ['internalis', 'internaliz'],
+  ['localis', 'localiz'],
+  ['materialis', 'materializ'],
+  ['memois', 'memoiz'],
+  ['memoris', 'memoriz'],
+  ['modernis', 'moderniz'],
+  ['monetis', 'monetiz'],
+  ['personalis', 'personaliz'],
+  ['physicalis', 'physicaliz'],
+  ['pressuris', 'pressuriz'],
+  ['rationalis', 'rationaliz'],
+  ['synthesis', 'synthesiz'],
   ['normalis', 'normaliz'],
   ['initialis', 'initializ'],
   ['serialis', 'serializ'],
@@ -126,7 +151,44 @@ export const RULES = [
  * in the table because the verb does need rewriting, and gated here instead:
  * the rule only fires when a letter that can only belong to the verb follows.
  */
-const GUARDED = new Map([['emphasis', /emphasis(e|ed|es|ing)/i]])
+// These nouns contain the same letters as the British verb stems.
+const GUARDED = new Map([
+  ['alphabetis', '(?=e|ing|ation|able)'],
+  ['amortis', '(?=e|ing|ation|able)'],
+  ['capitalis', '(?=e|ing|ation|able)'],
+  ['centralis', '(?=e|ing|ation|able)'],
+  ['circularis', '(?=e|ing|ation|able)'],
+  ['customis', '(?=e|ing|ation|able)'],
+  ['generalis', '(?=e|ing|ation|able)'],
+  ['hybridis', '(?=e|ing|ation|able)'],
+  ['internalis', '(?=e|ing|ation|able)'],
+  ['localis', '(?=e|ing|ation|able)'],
+  ['materialis', '(?=e|ing|ation|able)'],
+  ['memois', '(?=e|ing|ation|able)'],
+  ['memoris', '(?=e|ing|ation|able)'],
+  ['modernis', '(?=e|ing|ation|able)'],
+  ['monetis', '(?=e|ing|ation|able)'],
+  ['personalis', '(?=e|ing|ation|able)'],
+  ['physicalis', '(?=e|ing|ation|able)'],
+  ['pressuris', '(?=e|ing|ation|able)'],
+  ['rationalis', '(?=e|ing|ation|able)'],
+  ['synthesis', '(?=e|ing)'],
+  ['analyse', '(?!s(?:$|[^a-z]))'],
+
+  ['emphasis', '(?=e|ing)'],
+  ['realis', '(?=e|ing|ation|able)'],
+  ['organis', '(?=e|ing|ation|able)'],
+  ['optimis', '(?=e|ing|ation|able)'],
+  ['characteris', '(?=e|ing|ation|able)'],
+  ['polaris', '(?=e|ing|ation|able)'],
+])
+
+function pattern(from) {
+  return new RegExp(from + (GUARDED.get(from) ?? ''), 'gi')
+}
+
+// A match cannot cross camel-case words: DescentReport contains centRe.
+const wordBoundary = /(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/
 
 const CASE = {
   upper: (s) => s.toUpperCase(),
@@ -147,20 +209,22 @@ function casingOf(matched) {
  * compare by identity.
  */
 export function americanize(word) {
-  let out = word
-  for (const [from, to] of RULES) {
-    const guard = GUARDED.get(from)
-    if (guard !== undefined && !guard.test(out)) continue
-    out = out.replace(new RegExp(from, 'gi'), (m) => CASE[casingOf(m)](to))
-  }
-  return out
+  return word
+    .split(wordBoundary)
+    .map((part) => {
+      let out = part
+      for (const [from, to] of RULES) {
+        out = out.replace(pattern(from), (m) => CASE[casingOf(m)](to))
+      }
+      return out
+    })
+    .join('')
 }
 
-/** Every rule that fires on `word`, for reporting which spelling was found. */
+/** Every rule that fires within a word, without crossing camel-case boundaries. */
 export function rulesFiring(word) {
-  return RULES.filter(([from]) => {
-    const guard = GUARDED.get(from)
-    if (guard !== undefined) return guard.test(word)
-    return new RegExp(from, 'i').test(word)
-  }).map(([from]) => from)
+  const parts = word.split(wordBoundary)
+  return RULES.filter(([from]) =>
+    parts.some((part) => pattern(from).test(part)),
+  ).map(([from]) => from)
 }

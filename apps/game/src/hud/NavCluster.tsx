@@ -26,7 +26,7 @@ import { useCompact } from './viewport.ts'
 /*
  * The navigation cluster: the instrument a ship is flown by.
  *
- * `docs/design/ux.md` puts the attitude and horizon at the bottom centre of
+ * `docs/design/ux.md` puts the attitude and horizon at the bottom center of
  * the cockpit, subtle, and near a body; this is that element with the
  * readings a pilot needs beside it. In the middle the ball, with the heading
  * over it and the pitch and bank under it. On the left the speed — against

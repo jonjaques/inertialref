@@ -50,7 +50,7 @@ const MANIFEST = new URL('../../../data/catalog/manifest.json', import.meta.url)
 
 /*
  * Two readings of the same files. `volume()` is the 150 ly file alone, which
- * is what every claim about the neighbourhood is a claim about; `catalog()` is
+ * is what every claim about the neighborhood is a claim about; `catalog()` is
  * the pair as a host loads them, which is what the sky's claims are about and
  * what the survey checks are held against.
  */
@@ -92,7 +92,7 @@ describe('the vendored catalog', () => {
    * whole point of shipping real data. The tolerance is 0.05 ly — the spread
    * between the Hipparcos parallaxes HYG carries and the modern Gaia ones.
    */
-  const NEIGHBOURS: readonly [string, string, number][] = [
+  const NEIGHBORS: readonly [string, string, number][] = [
     ['HIP70890', 'Proxima Centauri', 4.25],
     ['HIP71683', 'Alpha Centauri', 4.32],
     ['HIP87937', "Barnard's Star", 5.95],
@@ -103,7 +103,7 @@ describe('the vendored catalog', () => {
     ['HIP8102', 'Tau Ceti', 11.91],
   ]
 
-  it.each(NEIGHBOURS)(
+  it.each(NEIGHBORS)(
     'has %s as %s at the published distance',
     (id, name, lightYears) => {
       const star = catalog().get(id as never)
@@ -244,7 +244,7 @@ describe('the sky asset', () => {
       if (star === undefined) throw new Error(id)
       // At the star's own distance, not a unit vector: a universe position is
       // 2.5 × 10²⁰ m from the origin, where a double resolves to tens of
-      // kilometres, and a one-metre offset from the Sun is rounding noise.
+      // kilometers, and a one-meter offset from the Sun is rounding noise.
       const published = galacticToCartesian(
         equatorialToGalactic(ra, dec),
         star.distanceLightYears * LIGHT_YEAR,
@@ -308,8 +308,8 @@ describe('the sky asset', () => {
     for (const cell of cellsWithin(sol.position, 150 * LIGHT_YEAR))
       expect(c.inCell(cell).length).toBe(v.inCell(cell).length)
     expect(c.within(sol.position, 150 * LIGHT_YEAR).length).toBe(v.stars.length)
-    const ids = (catalogue: StarCatalog) =>
-      systemsWithin(GALAXY_SEED, catalogue, sol.position, 40 * LIGHT_YEAR).map(
+    const ids = (catalog: StarCatalog) =>
+      systemsWithin(GALAXY_SEED, catalog, sol.position, 40 * LIGHT_YEAR).map(
         (s) => s.id,
       )
     expect(ids(c)).toEqual(ids(v))
@@ -605,7 +605,7 @@ describe('the galaxy the catalog produces', () => {
     if (sol === undefined) throw new Error('no Sol')
     for (const cell of cellsWithin(sol.position, 25 * LIGHT_YEAR))
       for (const stub of generateCell(GALAXY_SEED, cell, {
-        catalogued: c.inCell(cell).length,
+        cataloged: c.inCell(cell).length,
         completeRadius: c.completeRadius,
       }))
         expect(
@@ -618,7 +618,7 @@ describe('the galaxy the catalog produces', () => {
     const sol = c.get('SOL' as never)
     if (sol === undefined) throw new Error('no Sol')
     const near = systemsWithin(GALAXY_SEED, c, sol.position, 10 * LIGHT_YEAR)
-      .filter((s) => s.catalogued && s.id !== 'SOL')
+      .filter((s) => s.cataloged && s.id !== 'SOL')
       .map((s) => ({
         name: s.name,
         ly: UV.distance(s.position, sol.position) / LIGHT_YEAR,
@@ -645,13 +645,13 @@ describe('the galaxy the catalog produces', () => {
       z: 0,
     })
     const cell = cellOf(far)
-    const catalogued = c.inCell(cell).length
+    const cataloged = c.inCell(cell).length
     const procedural = generateCell(GALAXY_SEED, cell, {
-      catalogued,
+      cataloged,
       completeRadius: c.completeRadius,
     }).length
-    expect(catalogued).toBeGreaterThan(0)
-    expect(procedural).toBeGreaterThan(catalogued)
+    expect(cataloged).toBeGreaterThan(0)
+    expect(procedural).toBeGreaterThan(cataloged)
   })
 })
 

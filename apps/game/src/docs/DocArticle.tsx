@@ -90,7 +90,7 @@ export function DocArticle({
         () => {
           // The icon turns Nominal Green for a beat. No text swap and no toast:
           // the confirmation belongs on the control that was pressed, and this
-          // is the one status colour in the system that means "it is there".
+          // is the one status color in the system that means "it is there".
           copy.setAttribute('data-copied', 'true')
           copy.setAttribute('aria-label', 'Copied')
           window.setTimeout(() => {

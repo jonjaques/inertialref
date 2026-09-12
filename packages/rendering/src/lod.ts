@@ -1,4 +1,4 @@
-import { blackbodyColour } from '@inertialref/universe'
+import { blackbodyColor } from '@inertialref/universe'
 import type { Meters, Radians } from '@inertialref/shared'
 import {
   BASELINE_VIEWPORT,
@@ -151,6 +151,6 @@ export function starColor(temperature: number): {
   g: number
   b: number
 } {
-  const { r, g, b } = blackbodyColour(temperature)
+  const { r, g, b } = blackbodyColor(temperature)
   return { r: Math.max(0, r), g: Math.max(0, g), b: Math.max(0, b) }
 }

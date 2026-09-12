@@ -26,7 +26,7 @@ export interface NameSource {
  *
  * The order is "most familiar first", not "most authoritative first" — this is
  * the opposite of `canonicalSystemId`, and deliberately so. An id must be stable
- * and nobody reads it; a name must be recognisable and nobody depends on it.
+ * and nobody reads it; a name must be recognizable and nobody depends on it.
  *
  * Two clauses are subtle and both were arrived at by looking at what came out.
  *

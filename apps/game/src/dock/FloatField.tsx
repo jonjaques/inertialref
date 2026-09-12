@@ -53,7 +53,7 @@ export function FloatField({
          * answer to exactly this and it is already in the coordinate space
          * `clampFloat` works in.
          *
-         * It is null on some synthesised drags; `FloatingPanel`'s own `end`
+         * It is null on some synthesized drags; `FloatingPanel`'s own `end`
          * handler covers that case with a delta, and a panel arriving from a
          * pane with nothing to go on gets the cascade.
          */

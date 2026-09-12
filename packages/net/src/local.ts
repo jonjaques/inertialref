@@ -151,7 +151,7 @@ export class LocalAuthority implements AuthorityPort {
       state: this.#state,
       // Recomputed rather than remembered: the ship flies, and the partition it
       // is in is a fact about where it is now. A remembered one would be right
-      // until the first frame transition and quietly wrong afterwards — which
+      // until the first frame transition and quietly wrong afterward — which
       // is the H4 handoff question, visible here a milestone early.
       partition: this.#state === 'joined' ? this.#currentPartition() : null,
       peers: 0,

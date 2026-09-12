@@ -211,18 +211,18 @@ function checkMovementWithinSystem(): CapabilityResult {
   world.setThrottle(ship.id, 1)
   const before = world.canonicalPositionOf(ship.id)
   world.runTicks(640)
-  const travelled = UV.distance(before, world.canonicalPositionOf(ship.id))
+  const traveled = UV.distance(before, world.canonicalPositionOf(ship.id))
   // 10 s at 30 m/s² is ~1.5 km under the drive alone.
-  if (travelled < 1_000)
+  if (traveled < 1_000)
     return failure(
       4,
       'Movement within a system',
-      `only moved ${travelled.toFixed(1)} m`,
+      `only moved ${traveled.toFixed(1)} m`,
     )
   return pass(
     4,
     'Movement within a system',
-    `${(travelled / 1000).toFixed(2)} km under thrust in 10 s`,
+    `${(traveled / 1000).toFixed(2)} km under thrust in 10 s`,
   )
 }
 
@@ -319,11 +319,11 @@ function checkSurfacePrecision(world: World): CapabilityResult {
       `an inch measured ${measured} m`,
     )
   }
-  const outFromGalacticCentre = UV.distance(origin, UV.UNIVERSE_ORIGIN)
+  const outFromGalacticCenter = UV.distance(origin, UV.UNIVERSE_ORIGIN)
   return pass(
     7,
     'Precision near the surface',
-    `1 inch resolved to ${(error * 1e6).toFixed(1)} µm, ${(outFromGalacticCentre / 3.0857e19).toFixed(2)} kpc from the galactic center`,
+    `1 inch resolved to ${(error * 1e6).toFixed(1)} µm, ${(outFromGalacticCenter / 3.0857e19).toFixed(2)} kpc from the galactic center`,
   )
 }
 

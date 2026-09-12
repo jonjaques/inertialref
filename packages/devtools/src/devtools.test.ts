@@ -455,7 +455,7 @@ describe('travel targets', () => {
 
   it('says whether a destination was observed or is a projection', () => {
     /*
-     * The projection onto `TravelTarget` used to drop `stub.catalogued`, so a
+     * The projection onto `TravelTarget` used to drop `stub.cataloged`, so a
      * real star and an invented one rendered identically — against the one
      * claim PRODUCT.md says the interface always makes. It is not `loaded`:
      * Proxima is a stub nobody has generated yet and is still a real star.
@@ -536,7 +536,7 @@ describe('travel targets', () => {
     // no display string to hide a record inside.
     expect(sirius?.spectralType).toMatch(/^A/)
     expect(sirius?.bodyKind).toBeNull()
-    expect(sirius?.colour).not.toBeNull()
+    expect(sirius?.color).not.toBeNull()
   })
 
   it('finds nothing rather than everything for an empty query', () => {
@@ -861,12 +861,12 @@ describe('searching the volume for worlds', () => {
     expect(earth?.lightYears).toBeLessThan(1)
   })
 
-  it('stops when it is cancelled rather than finishing the volume', async () => {
+  it('stops when it is canceled rather than finishing the volume', async () => {
     const { harness: ir } = harness()
     const search = ir.findWorlds({}, { lightYears: 12 })
     search.cancel()
     const found = await search.done
-    // Whatever a cancelled sweep returns, it is not the whole volume — and it
+    // Whatever a canceled sweep returns, it is not the whole volume — and it
     // returns rather than hanging, which is what a second question needs.
     expect(Array.isArray(found)).toBe(true)
   })

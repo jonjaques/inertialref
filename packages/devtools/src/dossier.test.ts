@@ -243,7 +243,7 @@ describe('a star’s record', () => {
 
   it('does not describe the Sun as fainter than the Sun', () => {
     // The Sun is the denominator of two clauses in that sentence, so writing
-    // it without a branch produced "catalogued at 0.00 light years, putting out
+    // it without a branch produced "cataloged at 0.00 light years, putting out
     // 1.000 times fainter than the Sun" — wrong twice, about the one star every
     // reader looks at first.
     const live = session()
@@ -344,7 +344,7 @@ describe('the derivations', () => {
     )
   })
 
-  it('recognises a lock in either direction of spin', () => {
+  it('recognizes a lock in either direction of spin', () => {
     const period = 27.3 * SECONDS_PER_DAY
     expect(
       tidallyLocked(

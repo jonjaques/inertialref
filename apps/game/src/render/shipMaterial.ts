@@ -65,7 +65,7 @@ export function rebuildShipMaterial(
 /**
  * Rebuild every loader material under `root` in place, once per source.
  *
- * A glTF shares one material across many meshes, so the walk memoises on the
+ * A glTF shares one material across many meshes, so the walk memoizes on the
  * source and disposes it after the first rebuild; a second loader that walks
  * its own way would be a second place for that order to go wrong, which is
  * why the hull and the surface assets both come through here.

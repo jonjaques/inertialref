@@ -16,7 +16,7 @@ import {
   clampElevation,
   ELEVATION_LIMIT,
   framingDistance,
-  isCentred,
+  isCentered,
   lookToward,
   MIN_DISTANCE_RADII,
   NO_LOOK,
@@ -31,7 +31,7 @@ import { UV } from '@inertialref/spatial'
  * The aim solve, and the promise it makes to everything composed before it.
  *
  * Free look is an *offset*, so the whole list of compositions has to be
- * unmoved by its arrival: a centre-aimed picture is the pose it always was,
+ * unmoved by its arrival: a center-aimed picture is the pose it always was,
  * bit for bit, and the three that aim elsewhere are the ones that could not be
  * expressed at all. Both halves are stated here, because "the offset defaults
  * to zero" is not the same claim as "zero costs nothing".
@@ -160,9 +160,9 @@ describe('every composition', () => {
     )
   })
 
-  it('gives a centre-aimed one no look offset at all', () => {
+  it('gives a center-aimed one no look offset at all', () => {
     for (const composition of COMPOSITIONS) {
-      if (composition.aim !== 'centre') continue
+      if (composition.aim !== 'center') continue
       const placement = placeComposition(
         composition,
         EARTH_RADIUS,
@@ -171,7 +171,7 @@ describe('every composition', () => {
       )
       expect(placement.kind).toBe('orbit')
       if (placement.kind !== 'orbit') return
-      expect(isCentred(placement.look)).toBe(true)
+      expect(isCentered(placement.look)).toBe(true)
       // And the angles are `anglesForPhase`'s own, unrouted through the solve.
       const angles = anglesForPhase(
         SUN,
@@ -251,8 +251,8 @@ describe('every composition', () => {
     /*
      * `close` wants 1.95 radii at 65° and 1.27 at 110°, which is below the
      * orbit floor — and the floor is where the surface arm begins. Left to fall
-     * through, a centre-aimed framing becomes a stance whose aim point is the
-     * body's own centre: `forward` is `-up`, the heading is `atan2(0, 0)` and
+     * through, a center-aimed framing becomes a stance whose aim point is the
+     * body's own center: `forward` is `-up`, the heading is `atan2(0, 0)` and
      * the camera stares straight down 0.265 radii above the ground, which is
      * not "the disk overflowing the frame" by any reading.
      *

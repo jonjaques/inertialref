@@ -73,7 +73,7 @@ it('lights the sky and the dust from the stage sample while the hull is still lo
     expect(dust.visible).toBe(true)
     // Only the sheath waits — it is scaled from the hull's beam and length.
     expect(entry.visible).toBe(false)
-    fx.update(sample, { lengthMetres: 46, beamMetres: 16 })
+    fx.update(sample, { lengthMeters: 46, beamMeters: 16 })
     expect(entry.visible).toBe(true)
     expect(entry.children[0]!.scale.toArray()).toEqual([16, 46, 16])
     fx.update(null, null)

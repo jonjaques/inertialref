@@ -9,7 +9,7 @@ import { readCatalog } from '@inertialref/universe'
  * `pnpm catalog:build` writes all of them — the version inside each packed
  * `.irsc`, and `data/catalog/manifest.json` beside them, whose top-level
  * `version` is the pair's — so they agree by construction on the day they are
- * written. They are read by different things afterwards: the game and the
+ * written. They are read by different things afterward: the game and the
  * headless runner decode the packed files, and the Worker imports the
  * manifest, because a script that serves 900 KB of binary has no reason to
  * decode it to answer `/api/health`.
@@ -36,6 +36,13 @@ const declared = (): Manifest =>
   JSON.parse(readFileSync(manifest, 'utf8')) as Manifest
 
 describe('the packed catalog and its manifest', () => {
+  it.each([volume, sky])('retains source licenses when reading %s', (file) => {
+    const sources = readCatalog(readFileSync(file)).metadata.sources
+    expect(sources.length).toBeGreaterThan(0)
+    for (const source of sources)
+      expect(source.license).toEqual(expect.any(String))
+  })
+
   it('state the same version', () => {
     const m = declared()
     expect(typeof m.version, 'manifest.json has no version string').toBe(

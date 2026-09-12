@@ -21,7 +21,7 @@ import { walkBodies } from '@inertialref/universe'
  * `HazeAuthoring` from being keyed at all.
  */
 export interface HazeLike {
-  readonly colour: {
+  readonly color: {
     readonly r: number
     readonly g: number
     readonly b: number
@@ -41,11 +41,11 @@ export interface ScatteringBake {
  * header warns about.
  */
 export function scatteringKey(haze: HazeLike, topRatio: number): string {
-  const { colour, limb, thickness } = haze
+  const { color, limb, thickness } = haze
   return [
-    colour.r,
-    colour.g,
-    colour.b,
+    color.r,
+    color.g,
+    color.b,
     limb.r,
     limb.g,
     limb.b,

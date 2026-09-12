@@ -44,8 +44,8 @@ import {
  * Below the eight-pixel relief gate the streamed ground carries the sea, the
  * rivers, the biosphere, the maria and the caps; above it the archive's
  * sphere is drawn instead, and for a generated body that sphere is one flat
- * tint — the class colour, then the family colour. From orbit a temperate
- * ocean world was a ball of one colour until the gate opened and it turned
+ * tint — the class color, then the family color. From orbit a temperate
+ * ocean world was a ball of one color until the gate opened and it turned
  * blue and green. [The terrain plan](../../../../design/plans/terrain.md)
  * names the fix and this is it: the ground's own picture, taken once per
  * body and worn by the sphere at every distance.
@@ -55,13 +55,13 @@ import {
  * `Heightfields` module a patch is, with the same adapter selection and
  * recovery, built with the same `buildPatch`, and drawn with the
  * same `render/terrain.ts` graph in its bake mode into a cube target from a
- * camera at the body's centre. What the sphere then samples by direction is
+ * camera at the body's center. What the sphere then samples by direction is
  * the deposit stack, the mineral tint and the rivers the ground draws, by
  * construction rather than by a second implementation kept in step; the
  * seam rule in `AGENTS.md` holds because there is one graph. A second pass
  * writes the relief record — the mesh normal's slopes east and north, and
  * the sea mask — in the layout the sphere reads the archive's normal map
- * in, so a generated disk shades its mountains and keys its ocean colour
+ * in, so a generated disk shades its mountains and keys its ocean color
  * and sun-glint exactly as a photographed one does.
  *
  * A bake is a presentation cache — regenerable from the seed, never saved —
@@ -124,7 +124,7 @@ interface Bake {
   readonly body: Body
   readonly target: CubeRenderTarget
   readonly reliefTarget: CubeRenderTarget
-  /** The tile jobs in flight, cancelled if the bake is evicted under them. */
+  /** The tile jobs in flight, canceled if the bake is evicted under them. */
   readonly jobs: JobHandle<HeightfieldResponse | null>[]
   /** When the body last asked, in `performance.now()` ms. */
   asked: number
@@ -165,7 +165,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   let disposed = false
   /*
    * The patch's triangle list with every triangle turned over. The camera
-   * is at the body's centre and looks at the ground from *inside* the shell,
+   * is at the body's center and looks at the ground from *inside* the shell,
    * where the ground's own winding is clockwise and the material's single
    * side culls all of it — a bake of nothing, which reads as a black sphere
    * under the veil. Reversing the index rather than the material's side
@@ -313,7 +313,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   }
 
   /**
-   * Six faces from the body's centre, at true meters with the body at the
+   * Six faces from the body's center, at true meters with the body at the
    * origin: every patch at its anchor, unmorphed, through the ground material
    * in bake mode with this body's palette on it.
    *

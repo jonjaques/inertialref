@@ -158,9 +158,9 @@ export function patchGeometry(
   geometry.setIndex(index)
   geometry.boundingSphere = new Sphere(
     new Vector3(
-      patch.boundsCentre.x,
-      patch.boundsCentre.y,
-      patch.boundsCentre.z,
+      patch.boundsCenter.x,
+      patch.boundsCenter.y,
+      patch.boundsCenter.z,
     ),
     patch.boundsRadius,
   )
@@ -186,9 +186,9 @@ export function sheetGeometry(
   geometry.setIndex(index)
   geometry.boundingSphere = new Sphere(
     new Vector3(
-      sheet.boundsCentre.x,
-      sheet.boundsCentre.y,
-      sheet.boundsCentre.z,
+      sheet.boundsCenter.x,
+      sheet.boundsCenter.y,
+      sheet.boundsCenter.z,
     ),
     sheet.boundsRadius,
   )
@@ -261,7 +261,7 @@ export function wearGround(
  * sea.
  *
  * The grain origin is reduced here, in float64, from the *unrounded* anchor,
- * which is the whole trick and the reason it is not `anchor / GRAIN_METRES` in
+ * which is the whole trick and the reason it is not `anchor / GRAIN_METERS` in
  * the shader: that quotient is 2.5 × 10⁶ on Luna, where float32 resolves a
  * quarter of a wavelength; wrapped first it is under 64, where it resolves
  * four microns. A rock and the ground under it have to read the same field or

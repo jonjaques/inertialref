@@ -23,7 +23,7 @@ import {
  * streak, anything that hangs in camera space over what is really there —
  * and zero for everything else.
  *
- * A shader `property` rather than a material field: WGSL zero-initialises a
+ * A shader `property` rather than a material field: WGSL zero-initializes a
  * variable nothing assigns, so a material that never heard of overlays is a
  * surface, and `sensorRadiance(material, true)` is the only writer. A
  * material-level `mrtNode` cannot do this job, because three drops every
@@ -50,8 +50,8 @@ export function sensorMrt() {
   })
   // An attachment three has no blend mode for gets none, so a transparent
   // overlay would replace the surface's velocity and depth over its whole
-  // footprint whatever its alpha — the flare's quads sit at twenty metres and
-  // would tell the meter the sky behind the Sun is twenty metres away. Every
+  // footprint whatever its alpha — the flare's quads sit at twenty meters and
+  // would tell the meter the sky behind the Sun is twenty meters away. Every
   // surface writes alpha 1 and still replaces; an overlay writes 0 and leaves
   // the attachment to what it covers.
   const blend = new BlendMode(CustomBlending)

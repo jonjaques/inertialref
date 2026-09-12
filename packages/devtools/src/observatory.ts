@@ -76,7 +76,7 @@ import {
   framingDistance,
   heightForScrub,
   horizonPitch,
-  isCentred,
+  isCentered,
   localTriad,
   launchArc,
   type LookOffset,
@@ -121,7 +121,7 @@ import type { Host } from './harness.ts'
  * One deliberate difference from the cutscene director, worth naming because it
  * looks like a violation of that module's rule: **`sample` here does touch the
  * world.** A cutscene resolves its stage once at `prepare` and is a pure
- * function of the frame afterwards, because a scripted scene must be
+ * function of the frame afterward, because a scripted scene must be
  * reproducible frame for frame. The observatory is the opposite kind of object
  * — it is *following* something that moves, and a planetarium that resolved
  * Jupiter's position once and then orbited where Jupiter used to be would drift
@@ -207,7 +207,7 @@ interface Descent {
   readonly arc: EntryArc
   /** The camera's orientation at release, in the body's rotating axes. */
   readonly from: Quat
-  /** Unit vector from the centre to the touchdown point. */
+  /** Unit vector from the center to the touchdown point. */
   readonly ground: Vec3
   readonly latitude: Radians
   readonly longitude: Radians
@@ -236,7 +236,7 @@ export interface ObserverStatus {
   /** Where the camera is easing to. Equal to `state` once it has arrived. */
   readonly desired: ObserverState
   /** True while a fly-to is still visibly moving. */
-  readonly travelling: boolean
+  readonly traveling: boolean
   /** Distance from the target's *surface*, which is what a reader wants. */
   readonly altitude: Meters
   readonly altitudeText: string
@@ -262,7 +262,7 @@ export const TRAVEL_TAU: Seconds = 0.55
  *
  * A tenth of a percent of the distance and a milliradian of orbit — under a
  * pixel at any framing. An exponential approach never actually reaches its
- * target, so without a floor `travelling` stays true forever and a panel that
+ * target, so without a floor `traveling` stays true forever and a panel that
  * shows it flickers a "moving" indicator for the rest of the session.
  */
 const ARRIVED_LOG_EPSILON = 1e-3
@@ -270,7 +270,7 @@ const ARRIVED_LOG_EPSILON = 1e-3
 /**
  * The opening framing for a newly picked target: a disk with space around it.
  *
- * 0.55 of the frame height rather than 0.9. Every recognisable photograph of a
+ * 0.55 of the frame height rather than 0.9. Every recognizable photograph of a
  * planet has sky around it, and a body that arrives edge-to-edge gives the eye
  * nothing to judge its size against. See `shots.ts`, which argues the same
  * thing in body radii.
@@ -323,9 +323,9 @@ const HOLD_ALTITUDE_SHARE = 0.2
  * How far the ring floats over the ground it follows, as a share of its own
  * radius.
  *
- * Proportional, and it has to be. A fixed lift is a metre-scale number, and the
+ * Proportional, and it has to be. A fixed lift is a meter-scale number, and the
  * vertex buffer holding it is float32 at a planetary radius — where one step is
- * half a metre — so a two-metre lift is a handful of bits and the loop z-fights
+ * half a meter — so a two-meter lift is a handful of bits and the loop z-fights
  * with the patch drawing the same height. Worse at a limb, where the ground is
  * edge-on and any lift is foreshortened to nothing. A twelfth of the ring's own
  * radius is clear at every distance the gesture spans and still reads as lying
@@ -565,16 +565,16 @@ export class Observatory {
     )
   }
 
-  #orbitPose(centre: UniverseVector): ObserverPose {
+  #orbitPose(center: UniverseVector): ObserverPose {
     const transform = this.#trackingTransform()
-    const pose = observerPose(centre, this.#state, this.#look)
+    const pose = observerPose(center, this.#state, this.#look)
     if (transform.rotation === Q.IDENTITY && transform.scale === 1) return pose
     return {
       position: UV.translate(
-        centre,
+        center,
         Q.rotate(
           transform.rotation,
-          Vec.scale(UV.difference(pose.position, centre), transform.scale),
+          Vec.scale(UV.difference(pose.position, center), transform.scale),
         ),
       ),
       orientation: Q.normalize(
@@ -787,8 +787,8 @@ export class Observatory {
     // "the viewer" while the viewer is standing on Iapetus must not sort by
     // where the viewer was before the descent.
     if (this.#stance !== null) return this.#surfacePose()?.position ?? null
-    const centre = this.#targetPosition(target)
-    return centre === null ? null : this.#orbitPose(centre).position
+    const center = this.#targetPosition(target)
+    return center === null ? null : this.#orbitPose(center).position
   }
 
   /**
@@ -804,8 +804,8 @@ export class Observatory {
     const target = this.#target
     if (target === null) return null
     if (this.#stance !== null) return this.#surfacePose()
-    const centre = this.#targetPosition(target)
-    return centre === null ? null : this.#orbitPose(centre)
+    const center = this.#targetPosition(target)
+    return center === null ? null : this.#orbitPose(center)
   }
 
   /**
@@ -945,7 +945,7 @@ export class Observatory {
    * one of them is wired straight through by `useObserverInput`, which has no
    * idea which arm is drawing. Without the refusal the gesture silently rewrites
    * the state `leaveSurface` returns to, so a scroll while standing lands the
-   * ascent on a framing nobody chose and leaves `travelling` true forever,
+   * ascent on a framing nobody chose and leaves `traveling` true forever,
    * because `sample` never runs the ease that would clear it.
    */
   /**
@@ -1097,7 +1097,7 @@ export class Observatory {
   }
 
   /** Back to whatever the pose aims at. */
-  centre(): void {
+  center(): void {
     if (this.#stance !== null) {
       this.levelToHorizon()
       return
@@ -1463,7 +1463,7 @@ export class Observatory {
   /** Back to orbit, at whatever framing the camera had before the descent. */
   leaveSurface(): ObserverStatus {
     // A drop in flight is abandoned, not finished: the orbit state underneath
-    // is the one the camera left, so this is also how a drop is cancelled.
+    // is the one the camera left, so this is also how a drop is canceled.
     this.#descent = null
     this.#aim = null
     this.#stance = null
@@ -1846,13 +1846,13 @@ export class Observatory {
    * at a share of the body so it cannot wrap a small moon.
    *
    * Every point is sampled against `drawnSurfaceRadius`, so the loop lies on
-   * the ground rather than on the datum — on a slope the two are a kilometre
+   * the ground rather than on the datum — on a slope the two are a kilometer
    * apart, and a ring that floated over a crater rim would be pointing at
    * somewhere the camera does not land.
    */
   #groundRing(
     body: Body,
-    centre: Vec3,
+    center: Vec3,
     touchdownRadius: Meters,
     eye: UniverseVector,
   ): readonly Vec3[] {
@@ -1864,13 +1864,13 @@ export class Observatory {
     )
     const range = Math.max(
       1,
-      Vec.length(Vec.sub(local, Vec.scale(centre, touchdownRadius))),
+      Vec.length(Vec.sub(local, Vec.scale(center, touchdownRadius))),
     )
     const across = Math.min(body.radius * 0.22, range * RING_ANGLE)
-    // The angle the ring subtends at the body's centre, which is what turns a
+    // The angle the ring subtends at the body's center, which is what turns a
     // distance across the ground into a rotation of the direction.
     const sweep = Math.min(Math.PI / 3, across / body.radius)
-    const triad = localTriad(centre)
+    const triad = localTriad(center)
     const out: Vec3[] = []
     for (let index = 0; index <= RING_SEGMENTS; index += 1) {
       const angle = (index / RING_SEGMENTS) * Math.PI * 2
@@ -1885,7 +1885,7 @@ export class Observatory {
        * mountains are in — see `#descentStance`, which pays the same toll.
        */
       const turned = Vec.add(
-        Vec.scale(centre, Math.cos(sweep)),
+        Vec.scale(center, Math.cos(sweep)),
         Vec.scale(offset, Math.sin(sweep)),
       )
       const { latitude, longitude } = directionToGeodetic(turned)
@@ -2178,8 +2178,8 @@ export class Observatory {
       state: { ...this.#state, distance },
       desired: { ...this.#desired, distance: this.#desired.distance * scale },
       look: this.#look,
-      aimed: !isCentred(this.#look),
-      travelling:
+      aimed: !isCentered(this.#look),
+      traveling:
         this.#galaxyView === null &&
         (this.#descent !== null ||
           this.#journey?.motion != null ||
@@ -2228,9 +2228,9 @@ export class Observatory {
       this.#state = this.#desired
     }
 
-    const centre = this.#targetPosition(target)
-    if (centre === null) return null
-    return this.#orbitPose(centre)
+    const center = this.#targetPosition(target)
+    if (center === null) return null
+    return this.#orbitPose(center)
   }
 
   /** Whether the ease has close enough that holding it open is noise. */
@@ -2243,7 +2243,7 @@ export class Observatory {
       // `shortestAngle`, because that is the way `approachState` converges.
       // Against the raw difference, an azimuth more than half a turn from the
       // desired one settles at a difference near 2π that never falls below the
-      // epsilon — so `travelling` stays true for the rest of the session,
+      // epsilon — so `traveling` stays true for the rest of the session,
       // which is the exact failure this constant's docstring exists to
       // prevent. Azimuth accumulates as you drag; two headings naming the same
       // direction can be many turns apart numerically.
@@ -2415,8 +2415,8 @@ export class Observatory {
     const target = this.#target
     if (target === null || target.kind === 'star') return null
     const world = this.#host.world
-    const centre = this.#targetPosition(target)
-    if (centre === null) return null
+    const center = this.#targetPosition(target)
+    if (center === null) return null
     try {
       // Same instant as `#targetPosition`, for the same reason: the lighting
       // direction is measured between two points that must both be sampled at
@@ -2425,7 +2425,7 @@ export class Observatory {
         systemFrameId(target.system),
         this.time,
       ).position
-      const toStar = UV.difference(star, centre)
+      const toStar = UV.difference(star, center)
       return Vec.length(toStar) > 0 ? Vec.normalize(toStar) : null
     } catch {
       return null

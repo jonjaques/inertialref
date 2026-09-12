@@ -73,11 +73,11 @@ export function serveTasks(
    * nothing.
    */
   const timed = options.now !== undefined
-  const cancelled = new Set<JobId>()
+  const canceled = new Set<JobId>()
 
   const unsubscribe = port.subscribe((message) => {
     if (isWorkerCancel(message)) {
-      cancelled.add(message.job)
+      canceled.add(message.job)
       return
     }
     if (isWorkerTiming(message)) {
@@ -119,11 +119,11 @@ export function serveTasks(
     void (async () => {
       try {
         const result = await task.run(request.payload as never, {
-          cancelled: () => cancelled.has(request.job),
+          canceled: () => canceled.has(request.job),
         })
-        if (cancelled.has(request.job)) {
-          cancelled.delete(request.job)
-          port.post({ kind: 'failure', job: request.job, error: 'cancelled' })
+        if (canceled.has(request.job)) {
+          canceled.delete(request.job)
+          port.post({ kind: 'failure', job: request.job, error: 'canceled' })
           return
         }
         const transfer = task.transfers?.(result) ?? []
@@ -149,7 +149,7 @@ export function serveTasks(
           error: cause instanceof Error ? cause.message : String(cause),
         })
       } finally {
-        cancelled.delete(request.job)
+        canceled.delete(request.job)
         /*
          * One entry per task, on this thread, named for the task and no more —
          * and on every outcome, which is the same rule `pool.ts` states for its

@@ -36,7 +36,7 @@
  */
 
 export interface HazeAuthoring {
-  readonly colour: {
+  readonly color: {
     readonly r: number
     readonly g: number
     readonly b: number
@@ -116,14 +116,14 @@ export function atmosphereRecipe(
   const hRayleigh = shell * RAYLEIGH_SHELL_FRACTION
   const hMie = shell * MIE_SHELL_FRACTION
 
-  const { colour, limb, thickness } = haze
-  const colourSum = Math.max(colour.r + colour.g + colour.b, 1e-6)
+  const { color, limb, thickness } = haze
+  const colorSum = Math.max(color.r + color.g + color.b, 1e-6)
   // τ = β·H for an exponential column, so β = τ/H.
   const tau = TAU_RAYLEIGH_SUM * thickness
   const betaRayleigh: [number, number, number] = [
-    ((colour.r / colourSum) * tau) / hRayleigh,
-    ((colour.g / colourSum) * tau) / hRayleigh,
-    ((colour.b / colourSum) * tau) / hRayleigh,
+    ((color.r / colorSum) * tau) / hRayleigh,
+    ((color.g / colorSum) * tau) / hRayleigh,
+    ((color.b / colorSum) * tau) / hRayleigh,
   ]
 
   const limbMean = Math.max((limb.r + limb.g + limb.b) / 3, 1e-6)
@@ -219,7 +219,7 @@ function transmittanceFrom(
  * The transmittance table.
  *
  * u spans μ ∈ [−1, 1] linearly and v spans altitude — a deliberately naive
- * parameterisation against Bruneton's distance-warped one. Its weakness is
+ * parameterization against Bruneton's distance-warped one. Its weakness is
  * resolution exactly at the horizon, where T drops to zero within a texel;
  * bilinear filtering smears that edge across Δμ ≈ 0.004, about a quarter of
  * a degree — the width of a sun. A penumbra there is not a defect, it is the

@@ -109,7 +109,7 @@ each control rather than a key written into a label.
 replaced.** The orbit arm aims at the target's center by construction, so
 without an offset there is no way to look at a limb, at a moon beside a disk, or
 at the sky at all. A focus, a frame, `Home`, a composition and a picture each
-replace the pose and recentre the head; a drag, a dolly and leaving the mode do
+replace the pose and recenter the head; a drag, a dolly and leaving the mode do
 not — so a viewer who turned to look at Io beside Jupiter is still looking at Io
 after the wheel. On the ground the offset _is_ the heading and the pitch, which
 the stance already holds.
@@ -131,7 +131,7 @@ A dolly moves the camera and changes all of that. Framing is a solve — the
 standoff that makes the subject fill a stated fraction of the frame at whatever
 lens is fitted, which is what `F` and **Frame** run. It solves rather than
 restores: nothing stores the fill a viewer dollied to, so the control is
-labelled for the act it performs.
+labeled for the act it performs.
 
 One control cannot describe all three without saying something false about two
 of them — "the subject stays the same size" is a claim about the solve alone,
@@ -307,7 +307,7 @@ answered. A typed address still resolves first.
 **The neighborhood rail** is the part a list cannot be. Proxima at 4.24 ly and
 Sirius at 8.6 ly are two rows differing by a numeral and the factor of two never
 lands; on a scale it lands in 28 px. The dots are real stars at real distances
-in their real colours — [art](art.md) puts a star's colour on the list of things
+in their real colors — [art](art.md) puts a star's color on the list of things
 this game may not invent — and clicking one flies the camera there. The scale is
 √r: a survey's volume grows as r³, so linearly the whole neighborhood piles into
 the left tenth, and logarithmically the observer's own zero has nowhere to go.
@@ -548,7 +548,7 @@ vocabulary that would break it.
 | Age                     | A formation date per system, then per body. Procedural: one draw per system seed. Solar: published, not yet packed.                                                                                                                                                                                                                                                                                                                                                                     |
 | Bond albedo             | The equilibrium temperature balances absorbed sunlight against re-radiation, and the fraction absorbed is `1 − Bond`. The record carries `geometricAlbedo`, and the two are not proportional — Earth is 0.306/0.434, Mercury 0.088/0.142, Mars 0.250/0.170 — so every figure runs cool: Earth reads 241 K against a published equilibrium of 255. Closing it needs a phase integral, and inventing one is the "plausible number" ADR-0014 rejects, so the row names the albedo it used. |
 | Surface temperature     | A greenhouse model over the atmosphere that already exists, plus thermal inertia. Earth’s measured 288 K against a published 255 K equilibrium is the 33 K this accounts for — and it stacks on the Bond gap above, so the two arrive together or not at all.                                                                                                                                                                                                                           |
-| Atmospheric composition | Gas fractions on `Atmosphere`, which currently carries a density, a scale height and a ceiling. The scattering colour is already tuned from an implied composition.                                                                                                                                                                                                                                                                                                                     |
+| Atmospheric composition | Gas fractions on `Atmosphere`, which currently carries a density, a scale height and a ceiling. The scattering color is already tuned from an implied composition.                                                                                                                                                                                                                                                                                                                      |
 | Circulation             | Bands and a jet profile on `CloudLayer`, which has a rotation rate and nothing else.                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Magnetic field          | A dipole moment from mass, rotation and composition. It is also the gate on aurora, which [art](art.md) already licenses the renderer to draw.                                                                                                                                                                                                                                                                                                                                          |
 | Pole direction          | Right ascension and declination on `Body`. `axialTilt` is a magnitude with no direction, so nothing can place a season.                                                                                                                                                                                                                                                                                                                                                                 |

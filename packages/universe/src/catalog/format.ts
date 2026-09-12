@@ -45,14 +45,14 @@ export const MAGIC = 0x4952_5343
 export const FORMAT_VERSION = 1
 
 /**
- * Position quantisation step.
+ * Position quantization step.
  *
  * Positions are stored as signed 32-bit counts of this. At 1 AU per step the
  * representable range is ±2.1 × 10^9 AU ≈ ±34,000 ly, comfortably past the
- * 150 ly the file covers, and the quantisation error is bounded by half a step.
- * That sounds enormous until you compare it to what it is quantising: at 150 ly
+ * 150 ly the file covers, and the quantization error is bounded by half a step.
+ * That sounds enormous until you compare it to what it is quantizing: at 150 ly
  * the parallax uncertainty on a HYG position is several thousand AU, so the
- * quantiser is four orders of magnitude inside the measurement error and is,
+ * quantizer is four orders of magnitude inside the measurement error and is,
  * for practical purposes, free.
  */
 export const POSITION_STEP_AU = 1
@@ -118,7 +118,7 @@ export interface PackedStar {
   /** Absolute visual magnitude, or null. */
   readonly absoluteMagnitude: number | null
   /** Color index B−V, or null. */
-  readonly colourIndex: number | null
+  readonly colorIndex: number | null
   /**
    * The classification string exactly as the source catalog wrote it, or `''`.
    *
@@ -239,7 +239,7 @@ export interface CatalogMetadata {
   readonly sources: readonly {
     readonly name: string
     readonly url: string
-    readonly licence: string
+    readonly license: string
     readonly retrieved: string
   }[]
   /**
@@ -535,7 +535,7 @@ export function encodeCatalog(catalog: PackedCatalog): Uint8Array {
   for (const s of stars) w.i32(Math.round(s.y / POSITION_STEP_METERS))
   for (const s of stars) w.i32(Math.round(s.z / POSITION_STEP_METERS))
   for (const s of stars) w.i16(scaled(s.absoluteMagnitude, 100))
-  for (const s of stars) w.i16(scaled(s.colourIndex, 1_000))
+  for (const s of stars) w.i16(scaled(s.colorIndex, 1_000))
   for (const s of stars) w.u32(s.hip)
   for (const s of stars) w.u32(s.hd)
   for (const s of stars) w.u16(s.hr)
@@ -617,7 +617,7 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
   const y = column(starCount, () => r.i32())
   const z = column(starCount, () => r.i32())
   const absoluteMagnitude = column(starCount, () => r.i16())
-  const colourIndex = column(starCount, () => r.i16())
+  const colorIndex = column(starCount, () => r.i16())
   const hip = column(starCount, () => r.u32())
   const hd = column(starCount, () => r.u32())
   const hr = column(starCount, () => r.u16())
@@ -641,7 +641,7 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
       y: (y[i] as number) * POSITION_STEP_METERS,
       z: (z[i] as number) * POSITION_STEP_METERS,
       absoluteMagnitude: unscaled(absoluteMagnitude[i] as number, 100),
-      colourIndex: unscaled(colourIndex[i] as number, 1_000),
+      colorIndex: unscaled(colorIndex[i] as number, 1_000),
       spectralType: spectralType[i] as string,
       components: components[i] as number,
       provenance: PROVENANCE[provenance[i] as number] ?? 'observed',

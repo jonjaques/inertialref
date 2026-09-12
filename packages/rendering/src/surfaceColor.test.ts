@@ -6,19 +6,19 @@ import {
   resolveCameraPolicy,
 } from './exposure.ts'
 import { LENS_PRESETS } from './lens.ts'
-import { surfaceColour, surfaceVisibilityGain } from './surfaceColour.ts'
+import { surfaceColor, surfaceVisibilityGain } from './surfaceColor.ts'
 
 const channel = fc.double({ min: 0.001, max: 1, noNaN: true })
-const colour = fc.record({ r: channel, g: channel, b: channel })
+const color = fc.record({ r: channel, g: channel, b: channel })
 
-describe('surface source colour and visibility', () => {
+describe('surface source color and visibility', () => {
   it('keeps mapped brightness in the map while preserving the swatch’s hue', () => {
     fc.assert(
-      fc.property(colour, channel, (swatch, brightness) => {
-        const tint = surfaceColour({ texture: 'map', colour: swatch })
-        const dimmer = surfaceColour({
+      fc.property(color, channel, (swatch, brightness) => {
+        const tint = surfaceColor({ texture: 'map', color: swatch })
+        const dimmer = surfaceColor({
           texture: 'map',
-          colour: {
+          color: {
             r: swatch.r * brightness,
             g: swatch.g * brightness,
             b: swatch.b * brightness,
@@ -35,15 +35,15 @@ describe('surface source colour and visibility', () => {
 
   it('keeps a mapless swatch’s physical reflectance unchanged', () => {
     fc.assert(
-      fc.property(colour, (swatch) => {
-        expect(surfaceColour({ texture: null, colour: swatch })).toBe(swatch)
+      fc.property(color, (swatch) => {
+        expect(surfaceColor({ texture: null, color: swatch })).toBe(swatch)
       }),
     )
   })
 
   it('does not create light from a black source', () => {
     const black = { r: 0, g: 0, b: 0 }
-    expect(surfaceColour({ texture: 'map', colour: black })).toEqual(black)
+    expect(surfaceColor({ texture: 'map', color: black })).toEqual(black)
   })
 
   it.each(CAMERA_MODES)('separates %s processing from reflectance', (mode) => {

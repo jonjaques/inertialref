@@ -54,7 +54,7 @@ function delayed(kind: string) {
         resolve = yes
         reject = no
       })
-      const cancel = vi.fn(() => reject(new Error('cancelled')))
+      const cancel = vi.fn(() => reject(new Error('canceled')))
       jobs.push({ resolve, reject, cancel })
       return { id: jobs.length, result, cancel }
     }),
@@ -110,7 +110,7 @@ it('does not retry cancellation, including one between rejection and fallback', 
   gpu.jobs[0]!.reject(new HeightfieldUnavailable())
   job.cancel()
   job.cancel()
-  await expect(job.result).rejects.toThrow('cancelled')
+  await expect(job.result).rejects.toThrow('canceled')
   expect(gpu.jobs[0]!.cancel).toHaveBeenCalledTimes(1)
   expect(pool.jobs).toHaveLength(0)
 })
@@ -124,7 +124,7 @@ it('cancels the fallback after a request changes adapters', async () => {
   gpu.jobs[0]!.reject(new HeightfieldUnavailable())
   await Promise.resolve()
   job.cancel()
-  await expect(job.result).rejects.toThrow('cancelled')
+  await expect(job.result).rejects.toThrow('canceled')
   expect(pool.jobs[0]!.cancel).toHaveBeenCalledTimes(1)
 })
 

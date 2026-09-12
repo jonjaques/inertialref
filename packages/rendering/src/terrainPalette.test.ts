@@ -32,19 +32,19 @@ const find = (name: string): Body => {
   throw new Error(`no ${name} in Sol`)
 }
 
-const grey = (m: SurfaceMaterial): number =>
+const gray = (m: SurfaceMaterial): number =>
   0.2126 * m.albedo.r + 0.7152 * m.albedo.g + 0.0722 * m.albedo.b
 
 describe('the terrain palette', () => {
   it('leaves a mapped dark body’s brightness to its photograph and keeps its tint', () => {
     for (const name of ['Bennu', 'Ceres', 'Phobos', 'Vesta']) {
       const body = find(name)
-      const { colour } = body.appearance
-      const peak = Math.max(colour.r, colour.g, colour.b)
+      const { color } = body.appearance
+      const peak = Math.max(color.r, color.g, color.b)
       expect(terrainPalette(body).regolith.albedo, name).toEqual({
-        r: colour.r / peak,
-        g: colour.g / peak,
-        b: colour.b / peak,
+        r: color.r / peak,
+        g: color.g / peak,
+        b: color.b / peak,
       })
     }
   })
@@ -56,7 +56,7 @@ describe('the terrain palette', () => {
       appearance: { ...bennu.appearance, texture: null },
     }
     expect(terrainPalette(mapless).regolith.albedo).toEqual(
-      mapless.appearance.colour,
+      mapless.appearance.color,
     )
   })
 
@@ -69,7 +69,7 @@ describe('the terrain palette', () => {
   it('puts a mare at 0.54 of the ground around it, where nothing else says so', () => {
     for (const name of ['Iapetus', 'Enceladus']) {
       const palette = terrainPalette(find(name))
-      const ratio = grey(palette.basalt) / grey(palette.regolith)
+      const ratio = gray(palette.basalt) / gray(palette.regolith)
       expect(`${name}: ${ratio.toFixed(2)}`).toBe(`${name}: 0.54`)
     }
   })
@@ -84,7 +84,7 @@ describe('the terrain palette', () => {
   it("leaves a deposit's brightness to the map where there is one", () => {
     for (const name of ['Luna', 'Mercury', 'Mars']) {
       const palette = terrainPalette(find(name))
-      const ratio = grey(palette.basalt) / grey(palette.regolith)
+      const ratio = gray(palette.basalt) / gray(palette.regolith)
       expect(`${name}: ${ratio.toFixed(2)}`).toBe(`${name}: 1.00`)
     }
   })
@@ -97,7 +97,7 @@ describe('the terrain palette', () => {
   it('keeps the ice bright on a mapped body', () => {
     for (const name of ['Mars', 'Earth']) {
       const palette = terrainPalette(find(name))
-      expect(`${name}: ${grey(palette.ice) > grey(palette.regolith)}`).toBe(
+      expect(`${name}: ${gray(palette.ice) > gray(palette.regolith)}`).toBe(
         `${name}: true`,
       )
     }
@@ -110,14 +110,14 @@ describe('the terrain palette', () => {
     // streaks on the Moon for this reason.
     for (const name of ['Enceladus', 'Iapetus']) {
       const palette = terrainPalette(find(name))
-      expect(`${name}: ${grey(palette.rock) > grey(palette.regolith)}`).toBe(
+      expect(`${name}: ${gray(palette.rock) > gray(palette.regolith)}`).toBe(
         `${name}: true`,
       )
     }
   })
 
   /*
-   * The two meanings of `BodyAppearance.colour`, which differ by a factor of
+   * The two meanings of `BodyAppearance.color`, which differ by a factor of
    * six and are the reason this function has a branch in it at all.
    */
   it('reads a mapless body as a reflectance and a mapped one as a ratio', () => {
@@ -126,7 +126,7 @@ describe('the terrain palette', () => {
     // objects.
     const iapetus = find('Iapetus')
     expect(iapetus.appearance.texture).toBeNull()
-    expect(grey(terrainPalette(iapetus).regolith)).toBeLessThanOrEqual(
+    expect(gray(terrainPalette(iapetus).regolith)).toBeLessThanOrEqual(
       REFLECTANCE_CEILING,
     )
 
@@ -139,7 +139,7 @@ describe('the terrain palette', () => {
      */
     const luna = find('Luna')
     expect(luna.appearance.texture).not.toBeNull()
-    expect(grey(terrainPalette(luna).regolith)).toBeCloseTo(1, 6)
+    expect(gray(terrainPalette(luna).regolith)).toBeCloseTo(1, 6)
   })
 
   /*
@@ -152,9 +152,9 @@ describe('the terrain palette', () => {
    */
   it('keeps its contrast on a body brighter than the ceiling', () => {
     const palette = terrainPalette(find('Enceladus'))
-    expect(grey(palette.rock)).toBeLessThanOrEqual(REFLECTANCE_CEILING)
-    expect(grey(palette.basalt) / grey(palette.regolith)).toBeCloseTo(0.54, 2)
-    expect(grey(palette.rock) / grey(palette.regolith)).toBeCloseTo(1.18, 2)
+    expect(gray(palette.rock)).toBeLessThanOrEqual(REFLECTANCE_CEILING)
+    expect(gray(palette.basalt) / gray(palette.regolith)).toBeCloseTo(0.54, 2)
+    expect(gray(palette.rock) / gray(palette.regolith)).toBeCloseTo(1.18, 2)
   })
 
   it('widens the terminator by the relief the body actually has', () => {
@@ -189,13 +189,13 @@ describe('the terrain palette', () => {
 
   it('separates the sky it is lit by from the haze it is seen through', () => {
     /*
-     * Two fields with two jobs. `skyColour` tints the light arriving at the
-     * surface and carries no brightness of its own; `hazeColour` is the aerial
+     * Two fields with two jobs. `skyColor` tints the light arriving at the
+     * surface and carries no brightness of its own; `hazeColor` is the aerial
      * veil in front of it, and its value is the veil's.
      */
     const mars = terrainPalette(find('Mars'))
-    expect(mars.hazeColour).not.toEqual(mars.skyColour)
-    expect(terrainPalette(find('Luna')).hazeColour).toEqual({
+    expect(mars.hazeColor).not.toEqual(mars.skyColor)
+    expect(terrainPalette(find('Luna')).hazeColor).toEqual({
       r: 0,
       g: 0,
       b: 0,
@@ -205,11 +205,11 @@ describe('the terrain palette', () => {
   it('carries the sky as a tint rather than as a brightness', () => {
     /*
      * How much light the sky delivers is `airThickness`; this is only what
-     * colour it arrives in. Multiplied together instead, a thin warm sky is
+     * color it arrives in. Multiplied together instead, a thin warm sky is
      * dimmer than a thin blue one for no reason anybody could name.
      */
     for (const name of ['Earth', 'Mars', 'Titan', 'Luna']) {
-      const sky = terrainPalette(find(name)).skyColour
+      const sky = terrainPalette(find(name)).skyColor
       const lit = 0.2126 * sky.r + 0.7152 * sky.g + 0.0722 * sky.b
       expect(`${name}: ${lit.toFixed(4)}`).toBe(`${name}: 1.0000`)
     }

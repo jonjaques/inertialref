@@ -104,12 +104,12 @@ describe('the shipped Mars pad', () => {
       author: 'InertialRef',
       source: 'design/structures/mars-pad.blend',
       generator: 'apps/ingest/models/build_mars_pad.py',
-      units: 'metres',
+      units: 'meters',
       upAxis: '+y',
-      landingHeightMetres: 0,
-      landingRadiusMetres: 25,
-      foundationRadiusMetres: 45,
-      skirtDepthMetres: 6,
+      landingHeightMeters: 0,
+      landingRadiusMeters: 25,
+      foundationRadiusMeters: 45,
+      skirtDepthMeters: 6,
     })
   })
 
@@ -172,8 +172,8 @@ describe('the shipped Mars pad', () => {
     ).toEqual([-0.18])
   })
 
-  it('separates the guidance ring from the deck by ten centimetres', () => {
-    // At 200 m with a 0.1 m near plane, millimetre decals share depth bins.
+  it('separates the guidance ring from the deck by ten centimeters', () => {
+    // At 200 m with a 0.1 m near plane, millimeter decals share depth bins.
     expect(surfaceHeights(24.95, 0.7)).toEqual([0, 0.1])
   })
 })

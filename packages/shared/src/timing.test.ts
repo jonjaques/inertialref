@@ -47,7 +47,7 @@ describe('the timing hub', () => {
     const second: Span = timer.span('terrain.build')
     expect(first).toBe(second)
 
-    // And nothing reaches a sink attached afterwards, because nothing was held.
+    // And nothing reaches a sink attached afterward, because nothing was held.
     const { sink, records } = collect()
     hub.attach(sink, { now: () => 0 })
     first.end()

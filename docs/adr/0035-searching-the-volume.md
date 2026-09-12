@@ -43,7 +43,7 @@ rather than asserting the filter returned something.
 
 **"Sea", not "water".** The generator's answer is whether the ground
 temperature admits a _liquid_, and on a cold world that liquid is methane
-([ADR-0026](0026-the-liquid.md)). Labelling it water would be the interface
+([ADR-0026](0026-the-liquid.md)). Labeling it water would be the interface
 inventing a fact the simulation is careful not to claim.
 
 ### Streaming is several jobs, because a job cannot report progress
@@ -63,7 +63,7 @@ last worker holds the whole answer.
 The stub permits rejecting a nonmatching host class before generating its
 system. The share of work avoided depends on the selected population and
 query; there is no fixed rejection ratio. `matchSystem` checks the generated
-star against its parsed class afterwards.
+star against its parsed class afterward.
 
 ### The nearest thousand are kept, and the rest are counted
 
@@ -130,7 +130,7 @@ no bodies at all.
 - The reading room can be asked its own question, over a volume nobody has
   looked at, and the answer is about the worlds the generator actually makes.
 - The list fills in continuously: measured at 1600×900, 3,335 rows by 3% of a
-  37,929-system sweep and 16,805 by 17%, cancellable at any point.
+  37,929-system sweep and 16,805 by 17%, cancelable at any point.
 - `ir.findWorlds(query, { lightYears, onBatch })` is the console's own verb, so
   a script can ask the same question.
 - The predicate is pure and testable without a world: properties assert that
@@ -148,7 +148,7 @@ no bodies at all.
   the same systems twice, which is the honest starting point — a cache keyed on
   seed, generation manifest and query is a later decision with a memory budget
   attached.
-- The sweep centre is the camera's eye, so a search run from Alpha Centauri
+- The sweep center is the camera's eye, so a search run from Alpha Centauri
   answers about a different volume from one run at Sol. That is the intended
   reading of "within 25 light years" and it does mean two searches with the
   same query can differ.

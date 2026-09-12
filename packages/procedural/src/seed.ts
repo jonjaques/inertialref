@@ -10,7 +10,7 @@ import { hashString, mix32 } from './hash.ts'
  *
  *     rng.next(); rng.next(); rng.next()
  *
- * inserting one planet shifts every value drawn afterwards, so adding a body to
+ * inserting one planet shifts every value drawn afterward, so adding a body to
  * a system silently rewrites its neighbors, and generating two regions in a
  * different order produces two different universes. Path derivation has neither
  * property — a region's seed depends only on its own address, so worker order,

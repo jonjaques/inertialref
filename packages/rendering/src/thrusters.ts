@@ -24,7 +24,7 @@ export type NozzleKind = 'rcs' | 'pod'
 
 /** One valve on the hull. */
 export interface Nozzle {
-  /** The mouth, in hull axes: meters from the hull's centre, forward −Z. */
+  /** The mouth, in hull axes: meters from the hull's center, forward −Z. */
   readonly position: Vec3
   /** The way the gas leaves — a unit vector in hull axes. */
   readonly exhaust: Vec3
@@ -40,7 +40,7 @@ export interface Nozzle {
 
 /** The main drive: one exit plane, always along +Z, always on the axis. */
 export interface MainDrive {
-  /** The centre of the exit plane, in hull axes. */
+  /** The center of the exit plane, in hull axes. */
   readonly position: Vec3
   /** The exit plane's radius, meters. */
   readonly radius: Meters
@@ -56,11 +56,11 @@ export interface ThrusterLayout {
  * The lever at which a nozzle's torque counts in full, meters.
  *
  * A nozzle's torque is taken by *direction*, not magnitude: the bow cluster on
- * a 46 m hull sits sixteen meters from the centre and a belly pod two, and a
+ * a 46 m hull sits sixteen meters from the center and a belly pod two, and a
  * pitch-up that lit the bow at full and the pods at an eighth would draw the
  * ship being pitched by its nose alone, which is not how a maneuvering system
  * is flown. Below this lever the direction is scaled down toward nothing, so
- * a valve sitting on the centre of mass — which has no torque direction at
+ * a valve sitting on the center of mass — which has no torque direction at
  * all — is not lit by a rotation it cannot help with.
  */
 export const TORQUE_LEVER: Meters = 2
@@ -69,7 +69,7 @@ export const TORQUE_LEVER: Meters = 2
 export interface NozzleWrench {
   /** The thrust direction: opposite the exhaust, unit. */
   readonly thrust: Vec3
-  /** The direction of the torque its thrust produces about the centre, unit — or zero on the axis. */
+  /** The direction of the torque its thrust produces about the center, unit — or zero on the axis. */
   readonly torque: Vec3
   /** How much of `torque` counts, 0..1, from the lever against `TORQUE_LEVER`. */
   readonly leverage: number

@@ -55,7 +55,7 @@ import { sensorRadiance } from './radiance.ts'
 /*
  * The plumes: what a maneuvering valve and the main drive leave behind.
  *
- * Three drawables, all additive in colour and silent in alpha on the flare's
+ * Three drawables, all additive in color and silent in alpha on the flare's
  * and the warp's blending discipline — an alpha-writing additive surface
  * stamps rectangles into the extended-range canvas — and all depth-tested
  * against the hull, so a jet on the far side of the ship is behind the ship.
@@ -166,12 +166,12 @@ function plumeShell(
       const b = a + stride
       index.push(a, b, a + 1, a + 1, b, b + 1)
     }
-  // The cap: a fan from the mouth's centre.
-  const centre = positions.length / 3
+  // The cap: a fan from the mouth's center.
+  const center = positions.length / 3
   positions.push(0, 0, 0)
   normals.push(0, -1, 0)
   uvs.push(0.5, 0)
-  for (let s = 0; s < segments; s += 1) index.push(centre, s, s + 1)
+  for (let s = 0; s < segments; s += 1) index.push(center, s, s + 1)
 
   const geometry = new BufferGeometry()
   geometry.setAttribute(
@@ -197,7 +197,7 @@ const podProfile = (t: number): number =>
 const driveProfile = (t: number): number =>
   (1.02 + 0.45 * t) * Math.sqrt(Math.max(0, 1 - t ** 2.2))
 
-/** The blending every plume draws with: add colour, leave alpha alone. */
+/** The blending every plume draws with: add color, leave alpha alone. */
 function additive(material: MeshBasicNodeMaterial): void {
   material.transparent = true
   material.blending = CustomBlending
@@ -306,7 +306,7 @@ function shellMaterial(
         /*
          * The facing floor is what keeps a plume from reading as a white
          * rod. Both walls of the shell add — it is double-sided — so the
-         * centre of a side view is already twice the rim, and a floor much
+         * center of a side view is already twice the rim, and a floor much
          * above a tenth flattens that back into a cylinder. The gains are
          * set so the core just clears the tone curve's knee: at twice these
          * every valve was a flat white shape with no blue in it.
@@ -356,13 +356,13 @@ function shellMaterial(
           .mul(0.9)
         // The sheath's blue is deep on purpose: through the additive blend
         // and the tone curve a paler one reads as lavender, and the
-        // reference torch is the colour of a gas flame.
-        const colour = mix(
+        // reference torch is the color of a gas flame.
+        const color = mix(
           vec3(0.22, 0.5, 1.6),
           vec3(1.2, 1.35, 1.6),
           exp(along.mul(-3)).mul(0.75),
         )
-        return colour.mul(intensity)
+        return color.mul(intensity)
       }
     }
   })()
@@ -376,7 +376,7 @@ function shellMaterial(
  *
  * Two octaves of the baked noise, drifting rather than scrolling, over a
  * radial profile that saturates to white through the tone curve at the
- * centre and falls to the sheath's blue at the rim. The rim itself fades
+ * center and falls to the sheath's blue at the rim. The rim itself fades
  * out inside the geometry's edge, or the disk shows as a polygon against
  * the skirt's wall.
  */
@@ -387,27 +387,27 @@ function diskMaterial(
   const noise = noiseSampler(noiseTexture())
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.colorNode = Fn(() => {
-    const centred = uv().sub(0.5).mul(2)
-    const r = length(centred)
+    const centered = uv().sub(0.5).mul(2)
+    const r = length(centered)
     const drift = clock.mul(0.8)
     const coarse = asField(
       noiseFetch(
         noise,
-        asVector(vec3(centred.x.mul(3), centred.y.mul(3), drift)),
+        asVector(vec3(centered.x.mul(3), centered.y.mul(3), drift)),
       ),
     ).x
     const fine = asField(
       noiseFetch(
         noise,
         asVector(
-          vec3(centred.x.mul(9), centred.y.mul(9), drift.mul(1.7).add(11)),
+          vec3(centered.x.mul(9), centered.y.mul(9), drift.mul(1.7).add(11)),
         ),
       ),
     ).x
     const turbulence = coarse.mul(0.6).add(fine.mul(0.4))
     const core = exp(r.mul(r).mul(-2.2))
     const edge = oneMinus(smoothstep(float(0.88), float(1), r))
-    // Just over the knee at the centre and under it at the rim, so the
+    // Just over the knee at the center and under it at the rim, so the
     // structure survives the tone curve: at three times this the whole disk
     // was one white ellipse.
     const intensity = core
@@ -416,12 +416,12 @@ function diskMaterial(
       .add(turbulence.mul(0.35))
       .mul(edge)
       .mul(throttle)
-    const colour = mix(
+    const color = mix(
       vec3(0.4, 0.72, 1.55),
       vec3(1.5, 1.6, 1.7),
       saturate(core.mul(0.9).add(turbulence.mul(0.25))),
     )
-    return colour.mul(intensity)
+    return color.mul(intensity)
   })()
   additive(material)
   return material

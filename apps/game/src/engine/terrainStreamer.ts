@@ -431,8 +431,8 @@ export interface TerrainState {
    * anything to draw with them.
    */
   readonly orientation: Q.Quat | null
-  /** The body's centre in render space, for the direction of its star. */
-  readonly centre: Vec3 | null
+  /** The body's center in render space, for the direction of its star. */
+  readonly center: Vec3 | null
   /**
    * The radius the patches were **built** on, meters.
    *
@@ -483,7 +483,7 @@ export class TerrainStreamer {
   readonly #patches = new Map<number | string, RenderPatch>()
   /*
    * The handle, not just the key, because a job nobody wants any more is worth
-   * cancelling and only the handle can do it. `#epoch` discards an *answer*
+   * canceling and only the handle can do it. `#epoch` discards an *answer*
    * that outlives its view; the job behind it ran to completion regardless, so
    * leaving a landing view with the window full left up to 128 heightfields
    * queued ahead of everything the next view wanted — measured at 42 arrivals
@@ -826,7 +826,7 @@ export class TerrainStreamer {
       level: this.#deepest,
       palette: this.#palette,
       orientation: pose?.orientation ?? null,
-      centre: pose?.position ?? null,
+      center: pose?.position ?? null,
       datumRadius: this.#datumRadius,
       lens: this.#lensView,
       scatter: this.#scatter.state(),
@@ -994,7 +994,7 @@ export class TerrainStreamer {
        */
       this.#phases.step(
         'terrain.select',
-        // The same colour the walking path emits, for the same reason: a
+        // The same color the walking path emits, for the same reason: a
         // starved or saturated selection is a *stable* state — nothing builds,
         // nothing evicts, so the epoch never moves and the memo holds — and a
         // red band that goes out the moment the picture stops changing is off
@@ -1009,7 +1009,7 @@ export class TerrainStreamer {
        * ms a *walk* costs long after it stopped happening on most frames,
        * while `terrain.select` beside it is per-frame and the two are no
        * longer comparable. That is the trap `terrain.select` is stepped above
-       * to avoid, applied to its neighbours.
+       * to avoid, applied to its neighbors.
        */
       this.#phases.step('terrain.build', TERRAIN_PHASE)
       /*
@@ -1094,7 +1094,7 @@ export class TerrainStreamer {
   #reselect(
     surface: Body,
     spinPose: FramePose,
-    centre: UniverseVector,
+    center: UniverseVector,
     eyeLocal: Vec3,
     renderTime: Seconds,
     elapsed: Seconds,
@@ -1167,7 +1167,7 @@ export class TerrainStreamer {
       this.#lookAhead(
         surface,
         spinPose,
-        centre,
+        center,
         eyeLocal,
         renderTime,
         elapsed,
@@ -1280,13 +1280,13 @@ export class TerrainStreamer {
   #eye(
     body: Body,
     spinPose: FramePose,
-    centre: UniverseVector,
+    center: UniverseVector,
     camera: UniverseVector,
   ) {
     return {
       radius: body.radius,
       relief: body.surface.maxElevation,
-      distance: UV.distance(camera, centre),
+      distance: UV.distance(camera, center),
       // `bodyFixedDirection` is the only producer of the branded direction the
       // terrain functions accept, so this cannot drift back to an inertial
       // sample the way it once did.
@@ -1320,7 +1320,7 @@ export class TerrainStreamer {
   #lookAhead(
     body: Body,
     spinPose: FramePose,
-    centre: UniverseVector,
+    center: UniverseVector,
     eyeLocal: Vec3,
     time: Seconds,
     elapsed: Seconds,
@@ -1336,7 +1336,7 @@ export class TerrainStreamer {
       spinPose,
       Vec.add(eyeLocal, Vec.scale(drift, PREFETCH_SECONDS / step)),
     )
-    return this.#eye(body, spinPose, centre, ahead)
+    return this.#eye(body, spinPose, center, ahead)
   }
 
   /**
@@ -1398,7 +1398,7 @@ export class TerrainStreamer {
    * the task's own doc measures at 33-43 ms, queued ahead of every heightfield
    * the player is waiting for, while `maxLevel` stays null and the body never
    * streams ground at all. Worse after `dispose()`: `terminate()` rejects with
-   * `pool terminated`, which is not `cancelled`, and the next `run` throws
+   * `pool terminated`, which is not `canceled`, and the next `run` throws
    * `submit`'s invariant synchronously out of the frame.
    *
    * The fallback is one 33-43 ms hitch on a path that only runs when the
@@ -1440,7 +1440,7 @@ export class TerrainStreamer {
         // released and the next frame asks again. Holding it instead left the
         // surface in `#floorsAsked` with no answer and no job, and that body
         // never streamed again for the life of the session.
-        if (message === 'cancelled') {
+        if (message === 'canceled') {
           this.#floorsAsked.delete(surface)
           return
         }
@@ -1558,7 +1558,7 @@ export class TerrainStreamer {
           })
         })
         .catch((cause: unknown) => {
-          if (cause instanceof Error && cause.message === 'cancelled') return
+          if (cause instanceof Error && cause.message === 'canceled') return
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {
@@ -1660,7 +1660,7 @@ export class TerrainStreamer {
     this.#wanted = 0
     this.#refusedAt = null
     /*
-     * The in-flight window is cancelled and dropped, which is two fixes.
+     * The in-flight window is canceled and dropped, which is two fixes.
      *
      * Dropped, because `#request` filters on `!#inFlight.has(key)` and a key
      * is packed arithmetic over the region alone — so a job still out for the
@@ -1670,9 +1670,9 @@ export class TerrainStreamer {
      * every retarget, silently. The stale job's own `finally` is epoch-guarded
      * so it cannot take a new entry with it when it lands.
      *
-     * Cancelled, because dropping the key only discards the *answer*. At the
+     * Canceled, because dropping the key only discards the *answer*. At the
      * 128-job cap all but `poolSize()` of those are still in the pool's queue,
-     * where cancelling is a splice and the work never happens; leaving them
+     * where canceling is a splice and the work never happens; leaving them
      * there put up to 50 s of ground nobody will see ahead of everything the
      * next view wants, and the star survey behind it read 4-8 s of queue on a
      * jump home. The few actually running finish — `generateHeightfield` polls

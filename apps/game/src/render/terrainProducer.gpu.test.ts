@@ -24,7 +24,7 @@ import { createTileProducer, type TileProducer } from './terrainProducer.ts'
  * `terrainKernel.gpu.test.ts` holds the arithmetic. What is held here is the
  * plumbing that could be wrong while the arithmetic is right: a tile landing
  * in another tile's slot, a body's records left over from the previous batch,
- * a cancelled job resolving, a queued job outliving a failure.
+ * a canceled job resolving, a queued job outliving a failure.
  */
 
 let gpu: GpuSession
@@ -195,16 +195,16 @@ describe('the tile producer', () => {
       producer.submit(luna.surface, requestFor(region)),
     )
     // The first batch is taken on a microtask, so at this instant nothing
-    // has been dispatched; cancelling the tail leaves the head to run.
+    // has been dispatched; canceling the tail leaves the head to run.
     for (const handle of handles.slice(16)) handle.cancel()
     const outcomes = await Promise.allSettled(handles.map((h) => h.result))
     const delivered = outcomes.filter((o) => o.status === 'fulfilled').length
-    const cancelled = outcomes.filter(
+    const canceled = outcomes.filter(
       (o) =>
-        o.status === 'rejected' && (o.reason as Error).message === 'cancelled',
+        o.status === 'rejected' && (o.reason as Error).message === 'canceled',
     ).length
     expect(delivered).toBe(16)
-    expect(cancelled).toBe(24)
+    expect(canceled).toBe(24)
     expect(producer.stats().queued).toBe(0)
   })
 

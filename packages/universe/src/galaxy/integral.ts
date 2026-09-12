@@ -1,4 +1,4 @@
-import { blackbodyColour } from '../catalog/photometry.ts'
+import { blackbodyColor } from '../catalog/photometry.ts'
 import { GALAXY_POPULATIONS } from './field.ts'
 import { invariant, PARSEC } from '@inertialref/shared'
 import { UV, vec3, type UniverseVector, type Vec3 } from '@inertialref/spatial'
@@ -111,11 +111,11 @@ export function integrateGalaxyRay(
   )
   const properties =
     population === undefined ? undefined : GALAXY_POPULATIONS[population]
-  const colour =
+  const color =
     properties === undefined
       ? undefined
-      : blackbodyColour(properties.temperature)
-  const colourV = colour === undefined ? 1 : colour.g
+      : blackbodyColor(properties.temperature)
+  const colorV = color === undefined ? 1 : color.g
   const dx = direction.x / length,
     dy = direction.y / length,
     dz = direction.z / length
@@ -195,11 +195,11 @@ export function integrateGalaxyRay(
     if (
       population !== undefined &&
       properties !== undefined &&
-      colour !== undefined
+      color !== undefined
     ) {
       const density = s.populations[population]
       const light =
-        ((density * properties.meanSolarLuminosities * step) / colourV) *
+        ((density * properties.meanSolarLuminosities * step) / colorV) *
         (options.resolved === undefined
           ? 1
           : unresolvedPopulationFraction(
@@ -208,9 +208,9 @@ export function integrateGalaxyRay(
               options.resolved.apparentMagnitudeLimit,
               options.resolved.levelMask,
             ))
-      r += wr * light * colour.r
-      g += wg * light * colour.g
-      b += wb * light * colour.b
+      r += wr * light * color.r
+      g += wg * light * color.g
+      b += wb * light * color.b
       column += density * step
     } else {
       const emission =

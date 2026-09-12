@@ -1,6 +1,6 @@
 import { Aperture, Eye, Image, Sun } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
-import { Neighbourhood, StarBody } from '../icons/index.tsx'
+import { Neighborhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
 import { CameraPanel } from './CameraPanel.tsx'
 import { NavigatorPanel } from './NavigatorPanel.tsx'
@@ -28,17 +28,14 @@ export function planetariumPanels(
 ): readonly DockPanelDefinition[] {
   return [
     {
-      // The id keeps its old word. It is what a stored layout remembers, and
-      // renaming it would put every reader's navigator back in its default
-      // slot on the next visit. The title is what a person reads.
-      id: 'catalogue',
+      id: 'catalog',
       title: 'Navigator',
       // The neighborhood rather than the span between two stars: this panel is
       // "what is around here", and `StellarSpan` is a *dimension* — a measure
       // with arrow heads. The two glyphs sat one menu apart meaning almost the
       // same thing, which in a bar read by shape is two buttons that look like
       // they do each other's job.
-      icon: Neighbourhood,
+      icon: Neighborhood,
       zone: 'left',
       hint: 'Everything within reach — fold it, filter it, look at it',
       render: () => (

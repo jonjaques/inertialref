@@ -236,7 +236,7 @@ export const StarBody = createLucideIcon('StarBody', [
  * Bands are the one feature every gas giant in every photograph has, and they
  * are also the only interior mark that survives being drawn at 14 px — a Great
  * Red Spot at this scale is a smudge. Two rather than three, spaced 6 px, which
- * is what keeps them from fusing into a grey block on a low-DPI display.
+ * is what keeps them from fusing into a gray block on a low-DPI display.
  */
 export const GasGiant = createLucideIcon('GasGiant', [
   ['circle', { cx: '12', cy: '12', r: '9', key: 'disc' }],
@@ -295,8 +295,8 @@ export const MoonBody = createLucideIcon('MoonBody', [
  */
 export const DwarfPlanet = createLucideIcon('DwarfPlanet', [
   ['circle', { cx: '12', cy: '12', r: '5', key: 'disc' }],
-  ['circle', { cx: '3', cy: '12', r: '1', key: 'neighbour-west' }],
-  ['circle', { cx: '21', cy: '12', r: '1', key: 'neighbour-east' }],
+  ['circle', { cx: '3', cy: '12', r: '1', key: 'neighbor-west' }],
+  ['circle', { cx: '21', cy: '12', r: '1', key: 'neighbor-east' }],
 ])
 
 /**
@@ -334,7 +334,7 @@ export const Comet = createLucideIcon('Comet', [
  * different distances around one that is here. It is the catalog's "near"
  * heading and the shape of the question that heading answers.
  */
-export const Neighbourhood = createLucideIcon('Neighbourhood', [
+export const Neighborhood = createLucideIcon('Neighborhood', [
   ['circle', { cx: '12', cy: '12', r: '2.5', key: 'here' }],
   ['circle', { cx: '4', cy: '6', r: '1', key: 'near' }],
   ['circle', { cx: '20', cy: '8', r: '1', key: 'far' }],
@@ -347,7 +347,7 @@ export const Neighbourhood = createLucideIcon('Neighbourhood', [
 /* ------------------------------------------------------------------------- */
 
 /*
- * Lucide dropped brand icons; the Octocat is still the recognisable mark for
+ * Lucide dropped brand icons; the Octocat is still the recognizable mark for
  * "this repository on GitHub", and the geometry is the one Lucide used to ship
  * — stroke, round caps, 24×24 — so it sits next to every other icon here.
  */

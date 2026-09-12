@@ -14,7 +14,7 @@ import { QUERY } from '../pages/paths.ts'
  * It reads it *inside an animation frame*, and that is the whole trick.
  * Between frames a WebGPU canvas has no readable image: Chrome hands the drawn
  * texture to the compositor when the frame's task ends, and `drawImage`
- * afterwards yields transparent black whether the canvas presented or not — a
+ * afterward yields transparent black whether the canvas presented or not — a
  * sample taken from a timer says "never presented" about every canvas there
  * is, and the ladder below then runs to exhaustion on a healthy boot, nudging
  * and rebuilding a renderer that was fine. A `requestAnimationFrame` callback
@@ -211,7 +211,7 @@ export function watchPresentation(
     readonly onPresented?: () => void
   },
 ): PresentationWatch {
-  let cancelled = false
+  let canceled = false
   let attempts = 0
   let timer = 0
   let frame = 0
@@ -248,13 +248,13 @@ export function watchPresentation(
    * to fire a second inspection and count the same black twice.
    */
   const check = (): void => {
-    if (cancelled) return
+    if (canceled) return
     window.cancelAnimationFrame(frame)
     frame = window.requestAnimationFrame(inspect)
   }
 
   const inspect = (): void => {
-    if (cancelled) return
+    if (canceled) return
     /*
      * The two ways there is nothing to read, before anything that could read.
      *
@@ -355,7 +355,7 @@ export function watchPresentation(
   timer = window.setTimeout(check, FIRST_CHECK_MS)
   return {
     cancel() {
-      cancelled = true
+      canceled = true
       standDown()
     },
   }

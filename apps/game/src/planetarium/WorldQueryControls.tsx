@@ -68,7 +68,7 @@ export function WorldQueryControls({
         </ToggleGroup>
         {/* The sequence, said once, because O B A F G K M is the one ordering
             a reader of a star chart already knows and the chips are otherwise
-            seven unlabelled letters. */}
+            seven unlabeled letters. */}
         <p className="type-micro text-slate-400">
           Hottest to coolest. Empty means any.
         </p>
@@ -120,7 +120,7 @@ export function WorldQueryControls({
              * `type="single"`, and the empty string is the third state: Radix
              * returns it when a pressed item is pressed again, which is exactly
              * "I have stopped asking". That is what makes the clause removable
-             * without a third button labelled "any" taking a row's width to say
+             * without a third button labeled "any" taking a row's width to say
              * what the absence of a selection already says.
              */}
             <ToggleGroup

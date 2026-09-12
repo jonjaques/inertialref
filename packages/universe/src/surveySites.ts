@@ -25,7 +25,7 @@ import {
  * **Derived, not authored, and that is what makes them test fixtures.** A
  * hand-written list of coordinates is stale the moment the generator changes;
  * "the highest ground on this body" survives regeneration by construction and
- * is *still the interesting place* afterwards. The same call therefore serves
+ * is *still the interesting place* afterward. The same call therefore serves
  * the site picker and the regression suite — a plate of `summit` before and
  * after a change is a comparison of the same question, not of the same numbers.
  *
@@ -98,7 +98,7 @@ interface Cell {
  * calls on every camera re-target. The clamp is a `Math.max` against a number
  * the surface already carries, so deriving `ground` from `land` here is exact.
  */
-const centreOf = (body: Body, region: RegionAddress): Cell => {
+const centerOf = (body: Body, region: RegionAddress): Cell => {
   const direction = regionDirection(region, 0.5, 0.5)
   const land = elevationAt(body.surface, direction)
   const sea = seaDatumElevation(body.surface)
@@ -148,7 +148,7 @@ function refine(
     for (const parent of beam) {
       for (let di = 0; di < 2; di += 1) {
         for (let dj = 0; dj < 2; dj += 1) {
-          const cell = centreOf(
+          const cell = centerOf(
             body,
             regionAddress(
               parent.region.face,
@@ -175,7 +175,7 @@ function seedGrid(body: Body): readonly Cell[] {
   for (let face = 0; face < FACE_COUNT; face += 1) {
     for (let i = 0; i < span; i += 1) {
       for (let j = 0; j < span; j += 1) {
-        cells.push(centreOf(body, regionAddress(face, SEED_LEVEL, i, j)))
+        cells.push(centerOf(body, regionAddress(face, SEED_LEVEL, i, j)))
       }
     }
   }
@@ -209,7 +209,7 @@ function siteInDirection(
   direction: BodyFixedDirection,
 ): SurveySite {
   const region = regionForDirection(direction, SURVEY_LEVEL)
-  return siteAt(id, name, detail, centreOf(body, region))
+  return siteAt(id, name, detail, centerOf(body, region))
 }
 
 // `formatReading`, not `formatDistance`: this string is read under a button in

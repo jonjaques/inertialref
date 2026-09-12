@@ -51,7 +51,7 @@ const IDLE = {
 
 export function useWorldSearch(engine: GameEngine): WorldSearch {
   const [state, setState] = useState(IDLE)
-  /** The sweep in flight. Cancelled by the next one, and by unmounting. */
+  /** The sweep in flight. Canceled by the next one, and by unmounting. */
   const live = useRef<{ cancel: () => void } | null>(null)
 
   const stop = useCallback(() => {
@@ -77,9 +77,9 @@ export function useWorldSearch(engine: GameEngine): WorldSearch {
       const search = engine.harness.findWorlds(query, {
         lightYears,
         onBatch: (found, progress, total) => {
-          // The identity check is the guard against a cancelled sweep writing
+          // The identity check is the guard against a canceled sweep writing
           // over the one that replaced it: `cancel` drops the reference, and a
-          // batch already in flight lands here afterwards.
+          // batch already in flight lands here afterward.
           if (live.current !== handle) return
           setState((held) => ({
             ...held,

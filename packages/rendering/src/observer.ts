@@ -78,14 +78,14 @@ export interface LookOffset {
 export const NO_LOOK: LookOffset = Object.freeze({ yaw: 0, pitch: 0 })
 
 /** Whether an offset is the composed aim itself, and so costs nothing. */
-export const isCentred = (look: LookOffset): boolean =>
+export const isCentered = (look: LookOffset): boolean =>
   look.yaw === 0 && look.pitch === 0
 
 /**
  * How close to a pole the camera may get, radians.
  *
  * Not π/2. At exactly the pole the orbit's azimuth is undefined and the
- * horizon-levelling `upHint` becomes parallel to the view direction, so the
+ * horizon-leveling `upHint` becomes parallel to the view direction, so the
  * frame rolls through a half turn in one mouse-pixel. Two degrees of margin is
  * invisible and removes the singularity rather than special-casing it.
  */
@@ -321,13 +321,13 @@ export function observerPose(
  * and to the left arrives rolled — the horizon goes off level for a gesture
  * that never asked it to.
  *
- * A centred offset returns the base quaternion itself rather than its product
- * with the identity. The product is exact for every field, but `isCentred` is
+ * A centered offset returns the base quaternion itself rather than its product
+ * with the identity. The product is exact for every field, but `isCentered` is
  * the claim the compositions rest on and stating it as a branch is what makes
  * it hold under a later change to `multiply`.
  */
 export function turn(base: Quat, look: LookOffset): Quat {
-  if (isCentred(look)) return base
+  if (isCentered(look)) return base
   const yaw = Q.fromAxisAngle(vec3(0, 1, 0), look.yaw)
   const pitch = Q.fromAxisAngle(vec3(1, 0, 0), clampElevation(look.pitch))
   return Q.multiply(Q.multiply(base, yaw), pitch)

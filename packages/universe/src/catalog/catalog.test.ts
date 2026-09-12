@@ -7,13 +7,13 @@ import {
   parseSpectralType,
 } from './spectral.ts'
 import {
-  blackbodyColour,
+  blackbodyColor,
   bolometricCorrection,
   effectiveTemperature,
   estimateMass,
   luminosityFromAbsoluteMagnitude,
   radiusFromLuminosity,
-  temperatureFromColourIndex,
+  temperatureFromColorIndex,
 } from './photometry.ts'
 import {
   bayerName,
@@ -22,7 +22,7 @@ import {
   glieseName,
   searchKey,
 } from './designations.ts'
-import { canonicalSystemId, normaliseGliese } from './identity.ts'
+import { canonicalSystemId, normalizeGliese } from './identity.ts'
 import {
   decodeCatalog,
   encodeCatalog,
@@ -161,9 +161,9 @@ describe('photometry', () => {
 
   it.each(REFERENCE)(
     'derives %s within the limits of the method',
-    (_name, spect, colourIndex, magnitude, publishedT, publishedL) => {
+    (_name, spect, colorIndex, magnitude, publishedT, publishedL) => {
       const type = parseSpectralType(spect)
-      const temperature = effectiveTemperature(type, colourIndex)
+      const temperature = effectiveTemperature(type, colorIndex)
       if (temperature === null) throw new Error('no temperature')
       const luminosity = luminosityFromAbsoluteMagnitude(
         magnitude,
@@ -176,13 +176,13 @@ describe('photometry', () => {
   )
 
   it('gives a red star a red color and a blue star a blue one', () => {
-    const cool = blackbodyColour(3_000)
-    const hot = blackbodyColour(20_000)
+    const cool = blackbodyColor(3_000)
+    const hot = blackbodyColor(20_000)
     expect(cool.r).toBeGreaterThan(cool.b)
     expect(hot.b).toBeGreaterThan(hot.r)
     // The Sun is very nearly white by construction — it is the reference the
     // eye is adapted to — so neither channel may run away from the other.
-    const sun = blackbodyColour(5_772)
+    const sun = blackbodyColor(5_772)
     expect(Math.abs(sun.r - sun.b)).toBeLessThan(0.25)
   })
 
@@ -204,7 +204,7 @@ describe('photometry', () => {
         // Unclamped, Ballesteros' denominator changes sign around B−V = 2.2 and
         // the formula returns a *negative* temperature. There are entries out
         // there with B−V above 3.
-        expect(temperatureFromColourIndex(bv)).toBeGreaterThan(1_000)
+        expect(temperatureFromColorIndex(bv)).toBeGreaterThan(1_000)
       }),
     )
   })
@@ -283,16 +283,16 @@ describe('identity', () => {
     // HYG v4.4 merged five duplicate pairs that existed precisely because one
     // spelling was not recognized as the other. A resolver that repeats the
     // mistake issues two addresses for one star.
-    expect(normaliseGliese('Gl 559A')).toBe('GJ559A')
-    expect(normaliseGliese('GJ 559 A')).toBe('GJ559A')
-    expect(normaliseGliese('gl559a')).toBe('GJ559A')
+    expect(normalizeGliese('Gl 559A')).toBe('GJ559A')
+    expect(normalizeGliese('GJ 559 A')).toBe('GJ559A')
+    expect(normalizeGliese('gl559a')).toBe('GJ559A')
     expect(source({ gliese: 'Gl 699' })).toBe(source({ gliese: 'GJ 699' }))
   })
 
   it('refuses a designation that is not a legal address', () => {
     // `systemId` would throw on these, and an ingest that throws halfway is
     // worse than one that falls through to the next rung.
-    expect(normaliseGliese('GJ 1002.1')).toBeNull()
+    expect(normalizeGliese('GJ 1002.1')).toBeNull()
     expect(source({ gliese: 'GJ 1002.1', hd: 7 })).toBe('HD7')
   })
 })
@@ -304,7 +304,7 @@ describe('the packed format', () => {
     y: -2e16,
     z: 3e15,
     absoluteMagnitude: 4.85,
-    colourIndex: 0.656,
+    colorIndex: 0.656,
     spectralType: 'G2V',
     components: 1,
     provenance: 'observed',
@@ -350,7 +350,7 @@ describe('the packed format', () => {
           {
             name: 'HYG',
             url: 'https://x',
-            licence: 'CC BY-SA 4.0',
+            license: 'CC BY-SA 4.0',
             retrieved: 'abc',
           },
         ],
@@ -378,7 +378,7 @@ describe('the packed format', () => {
           id: 'HYG7',
           hip: 0,
           absoluteMagnitude: null,
-          colourIndex: null,
+          colorIndex: null,
           spectralType: '',
         }),
       ],
@@ -418,7 +418,7 @@ describe('the packed format', () => {
     })
     for (const [i, row] of original.stars.entries()) {
       const decodedStar = decoded.stars[i] as PackedStar
-      // Position is quantised to 1 AU, which is four orders of magnitude inside
+      // Position is quantized to 1 AU, which is four orders of magnitude inside
       // the parallax error at this distance. Everything else is exact.
       expect(Math.abs(decodedStar.x - row.x)).toBeLessThan(1.5e11)
       expect({ ...decodedStar, x: 0, y: 0, z: 0 }).toEqual({
@@ -478,8 +478,8 @@ describe('the sky catalog', () => {
     expect(betelgeuse?.name).toBe('Betelgeuse')
     expect(betelgeuse?.distanceLightYears).toBeCloseTo(497.9, 0)
     // A red supergiant reads red, from the same photometry as the volume.
-    expect(betelgeuse?.physical.colour.r).toBeGreaterThan(
-      betelgeuse?.physical.colour.b ?? 1,
+    expect(betelgeuse?.physical.color.r).toBeGreaterThan(
+      betelgeuse?.physical.color.b ?? 1,
     )
     for (const query of [
       'Betelgeuse',
@@ -566,10 +566,10 @@ describe('the sky catalog', () => {
 describe('the catalog at runtime', () => {
   it('indexes by cell rather than scanning', () => {
     // Same answer as a linear scan, which is the only thing the index owes.
-    const centre = TEST_CATALOG.stars[0]?.position
-    if (centre === undefined) throw new Error('empty fixture')
+    const center = TEST_CATALOG.stars[0]?.position
+    if (center === undefined) throw new Error('empty fixture')
     const radius = 6 * 9.4607304725808e15
-    const indexed = [...TEST_CATALOG.within(centre, radius)]
+    const indexed = [...TEST_CATALOG.within(center, radius)]
       .map((s) => s.id as string)
       .sort()
     const scanned = TEST_CATALOG.stars

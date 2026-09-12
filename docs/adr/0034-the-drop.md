@@ -31,7 +31,7 @@ that the camera flies to where it lands.**
 ### The trajectory is the conic, and its periapsis is under the ground
 
 `packages/rendering/src/entryArc.ts` is a Keplerian conic about the body's
-centre through the release point and the touchdown, with its apoapsis at the
+center through the release point and the touchdown, with its apoapsis at the
 release. Its periapsis lies below the surface, which is what makes it an
 _entry_ rather than an orbit, and drawing that continuation is what says so.
 

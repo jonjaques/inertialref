@@ -30,7 +30,7 @@ export const nextSpeedMode = (mode: SpeedMode): SpeedMode =>
  * high enough to orbit, the reverse. Ten kilometers is inside the band on
  * every body that has air and well under any orbit that survives a lap.
  */
-export const SURFACE_BELOW_METRES = 10_000
+export const SURFACE_BELOW_METERS = 10_000
 
 export interface SpeedReading {
   /** Which figure is showing, resolved from `auto`. */
@@ -46,7 +46,7 @@ export function speedReading(
   const surface =
     player.surfaceSpeed !== null &&
     (player.landed ||
-      (player.altitude !== null && player.altitude < SURFACE_BELOW_METRES))
+      (player.altitude !== null && player.altitude < SURFACE_BELOW_METERS))
   const resolved = mode === 'auto' ? (surface ? 'surface' : 'orbit') : mode
   if (resolved === 'surface')
     return { mode: 'surface', value: player.surfaceSpeed }
@@ -83,7 +83,7 @@ export const CLIMB_FULL_SCALE = 1_000
  * Symmetric and logarithmic, so the needle moves as much for the first meter
  * a second as for the last hundred: a descent onto a pad is read in single
  * meters a second and a re-entry in hundreds, and a linear scale spends all
- * of its travel on the second. `log(1 + v)` keeps zero at the centre without
+ * of its travel on the second. `log(1 + v)` keeps zero at the center without
  * a singularity beside it.
  */
 export function climbGauge(mps: number | null): number {
@@ -114,9 +114,9 @@ export function formatDegrees(radians: number): string {
  * A ship on the pad reads zero to the millimeter by construction, and a
  * figure in millimeters says the instrument is measuring something.
  */
-export function formatAltitude(metres: number | null): string {
-  if (metres === null || !Number.isFinite(metres)) return '—'
-  return Math.abs(metres) < 0.5 ? '0 m' : formatReading(metres)
+export function formatAltitude(meters: number | null): string {
+  if (meters === null || !Number.isFinite(meters)) return '—'
+  return Math.abs(meters) < 0.5 ? '0 m' : formatReading(meters)
 }
 
 /** A throttle as a whole percentage. */
@@ -183,7 +183,7 @@ export const climbArc = (gauge: number): Arc => {
 }
 
 /**
- * An SVG arc from one angle to another about a centre, angles in radians
+ * An SVG arc from one angle to another about a center, angles in radians
  * measured clockwise from twelve o'clock, which is how a gauge is read.
  *
  * Both angles are on the same circle, so an arc that spans more than a half

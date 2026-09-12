@@ -57,7 +57,7 @@ import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
  * does is what a real surface of water does: it reflects the sky and the sun
  * by Fresnel's law, it refracts what is under it, and it absorbs that light
  * by the path it takes through the water, so a shelf is turquoise and the
- * deep is the liquid's own colour. The refraction is real rather than a tint:
+ * deep is the liquid's own color. The refraction is real rather than a tint:
  * the sheet reads the frame the opaque pass just drew — the seabed, lit —
  * through `viewportSharedTexture`, displaced by the wave slope, and attenuates
  * it by `e^(−absorption · path)`. What is not here is a reflection of the
@@ -71,7 +71,7 @@ import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
  * the same distance and the shoreline does not swim at a level boundary.
  *
  * The three liquids share the graph and differ in uniforms: water and a
- * hydrocarbon sea in colour and absorption, magma in a glow that is most of
+ * hydrocarbon sea in color and absorption, magma in a glow that is most of
  * the picture and an absorption that takes the seabed out of it.
  */
 
@@ -79,7 +79,7 @@ export interface WaterMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Unit vector toward the star, **in the body's own rotating axes**. */
   readonly sunDirection: { value: Vector3 }
-  readonly sunColour: { value: Color }
+  readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
   /** Presentation seconds; the waves drift against it. */
   readonly time: { value: number }
@@ -93,7 +93,7 @@ export interface WaterMaterial {
 
 /** What the graphics settings may turn down. */
 export interface WaterQuality {
-  /** Screen-space refraction of the seabed. Off reads the liquid's colour alone. */
+  /** Screen-space refraction of the seabed. Off reads the liquid's color alone. */
   readonly refraction: boolean
   /**
    * Wave fields: one is the swell, two adds the chop. Zero is a flat sheet
@@ -114,7 +114,7 @@ export const DEFAULT_WATER_QUALITY: WaterQuality = {
  * swell a landing ship's shadow crosses in a second, and three octaves below
  * it reach the meter-scale chop the sun glints off.
  */
-export const WAVE_METRES = 12
+export const WAVE_METERS = 12
 
 /** Peak-to-peak relief of the coarsest wave octave, meters. */
 const WAVE_RELIEF = 0.6
@@ -137,7 +137,7 @@ export const WAVE_PERIOD = NOISE_CELLS
 
 /** One body-fixed coordinate reduced into the wave field's period, in wavelengths. */
 export function waveWrap(meters: number): number {
-  const cycles = meters / WAVE_METRES
+  const cycles = meters / WAVE_METERS
   return cycles - Math.floor(cycles / WAVE_PERIOD) * WAVE_PERIOD
 }
 
@@ -158,17 +158,17 @@ export function createWaterMaterial(
   build: WaterBuild = { refraction: true },
 ): WaterMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
-  const sunColour = uniform(new Color(1, 1, 1))
+  const sunColor = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const time = uniform(0)
   const pixelAngle = uniform(1e-3)
-  const liquidColour = uniform(
+  const liquidColor = uniform(
     new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
   )
   const absorption = uniform(new Vector3(0.35, 0.065, 0.025))
   const glow = uniform(new Color(0, 0, 0))
-  const skyColour = uniform(new Color(0, 0, 0))
-  const hazeColour = uniform(new Color(0, 0, 0))
+  const skyColor = uniform(new Color(0, 0, 0))
+  const hazeColor = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
   const sunsetTint = uniform(new Color(1, 1, 1))
   const terminator = uniform(0.05)
@@ -248,17 +248,17 @@ export function createWaterMaterial(
      * crawls, and the sun-glint's wide lobe is what the eye calls sea.
      */
     const waveFade = oneMinus(
-      smoothstep(float(WAVE_METRES * 0.4), float(WAVE_METRES * 3), footprint),
+      smoothstep(float(WAVE_METERS * 0.4), float(WAVE_METERS * 3), footprint),
     )
     const drift = vec3(time.mul(0.045), time.mul(0.02), time.mul(-0.03))
     const point = asVector(
-      waveOrigin.add(local.mul(float(1 / WAVE_METRES))).add(drift),
+      waveOrigin.add(local.mul(float(1 / WAVE_METERS))).add(drift),
     )
     const octaves = DEFAULT_WATER_QUALITY.waveOctaves
     const chopFade = oneMinus(
       smoothstep(
-        float(WAVE_METRES * 0.08),
-        float(WAVE_METRES * 0.6),
+        float(WAVE_METERS * 0.08),
+        float(WAVE_METERS * 0.6),
         footprint,
       ),
     )
@@ -282,13 +282,13 @@ export function createWaterMaterial(
     })
     // The value, for the foam; the slope in meters per meter, for the normal.
     // `point` is in wavelengths, so a gradient per wavelength is one over
-    // `WAVE_METRES` per meter, and the chop's domain is four times finer.
+    // `WAVE_METERS` per meter, and the chop's domain is four times finer.
     const height = relief.x
       .mul(float(WAVE_RELIEF))
       .add(chop.x.mul(float(CHOP_RELIEF)))
     const slope = relief.yzw
-      .mul(float(WAVE_RELIEF / WAVE_METRES))
-      .add(chop.yzw.mul(float((CHOP_RELIEF * 4) / WAVE_METRES)))
+      .mul(float(WAVE_RELIEF / WAVE_METERS))
+      .add(chop.yzw.mul(float((CHOP_RELIEF * 4) / WAVE_METERS)))
 
     // The wave normal: the datum's, tilted by the tangential slope. See
     // `bumped` for why it is a gradient and not a screen-space difference.
@@ -301,7 +301,7 @@ export function createWaterMaterial(
     const daylight = smoothstep(terminator.negate(), terminator, incidence)
     const lowSun = smoothstep(float(0.35), float(0.02), incidence)
     const tint = mix(vec3(1), sunsetTint, lowSun.mul(skyStrength).mul(0.85))
-    const sunlight = sunColour.mul(sunIntensity).mul(tint)
+    const sunlight = sunColor.mul(sunIntensity).mul(tint)
     const diffuse = skyStrength.mul(SKY_FRACTION)
 
     /* --- Fresnel ------------------------------------------------------------ */
@@ -340,12 +340,12 @@ export function createWaterMaterial(
       saturate(screenUV.x.add(shift.x)),
       saturate(screenUV.y.add(shift.y)),
     )
-    const liquid = asVector(liquidColour)
+    const liquid = asVector(liquidColor)
     const behind = build.refraction
       ? asVector(viewportSharedTexture(shifted).rgb.div(sceneRadianceGain))
       : liquid
     /*
-     * The liquid's own colour, lit: what scatters back out of the body of
+     * The liquid's own color, lit: what scatters back out of the body of
      * the water where the seabed's light has been absorbed. Lambert on the
      * datum normal plus the skylight, the way the ground is lit, so the sea
      * and the shore agree about how bright the day is.
@@ -354,7 +354,7 @@ export function createWaterMaterial(
     const diffuseLight = max(incidence, float(0))
       .mul(daylight)
       .mul(oneMinus(diffuse))
-      .add(skyColour.mul(diffuse).mul(saturate(incidence.add(0.25))))
+      .add(skyColor.mul(diffuse).mul(saturate(incidence.add(0.25))))
       .add(skyView.mul(visibilityAmbient))
       .mul(sunlight)
     const bodyLight = liquid.mul(diffuseLight)
@@ -367,12 +367,12 @@ export function createWaterMaterial(
     /* --- what reflects off it --------------------------------------------- */
 
     /*
-     * The sky, as the reflection: its colour at the day's strength, falling
+     * The sky, as the reflection: its color at the day's strength, falling
      * to the same floor the ground's night side keeps, and the sun in it as
      * the two-lobe glint the sphere and the ground already share — on the
      * wave normal now, because the wave field is in this geometry.
      */
-    const skyLight = skyColour
+    const skyLight = skyColor
       .mul(skyStrength)
       .mul(saturate(incidence.add(0.15)))
       .mul(0.9)
@@ -390,7 +390,7 @@ export function createWaterMaterial(
 
     /* --- the surface ---------------------------------------------------------- */
 
-    let colour: Vector = asVector(
+    let color: Vector = asVector(
       mix(subsurface, skyLight, fresnel).add(sunlight.mul(glint)),
     )
 
@@ -404,11 +404,11 @@ export function createWaterMaterial(
     const foam = oneMinus(smoothstep(float(0.05), float(1.4), depth))
       .mul(foamNoise)
       .mul(daylight.mul(0.8).add(0.2))
-    colour = asVector(mix(colour, vec3(0.55).mul(diffuseLight), foam.mul(0.75)))
+    color = asVector(mix(color, vec3(0.55).mul(diffuseLight), foam.mul(0.75)))
 
     // A magma sea is its own light, and so much of it that the reflection
     // and the seabed are drowned; a water sea adds nothing here.
-    colour = asVector(colour.add(glow))
+    color = asVector(color.add(glow))
 
     /* --- the air in front of it ---------------------------------------------- */
 
@@ -424,8 +424,8 @@ export function createWaterMaterial(
     const veil = oneMinus(exp(airmass.mul(-0.15)))
       .mul(skyStrength)
       .mul(smoothstep(float(-0.06), float(0.28), incidence))
-    const veilColour = mix(hazeColour, vec3(1), veil.mul(0.55)).mul(sunlight)
-    return mix(colour, veilColour, veil.mul(0.68))
+    const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(sunlight)
+    return mix(color, veilColor, veil.mul(0.68))
   })
 
   material.colorNode = shading()
@@ -444,7 +444,7 @@ export function createWaterMaterial(
   return {
     material,
     sunDirection,
-    sunColour,
+    sunColor,
     sunIntensity,
     time,
     setPixelAngle(radians) {
@@ -452,12 +452,12 @@ export function createWaterMaterial(
     },
     setPalette(palette) {
       const liquid = palette.liquid
-      paint(liquidColour, palette.oceanColour)
+      paint(liquidColor, palette.oceanColor)
       const absorb = liquid?.absorption ?? WATER_ABSORPTION
       absorption.value.set(absorb.r, absorb.g, absorb.b)
       paint(glow, liquid?.glow ?? BLACK_RGB)
-      paint(skyColour, palette.skyColour)
-      paint(hazeColour, palette.hazeColour)
+      paint(skyColor, palette.skyColor)
+      paint(hazeColor, palette.hazeColor)
       skyStrength.value = palette.airThickness
       paint(sunsetTint, palette.sunsetTint)
       terminator.value = palette.terminator

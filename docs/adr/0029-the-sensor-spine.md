@@ -40,7 +40,7 @@ walk and fills in the GPU object when `createRenderPipelineAsync` resolves.
 `WebGPUBackend.draw` skips a pipeline that failed to build and not one that is
 pending, so a frame drawn between the walk and the promise hands
 `setPipeline` an undefined and throws out of the whole render. The build-ahead
-in `Bodies.tsx` materialises a body that is already in view and warms it in
+in `Bodies.tsx` materializes a body that is already in view and warms it in
 the same task, so the next frame throws — twice at every boot of the plain
 app, measured in the driver's log, and once per body at every build-ahead in
 flight. Without the chain that costs the frame; with it, the frame and the
@@ -99,7 +99,7 @@ to draw nothing for a pipeline still building.**
   rig and the harness.** Declined: `renderer._nodes.nodeFrame` is private,
   and the app's correctness would still rest on three's loop and R3F's loop
   agreeing once per rAF, which they do by coincidence rather than by
-  contract. Keyed on the render call, the chain's behaviour is a function of
+  contract. Keyed on the render call, the chain's behavior is a function of
   its own calls.
 - **Patch `RenderPipeline.render` with a `finally` rather than restore in the
   app.** Declined: the app is the only caller, the restore is testable here

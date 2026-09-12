@@ -77,15 +77,15 @@ function stagedScene(): Scene {
 
   const field = createStarfieldMaterial(8)
   const positions = field.positions.array as Float32Array
-  const colours = field.colours.array as Float32Array
+  const colors = field.colors.array as Float32Array
   const prominence = field.prominence.array as Float32Array
   for (let i = 0; i < 8; i += 1) {
     positions[i * 3] = (i - 3.5) * 0.4
     positions[i * 3 + 1] = 1.4
     positions[i * 3 + 2] = -2
-    colours[i * 3] = 1
-    colours[i * 3 + 1] = 0.9
-    colours[i * 3 + 2] = 0.8
+    colors[i * 3] = 1
+    colors[i * 3 + 1] = 0.9
+    colors[i * 3 + 2] = 0.8
     prominence[i] = i / 7
   }
   const sprites = new Sprite(field.material)

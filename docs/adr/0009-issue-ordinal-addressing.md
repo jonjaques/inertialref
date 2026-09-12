@@ -60,7 +60,7 @@ A system therefore carries an ordered, **append-only** body manifest:
 Four rules govern it:
 
 1. **The catalog version is an explicit generation input.** `bodies(system,
-seed, catalogueVersion)` — same three inputs, same universe, forever, on any
+seed, catalogVersion)` — same three inputs, same universe, forever, on any
    machine, offline. Determinism is unchanged; it now has three inputs instead of
    two, and the catalog version joins `algorithm()` in the generation manifest
    ([ADR-0005](0005-procedural-seeds.md)).
@@ -106,7 +106,7 @@ seed, catalogueVersion)` — same three inputs, same universe, forever, on any
   logs and the harness.
 - **Generation must consult the manifest before assigning slots**, which is the
   first time generation depends on anything but seed and address. It stays a pure
-  function — the manifest is derived from `(seed, catalogueVersion)` and is not
+  function — the manifest is derived from `(seed, catalogVersion)` and is not
   mutable state — but the dependency is real and `universe` grows a concept it
   did not have.
 - **Systems accumulate tombstones.** A well-studied system revised many times
@@ -116,7 +116,7 @@ seed, catalogueVersion)` — same three inputs, same universe, forever, on any
   and a gap at `2`. That looks like a bug and is not; it wants a comment in the
   generator and a note in the debug overlay.
 - **Golden vectors must cover it.** The manifest for a given
-  `(seed, catalogueVersion)` needs locking the same way PRNG output is locked, or
+  `(seed, catalogVersion)` needs locking the same way PRNG output is locked, or
   the property this ADR exists to guarantee is guaranteed by intent rather than
   by a test.
 - **This is free today and expensive tomorrow.** Adopted in pre-alpha with no

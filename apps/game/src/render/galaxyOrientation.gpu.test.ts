@@ -86,7 +86,7 @@ it.each(['outside', 'inside'] as const)(
         float: true,
       })
       // The volume is a quarter of each dimension, so a screen row lands on a
-      // texel centre only every fourth one. Sampling anywhere else compares a
+      // texel center only every fourth one. Sampling anywhere else compares a
       // bilinear blend of two rays against one, which is a 20% claim at the
       // bulge's gradient and says nothing about which way up the frame is.
       const divisor = SIZE / volume.diagnostics.height

@@ -43,9 +43,9 @@ it('retains physical columns through travel and blends each finite refresh witho
       ),
     )
   const initial: StarExtinctionSelection = {
-    ids: ['catalogue', 'procedural', 'foreground', 'coincident'],
+    ids: ['catalog', 'procedural', 'foreground', 'coincident'],
     positions: [at(1000), at(1000), at(100), SUN_POSITION],
-    catalogued: [true, false, false, true],
+    cataloged: [true, false, false, true],
   }
   const cache = new StarExtinctionCache(4, field, { batchSize: 1 })
   const draw = (count: number) =>
@@ -74,9 +74,9 @@ it('retains physical columns through travel and blends each finite refresh witho
     expect(ready.at(1, 0)[1]).toBeLessThan(0.2)
     expect(ready.at(2, 0)[1]).toBeGreaterThan(0.98)
     const reordered: StarExtinctionSelection = {
-      ids: ['procedural', 'catalogue'],
+      ids: ['procedural', 'catalog'],
       positions: [initial.positions[1]!, initial.positions[0]!],
-      catalogued: [false, true],
+      cataloged: [false, true],
     }
     cache.configure(reordered, SUN_POSITION)
     expect(cache.diagnostics.pending).toBe(0)
@@ -117,9 +117,9 @@ it('retains physical columns through travel and blends each finite refresh witho
       )
     }
     const replacement: StarExtinctionSelection = {
-      ids: ['new-foreground', 'catalogue'],
+      ids: ['new-foreground', 'catalog'],
       positions: [at(100), at(1000)],
-      catalogued: [false, true],
+      cataloged: [false, true],
     }
     cache.configure(replacement, moved)
     const pendingReplacement = await draw(2)

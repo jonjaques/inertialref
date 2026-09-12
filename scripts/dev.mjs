@@ -63,12 +63,12 @@ const DIM = `${ESC}[2m`
 const CHILDREN = [
   {
     label: 'client',
-    colour: `${ESC}[36m`, // cyan, the accent
+    color: `${ESC}[36m`, // cyan, the accent
     argv: ['--filter', '@inertialref/game', 'run', 'dev'],
   },
   {
     label: 'server',
-    colour: `${ESC}[35m`, // magenta — distinct from anything either tool prints
+    color: `${ESC}[35m`, // magenta — distinct from anything either tool prints
     argv: ['--filter', '@inertialref/server', 'run', 'dev'],
   },
 ]
@@ -221,9 +221,9 @@ if (
 }
 
 /** One prefixed writer per stream, holding a partial line between chunks. */
-function prefixer(label, colour, stream) {
+function prefixer(label, color, stream) {
   let pending = ''
-  const head = `${colour}${label.padEnd(6)}${RESET} ${DIM}|${RESET} `
+  const head = `${color}${label.padEnd(6)}${RESET} ${DIM}|${RESET} `
   return (chunk) => {
     pending += chunk
     const lines = pending.split('\n')
@@ -282,7 +282,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   })
 }
 
-for (const { label, colour, argv } of CHILDREN) {
+for (const { label, color, argv } of CHILDREN) {
   if (reuseServer && label === 'server') continue
   const child = spawn('pnpm', argv, {
     cwd: ROOT,
@@ -304,8 +304,8 @@ for (const { label, colour, argv } of CHILDREN) {
    */
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
-  child.stdout.on('data', prefixer(label, colour, process.stdout))
-  child.stderr.on('data', prefixer(label, colour, process.stderr))
+  child.stdout.on('data', prefixer(label, color, process.stdout))
+  child.stderr.on('data', prefixer(label, color, process.stderr))
   child.on('error', (cause) => {
     console.error(`${label} failed to start: ${cause.message}`)
     process.exitCode = 1

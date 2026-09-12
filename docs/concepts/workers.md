@@ -109,7 +109,7 @@ sequenceDiagram
         W-->>P: {kind:'failure', error:'version mismatch'}
         Note right of W: the page has been open<br/>across a deploy
     else ok
-        W->>W: run(payload, {cancelled})
+        W->>W: run(payload, {canceled})
         W-->>P: {kind:'success', job, payload, durationMs}
         Note over P,W: transferables move, they do not copy
     end
@@ -159,14 +159,14 @@ A job can be canceled whether or not it has started:
 
 - **Queued** — removed from the queue, promise rejects immediately.
 - **Running** — a `cancel` envelope is posted; the task polls
-  `context.cancelled()` at a sensible granularity (per cell in a region survey,
+  `context.canceled()` at a sensible granularity (per cell in a region survey,
   not per star — the check should not cost more than the work).
 
 **The terrain streamer is the caller that makes this pay.** `submit` hands it a
 `JobHandle` rather than a bare promise, it holds one per in-flight heightfield,
 and `clear()` cancels the whole window on a retarget. Dropping the answer is not
 enough: at the 128-job cap all but `poolSize()` of those are still queued, where
-cancelling is a splice and the work never happens, and leaving them there put up
+canceling is a splice and the work never happens, and leaving them there put up
 to 50 s of ground nobody will see ahead of everything the next view wants. The
 few actually running finish — `generateHeightfield` polls nothing and cannot be
 interrupted mid-field — and their answers are discarded by the streamer's epoch.
@@ -210,11 +210,11 @@ because the pool is the one source with a wire to cross.
 
 ## What is deliberately not here
 
-| Not used                                     | Why                                                                                                                                                                                                                                                                 |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SharedArrayBuffer`                          | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic.                                                                                                                |
-| The simulation itself in a worker            | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker).                                                                      |
-| A second pool for a different priority class | One pool, FIFO — and terrain does compete with the star survey, which read 4–8 s of queue behind a landing's heightfields. Cancelling the window the streamer no longer wants is what that needed; a priority class would have reordered work nobody wanted at all. |
+| Not used                                     | Why                                                                                                                                                                                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SharedArrayBuffer`                          | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic.                                                                                                               |
+| The simulation itself in a worker            | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker).                                                                     |
+| A second pool for a different priority class | One pool, FIFO — and terrain does compete with the star survey, which read 4–8 s of queue behind a landing's heightfields. Canceling the window the streamer no longer wants is what that needed; a priority class would have reordered work nobody wanted at all. |
 
 ---
 

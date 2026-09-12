@@ -8,7 +8,7 @@ import { DOCS } from './routes.mjs'
  *
  * **Why the JSON rather than a theme.** TypeDoc can render HTML and can be
  * given a custom theme, and that is the shorter road to an API reference that
- * is nearly the right colour. It is the wrong road here for one structural
+ * is nearly the right color. It is the wrong road here for one structural
  * reason: a themed TypeDoc site is a *second site*. It has its own navigation,
  * its own search, its own page shell and its own idea of what a link is, and
  * embedding it means a reader crossing from `Concepts` into `Reference` leaves

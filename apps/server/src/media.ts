@@ -51,7 +51,7 @@ export interface MediaObject {
  * the reason. The overlay does not play the reference audio, it *chases* a
  * clock with it — `currentTime` is written whenever the element drifts more
  * than 80 ms from the frame — and MPEG audio has no sample-accurate index, so
- * a seek lands on the nearest frame the decoder can resynchronise to. Chrome
+ * a seek lands on the nearest frame the decoder can resynchronize to. Chrome
  * hides that; Safari does not, and an mp3 seek there is coarse enough that the
  * correction lands outside tolerance and is issued again on the next frame, so
  * the track stutters instead of playing. AAC in an MP4 carries a sample table,

@@ -69,7 +69,7 @@ describe('placeShot', () => {
           const { position, orientation } = placeShot(shot, RADIUS, sun)
           const { forward } = Q.basis(orientation)
 
-          if (shot.aim === 'centre') {
+          if (shot.aim === 'center') {
             // Looking at the center means forward is exactly anti-radial.
             expect(
               Vec.dot(forward, Vec.normalize(Vec.negate(position))),
@@ -80,10 +80,10 @@ describe('placeShot', () => {
             // the ray must graze within the lifted radius. The closest
             // approach of the ray to the center is |p|·sin(angle between −p
             // and forward).
-            const toCentre = Vec.negate(position)
-            const along = Vec.dot(toCentre, forward)
+            const toCenter = Vec.negate(position)
+            const along = Vec.dot(toCenter, forward)
             const closest = Math.sqrt(
-              Math.max(0, Vec.lengthSquared(toCentre) - along * along),
+              Math.max(0, Vec.lengthSquared(toCenter) - along * along),
             )
             expect(along).toBeGreaterThan(0) // ahead, not behind
             expect(closest).toBeLessThanOrEqual(
@@ -105,7 +105,7 @@ describe('placeShot', () => {
           // vertical: the pole for a center shot, the local vertical for a
           // limb shot. A tilted horizon is the first thing an eye notices.
           const vertical =
-            shot.aim === 'centre' ? vec3(0, 1, 0) : Vec.normalize(position)
+            shot.aim === 'center' ? vec3(0, 1, 0) : Vec.normalize(position)
           expect(Math.abs(Vec.dot(right, vertical))).toBeLessThan(1e-6)
         }
       }),

@@ -158,7 +158,7 @@ export function horizonDirection(heading: number, pitch: number): Vec3 {
  * is in the hull's: `x` runs to starboard and `y` up the panel, both −1..1
  * across the ball, and `depth` is how far toward the viewer the point sits —
  * positive on the face the nose looks at, negative round the back, where it
- * is not drawn. A direction along the nose lands dead centre at depth 1,
+ * is not drawn. A direction along the nose lands dead center at depth 1,
  * which is what puts the level mark under the horizon a hull is flying on.
  */
 export function onBall(

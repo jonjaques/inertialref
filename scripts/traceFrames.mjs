@@ -26,7 +26,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
-import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
+import { analyzeFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 
@@ -95,7 +95,7 @@ process.stdout.write(
   `${paths.length} frames at ${identified}, ${span.toFixed(2)}s (${fps.toFixed(1)} fps) -> ${path.relative(ROOT, out)}\n`,
 )
 
-const analysis = await analyseFrames(paths, timestamps)
+const analysis = await analyzeFrames(paths, timestamps)
 process.stdout.write(`${reportFrames(analysis, fps)}\n`)
 
 const first = analysis.events[0]

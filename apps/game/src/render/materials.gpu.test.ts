@@ -284,7 +284,7 @@ describe('a stand-in texture compiles the program the real one draws with', () =
     const real = createAtmosphereMaterial()
     const baked = scatteringFor(
       {
-        colour: { r: 0.3, g: 0.5, b: 0.9 },
+        color: { r: 0.3, g: 0.5, b: 0.9 },
         limb: { r: 1, g: 0.5, b: 0.2 },
         thickness: 1,
       },
@@ -596,7 +596,7 @@ describe('the orbital bake', () => {
 })
 
 /**
- * A cube target whose six faces hold one colour, the way a bake's arrive:
+ * A cube target whose six faces hold one color, the way a bake's arrive:
  * the same type and filtering the baker builds, cleared rather than drawn.
  */
 function filledCube(
@@ -614,7 +614,7 @@ function filledCube(
   const held = renderer.getRenderTarget()
   // The getter wants three's `Color4`, which `three/webgpu` does not export;
   // a `Color` carrying an alpha is the shape, and `copy` fills the three lanes.
-  const heldColour = renderer.getClearColor(
+  const heldColor = renderer.getClearColor(
     Object.assign(new Color(), { a: 1 }) as unknown as Parameters<
       typeof renderer.getClearColor
     >[0],
@@ -626,7 +626,7 @@ function filledCube(
     renderer.clear()
   }
   renderer.setRenderTarget(held)
-  renderer.setClearColor(heldColour, heldAlpha)
+  renderer.setClearColor(heldColor, heldAlpha)
   return target
 }
 
@@ -636,14 +636,14 @@ describe('the sphere wearing a bake', () => {
    *
    * Drawn rather than inferred from the WGSL: the signature test above holds
    * the binding count, and this holds what the count is for. A sphere facing
-   * both the camera and the star, at its centre, is its reflectance times
+   * both the camera and the star, at its center, is its reflectance times
    * one — every photometric term is unity there — so a bake of 0.8 with a
    * relief record saying dry ground and no slope draws 0.8. Read through the
    * reflectance instead, the record says a slope of 0.6 and a sea mask of
-   * 0.8: the normal tilts off the star, the albedo goes to the ocean colour,
-   * and the centre is the sun-glint.
+   * 0.8: the normal tilts off the star, the albedo goes to the ocean color,
+   * and the center is the sun-glint.
    */
-  async function centre(
+  async function center(
     relief: readonly [number, number, number],
   ): Promise<[number, number, number, number]> {
     const planet = createPlanetMaterial()
@@ -653,7 +653,7 @@ describe('the sphere wearing a bake', () => {
     const scene = staged(mesh)
     /*
      * In the boot's order: the program is compiled over the stand-ins first
-     * and the bake is bound into it afterwards. Bound before the compile,
+     * and the bake is bound into it afterward. Bound before the compile,
      * two distinct cubes get two bindings whatever the stand-ins share, and
      * the draw passes over the defect it exists to hold. The target is held
      * still across both draws for the same reason — a pipeline is keyed on
@@ -678,16 +678,16 @@ describe('the sphere wearing a bake', () => {
   }
 
   it('draws the reflectance where the relief record says dry ground', async () => {
-    const [red, green, blue] = await centre([0.5, 0.5, 0])
+    const [red, green, blue] = await center([0.5, 0.5, 0])
     expect(red).toBeCloseTo(0.8, 2)
     expect(green).toBeCloseTo(0.8, 2)
     expect(blue).toBeCloseTo(0.8, 2)
   })
 
   it('draws the sea where the relief record says so, and nothing else moved', async () => {
-    const [dryRed] = await centre([0.5, 0.5, 0])
-    const [red, , blue] = await centre([0.5, 0.5, 1])
-    // The ocean colour is a deep blue: darker than the ice, and bluer.
+    const [dryRed] = await center([0.5, 0.5, 0])
+    const [red, , blue] = await center([0.5, 0.5, 1])
+    // The ocean color is a deep blue: darker than the ice, and bluer.
     expect(red).toBeLessThan(dryRed * 0.6)
     expect(blue).toBeGreaterThan(red)
   })

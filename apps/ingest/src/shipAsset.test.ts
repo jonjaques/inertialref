@@ -229,12 +229,12 @@ describe('the Rocinante realtime asset', () => {
       min: [-85.68923229477863, -70.44715801427573, -182.61692244630416],
       max: [85.6892697193465, 70.20755526298252, 297.93466044660124],
     }
-    const metresPerUnit = 46 / (original.max[2]! - original.min[2]!)
+    const metersPerUnit = 46 / (original.max[2]! - original.min[2]!)
     const actual = bounds()
     for (const side of ['min', 'max'] as const) {
       for (const axis of [0, 1, 2] as const) {
         const error = Math.abs(actual[side][axis] - original[side][axis]!)
-        expect(error * metresPerUnit).toBeLessThan(0.001)
+        expect(error * metersPerUnit).toBeLessThan(0.001)
       }
     }
   })
@@ -289,7 +289,7 @@ describe('the Rocinante realtime asset', () => {
       }
     })
     expect(markings).toHaveLength(12)
-    const metresPerUnit = 0.09572333467945615
+    const metersPerUnit = 0.09572333467945615
     // Four interior samples per triangle cover both the middle and corners of
     // each quad; a centroid alone misses a tilted decal intersecting the hull.
     for (const marking of markings) {
@@ -308,7 +308,7 @@ describe('the Rocinante realtime asset', () => {
           if (distance !== null && Math.abs(distance) < Math.abs(nearest))
             nearest = distance
         }
-        const clearance = -nearest * metresPerUnit
+        const clearance = -nearest * metersPerUnit
         expect(clearance).toBeGreaterThanOrEqual(0.015)
         expect(clearance).toBeLessThanOrEqual(0.035)
       }

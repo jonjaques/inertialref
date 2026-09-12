@@ -12,7 +12,7 @@ import { invariant } from '@inertialref/shared'
 
 export interface TaskContext {
   /** Long tasks should poll this and bail out early. */
-  readonly cancelled: () => boolean
+  readonly canceled: () => boolean
 }
 
 export interface TaskDefinition<Request, Response> {
@@ -61,13 +61,13 @@ export class TaskRegistry {
   }
 }
 
-export const NEVER_CANCELLED: TaskContext = { cancelled: () => false }
+export const NEVER_CANCELED: TaskContext = { canceled: () => false }
 
 /** Run a task in the calling thread. Tests, Node, and the no-worker fallback. */
 export async function runInline<Request, Response>(
   task: TaskDefinition<Request, Response>,
   payload: Request,
-  context: TaskContext = NEVER_CANCELLED,
+  context: TaskContext = NEVER_CANCELED,
 ): Promise<Response> {
   return await task.run(payload, context)
 }

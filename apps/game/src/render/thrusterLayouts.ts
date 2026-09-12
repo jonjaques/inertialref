@@ -6,7 +6,7 @@ import type { Nozzle, NozzleKind, ThrusterLayout } from '@inertialref/rendering'
  * Where each hull's valves are, measured off the shipped glTF.
  *
  * Every number here is a reading from `scripts/nozzles.mjs` over the model in
- * `data/models/`, in the game's hull axes — recentred, scaled to the
+ * `data/models/`, in the game's hull axes — recentered, scaled to the
  * manifest's length, bow turned to −Z — so it can be checked against the
  * artwork by running the script again. Nothing is estimated from a drawing
  * of the ship. The one liberty is symmetry: where the artist modeled one
@@ -18,7 +18,7 @@ import type { Nozzle, NozzleKind, ThrusterLayout } from '@inertialref/rendering'
  * renderer.
  */
 
-/** A nozzle on the centreline, or its measured position as given. */
+/** A nozzle on the centerline, or its measured position as given. */
 const nozzle = (
   kind: NozzleKind,
   radius: Meters,
@@ -26,7 +26,7 @@ const nozzle = (
   exhaust: Vec3,
 ): Nozzle => ({ position, exhaust, radius, kind })
 
-/** The measured nozzle and its mirror through the centreline plane. */
+/** The measured nozzle and its mirror through the centerline plane. */
 const pair = (
   kind: NozzleKind,
   radius: Meters,
@@ -67,7 +67,7 @@ const corners = (
  * its attachment to the hull, so the exhaust axis is the shell's mean face
  * normal, which leans away from the hull; the loop's own normal points into
  * it. The belly carries six `engines_secondary` pods, hexagonal housings with
- * a round lip at the tip, and the lip's centre and normal are what is used.
+ * a round lip at the tip, and the lip's center and normal are what is used.
  * The stern has one pod modeled at its bottom-starboard corner and holes in
  * `hull_rear` at all four, 0.3 m from where the pod's ring sits, so the four
  * corners are the one ring mirrored twice.

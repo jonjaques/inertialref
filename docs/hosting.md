@@ -367,7 +367,7 @@ worth keeping:
   the universe — a position replicated between two of them refers to a planet
   only one of them has.
 - **`status().partition` is recomputed, never remembered.** A remembered one is
-  correct until the first frame transition and quietly wrong afterwards. Flying
+  correct until the first frame transition and quietly wrong afterward. Flying
   from Sol to Alpha Centauri moves the reported authority from `s:SOL` to
   `s:HIP71683` with nothing driving it, which makes the
   [handoff question](#open-questions) something you can watch on the overlay a

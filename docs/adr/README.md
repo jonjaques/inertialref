@@ -205,7 +205,7 @@ or when they would otherwise have to reverse-engineer _why_ from the code.
 
 Keep the four headings: **Context**, **Decision**, **Alternatives considered**,
 **Consequences**. The alternatives section is the one that ages best — it is the
-difference between a record and a rationalisation.
+difference between a record and a rationalization.
 
 Prefer real numbers over adjectives. "0.24 mm anywhere in 249,000 ly" is a
 decision record; "very precise" is a mood.

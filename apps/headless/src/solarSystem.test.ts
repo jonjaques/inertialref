@@ -190,7 +190,7 @@ function find(name: string): Body {
 }
 
 /** Modeled here, or deliberately not. The reference lists more than the game. */
-const modelled = (name: string): boolean =>
+const modeled = (name: string): boolean =>
   everything().some((body) => body.name === name)
 
 const KM = 1_000
@@ -329,7 +329,7 @@ describe('the eight planets, against the JPL fact table', () => {
 describe('the dwarf planets, against the same table', () => {
   it.each(
     reference.dwarfPlanets
-      .filter((row) => modelled(row.name))
+      .filter((row) => modeled(row.name))
       .map((row) => [row.name, row] as const),
   )('%s is the published size and mass', (name, row) => {
     const body = find(name)
@@ -352,7 +352,7 @@ describe('the dwarf planets, against the same table', () => {
      * Jacobi ellipsoid whose long axis is nearly twice its short one, and whose
      * volume-equivalent radius from the 2017 occultation (Ortiz et al., Nature
      * 550, 219) is 798 km rather than the 715 km that Spitzer and Herschel
-     * thermal modelling gave. That is two measurements disagreeing, not a
+     * thermal modeling gave. That is two measurements disagreeing, not a
      * transcription error, and the newer one is what the data file uses.
      */
     if (name === 'Haumea') {
@@ -367,7 +367,7 @@ describe('the dwarf planets, against the same table', () => {
 
   it('classifies all five as dwarf planets and none of them as planets', () => {
     for (const row of reference.dwarfPlanets) {
-      if (!modelled(row.name)) continue
+      if (!modeled(row.name)) continue
       expect(`${row.name}: ${find(row.name).kind}`).toBe(`${row.name}: dwarf`)
     }
     // The 2006 vote, as a number. Everything else in `planets` is a rock.
@@ -377,11 +377,11 @@ describe('the dwarf planets, against the same table', () => {
   it('makes Pluto and Charon the double body they are', () => {
     const pluto = find('Pluto')
     const charon = find('Charon')
-    // The barycentre is outside Pluto's surface, which is true of no other
+    // The barycenter is outside Pluto's surface, which is true of no other
     // planet–satellite pair in the Solar System.
-    const barycentre =
+    const barycenter =
       (charon.elements.semiMajorAxis * charon.mass) / (pluto.mass + charon.mass)
-    expect(barycentre).toBeGreaterThan(pluto.radius)
+    expect(barycenter).toBeGreaterThan(pluto.radius)
     // Mutually locked: Charon's orbit, Charon's day and Pluto's day are one
     // number. Nothing else in the system does this either.
     expect(
@@ -402,7 +402,7 @@ describe('the satellites, against the JPL satellite tables', () => {
       // braces.
       (row.gmKm3S2 ?? 0) > 0 &&
       row.semiMajorAxisKm !== null &&
-      modelled(row.name),
+      modeled(row.name),
   )
 
   /*
@@ -453,8 +453,8 @@ describe('the satellites, against the JPL satellite tables', () => {
        *
        * Two things are going on and both are real.
        *
-       * **The barycentre.** Styx, Nix, Kerberos and Hydra orbit the
-       * Pluto–Charon barycentre, and Charon is 12.2% of Pluto's mass. The
+       * **The barycenter.** Styx, Nix, Kerberos and Hydra orbit the
+       * Pluto–Charon barycenter, and Charon is 12.2% of Pluto's mass. The
        * engine is a patched-conic hierarchy — a moon orbits its parent, full
        * stop — so it propagates them about `G(M_Pluto + m_moon)` and leaves
        * Charon out. A period goes as `M^(-1/2)`, so every one comes out
@@ -543,7 +543,7 @@ describe('the satellites, against the JPL satellite tables', () => {
 })
 
 describe('the small bodies, against the JPL Small-Body Database', () => {
-  const rows = reference.smallBodies.filter((row) => modelled(row.name))
+  const rows = reference.smallBodies.filter((row) => modeled(row.name))
 
   it('checks every asteroid, comet and dwarf planet the game models', () => {
     expect(rows.length).toBeGreaterThan(50)

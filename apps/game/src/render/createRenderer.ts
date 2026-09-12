@@ -257,7 +257,7 @@ async function buildRenderer(
      */
     renderer.info.autoReset = false
 
-    // Ask afterwards rather than assume. `init` is where the device request can
+    // Ask afterward rather than assume. `init` is where the device request can
     // still fail and take the WebGL backend instead, and extended output does
     // not exist there whatever the probe said a moment earlier.
     const backend = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl'

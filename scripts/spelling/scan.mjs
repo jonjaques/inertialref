@@ -1,38 +1,26 @@
 /*
- * Where British spelling survives in the tree, and what it would cost to remove
- * each one. `pnpm spelling`.
- *
- * `STYLE.md` § "American English" makes the rule and then suspends half of
- * it: prose follows American English, code follows the identifier that exists,
- * "until a dedicated rename". This is the instrument that rename needs, because
- * the operation is not a search and replace and the difference matters twice.
- *
- * A regex over the tree is wrong in both directions. It matches text that is
- * not a word — `CapabilityResult` contains `tyRe` — and, worse, it cannot see
- * the boundary that makes a rename unsafe: an identifier that also exists as a
- * key in checked-in data. Renaming the TypeScript property `licence` to
- * `license` compiles clean and then reads `undefined` out of
- * `data/textures/manifest.json`, which still says `licence`.
- *
- * So this reads declarations through the TypeScript compiler — ts-morph gives
- * the same symbol graph `tsc` uses — and grades each one:
- *
- *   local     the declaration and every reference are inside one file
- *   internal  referenced across files, but the symbol never leaves the source
- *   boundary  the name also occurs as a quoted string or a data key, so the
- *             rename has a second half that the compiler cannot perform
- *
- * Only the third grade needs a human. The first two are what `rename()` is for:
- * it moves the declaration and every reference the checker can see, including
- * import specifiers, shorthand properties and indexed-access types like
- * `TravelTarget['colour']`, which is exactly the set a regex gets wrong.
+ * Report British identifier declarations and the references a rename reaches.
+ * `pnpm spelling` prints the inventory; `pnpm spelling:check` also fails when
+ * a declaration needs renaming. Strings and checked-in data need a separate
+ * review, so the report marks names that also appear at those boundaries.
  */
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { Node, Project, SyntaxKind } from 'ts-morph'
 import { americanize, rulesFiring } from './dictionary.mjs'
 
-const ROOT = fileURLToPath(new URL('../..', import.meta.url))
+const rootIndex = process.argv.indexOf('--root')
+if (
+  rootIndex >= 0 &&
+  (!process.argv[rootIndex + 1] || process.argv[rootIndex + 1].startsWith('--'))
+)
+  throw new Error('--root requires a directory')
+const ROOT = (
+  rootIndex >= 0
+    ? resolve(process.argv[rootIndex + 1]) + '/'
+    : fileURLToPath(new URL('../..', import.meta.url))
+).replaceAll('\\', '/')
 
 /*
  * One Project over the whole tree rather than one per tsconfig. The five
@@ -93,13 +81,24 @@ const DECLARATIONS = new Set([
 const found = []
 for (const file of project.getSourceFiles()) {
   const path = file.getFilePath().replace(ROOT, '')
-  if (path.includes('node_modules')) continue
+  if (
+    path.includes('node_modules') ||
+    path.endsWith('worker-configuration.d.ts')
+  )
+    continue
   file.forEachDescendant((node) => {
-    if (!Node.isIdentifier(node)) return
+    if (
+      !Node.isIdentifier(node) &&
+      !Node.isPrivateIdentifier(node) &&
+      !Node.isStringLiteral(node)
+    )
+      return
     const parent = node.getParent()
     if (parent === undefined || !DECLARATIONS.has(parent.getKind())) return
     if (parent.getNameNode?.() !== node) return
-    const name = node.getText()
+    const name = Node.isStringLiteral(node)
+      ? node.getLiteralValue()
+      : node.getText()
     const renamed = americanize(name)
     if (renamed === name) return
     found.push({
@@ -231,3 +230,5 @@ if (process.argv.includes('--json')) {
     if (where.length > 6) console.log(`      … and ${where.length - 6} more`)
   }
 }
+
+if (process.argv.includes('--check') && found.length > 0) process.exitCode = 1

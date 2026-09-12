@@ -12,7 +12,7 @@ import type { DocWing } from './content.ts'
  * them.
  *
  * The current one carries an accent bar rather than a fill. A filled row here
- * would be the largest block of colour in the rail and would compete with the
+ * would be the largest block of color in the rail and would compete with the
  * selected *page* three lines below it, which is the thing the reader is
  * actually tracking.
  */

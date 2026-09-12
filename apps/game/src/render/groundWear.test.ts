@@ -111,7 +111,7 @@ describe('a mesh that wears the ground', () => {
    * `grainWrap` returns one number either side of the rounding. Deleting both
    * halves of the ritual passed this file. At `6371000/√3` the rounding is
    * −0.1126 m of altitude against 9.3e-10 without it, and moves the grain
-   * origin 0.093 of a period — 0.065 m, a tenth of `GRAIN_METRES`.
+   * origin 0.093 of a period — 0.065 m, a tenth of `GRAIN_METERS`.
    */
   it('moves all three anchor terms together', () => {
     const mesh = new Mesh()

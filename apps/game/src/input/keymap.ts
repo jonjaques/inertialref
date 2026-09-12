@@ -386,7 +386,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('flight.view', 'Camera View', 'Flight', 'flight', chord('KeyV'), {
     hint: 'chase the ship, or stand off and orbit it — drag to look or orbit, wheel to dolly',
   }),
-  press('flight.recentre', 'Recentre', 'Flight', 'flight', chord('Home'), {
+  press('flight.recenter', 'Recenter', 'Flight', 'flight', chord('Home'), {
     yieldsToFocus: true,
     hint: 'look where the view aims again',
   }),

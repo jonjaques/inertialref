@@ -203,9 +203,9 @@ export function groupBySystem(
  * a filter deciding what a *moon* is. But a promoted moon sorted by its own
  * semi-major axis is worse than either: turning off "Asteroids" in Sol left
  * Dimorphos, Selam, Dactyl and six more sitting *above Mercury*, because a moon
- * of an asteroid orbits at a kilometre or two and the planets orbit at tenths
+ * of an asteroid orbits at a kilometer or two and the planets orbit at tenths
  * of an AU. Nine rocks nobody asked for, at the top of the list, measured in
- * kilometres in a column of AU.
+ * kilometers in a column of AU.
  *
  * So the sort key for a promoted body is its parent's axis, taken from `all` —
  * the run before the filter. It lands where Didymos would have been, which is
@@ -317,13 +317,13 @@ export function measureOf(row: TravelTarget): string {
 }
 
 /** The nearest systems, with the distance rail's own scale already applied. */
-export interface Neighbour {
+export interface Neighbor {
   readonly address: string
   readonly name: string
   readonly lightYears: number
   /** Where it sits on the rail, 0 at the observer and 1 at the survey edge. */
   readonly at: number
-  readonly colour: TravelTarget['colour']
+  readonly color: TravelTarget['color']
   readonly loaded: boolean
 }
 
@@ -351,10 +351,10 @@ export interface Neighbour {
  */
 const RAIL_LIMIT = 24
 
-export function neighbours(
+export function neighbors(
   rows: readonly TravelTarget[],
   radiusLightYears: number,
-): readonly Neighbour[] {
+): readonly Neighbor[] {
   const limit = Math.max(1, radiusLightYears)
   return rows
     .filter((row) => row.kind === 'system')
@@ -365,7 +365,7 @@ export function neighbours(
         name: row.name,
         lightYears,
         at: Math.sqrt(lightYears / limit),
-        colour: row.colour,
+        color: row.color,
         loaded: row.loaded,
       }
     })

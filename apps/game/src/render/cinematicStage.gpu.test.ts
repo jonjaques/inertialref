@@ -32,7 +32,7 @@ beforeAll(async () => {
 afterAll(() => gpu.dispose())
 
 const pose = { position: vec3(0, 0, 0), orientation: Quaternion.IDENTITY }
-const HULL = { lengthMetres: 46, beamMetres: 16 }
+const HULL = { lengthMeters: 46, beamMeters: 16 }
 function view(entryHeat: number, landingDust: number): CinematicView {
   return {
     frame: 240,
@@ -171,7 +171,7 @@ it('draws a dusty photographic sky with a cool halo at the Sun only when the scr
 })
 
 it.each([50, 5000])(
-  'replaces transparent atmospheric radiance at %i metres without covering foreground or the Sun',
+  'replaces transparent atmospheric radiance at %i meters without covering foreground or the Sun',
   async (distance) => {
     const camera = new PerspectiveCamera(55, 1, 0.1, 10000)
     const scene = new Scene()

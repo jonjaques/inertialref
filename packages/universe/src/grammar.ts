@@ -181,7 +181,7 @@ export interface SurfaceGrammar {
    * flown over the body and the archive overrides all three.
    *
    * Recorded rather than re-derived, because `reliefLimit` is not always what
-   * bound the body and the comparison cannot tell afterwards. See
+   * bound the body and the comparison cannot tell afterward. See
    * `reliefLimitSource`.
    */
   readonly reliefSource: ReliefSource
@@ -225,8 +225,8 @@ export interface SurfaceGrammar {
    * What stands as a liquid on this ground, if anything does. See `liquidKind`.
    *
    * On the grammar rather than derived at every reader because three of them
-   * disagree about what the answer is for: the sea's colour, whether the band
-   * stack carves valleys, and whether anything photosynthesises. Null on a
+   * disagree about what the answer is for: the sea's color, whether the band
+   * stack carves valleys, and whether anything photosynthesizes. Null on a
    * body whose ground is too hot or too cold for any of the three.
    */
   readonly liquidKind: LiquidKind | null

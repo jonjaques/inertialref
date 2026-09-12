@@ -8,7 +8,7 @@ import { documentsUnderDocs, listedPages, WINGS } from './wings.mjs'
  *
  * A markdown renderer that breaks announces itself: the page is empty. These do
  * not. A link that resolves to the wrong route renders as a link, in the right
- * colour, with the right words on it, and goes to a page that is not the one
+ * color, with the right words on it, and goes to a page that is not the one
  * the author wrote down — and a document nobody filed lands in no wing and is
  * absent from a navigation that looks complete.
  */

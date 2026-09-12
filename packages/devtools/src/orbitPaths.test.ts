@@ -96,8 +96,8 @@ describe('orbit traces', () => {
     if (moons.length === 0) return // The fixture may have none; the rule stands.
 
     for (const moon of moons) {
-      const centre = centroid(moon.points)
-      const radii = moon.points.map((point) => UV.distance(point, centre))
+      const center = centroid(moon.points)
+      const radii = moon.points.map((point) => UV.distance(point, center))
       const min = Math.min(...radii)
       const max = Math.max(...radii)
       // A closed ellipse: every point is within a factor of a few of the mean

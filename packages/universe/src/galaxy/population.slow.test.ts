@@ -13,7 +13,7 @@ import {
 it('holds completeness, uniqueness and order independence across ten thousand cells', () => {
   const seed = rootSeed('ten-thousand-population-cells')
   const generator = createPopulationGenerator(createGalaxyField(seed))
-  const centre = populationCellOf(SUN_POSITION, 0)
+  const center = populationCellOf(SUN_POSITION, 0)
   const random = new Rng(seed)
   const coverage = {
     radiusParsecs: 150 / 3.261563777167433,
@@ -23,9 +23,9 @@ it('holds completeness, uniqueness and order independence across ten thousand ce
   }
   const seen = new Set<string>()
   const cells = Array.from({ length: 10000 }, (_, index) => ({
-    x: centre.x + (index % 100) - 50,
-    y: centre.y + (Math.floor(index / 100) % 10) - 5,
-    z: centre.z + Math.floor(index / 1000) - 5,
+    x: center.x + (index % 100) - 50,
+    y: center.y + (Math.floor(index / 100) % 10) - 5,
+    z: center.z + Math.floor(index / 1000) - 5,
   }))
   for (const cell of cells) {
     const stars = generator.cell(0, cell, coverage)

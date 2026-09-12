@@ -70,7 +70,7 @@ import {
   heightfieldSample,
   heightfieldStride,
   levelForSize,
-  regionCentreDirection,
+  regionCenterDirection,
   regionChildren,
   regionDirection,
   regionForDirection,
@@ -152,7 +152,7 @@ describe('galaxy', () => {
       SOL.position,
       5 * LIGHT_YEAR,
     )
-    const names = near.filter((s) => s.catalogued).map((s) => s.name)
+    const names = near.filter((s) => s.cataloged).map((s) => s.name)
     expect(names).toContain('Proxima Centauri')
     expect(names).toContain('Alpha Centauri')
     expect(names).not.toContain('Sirius')
@@ -400,8 +400,8 @@ describe('cube-sphere terrain', () => {
     const direction = Vec.normalize(vec3(0.3, 0.8, -0.5))
     for (const level of [0, 3, 8]) {
       const region = regionForDirection(direction, level)
-      const centre = regionCentreDirection(region)
-      const angle = Math.acos(Math.min(1, Vec.dot(centre, direction)))
+      const center = regionCenterDirection(region)
+      const angle = Math.acos(Math.min(1, Vec.dot(center, direction)))
       // Within one region's angular half-width, plus slack for the cube warp.
       expect(angle).toBeLessThan((1.6 * (Math.PI / 2)) / 2 ** level)
     }
@@ -455,7 +455,7 @@ describe('cube-sphere terrain', () => {
       resolution: 5,
       border: 0,
     })
-    const corner = elevationAt(planet.surface, regionCentreDirection(region))
+    const corner = elevationAt(planet.surface, regionCenterDirection(region))
     expect(Number.isFinite(corner)).toBe(true)
     expect(field.elevations.length).toBe(25)
   })
@@ -635,8 +635,8 @@ describe('cross-face adjacency', () => {
             Math.min(
               1,
               Vec.dot(
-                regionCentreDirection(region),
-                regionCentreDirection(neighbor),
+                regionCenterDirection(region),
+                regionCenterDirection(neighbor),
               ),
             ),
           )
@@ -797,7 +797,7 @@ describe('cross-face adjacency', () => {
             // A child's ground is inside its parent's: its center direction is
             // in the parent at the parent's level.
             expect(
-              regionForDirection(regionCentreDirection(child), level),
+              regionForDirection(regionCenterDirection(child), level),
             ).toEqual(region)
           }
           if (level === 0) expect(regionParent(region)).toBeNull()
@@ -1287,7 +1287,7 @@ describe('surface frame ids round-trip', () => {
           if (parsed === null) return
           expect(formatAddress(parsed.address)).toBe(formatAddress(ADDRESS))
           // Re-formatting what we parsed must give the identical id. That is the
-          // property the whole quantisation dance exists to provide.
+          // property the whole quantization dance exists to provide.
           expect(
             surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude),
           ).toBe(id)

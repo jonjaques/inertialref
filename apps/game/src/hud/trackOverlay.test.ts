@@ -187,7 +187,7 @@ describe('the pixel mapping', () => {
       const map = frameToPixels(width, 849)
       expect(map.y(0)).toBeCloseTo(0, 9)
       expect(map.y(1)).toBeCloseTo(849, 9)
-      // Centred horizontally: the composition's middle is the window's middle.
+      // Centered horizontally: the composition's middle is the window's middle.
       expect(map.x(0.5)).toBeCloseTo(width / 2, 9)
       // And one authored frame is 16:9 of that height, however wide the window.
       expect(map.x(1) - map.x(0)).toBeCloseTo(849 * TNG_LENS.aspect, 9)
@@ -227,7 +227,7 @@ describe('the hull against the live script', () => {
     const difference = (half: number) => {
       const before = harness.cutscenePeek(frame - half)
       const after = harness.cutscenePeek(frame + half)
-      if (before === null || after === null) throw new Error('no neighbours')
+      if (before === null || after === null) throw new Error('no neighbors')
       return Vec.scale(
         Vec.sub(offsetOfSample(after), offsetOfSample(before)),
         1 / (2 * half),
@@ -332,7 +332,7 @@ describe('the hull against the live script', () => {
   it('reads the same offset in render space as in universe space', () => {
     /*
      * The component takes the frame on screen from `engine.cinematic`, which is
-     * render space, and only its *neighbours* from `peek`, which is universe
+     * render space, and only its *neighbors* from `peek`, which is universe
      * space. If those two disagreed, the velocity would belong to a different
      * hull from the box it is drawn on. They cannot: render space is a rebase,
      * so a translation common to the camera and the hull cancels in the

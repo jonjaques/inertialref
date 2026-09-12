@@ -203,7 +203,7 @@ flowchart TB
     class UVNOTE,LOCALNOTE,RENDERNOTE note
 ```
 
-The middle box carries the subtlety worth internalising: **a frame-local `Vec3`
+The middle box carries the subtlety worth internalizing: **a frame-local `Vec3`
 is only precise near its own frame.** Expressing a point in a frame four
 light-years away degrades to meters, because a `Vec3` is a double. That is not a
 defect to be fixed; it is why canonical state is a `UniverseVector` and why an

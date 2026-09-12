@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Vec, vec3 } from '@inertialref/spatial'
 import {
   type BodyFixedDirection,
-  regionCentreDirection,
+  regionCenterDirection,
   regionForDirection,
   regionSize,
 } from '@inertialref/universe'
@@ -159,9 +159,9 @@ describe('which rock regions the camera asks for', () => {
     const size = regionSize(LUNA_RADIUS, LEVEL)
     for (const region of regions) {
       expect(region.level).toBe(LEVEL)
-      const centre = regionCentreDirection(region)
+      const center = regionCenterDirection(region)
       const angle = Math.acos(
-        Math.min(1, Math.max(-1, dot(centre, eyeAt(2).direction))),
+        Math.min(1, Math.max(-1, dot(center, eyeAt(2).direction))),
       )
       expect(angle * LUNA_RADIUS).toBeLessThanOrEqual(range + size)
       expect(regions.length).toBeGreaterThan(0)

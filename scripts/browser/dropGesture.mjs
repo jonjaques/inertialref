@@ -11,10 +11,10 @@ ir.pause()
 ir.ascend()
 // Pausing holds time while the camera still eases to its composed pose. The
 // pointer check compares world coordinates, so finish that motion first.
-for (let index = 0; ir.observerStatus()?.travelling && index < 1800; index += 1)
+for (let index = 0; ir.observerStatus()?.traveling && index < 1800; index += 1)
   ir.observerSample(1 / 60)
 assert(
-  !ir.observerStatus()?.travelling,
+  !ir.observerStatus()?.traveling,
   'The camera must finish framing before the held-end check',
 )
 await settle(12)

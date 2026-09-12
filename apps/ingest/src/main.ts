@@ -101,7 +101,7 @@ function printReport(report: BuildReport): void {
 
   with a proper name      ${pad(report.withProperName)}   ${percent(report.withProperName, s)}
   with a spectral type    ${pad(report.withSpectralType)}   ${percent(report.withSpectralType, s)}
-  with a color index      ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
+  with a color index      ${pad(report.withColorIndex)}   ${percent(report.withColorIndex, s)}
   with a magnitude        ${pad(report.withMagnitude)}   ${percent(report.withMagnitude, s)}
 
   unparsed spectral types ${pad(report.spectralUnparsed)}   had a string the parser could not read
@@ -132,7 +132,7 @@ function printSkyReport(report: SkyBuildReport): void {
   multiple-star systems   ${pad(report.multiples)}   ${percent(report.multiples, s)}
   with a proper name      ${pad(report.withProperName)}   ${percent(report.withProperName, s)}
   with a spectral type    ${pad(report.withSpectralType)}   ${percent(report.withSpectralType, s)}
-  with a color index      ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
+  with a color index      ${pad(report.withColorIndex)}   ${percent(report.withColorIndex, s)}
   unparsed spectral types ${pad(report.spectralUnparsed)}
   ids only HYG can supply ${pad(report.unstableIds)}   ${percent(report.unstableIds, s)}
   duplicate ids dropped   ${pad(report.duplicateIds.length)}   ${report.duplicateIds.slice(0, 6).join(', ')}
@@ -185,7 +185,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   const sources = SOURCES.map((source, i) => ({
     name: source.name,
     url: source.url,
-    licence: source.licence,
+    license: source.license,
     // The digest of what was actually read, so a changed artifact can always
     // be traced to the input that changed it.
     retrieved: [hyg, exoplanets][i]?.sha256.slice(0, 16) ?? '',
@@ -345,7 +345,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
   )
   writeFileSync(
     join(directory, 'LICENSE.md'),
-    licenceText(reread.metadata.attribution, reread.version),
+    licenseText(reread.metadata.attribution, reread.version),
   )
   console.log(`\n  written to ${OUTPUT_DIRECTORY}/`)
 }
@@ -359,7 +359,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
  * not to the code that reads it — the database is Adapted Material, its
  * individual contents are not.
  */
-const licenceText = (attribution: readonly string[], version: string): string =>
+const licenseText = (attribution: readonly string[], version: string): string =>
   `# Star catalog — license and attribution
 
 This directory contains a **derived database** built from published astronomical
@@ -419,14 +419,14 @@ async function textures() {
   )
   writeFileSync(
     join(root, TEXTURE_DIRECTORY, 'LICENSE.md'),
-    textureLicence(manifest.attribution),
+    textureLicense(manifest.attribution),
   )
   console.log(`
   ${manifest.textures.length} maps, ${(total / 1024 / 1024).toFixed(1)} MB
   written to ${TEXTURE_DIRECTORY}/`)
 }
 
-const textureLicence = (attribution: readonly string[]): string =>
+const textureLicense = (attribution: readonly string[]): string =>
   `# Planetary textures — license and attribution
 
 Surface maps for the Solar System, built by \`apps/ingest\` from published
@@ -442,7 +442,7 @@ ${attribution.map((line) => `- ${line}`).join('\n\n')}
 
 Per-file provenance — source URL, license and output digest — is in
 \`manifest.json\`. Rebuild with \`pnpm textures:build\`; see
-\`docs/guides/catalogue.md\`.
+\`docs/guides/catalog.md\`.
 `
 
 /**
@@ -502,14 +502,14 @@ async function shapes(refresh: boolean) {
   )
   writeFileSync(
     join(root, SHAPE_DIRECTORY, 'LICENSE.md'),
-    shapeLicence(manifest.attribution),
+    shapeLicense(manifest.attribution),
   )
   console.log(`
   ${manifest.shapes.length} shape models, ${(total / 1024).toFixed(0)} KB
   written to ${SHAPE_DIRECTORY}/`)
 }
 
-const shapeLicence = (attribution: readonly string[]): string =>
+const shapeLicense = (attribution: readonly string[]): string =>
   `# Shape models — provenance
 
 Measured figures of Solar System bodies, built by \`apps/ingest\` from models

@@ -11,7 +11,7 @@ import { coarsePointer } from '../hud/viewport.ts'
  * `HTML5Backend` rides the native drag-and-drop events, which gives real drag
  * images, correct cursors and no scroll interference — and which touch devices
  * do not fire at all, so on a phone every panel is simply immovable.
- * `TouchBackend` synthesises drags from pointer movement, which works
+ * `TouchBackend` synthesizes drags from pointer movement, which works
  * everywhere but loses the native drag image and has to be told to listen for
  * mouse events at all.
  *

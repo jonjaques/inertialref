@@ -13,13 +13,13 @@ import {
   usePersistentState,
 } from '../state/preferences.ts'
 import { NavigatorTree } from './NavigatorTree.tsx'
-import { NeighbourhoodRail } from './NeighbourhoodRail.tsx'
+import { NeighborhoodRail } from './NeighborhoodRail.tsx'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { TargetActions } from '../hud/TargetActions.tsx'
 import {
   flattenGroups,
   groupBySystem,
-  neighbours,
+  neighbors,
   searchRows,
   systemOfAddress,
 } from './navigator.ts'
@@ -160,7 +160,7 @@ export function NavigatorPanel({
   const rows = searching ? found.rows : survey.rows
   const groups = groupBySystem(survey.rows, classes)
   const chosen = rows.find((row) => row.address === selected) ?? null
-  const near = neighbours(survey.rows, lightYears)
+  const near = neighbors(survey.rows, lightYears)
   /*
    * What the filter took, counted against the survey rather than against what
    * survived it: a system whose star *and* whose every body were filtered out
@@ -428,7 +428,7 @@ export function NavigatorPanel({
           those results are ranked by how well they match, and a scale bar
           under them would be measuring the wrong thing. */}
       {!searching && (
-        <NeighbourhoodRail
+        <NeighborhoodRail
           stars={near}
           radiusLightYears={lightYears}
           target={home}

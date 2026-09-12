@@ -59,7 +59,7 @@ Folded through `softLimit` at `MICRO_CRATER_CEILING`, the tail's own bound is
 0.8 m — over the half-meter a cell is refined against, so the floor moves, and
 under the depth of one fresh crater, because a **saturated** population is in
 equilibrium and its members destroy each other. Measured RMS slope at a
-one-meter baseline afterwards: Luna 12.3°, Mars 8.4°, Mercury 15.6°, against a
+one-meter baseline afterward: Luna 12.3°, Mars 8.4°, Mercury 15.6°, against a
 published 5–20° for lunar regolith and the MER landing sites — and against
 **0.2° on Luna canonically**, which is what a flat plane measures.
 
@@ -156,7 +156,7 @@ there.
 body it is 4 × 10⁻¹⁴ against a float64 ulp of 2 × 10⁻¹⁶, which is a millimeter
 on the crater's own depth and a millimeter that differs between two patches
 computing the same direction by different routes. The sum of squared component
-differences is the same number with nothing cancelling. `ChordForm` is the
+differences is the same number with nothing canceling. `ChordForm` is the
 parameter, and the canonical ladder keeps the cheap form deliberately: changing
 it would move `elevationAt` in its last bits on every body.
 
@@ -181,7 +181,7 @@ while Earth's rises from 15 to 17 — and costs 13% a patch. It works, and it
 moves the field the
 contact test integrates, which is a terrain version and every save's landed
 hull. This phase did not spend it, because the tail was the larger gain for no
-version at all; terrain algorithm v4 spends it afterwards, on its own, and the
+version at all; terrain algorithm v4 spends it afterward, on its own, and the
 two are complementary rather than alternatives — the ladder now reaches 265 m
 on that body and the tail still starts at eight.
 

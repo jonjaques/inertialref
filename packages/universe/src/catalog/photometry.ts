@@ -43,8 +43,8 @@ export const SOLAR_TEMPERATURE: Kelvin = 5772
  * clamped rather than extrapolated: an unclamped B−V of 2.5 turns the
  * denominator negative and returns a *negative* temperature.
  */
-export function temperatureFromColourIndex(colourIndex: number): Kelvin {
-  const bv = Math.min(2.0, Math.max(-0.3, colourIndex))
+export function temperatureFromColorIndex(colorIndex: number): Kelvin {
+  const bv = Math.min(2.0, Math.max(-0.3, colorIndex))
   return 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62))
 }
 
@@ -189,13 +189,13 @@ export function temperatureFromSpectralType(type: SpectralType): Kelvin | null {
  */
 export function effectiveTemperature(
   type: SpectralType,
-  colourIndex: number | null,
+  colorIndex: number | null,
 ): Kelvin | null {
-  const fromColour =
-    colourIndex === null ? null : temperatureFromColourIndex(colourIndex)
+  const fromColor =
+    colorIndex === null ? null : temperatureFromColorIndex(colorIndex)
   const fromClass = temperatureFromSpectralType(type)
-  if (isGiant(type) && fromColour !== null) return fromColour
-  return fromClass ?? fromColour
+  if (isGiant(type) && fromColor !== null) return fromColor
+  return fromClass ?? fromColor
 }
 
 /*
@@ -401,7 +401,7 @@ function planckianChromaticity(temperature: Kelvin): { x: number; y: number } {
  * runs outside the sRGB gamut at both ends, and clamping is a gamut mapping the
  * tone mapper should own, not this function.
  */
-export function blackbodyColour(temperature: Kelvin): LinearRgb {
+export function blackbodyColor(temperature: Kelvin): LinearRgb {
   const { x: bigX, y: bigY, z: bigZ } = blackbodyXyz(temperature)
 
   // CIE XYZ (D65) → linear sRGB; negative channels retain out-of-gamut light.

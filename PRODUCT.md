@@ -245,7 +245,7 @@ the original for every one of them. The NASA Exoplanet Archive's requested
 acknowledgment is carried. Gaia is **deliberately unused** because ESA releases
 it CC BY-NC 3.0 IGO, and a
 non-commercial clause is not an open source license. See `NOTICE` and
-[the catalog guide](docs/guides/catalogue.md).
+[the catalog guide](docs/guides/catalog.md).
 
 **Absences that future work must not fabricate.** There are no users, no
 release, no testimonials, no press, no adoption numbers, and no benchmarks on

@@ -101,7 +101,7 @@ async function ringValue(
   // No body to eclipse the ring: the cylinder test would otherwise put half
   // of it in a shadow this measurement is not about.
   ring.bodyRadius.value = 0
-  ring.centre.value.set(0, 0, 0)
+  ring.center.value.set(0, 0, 0)
   const mesh = new Mesh(annulus(), ring.material)
   const scene = new Scene()
   scene.add(mesh)

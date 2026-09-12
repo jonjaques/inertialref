@@ -320,7 +320,7 @@ That design is not in this plan; the counter is what it would be built on.
   ratio — and the canvas key reads them. The knobs the frame loop reads are
   the ones the registry binds.
 - **The streamer still caches the palette for the renderer.** `TerrainState`
-  carries `palette`, `datumRadius`, `orientation`, `centre` and `lens` so the
+  carries `palette`, `datumRadius`, `orientation`, `center` and `lens` so the
   renderer has them in the frame the drawn set is empty; the streamer holds
   three palette fields for it. Small, and its home is `TerrainPatches`
   reading the body.

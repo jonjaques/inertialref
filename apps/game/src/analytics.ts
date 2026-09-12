@@ -114,7 +114,7 @@ export function startAnalytics(): void {
   window.gtag = function gtag() {
     /*
      * `arguments`, not a rest array, and this is the one line of Google's
-     * snippet that must be copied rather than modernised. gtag.js reads each
+     * snippet that must be copied rather than modernized. gtag.js reads each
      * queued entry as an `Arguments` object; a plain array pushed in its place
      * is queued, never processed, and never reported as an error — the tag
      * loads, the network requests never happen, and the property stays empty.

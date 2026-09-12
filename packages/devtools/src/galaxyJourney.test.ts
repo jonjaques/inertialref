@@ -120,7 +120,7 @@ it('travels from Earth orbit to 30 kpc above the center and returns without cano
     for (let i = 0; i < 721; i++) ir.observerSample(1 / 60)
     expect(UV.distance(ir.observatory.eye!, start.position)).toBeLessThan(0.001)
     expect(session.world.stateHash()).toBe(before)
-    expect(ir.observerStatus()!.travelling).toBe(false)
+    expect(ir.observerStatus()!.traveling).toBe(false)
     expect(ir.observerStatus()!.journey?.progress).toBe(0)
     ir.look('s:SOL/b:2', { ease: false })
     expect(ir.observerStatus()!.journey).toBeNull()

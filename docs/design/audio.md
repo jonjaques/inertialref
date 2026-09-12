@@ -80,10 +80,10 @@ This is a scope decision and a tonal one, and they agree. All
 by radio, which is both cheaper and more consistent with a setting where the
 nearest other person is usually several light-years away.
 
-**Resolved: yes, synthesised, twelve fixed strings.**
+**Resolved: yes, synthesized, twelve fixed strings.**
 
 This does not break the no-voice-acting rule — nobody is performing, an instrument
-is annunciating, and it is synthesised precisely so it sounds like a machine.
+is annunciating, and it is synthesized precisely so it sounds like a machine.
 Real aircraft do this for the same reason it is wanted here: under load, when you
 cannot look at a gauge, a spoken word is the fastest channel there is.
 
@@ -101,7 +101,7 @@ targeted recording, and it is deliberately sized to be one person's work over a
 few weeks rather than a discipline.
 
 **Procedural audio is the leverage.** Thruster and drive sound should be
-synthesised from actual thrust and RPM state rather than sample-triggered, which
+synthesized from actual thrust and RPM state rather than sample-triggered, which
 is both cheaper in assets and dramatically better in a game where thrust is
 continuously variable. The Web Audio API is well-suited to it and this is one
 place the browser is an advantage rather than a constraint.

@@ -193,13 +193,13 @@ describe('one step of a gesture', () => {
   })
 
   it('still reports the travel a click test needs', () => {
-    // `travelled` is about "did the hand move", which is true however many
+    // `traveled` is about "did the hand move", which is true however many
     // fingers moved — the caller uses it to tell a tap from a drag.
-    const step = gestureStep({ centre: { x: 0, y: 0 }, spread: 40 }, [
+    const step = gestureStep({ center: { x: 0, y: 0 }, spread: 40 }, [
       { x: 30, y: 40 },
       { x: 30, y: 40 },
     ])
-    expect(step.travelled).toBeCloseTo(50, 9)
+    expect(step.traveled).toBeCloseTo(50, 9)
     expect(step.orbit).toEqual({ x: 0, y: 0 })
   })
 

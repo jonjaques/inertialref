@@ -45,7 +45,7 @@ export interface IdentitySource {
  * different ids for one star — which they did, until a star that gained a `GJ`
  * spelling in HYG v4.4 came back as a new system.
  */
-export function normaliseGliese(gliese: string): string | null {
+export function normalizeGliese(gliese: string): string | null {
   const text = gliese.trim().replace(/\s+/g, '')
   if (text === '') return null
   const folded = text.replace(/^Gl/i, 'GJ').toUpperCase()
@@ -76,7 +76,7 @@ export function normaliseGliese(gliese: string): string | null {
 export function canonicalSystemId(source: IdentitySource): SystemId {
   if (source.proper.trim() === 'Sol') return systemId('SOL')
   if (source.hip > 0) return systemId(`HIP${source.hip}`)
-  const gliese = normaliseGliese(source.gliese)
+  const gliese = normalizeGliese(source.gliese)
   if (gliese !== null) return systemId(gliese)
   if (source.hd > 0) return systemId(`HD${source.hd}`)
   if (source.hr > 0) return systemId(`HR${source.hr}`)

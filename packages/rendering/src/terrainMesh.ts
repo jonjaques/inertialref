@@ -75,7 +75,7 @@ export interface PatchInput {
 /**
  * The sea over a patch: the datum sphere, meshed on the patch's own grid.
  *
- * A second surface rather than a colour on the first, because a shore seen
+ * A second surface rather than a color on the first, because a shore seen
  * from a landed ship is a flat sheet meeting a slope, and the ground under it
  * is a seabed the sheet is looked *through*. The vertices are anchor-relative
  * for the reason the patch's are, and they morph onto the parent's grid for
@@ -94,7 +94,7 @@ export interface WaterPatch {
   readonly depths: Float32Array
   readonly morphDepths: Float32Array
   /** Bounding sphere in the same anchor-relative axes the vertices are in. */
-  readonly boundsCentre: Vec3
+  readonly boundsCenter: Vec3
   readonly boundsRadius: Meters
 }
 
@@ -139,7 +139,7 @@ export interface RenderPatch {
    */
   readonly anchor: Vec3
   /** Bounding sphere in the same anchor-relative axes the vertices are in. */
-  readonly boundsCentre: Vec3
+  readonly boundsCenter: Vec3
   readonly boundsRadius: Meters
   /** Ground one grid cell covers: the patch's own LOD error, in meters. */
   readonly spacing: Meters
@@ -364,7 +364,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
     morphCover,
     indices: patchIndices(resolution),
     anchor,
-    boundsCentre: {
+    boundsCenter: {
       x: (lowX + highX) / 2,
       y: (lowY + highY) / 2,
       z: (lowZ + highZ) / 2,
@@ -462,7 +462,7 @@ function buildWater(
     morphPositions,
     depths,
     morphDepths,
-    boundsCentre: {
+    boundsCenter: {
       x: (lowX + highX) / 2,
       y: (lowY + highY) / 2,
       z: (lowZ + highZ) / 2,
@@ -511,10 +511,10 @@ function writeNormal(
   let nz = dux * dvy - duy * dvx
   const length = Math.hypot(nx, ny, nz)
 
-  const centre = here * 3
-  const rx = anchor.x + (extended[centre] as number)
-  const ry = anchor.y + (extended[centre + 1] as number)
-  const rz = anchor.z + (extended[centre + 2] as number)
+  const center = here * 3
+  const rx = anchor.x + (extended[center] as number)
+  const ry = anchor.y + (extended[center + 1] as number)
+  const rz = anchor.z + (extended[center + 2] as number)
 
   if (length === 0) {
     // Degenerate only where the field is exactly flat over five samples, and

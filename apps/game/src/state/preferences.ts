@@ -444,14 +444,8 @@ export const PLANETARIUM_HINTED = define({
   accept: isBoolean,
 })
 
-/*
- * The navigator's three keys keep `catalogue` in their stored names. A key is
- * what a reader's browser already holds, and renaming it would put every
- * radius and every chip selection back to the default on the next visit — a
- * rename of the panel's title that reset its settings.
- */
 export const NAVIGATOR_RADIUS = define<string>({
-  key: 'planetarium.catalogue.radius',
+  key: 'planetarium.catalog.radius',
   group: 'planetarium',
   what: 'the navigator’s survey radius',
   initial: '10',
@@ -459,7 +453,7 @@ export const NAVIGATOR_RADIUS = define<string>({
 })
 
 export const NAVIGATOR_CLASSES = define<readonly string[]>({
-  key: 'planetarium.catalogue.classes',
+  key: 'planetarium.catalog.classes',
   group: 'planetarium',
   what: 'which object classes the navigator lists',
   initial: ALL_CLASSES,
@@ -473,7 +467,7 @@ export const NAVIGATOR_CLASSES = define<readonly string[]>({
 })
 
 export const NAVIGATOR_FILTERING = define({
-  key: 'planetarium.catalogue.filtering',
+  key: 'planetarium.catalog.filtering',
   group: 'planetarium',
   what: 'whether the navigator’s filter row is showing',
   initial: false,

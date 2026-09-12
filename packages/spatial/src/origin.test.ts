@@ -60,10 +60,10 @@ describe('floating origin', () => {
     expect(origin.generation).toBeLessThanOrEqual(10_000)
 
     // Exactly on the snap grid, with no drift relative to a single computed jump.
-    const travelled = UV.difference(origin.position, START)
-    expect(travelled.x % REBASE_SNAP).toBe(0)
-    expect(travelled.y).toBe(0)
-    expect(travelled.z).toBe(0)
+    const traveled = UV.difference(origin.position, START)
+    expect(traveled.x % REBASE_SNAP).toBe(0)
+    expect(traveled.y).toBe(0)
+    expect(traveled.z).toBe(0)
     expect(
       Math.abs(UV.difference(camera, origin.position).x),
     ).toBeLessThanOrEqual(REBASE_SNAP)

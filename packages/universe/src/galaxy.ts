@@ -15,7 +15,7 @@ import {
 } from './address.ts'
 import {
   CELL_SIZE,
-  cellCentre,
+  cellCenter,
   cellKey,
   cellOf,
   cellOrigin,
@@ -26,7 +26,7 @@ import {
   SUN_GALACTOCENTRIC_RADIUS,
   SUN_POSITION,
 } from './catalog/astrometry.ts'
-import { blackbodyColour, type LinearRgb } from './catalog/photometry.ts'
+import { blackbodyColor, type LinearRgb } from './catalog/photometry.ts'
 import type {
   CatalogPlanet,
   CatalogStar,
@@ -87,15 +87,15 @@ export interface SystemStub {
   readonly visualLuminosities?: number
   readonly temperature: Kelvin
   /** Linear sRGB of a blackbody at `temperature`. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   /** Number of stellar components; >1 means the system is being simplified. */
   readonly components: number
-  readonly catalogued: boolean
+  readonly cataloged: boolean
   /** Confirmed planets. Empty for anything the catalog does not know. */
   readonly planets: readonly CatalogPlanet[]
 }
 
-export { CELL_SIZE, cellCentre, cellKey, cellOf, cellOrigin }
+export { CELL_SIZE, cellCenter, cellKey, cellOf, cellOrigin }
 export type { GalacticCell }
 
 /** Zigzag encoding, so negative cell coordinates survive the id character set. */
@@ -207,7 +207,7 @@ export function mainSequenceProperties(solarMasses: number): {
  */
 export interface CellContext {
   /** Cataloged stars already in this cell, for legacy P-address generation. */
-  readonly catalogued: number
+  readonly cataloged: number
   /**
    * Distance from the Sun inside which the catalog is complete for the kind of
    * star this generator makes, and procedural fill is therefore suppressed.
@@ -231,8 +231,8 @@ export interface CellContext {
 }
 
 /** No catalog at all: fill everything, suppress nothing. */
-export const NO_CATALOGUE: CellContext = Object.freeze({
-  catalogued: 0,
+export const NO_CATALOG: CellContext = Object.freeze({
+  cataloged: 0,
   completeRadius: 0,
 })
 
@@ -240,13 +240,13 @@ export const NO_CATALOGUE: CellContext = Object.freeze({
 export function proceduralCount(
   rng: Rng,
   cell: GalacticCell,
-  cataloguedCount: number,
+  catalogedCount: number,
   galaxySeed: Seed,
 ): number {
   return roundedPopulationCount(
     rng,
-    stellarDensity(cellCentre(cell), galaxySeed) * CELL_SIZE ** 3 -
-      cataloguedCount,
+    stellarDensity(cellCenter(cell), galaxySeed) * CELL_SIZE ** 3 -
+      catalogedCount,
   )
 }
 
@@ -260,14 +260,13 @@ function roundedPopulationCount(rng: Rng, expected: number): number {
 function generateLegacyCell(
   galaxySeed: Seed,
   cell: GalacticCell,
-  context: CellContext = NO_CATALOGUE,
+  context: CellContext = NO_CATALOG,
 ): readonly SystemStub[] {
   const seed = derivePath(galaxySeed, ['cell', cellKey(cell)])
   const rng = new Rng(seed)
   const count = roundedPopulationCount(
     rng,
-    legacyStellarDensity(cellCentre(cell)) * CELL_SIZE ** 3 -
-      context.catalogued,
+    legacyStellarDensity(cellCenter(cell)) * CELL_SIZE ** 3 - context.cataloged,
   )
 
   const stars: SystemStub[] = []
@@ -303,9 +302,9 @@ function generateLegacyCell(
       spectralType: `${spectralClass}${starRng.int(0, 9)}V`,
       solarMasses,
       ...properties,
-      colour: blackbodyColour(properties.temperature),
+      color: blackbodyColor(properties.temperature),
       components: 1,
-      catalogued: false,
+      cataloged: false,
       planets: [],
     })
   }
@@ -316,10 +315,10 @@ function generateLegacyCell(
 export function generateCell(
   galaxySeed: Seed,
   cell: GalacticCell,
-  context: CellContext = NO_CATALOGUE,
+  context: CellContext = NO_CATALOG,
 ): readonly SystemStub[] {
   const generator = populationGenerator(galaxySeed)
-  const centre = cellCentre(cell)
+  const center = cellCenter(cell)
   const coverage = context.magnitudeCoverage ?? {
     radiusParsecs: 0,
     innerMagnitude: -Infinity,
@@ -331,7 +330,7 @@ export function generateCell(
     max = UV.translate(min, vec3(CELL_SIZE, CELL_SIZE, CELL_SIZE))
   for (const band of LUMINOSITY_BANDS) {
     for (const coarse of populationCellsWithin(
-      centre,
+      center,
       CELL_SIZE / 2,
       band.level,
     )) {
@@ -364,9 +363,9 @@ export const catalogStub = (star: CatalogStar): SystemStub => ({
       : 10 **
         ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
   temperature: star.physical.temperature,
-  colour: star.physical.colour,
+  color: star.physical.color,
   components: star.components,
-  catalogued: true,
+  cataloged: true,
   planets: star.planets,
 })
 
@@ -382,8 +381,8 @@ export function resolveSystem(
   catalog: StarCatalog,
   id: SystemId,
 ): SystemStub | undefined {
-  const catalogued = catalog.get(id)
-  if (catalogued !== undefined) return catalogStub(catalogued)
+  const cataloged = catalog.get(id)
+  if (cataloged !== undefined) return catalogStub(cataloged)
   const population = parsePopulationSystemId(id)
   if (population !== null)
     return populationGenerator(galaxySeed).star(
@@ -407,7 +406,7 @@ export const cellContext = (
   catalog: StarCatalog,
   cell: GalacticCell,
 ): CellContext => ({
-  catalogued: catalog.inCell(cell).length,
+  cataloged: catalog.inCell(cell).length,
   completeRadius: catalog.completeRadius,
   magnitudeCoverage: populationCoverage(catalog),
 })
@@ -423,35 +422,35 @@ export const cellContext = (
 export function systemsWithin(
   galaxySeed: Seed,
   catalog: StarCatalog,
-  centre: UniverseVector,
+  center: UniverseVector,
   radius: Meters,
 ): readonly SystemStub[] {
   const found: SystemStub[] = []
-  for (const cell of cellsWithin(centre, radius)) {
+  for (const cell of cellsWithin(center, radius)) {
     for (const star of catalog.inCell(cell))
-      if (UV.distance(star.position, centre) <= radius)
+      if (UV.distance(star.position, center) <= radius)
         found.push(catalogStub(star))
   }
   const generator = populationGenerator(galaxySeed)
   const coverage = populationCoverage(catalog)
   const box = {
-    min: UV.translate(centre, vec3(-radius, -radius, -radius)),
-    max: UV.translate(centre, vec3(radius, radius, radius)),
+    min: UV.translate(center, vec3(-radius, -radius, -radius)),
+    max: UV.translate(center, vec3(radius, radius, radius)),
   }
   for (const band of LUMINOSITY_BANDS) {
-    const cells = populationCellsWithin(centre, radius, band.level)
+    const cells = populationCellsWithin(center, radius, band.level)
     invariant(
       cells.length > 0,
       `Travel query radius ${radius / PARSEC} pc exceeds the population cell budget at level ${band.level}`,
     )
     for (const cell of cells)
       for (const stub of generator.cell(band.level, cell, coverage, box))
-        if (UV.distance(stub.position, centre) <= radius) found.push(stub)
+        if (UV.distance(stub.position, center) <= radius) found.push(stub)
   }
   // The bright catalog is deliberately outside the travel cell index. It still
   // names real destinations when a local query reaches their actual positions.
   for (const star of catalog.sky)
-    if (UV.distance(star.position, centre) <= radius)
+    if (UV.distance(star.position, center) <= radius)
       found.push(catalogStub(star))
   // Sorted by id so the result is a pure function of the query, not of iteration
   // order — two clients asking the same question get the same list.

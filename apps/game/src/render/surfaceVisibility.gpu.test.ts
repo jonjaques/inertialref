@@ -6,7 +6,7 @@ import {
   LENS_PRESETS,
   resolveCameraPolicy,
   SURFACE_LUMINANCE,
-  surfaceColour,
+  surfaceColor,
   surfaceVisibilityGain,
   terrainPalette,
   type TerrainPalette,
@@ -66,7 +66,7 @@ function sceneFor(mesh: Mesh): Scene {
   return scene
 }
 
-/** A uniform deposit isolates the source colour from geology and detail. */
+/** A uniform deposit isolates the source color from geology and detail. */
 function uniformPalette(body: Body): TerrainPalette {
   const palette = terrainPalette(body)
   const deposit = { ...palette.regolith, grain: 0, bump: 0 }
@@ -107,8 +107,8 @@ it.each([true, false])(
     const groundScene = sceneFor(ground)
     const planet = createPlanetMaterial()
     planet.sunDirection.value.set(0, 0, 1)
-    const tint = surfaceColour(body.appearance)
-    planet.baseColour.value.setRGB(tint.r, tint.g, tint.b)
+    const tint = surfaceColor(body.appearance)
+    planet.baseColor.value.setRGB(tint.r, tint.g, tint.b)
     const sphere = new Mesh(new SphereGeometry(1, 32, 24), planet.material)
     const sphereScene = sceneFor(sphere)
     const map = new DataTexture(
@@ -121,7 +121,7 @@ it.each([true, false])(
     map.needsUpdate = true
     terrain.setAlbedoMap(mapped ? map : null, mapped)
     planet.setTextures({ ...NO_TEXTURES, albedo: mapped ? map : null })
-    const expected = mapped ? 32 / 255 : body.appearance.colour.r
+    const expected = mapped ? 32 / 255 : body.appearance.color.r
     try {
       for (const mode of CAMERA_MODES) {
         const policy = resolveCameraPolicy(

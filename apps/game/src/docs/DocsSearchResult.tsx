@@ -54,8 +54,8 @@ export function DocsSearchResult({
           >
             {hit.title}
           </span>
-          {/* Which wing, named the way the rail names it. Not a coloured
-              chip: five wings' worth of colour in a dropdown is five colours
+          {/* Which wing, named the way the rail names it. Not a colored
+              chip: five wings' worth of color in a dropdown is five colors
               this system does not have, and the word is the information. */}
           <span className="type-label shrink-0 text-slate-400">{wing}</span>
         </span>

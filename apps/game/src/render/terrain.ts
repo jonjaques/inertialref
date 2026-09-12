@@ -97,7 +97,7 @@ export interface TerrainMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Unit vector toward the star, **in the body's own rotating axes**. */
   readonly sunDirection: { value: Vector3 }
-  readonly sunColour: { value: Color }
+  readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
   /** Enhanced visibility on the lit surface; orbital bakes remain physical. */
   readonly albedoScale: { value: number }
@@ -138,7 +138,7 @@ export interface TerrainMaterial {
  * steps; three octaves down from four kilometers stops an order of magnitude
  * short of that.
  */
-const MACRO_METRES = 4000
+const MACRO_METERS = 4000
 
 /**
  * And of the middle octave, evaluated on the patch-local position instead.
@@ -151,7 +151,7 @@ const MACRO_METRES = 4000
  * at any distance where the boundary itself is a visible line the detail on
  * both sides of it is already gone.
  */
-const MICRO_METRES = 7
+const MICRO_METERS = 7
 
 /** Peak-to-peak relief of the micro octave, meters. Half the canonical floor. */
 const MICRO_RELIEF = 0.25
@@ -163,13 +163,13 @@ const MICRO_RELIEF = 0.25
  * across the zoo, and standing at two meters one of those cells is two hundred
  * display pixels across — so everything between a cell and a pixel is this
  * band's, and there was nothing there: the ground under the camera drew as a
- * smooth swell with `MICRO_METRES`'s seven-meter octave on it and no texture at
+ * smooth swell with `MICRO_METERS`'s seven-meter octave on it and no texture at
  * all.
  *
  * Seventy centimeters down to nine, at a slope of about fifteen degrees, which
  * is what lunar regolith measures at centimeter baselines.
  */
-export const GRAIN_METRES = 0.7
+export const GRAIN_METERS = 0.7
 
 /** Octaves of it. Two reaches 17 cm; the third, at 9 cm, was a fetch a pixel over the whole near ground for a band the chop under it already carries. */
 const GRAIN_OCTAVES = 2
@@ -204,16 +204,16 @@ export const GRAIN_PERIOD = NOISE_CELLS
 
 export function createTerrainMaterial(): TerrainMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
-  const sunColour = uniform(new Color(1, 1, 1))
+  const sunColor = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const albedoScale = uniform(1)
   const macroFrequency = uniform(1)
 
   /*
-   * One colour and one `(roughness, grain, bump)` triple per deposit.
+   * One color and one `(roughness, grain, bump)` triple per deposit.
    *
    * The three scalars ride in a vector so that laying one deposit over another
-   * is two `mix`es rather than five: whatever wins the colour has to win its
+   * is two `mix`es rather than five: whatever wins the color has to win its
    * roughness and its grain with it, and a slope that is half regolith and half
    * bedrock genuinely is half as smooth.
    */
@@ -237,15 +237,15 @@ export function createTerrainMaterial(): TerrainMaterial {
   const maxElevation = uniform(1)
   const seaEnabled = uniform(0)
   const seaDatum = uniform(0)
-  const oceanColour = uniform(
+  const oceanColor = uniform(
     new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
   )
   /*
-   * Whether the sea is a sheet over this ground or a colour painted on it.
+   * Whether the sea is a sheet over this ground or a color painted on it.
    *
    * One where `WaterPatches` draws the datum as a surface of its own, and the
    * ground under it is a seabed; zero where there is no sheet — a mapped body
-   * — and the flat clamped ground wears the water's colour.
+   * — and the flat clamped ground wears the water's color.
    */
   const seaSheet = uniform(0)
   const liquidGlow = uniform(new Color(0, 0, 0))
@@ -260,15 +260,15 @@ export function createTerrainMaterial(): TerrainMaterial {
   const detailBands = uniform(groundBandsFor(DEFAULT_SURFACE_QUALITY.ground))
   /*
    * Bake mode: the graph answers "what does this ground reflect, and is it
-   * sea" instead of "what colour is this pixel". One graph rather than a
+   * sea" instead of "what color is this pixel". One graph rather than a
    * second material, so the sphere's picture of a body and the ground's are
    * the same deposits, the same tints and the same rivers by construction —
    * the one way the seam rule can hold for a bake without a second copy of
    * the stack to keep in step.
    */
   const bakeMode = uniform(0)
-  const skyColour = uniform(new Color(0, 0, 0))
-  const hazeColour = uniform(new Color(0, 0, 0))
+  const skyColor = uniform(new Color(0, 0, 0))
+  const hazeColor = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
   const sunsetTint = uniform(new Color(1, 1, 1))
   /**
@@ -501,10 +501,10 @@ export function createTerrainMaterial(): TerrainMaterial {
     const footprint = length(toEye).mul(pixelAngle).div(squareOn)
 
     const macroFade = oneMinus(
-      smoothstep(float(MACRO_METRES * 0.25), float(MACRO_METRES), footprint),
+      smoothstep(float(MACRO_METERS * 0.25), float(MACRO_METERS), footprint),
     )
     const microFade = oneMinus(
-      smoothstep(float(MICRO_METRES * 0.4), float(MICRO_METRES * 2), footprint),
+      smoothstep(float(MICRO_METERS * 0.4), float(MICRO_METERS * 2), footprint),
     )
 
     /*
@@ -533,16 +533,16 @@ export function createTerrainMaterial(): TerrainMaterial {
         ),
       )
     })
-    // Meters-domain, so it stays sharp at arm's length. See `MICRO_METRES`.
+    // Meters-domain, so it stays sharp at arm's length. See `MICRO_METERS`.
     const micro = vec4(0).toVar()
     If(detailBands.greaterThan(1.5).and(microFade.greaterThan(0)), () => {
       const field = fbmFetch(
         noise,
-        asVector(local.mul(float(1 / MICRO_METRES))),
+        asVector(local.mul(float(1 / MICRO_METERS))),
         1,
       )
       micro.assign(
-        vec4(field.x, field.yzw.mul(float(1 / MICRO_METRES))).mul(microFade),
+        vec4(field.x, field.yzw.mul(float(1 / MICRO_METERS))).mul(microFade),
       )
     })
     const detail = macro.x.mul(0.6).add(micro.x.mul(0.4))
@@ -558,8 +558,8 @@ export function createTerrainMaterial(): TerrainMaterial {
      */
     const grainFade = oneMinus(
       smoothstep(
-        float(GRAIN_METRES * 0.3),
-        float(GRAIN_METRES * 1.5),
+        float(GRAIN_METERS * 0.3),
+        float(GRAIN_METERS * 1.5),
         footprint,
       ),
     )
@@ -567,11 +567,11 @@ export function createTerrainMaterial(): TerrainMaterial {
     If(detailBands.greaterThan(1.5).and(grainFade.greaterThan(0)), () => {
       const field = fbmFetch(
         noise,
-        asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
+        asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METERS)))),
         GRAIN_OCTAVES,
       )
       grit.assign(
-        vec4(field.x, field.yzw.mul(float(1 / GRAIN_METRES))).mul(grainFade),
+        vec4(field.x, field.yzw.mul(float(1 / GRAIN_METERS))).mul(grainFade),
       )
     })
 
@@ -612,7 +612,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     const level = oneMinus(smoothstep(repose.mul(0.05), repose.mul(1), slope))
 
     /*
-     * Water is a different material, not a different colour — and it is decided
+     * Water is a different material, not a different color — and it is decided
      * *before* the deposits, because two of them are nonsense underneath it.
      *
      * `groundElevation` clamps the mesh **to** the sea datum, so an ocean is
@@ -623,7 +623,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * the shoreline shimmers, wider and it is a beach.
      *
      * **It runs upward from the datum, not across it, and that follows from the
-     * clamp.** No vertex is ever below the sea, so a band centred on the datum
+     * clamp.** No vertex is ever below the sea, so a band centered on the datum
      * has half of itself in ground that does not exist and the sea sits on its
      * midpoint: `water` saturates at 0.5, `dry` never falls below 0.5, and every
      * gate below that spends `dry` is half-open over open ocean — the mottle and
@@ -725,13 +725,13 @@ export function createTerrainMaterial(): TerrainMaterial {
     )
     const grown = saturate(cover2.y).mul(invented).mul(dry).mul(mantled)
 
-    let colour = mix(rock.albedo, regolith.albedo, mantled)
-    colour = mix(colour, basalt.albedo, flooded)
-    colour = mix(colour, sand.albedo, blown)
-    colour = mix(colour, evaporite.albedo, dried)
-    colour = mix(colour, seabed.albedo, seafloor)
-    colour = mix(colour, pigment.albedo, grown)
-    colour = mix(colour, ice.albedo, frozen)
+    let color = mix(rock.albedo, regolith.albedo, mantled)
+    color = mix(color, basalt.albedo, flooded)
+    color = mix(color, sand.albedo, blown)
+    color = mix(color, evaporite.albedo, dried)
+    color = mix(color, seabed.albedo, seafloor)
+    color = mix(color, pigment.albedo, grown)
+    color = mix(color, ice.albedo, frozen)
 
     let scalars = mix(rock.params, regolith.params, mantled)
     scalars = mix(scalars, basalt.params, flooded)
@@ -781,7 +781,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * The layout is `SphereGeometry`'s, which is what every albedo map in the
      * archive is authored against and what `buildShapeMesh` reproduces for the
      * small bodies — so the same photograph fits the sphere and the patches in
-     * front of it, and a descent does not cross a colour change.
+     * front of it, and a descent does not cross a color change.
      *
      * Sampled with **explicit gradients**, and the wrap is why. Longitude comes
      * out of an `atan2`, so it jumps by a whole turn along one meridian; the
@@ -844,17 +844,17 @@ export function createTerrainMaterial(): TerrainMaterial {
      * than reflectances, so clamping at the palette's end would clamp the
      * multiplier and flatten every contrast the photograph has. What may not
      * exceed one is the product: a surface that reflects more than it receives
-     * gains energy at every bounce and blows out to white while its neighbours
+     * gains energy at every bounce and blows out to white while its neighbors
      * are correctly exposed.
      */
-    const raw = colour.mul(published).mul(mineral).mul(mottle).mul(fresh)
+    const raw = color.mul(published).mul(mineral).mul(mottle).mul(fresh)
     /*
-     * Ceilinged by the brightest channel, so the whole colour scales together.
+     * Ceilinged by the brightest channel, so the whole color scales together.
      *
-     * A per-channel `min` is the obvious form and it does not clamp a colour,
+     * A per-channel `min` is the obvious form and it does not clamp a color,
      * it *rotates* one: an evaporite whose red is over the ceiling and whose
      * blue is not comes back with its red clipped and its blue untouched, so
-     * the hue slides toward grey exactly where the surface is brightest. The
+     * the hue slides toward gray exactly where the surface is brightest. The
      * palette's reference ceiling keeps bedrock, regolith and basalt under the
      * line by construction; the deposits above the brightest one a body can
      * reach — an evaporite at 1.9 of the reference, on the ten Saturnian and
@@ -866,15 +866,15 @@ export function createTerrainMaterial(): TerrainMaterial {
     )
 
     /*
-     * The painted water's colour. Open sea — where there is no sheet — is
-     * the liquid's deep colour; a river is a few meters deep and shows its
+     * The painted water's color. Open sea — where there is no sheet — is
+     * the liquid's deep color; a river is a few meters deep and shows its
      * bed through the water, so the channel is the bed tinted rather than
-     * the deep colour laid on.
+     * the deep color laid on.
      */
-    const riverColour = mix(ground.mul(0.55), oceanColour.mul(2.2), float(0.6))
+    const riverColor = mix(ground.mul(0.55), oceanColor.mul(2.2), float(0.6))
     const surfaceAlbedo = mix(
-      mix(ground, oceanColour, water),
-      riverColour,
+      mix(ground, oceanColor, water),
+      riverColor,
       river.mul(seaSheet.add(oneMinus(seaEnabled))),
     ).mul(albedoScale)
     // Water is smooth and rock is not; the glint below is what the roughness
@@ -943,7 +943,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     // hundreds of kilometers of air. Nothing on an airless world.
     const lowSun = smoothstep(float(0.35), float(0.02), incidence)
     const tint = mix(vec3(1), sunsetTint, lowSun.mul(skyStrength).mul(0.85))
-    const sunlight = sunColour.mul(sunIntensity).mul(tint)
+    const sunlight = sunColor.mul(sunIntensity).mul(tint)
 
     /*
      * Skylight, which on a body with air is most of what lights a shadow — and
@@ -970,7 +970,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       .mul(daylight)
       .mul(sunlight)
       .mul(oneMinus(diffuse))
-    const ambient = skyColour
+    const ambient = skyColor
       .mul(diffuse)
       .mul(skyView)
       .mul(saturate(incidence.add(0.25)))
@@ -1041,13 +1041,13 @@ export function createTerrainMaterial(): TerrainMaterial {
     const veil = oneMinus(exp(airmass.mul(-0.15)))
       .mul(skyStrength)
       .mul(smoothstep(float(-0.06), float(0.28), incidence))
-    const veilColour = mix(hazeColour, vec3(1), veil.mul(0.55)).mul(sunlight)
+    const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(sunlight)
 
     const surface = direct.add(indirect).add(sunlight.mul(glint)).add(emission)
     // 0.68 for the reason the disk uses it: at 0.8 the whole thing goes milky
     // and the ocean loses its depth, where the photographs keep a saturated
     // blue mid-disk under the veil.
-    const lit = mix(surface, veilColour, veil.mul(0.68))
+    const lit = mix(surface, veilColor, veil.mul(0.68))
     /*
      * The bake: mode 1 is the reflectance alone; mode 2 is the sphere's
      * normal-map record — the mesh normal's components along geographic east
@@ -1079,7 +1079,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       oneMinus(seaMask),
     )
     const baked = mix(
-      mix(ground, riverColour, river),
+      mix(ground, riverColor, river),
       vec3(bakeSlope.mul(0.5).add(0.5), seaMask),
       saturate(bakeMode.sub(1)),
     )
@@ -1089,7 +1089,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   return {
     material,
     sunDirection,
-    sunColour,
+    sunColor,
     sunIntensity,
     albedoScale,
     setPixelAngle(radians) {
@@ -1116,10 +1116,10 @@ export function createTerrainMaterial(): TerrainMaterial {
       seaEnabled.value = palette.seaLevel === null ? 0 : 1
       seaDatum.value = palette.seaLevel ?? 0
       seaSheet.value = palette.sheet
-      paint(oceanColour, palette.oceanColour)
+      paint(oceanColor, palette.oceanColor)
       paint(liquidGlow, palette.liquid?.glow ?? BLACK_RGB)
-      paint(skyColour, palette.skyColour)
-      paint(hazeColour, palette.hazeColour)
+      paint(skyColor, palette.skyColor)
+      paint(hazeColor, palette.hazeColor)
       skyStrength.value = palette.airThickness
       paint(sunsetTint, palette.sunsetTint)
       /*
@@ -1130,7 +1130,7 @@ export function createTerrainMaterial(): TerrainMaterial {
        * serve a 236 km moon and a 6,371 km planet: four kilometers of ground is
        * four kilometers of ground on both.
        */
-      macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
+      macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METERS
     },
     setQuality(ground) {
       const bands = groundBandsFor(ground)
@@ -1159,17 +1159,17 @@ export function createTerrainMaterial(): TerrainMaterial {
 /**
  * One body-fixed coordinate reduced into the grain field's own period.
  *
- * In grain wavelengths, so the shader adds `positionLocal / GRAIN_METRES` to it
+ * In grain wavelengths, so the shader adds `positionLocal / GRAIN_METERS` to it
  * directly. See `GRAIN_PERIOD` in `render/terrain.ts` for why the reduction has
  * to happen on this side of the uniform.
  */
 export function grainWrap(meters: number): number {
-  const cycles = meters / GRAIN_METRES
+  const cycles = meters / GRAIN_METERS
   return cycles - Math.floor(cycles / GRAIN_PERIOD) * GRAIN_PERIOD
 }
 
 /**
- * A texture read with explicit gradients, as a colour.
+ * A texture read with explicit gradients, as a color.
  *
  * `TextureNode.sample` and `.grad` each return a `TextureNode` and each are
  * *typed* as returning the base `Node`, so chaining them loses both the second
@@ -1208,10 +1208,10 @@ function write(into: Deposit, from: SurfaceMaterial): void {
 }
 
 /**
- * One palette colour into one uniform.
+ * One palette color into one uniform.
  *
  * Spelled out, each of these names its field three times, which is the shape a
- * `skyColour.b` pasted into the `hazeColour` block type-checks through and then
+ * `skyColor.b` pasted into the `hazeColor` block type-checks through and then
  * reads as an art choice rather than as a bug.
  */
 export function paint(into: { value: Color }, from: LinearRgb): void {

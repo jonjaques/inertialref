@@ -5,7 +5,7 @@ import { systemId, type SystemId } from '../address.ts'
 import { CELL_SIZE, cellKey, type GalacticCell } from '../cells.ts'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
 import {
-  blackbodyColour,
+  blackbodyColor,
   luminosityFromAbsoluteMagnitude,
   mainSequenceMass,
   radiusFromLuminosity,
@@ -78,7 +78,7 @@ export interface PopulationCoverage {
   readonly outerMagnitude: number
   readonly completeRadiusParsecs: number
   /** Known stars outside the complete magnitude envelope, by owning level and cell. */
-  readonly cataloguedByCell?: Readonly<Record<string, number>>
+  readonly catalogedByCell?: Readonly<Record<string, number>>
 }
 
 const coverageByCatalog = new WeakMap<StarCatalog, PopulationCoverage>()
@@ -99,7 +99,7 @@ export function populationCoverage(catalog: StarCatalog): PopulationCoverage {
     outerMagnitude: catalog.metadata.sky?.apparentMagnitudeLimit ?? -Infinity,
     completeRadiusParsecs: catalog.completeRadius / PARSEC,
   }
-  const cataloguedByCell: Record<string, number> = {}
+  const catalogedByCell: Record<string, number> = {}
   for (const star of catalog.stars) {
     const absolute = star.physical.absoluteMagnitude
     if (absolute === null) continue
@@ -118,11 +118,11 @@ export function populationCoverage(catalog: StarCatalog): PopulationCoverage {
     )
     if (band === undefined) continue
     const key = `${band.level}:${cellKey(populationCellOf(star.position, band.level))}`
-    cataloguedByCell[key] = (cataloguedByCell[key] ?? 0) + 1
+    catalogedByCell[key] = (catalogedByCell[key] ?? 0) + 1
   }
   const result = Object.freeze({
     ...coverage,
-    cataloguedByCell: Object.freeze(cataloguedByCell),
+    catalogedByCell: Object.freeze(catalogedByCell),
   })
   coverageByCatalog.set(catalog, result)
   return result
@@ -177,12 +177,12 @@ export function unresolvedPopulationFraction(
   )
 }
 
-const POPULATION_COLOURS = Object.fromEntries(
+const POPULATION_COLORS = Object.fromEntries(
   POPULATION_NAMES.map((name) => [
     name,
-    blackbodyColour(GALAXY_POPULATIONS[name].temperature),
+    blackbodyColor(GALAXY_POPULATIONS[name].temperature),
   ]),
-) as Record<GalaxyPopulation, ReturnType<typeof blackbodyColour>>
+) as Record<GalaxyPopulation, ReturnType<typeof blackbodyColor>>
 
 /** The smooth field is an ensemble. This partitions its first moments, not individual realized stars. */
 export function partitionGalaxyEmission(
@@ -199,15 +199,15 @@ export function partitionGalaxyEmission(
       selection.apparentMagnitudeLimit,
       selection.levelMask,
     )
-    const colour = POPULATION_COLOURS[name]
+    const color = POPULATION_COLORS[name]
     const light =
       (sample.populations[name] *
         GALAXY_POPULATIONS[name].meanSolarLuminosities *
         fraction) /
-      colour.g
-    unresolved.r += light * colour.r
-    unresolved.g += light * colour.g
-    unresolved.b += light * colour.b
+      color.g
+    unresolved.r += light * color.r
+    unresolved.g += light * color.g
+    unresolved.b += light * color.b
   }
   return {
     unresolved,
@@ -355,8 +355,8 @@ export function createPopulationGenerator(field: GalaxyField) {
     cell: GalacticCell,
     coverage?: PopulationCoverage,
   ): PopulationCellPlan => {
-    const catalogued = coverage?.cataloguedByCell?.[keyOf(level, cell)] ?? 0
-    const key = `${keyOf(level, cell)}:${catalogued}`
+    const cataloged = coverage?.catalogedByCell?.[keyOf(level, cell)] ?? 0
+    const key = `${keyOf(level, cell)}:${cataloged}`
     const held = plans.get(key)
     if (held !== undefined) return held
     const size = populationCellSize(level)
@@ -394,7 +394,7 @@ export function createPopulationGenerator(field: GalaxyField) {
     )
     const totalExpected = expectations.reduce((a, b) => a + b, 0)
     const fraction =
-      totalExpected === 0 ? 0 : Math.max(0, 1 - catalogued / totalExpected)
+      totalExpected === 0 ? 0 : Math.max(0, 1 - cataloged / totalExpected)
     const counts = POPULATION_NAMES.map((name, i) => {
       const expected = expectations[i]! * fraction
       const whole = Math.floor(expected)
@@ -508,9 +508,9 @@ export function createPopulationGenerator(field: GalaxyField) {
       visualLuminosities,
       solarRadii: radiusFromLuminosity(solarLuminosities, temperature),
       temperature,
-      colour: blackbodyColour(temperature),
+      color: blackbodyColor(temperature),
       components: 1,
-      catalogued: false,
+      cataloged: false,
       planets: [],
     }
   }
@@ -588,7 +588,7 @@ export interface PopulationSkyOptions {
   readonly cellCeiling?: number
   readonly apparentMagnitudeLimit?: number
   readonly coverage?: PopulationCoverage
-  readonly cancelled?: () => boolean
+  readonly canceled?: () => boolean
 }
 export interface PopulationSkySelection extends ResolvedPopulationSelection {
   readonly stars: readonly SystemStub[]
@@ -597,17 +597,17 @@ export interface PopulationSkySelection extends ResolvedPopulationSelection {
 }
 
 export function populationCellsWithin(
-  centre: UniverseVector,
+  center: UniverseVector,
   radius: number,
   level: number,
   ceiling = 200000,
 ): readonly GalacticCell[] {
   const lo = populationCellOf(
-    UV.translate(centre, vec3(-radius, -radius, -radius)),
+    UV.translate(center, vec3(-radius, -radius, -radius)),
     level,
   )
   const hi = populationCellOf(
-    UV.translate(centre, vec3(radius, radius, radius)),
+    UV.translate(center, vec3(radius, radius, radius)),
     level,
   )
   const count = (hi.x - lo.x + 1) * (hi.y - lo.y + 1) * (hi.z - lo.z + 1)
@@ -648,7 +648,7 @@ export function selectPopulationSky(
     cellsVisited = 0,
     levelMask = 0
   for (const band of LUMINOSITY_BANDS) {
-    if (options.cancelled?.())
+    if (options.canceled?.())
       return {
         origin,
         stars: [],
@@ -680,7 +680,7 @@ export function selectPopulationSky(
     candidateCount += candidates
     levelMask |= 1 << band.level
     for (const cell of cells) {
-      if (options.cancelled?.())
+      if (options.canceled?.())
         return {
           origin,
           stars: [],

@@ -1232,7 +1232,7 @@ rounding it bounds is zero.
 === x`. A round metric radius on a cardinal axis almost always is. An arming
 fixture is one off-axis Earth anchor: `x = y = z = 6371000/√3 = 3678298.565…`
 gives `anchorAltitude` **−0.1126 m** with the fround and **9.3e-10** without,
-and moves the grain origin by 0.065 m — a tenth of `GRAIN_METRES`.
+and moves the grain origin by 0.065 m — a tenth of `GRAIN_METERS`.
 
 Same file, same class: line 90's `expect(wear.anchorAltitude).toBe(hypot(ax,ay,az)
 
@@ -1280,7 +1280,7 @@ other three channels. `LensSection` is the one preference explicitly drawn in tw
 simultaneously-mounted places — the planetarium dock's `CameraPanel` and
 `/settings/camera` over it — which is the exact pairing the new bullet's own text
 names. Also `pages/ControlsSection.tsx:98` (`{...overrides, [id]: chord}`) and
-`:111`, and `planetarium/CataloguePanel.tsx:306` (`setFiltering(!filtering)`).
+`:111`, and `planetarium/CatalogPanel.tsx:306` (`setFiltering(!filtering)`).
 Clean: `dock/useWorkspace.ts` is updater-form throughout; `firstLight.ts`'s
 `{...store.getState()}` is a live read, not a snapshot.
 
@@ -1376,7 +1376,7 @@ section in a plan is a `--stat` you can run.
 wrong. `CONTEXT.md` in the same commit says "a floor of 15", which is right; the
 docstring carried the pre-tail figure verbatim through its own rewrite.
 
-The generalisation is the other half: "Measured across the zoo the detail floor does not
+The generalization is the other half: "Measured across the zoo the detail floor does not
 move" is true of the zoo's four members (Gliese 1061 d 19→19, Gliese 1061 IV 17→17,
 Iapetus 14→14, Miranda 12→12) and false on 8 of 192 Sol+fixture bodies — **Earth 15→17**,
 Proxima Centauri II 14→16, Alpha Centauri IX b 10→12, Mars 15→16, Barnard's b/c 16→17,

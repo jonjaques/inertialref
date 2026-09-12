@@ -44,7 +44,7 @@ function response(request: SurveySkyRequest, id: string): SurveySkyResponse {
         ),
         solarLuminosities: 1,
         visualLuminosities: 1,
-        colour: [1, 1, 1],
+        color: [1, 1, 1],
       },
     ],
   }

@@ -76,7 +76,7 @@
    * a key prefix — is `src/media.ts`.
    *
    * The bucket is shared with anything else the site ever stores, so the
-   * binding is *not* a licence for the Worker to serve it. `run_worker_first`
+   * binding is *not* a license for the Worker to serve it. `run_worker_first`
    * routes `/media/*` here; `mediaFor` decides whether a name exists at all.
    *
    * Biome material sets, when they exist, are the other planned tenant.
@@ -90,7 +90,7 @@
    *                                 key, with hibernating sockets. Note that
    *                                 `new_sqlite_classes`, not `new_classes`, is
    *                                 what makes the object SQLite-backed.
-   *   d1_databases                  H2 — accounts, catalogue revisions and
+   *   d1_databases                  H2 — accounts, catalog revisions and
    *                                 first-discovery claims, which are the
    *                                 writes needing a galaxy-wide uniqueness
    *                                 guarantee rather than a per-partition

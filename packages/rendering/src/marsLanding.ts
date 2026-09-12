@@ -106,7 +106,7 @@ export const MARS_CUTOFF_SECONDS = 0.75
 export function marsLandingDrives(seconds: number) {
   const { offset } = marsApproach(seconds)
   const ignition = smooth((seconds - 8) / 2)
-  // The drive carries the ship until the deck does. The last metre of the
+  // The drive carries the ship until the deck does. The last meter of the
   // approach is a hover, and a burn that fades through it leaves nothing
   // holding the hull up at contact; the cut begins at touchdown.
   const cutoff =

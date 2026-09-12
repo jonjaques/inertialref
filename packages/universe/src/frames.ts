@@ -98,7 +98,7 @@ const ANGLE_PRECISION = 1e-6
 /**
  * Snap an angle to the precision the id records.
  *
- * The frame's *geometry* is built from the quantised value too, not just its
+ * The frame's *geometry* is built from the quantized value too, not just its
  * name. Otherwise the id does not fully determine the frame: a landing site
  * rebuilt from a save landed half a meter from where it was written, because
  * the original frame had used the unrounded latitude the id had thrown away.
@@ -151,7 +151,7 @@ export function parseSurfaceFrameId(id: FrameId): {
   const longitude = Number.parseFloat(parts[1] as string)
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
 
-  // Quantised on the way out as well as in. `formatAngle` collapses a
+  // Quantized on the way out as well as in. `formatAngle` collapses a
   // sub-precision negative to +0, so parsing has to land on the same value the
   // formatter would produce or the round trip is not a round trip.
   return {
@@ -353,7 +353,7 @@ export function installSurfaceFrame(
 
   const up = geodeticDirection(latitude, longitude)
   // Elevation is derived here rather than passed in, for the same reason the
-  // angles are quantised here: the id has to determine the frame completely.
+  // angles are quantized here: the id has to determine the frame completely.
   // A caller-supplied elevation sampled at the unrounded position put a
   // restored landing site 21 mm from the original.
   const elevation = surfaceRadius(body, up) - body.radius

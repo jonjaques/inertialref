@@ -10,7 +10,7 @@ Astronomical data
 
 The star catalog in `data/catalog/` is a DERIVED DATABASE and is NOT covered by
 the Apache License. It is licensed CC BY-SA 4.0. See `data/catalog/LICENSE.md`
-for the full notice, and `docs/guides/catalogue.md` for how it is built.
+for the full notice, and `docs/guides/catalog.md` for how it is built.
 
 The obligation attaches to that database, not to the software that reads it:
 CC BY-SA 4.0 § 4(b) makes a database containing a substantial portion of the

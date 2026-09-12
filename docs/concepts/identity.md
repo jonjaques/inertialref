@@ -151,7 +151,7 @@ maps a direction to its region, and `regionDirection(region, s, t)` maps back.
 
 The 1e-12 property test is on the layer below — `directionToFace` ⇄
 `faceToDirection`. `regionForDirection` is checked against
-`regionCentreDirection` to within one region's angular half-width, which is the
+`regionCenterDirection` to within one region's angular half-width, which is the
 strongest thing that can be true of a map that quantizes.
 
 Both `regionDirection` and `faceToDirection` return a branded

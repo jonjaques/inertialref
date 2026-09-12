@@ -15,7 +15,7 @@
  * told to press `BracketLeft`. `navigator.keyboard.getLayoutMap()` answers what
  * a physical key types on the keyboard actually attached, and where it does not
  * exist — every browser but Chromium's, as of writing — the table below is the
- * US answer, which is the right guess and is labelled as one.
+ * US answer, which is the right guess and is labeled as one.
  *
  * A leaf module: `state/preferences.ts` needs to guard a stored chord and
  * `keymap.ts` needs to resolve one, and neither may import the other.

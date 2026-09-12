@@ -172,14 +172,14 @@ export function createStarMaterial(): StarMaterial {
 export interface AtmosphereMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Body center in render space. Written every frame — the planet is orbiting. */
-  readonly centre: { value: Vector3 }
+  readonly center: { value: Vector3 }
   /** Render-space radius of the shell, and of the ground beneath it. */
   readonly outerRadius: { value: number }
   readonly innerRadius: { value: number }
   /** Unit vector from the body toward its star, in render space. */
   readonly sunDirection: { value: Vector3 }
   /** The key light's color; the sky is scattered starlight. */
-  readonly sunColour: { value: Color }
+  readonly sunColor: { value: Color }
   /** The body's spin axis in render space; the oblateness is along it. */
   readonly spinAxis: { value: Vector3 }
   /** Polar radius over equatorial, 1 for a sphere. See the stretch note. */
@@ -277,11 +277,11 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
  * which a photograph agrees with.
  */
 export function createAtmosphereMaterial(): AtmosphereMaterial {
-  const centre = uniform(new Vector3())
+  const center = uniform(new Vector3())
   const outerRadius = uniform(1)
   const innerRadius = uniform(1)
   const sunDirection = uniform(new Vector3(0, 1, 0))
-  const sunColour = uniform(new Color(1, 1, 1))
+  const sunColor = uniform(new Color(1, 1, 1))
   const spinAxis = uniform(new Vector3(0, 1, 0))
   const flattening = uniform(1)
 
@@ -324,12 +324,12 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const stretchGain = float(1)
       .div(max(flattening, float(1e-3)))
       .sub(1)
-    // Both relative to the center already, so `centre` drops out below.
-    const eyeRelative = cameraPosition.sub(centre)
+    // Both relative to the center already, so `center` drops out below.
+    const eyeRelative = cameraPosition.sub(center)
     const eye = eyeRelative.add(
       axis.mul(dot(eyeRelative, axis).mul(stretchGain)),
     )
-    const wallRelative = positionWorld.sub(centre)
+    const wallRelative = positionWorld.sub(center)
     const wall = wallRelative.add(
       axis.mul(dot(wallRelative, axis).mul(stretchGain)),
     )
@@ -347,14 +347,14 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const shellHeight = max(top.sub(1), 1e-6)
 
     const rayDirection = normalize(wallUnits.sub(eyeUnits))
-    const toCentre = eyeUnits.negate()
+    const toCenter = eyeUnits.negate()
 
     // Closest approach along the ray, and the impact parameter squared.
     // `|d × c|` with d a unit vector gives the perpendicular distance directly
     // and, unlike solving the quadratic, cannot go imaginary on a grazing ray
     // — which is every ray that matters here.
-    const closest = dot(toCentre, rayDirection)
-    const impactSquared = max(length(cross(rayDirection, toCentre)).pow(2), 0)
+    const closest = dot(toCenter, rayDirection)
+    const impactSquared = max(length(cross(rayDirection, toCenter)).pow(2), 0)
 
     const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
     const halfInner = sqrt(max(float(1).sub(impactSquared), 0))
@@ -429,7 +429,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       opticalDepth.addAssign(stepTau)
     })
 
-    const radiance = inscatter.mul(sunColour).mul(ATMOSPHERE_GAIN)
+    const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
     const survives = exp(opticalDepth.negate())
     const extinguished = oneMinus(
       survives.x.add(survives.y).add(survives.z).div(3),
@@ -461,11 +461,11 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
 
   return {
     material,
-    centre,
+    center,
     outerRadius,
     innerRadius,
     sunDirection,
-    sunColour,
+    sunColor,
     spinAxis,
     flattening,
     setScattering(recipe, transmittance, multiScatter) {
@@ -484,7 +484,7 @@ export interface StarfieldMaterial {
   readonly material: PointsNodeMaterial
   readonly positions: InstancedBufferAttribute
   /** Linear sRGB per star, from its blackbody temperature. */
-  readonly colours: InstancedBufferAttribute
+  readonly colors: InstancedBufferAttribute
   /** Integrated illuminance in lux, before the lens collects it. */
   readonly prominence: InstancedBufferAttribute
   /** Screen size of the brightest star, in logical pixels. */
@@ -520,10 +520,7 @@ export function createStarfieldMaterial(
     new Float32Array(legacyCapacity * 3),
     3,
   )
-  const colours = new InstancedBufferAttribute(
-    new Float32Array(capacity * 3),
-    3,
-  )
+  const colors = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3)
   const prominence = new InstancedBufferAttribute(
     new Float32Array(legacyCapacity),
     1,
@@ -604,7 +601,7 @@ export function createStarfieldMaterial(
   const colorTransport = enhanced
     .and(absolute)
     .select(transported.div(transported.g.max(1e-20)), transported)
-  material.colorNode = instancedBufferAttribute<'vec3'>(colours, 'vec3')
+  material.colorNode = instancedBufferAttribute<'vec3'>(colors, 'vec3')
     .mul(colorTransport)
     .mul(profile.mul(profile))
     .mul(
@@ -638,7 +635,7 @@ export function createStarfieldMaterial(
   return {
     material,
     positions,
-    colours,
+    colors,
     prominence,
     visibility,
     integrated,

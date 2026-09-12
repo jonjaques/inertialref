@@ -79,18 +79,18 @@ it('measures a star at its instance position instead of the sprite quad', async 
 it('keeps a surface’s depth in the motion attachment under an overlay quad', async () => {
   // A flare quad hangs in camera space over what is really there. Without the
   // overlay blend it would replace the motion attachment's inverse depth with
-  // its own — twenty metres in front of the lens — over its whole footprint,
+  // its own — twenty meters in front of the lens — over its whole footprint,
   // and the meter would read a near circle and enable defocus over the Sun.
   const camera = new PerspectiveCamera(65, 1, 0.01, 100)
   camera.position.z = 2
   const scene = new Scene()
   const surface = new Mesh(new PlaneGeometry(4, 4), new MeshBasicNodeMaterial())
-  scene.add(surface) // At z = 0, two metres away: inverse depth 0.5.
+  scene.add(surface) // At z = 0, two meters away: inverse depth 0.5.
   const overlay = new Mesh(
     new PlaneGeometry(1, 1),
     sensorRadiance(new MeshBasicNodeMaterial(), true),
   )
-  overlay.position.z = 1 // One metre away: inverse depth 1, were it believed.
+  overlay.position.z = 1 // One meter away: inverse depth 1, were it believed.
   overlay.material.transparent = true
   overlay.material.depthWrite = false
   overlay.renderOrder = 1
@@ -100,7 +100,7 @@ it('keeps a surface’s depth in the motion attachment under an overlay quad', a
   const motion = scenePass.getTextureNode('motion')
   try {
     const drawn = await gpu.drawGraph(motion, { float: true })
-    // The centre is under the overlay; the edge is the bare surface. Both read
+    // The center is under the overlay; the edge is the bare surface. Both read
     // the surface's 0.5, not the overlay's 1.0.
     expect(drawn.at(64, 64)[2]).toBeCloseTo(0.5, 2)
     expect(drawn.at(8, 8)[2]).toBeCloseTo(0.5, 2)

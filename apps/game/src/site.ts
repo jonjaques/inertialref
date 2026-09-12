@@ -40,7 +40,7 @@ export const SITE = {
     'An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed.',
   author: 'Jon Jaques',
   repository: 'https://github.com/jonjaques/inertialref',
-  licence: 'Apache-2.0',
+  license: 'Apache-2.0',
   /** Slate-950. The page behind the app, the icon plate and the share card all
    *  sit on it, and a browser paints it before the bundle arrives. */
   background: '#020617',

@@ -172,14 +172,14 @@ export interface PlanetMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Unit vector toward the star, render space. */
   readonly sunDirection: { value: Vector3 }
-  readonly sunColour: { value: Color }
+  readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
   /** The body's spin axis in render space; the normal-map frame is built on it. */
   readonly spinAxis: { value: Vector3 }
   /** Body center in render space, for the ring-shadow projection. */
-  readonly centre: { value: Vector3 }
+  readonly center: { value: Vector3 }
   /** Tint, and the whole surface where there is no albedo map. */
-  readonly baseColour: { value: Color }
+  readonly baseColor: { value: Color }
   /**
    * A multiplier on the sampled albedo, for the eye a photograph implies.
    *
@@ -223,13 +223,13 @@ export interface PlanetMaterial {
   readonly specularStrength: { value: number }
   readonly specularSharpness: { value: number }
   /** Scattering color of the air, seen looking down through it. */
-  readonly hazeColour: { value: Color }
+  readonly hazeColor: { value: Color }
   /** What the low sun turns: the sunset tint the air lends the light. */
   readonly hazeLimb: { value: Color }
   /** How much air sits over this surface. 0 disables the whole aerial term. */
   readonly hazeStrength: { value: number }
   /** What deep water looks like from orbit; the map's bathymetry is not it. */
-  readonly oceanColour: { value: Color }
+  readonly oceanColor: { value: Color }
   /** Cloud shell height as a fraction of the body's radius. */
   readonly cloudHeight: { value: number }
   readonly cloudShadow: { value: number }
@@ -286,11 +286,11 @@ export function createPlanetMaterial(): PlanetMaterial {
   const baked = uniform(0)
 
   const sunDirection = uniform(new Vector3(1, 0, 0))
-  const sunColour = uniform(new Color(1, 1, 1))
+  const sunColor = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const spinAxis = uniform(new Vector3(0, 1, 0))
-  const centre = uniform(new Vector3())
-  const baseColour = uniform(new Color(1, 1, 1))
+  const center = uniform(new Vector3())
+  const baseColor = uniform(new Color(1, 1, 1))
   const albedoScale = uniform(1)
   const lunarLambert = uniform(0.9)
   const reliefScale = uniform(1)
@@ -302,12 +302,12 @@ export function createPlanetMaterial(): PlanetMaterial {
   const nightStrength = uniform(1)
   const specularStrength = uniform(0)
   const specularSharpness = uniform(420)
-  const hazeColour = uniform(new Color(0.28, 0.48, 0.95))
+  const hazeColor = uniform(new Color(0.28, 0.48, 0.95))
   const hazeLimb = uniform(new Color(0.92, 0.42, 0.2))
   const hazeStrength = uniform(0)
   // Open-ocean reflectance to start; `Bodies` writes the body's own liquid
-  // over it every frame, so a bake's sea is the colour the ground gives it.
-  const oceanColour = uniform(
+  // over it every frame, so a bake's sea is the color the ground gives it.
+  const oceanColor = uniform(
     new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
   )
   const cloudHeight = uniform(0)
@@ -397,7 +397,7 @@ export function createPlanetMaterial(): PlanetMaterial {
    * photographed rather than modeled — those bands move with the season and no
    * amount of surface detail substitutes for them.
    */
-  const radial = positionWorld.sub(centre)
+  const radial = positionWorld.sub(center)
   const heightAbovePlane = dot(radial, axis)
   const alongAxis = dot(light, axis)
   // Away from zero, or a ray parallel to the ring plane divides by nothing.
@@ -462,7 +462,7 @@ export function createPlanetMaterial(): PlanetMaterial {
    */
   const lowSun = smoothstep(float(0.35), float(0.02), incidence)
   const lightTint = mix(vec3(1), hazeLimb, lowSun.mul(hazeStrength).mul(0.85))
-  const sunlight = sunColour.mul(sunIntensity).mul(lightTint)
+  const sunlight = sunColor.mul(sunIntensity).mul(lightTint)
   const lit = daylight.mul(ringShade).mul(cloudShade)
 
   /*
@@ -477,7 +477,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   const bakeSample = bakeMap.sample(bakeDirection)
   const ocean = mix(normalMap.b, relief.b, baked)
   const surfaceAlbedo = mix(
-    albedoMap.sample(flowUv).rgb.mul(baseColour),
+    albedoMap.sample(flowUv).rgb.mul(baseColor),
     bakeSample.rgb,
     baked,
   )
@@ -486,7 +486,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   const rich = mix(vec3(luminance(surfaceAlbedo)), surfaceAlbedo, saturation)
   // Enhanced lifts the whole surface, including measured ocean reflectance,
   // once. The streamed ground applies the same gain after its land/sea mix.
-  const albedo = mix(rich, oceanColour, ocean.mul(0.65)).mul(albedoScale)
+  const albedo = mix(rich, oceanColor, ocean.mul(0.65)).mul(albedoScale)
 
   // See `limbDarkening` on the interface. The exponent is gentle because the
   // aerial veil re-brightens the last few degrees on top of this.
@@ -544,14 +544,14 @@ export function createPlanetMaterial(): PlanetMaterial {
     .mul(hazeStrength)
     .mul(smoothstep(float(-0.06), float(0.28), incidence))
     .mul(ringShade)
-  const veilColour = mix(hazeColour, vec3(1), veil.mul(0.55)).mul(
-    sunColour.mul(sunIntensity).mul(lightTint),
+  const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(
+    sunColor.mul(sunIntensity).mul(lightTint),
   )
 
   const surfaceLight = diffuse.add(sunlight.mul(glint))
   // 0.68, not higher: at 0.8 the whole disk went milky and the ocean lost
   // its depth — the photographs keep a saturated blue mid-disk under the veil.
-  const shadedSurface = mix(surfaceLight, veilColour, veil.mul(0.68))
+  const shadedSurface = mix(surfaceLight, veilColor, veil.mul(0.68))
 
   /*
    * Night lights, revealed slightly *before* the terminator.
@@ -574,11 +574,11 @@ export function createPlanetMaterial(): PlanetMaterial {
   const handle: PlanetMaterial = {
     material,
     sunDirection,
-    sunColour,
+    sunColor,
     sunIntensity,
     spinAxis,
-    centre,
-    baseColour,
+    center,
+    baseColor,
     albedoScale,
     lunarLambert,
     reliefScale,
@@ -590,10 +590,10 @@ export function createPlanetMaterial(): PlanetMaterial {
     nightStrength,
     specularStrength,
     specularSharpness,
-    hazeColour,
+    hazeColor,
     hazeLimb,
     hazeStrength,
-    oceanColour,
+    oceanColor,
     cloudHeight,
     cloudShadow,
     ringInner,
@@ -625,7 +625,7 @@ export function createPlanetMaterial(): PlanetMaterial {
 export interface CloudMaterial {
   readonly material: MeshBasicNodeMaterial
   readonly sunDirection: { value: Vector3 }
-  readonly sunColour: { value: Color }
+  readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
   readonly opacity: { value: number }
   /** Altitude interval over which the whole deck clears, in render meters. */
@@ -635,9 +635,9 @@ export interface CloudMaterial {
   /** Longitude offset in turns; the deck rotates against the surface. */
   readonly drift: { value: number }
   /** Tint for a deck with no map — Titan's, and every procedural world's. */
-  readonly baseColour: { value: Color }
+  readonly baseColor: { value: Color }
   /** What the low sun turns the deck: the body's sunset color. */
-  readonly sunsetColour: { value: Color }
+  readonly sunsetColor: { value: Color }
   setTexture(map: Texture | null): void
 }
 
@@ -659,14 +659,14 @@ export function createCloudMaterial(): CloudMaterial {
   // — at zero opacity, an invisible shell updated every frame for nothing.
   const map = texture(WHITE)
   const sunDirection = uniform(new Vector3(1, 0, 0))
-  const sunColour = uniform(new Color(1, 1, 1))
+  const sunColor = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const opacity = uniform(1)
   const entryDistance = uniform(1)
   const eyeAltitude = uniform(1)
   const drift = uniform(0)
-  const baseColour = uniform(new Color(1, 1, 1))
-  const sunsetColour = uniform(new Color(1, 0.55, 0.28))
+  const baseColor = uniform(new Color(1, 1, 1))
+  const sunsetColor = uniform(new Color(1, 0.55, 0.28))
 
   const surfaceUv = uv()
   const drifted = vec2(surfaceUv.x.add(drift), surfaceUv.y)
@@ -689,14 +689,14 @@ export function createCloudMaterial(): CloudMaterial {
    */
   const glow = mix(
     vec3(1),
-    sunsetColour,
+    sunsetColor,
     smoothstep(float(0.3), float(0.0), incidence),
   )
 
   const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = cover.rgb
-    .mul(baseColour)
-    .mul(sunColour)
+    .mul(baseColor)
+    .mul(sunColor)
     .mul(sunIntensity)
     .mul(glow)
     .mul(max(incidence, float(0)).mul(0.96).add(0.04))
@@ -712,14 +712,14 @@ export function createCloudMaterial(): CloudMaterial {
   return {
     material,
     sunDirection,
-    sunColour,
+    sunColor,
     sunIntensity,
     opacity,
     entryDistance,
     eyeAltitude,
     drift,
-    baseColour,
-    sunsetColour,
+    baseColor,
+    sunsetColor,
     setTexture(value) {
       map.value = value ?? WHITE
     },
@@ -733,12 +733,12 @@ export function createCloudMaterial(): CloudMaterial {
 export interface RingMaterial {
   readonly material: MeshBasicNodeMaterial
   readonly sunDirection: { value: Vector3 }
-  readonly sunColour: { value: Color }
+  readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
   /** Ring radii as a fraction of the mesh's own extent, 0..1. */
   readonly innerFraction: { value: number }
   /** Center of the body that casts a shadow on the ring, render space. */
-  readonly centre: { value: Vector3 }
+  readonly center: { value: Vector3 }
   /**
    * That body's drawn radius in render space — the cylinder test runs on
    * `positionWorld`, so mesh-local units would never eclipse anything.
@@ -746,7 +746,7 @@ export interface RingMaterial {
   readonly bodyRadius: { value: number }
   readonly opticalDepth: { value: number }
   /** Tint for a ring with no map — a procedural giant's. */
-  readonly baseColour: { value: Color }
+  readonly baseColor: { value: Color }
   setTexture(map: Texture | null): void
 }
 
@@ -774,20 +774,20 @@ export function createRingMaterial(): RingMaterial {
   // so a clear fallback zeroes the thickness and a mapless ring — every
   // procedural giant's, and Jupiter's, Uranus's and Neptune's — renders fully
   // transparent. White makes it a uniform slab whose density comes from
-  // `opticalDepth` and whose color comes from `baseColour`.
+  // `opticalDepth` and whose color comes from `baseColor`.
   const map = texture(WHITE)
   const sunDirection = uniform(new Vector3(1, 0, 0))
-  const sunColour = uniform(new Color(1, 1, 1))
+  const sunColor = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const innerFraction = uniform(0.5)
-  const centre = uniform(new Vector3())
+  const center = uniform(new Vector3())
   const bodyRadius = uniform(0.4)
   const opticalDepth = uniform(0.7)
-  const baseColour = uniform(new Color(1, 1, 1))
+  const baseColor = uniform(new Color(1, 1, 1))
 
   // The geometry is an annulus in its own XZ plane with an outer radius of 1, so
   // the radial coordinate is available without a UV channel — and without the
-  // seam that any UV parameterisation of a disk has to put somewhere.
+  // seam that any UV parameterization of a disk has to put somewhere.
   const radius = length(vec2(positionLocal.x, positionLocal.z))
   const across = saturate(
     radius.sub(innerFraction).div(max(oneMinus(innerFraction), float(1e-3))),
@@ -818,7 +818,7 @@ export function createRingMaterial(): RingMaterial {
    * rings turn edge-on to the *sun*, which is the seasonal cycle that took
    * Cassini seven years to watch once.
    *
-   * `ω₀ = 0.9` is clean water ice in the visible. The strip's colour
+   * `ω₀ = 0.9` is clean water ice in the visible. The strip's color
    * multiplies it, and the strip is where the darkening lives — Saturn's B
    * ring is 0.51 in its photograph and Uranus's rubble 0.06 — so the two
    * together are the particle albedo Cassini measured, 0.5 to 0.6 for the
@@ -869,7 +869,7 @@ export function createRingMaterial(): RingMaterial {
    * narrow but it is not a step, and a hard edge is the single most obvious tell
    * that a shadow was computed rather than cast.
    */
-  const ringRadial = positionWorld.sub(centre)
+  const ringRadial = positionWorld.sub(center)
   const alongSun = dot(ringRadial, light)
   const offAxis = length(ringRadial.sub(light.mul(alongSun)))
   const eclipsed = step(alongSun, float(0)).mul(
@@ -879,8 +879,8 @@ export function createRingMaterial(): RingMaterial {
 
   const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = mix(transmitted, backscatter, sameSide)
-    .mul(baseColour)
-    .mul(sunColour)
+    .mul(baseColor)
+    .mul(sunColor)
     .mul(sunIntensity)
     .mul(sunlit)
   material.opacityNode = min(opaque, float(1))
@@ -891,13 +891,13 @@ export function createRingMaterial(): RingMaterial {
   return {
     material,
     sunDirection,
-    sunColour,
+    sunColor,
     sunIntensity,
     innerFraction,
-    centre,
+    center,
     bodyRadius,
     opticalDepth,
-    baseColour,
+    baseColor,
     setTexture(value) {
       map.value = value ?? WHITE
     },

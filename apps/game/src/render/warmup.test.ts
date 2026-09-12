@@ -30,7 +30,7 @@ const SCENE = {} as Scene
  * The second adapter.
  *
  * It records `visible` **at call time**, which is the whole point: a renderer
- * that recorded it afterwards would pass against the bug this guards, because
+ * that recorded it afterward would pass against the bug this guards, because
  * `warmCompile` restores visibility on the next line.
  */
 function recorder(behavior: 'resolves' | 'rejects' = 'resolves'): {

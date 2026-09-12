@@ -46,8 +46,8 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
   /*
    * React Compiler is on, and it is exactly wrong about this component.
    *
-   * It memoises derived values against their inputs, and every input here is a
-   * `GameEngine` that never changes identity — so `metrics.period.summarise()`
+   * It memoizes derived values against their inputs, and every input here is a
+   * `GameEngine` that never changes identity — so `metrics.period.summarize()`
    * is a pure call on a stable object as far as the compiler can see, and gets
    * computed once. It is not pure: it reads a ring buffer that the frame loop
    * has been writing to ever since. The panel rendered its first frame and then
@@ -74,8 +74,8 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
   const workers = status?.workers ?? null
   const [gpuBusy, setGpuBusy] = useState(false)
 
-  const period = metrics.period.summarise()
-  const heap = metrics.heapMb.summarise()
+  const period = metrics.period.summarize()
+  const heap = metrics.heapMb.summarize()
 
   const measureGpu = (): void => {
     const measurement = gpuBusy ? null : engine.measureGpu()
@@ -118,7 +118,7 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
       <Section
         id="perf.engine"
         title="Engine"
-        trailing={`${metrics.engineMs.summarise().mean.toFixed(2)} ms`}
+        trailing={`${metrics.engineMs.summarize().mean.toFixed(2)} ms`}
       >
         {/* Simulation, snapshot, scene build and terrain reconciliation — but
             not the draw, which happens after this returns. Conflating the two is
@@ -128,7 +128,7 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
           unit="ms"
           budget={ENGINE_BUDGET_MS}
         />
-        <SeriesStatsRow stats={metrics.engineMs.summarise()} unit="ms" />
+        <SeriesStatsRow stats={metrics.engineMs.summarize()} unit="ms" />
         <Row label="GPU" value={gpuLabel(engine, metrics.gpuMs, gpuBusy)} />
         <div className="mt-1">
           <GpuMeasureButton
@@ -171,7 +171,7 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
           )}
         <Row
           label="Ticks/frame"
-          value={format(metrics.ticks.summarise().mean)}
+          value={format(metrics.ticks.summarize().mean)}
         />
         <Row
           label="Dropped"
@@ -182,17 +182,17 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
       <Section
         id="perf.render"
         title="Render"
-        trailing={`${format(metrics.drawCalls.summarise().last)} calls`}
+        trailing={`${format(metrics.drawCalls.summarize().last)} calls`}
       >
         <SeriesPlot
           series={metrics.drawCalls}
           unit=""
           budget={DRAW_CALL_BUDGET}
         />
-        <SeriesStatsRow stats={metrics.drawCalls.summarise()} unit="" />
+        <SeriesStatsRow stats={metrics.drawCalls.summarize()} unit="" />
         <Row
           label="Triangles"
-          value={format(metrics.triangles.summarise().last)}
+          value={format(metrics.triangles.summarize().last)}
         />
         <Row
           label="Pipeline"

@@ -151,7 +151,7 @@ describe('the attitude', () => {
 })
 
 describe('the ball', () => {
-  it('puts the nose at the centre, facing the viewer (property)', () => {
+  it('puts the nose at the center, facing the viewer (property)', () => {
     fc.assert(
       fc.property(rotation, horizonArb, (ship, horizon) => {
         const local = hullInHorizon(ship, horizon)
@@ -165,7 +165,7 @@ describe('the ball', () => {
 
   it('paints the horizon at the attitude the reading says (property)', () => {
     // The point of the horizon dead ahead of a level hull lands at the
-    // centre; pitch the hull up and it drops down the ball by the sine.
+    // center; pitch the hull up and it drops down the ball by the sine.
     fc.assert(
       fc.property(
         fc.double({ min: -1.2, max: 1.2, noNaN: true }),

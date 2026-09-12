@@ -176,7 +176,7 @@ Positioned in one line each:
 |                     | What it is                                      | What we take                                                                                 | What we do differently                                                                                                                                              |
 | ------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Elite Dangerous** | The exploration loop, perfected                 | Fuel-gated route planning, first-discovery credit, cockpit discipline, the A–E module grades | A _real_ local galaxy rather than a synthetic one; seamless atmospheric worlds as the base case; _The Expanse_-style burns instead of supercruise; no grind economy |
-| **Star Citizen**    | Fidelity and continuity in a few systems        | Seamless ship interiors, physicalised interaction, first-person everything                   | Galaxy scale instead of set scale; ships in a browser tab instead of a 120 GB install; shipping instead of not                                                      |
+| **Star Citizen**    | Fidelity and continuity in a few systems        | Seamless ship interiors, physicalized interaction, first-person everything                   | Galaxy scale instead of set scale; ships in a browser tab instead of a 120 GB install; shipping instead of not                                                      |
 | **No Man's Sky**    | Procedural breadth and the joy of naming things | Discovery-as-reward, generation as content, planetary variety                                | Real astronomy underneath, real orbital mechanics, real momentum                                                                                                    |
 
 The positioning sentence, for external use:
@@ -214,7 +214,7 @@ a hard requirement rather than a nicety.
 
 ## Business posture
 
-Open source, non-commercial, no monetisation of any kind. No purchases, no
+Open source, non-commercial, no monetization of any kind. No purchases, no
 cosmetics, no subscription, no ads, no engagement metrics.
 
 This is a design constraint before it is a business one, and a favorable one:
