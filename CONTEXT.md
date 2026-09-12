@@ -9641,6 +9641,45 @@ card. `play` takes `hold`; the cinema session uses it and the director parks
 the last frame with the clock paused. A measurement's `ir.play` keeps the
 frame-null ending every rig depends on.
 
+## The plans lose what landed, and three of them were quoting a tree that had moved (12 Sep 2026)
+
+`design/plans/` held nineteen plans, five of which were finished. The sensor,
+camera and galaxy plans were two thousand lines of completion record between
+them. They are deleted: unbuilt follow-ups to `docs/roadmap.md`, measured
+figures to `perf.md` or the owning ADR, and nothing to a plan page, which is
+what `documents.md` has always said.
+
+The check that made the deletion safe is worth keeping. Before a page went,
+every figure on it was swept against `CONTEXT.md`, `perf.md` and
+ADR-0032/0037/0038. Most were already duplicated; a dozen were not, and moved.
+ADR-0032 gained the five rejected representations — the panorama, the point
+cloud, the 134 MB 3D texture and its 17 MB slab fallback, density-wave
+particles, baking only the smooth sky — because that prose is the argument for
+the field rather than a record of building it, and it had no ADR.
+
+**`pnpm docs:build` does not validate relative links from `docs/` into
+`design/`.** A dead link to a nonexistent `design/plans/` file was added to
+`docs/roadmap.md` on a scratchpad copy and the build reported success.
+`documents.md` says the build "refuses rather than guessing", which is true of a
+file no wing lists and false of a cross-tree link. After moving or deleting
+anything under `design/`, sweep with `rg` for the old path; a green build is not
+the proof it looks like.
+
+Two figures the plans carried were wrong in ways that mattered. `test-speed.md`
+described a configuration that does not exist — the root config excludes
+`**/*.slow.test.ts`, so "with the descent running, `pnpm test` is 102.9 s"
+measures a run nobody makes — and it named `gameEngine.test.ts` where the
+descent is `gameEngine.descent.slow.test.ts`. At `91ca32f` the root suite is
+16.8 s at 796% CPU over 203 files and 2,312 tests; `pnpm test:slow` is 108.6 s,
+of which the descent file alone is 108.3 s at 100% CPU. And its proposed
+heightfield cache keyed on `(version, surface seed, region, resolution,
+border)`, which omits `seabed`: the same region has two correct answers and the
+wrong one hands a landing the trench under its sea. The task is at version 6
+for that reason.
+
+The spelling burn-down moved the wrong way while nobody was reading it: 315
+declarations in 86 files with 1,997 references is 456 in 117 with 3,409.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
