@@ -601,8 +601,8 @@ tick.
 
 The snapshot resolves each body's rotating pose once, for the placements it
 carries and for its own visible orientation, and formats its address once.
-`Engine/snapshot` is 0.24–0.32 ms a frame with Sol loaded; the pose it no
-longer repeats is a Kepler solve up the chain per body, unmeasured on its own.
+`Engine/snapshot` is 0.24–0.32 ms a frame with Sol loaded; the pose it
+resolves once is a Kepler solve up the chain per body, unmeasured on its own.
 
 A glTF that fails to load stays failed until the page reloads, in the loader
 and in the structure pass, because the pass asks for every instance it lacks

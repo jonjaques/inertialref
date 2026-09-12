@@ -66,7 +66,9 @@ class Director {
   seek(frame: number): void {
     this.calls.push(`seek:${frame}`)
     if (this.status !== null) this.status = { ...this.status, frame }
-    // A seek away from a held end is the scene playing again.
+    // A seek away from a held end clears the outcome: the playhead has left
+    // the end, and the next ending is a new one. The clock is untouched —
+    // `resume` is what runs it, as after any pause.
     if (this.outcome?.ending === 'ended') this.outcome = null
   }
 
@@ -79,6 +81,8 @@ class Director {
       return
     }
     this.calls.push('hold')
+    // Exactly the last frame, which is the real director's contract for a
+    // held end and what `toggle`'s play-at-the-end comparison relies on.
     this.status = { ...open, frame: DURATION - 1 }
     this.paused = true
     this.outcome = {
@@ -113,12 +117,12 @@ describe('a cutscene session', () => {
     expect(playhead?.frame).toBe(DURATION - 1)
     expect(playhead?.paused).toBe(true)
     /*
-     * THE REGRESSION. The director used to restore the player on the final
-     * frame and the session reopened the scene two frames short a sample
+     * THE REGRESSION. A director that restores the player on the final
+     * frame has the session reopen the scene two frames short a sample
      * later — up to 125 ms of the chase camera on whatever body the ship was
-     * left at, and a terrain streamer that had dropped every patch of the
-     * one the scene was on. The last frame is held on stage now; nothing
-     * here plays or seeks to put it back.
+     * left at, and a terrain streamer that has dropped every patch of the
+     * one the scene was on. The last frame is held on stage; nothing here
+     * plays or seeks to put it back.
      */
     expect(calls.filter((one) => one.startsWith('play:'))).toHaveLength(1)
     expect(calls.filter((one) => one.startsWith('seek:'))).toHaveLength(0)
@@ -176,10 +180,10 @@ describe('a cutscene session', () => {
 
   it('shows the end card after a scene that was paused and resumed on the way', () => {
     /*
-     * `dismissed` used to conflate two things: "hide the card that is up" and
-     * "suppress any future card". Pausing mid-scene is an ordinary act — the
-     * transport exists for it — and it silently cost the ending its card, and
-     * with it the Replay button that lives there.
+     * One `dismissed` flag conflates two things: "hide the card that is up"
+     * and "suppress any future card". Pausing mid-scene is an ordinary act —
+     * the transport exists for it — and under one flag it silently costs the
+     * ending its card, and with it the Replay button that lives there.
      */
     const { host, director } = fake()
     const session = createCutsceneSession(host)

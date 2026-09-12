@@ -3,10 +3,9 @@ import { CUTSCENES } from '@inertialref/devtools'
 import { soundtrackCandidates, soundtrackFor } from './cutsceneAudio.ts'
 
 /*
- * Sound is staging, so a script declares it. The title sequence's music used
- * to play over every scene, from the first frame of the Mars landing's entry
- * burn, because the overlay owned one track and started it for whatever was
- * open.
+ * Sound is staging, so a script declares it. An overlay that owns one track
+ * and starts it for whatever is open plays the title sequence's music over
+ * every scene, from the first frame of the Mars landing's entry burn.
  */
 
 const scenes = CUTSCENES.map((script) => ({
