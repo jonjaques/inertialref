@@ -17,7 +17,7 @@ import { FrameScrubber } from '../hud/FrameScrubber.tsx'
 import { useAction, useActions, useKeyContext } from '../input/useKeymap.ts'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { useScrubber } from '../hud/useScrubber.ts'
-import { useEngine } from '../state/engineStore.ts'
+import { engineStore, sampleOnce, useEngine } from '../state/engineStore.ts'
 import { CINEMA, cinemaLink, QUERY } from '../pages/paths.ts'
 import { EndCard } from './EndCard.tsx'
 import {
@@ -131,8 +131,19 @@ export function CinemaPlayer({
     () => () => {
       opened.current = null
       session.stop()
+      /*
+       * And say so now, not at the next sample. `PageShell` hides the mode
+       * band while the store says a scene is running and the mode is not the
+       * cinema, so a navigation out of the player — the mark, the end card's
+       * Menu — left the front door unmounted until the sampler's next tick:
+       * two frames of the scene with nothing over it, measured per frame
+       * under the driver, before the page arrived. The stop above is
+       * synchronous; publishing it here makes the page's first frame the
+       * click's own.
+       */
+      sampleOnce(engineStore, engine)
     },
-    [session],
+    [session, engine],
   )
 
   /*

@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
 import { BookText, Info, SlidersHorizontal } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { BootLine } from '../hud/BootLine.tsx'
+import { useBoot } from '../hud/useBoot.ts'
 import { Logomark } from '../icons/Logomark.tsx'
 import { FooterLink } from './FooterLink.tsx'
 import { ModeLink } from './ModeLink.tsx'
@@ -124,6 +126,7 @@ const SPEC: readonly (readonly [string, string])[] = [
 
 export function HomePage({ engine }: { engine: GameEngine | null }) {
   const hydrated = useHydrated()
+  const boot = useBoot()
   useKeyContext(MENU_KEYS)
   /*
    * Frame Earth, and carry the sun across it.
@@ -344,6 +347,27 @@ export function HomePage({ engine }: { engine: GameEngine | null }) {
           <FooterLink to={DOCS} icon={BookText} label="Documentation" />
           <FooterLink to={SETTINGS} icon={SlidersHorizontal} label="Settings" />
           <FooterLink to={ABOUT} icon={Info} label="About" />
+          {/* The scene's own progress, at the end of the status row, while the
+              black behind the poster is the cover and not the sky. One line of
+              the ledger the scene modes get whole, in the register the figures
+              above are set in; it leaves with the cover, a beat after the
+              check, so the planet arriving and the line going are one event.
+              `ml-auto` in a wrapping row: beside the links while they fit on
+              one line, on its own line at the right edge when they do not. */}
+          <AnimatePresence>
+            {boot !== null && boot.phase !== 'done' && (
+              <motion.span
+                key="boot"
+                className="ml-auto min-w-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4 }}
+              >
+                <BootLine boot={boot} />
+              </motion.span>
+            )}
+          </AnimatePresence>
         </footer>
       </motion.div>
     </div>

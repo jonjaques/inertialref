@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type PresentedSignal,
+  bootFraction,
   bootStatusLine,
   createFirstLight,
 } from './firstLight.ts'
@@ -245,9 +246,72 @@ describe('first light', () => {
     light.warmed()
     expect(light.store.getState().status).toBe('first light…')
   })
+
+  it('keeps a ledger of every stage it has shown, with the census at each', () => {
+    const { light } = harness()
+    // The runtime's own line is already finished: this is built by `App`,
+    // which exists only once the chunk and the catalog are in hand, and the
+    // document's admission has been showing that line as running until now.
+    expect(light.store.getState().stages).toEqual([
+      { label: 'loading the runtime', count: null },
+      { label: 'waking the renderer', count: null },
+    ])
+    expect(light.store.getState().fraction).toBe(0)
+
+    // A producer reports once per unit; the ledger holds it once, and the
+    // line keeps the last count it reported.
+    light.progress({ label: 'warming surface maps', done: 0, total: 55 })
+    light.progress({ label: 'warming surface maps', done: 19, total: 55 })
+    light.progress({ label: 'baking atmospheres', done: 19, total: 55 })
+    light.progress({ label: 'baking atmospheres', done: 22, total: 55 })
+    expect(light.store.getState().stages).toEqual([
+      { label: 'loading the runtime', count: null },
+      { label: 'waking the renderer', count: null },
+      { label: 'warming surface maps', count: '19/55' },
+      { label: 'baking atmospheres', count: '22/55' },
+    ])
+    expect(light.store.getState().fraction).toBeCloseTo(22 / 55)
+
+    light.warmed()
+    expect(light.store.getState().stages.at(-1)).toEqual({
+      label: 'first light',
+      count: null,
+    })
+    expect(light.store.getState().fraction).toBe(1)
+
+    // A renderer rebuild re-runs the warm-up mid-session. The ledger is what
+    // the cover showed, and it closed at first light.
+    light.progress({ label: 'warming surface maps', done: 3, total: 55 })
+    expect(light.store.getState().stages).toHaveLength(5)
+    expect(light.store.getState().stages.at(-1)).toEqual({
+      label: 'first light',
+      count: null,
+    })
+  })
+
+  it('adds no line for a census that has not named a producer yet', () => {
+    const { light } = harness()
+    light.progress({ label: '', done: 0, total: 3 })
+    expect(light.store.getState().stages).toEqual([
+      { label: 'loading the runtime', count: null },
+      { label: 'waking the renderer', count: null },
+    ])
+  })
 })
 
 describe('the status line', () => {
+  it('measures the rule against the whole census and fills it at first light', () => {
+    expect(bootFraction(null, false)).toBe(0)
+    expect(
+      bootFraction({ label: 'building bodies', done: 11, total: 44 }, false),
+    ).toBeCloseTo(0.25)
+    // A producer that gave up early has been credited its shortfall by then;
+    // a rule stopping short under "first light" would read as stuck.
+    expect(
+      bootFraction({ label: 'building bodies', done: 40, total: 44 }, true),
+    ).toBe(1)
+  })
+
   it('names the running producer and the whole census', () => {
     expect(
       bootStatusLine(

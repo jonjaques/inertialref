@@ -1,9 +1,16 @@
 import { getLogger, getTimer } from '@inertialref/shared'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import { BOOT_MARKER, BOOT_PHASE } from '../engine/frameTiming.ts'
+import { type FirstLightState, RUNTIME_STAGE } from './bootState.ts'
 import type { RendererDescription } from './output.ts'
 import { replayMeasurement, watchPresentation } from './presentationWatchdog.ts'
 import type { BootProgress } from './warmup.ts'
+
+export type {
+  BootStage,
+  FirstLightPhase,
+  FirstLightState,
+} from './bootState.ts'
 
 /*
  * When the cover comes off.
@@ -36,7 +43,9 @@ import type { BootProgress } from './warmup.ts'
  *     canvas key and the only thing that bumps it is the watchdog's last rung.
  *   - one **measurement replay**, where there were three implementations in two
  *     files, each with a comment explaining why the other two were insufficient.
- *   - the status line.
+ *   - the status line, and the ledger of every line the cover has shown. The
+ *     shapes it publishes are `render/bootState.ts`'s, so the pages can read
+ *     the ledger without this module's engine imports reaching the server.
  *
  * All of it is a plain state machine over injected signals, so the transitions,
  * the latch and the release are assertable in Node.
@@ -44,20 +53,6 @@ import type { BootProgress } from './warmup.ts'
 
 const log = getLogger('game.firstlight')
 const timer = getTimer('game.firstlight')
-
-export type FirstLightPhase = 'booting' | 'revealing' | 'done'
-
-/** Everything the shell renders from. */
-export interface FirstLightState {
-  readonly phase: FirstLightPhase
-  /** The cover's status line. */
-  readonly status: string
-  /**
-   * How many times the canvas has been rebuilt. Part of the canvas key, and
-   * bumped by the watchdog's last rung and by nothing else.
-   */
-  readonly epoch: number
-}
 
 /* ------------------------------------------------------------------------- */
 /* The seam                                                                   */
@@ -149,27 +144,65 @@ export function signalFor(
 /**
  * What boot is doing right now, in the cover's own voice.
  *
- * Lowercase like the boot placeholder in `index.html` — these two speak in one
- * voice, because the placeholder's last line and this module's first are on
- * screen within a commit of each other and a case change at that seam reads as
- * a glitch.
- *
- * The verb phrase comes from the producer that is running; the count comes from
- * the whole census. It used to be the running step's own count, so "compiling
- * the sky…" appeared with nothing left to say while the per-body build-ahead —
- * the expensive part — had not started. A single running total cannot tell that
- * lie.
+ * Lowercase, because the cover keeps every one of these as a line of a ledger
+ * and a capitalised sentence per stage would read as a column of headings.
+ * The two lines this module owns — before the first producer reports, and
+ * after the last one has — are in the same register as the producers' own.
  */
+export function bootStageLabel(
+  progress: BootProgress | null,
+  warmed: boolean,
+): string {
+  if (warmed) return 'first light'
+  if (progress === null) return 'waking the renderer'
+  return progress.label
+}
+
+/**
+ * The count beside the running stage, or `null` when there is none to show.
+ *
+ * The count comes from the whole census, not the running producer's own. It
+ * used to be the running step's count, so "compiling the sky…" appeared with
+ * nothing left to say while the per-body build-ahead — the expensive part —
+ * had not started. A single running total cannot tell that lie.
+ */
+export function bootStatusCount(
+  progress: BootProgress | null,
+  warmed: boolean,
+): string | null {
+  // Once the warm-up is done the wait is for pixels, and there is nothing
+  // left to count.
+  if (warmed || progress === null) return null
+  // Before the first unit lands there is no fraction worth showing, and "0/19"
+  // reads as stuck where an ellipsis reads as starting.
+  if (progress.done === 0) return null
+  return `${progress.done}/${progress.total}`
+}
+
+/** The running stage and its count as the one line a log would print. */
 export function bootStatusLine(
   progress: BootProgress | null,
   warmed: boolean,
 ): string {
-  if (warmed) return 'first light…'
-  if (progress === null) return 'waking the renderer…'
-  // Before the first unit lands there is no fraction worth showing, and "0/19"
-  // reads as stuck where an ellipsis reads as starting.
-  if (progress.done === 0) return `${progress.label}…`
-  return `${progress.label} ${progress.done}/${progress.total}`
+  const label = bootStageLabel(progress, warmed)
+  const count = bootStatusCount(progress, warmed)
+  return count === null ? `${label}…` : `${label} ${count}`
+}
+
+/**
+ * How far through the census boot is, for the rule under the wordmark.
+ *
+ * Warmed is 1 whatever the census says: a producer that gave up early has
+ * been credited its shortfall by then, and a rule that stops short of its end
+ * while the line beneath it says "first light" reads as stuck.
+ */
+export function bootFraction(
+  progress: BootProgress | null,
+  warmed: boolean,
+): number {
+  if (warmed) return 1
+  if (progress === null) return 0
+  return Math.min(1, Math.max(0, progress.done / Math.max(1, progress.total)))
 }
 
 /* ------------------------------------------------------------------------- */
@@ -210,9 +243,18 @@ export function createFirstLight(
 ): FirstLight {
   const signal = deps.signal ?? signalFor
   const replay = deps.replay ?? replayMeasurement
+  // The ledger opens with the runtime's own line already finished: this is
+  // built by `App`, which exists only once `GameLoader` has the chunk and the
+  // catalog in hand, and the document has been showing that line as running
+  // since before there was a runtime. `render/bootState.ts` has the argument.
   const store = createStore<FirstLightState>(() => ({
     phase: 'booting',
     status: bootStatusLine(null, false),
+    stages: [
+      RUNTIME_STAGE,
+      { label: bootStageLabel(null, false), count: null },
+    ],
+    fraction: 0,
     epoch: 0,
   }))
 
@@ -222,11 +264,33 @@ export function createFirstLight(
   let watching: PresentedSignal | null = null
   let epoch = 0
 
+  /*
+   * The ledger grows by one line each time the running stage changes name,
+   * and never shrinks. A producer reports many times under one label — every
+   * unit is a publish — so a report under the running label updates that
+   * line's count in place, and only a new label appends. A producer reporting
+   * again after the warm-up settled (a renderer rebuild re-runs it) lands on
+   * "first light", which the label function already answers for a warmed
+   * boot, so the ledger is closed by the same rule that closes the line.
+   */
   const publish = (): void => {
-    const phase = store.getState().phase
+    const { phase, stages } = store.getState()
+    const label = bootStageLabel(progress, isWarmed)
+    const count = bootStatusCount(progress, isWarmed)
+    const last = stages[stages.length - 1]
+    let next = stages
+    // A census that has registered producers but not yet started one reports
+    // an empty label. Not a stage; the running line keeps its name.
+    if (label !== '' && last !== undefined) {
+      if (last.label !== label) next = [...stages, { label, count }]
+      else if (last.count !== count)
+        next = [...stages.slice(0, -1), { label, count }]
+    }
     store.setState({
       phase,
       status: bootStatusLine(progress, isWarmed),
+      stages: next,
+      fraction: bootFraction(progress, isWarmed),
       epoch,
     })
   }

@@ -1,7 +1,9 @@
 import { Link } from 'react-router'
 import { ArrowRight } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
+import { preloadMode } from './modeLoader.ts'
 import type { ModeCard } from './modes.ts'
+import { modeForPath } from './paths.ts'
 import { StatusBadge } from './StatusBadge.tsx'
 
 /**
@@ -15,9 +17,25 @@ import { StatusBadge } from './StatusBadge.tsx'
  */
 export function ModeLink({ mode }: { mode: ModeCard }) {
   const Icon = mode.icon
+  /*
+   * The door's code, fetched while the pointer is still deciding.
+   *
+   * A mode's chunk otherwise loads when its route first renders, and until it
+   * lands the route renders nothing: the click was a scene with no chrome for
+   * the length of the fetch. The hover before a click is longer than the
+   * fetch on any connection this ships to, and the loader shares one promise
+   * with the route, so a fetch begun here is the one the route awaits.
+   * `App` warms every mode after first light besides; this covers the door
+   * opened before that.
+   */
+  const warm = (): void => {
+    void preloadMode(modeForPath(mode.to))?.catch(() => {})
+  }
   return (
     <Link
       to={mode.to}
+      onPointerEnter={warm}
+      onFocus={warm}
       // The surfaces are near-opaque rather than a wash. They sit over a sunlit
       // planet at the brightest end of the frame, and a 50% slate over that is
       // a lighter grey than the type on it.

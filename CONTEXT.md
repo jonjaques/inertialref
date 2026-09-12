@@ -9295,6 +9295,192 @@ signal handlers are in the `logs` follower — so after every Ctrl-C the file
 names a pid that is gone, and the port message trusts it only while that pid
 is alive and on 5173.
 
+## The boot cover keeps a ledger, and the mask that could not know it had overflowed (11 Sep 2026)
+
+The cover's readout is a column now rather than a line. `render/firstLight.ts`
+publishes every stage the warm-up has been through, oldest first, each keeping
+the census count it ended on, and `hud/BootOverlay.tsx` streams them down the
+top-right corner under the mark, the name and a hairline that fills with the
+census. One line replacing itself fourteen times in five seconds was a flicker,
+and it sat bottom left — the flight strip's corner — so the reveal read as the
+strip's text changing rather than as a cover coming off.
+
+**The census grows while the cover is up.** On `/play/solo` the total is 71
+units through the awaited producers and jumps to 173 (201 in another run) when
+the frame-driven ones — `building bodies`, `baking the nearby sky` — declare
+theirs, so any single progress figure steps backward once, at "warming the
+galaxy 65/71" → "compiling the ground 67/173". That is the census being honest
+about work it has just discovered, and the ledger keeps the count per line so
+a reader can see why the rule retreated. A monotonic bar would stall at 92%
+for half the boot instead; it was not tried and should not be.
+
+**The fade at the top of the column cannot be a mask stretched over the box.**
+Two obvious forms fail. A mask over a box that grows with its content puts the
+fade zone on the first two lines from the first frame — "waking the renderer"
+was gray before the column had reached anything. A box of fixed height with
+the column packed to its end puts the first line a whole cap below the
+wordmark. `boot-ledger` in `index.css` sizes the mask image to the cap
+(`min(50dvh, 22rem)`) and anchors it to the box's bottom, so its fade zone sits
+above the box until the box has grown to the cap, which is exactly when there
+is something to fade; the box is never taller than the mask, so nothing falls
+outside the image and goes unmasked.
+
+**The front door draws over the cover and its right half is transparent.** On
+`/` and `/docs` the cover sits at z-0 under the public page, and a wordmark on
+the cover showed through beside the page's own — two mastheads on one screen.
+Under a public page the cover is a black ground and the live region only,
+which is what the bottom-left readout amounted to there: it sat under the
+page's opaque half and only a screen reader ever met it.
+
+**Icons from one library, or the weights disagree.** An authored spinner on a
+16-unit grid at stroke 2 renders 1.5 px at 12 px where lucide's check — a
+24-unit grid at stroke 2 — renders 1 px, so the ring a running line turned was
+half again as heavy as the glyph it became. The finish review caught it; both
+are lucide now.
+
+Boot under the driver, for whoever photographs the cover next (dev React,
+`--document` mode, 1600×900 at DPR 1, warm page): the surface maps hold the
+ledger at two lines until about 3.5 s, the remaining stages land within the
+next 0.7 s, and first light is at 5–6 s. A still taken at 2.3 s and one at
+2.8 s were on opposite sides of that cliff, and a driven boot lifts the cover
+at first light, so a still past 5 s is the scene.
+
+## The cover has two forms, the admission is its first frame, and it sits below the dialogs (11 Sep 2026)
+
+A scene mode — flight, the planetarium, the cinema — gets the whole cover; a
+page that is readable without a scene — the front door, the reading room —
+gets a black ground under the page and draws one line of the ledger where its
+own layout has a line to spare. `hud/BootLine.tsx` is that line: the running
+stage, its count, the ring or the check. The front door sets it at the end of
+its footer row (`ml-auto`, so it wraps to its own right-aligned row on a
+phone); the reading room sets it in the horizon's readout in place of the
+framed body. That second one fixed a lie: the framing is solved before the
+picture exists, so the strip read "Earth · rocky · observed · 1.00 AU" over a
+band that was still the cover's black.
+
+**The pages read the cover's own store, never a copy.** `RuntimeSnapshot`
+carries `firstLight.store`, and `hud/useBoot.ts` reads it — or a prelude store
+while nothing is published — so there is one producer of which line is
+running. The prelude and the shapes live in `render/bootState.ts` with no
+imports, because the pages are server-rendered and `firstLight.ts` reaches the
+watchdog and the frame timing. `useBoot` answers `null` on the server, before
+hydration, and once the runtime has failed: a spinner in static HTML is a
+promise to a reader whose browser may never keep it, and one beside
+`RuntimeNotice` is the promise the notice just withdrew.
+
+**The admission is the cover's first frame.** Cold-loading `/planetarium`
+opened with a server-rendered title card — the mode's name, a sentence, two
+links, centered on a scrim — and the runtime then mounted a black screen with
+a different block in a different corner. Now `pages/ModeRoutes.tsx` draws
+`hud/BootLedger.tsx`, the block `BootOverlay` draws, one line shorter:
+`loading the runtime`, running. `firstLight.ts` opens its ledger with that
+line finished, so the runtime arriving is the ledger growing by a line rather
+than a screen being replaced. The mode's name and sentence stay in the markup
+for a reader, out of sight; the two links are the same two the cover offers
+bottom right (`hud/BootNav.tsx`), so the hand-off moves nothing a pointer was
+heading for. Bottom right and not bottom left, for the reason the ledger
+moved: the flight strip lands in the left corner at first light.
+
+**A server-rendered `motion` entrance is an inline `opacity: 0` nothing
+lifts.** The ledger's rows enter from above, and the admission's one row
+rendered with that entrance baked into its style attribute — invisible until
+hydration, which without JavaScript is never, so the no-script page had a
+wordmark, a rule and an empty column. `initial` is read once at mount, so
+`BootLedger` gates it on `useHydrated()`: the line the document arrives with
+is still, and every line the runtime appends streams in. The front door's
+poster has the same guard for the same reason.
+
+**The cover sits at `z-35`, below the dialog band.** At `z-50` it was above
+the overlay routes at `z-40`, and the dialogs are reachable from the first
+frame — `?` and the settings key are bound in every mode — so a sheet opened
+during boot rendered fully live under opaque black and took every click the
+cover did not. Thirty-five is above the cinema band and the notice at 30 and
+below the dialogs at 40; `PageShell` is the later sibling and wins a tie, so
+the gap is load-bearing. Verified by computed style under the driver, since
+Tailwind 4 emits any bare `z-<number>`.
+
+**A mode's chunk loads on hover and after first light, and the route renders
+nothing while it does.** `preloadMode` was called from an effect on the mode
+that had already been navigated to, so the first entry into any scene mode
+after boot flashed the admission — a black cover cut into a running scene —
+for the length of the fetch, and the planetarium's stance arrived a beat after
+the menu's had been released, which is a beat of the ship's camera between two
+pictures that are not it. `ModeLink` warms the chunk on pointer-enter and
+focus; `App` warms all three once the cover is off, so the fetches never
+compete with the census; and the `Suspense` fallback with a runtime present is
+`null`, because the scene behind the route, or the cover over it, is the right
+picture for that beat. Navigating from the front door to the planetarium
+mid-boot was already continuous — the canvas lives outside every route — and
+now reads as one ledger from the hop: at 0.25 s after the click the cover
+shows `loading the runtime ✓ / waking the renderer ✓ / warming surface maps
+14/71`, and the cover's Home link back lands on the poster with the same
+count in its footer.
+
+## `React.lazy` suspends once for a chunk that has landed, and the guard that met the routine reload (11 Sep 2026)
+
+Two findings from the same afternoon, both about a beat nobody had asked for.
+
+**The flash between the front door and the planetarium was the ship's
+camera, and it was `lazy`'s.** Booted front door, hover, click Planetarium:
+a frame or two of Earth from the chase camera — the cinema library's
+backdrop, which is the same default view — before the planetarium's chrome.
+Sampled per frame under the driver with the chunk not preloaded, the click
+was followed by 17 frames (about 250 ms) with no observatory target and no
+navigator, then both at once. The chunk fetch is the length; the cause is
+that `React.lazy` learns a module has landed only from its own `.then`, a
+microtask after the first render asks, so even a chunk fetched a minute ago
+suspends once — and with `useTransitions={false}` on the router (its own
+entry above, 8 Sep 2026) a suspended route commits its fallback at once,
+which unmounts the mode leaving and releases its stance a frame before the
+mode arriving exists. Prefetching alone shortened the beat to that one
+frame; it did not remove it. `pages/modeLoader.ts` now marks the shared
+promise with `status` and `value` the way `React.use` reads a thenable, and
+`pages/LoadedMode.tsx` renders the mode through `use`: a landed chunk
+renders in the same pass as the navigation, and the stance hand-off happens
+inside one passive phase, where React runs the unmount cleanup and the
+mount effect back to back with no paint between. Thirty frames sampled
+after the click, preloaded and not: the observatory holds its target and
+the navigator is up on every one. The transition flag stays off, for the
+reason recorded.
+
+**The graphics-session guard counts strikes now, and forgives one.** The
+marker in session storage that stops a replacement document from repeating
+GPU startup after a tab crash was a flag: any document that ended without
+`pagehide` refused the next one until "Try graphics again". Three things
+end without `pagehide` on this machine every day — a tab Chrome discards
+under memory pressure, a hung page reloaded from the "unresponsive" bar,
+and the driver's Chrome closed by `--down`, whose profile restores the tab
+and its session storage — so the notice met the routine reload, and the
+rig refused its own second launch with nothing on its side saying why.
+`graphicsSession.ts` writes the count of consecutive unclean ends, blocks
+on the second, and resets the count once a session has run for a minute:
+a document that drew for that long and then vanished was not a crash on
+boot. The driver clears session storage along with local storage on every
+boot, so the rig's strikes never accumulate. ADR-0039's paragraph on the
+marker describes the count.
+
+## The cutscene overlay's transport is gone, and a stop is visible in the same task (11 Sep 2026)
+
+Leaving the player by the IR menu's mark — or the end card's Menu — showed
+the cutscene overlay's debug transport for a frame, then a black beat, then
+the front door. `hud/CutsceneTransport.tsx` is deleted: the cinema player is
+the one transport, with a timecode and a shareable link, and the overlay's
+was two playheads to disagree with, drawn behind the debug overlay for a scene
+started from another mode. `ir.pause()`, `ir.seekCutscene()` and Escape are
+the verbs outside the player.
+
+The beat had two causes, both about a stop that nothing could see yet.
+`PageShell` hides the mode band while the store says a scene is running and
+the mode is not the cinema, so the navigation's own commit unmounts the
+player and mounts nothing; the store learns the scene has stopped at the
+sampler's next tick, up to 125 ms later. Republishing from the player's exit
+was not enough on its own — sampled per frame, three frames of nothing
+remained — because `engine.cinematic` is written once a frame by `#step` and
+a sample taken in the stopping task still read the running scene. The
+engine's cutscene port now clears the field as it stops, and the player's
+unmount cleanup calls `sampleOnce` after `session.stop()`. Twenty frames
+sampled after the click: the front door is up on the first.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered

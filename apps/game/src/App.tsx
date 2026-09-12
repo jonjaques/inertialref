@@ -61,8 +61,10 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
+import { preloadMode } from './pages/modeLoader.ts'
 import {
   KEYS,
+  MODES,
   modeForPath,
   overlayState,
   resolvedLocation,
@@ -266,7 +268,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const [firstLight] = useState(() => createFirstLight())
   const {
     phase: boot,
-    status: bootStatus,
+    stages: bootStages,
+    fraction: bootFraction,
     epoch: canvasEpoch,
   } = useStore(firstLight.store)
   // `start` rather than the factory, because a `useState` initializer is
@@ -588,9 +591,32 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }
 
   useEffect(() => {
-    publishRuntime({ engine, dev, render: renderState, onNotice: flash })
+    publishRuntime({
+      engine,
+      dev,
+      render: renderState,
+      onNotice: flash,
+      boot: firstLight.store,
+    })
   })
   useEffect(() => () => publishRuntime(null), [])
+
+  /*
+   * Every mode's chunk, fetched once the cover is off.
+   *
+   * A mode's code loads when its route first renders, and the route renders
+   * nothing until the code lands — so the first door opened after first
+   * light was the scene with no chrome for the length of a chunk fetch, and
+   * the planetarium's stance arrived a beat after the menu's had been
+   * released, which is a beat of the ship's camera between two pictures that
+   * are not it. After `done` rather than at mount, so the three fetches never
+   * compete with the census for the network; `ModeLink` also warms the one
+   * under the pointer, which is the door most likely to open first.
+   */
+  useEffect(() => {
+    if (boot !== 'done') return
+    for (const mode of MODES) void preloadMode(mode)?.catch(() => {})
+  }, [boot])
 
   /*
    * The transport verbs, bound in every mode.
@@ -659,6 +685,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       }),
   )
 
+  /*
+   * Where the cover sits under a public page rather than over the scene. The
+   * page stays readable above it while its backdrop warms, and the cover is
+   * then a black ground and nothing else: the front door already carries the
+   * mark and the name, and a second wordmark showing through the page's
+   * transparent half is two mastheads on one screen.
+   */
+  const coverUnderPage = mode === 'menu' || mode === 'docs'
+
   return (
     /*
      * `h-full w-full`, not `h-screen w-screen`.
@@ -725,15 +760,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               what="the cutscene overlay"
               className="type-readout pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80%] -translate-x-1/2"
             >
-              {/* The scene's own screen-space layer: blackout, titles, audio. Its
-                transport is the *debug* one — the cinema player provides the
-                real controls, and two transports on screen at once would be two
-                playheads a person could disagree with, so it is off in the
-                cinema mode however the debug overlay is set. */}
-              <CutsceneOverlay
-                engine={engine}
-                transport={debug && mode !== 'cinema'}
-              />
+              {/* The scene's own screen-space layer: blackout, titles, audio.
+                No transport: the cinema player provides the controls, and the
+                overlay's header says why a second set is not drawn here. */}
+              <CutsceneOverlay engine={engine} />
             </ErrorBoundary>
             {/* The reference edit's tracked subject over the render, behind
               `ir.trackOverlay(true)` and drawn by nothing else. After the
@@ -801,18 +831,28 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
           {/* Public pages remain readable above the cover while their backdrop
               warms. Keep the fade mounted in every mode: onRevealed completes
-              firstLight and releases its warm-up machinery. */}
+              firstLight and releases its warm-up machinery.
+
+              `z-35` over a scene mode: above the mode's chrome and the cinema
+              band at 30, and *below* the dialog band at 40. The dialogs are
+              reachable during boot — `?` and the settings key are bound from
+              the first frame — and at 50 the cover swallowed them: a live
+              sheet under opaque black, taking every click the cover did not.
+              `PageShell` is the later sibling and wins a tie, so the gap
+              between the two is not decorative. */}
           {boot !== 'done' && (
             <div
-              className={`pointer-events-none absolute inset-0 ${mode === 'menu' || mode === 'docs' ? 'z-0' : 'z-50'}`}
+              className={`pointer-events-none absolute inset-0 ${coverUnderPage ? 'z-0' : 'z-35'}`}
             >
               <ErrorBoundary
                 what="the loading screen"
-                className="type-readout pointer-events-auto absolute bottom-3 left-3"
+                className="type-readout pointer-events-auto absolute top-3 right-3"
               >
                 <BootOverlay
                   phase={boot === 'revealing' ? 'revealing' : 'booting'}
-                  status={bootStatus}
+                  stages={bootStages}
+                  fraction={bootFraction}
+                  quiet={coverUnderPage}
                   onRevealed={firstLight.revealed}
                 />
               </ErrorBoundary>

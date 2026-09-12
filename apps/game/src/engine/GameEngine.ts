@@ -877,7 +877,14 @@ export class GameEngine {
       seek: (frame) => void this.harness.seekCutscene(frame),
       pause: () => this.harness.pause(),
       resume: () => this.harness.resume(),
-      stop: () => this.harness.stopCutscene(),
+      stop: () => {
+        this.harness.stopCutscene()
+        // `#step` writes this once a frame, so a stop is invisible to anything
+        // that reads the field before the next one — the store's sampler, and
+        // the player's own exit, which republishes the snapshot as it leaves.
+        // The director has stopped; the frame's view of it is over now.
+        this.cinematic = null
+      },
     })
     this.presentation = createPresentationStack((stance) => {
       this.showShip = stance.showShip

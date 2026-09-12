@@ -1,9 +1,13 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Link, Route, Routes, useLocation } from 'react-router'
+import { Route, Routes, useLocation } from 'react-router'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { DocsMode } from '../docs/DocsMode.tsx'
+import { BootLedger } from '../hud/BootLedger.tsx'
+import { BootNav } from '../hud/BootNav.tsx'
+import { PRELUDE } from '../render/bootState.ts'
 import { HomePage } from './HomePage.tsx'
+import { LoadedMode } from './LoadedMode.tsx'
 import { modeLoaders, preloadMode } from './modeLoader.ts'
 import { useRuntimeFailure } from '../runtimeFailure.ts'
 import {
@@ -15,9 +19,6 @@ import {
   resolvedLocation,
 } from './paths.ts'
 
-const CinemaMode = lazy(modeLoaders.cinema)
-const FlightMode = lazy(modeLoaders.flight)
-const PlanetariumMode = lazy(modeLoaders.planetarium)
 const CatalogPage = lazy(() =>
   import('../planetarium/CatalogPage.tsx').then((module) => ({
     default: module.CatalogPage,
@@ -105,35 +106,61 @@ export function ModeRoutes(props: ModeRouteProps) {
       : mode === 'cinema'
         ? 'Cinema'
         : 'Flight'
+  const blurb =
+    mode === 'planetarium'
+      ? 'Explore the sky and the catalog in one continuous universe.'
+      : mode === 'cinema'
+        ? 'Watch scripted scenes over the live universe.'
+        : 'Fly through a universe simulated in this browser.'
+  /*
+   * The admission: the cover, before there is a runtime to draw one.
+   *
+   * The same block `hud/BootOverlay.tsx` draws, in the same corner, one line
+   * shorter — the runtime's own line, running, which is the one true thing
+   * this document knows about the wait. The runtime mounts its cover over
+   * this and the ledger gains a line; a title card here gave way to a black
+   * screen with a different block in a different place, and the cold load of
+   * every scene mode opened with a screen being replaced.
+   *
+   * What is on the page for a reader is the mode's name and its one
+   * sentence, held out of sight because the cover is what is being looked
+   * at; the two links are the same two the cover offers, and without
+   * JavaScript they are the whole page.
+   */
   const admission = (
-    <main className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/85 p-6 text-center">
-      <h1 className="type-display text-4xl text-slate-50">{title}</h1>
-      <p className="type-body max-w-prose text-slate-300">
-        {mode === 'planetarium'
-          ? 'Explore the sky and the catalog in one continuous universe.'
-          : mode === 'cinema'
-            ? 'Watch scripted scenes over the live universe.'
-            : 'Fly through a universe simulated in this browser.'}
-      </p>
-      <p className="type-ui text-slate-400">
-        {failure === null
-          ? 'The interactive experience starts when graphics are ready.'
-          : 'The interactive experience is unavailable. Home and documentation remain available.'}
-      </p>
-      <noscript>
-        <p className="type-body text-slate-300">
-          Enable JavaScript to enter the interactive experience.
-        </p>
-      </noscript>
-      <nav
-        aria-label="Explore InertialRef"
-        className="type-ui flex gap-6 text-sky-300"
-      >
-        <Link to={HOME}>Home</Link>
-        <Link to={DOCS}>Documentation</Link>
-      </nav>
+    <main className="hud-bleed pointer-events-auto absolute flex flex-col items-end justify-between bg-black">
+      <h1 className="sr-only">{title}</h1>
+      <p className="sr-only">{blurb}</p>
+      <BootLedger
+        stages={PRELUDE.stages}
+        fraction={PRELUDE.fraction}
+        lifted={false}
+        halted={failure !== null}
+      />
+      <div className="m-3 flex flex-col items-end gap-2 text-right">
+        {failure !== null && (
+          <p className="type-ui text-slate-400">
+            The interactive experience is unavailable. Home and documentation
+            remain available.
+          </p>
+        )}
+        <noscript>
+          <p className="type-ui text-slate-400">
+            Enable JavaScript to enter the interactive experience.
+          </p>
+        </noscript>
+        <BootNav />
+      </div>
     </main>
   )
+  /*
+   * Nothing while a mode's code is on its way and the runtime is already up.
+   * The scene is live behind the route, or the cover is over it; either is
+   * the right picture for the length of a fetch, where the admission drawn
+   * here was a black screen cut into a running scene for a beat on every
+   * first entry. `ModeLink` and `App` warm the chunks so the beat is rare.
+   */
+  const loading = null
 
   return (
     <Routes location={at}>
@@ -144,11 +171,14 @@ export function ModeRoutes(props: ModeRouteProps) {
           props.engine === null ? (
             admission
           ) : (
-            <Suspense fallback={admission}>
-              <FlightMode
-                engine={props.engine}
-                dev={props.dev}
-                onNotice={props.onNotice}
+            <Suspense fallback={loading}>
+              <LoadedMode
+                load={modeLoaders.flight}
+                props={{
+                  engine: props.engine,
+                  dev: props.dev,
+                  onNotice: props.onNotice,
+                }}
               />
             </Suspense>
           )
@@ -160,8 +190,11 @@ export function ModeRoutes(props: ModeRouteProps) {
           props.engine === null ? (
             admission
           ) : (
-            <Suspense fallback={admission}>
-              <PlanetariumMode engine={props.engine} dev={props.dev} />
+            <Suspense fallback={loading}>
+              <LoadedMode
+                load={modeLoaders.planetarium}
+                props={{ engine: props.engine, dev: props.dev }}
+              />
             </Suspense>
           )
         }
@@ -197,8 +230,11 @@ export function ModeRoutes(props: ModeRouteProps) {
           props.engine === null ? (
             admission
           ) : (
-            <Suspense fallback={admission}>
-              <CinemaMode engine={props.engine} dev={props.dev} />
+            <Suspense fallback={loading}>
+              <LoadedMode
+                load={modeLoaders.cinema}
+                props={{ engine: props.engine, dev: props.dev }}
+              />
             </Suspense>
           )
         }
@@ -209,8 +245,11 @@ export function ModeRoutes(props: ModeRouteProps) {
           props.engine === null ? (
             admission
           ) : (
-            <Suspense fallback={admission}>
-              <CinemaMode engine={props.engine} dev={props.dev} />
+            <Suspense fallback={loading}>
+              <LoadedMode
+                load={modeLoaders.cinema}
+                props={{ engine: props.engine, dev: props.dev }}
+              />
             </Suspense>
           )
         }
