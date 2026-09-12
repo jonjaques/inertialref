@@ -117,7 +117,7 @@ const HOUR = 3_600
  * Moon at 0.136, and Iapetus's dark side came out brighter than Callisto. The
  * darkest objects in the Solar System are supposed to look like it.
  */
-const surfaceColour = (albedo: number, hue: LinearRgb): LinearRgb => {
+const surfaceColor = (albedo: number, hue: LinearRgb): LinearRgb => {
   const peak = Math.max(hue.r, hue.g, hue.b, 1e-6)
   const reflectance = Math.min(1, 1.5 * albedo)
   return {
@@ -219,7 +219,7 @@ const smallBody = (
     geometricAlbedo: albedo,
     temperature: 100,
     texture: null,
-    tint: surfaceColour(albedo, hue),
+    tint: surfaceColor(albedo, hue),
     // The figure *is* the relief. Sinking the drawn body by a second helping of
     // it — which is what a non-zero relief asks the renderer to do — would
     // shrink every asteroid inside its own shape model.
@@ -276,7 +276,7 @@ const satellite = (
     geometricAlbedo: albedo,
     temperature: 40,
     texture: null,
-    tint: surfaceColour(albedo, hue),
+    tint: surfaceColor(albedo, hue),
     relief: 0,
     roughness: 0.9,
     atmosphere: null,

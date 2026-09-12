@@ -46,12 +46,12 @@ export const cellCenter = (cell: GalacticCell): UniverseVector =>
 
 /** Every cell touching the axis-aligned box of `radius` around `centre`. */
 export function cellsWithin(
-  centre: UniverseVector,
+  center: UniverseVector,
   radius: Meters,
   limit = 200_000,
 ): readonly GalacticCell[] {
-  const min = cellOf(UV.translate(centre, vec3(-radius, -radius, -radius)))
-  const max = cellOf(UV.translate(centre, vec3(radius, radius, radius)))
+  const min = cellOf(UV.translate(center, vec3(-radius, -radius, -radius)))
+  const max = cellOf(UV.translate(center, vec3(radius, radius, radius)))
   const count = (max.x - min.x + 1) * (max.y - min.y + 1) * (max.z - min.z + 1)
   invariant(
     count <= limit,

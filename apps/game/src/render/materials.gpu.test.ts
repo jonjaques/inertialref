@@ -614,7 +614,7 @@ function filledCube(
   const held = renderer.getRenderTarget()
   // The getter wants three's `Color4`, which `three/webgpu` does not export;
   // a `Color` carrying an alpha is the shape, and `copy` fills the three lanes.
-  const heldColour = renderer.getClearColor(
+  const heldColor = renderer.getClearColor(
     Object.assign(new Color(), { a: 1 }) as unknown as Parameters<
       typeof renderer.getClearColor
     >[0],
@@ -626,7 +626,7 @@ function filledCube(
     renderer.clear()
   }
   renderer.setRenderTarget(held)
-  renderer.setClearColor(heldColour, heldAlpha)
+  renderer.setClearColor(heldColor, heldAlpha)
   return target
 }
 

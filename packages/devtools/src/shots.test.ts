@@ -80,10 +80,10 @@ describe('placeShot', () => {
             // the ray must graze within the lifted radius. The closest
             // approach of the ray to the center is |p|·sin(angle between −p
             // and forward).
-            const toCentre = Vec.negate(position)
-            const along = Vec.dot(toCentre, forward)
+            const toCenter = Vec.negate(position)
+            const along = Vec.dot(toCenter, forward)
             const closest = Math.sqrt(
-              Math.max(0, Vec.lengthSquared(toCentre) - along * along),
+              Math.max(0, Vec.lengthSquared(toCenter) - along * along),
             )
             expect(along).toBeGreaterThan(0) // ahead, not behind
             expect(closest).toBeLessThanOrEqual(

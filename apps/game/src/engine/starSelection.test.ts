@@ -14,7 +14,7 @@ import { selectStars, type StarCandidate } from './starSelection.ts'
  * different order than last time.
  */
 
-const centre = UV.fromMeters(0, 0, 0)
+const center = UV.fromMeters(0, 0, 0)
 
 /** A star within a few hundred light-years, with an id from a small alphabet. */
 const candidate = fc
@@ -50,8 +50,8 @@ const selections = fc.array(fc.array(candidate, { maxLength: 60 }), {
 })
 
 const flux = (star: StarCandidate): number => {
-  const metres = Math.max(UV.distance(star.position, centre), 1)
-  return star.solarLuminosities / (metres * metres)
+  const meters = Math.max(UV.distance(star.position, center), 1)
+  return star.solarLuminosities / (meters * meters)
 }
 
 /** The first record per id, in order — what the union owes before the ceiling. */
@@ -80,8 +80,8 @@ describe('selecting the drawn stars', () => {
       catalogued: true,
     }
     expect(
-      selectStars(centre, [[star]], 10, {
-        origin: centre,
+      selectStars(center, [[star]], 10, {
+        origin: center,
         apparentMagnitudeLimit: 8,
         levelMask: 511,
       }).ids,
@@ -99,8 +99,8 @@ describe('selecting the drawn stars', () => {
     }))
     const distance = vi.spyOn(UV, 'distance')
     try {
-      selectStars(centre, [stars, stars], 3, {
-        origin: centre,
+      selectStars(center, [stars, stars], 3, {
+        origin: center,
         apparentMagnitudeLimit: 8,
         levelMask: 511,
       })
@@ -120,8 +120,8 @@ describe('selecting the drawn stars', () => {
       catalogued: id === 'known',
     })
     const stars = [make('faint', 1), make('bright', 10), make('known', 100)]
-    const result = selectStars(centre, [stars], 2, {
-      origin: centre,
+    const result = selectStars(center, [stars], 2, {
+      origin: center,
       apparentMagnitudeLimit: 10,
       levelMask: 511,
     })
@@ -130,7 +130,7 @@ describe('selecting the drawn stars', () => {
     expect(result.visualLuminosities).toEqual([100, 10])
     expect(result.resolved!.apparentMagnitudeLimit).toBeLessThan(10)
     const repeated = selectStars(
-      centre,
+      center,
       [[...stars].reverse()],
       2,
       result.resolved,
@@ -140,7 +140,7 @@ describe('selecting the drawn stars', () => {
   it('says each id once, in the order the selections are trusted', () => {
     fc.assert(
       fc.property(selections, (lists) => {
-        const field = selectStars(centre, lists, 10_000)
+        const field = selectStars(center, lists, 10_000)
         const expected = firstPerId(lists)
         expect(field.positions.length).toBe(expected.length)
         // The earlier selection's record wins: same name, same light.
@@ -158,7 +158,7 @@ describe('selecting the drawn stars', () => {
         selections,
         fc.integer({ min: 1, max: 40 }),
         (lists, ceiling) => {
-          const field = selectStars(centre, lists, ceiling)
+          const field = selectStars(center, lists, ceiling)
           const union = firstPerId(lists)
           expect(field.positions.length).toBe(Math.min(ceiling, union.length))
           if (union.length <= ceiling) return
@@ -182,10 +182,10 @@ describe('selecting the drawn stars', () => {
       .map((stars) => stars.map((s, i) => ({ ...s, id: `U${i}` })))
     fc.assert(
       fc.property(unique, fc.integer({ min: 1, max: 30 }), (stars, ceiling) => {
-        const forward = selectStars(centre, [stars], ceiling)
-        const backward = selectStars(centre, [[...stars].reverse()], ceiling)
+        const forward = selectStars(center, [stars], ceiling)
+        const backward = selectStars(center, [[...stars].reverse()], ceiling)
         const split = selectStars(
-          centre,
+          center,
           [stars.slice(0, stars.length >> 1), stars.slice(stars.length >> 1)],
           ceiling,
         )
@@ -214,7 +214,7 @@ describe('selecting the drawn stars', () => {
       solarLuminosities: 31_700,
       visualLuminosities: 31_700,
     }
-    const field = selectStars(centre, [[sirius], [], [sirius, betelgeuse]])
+    const field = selectStars(center, [[sirius], [], [sirius, betelgeuse]])
     expect(field.names).toEqual(['Sirius', 'Betelgeuse'])
     expect(field.luminosities).toEqual([25, 31_700])
   })

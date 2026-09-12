@@ -41,7 +41,7 @@ export const GALAXY_POPULATIONS = Object.freeze({
   barBulge: Object.freeze({ meanSolarLuminosities: 0.7725, temperature: 4300 }),
   halo: Object.freeze({ meanSolarLuminosities: 0.1, temperature: 4800 }),
 })
-const COLOURS = POPULATION_NAMES.map((name) =>
+const COLORS = POPULATION_NAMES.map((name) =>
   blackbodyColor(GALAXY_POPULATIONS[name].temperature),
 )
 const BAR_ANGLE = (27 * Math.PI) / 180
@@ -220,7 +220,7 @@ export function createGalaxyField(
         total += density
         const light = density * GALAXY_POPULATIONS[name].meanSolarLuminosities
         emission += light
-        const color = COLOURS[i]!
+        const color = COLORS[i]!
         // Green carries the measured V band; chromaticity cannot redefine its power.
         const sum = color.g
         r += (light * color.r) / sum

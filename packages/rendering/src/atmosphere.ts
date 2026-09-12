@@ -116,14 +116,14 @@ export function atmosphereRecipe(
   const hRayleigh = shell * RAYLEIGH_SHELL_FRACTION
   const hMie = shell * MIE_SHELL_FRACTION
 
-  const { color: colour, limb, thickness } = haze
-  const colorSum = Math.max(colour.r + colour.g + colour.b, 1e-6)
+  const { color, limb, thickness } = haze
+  const colorSum = Math.max(color.r + color.g + color.b, 1e-6)
   // τ = β·H for an exponential column, so β = τ/H.
   const tau = TAU_RAYLEIGH_SUM * thickness
   const betaRayleigh: [number, number, number] = [
-    ((colour.r / colorSum) * tau) / hRayleigh,
-    ((colour.g / colorSum) * tau) / hRayleigh,
-    ((colour.b / colorSum) * tau) / hRayleigh,
+    ((color.r / colorSum) * tau) / hRayleigh,
+    ((color.g / colorSum) * tau) / hRayleigh,
+    ((color.b / colorSum) * tau) / hRayleigh,
   ]
 
   const limbMean = Math.max((limb.r + limb.g + limb.b) / 3, 1e-6)

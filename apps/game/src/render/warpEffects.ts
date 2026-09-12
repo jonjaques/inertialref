@@ -108,11 +108,11 @@ function warpMaterial(kind: WarpKind): WarpElement {
   const tint = uniform(new Color(1, 1, 1))
   const intensity = uniform(0)
 
-  const centred = uv().sub(0.5).mul(2)
-  const r = length(centred)
+  const centered = uv().sub(0.5).mul(2)
+  const r = length(centered)
 
   let profile
-  let colour
+  let color
   switch (kind) {
     case 'wash': {
       /*
@@ -151,7 +151,7 @@ function warpMaterial(kind: WarpKind): WarpElement {
        * the reference measures, and small enough that the stretch below is
        * what sets the subject's width.
        */
-      colour = mix(vec3(0.05, 0.22, 1.5), vec3(0.9, 1.0, 1.5), exp(r.mul(-8)))
+      color = mix(vec3(0.05, 0.22, 1.5), vec3(0.9, 1.0, 1.5), exp(r.mul(-8)))
       break
     }
     case 'glow': {
@@ -162,7 +162,7 @@ function warpMaterial(kind: WarpKind): WarpElement {
       profile = exp(r.mul(-9))
         .add(exp(r.mul(-3.2)).mul(0.16))
         .mul(oneMinus(smoothstep(float(0.8), float(1), r)))
-      colour = vec3(1)
+      color = vec3(1)
       break
     }
     case 'streak': {
@@ -170,15 +170,11 @@ function warpMaterial(kind: WarpKind): WarpElement {
       // length, thin across. The asymmetry matters — a symmetric blade reads
       // as an anamorphic flare, not as light being left behind.
       const along = uv().x
-      const across = abs(centred.y).mul(14)
+      const across = abs(centered.y).mul(14)
       profile = exp(across.negate())
         .mul(pow(oneMinus(smoothstep(float(0), float(1), along)), 2))
         .mul(smoothstep(float(0), float(0.04), along))
-      colour = mix(
-        vec3(0.5, 0.7, 1.7),
-        vec3(1.3, 1.35, 1.5),
-        exp(along.mul(-6)),
-      )
+      color = mix(vec3(0.5, 0.7, 1.7), vec3(1.3, 1.35, 1.5), exp(along.mul(-6)))
       break
     }
     case 'stretch': {
@@ -202,8 +198,8 @@ function warpMaterial(kind: WarpKind): WarpElement {
        * blue field out of the mask. A blue stretch would be light the
        * instrument cannot see a ship in.
        */
-      const along = abs(centred.x)
-      const across = abs(centred.y)
+      const along = abs(centered.x)
+      const across = abs(centered.y)
       const body = exp(along.mul(-2.6)).mul(exp(across.mul(-2.2)))
       const waist = exp(along.mul(-7))
         .mul(exp(across.mul(-4)))
@@ -212,7 +208,7 @@ function warpMaterial(kind: WarpKind): WarpElement {
         .add(waist)
         .mul(oneMinus(smoothstep(float(0.8), float(1), along)))
         .mul(oneMinus(smoothstep(float(0.72), float(1), across)))
-      colour = mix(
+      color = mix(
         vec3(1.1, 1.05, 1.15),
         vec3(0.85, 0.9, 1.2),
         smoothstep(float(0), float(0.85), along),
@@ -229,8 +225,8 @@ function warpMaterial(kind: WarpKind): WarpElement {
        * shape rather than a bloom: a round glow there reads as a star, not as
        * something that just left at warp.
        */
-      const nx = abs(centred.x)
-      const ny = abs(centred.y)
+      const nx = abs(centered.x)
+      const ny = abs(centered.y)
       /*
        * The needle and the bar are given back the width the quad took away.
        * The quad is 2.6× wider than it was (see `spark.mesh.scale`), because
@@ -248,13 +244,13 @@ function warpMaterial(kind: WarpKind): WarpElement {
         pow(oneMinus(smoothstep(float(0), float(0.16), nx)), 2),
       )
       const halo = exp(
-        length(vec2(centred.x.mul(2.6), centred.y.mul(1.05))).mul(-3.1),
+        length(vec2(centered.x.mul(2.6), centered.y.mul(1.05))).mul(-3.1),
       )
       profile = needle
         .add(bar.mul(0.55))
         .add(halo.mul(0.4))
-        .mul(oneMinus(smoothstep(float(0.85), float(1), length(centred))))
-      colour = mix(vec3(0.7, 0.85, 1.5), vec3(1.2, 1.2, 1.25), needle)
+        .mul(oneMinus(smoothstep(float(0.85), float(1), length(centered))))
+      color = mix(vec3(0.7, 0.85, 1.5), vec3(1.2, 1.2, 1.25), needle)
       break
     }
   }
@@ -262,7 +258,7 @@ function warpMaterial(kind: WarpKind): WarpElement {
   // An overlay, for the reason `flare.ts` gives: the streaks live in camera
   // space and carry no depth the sensor should believe.
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
-  material.colorNode = colour.mul(profile).mul(intensity).mul(tint)
+  material.colorNode = color.mul(profile).mul(intensity).mul(tint)
   material.transparent = true
   material.blending = CustomBlending
   material.blendEquation = AddEquation

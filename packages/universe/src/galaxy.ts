@@ -423,35 +423,35 @@ export const cellContext = (
 export function systemsWithin(
   galaxySeed: Seed,
   catalog: StarCatalog,
-  centre: UniverseVector,
+  center: UniverseVector,
   radius: Meters,
 ): readonly SystemStub[] {
   const found: SystemStub[] = []
-  for (const cell of cellsWithin(centre, radius)) {
+  for (const cell of cellsWithin(center, radius)) {
     for (const star of catalog.inCell(cell))
-      if (UV.distance(star.position, centre) <= radius)
+      if (UV.distance(star.position, center) <= radius)
         found.push(catalogStub(star))
   }
   const generator = populationGenerator(galaxySeed)
   const coverage = populationCoverage(catalog)
   const box = {
-    min: UV.translate(centre, vec3(-radius, -radius, -radius)),
-    max: UV.translate(centre, vec3(radius, radius, radius)),
+    min: UV.translate(center, vec3(-radius, -radius, -radius)),
+    max: UV.translate(center, vec3(radius, radius, radius)),
   }
   for (const band of LUMINOSITY_BANDS) {
-    const cells = populationCellsWithin(centre, radius, band.level)
+    const cells = populationCellsWithin(center, radius, band.level)
     invariant(
       cells.length > 0,
       `Travel query radius ${radius / PARSEC} pc exceeds the population cell budget at level ${band.level}`,
     )
     for (const cell of cells)
       for (const stub of generator.cell(band.level, cell, coverage, box))
-        if (UV.distance(stub.position, centre) <= radius) found.push(stub)
+        if (UV.distance(stub.position, center) <= radius) found.push(stub)
   }
   // The bright catalog is deliberately outside the travel cell index. It still
   // names real destinations when a local query reaches their actual positions.
   for (const star of catalog.sky)
-    if (UV.distance(star.position, centre) <= radius)
+    if (UV.distance(star.position, center) <= radius)
       found.push(catalogStub(star))
   // Sorted by id so the result is a pure function of the query, not of iteration
   // order — two clients asking the same question get the same list.

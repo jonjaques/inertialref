@@ -114,9 +114,9 @@ export function formatDegrees(radians: number): string {
  * A ship on the pad reads zero to the millimeter by construction, and a
  * figure in millimeters says the instrument is measuring something.
  */
-export function formatAltitude(metres: number | null): string {
-  if (metres === null || !Number.isFinite(metres)) return '—'
-  return Math.abs(metres) < 0.5 ? '0 m' : formatReading(metres)
+export function formatAltitude(meters: number | null): string {
+  if (meters === null || !Number.isFinite(meters)) return '—'
+  return Math.abs(meters) < 0.5 ? '0 m' : formatReading(meters)
 }
 
 /** A throttle as a whole percentage. */

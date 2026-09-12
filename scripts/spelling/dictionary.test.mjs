@@ -23,6 +23,8 @@ describe('American spelling', () => {
     'promise',
     'CapabilityResult',
     'characteristic',
+    'Polaris',
+    'polaris',
     'DescentReport',
     'descentRegions',
   ])('preserves %s', (word) => {

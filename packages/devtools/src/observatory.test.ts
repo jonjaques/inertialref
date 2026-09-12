@@ -171,8 +171,8 @@ describe('the observatory', () => {
     expect(status.target?.kind).toBe('planet')
 
     // The target's own frame, which is the thing the camera orbits.
-    const centre = originOf(session, status.target?.frame ?? '')
-    const range = UV.distance(posed(ir.observerSample(0)).position, centre)
+    const center = originOf(session, status.target?.frame ?? '')
+    const range = UV.distance(posed(ir.observerSample(0)).position, center)
     expect(range / status.state.distance).toBeCloseTo(1, 6)
   })
 
@@ -242,22 +242,22 @@ describe('the observatory', () => {
     ir.look('s:SOL/b:5')
     const first = posed(ir.observerSample(0))
     const bodyFrame = ir.observatory.target?.frame ?? ''
-    const startCentre = originOf(session, bodyFrame)
+    const startCenter = originOf(session, bodyFrame)
 
     // An hour of simulated time. A minute moves Jupiter about 800 km, which
     // is under the tolerance this test wants to be able to assert.
     ir.step(64 * 3600)
     const later = posed(ir.observerSample(0))
-    const laterCentre = originOf(session, bodyFrame)
+    const laterCenter = originOf(session, bodyFrame)
 
-    const bodyMoved = UV.distance(startCentre, laterCentre)
+    const bodyMoved = UV.distance(startCenter, laterCenter)
     // The body genuinely went somewhere, or the test proves nothing.
     expect(bodyMoved).toBeGreaterThan(1e6)
     const cameraMoved = UV.distance(first.position, later.position)
     // The camera went with it: it moved by about as much as the body did.
     expect(Math.abs(cameraMoved / bodyMoved - 1)).toBeLessThan(0.5)
     // ...and it is still exactly its orbit radius from the new center.
-    const range = UV.distance(later.position, laterCentre)
+    const range = UV.distance(later.position, laterCenter)
     expect(range / ir.observatory.state.distance).toBeCloseTo(1, 6)
   })
 
@@ -380,11 +380,11 @@ describe('the observatory', () => {
     // `setPhase` eases like everything else; settle it before measuring.
     for (let i = 0; i < 900; i += 1) ir.observerSample(1 / 60)
     const pose = posed(ir.observerSample(0))
-    const centre = originOf(session, ir.observatory.target?.frame ?? '')
+    const center = originOf(session, ir.observatory.target?.frame ?? '')
     // The system frame's origin is the star.
     const star = originOf(session, 's:SOL')
-    const toCamera = Vec.normalize(UV.difference(pose.position, centre))
-    const toStar = Vec.normalize(UV.difference(star, centre))
+    const toCamera = Vec.normalize(UV.difference(pose.position, center))
+    const toStar = Vec.normalize(UV.difference(star, center))
     const phase = (Math.acos(Vec.dot(toCamera, toStar)) * 180) / Math.PI
     // A crescent: the camera is nearly opposite the sun from the body.
     expect(phase).toBeGreaterThan(145)
@@ -507,9 +507,9 @@ describe('the compositions, through the camera rather than the hull', () => {
     for (const id of ['sunset', 'oblique']) {
       ir.compose(id)
       const pose = posed(ir.observerSample(0))
-      const centre = originOf(session, ir.observatory.target?.frame ?? '')
+      const center = originOf(session, ir.observatory.target?.frame ?? '')
       const star = originOf(session, 's:SOL')
-      const up = Vec.normalize(UV.difference(pose.position, centre))
+      const up = Vec.normalize(UV.difference(pose.position, center))
       const flat = (v: Vec3): Vec3 =>
         Vec.normalize(Vec.sub(v, Vec.scale(up, Vec.dot(v, up))))
       const forward = flat(Q.rotate(pose.orientation, vec3(0, 0, -1)))
@@ -922,7 +922,7 @@ describe('a drop', () => {
     const system = session.world.system(systemId('SOL'))
     const earth = findBody(system as StarSystem, [2]) as Body
     const relief = earth.surface.maxElevation
-    const centre = originOf(
+    const center = originOf(
       session,
       bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2')),
     )
@@ -930,7 +930,7 @@ describe('a drop', () => {
     let climbed = 0
     for (let i = 0; i < 200; i += 1) {
       const pose = posed(ir.observerSample(1 / 60))
-      const radius = UV.distance(pose.position, centre)
+      const radius = UV.distance(pose.position, center)
       if (radius > previous) climbed = Math.max(climbed, radius - previous)
       // Never inside the world it is landing on.
       expect(radius).toBeGreaterThan(earth.radius - relief)
@@ -1001,17 +1001,17 @@ describe('a drop', () => {
     const { harness: ir, session } = harness()
     ir.look('s:SOL/b:2')
     const eye = ir.observatory.eye
-    const centre = originOf(
+    const center = originOf(
       session,
       bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2')),
     )
-    const down = Vec.normalize(UV.difference(centre, eye ?? centre))
+    const down = Vec.normalize(UV.difference(center, eye ?? center))
     const hit = ir.observatory.groundUnderRay(undefined, down)
     expect(hit?.address).toBe('g:milky-way/s:SOL/b:2')
     const spin = spinOf(session, 'g:milky-way/s:SOL/b:2')
     const under = Q.rotateInverse(
       spin.orientation,
-      UV.difference(eye ?? centre, spin.position),
+      UV.difference(eye ?? center, spin.position),
     )
     const expected = directionToGeodetic(under)
     expect(hit?.latitude).toBeCloseTo(expected.latitude, 6)

@@ -41,11 +41,11 @@ export interface ScatteringBake {
  * header warns about.
  */
 export function scatteringKey(haze: HazeLike, topRatio: number): string {
-  const { color: colour, limb, thickness } = haze
+  const { color, limb, thickness } = haze
   return [
-    colour.r,
-    colour.g,
-    colour.b,
+    color.r,
+    color.g,
+    color.b,
     limb.r,
     limb.g,
     limb.b,

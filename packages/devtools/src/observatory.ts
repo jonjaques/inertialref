@@ -565,16 +565,16 @@ export class Observatory {
     )
   }
 
-  #orbitPose(centre: UniverseVector): ObserverPose {
+  #orbitPose(center: UniverseVector): ObserverPose {
     const transform = this.#trackingTransform()
-    const pose = observerPose(centre, this.#state, this.#look)
+    const pose = observerPose(center, this.#state, this.#look)
     if (transform.rotation === Q.IDENTITY && transform.scale === 1) return pose
     return {
       position: UV.translate(
-        centre,
+        center,
         Q.rotate(
           transform.rotation,
-          Vec.scale(UV.difference(pose.position, centre), transform.scale),
+          Vec.scale(UV.difference(pose.position, center), transform.scale),
         ),
       ),
       orientation: Q.normalize(
@@ -1852,7 +1852,7 @@ export class Observatory {
    */
   #groundRing(
     body: Body,
-    centre: Vec3,
+    center: Vec3,
     touchdownRadius: Meters,
     eye: UniverseVector,
   ): readonly Vec3[] {
@@ -1864,13 +1864,13 @@ export class Observatory {
     )
     const range = Math.max(
       1,
-      Vec.length(Vec.sub(local, Vec.scale(centre, touchdownRadius))),
+      Vec.length(Vec.sub(local, Vec.scale(center, touchdownRadius))),
     )
     const across = Math.min(body.radius * 0.22, range * RING_ANGLE)
     // The angle the ring subtends at the body's centre, which is what turns a
     // distance across the ground into a rotation of the direction.
     const sweep = Math.min(Math.PI / 3, across / body.radius)
-    const triad = localTriad(centre)
+    const triad = localTriad(center)
     const out: Vec3[] = []
     for (let index = 0; index <= RING_SEGMENTS; index += 1) {
       const angle = (index / RING_SEGMENTS) * Math.PI * 2
@@ -1885,7 +1885,7 @@ export class Observatory {
        * mountains are in — see `#descentStance`, which pays the same toll.
        */
       const turned = Vec.add(
-        Vec.scale(centre, Math.cos(sweep)),
+        Vec.scale(center, Math.cos(sweep)),
         Vec.scale(offset, Math.sin(sweep)),
       )
       const { latitude, longitude } = directionToGeodetic(turned)

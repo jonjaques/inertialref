@@ -199,12 +199,12 @@ describe('the tile producer', () => {
     for (const handle of handles.slice(16)) handle.cancel()
     const outcomes = await Promise.allSettled(handles.map((h) => h.result))
     const delivered = outcomes.filter((o) => o.status === 'fulfilled').length
-    const cancelled = outcomes.filter(
+    const canceled = outcomes.filter(
       (o) =>
         o.status === 'rejected' && (o.reason as Error).message === 'canceled',
     ).length
     expect(delivered).toBe(16)
-    expect(cancelled).toBe(24)
+    expect(canceled).toBe(24)
     expect(producer.stats().queued).toBe(0)
   })
 

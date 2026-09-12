@@ -29,7 +29,7 @@ it('retains appearance buffers and updates duplicate names, shrinking selections
   const next: StarField = {
     ...stars,
     names: ['a', 'b', ''],
-    colors: stars.colors.map((colour) => [...colour]),
+    colors: stars.colors.map((color) => [...color]),
   }
   material.enabled.array[1] = 0
   hidden.add(1)

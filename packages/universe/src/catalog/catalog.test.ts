@@ -161,9 +161,9 @@ describe('photometry', () => {
 
   it.each(REFERENCE)(
     'derives %s within the limits of the method',
-    (_name, spect, colourIndex, magnitude, publishedT, publishedL) => {
+    (_name, spect, colorIndex, magnitude, publishedT, publishedL) => {
       const type = parseSpectralType(spect)
-      const temperature = effectiveTemperature(type, colourIndex)
+      const temperature = effectiveTemperature(type, colorIndex)
       if (temperature === null) throw new Error('no temperature')
       const luminosity = luminosityFromAbsoluteMagnitude(
         magnitude,
@@ -566,10 +566,10 @@ describe('the sky catalog', () => {
 describe('the catalog at runtime', () => {
   it('indexes by cell rather than scanning', () => {
     // Same answer as a linear scan, which is the only thing the index owes.
-    const centre = TEST_CATALOG.stars[0]?.position
-    if (centre === undefined) throw new Error('empty fixture')
+    const center = TEST_CATALOG.stars[0]?.position
+    if (center === undefined) throw new Error('empty fixture')
     const radius = 6 * 9.4607304725808e15
-    const indexed = [...TEST_CATALOG.within(centre, radius)]
+    const indexed = [...TEST_CATALOG.within(center, radius)]
       .map((s) => s.id as string)
       .sort()
     const scanned = TEST_CATALOG.stars

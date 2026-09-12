@@ -8,11 +8,11 @@ import type { BodyAppearance, LinearRgb } from '@inertialref/universe'
 export function surfaceColor(
   appearance: Pick<BodyAppearance, 'color' | 'texture'>,
 ): LinearRgb {
-  const { color: colour, texture } = appearance
-  if (texture === null) return colour
-  const peak = Math.max(colour.r, colour.g, colour.b)
-  if (peak === 0 || peak === 1) return colour
-  return { r: colour.r / peak, g: colour.g / peak, b: colour.b / peak }
+  const { color, texture } = appearance
+  if (texture === null) return color
+  const peak = Math.max(color.r, color.g, color.b)
+  if (peak === 0 || peak === 1) return color
+  return { r: color.r / peak, g: color.g / peak, b: color.b / peak }
 }
 
 /** The geometric albedo Enhanced's calibrated exposure suits. */

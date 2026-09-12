@@ -9,12 +9,12 @@ import { LENS_PRESETS } from './lens.ts'
 import { surfaceColor, surfaceVisibilityGain } from './surfaceColour.ts'
 
 const channel = fc.double({ min: 0.001, max: 1, noNaN: true })
-const colour = fc.record({ r: channel, g: channel, b: channel })
+const color = fc.record({ r: channel, g: channel, b: channel })
 
 describe('surface source colour and visibility', () => {
   it('keeps mapped brightness in the map while preserving the swatch’s hue', () => {
     fc.assert(
-      fc.property(colour, channel, (swatch, brightness) => {
+      fc.property(color, channel, (swatch, brightness) => {
         const tint = surfaceColor({ texture: 'map', color: swatch })
         const dimmer = surfaceColor({
           texture: 'map',
@@ -35,7 +35,7 @@ describe('surface source colour and visibility', () => {
 
   it('keeps a mapless swatch’s physical reflectance unchanged', () => {
     fc.assert(
-      fc.property(colour, (swatch) => {
+      fc.property(color, (swatch) => {
         expect(surfaceColor({ texture: null, color: swatch })).toBe(swatch)
       }),
     )

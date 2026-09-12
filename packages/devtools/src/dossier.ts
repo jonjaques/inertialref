@@ -256,7 +256,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
     {
       label: 'Temperature',
       value: `${round(star.temperature, 0)} K`,
-      note: colourWord(star.temperature),
+      note: colorWord(star.temperature),
     },
     {
       label: 'Luminosity',
@@ -655,8 +655,8 @@ function orbitGroup(
   const elements = body.elements
   const facts: Fact[] = []
   const moonScale = body.address.kind === 'body' && body.address.body.length > 1
-  const span = (metres: Meters): string =>
-    moonScale ? kilometers(metres) : `${round(metres / AU, 4)} AU`
+  const span = (meters: Meters): string =>
+    moonScale ? kilometers(meters) : `${round(meters / AU, 4)} AU`
 
   facts.push({
     label: 'Semi-major axis',
@@ -1368,7 +1368,7 @@ function starSummary(
       : cataloged.distanceLightYears < 0.001
         ? 'The star every distance in this catalog is measured from'
         : `Catalogued at ${round(cataloged.distanceLightYears, 2)} light years`
-  return `${seen}: ${colourWord(star.temperature)}, ${round(star.temperature, 0)} K, putting out ${brightness}. ${worlds}.`
+  return `${seen}: ${colorWord(star.temperature)}, ${round(star.temperature, 0)} K, putting out ${brightness}. ${worlds}.`
 }
 
 function bodySummary(star: Star, body: Body, primary: Body | null): string {
@@ -1588,13 +1588,13 @@ const SUPERSCRIPTS: Readonly<Record<string, string>> = {
 const superscript = (text: string): string =>
   [...text].map((char) => SUPERSCRIPTS[char] ?? char).join('')
 
-function kilometers(metres: Meters): string {
-  const km = metres / 1000
+function kilometers(meters: Meters): string {
+  const km = meters / 1000
   if (!Number.isFinite(km)) return '—'
   if (Math.abs(km) >= 1e7) return `${round(km / 1e6, 3)} million km`
   if (Math.abs(km) >= 100) return `${round(km, 0)} km`
   if (Math.abs(km) >= 1) return `${round(km, 2)} km`
-  return `${round(metres, 0)} m`
+  return `${round(meters, 0)} m`
 }
 
 function period(seconds: Seconds): string {
@@ -1647,7 +1647,7 @@ function density(mass: Kilograms, radius: Meters): string {
   return `${round(mass / volume / 1000, 3)} g/cm³`
 }
 
-const colourWord = (temperature: number): string => {
+const colorWord = (temperature: number): string => {
   if (temperature >= 30_000) return 'blue'
   if (temperature >= 10_000) return 'blue-white'
   if (temperature >= 7_500) return 'white'

@@ -284,29 +284,29 @@ function bandColor(
   random: () => number,
   shade = 1,
 ): Rgb {
-  const grey = albedo * shade * between(random, 0.82, 1.12)
+  const gray = albedo * shade * between(random, 0.82, 1.12)
   const chroma = between(random, 0.94, 1.06)
   return [
-    grey * tint[0] * chroma,
-    grey * tint[1],
-    grey * tint[2] * (2 - chroma),
+    gray * tint[0] * chroma,
+    gray * tint[1],
+    gray * tint[2] * (2 - chroma),
   ]
 }
 
 /** A hairline: a gaussian, no plateau, the same fall-off both sides. */
 function thread(
-  centre: number,
+  center: number,
   width: number,
   alpha: number,
-  colour: Rgb,
+  color: Rgb,
 ): Band {
   return {
-    center: centre,
+    center,
     half: 0,
     inner: width,
     outer: width,
     alpha,
-    color: colour,
+    color,
     ripple: 0,
     frequency: 0,
     phase: 0,
@@ -341,9 +341,9 @@ function sheetBands(
     const span = ((weights[i] as number) / total) * (to - from)
     const fill = between(random, 0.6, 0.92)
     const half = (span * fill) / 2
-    const centre = at + span / 2
+    const center = at + span / 2
     bands.push({
-      center: centre,
+      center,
       half,
       inner: half * between(random, 0.12, 0.35),
       outer: half * between(random, 0.03, 0.14),
@@ -376,15 +376,15 @@ function threadBands(
   const bands: Band[] = []
   const lesser = Math.max(0, count - 1)
   for (let i = 0; i < lesser; i += 1) {
-    const centre = between(random, from, to - 0.05)
+    const center = between(random, from, to - 0.05)
     const width = between(random, 0.0012, 0.006)
     const alpha = between(random, 0.35, 0.85)
-    bands.push(thread(centre, width, alpha, bandColor(albedo, tint, random)))
+    bands.push(thread(center, width, alpha, bandColor(albedo, tint, random)))
     if (random() < 0.2 && i + 1 < lesser) {
       i += 1
       bands.push(
         thread(
-          centre + between(random, 0.006, 0.014),
+          center + between(random, 0.006, 0.014),
           width * between(random, 0.6, 1.2),
           alpha * between(random, 0.6, 1),
           bandColor(albedo, tint, random),

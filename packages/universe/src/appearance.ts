@@ -107,10 +107,10 @@ function drawFamily(
    */
   const value = rng.range(0.82, 1.2)
   const chroma = rng.range(0.75, 1.25)
-  const grey =
+  const gray =
     0.2126 * base.color.r + 0.7152 * base.color.g + 0.0722 * base.color.b
   const channel = (c: number): number =>
-    Math.max(0, (grey + (c - grey) * chroma) * value)
+    Math.max(0, (gray + (c - gray) * chroma) * value)
   return {
     r: channel(base.color.r),
     g: channel(base.color.g),

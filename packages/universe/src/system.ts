@@ -1148,7 +1148,7 @@ export function irregularFigure(
  * and the saturated palette a generator reaches for first is the single clearest
  * tell that a world was invented. Bodies in `solar/` override these with a map.
  */
-const KIND_COLOUR: Readonly<Record<BodyKind, LinearRgb>> = {
+const KIND_COLOR: Readonly<Record<BodyKind, LinearRgb>> = {
   rocky: { r: 0.28, g: 0.21, b: 0.16 },
   ice: { r: 0.62, g: 0.68, b: 0.72 },
   moon: { r: 0.3, g: 0.3, b: 0.29 },
@@ -1309,7 +1309,7 @@ function proceduralAppearance(
             thickness: giant ? 1 : Math.min(1, atmosphere.surfaceDensity / 1.2),
           },
     color: giant
-      ? (KIND_COLOUR[kind] ?? KIND_COLOUR.rocky)
+      ? (KIND_COLOR[kind] ?? KIND_COLOR.rocky)
       : surfaceColorFor(palette.fork('surface'), kind, grammar),
     pigment: pigmentFor(palette.fork('pigment')),
     liquid: liquidAppearance(grammar.liquidKind, palette.fork('liquid')),
@@ -1959,7 +1959,7 @@ function makeSmallBody(
        * clearest compositional gradient in the Solar System and it costs one
        * interpolation.
        */
-      color: darkening(KIND_COLOUR[kind], insolationHere, rng),
+      color: darkening(KIND_COLOR[kind], insolationHere, rng),
       // Nothing grows on a rubble pile and nothing pools on one.
       pigment: PIGMENTS[0]?.color ?? { r: 0.08, g: 0.21, b: 0.05 },
       liquid: null,

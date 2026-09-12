@@ -168,7 +168,7 @@ async function elevationToNormal(
     if (value < low) low = value
     if (value > high) high = value
   }
-  const metresPerValue = high > low ? relief / (high - low) : 0
+  const metersPerValue = high > low ? relief / (high - low) : 0
   const oceanLevel =
     source.oceanBelow === undefined
       ? -Infinity
@@ -177,7 +177,7 @@ async function elevationToNormal(
   // Meters per pixel on the ground, north–south. The equirectangular grid is
   // uniform in angle, so this is a constant; east–west is this times
   // cos(latitude), which is the whole reason for the correction below.
-  const metresPerPixel = (Math.PI * radius) / height
+  const metersPerPixel = (Math.PI * radius) / height
 
   const out = Buffer.alloc(width * height * 3)
   for (let y = 0; y < height; y += 1) {
@@ -185,10 +185,10 @@ async function elevationToNormal(
     const cosLatitude = Math.max(POLE_CLAMP, Math.cos(latitude))
     for (let x = 0; x < width; x += 1) {
       const east =
-        ((at(x + 1, y) - at(x - 1, y)) * metresPerValue) /
-        (2 * metresPerPixel * cosLatitude)
+        ((at(x + 1, y) - at(x - 1, y)) * metersPerValue) /
+        (2 * metersPerPixel * cosLatitude)
       const south =
-        ((at(x, y + 1) - at(x, y - 1)) * metresPerValue) / (2 * metresPerPixel)
+        ((at(x, y + 1) - at(x, y - 1)) * metersPerValue) / (2 * metersPerPixel)
 
       /*
        * Tangent space, +X east, +Y north, +Z out of the surface.
@@ -235,7 +235,7 @@ async function luminanceToAlpha(
 ): Promise<Buffer> {
   const width = source.width
   const height = width / 2
-  const grey = await open(bytes)
+  const gray = await open(bytes)
     .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
     .toColourspace('b-w')
     .raw()
@@ -243,7 +243,7 @@ async function luminanceToAlpha(
 
   const out = Buffer.alloc(width * height * 4)
   for (let i = 0; i < width * height; i += 1) {
-    const value = grey[i] as number
+    const value = gray[i] as number
     // White cloud, alpha from brightness. Cloud tops are very nearly a perfect
     // Lambertian white — the brightest natural surface there is — so the color
     // channels are constant and only the coverage varies.

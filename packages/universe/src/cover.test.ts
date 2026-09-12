@@ -80,7 +80,7 @@ describe('ray craters', () => {
             index === rung ? level : { ...level, density: 0 },
           ),
         }
-        const centre = craterField(alone, grammar, crater.axis)
+        const center = craterField(alone, grammar, crater.axis)
         // The median of a ring three radii out — past the ejecta blanket, and
         // a median so that one neighbour cannot decide the comparison.
         const ring: number[] = []
@@ -100,7 +100,7 @@ describe('ray craters', () => {
           )
         }
         ring.sort((a, b) => a - b)
-        const drop = (ring[12] as number) - centre
+        const drop = (ring[12] as number) - center
         const label = `${name} ${(crater.diameter / 1000).toFixed(0)}km`
         expect(`${label}: ${drop > 0.002 * crater.diameter}`).toBe(
           `${label}: true`,

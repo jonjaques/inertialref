@@ -174,7 +174,7 @@ export interface StarCatalog {
    */
   search(text: string, limit?: number): readonly CatalogStar[]
   /** Every star of the volume within `radius` of a point, unordered. */
-  within(centre: UniverseVector, radius: Meters): readonly CatalogStar[]
+  within(center: UniverseVector, radius: Meters): readonly CatalogStar[]
   /**
    * The volume's stars in one generation cell. The procedural fill needs the
    * count, which is why the sky's stars are not here; see `sky`.
@@ -694,11 +694,11 @@ class DecodedCatalog implements StarCatalog {
     return this.#byCell.get(cellKey(cell)) ?? []
   }
 
-  within(centre: UniverseVector, radius: Meters): readonly CatalogStar[] {
+  within(center: UniverseVector, radius: Meters): readonly CatalogStar[] {
     const found: CatalogStar[] = []
-    for (const cell of cellsWithin(centre, radius))
+    for (const cell of cellsWithin(center, radius))
       for (const star of this.inCell(cell))
-        if (UV.distance(star.position, centre) <= radius) found.push(star)
+        if (UV.distance(star.position, center) <= radius) found.push(star)
     return found
   }
 }

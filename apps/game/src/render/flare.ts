@@ -139,35 +139,35 @@ function elementMaterial(kind: ElementKind): {
   const sunward = uniform(new Vector2(1, 0))
   const asymmetry = uniform(0)
 
-  const centred = uv().sub(0.5).mul(2)
-  const r = length(centred)
+  const centered = uv().sub(0.5).mul(2)
+  const r = length(centered)
   const tinted = asVector(tint)
 
   let profile
-  let colour
+  let color
   switch (kind) {
     case 'glow': {
       profile = exp(r.mul(-7))
         .add(exp(r.mul(-2.6)).mul(0.05))
         .mul(oneMinus(smoothstep(float(0.8), float(1), r)))
-      colour = tint
+      color = tint
       break
     }
     case 'streak': {
-      const across = abs(centred.y).mul(30)
-      const along = oneMinus(smoothstep(float(0), float(1), abs(centred.x)))
+      const across = abs(centered.y).mul(30)
+      const along = oneMinus(smoothstep(float(0), float(1), abs(centered.x)))
       profile = exp(across.negate()).mul(pow(along, 3))
-      colour = tint
+      color = tint
       break
     }
     case 'anamorphic': {
-      const across = abs(centred.y)
-      const along = abs(centred.x)
+      const across = abs(centered.y)
+      const along = abs(centered.x)
       profile = exp(across.mul(-120))
         .add(exp(across.mul(-25)).mul(0.08))
         .mul(exp(along.mul(-3)))
         .mul(oneMinus(smoothstep(0.82, 1, along)))
-      colour = mix(
+      color = mix(
         vec3(0.22, 0.46, 1.15),
         vec3(1.5, 0.83, 0.3),
         exp(along.mul(-12)),
@@ -178,7 +178,7 @@ function elementMaterial(kind: ElementKind): {
       // An iris ghost: a soft disk whose rim runs warm — the chromatic
       // fringing real coatings leave on out-of-focus apertures.
       profile = oneMinus(smoothstep(float(0.3), float(0.95), r))
-      colour = tinted.mul(
+      color = tinted.mul(
         mix(
           vec3(1),
           vec3(1.3, 0.75, 0.6),
@@ -194,7 +194,7 @@ function elementMaterial(kind: ElementKind): {
       profile = smoothstep(float(0.3), float(0.8), r).mul(
         oneMinus(smoothstep(float(0.8), float(1), r)),
       )
-      colour = tinted.mul(
+      color = tinted.mul(
         mix(
           vec3(0.6, 0.75, 1.3),
           vec3(1.4, 0.6, 0.5),
@@ -236,7 +236,7 @@ function elementMaterial(kind: ElementKind): {
       // NaN is not killed by the radial gate below — `0 * NaN` is NaN, and
       // `mix(1, NaN, 0)` is NaN too, so an additive quad would stamp it into
       // the frame at the middle of the silhouette.
-      const sunDot = dot(centred.div(r.max(1e-6)), sunward)
+      const sunDot = dot(centered.div(r.max(1e-6)), sunward)
       const banked = mix(
         float(1),
         clamp(sunDot, float(0), float(1)).mul(0.82).add(0.18),
@@ -250,7 +250,7 @@ function elementMaterial(kind: ElementKind): {
         .mul(exp(outside.mul(-11)).add(exp(outside.mul(-3.4)).mul(0.42)))
         .mul(oneMinus(smoothstep(float(0.82), float(1), r)))
         .mul(banked)
-      colour = tint
+      color = tint
       break
     }
   }
@@ -258,7 +258,7 @@ function elementMaterial(kind: ElementKind): {
   // An overlay: the quads hang twenty metres in front of the lens, and the
   // sensor must not take that for the distance of the sky behind the Sun.
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
-  material.colorNode = colour.mul(profile).mul(intensity)
+  material.colorNode = color.mul(profile).mul(intensity)
   material.transparent = true
   /*
    * Additive in color, and **silent in alpha** — not `AdditiveBlending`.
@@ -291,7 +291,7 @@ export interface LensFlare {
   update(
     camera: PerspectiveCamera,
     sunWorld: { readonly x: number; readonly y: number; readonly z: number },
-    starColour: { readonly r: number; readonly g: number; readonly b: number },
+    starColor: { readonly r: number; readonly g: number; readonly b: number },
     /** Apparent brightness of the star, 0..1 within the scene. */
     brightness: number,
     /** Angular radius of the disk, radians — a close star blooms wider. */
@@ -377,7 +377,7 @@ export function createLensFlare(): LensFlare {
     update(
       camera,
       sunWorld,
-      starColour,
+      starColor,
       brightness,
       angularRadius,
       occlusion,
@@ -435,11 +435,7 @@ export function createLensFlare(): LensFlare {
       anamorphic.scale.set(frameHeight * aspect * 2.5, frameHeight * 0.18, 1)
       anamorphicParts.intensity.value =
         saturate(anamorphicDrive) * strength * 0.75
-      anamorphicParts.tint.value.setRGB(
-        starColour.r,
-        starColour.g,
-        starColour.b,
-      )
+      anamorphicParts.tint.value.setRGB(starColor.r, starColor.g, starColor.b)
 
       if (eclipse === null || coronaStrength < 0.003) {
         coronaParts.intensity.value = 0
@@ -511,9 +507,9 @@ export function createLensFlare(): LensFlare {
          * goes to die.
          */
         coronaParts.tint.value.setRGB(
-          starColour.r * 1.3,
-          starColour.g * 0.58,
-          starColour.b * 0.14,
+          starColor.r * 1.3,
+          starColor.g * 0.58,
+          starColor.b * 0.14,
         )
       }
 
@@ -541,9 +537,9 @@ export function createLensFlare(): LensFlare {
          */
         const warm = occlusion.graze * (core ? 0.75 : 0.9)
         element.tint.value.setRGB(
-          starColour.r * spec.tint[0] * (1 + warm * 0.15),
-          starColour.g * spec.tint[1] * (1 - warm * 0.45),
-          starColour.b * spec.tint[2] * (1 - warm * 0.7),
+          starColor.r * spec.tint[0] * (1 + warm * 0.15),
+          starColor.g * spec.tint[1] * (1 - warm * 0.45),
+          starColor.b * spec.tint[2] * (1 - warm * 0.7),
         )
         /*
          * A ghost that lands on the star's own image is swamped by the glare

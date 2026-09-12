@@ -167,11 +167,11 @@ function plumeShell(
       index.push(a, b, a + 1, a + 1, b, b + 1)
     }
   // The cap: a fan from the mouth's centre.
-  const centre = positions.length / 3
+  const center = positions.length / 3
   positions.push(0, 0, 0)
   normals.push(0, -1, 0)
   uvs.push(0.5, 0)
-  for (let s = 0; s < segments; s += 1) index.push(centre, s, s + 1)
+  for (let s = 0; s < segments; s += 1) index.push(center, s, s + 1)
 
   const geometry = new BufferGeometry()
   geometry.setAttribute(
@@ -357,12 +357,12 @@ function shellMaterial(
         // The sheath's blue is deep on purpose: through the additive blend
         // and the tone curve a paler one reads as lavender, and the
         // reference torch is the colour of a gas flame.
-        const colour = mix(
+        const color = mix(
           vec3(0.22, 0.5, 1.6),
           vec3(1.2, 1.35, 1.6),
           exp(along.mul(-3)).mul(0.75),
         )
-        return colour.mul(intensity)
+        return color.mul(intensity)
       }
     }
   })()
@@ -387,20 +387,20 @@ function diskMaterial(
   const noise = noiseSampler(noiseTexture())
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.colorNode = Fn(() => {
-    const centred = uv().sub(0.5).mul(2)
-    const r = length(centred)
+    const centered = uv().sub(0.5).mul(2)
+    const r = length(centered)
     const drift = clock.mul(0.8)
     const coarse = asField(
       noiseFetch(
         noise,
-        asVector(vec3(centred.x.mul(3), centred.y.mul(3), drift)),
+        asVector(vec3(centered.x.mul(3), centered.y.mul(3), drift)),
       ),
     ).x
     const fine = asField(
       noiseFetch(
         noise,
         asVector(
-          vec3(centred.x.mul(9), centred.y.mul(9), drift.mul(1.7).add(11)),
+          vec3(centered.x.mul(9), centered.y.mul(9), drift.mul(1.7).add(11)),
         ),
       ),
     ).x
@@ -416,12 +416,12 @@ function diskMaterial(
       .add(turbulence.mul(0.35))
       .mul(edge)
       .mul(throttle)
-    const colour = mix(
+    const color = mix(
       vec3(0.4, 0.72, 1.55),
       vec3(1.5, 1.6, 1.7),
       saturate(core.mul(0.9).add(turbulence.mul(0.25))),
     )
-    return colour.mul(intensity)
+    return color.mul(intensity)
   })()
   additive(material)
   return material

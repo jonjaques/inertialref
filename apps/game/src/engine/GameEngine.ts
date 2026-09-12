@@ -1570,21 +1570,21 @@ export class GameEngine {
   }
 
   /** A bounded magnitude survey is independent of the travel query's spatial radius. */
-  #maybeSurveyStars(centre: UniverseVector): void {
+  #maybeSurveyStars(center: UniverseVector): void {
     if (this.#starFieldPending) return
     if (
       this.#starFieldCenter !== null &&
-      UV.distance(this.#starFieldCenter, centre) <= STARFIELD_HYSTERESIS
+      UV.distance(this.#starFieldCenter, center) <= STARFIELD_HYSTERESIS
     )
       return
-    this.#starFieldCenter = centre
+    this.#starFieldCenter = center
     this.#starFieldPending = true
     const world = this.#starFieldWorld
     const catalog = this.world.catalog
     const known = (this.#starFieldKnown ??= catalog.stars.map(asCandidate))
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
-      origin: encodeUniverseVector(centre),
+      origin: encodeUniverseVector(center),
       coverage: (this.#starFieldCoverage ??= populationCoverage(catalog)),
       spriteCeiling: STAR_SPRITE_CEILING,
       cellCeiling: STARFIELD_CELL_CEILING,
@@ -1595,7 +1595,7 @@ export class GameEngine {
     // same light partition during travel. Publishing only the catalog between
     // replies removes procedural sources and resets their dust and sky history.
     if (this.#starField.resolved === undefined)
-      this.#starField = selectStars(centre, [known])
+      this.#starField = selectStars(center, [known])
     const pool = this.pool()
     // Inline execution can throw before returning a promise. Start it inside the
     // chain so it has the same failure and pending-state lifetime as a worker.
@@ -1618,11 +1618,11 @@ export class GameEngine {
           catalogued: false,
         }))
         this.#starField = selectStars(
-          centre,
+          center,
           [known, fill],
           STAR_SPRITE_CEILING,
           {
-            origin: centre,
+            origin: center,
             apparentMagnitudeLimit: selection.apparentMagnitudeLimit,
             levelMask: selection.levelMask,
           },

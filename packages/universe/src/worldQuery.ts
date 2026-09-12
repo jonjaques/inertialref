@@ -217,11 +217,11 @@ export function findWorlds(
   stubs: readonly SystemStub[],
   query: WorldQuery,
   from: UniverseVector,
-  cancelled: () => boolean = () => false,
+  canceled: () => boolean = () => false,
 ): readonly WorldMatch[] {
   const out: WorldMatch[] = []
   for (const stub of stubs) {
-    if (cancelled()) return out
+    if (canceled()) return out
     /*
      * The star's class is checked before the system is built, which is where
      * the whole cost of this is: generating a system is milliseconds and

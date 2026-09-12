@@ -58,7 +58,7 @@ export const EMPTY_STAR_FIELD: StarField = {
  * order would leave missing sources subtracted from the haze.
  */
 export function selectStars(
-  centre: UniverseVector,
+  center: UniverseVector,
   selections: readonly (readonly StarCandidate[])[],
   ceiling: number = STAR_SPRITE_CEILING,
   resolved?: ResolvedPopulationSelection,
@@ -73,7 +73,7 @@ export function selectStars(
       // A missing V measurement cannot be replaced by bolometric luminosity.
       if (star.visualLuminosities === undefined) continue
       // The same finite point-source distance sets both rank and admission.
-      const meters = Math.max(UV.distance(star.position, centre), 1)
+      const meters = Math.max(UV.distance(star.position, center), 1)
       const flux = star.visualLuminosities / (meters * meters)
       const magnitude =
         GALAXY_SOLAR_V_MAGNITUDE -
@@ -128,7 +128,7 @@ export function selectStars(
     catalogued,
     positions,
     names,
-    colors: colors,
+    colors,
     luminosities,
     visualLuminosities,
     resolved,

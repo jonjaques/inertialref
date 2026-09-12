@@ -27,9 +27,9 @@ const direction = fc
   .filter((v) => Vec.length(v) > 0.1)
   .map((v) => Vec.normalize(v))
 
-const metres = fc.double({ min: -20, max: 20, noNaN: true })
+const meters = fc.double({ min: -20, max: 20, noNaN: true })
 const nozzleArb: fc.Arbitrary<Nozzle> = fc.record({
-  position: fc.tuple(metres, metres, metres).map(([x, y, z]) => vec3(x, y, z)),
+  position: fc.tuple(meters, meters, meters).map(([x, y, z]) => vec3(x, y, z)),
   exhaust: direction,
   radius: fc.double({ min: 0.05, max: 1, noNaN: true }),
   kind: fc.constantFrom('rcs', 'pod'),
@@ -67,14 +67,14 @@ describe('the wrench of one nozzle', () => {
   it('has no torque direction on the centre of mass, and less leverage near it (property)', () => {
     fc.assert(
       fc.property(direction, (exhaust) => {
-        const centred = nozzleWrench({
+        const centered = nozzleWrench({
           position: Vec.ZERO,
           exhaust,
           radius: 0.1,
           kind: 'rcs',
         })
-        expect(centred.torque).toEqual(Vec.ZERO)
-        expect(centred.leverage).toBe(0)
+        expect(centered.torque).toEqual(Vec.ZERO)
+        expect(centered.leverage).toBe(0)
         // Along its own exhaust line the lever is zero too, wherever it sits.
         const inline = nozzleWrench({
           position: Vec.scale(exhaust, 7),

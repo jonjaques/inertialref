@@ -43,8 +43,8 @@ export const SOLAR_TEMPERATURE: Kelvin = 5772
  * clamped rather than extrapolated: an unclamped B−V of 2.5 turns the
  * denominator negative and returns a *negative* temperature.
  */
-export function temperatureFromColorIndex(colourIndex: number): Kelvin {
-  const bv = Math.min(2.0, Math.max(-0.3, colourIndex))
+export function temperatureFromColorIndex(colorIndex: number): Kelvin {
+  const bv = Math.min(2.0, Math.max(-0.3, colorIndex))
   return 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62))
 }
 
@@ -189,10 +189,10 @@ export function temperatureFromSpectralType(type: SpectralType): Kelvin | null {
  */
 export function effectiveTemperature(
   type: SpectralType,
-  colourIndex: number | null,
+  colorIndex: number | null,
 ): Kelvin | null {
   const fromColor =
-    colourIndex === null ? null : temperatureFromColorIndex(colourIndex)
+    colorIndex === null ? null : temperatureFromColorIndex(colorIndex)
   const fromClass = temperatureFromSpectralType(type)
   if (isGiant(type) && fromColor !== null) return fromColor
   return fromClass ?? fromColor

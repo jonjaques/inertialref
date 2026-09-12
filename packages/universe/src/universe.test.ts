@@ -400,8 +400,8 @@ describe('cube-sphere terrain', () => {
     const direction = Vec.normalize(vec3(0.3, 0.8, -0.5))
     for (const level of [0, 3, 8]) {
       const region = regionForDirection(direction, level)
-      const centre = regionCenterDirection(region)
-      const angle = Math.acos(Math.min(1, Vec.dot(centre, direction)))
+      const center = regionCenterDirection(region)
+      const angle = Math.acos(Math.min(1, Vec.dot(center, direction)))
       // Within one region's angular half-width, plus slack for the cube warp.
       expect(angle).toBeLessThan((1.6 * (Math.PI / 2)) / 2 ** level)
     }

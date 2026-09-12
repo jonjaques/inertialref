@@ -419,14 +419,14 @@ async function textures() {
   )
   writeFileSync(
     join(root, TEXTURE_DIRECTORY, 'LICENSE.md'),
-    textureLicence(manifest.attribution),
+    textureLicense(manifest.attribution),
   )
   console.log(`
   ${manifest.textures.length} maps, ${(total / 1024 / 1024).toFixed(1)} MB
   written to ${TEXTURE_DIRECTORY}/`)
 }
 
-const textureLicence = (attribution: readonly string[]): string =>
+const textureLicense = (attribution: readonly string[]): string =>
   `# Planetary textures — license and attribution
 
 Surface maps for the Solar System, built by \`apps/ingest\` from published
@@ -502,14 +502,14 @@ async function shapes(refresh: boolean) {
   )
   writeFileSync(
     join(root, SHAPE_DIRECTORY, 'LICENSE.md'),
-    shapeLicence(manifest.attribution),
+    shapeLicense(manifest.attribution),
   )
   console.log(`
   ${manifest.shapes.length} shape models, ${(total / 1024).toFixed(0)} KB
   written to ${SHAPE_DIRECTORY}/`)
 }
 
-const shapeLicence = (attribution: readonly string[]): string =>
+const shapeLicense = (attribution: readonly string[]): string =>
   `# Shape models — provenance
 
 Measured figures of Solar System bodies, built by \`apps/ingest\` from models

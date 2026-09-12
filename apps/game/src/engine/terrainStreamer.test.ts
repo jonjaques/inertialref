@@ -514,7 +514,7 @@ describe('the terrain streamer', () => {
       bodyFixedFrameId(address),
       view.renderTime,
     )
-    const centre = session.world.frames.pose(
+    const center = session.world.frames.pose(
       bodyFrameId(address),
       view.renderTime,
     ).position
@@ -525,7 +525,7 @@ describe('the terrain streamer', () => {
     // streamer's two-second lead is 2,400 m ahead of the camera.
     const STEP = 20
     const LEAD = 2 * STEP * 60
-    const up = Vec.normalize(UV.difference(view.camera, centre))
+    const up = Vec.normalize(UV.difference(view.camera, center))
     const east = Vec.normalize(Vec.cross(up, vec3(1, 0, 0)))
     const cameraAt = (i: number): UniverseVector =>
       UV.translate(view.camera, Vec.scale(east, i * STEP))
@@ -615,11 +615,11 @@ describe('the terrain streamer', () => {
     const session = openSession({ seed: 'inertialref', workers: null })
     const view = groundView(session)
     const address = parseAddress(EARTH)
-    const centre = session.world.frames.pose(
+    const center = session.world.frames.pose(
       bodyFrameId(address),
       view.renderTime,
     ).position
-    const up = Vec.normalize(UV.difference(view.camera, centre))
+    const up = Vec.normalize(UV.difference(view.camera, center))
     const streamer = new TerrainStreamer(null)
     streamer.lensView = {
       lens: DEFAULT_LENS,

@@ -194,9 +194,9 @@ export const REFLECTANCE_CEILING = 0.88
 
 /** Physical reference reflectance, or the tint over a published albedo map. */
 function referenceReflectance(body: Body): LinearRgb {
-  const colour = surfaceColor(body.appearance)
-  if (body.appearance.texture !== null) return colour
-  const grey = luminance(colour)
+  const color = surfaceColor(body.appearance)
+  if (body.appearance.texture !== null) return color
+  const gray = luminance(color)
   // The hue is the colour's, normalized: a body whose swatch is warm grey stays
   // warm grey whatever its brightness turns out to be.
   /*
@@ -212,8 +212,8 @@ function referenceReflectance(body: Body): LinearRgb {
    * deposits above the brightest one this body can reach are truncated.
    */
   const gain =
-    grey > 0 ? Math.min(1, REFLECTANCE_CEILING / BRIGHTEST_RATIO / grey) : 0
-  return { r: colour.r * gain, g: colour.g * gain, b: colour.b * gain }
+    gray > 0 ? Math.min(1, REFLECTANCE_CEILING / BRIGHTEST_RATIO / gray) : 0
+  return { r: color.r * gain, g: color.g * gain, b: color.b * gain }
 }
 
 /** The largest multiple of the reference any reachable deposit takes. Bedrock. */
@@ -223,11 +223,11 @@ const luminance = (c: LinearRgb): number =>
   0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 
 /** A colour rescaled to luminance 1, or white where there is none. */
-function unitLuminance(colour: LinearRgb | undefined): LinearRgb {
-  if (colour === undefined) return { r: 1, g: 1, b: 1 }
-  const grey = luminance(colour)
-  if (!(grey > 0)) return { r: 1, g: 1, b: 1 }
-  return { r: colour.r / grey, g: colour.g / grey, b: colour.b / grey }
+function unitLuminance(color: LinearRgb | undefined): LinearRgb {
+  if (color === undefined) return { r: 1, g: 1, b: 1 }
+  const gray = luminance(color)
+  if (!(gray > 0)) return { r: 1, g: 1, b: 1 }
+  return { r: color.r / gray, g: color.g / gray, b: color.b / gray }
 }
 
 /**
@@ -472,11 +472,11 @@ export function terrainPalette(body: Body): TerrainPalette {
  * base colour is unusual come out wrong in a way nothing local explains.
  */
 function scale(base: LinearRgb, value: number, chroma: number): LinearRgb {
-  const grey = luminance(base)
+  const gray = luminance(base)
   return {
-    r: nonNegative((grey + (base.r - grey) * chroma) * value),
-    g: nonNegative((grey + (base.g - grey) * chroma) * value),
-    b: nonNegative((grey + (base.b - grey) * chroma) * value),
+    r: nonNegative((gray + (base.r - gray) * chroma) * value),
+    g: nonNegative((gray + (base.g - gray) * chroma) * value),
+    b: nonNegative((gray + (base.b - gray) * chroma) * value),
   }
 }
 

@@ -171,8 +171,8 @@ export function acceptsRow(
  * legibility the floor was buying is already there, and the hue is what was
  * being spent for it.
  */
-export function starColor(colour: TravelTarget['color']): string | null {
-  if (colour === null) return null
+export function starColor(color: TravelTarget['color']): string | null {
+  if (color === null) return null
   const channel = (linear: number): number => {
     const value = Math.min(1, Math.max(0, linear))
     const encoded =
@@ -181,7 +181,7 @@ export function starColor(colour: TravelTarget['color']): string | null {
         : 1.055 * Math.pow(value, 1 / 2.4) - 0.055
     return Math.round(encoded * 255)
   }
-  return `rgb(${channel(colour.r)} ${channel(colour.g)} ${channel(colour.b)})`
+  return `rgb(${channel(color.r)} ${channel(color.g)} ${channel(color.b)})`
 }
 
 /**

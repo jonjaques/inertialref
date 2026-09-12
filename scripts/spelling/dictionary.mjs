@@ -133,6 +133,7 @@ const GUARDED = new Map([
   ['organis', '(?=e|ing|ation|able)'],
   ['optimis', '(?=e|ing|ation|able)'],
   ['characteris', '(?=e|ing|ation|able)'],
+  ['polaris', '(?=e|ing|ation|able)'],
 ])
 
 function pattern(from) {

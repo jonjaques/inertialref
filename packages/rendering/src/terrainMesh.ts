@@ -511,10 +511,10 @@ function writeNormal(
   let nz = dux * dvy - duy * dvx
   const length = Math.hypot(nx, ny, nz)
 
-  const centre = here * 3
-  const rx = anchor.x + (extended[centre] as number)
-  const ry = anchor.y + (extended[centre + 1] as number)
-  const rz = anchor.z + (extended[centre + 2] as number)
+  const center = here * 3
+  const rx = anchor.x + (extended[center] as number)
+  const ry = anchor.y + (extended[center + 1] as number)
+  const rz = anchor.z + (extended[center + 2] as number)
 
   if (length === 0) {
     // Degenerate only where the field is exactly flat over five samples, and

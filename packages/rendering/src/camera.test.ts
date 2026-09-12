@@ -58,8 +58,8 @@ const direction = fc
 const rotation = fc
   .tuple(direction, fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }))
   .map(([axis, angle]) => Q.fromAxisAngle(axis, angle))
-const metres = fc.double({ min: -1e5, max: 1e5, noNaN: true })
-const point = fc.tuple(metres, metres, metres).map(([x, y, z]) => vec3(x, y, z))
+const meters = fc.double({ min: -1e5, max: 1e5, noNaN: true })
+const point = fc.tuple(meters, meters, meters).map(([x, y, z]) => vec3(x, y, z))
 const orbit = fc.record({
   azimuth: fc.double({ min: -10, max: 10, noNaN: true }),
   elevation: fc.double({ min: -1.5, max: 1.5, noNaN: true }),
@@ -227,7 +227,7 @@ describe('the flight camera pose', () => {
   it('turns the head from either view without moving the eye', () => {
     const scene = sceneWith(vec3(10, 20, 30), Q.IDENTITY)
     for (const view of ['chase', 'orbit'] as const) {
-      const centred = flightCameraPose(
+      const centered = flightCameraPose(
         scene,
         { ...DEFAULT_FLIGHT_CAMERA, view },
         46,
@@ -237,9 +237,9 @@ describe('the flight camera pose', () => {
         { ...DEFAULT_FLIGHT_CAMERA, view, look: { yaw: 0.5, pitch: 0.2 } },
         46,
       )
-      expect(turned.position).toEqual(centred.position)
+      expect(turned.position).toEqual(centered.position)
       expect(
-        Vec.dot(forwardOf(turned.orientation), forwardOf(centred.orientation)),
+        Vec.dot(forwardOf(turned.orientation), forwardOf(centered.orientation)),
       ).toBeLessThan(0.99)
     }
   })

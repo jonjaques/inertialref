@@ -1129,13 +1129,13 @@ export class World implements FlightWorld {
    * boundary. Systems containing an entity are never unloaded.
    */
   updateInterest(
-    centre: UniverseVector,
+    center: UniverseVector,
     radius: Meters = 6 * LIGHT_YEAR,
   ): {
     loaded: readonly SystemId[]
     unloaded: readonly SystemId[]
   } {
-    const wanted = systemsWithin(this.galaxySeed, this.catalog, centre, radius)
+    const wanted = systemsWithin(this.galaxySeed, this.catalog, center, radius)
     const loaded: SystemId[] = []
     for (const stub of wanted) {
       if (!this.#systems.has(stub.id)) {
@@ -1154,7 +1154,7 @@ export class World implements FlightWorld {
     const unloaded: SystemId[] = []
     for (const system of [...this.#systems.values()]) {
       if (occupied.has(systemFrameId(system.id))) continue
-      if (UV.distance(system.position, centre) > radius * 1.25) {
+      if (UV.distance(system.position, center) > radius * 1.25) {
         this.unloadSystem(system.id)
         unloaded.push(system.id)
       }

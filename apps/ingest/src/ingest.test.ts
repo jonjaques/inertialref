@@ -92,7 +92,7 @@ describe('the vendored catalog', () => {
    * whole point of shipping real data. The tolerance is 0.05 ly — the spread
    * between the Hipparcos parallaxes HYG carries and the modern Gaia ones.
    */
-  const NEIGHBOURS: readonly [string, string, number][] = [
+  const NEIGHBORS: readonly [string, string, number][] = [
     ['HIP70890', 'Proxima Centauri', 4.25],
     ['HIP71683', 'Alpha Centauri', 4.32],
     ['HIP87937', "Barnard's Star", 5.95],
@@ -103,7 +103,7 @@ describe('the vendored catalog', () => {
     ['HIP8102', 'Tau Ceti', 11.91],
   ]
 
-  it.each(NEIGHBOURS)(
+  it.each(NEIGHBORS)(
     'has %s as %s at the published distance',
     (id, name, lightYears) => {
       const star = catalog().get(id as never)

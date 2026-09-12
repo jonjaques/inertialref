@@ -680,8 +680,8 @@ export async function buildShapes({
     onProgress(
       `  ${source.name.padEnd(18)} ${sourceDetail.padEnd(20)} → ${width}×${height}  ` +
         `${String((bytes.length / 1024).toFixed(0)).padStart(4)} KB  ` +
-        `r̄ ${formatMetres(extent.meanRadius).padStart(9)}  ` +
-        `axes ${extent.semiAxes.map((a) => formatMetres(a)).join(' × ')}  ` +
+        `r̄ ${formatMeters(extent.meanRadius).padStart(9)}  ` +
+        `axes ${extent.semiAxes.map((a) => formatMeters(a)).join(' × ')}  ` +
         `vol ${(volumeRatio * 100).toFixed(1)}%`,
     )
   }
@@ -693,7 +693,7 @@ export async function buildShapes({
   }
 }
 
-const formatMetres = (metres: number): string =>
-  metres >= 1_000
-    ? `${(metres / 1_000).toFixed(1)} km`
-    : `${metres.toFixed(0)} m`
+const formatMeters = (meters: number): string =>
+  meters >= 1_000
+    ? `${(meters / 1_000).toFixed(1)} km`
+    : `${meters.toFixed(0)} m`

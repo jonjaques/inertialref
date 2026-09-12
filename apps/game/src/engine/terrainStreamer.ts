@@ -1094,7 +1094,7 @@ export class TerrainStreamer {
   #reselect(
     surface: Body,
     spinPose: FramePose,
-    centre: UniverseVector,
+    center: UniverseVector,
     eyeLocal: Vec3,
     renderTime: Seconds,
     elapsed: Seconds,
@@ -1167,7 +1167,7 @@ export class TerrainStreamer {
       this.#lookAhead(
         surface,
         spinPose,
-        centre,
+        center,
         eyeLocal,
         renderTime,
         elapsed,
@@ -1280,13 +1280,13 @@ export class TerrainStreamer {
   #eye(
     body: Body,
     spinPose: FramePose,
-    centre: UniverseVector,
+    center: UniverseVector,
     camera: UniverseVector,
   ) {
     return {
       radius: body.radius,
       relief: body.surface.maxElevation,
-      distance: UV.distance(camera, centre),
+      distance: UV.distance(camera, center),
       // `bodyFixedDirection` is the only producer of the branded direction the
       // terrain functions accept, so this cannot drift back to an inertial
       // sample the way it once did.
@@ -1320,7 +1320,7 @@ export class TerrainStreamer {
   #lookAhead(
     body: Body,
     spinPose: FramePose,
-    centre: UniverseVector,
+    center: UniverseVector,
     eyeLocal: Vec3,
     time: Seconds,
     elapsed: Seconds,
@@ -1336,7 +1336,7 @@ export class TerrainStreamer {
       spinPose,
       Vec.add(eyeLocal, Vec.scale(drift, PREFETCH_SECONDS / step)),
     )
-    return this.#eye(body, spinPose, centre, ahead)
+    return this.#eye(body, spinPose, center, ahead)
   }
 
   /**

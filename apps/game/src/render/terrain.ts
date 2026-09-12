@@ -138,7 +138,7 @@ export interface TerrainMaterial {
  * steps; three octaves down from four kilometers stops an order of magnitude
  * short of that.
  */
-const MACRO_METRES = 4000
+const MACRO_METERS = 4000
 
 /**
  * And of the middle octave, evaluated on the patch-local position instead.
@@ -151,7 +151,7 @@ const MACRO_METRES = 4000
  * at any distance where the boundary itself is a visible line the detail on
  * both sides of it is already gone.
  */
-const MICRO_METRES = 7
+const MICRO_METERS = 7
 
 /** Peak-to-peak relief of the micro octave, meters. Half the canonical floor. */
 const MICRO_RELIEF = 0.25
@@ -501,10 +501,10 @@ export function createTerrainMaterial(): TerrainMaterial {
     const footprint = length(toEye).mul(pixelAngle).div(squareOn)
 
     const macroFade = oneMinus(
-      smoothstep(float(MACRO_METRES * 0.25), float(MACRO_METRES), footprint),
+      smoothstep(float(MACRO_METERS * 0.25), float(MACRO_METERS), footprint),
     )
     const microFade = oneMinus(
-      smoothstep(float(MICRO_METRES * 0.4), float(MICRO_METRES * 2), footprint),
+      smoothstep(float(MICRO_METERS * 0.4), float(MICRO_METERS * 2), footprint),
     )
 
     /*
@@ -538,11 +538,11 @@ export function createTerrainMaterial(): TerrainMaterial {
     If(detailBands.greaterThan(1.5).and(microFade.greaterThan(0)), () => {
       const field = fbmFetch(
         noise,
-        asVector(local.mul(float(1 / MICRO_METRES))),
+        asVector(local.mul(float(1 / MICRO_METERS))),
         1,
       )
       micro.assign(
-        vec4(field.x, field.yzw.mul(float(1 / MICRO_METRES))).mul(microFade),
+        vec4(field.x, field.yzw.mul(float(1 / MICRO_METERS))).mul(microFade),
       )
     })
     const detail = macro.x.mul(0.6).add(micro.x.mul(0.4))
@@ -1089,7 +1089,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   return {
     material,
     sunDirection,
-    sunColor: sunColor,
+    sunColor,
     sunIntensity,
     albedoScale,
     setPixelAngle(radians) {
@@ -1130,7 +1130,7 @@ export function createTerrainMaterial(): TerrainMaterial {
        * serve a 236 km moon and a 6,371 km planet: four kilometers of ground is
        * four kilometers of ground on both.
        */
-      macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
+      macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METERS
     },
     setQuality(ground) {
       const bands = groundBandsFor(ground)

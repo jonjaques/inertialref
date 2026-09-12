@@ -37,7 +37,7 @@ const DAY = SECONDS_PER_DAY
  * `1.5 p`, on a hue normalized to carry color and nothing else. The same
  * mapping `smallBodies.ts` uses, and the reasoning is in its header.
  */
-const surfaceColour = (albedo: number, hue: LinearRgb): LinearRgb => {
+const surfaceColor = (albedo: number, hue: LinearRgb): LinearRgb => {
   const peak = Math.max(hue.r, hue.g, hue.b, 1e-6)
   const reflectance = Math.min(1, 1.5 * albedo)
   return {
@@ -87,7 +87,7 @@ const minorMoon = (
     geometricAlbedo: albedo,
     temperature: 80,
     texture: null,
-    tint: surfaceColour(albedo, hue),
+    tint: surfaceColor(albedo, hue),
     // The figure is the relief; see `smallBodies.ts`.
     relief: 0,
     roughness: 0.95,

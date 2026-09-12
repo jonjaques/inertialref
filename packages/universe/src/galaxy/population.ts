@@ -177,7 +177,7 @@ export function unresolvedPopulationFraction(
   )
 }
 
-const POPULATION_COLOURS = Object.fromEntries(
+const POPULATION_COLORS = Object.fromEntries(
   POPULATION_NAMES.map((name) => [
     name,
     blackbodyColor(GALAXY_POPULATIONS[name].temperature),
@@ -199,7 +199,7 @@ export function partitionGalaxyEmission(
       selection.apparentMagnitudeLimit,
       selection.levelMask,
     )
-    const color = POPULATION_COLOURS[name]
+    const color = POPULATION_COLORS[name]
     const light =
       (sample.populations[name] *
         GALAXY_POPULATIONS[name].meanSolarLuminosities *
@@ -597,17 +597,17 @@ export interface PopulationSkySelection extends ResolvedPopulationSelection {
 }
 
 export function populationCellsWithin(
-  centre: UniverseVector,
+  center: UniverseVector,
   radius: number,
   level: number,
   ceiling = 200000,
 ): readonly GalacticCell[] {
   const lo = populationCellOf(
-    UV.translate(centre, vec3(-radius, -radius, -radius)),
+    UV.translate(center, vec3(-radius, -radius, -radius)),
     level,
   )
   const hi = populationCellOf(
-    UV.translate(centre, vec3(radius, radius, radius)),
+    UV.translate(center, vec3(radius, radius, radius)),
     level,
   )
   const count = (hi.x - lo.x + 1) * (hi.y - lo.y + 1) * (hi.z - lo.z + 1)
