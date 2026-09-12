@@ -7,6 +7,7 @@ import { BootLedger } from '../hud/BootLedger.tsx'
 import { BootNav } from '../hud/BootNav.tsx'
 import { PRELUDE } from '../render/bootState.ts'
 import { HomePage } from './HomePage.tsx'
+import { LoadedMode } from './LoadedMode.tsx'
 import { modeLoaders, preloadMode } from './modeLoader.ts'
 import { useRuntimeFailure } from '../runtimeFailure.ts'
 import {
@@ -18,9 +19,6 @@ import {
   resolvedLocation,
 } from './paths.ts'
 
-const CinemaMode = lazy(modeLoaders.cinema)
-const FlightMode = lazy(modeLoaders.flight)
-const PlanetariumMode = lazy(modeLoaders.planetarium)
 const CatalogPage = lazy(() =>
   import('../planetarium/CatalogPage.tsx').then((module) => ({
     default: module.CatalogPage,
@@ -174,10 +172,13 @@ export function ModeRoutes(props: ModeRouteProps) {
             admission
           ) : (
             <Suspense fallback={loading}>
-              <FlightMode
-                engine={props.engine}
-                dev={props.dev}
-                onNotice={props.onNotice}
+              <LoadedMode
+                load={modeLoaders.flight}
+                props={{
+                  engine: props.engine,
+                  dev: props.dev,
+                  onNotice: props.onNotice,
+                }}
               />
             </Suspense>
           )
@@ -190,7 +191,10 @@ export function ModeRoutes(props: ModeRouteProps) {
             admission
           ) : (
             <Suspense fallback={loading}>
-              <PlanetariumMode engine={props.engine} dev={props.dev} />
+              <LoadedMode
+                load={modeLoaders.planetarium}
+                props={{ engine: props.engine, dev: props.dev }}
+              />
             </Suspense>
           )
         }
@@ -227,7 +231,10 @@ export function ModeRoutes(props: ModeRouteProps) {
             admission
           ) : (
             <Suspense fallback={loading}>
-              <CinemaMode engine={props.engine} dev={props.dev} />
+              <LoadedMode
+                load={modeLoaders.cinema}
+                props={{ engine: props.engine, dev: props.dev }}
+              />
             </Suspense>
           )
         }
@@ -239,7 +246,10 @@ export function ModeRoutes(props: ModeRouteProps) {
             admission
           ) : (
             <Suspense fallback={loading}>
-              <CinemaMode engine={props.engine} dev={props.dev} />
+              <LoadedMode
+                load={modeLoaders.cinema}
+                props={{ engine: props.engine, dev: props.dev }}
+              />
             </Suspense>
           )
         }
