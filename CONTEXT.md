@@ -9416,6 +9416,49 @@ shows `loading the runtime ✓ / waking the renderer ✓ / warming surface maps
 14/71`, and the cover's Home link back lands on the poster with the same
 count in its footer.
 
+## `React.lazy` suspends once for a chunk that has landed, and the guard that met the routine reload (11 Sep 2026)
+
+Two findings from the same afternoon, both about a beat nobody had asked for.
+
+**The flash between the front door and the planetarium was the ship's
+camera, and it was `lazy`'s.** Booted front door, hover, click Planetarium:
+a frame or two of Earth from the chase camera — the cinema library's
+backdrop, which is the same default view — before the planetarium's chrome.
+Sampled per frame under the driver with the chunk not preloaded, the click
+was followed by 17 frames (about 250 ms) with no observatory target and no
+navigator, then both at once. The chunk fetch is the length; the cause is
+that `React.lazy` learns a module has landed only from its own `.then`, a
+microtask after the first render asks, so even a chunk fetched a minute ago
+suspends once — and with `useTransitions={false}` on the router (its own
+entry above, 8 Sep 2026) a suspended route commits its fallback at once,
+which unmounts the mode leaving and releases its stance a frame before the
+mode arriving exists. Prefetching alone shortened the beat to that one
+frame; it did not remove it. `pages/modeLoader.ts` now marks the shared
+promise with `status` and `value` the way `React.use` reads a thenable, and
+`pages/LoadedMode.tsx` renders the mode through `use`: a landed chunk
+renders in the same pass as the navigation, and the stance hand-off happens
+inside one passive phase, where React runs the unmount cleanup and the
+mount effect back to back with no paint between. Thirty frames sampled
+after the click, preloaded and not: the observatory holds its target and
+the navigator is up on every one. The transition flag stays off, for the
+reason recorded.
+
+**The graphics-session guard counts strikes now, and forgives one.** The
+marker in session storage that stops a replacement document from repeating
+GPU startup after a tab crash was a flag: any document that ended without
+`pagehide` refused the next one until "Try graphics again". Three things
+end without `pagehide` on this machine every day — a tab Chrome discards
+under memory pressure, a hung page reloaded from the "unresponsive" bar,
+and the driver's Chrome closed by `--down`, whose profile restores the tab
+and its session storage — so the notice met the routine reload, and the
+rig refused its own second launch with nothing on its side saying why.
+`graphicsSession.ts` writes the count of consecutive unclean ends, blocks
+on the second, and resets the count once a session has run for a minute:
+a document that drew for that long and then vanished was not a crash on
+boot. The driver clears session storage along with local storage on every
+boot, so the rig's strikes never accumulate. ADR-0039's paragraph on the
+marker describes the count.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
