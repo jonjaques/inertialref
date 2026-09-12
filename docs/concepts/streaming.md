@@ -290,7 +290,7 @@ rather than one: a job still in flight for the world just discarded names the
 _same_ key the new body's roots do, so it filters the nearest-first head of the
 new request list out until it lands, and the ground arrives a heightfield's
 latency late on every retarget. `clear()` drops the whole in-flight set, and
-cancels it — dropping the key discards only the answer, while cancelling reaches
+cancels it — dropping the key discards only the answer, while canceling reaches
 the majority still sitting in the pool's queue, where the work never happens at
 all ([workers](workers.md#cancellation)).
 
@@ -378,7 +378,7 @@ regions, regions still resolving, rocks drawn, and the range they are drawn to
 `TerrainState` is the whole interface, and it carries more than the meshes.
 Beside `patches` it states the body's `palette` — the deposit reflectances,
 roughnesses and grains [ADR-0020](../adr/0020-the-face.md) derives from the
-body's own facts — its `orientation` and `centre` in render space, the
+body's own facts — its `orientation` and `center` in render space, the
 `datumRadius` the vertices were measured from, and the `lens` the selection was
 made against. `apps/game/src/scene/TerrainPatches.tsx` writes all five into the
 material's uniforms.

@@ -96,7 +96,7 @@ was fitted to.
 
 **What is still authored is the skim**, f2131–2379, and deliberately. Its beats
 are a camera-clearance solution rather than a trajectory — a straight line
-fitted to them wants to pass 33 m from the hull's centre — so the hull's nose
+fitted to them wants to pass 33 m from the hull's center — so the hull's nose
 still sits a mean 89° off its own path there, on the one stretch the reference
 cannot arbitrate.
 
@@ -105,7 +105,7 @@ cannot arbitrate.
 The credit sequence wants to be **one straight rail with a camera that tilts**:
 the ship descends toward the lens, passes overhead, and the camera pitches up to
 watch it go to warp. That is what the reference is, it would fold the skim and
-both of its neighbours into a single pass, and it is the only staging that makes
+both of its neighbors into a single pass, and it is the only staging that makes
 the skim physical. The reason it is not done is the locked-camera constraint:
 the pan can only begin at f2032, because Wheaton's credit is the last text on
 screen and nothing may move before it clears. Whether 350 frames is enough to
@@ -210,7 +210,7 @@ and #72 and #74 are changes to how everything is lit.
 
 1. **The hull is too dark, and it is not a staging problem.** Through the whole
    cruise the reference's ship carries bright red Bussards, a blazing blue
-   deflector and lit window rows; ours is a grey disc. That is what
+   deflector and lit window rows; ours is a gray disc. That is what
    `cruise-close`'s dw −0.262 is made of: the subject channel scores the largest
    _lit_ mass, and at 311 m our lit mass is 0.585 of the frame where the
    reference's is clipped at 1.000, on a hull whose geometric silhouette

@@ -293,7 +293,7 @@ reference: the WebGPU frame is the one the target applies to.
     about 20 km of ground, at full strength for any footprint under a
     kilometer a pixel — sixteen identical tiles across a frame at 200 m/px —
     and the bake evaluates it unfaded at 20 km a texel. Beside it, the
-    "four kilometers" `MACRO_METRES` names is 637 m in practice, a 2π the
+    "four kilometers" `MACRO_METERS` names is 637 m in practice, a 2π the
     period arithmetic never divided out. Either that one band goes back to
     an aperiodic evaluation, or the period is fixed at a real 4 km cell and
     the bake's detail bands are set flat; both change the look, so a plate

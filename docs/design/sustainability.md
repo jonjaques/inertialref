@@ -20,7 +20,7 @@ awkward for anyone who read carefully. That is now fixed.
 
 | What                               | License                 | Why                                                                                                                                                  |
 | ---------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/*` — the simulation core | **Apache-2.0**          | Permissive maximises adoption, and the engine identity is an asset for a project that wants contributors. The explicit patent grant is worth having. |
+| `packages/*` — the simulation core | **Apache-2.0**          | Permissive maximizes adoption, and the engine identity is an asset for a project that wants contributors. The explicit patent grant is worth having. |
 | `apps/*` — the game client         | **Apache-2.0**          | Same tree, same terms; splitting licenses within one repository creates confusion for no benefit here                                                |
 | Ingested catalog data              | **Inherits its source** | Non-negotiable — see below                                                                                                                           |
 | Authored art and audio             | **CC BY-SA 4.0**        | Standard for game assets; keeps derivative asset work open                                                                                           |

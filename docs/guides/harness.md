@@ -355,7 +355,7 @@ behind the hull; `ir.view()` cycles. `ir.flightCamera` is the camera itself:
 ir.flightCamera.drag(dx, dy) // orbit, or turn the head in the chase
 ir.flightCamera.turn(dx, dy) // turn the head in either view
 ir.flightCamera.zoom(factor) // dolly the orbit; above 1 retreats
-ir.flightCamera.recentre() // look where the view aims again
+ir.flightCamera.recenter() // look where the view aims again
 ```
 
 The orbit is measured in hull lengths about the ship in the world's own axes,

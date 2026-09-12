@@ -1232,7 +1232,7 @@ rounding it bounds is zero.
 === x`. A round metric radius on a cardinal axis almost always is. An arming
 fixture is one off-axis Earth anchor: `x = y = z = 6371000/√3 = 3678298.565…`
 gives `anchorAltitude` **−0.1126 m** with the fround and **9.3e-10** without,
-and moves the grain origin by 0.065 m — a tenth of `GRAIN_METRES`.
+and moves the grain origin by 0.065 m — a tenth of `GRAIN_METERS`.
 
 Same file, same class: line 90's `expect(wear.anchorAltitude).toBe(hypot(ax,ay,az)
 

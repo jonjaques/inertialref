@@ -159,7 +159,7 @@ Use American spelling and usage: _color_, _center_, _meter_, _license_,
 _behavior_, _catalog_, _modeling_, _traveling_, _artifact_, _toward_.
 
 Do not rename files or identifiers in this pass just to match. `catalogue.md`
-and `cancelled()` stay until a dedicated rename. Prose follows American English;
+and `canceled()` stay until a dedicated rename. Prose follows American English;
 code follows the identifier that exists.
 
 Quoted third-party legal text keeps its original spelling.

@@ -252,7 +252,7 @@ ir.shots() // the sixteen, with what each one is
 ir.preset('earthrise') // a PICTURE: address + framing + lens, the same frame every time
 ir.presets() // the seven, with what each one is
 ir.rise() // stand with the parent over the horizon; returns the fov it solved
-ir.aim(yawDeg, pitchDeg) // turn the head without moving the camera. (0,0) recentres
+ir.aim(yawDeg, pitchDeg) // turn the head without moving the camera. (0,0) recenters
 ir.sites(address) // the named places on a body: summit basin shore rough corner pole
 ir.visit(address, { site: 'summit', height: 2 }) // stand there; moves only a CAMERA
 ir.ascend() // back to the framing the visit left
@@ -339,7 +339,7 @@ handles the first three — they are here because they explain what it is doing.
     no `Input.dispatchKeyEvent`. Reach a keyboard affordance through the preference it
     toggles or the harness verb behind it — never by faking the event and believing the
     silence.
-11. **`--shot` cannot carry a colour space.** `Page.captureScreenshot` writes an 8-bit PNG
+11. **`--shot` cannot carry a color space.** `Page.captureScreenshot` writes an 8-bit PNG
     with no `iCCP`, `cHRM`, `sRGB` or `cICP` chunk, so every viewer reads it as sRGB and an
     extended-range frame arrives already converted with nothing in the file saying so.
     `--force-color-profile=display-p3` does not fix it and costs the extended path outright:
@@ -357,7 +357,7 @@ transparent black: the renderer is WebGPU and the swap-chain texture is invalida
 the end of the task that drew it, which is why the driver uses `Page.captureScreenshot`.
 That composited image is also the only one carrying the DOM HUD. Inside the animation
 frame the canvas still holds its image, so `drawImage` into a 2D context reads it — the
-one route out that carries a colour profile, and the one that leaves the HUD behind.
+one route out that carries a color profile, and the one that leaves the HUD behind.
 
 ## The author's instruments
 
@@ -416,7 +416,7 @@ DOM rather than the rendered text, or scroll the container first.
 
 ## The cutscene reference
 
-`ir.play('tng-intro')` is timed against a frame-analysed reference edit outside this
+`ir.play('tng-intro')` is timed against a frame-analyzed reference edit outside this
 repository at `~/Developer/tng-inertial` — compare a seek against
 `data/frames/%05d.jpg`. Read the `corrections` block in `analysis/timeline.json` before
 trusting that file's prose: **its measured timings held, its motion narrative did not.**

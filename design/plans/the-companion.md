@@ -246,7 +246,7 @@ catalog panel's own — 5, 10, 25, 50 ly — and the default is 10. Generation
 runs where the data is, in a `universe.findWorlds` task on the existing pool:
 it takes the query and a list of stubs, generates each system, matches, and
 returns only the matching bodies with the fields the reply needs. The task is
-cancellable through `TaskContext.cancelled` and a second question cancels the
+cancellable through `TaskContext.canceled` and a second question cancels the
 first. `surveySystemTask` is left at version 2; it answers a different question
 and its response carries neither `seaLevel` nor a temperature.
 
@@ -321,7 +321,7 @@ irrelevant to any canonical state.
 **The runner is a presentation object driven by the frame.** `TourRunner`
 advances with the same `dt` the observatory's `sample(dt)` takes, so it eases
 while paused the way a fly-to does. At each stop it calls the framing verb,
-waits until `status().travelling` is false, starts the dwell, and moves on when
+waits until `status().traveling` is false, starts the dwell, and moves on when
 both the dwell and the stop's narration have ended — the narration's end is a
 signal the transport raises, and the voice later raises the same signal when it
 falls silent; on arrival it raises `stopReached`, and the transport answers with
@@ -495,8 +495,8 @@ ships:
 
 If the frame budget fails there is no clever fix on this side of ONNX Runtime:
 the options are a smaller model, a lower ceiling on tokens, or not decoding
-while a fly-to is easing — the runner knows when it is travelling, and a pass
-can wait for `travelling === false`, which is also when there is something to
+while a fly-to is easing — the runner knows when it is traveling, and a pass
+can wait for `traveling === false`, which is also when there is something to
 describe.
 
 **Where the bytes come from is § 7.** In production, R2 on its own host; in
@@ -602,7 +602,7 @@ exactly those.
 
 Cancel aborts the session through its `AbortSignal`, which stops the fetches in
 flight. The runtime writes a file to the cache only when it is complete, so a
-cancelled download leaves whole files and no partial ones, and pressing Download
+canceled download leaves whole files and no partial ones, and pressing Download
 again resumes at the first file that is missing. Failures are rows in the same
 dialog, never toasts: quota (`QuotaExceededError` — the storage line, and what
 would have to be freed), network (the file it stopped at, and a retry), and a

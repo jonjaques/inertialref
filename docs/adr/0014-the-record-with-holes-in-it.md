@@ -61,7 +61,7 @@ saying _no data_ is a specification for the survey that will fill it.
 [art](../design/art.md) puts composition-adjacent facts on the list of things a
 player can check against a catalog, and inventing one is the failure mode the
 whole `observed` / `projected` split exists to prevent. A projection is
-labelled; a fabrication is not a projection.
+labeled; a fabrication is not a projection.
 
 **Say "not implemented".** This is the one that took a deliberate decision
 rather than a shrug, because it is _true_ and it is what an engineer writes

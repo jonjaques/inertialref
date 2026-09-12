@@ -229,7 +229,7 @@ question is about.
 | Pipeline build, median of 6, cache defeated | **1.00 ms**         | **0.90 ms**                    |
 
 The 15% threshold the spike set for "take TSL and stop thinking about it" was met
-by a factor of ten. Chrome's timestamp results are quantised to ~65.5 µs on this
+by a factor of ten. Chrome's timestamp results are quantized to ~65.5 µs on this
 machine, so the orbit case is at the resolution floor — the two are
 indistinguishable there rather than merely close.
 
@@ -334,7 +334,7 @@ sentinel and must be dropped, not clamped).
 
 | Bytes | Field                          | Note                                                              |
 | ----- | ------------------------------ | ----------------------------------------------------------------- |
-| 0–8   | position, 3 × int24            | galactic cartesian, quantised against the chunk extent            |
+| 0–8   | position, 3 × int24            | galactic cartesian, quantized against the chunk extent            |
 | 9     | spectral class                 | class × subclass × giant flag, one byte                           |
 | 10–11 | absolute magnitude, int16 ×100 | luminosity is `10^((4.85 − M)/2.5)` — **do not store it as well** |
 | 12–13 | color index B−V, int16 ×1000   | `-32768` is "unknown"; drives the render color                    |
@@ -343,8 +343,8 @@ sentinel and must be dropped, not clamped).
 
 Plus an 8-byte identity row per star (HYG id + HIP) and a designation table for
 the stars that have one. Position resolution at 150 ly is **1.13 AU per step**,
-worst observed quantisation error **0.94 AU** — four orders of magnitude below the
-parallax uncertainty at that distance, so the quantiser is free.
+worst observed quantization error **0.94 AU** — four orders of magnitude below the
+parallax uncertainty at that distance, so the quantizer is free.
 
 ### What came back
 
@@ -390,7 +390,7 @@ around 420 KB. That is not a conversation, it is a rounding error against the
 
 ### Chunking, for when it does become streamed
 
-Cell-local coordinates (rebasing to the cell origin before quantisation — the
+Cell-local coordinates (rebasing to the cell origin before quantization — the
 first attempt did not, clamped every value, and produced a _negative_ chunking
 penalty, which is what a bug looks like):
 
@@ -646,7 +646,7 @@ source; none of it is a device test. Outstanding:
 - Do real devices put buttons above usage 32 in practice? (Virpil and VKB
   throttles are the suspects.)
 - End-to-end latency versus the same device natively.
-- Is there visible quantisation in a slow roll?
+- Is there visible quantization in a slow roll?
 - What does the chooser actually cost a player who has never seen one?
 
 **Run this on hardware before the promise goes in a README.** The software half

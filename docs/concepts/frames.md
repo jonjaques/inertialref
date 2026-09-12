@@ -233,8 +233,8 @@ Two bugs came from violating it:
    rounded, and the ground elevation was passed in by the caller. A restored
    landing site sat half a meter — then 21 mm — from the original.
 
-Both are fixed by the same principle: quantise the angles, derive the elevation
-from the quantised direction, and let the entity's local position absorb the
+Both are fixed by the same principle: quantize the angles, derive the elevation
+from the quantized direction, and let the entity's local position absorb the
 residual.
 
 The formatter and the parser now sit in the same module —

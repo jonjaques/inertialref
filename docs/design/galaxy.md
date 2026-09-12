@@ -304,7 +304,7 @@ scheduled advance.
 
 ### What real data buys
 
-Worth stating plainly, because it is easy to assume real data is merely flavour.
+Worth stating plainly, because it is easy to assume real data is merely flavor.
 
 - **Systems are unequal, truthfully.** Sol has 129 modeled bodies — eight
   planets, nine dwarf planets, fifty asteroids and comets, sixty-two moons
@@ -523,7 +523,7 @@ The record layout, because it is the whole answer:
 
 | Bytes | Field                          | Note                                                                                        |
 | ----- | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| 0–8   | position, 3 × int24            | 1.13 AU per step at 150 ly — four orders below the parallax error, so the quantiser is free |
+| 0–8   | position, 3 × int24            | 1.13 AU per step at 150 ly — four orders below the parallax error, so the quantizer is free |
 | 9     | spectral class                 | class × subclass × giant flag                                                               |
 | 10–11 | absolute magnitude, int16 ×100 | luminosity is `10^((4.85 − M)/2.5)`; **storing both is storing it twice**                   |
 | 12–13 | color index B−V, int16 ×1000   | `-32768` for unknown                                                                        |

@@ -76,7 +76,7 @@ sheet, and the four small bodies the one or two rings their occultations found.
 is a mapless ringed body in Sol, and every such body has a key — because a
 key-set test that only checked one direction could not see a swap.
 
-**`ω₀` is 0.9, and the darkening lives in the strip.** The strip's colour
+**`ω₀` is 0.9, and the darkening lives in the strip.** The strip's color
 multiplies the single-scattering albedo, so at 0.6 the albedo was in the
 product twice and the lit face of a τ 1 sheet sat at a sixth of its planet.
 Clean water ice in the visible is 0.9; the product is then the 0.5 to 0.6
@@ -141,7 +141,7 @@ generator computes and the shader spends. That is the shape this takes if the
 record ever carries a real annulus mean.
 
 **Untinting the rings.** They are already untinted: a mapless strip carries its
-own colour and `Bodies.tsx` gives it white. Dyeing it with the body's colour is
+own color and `Bodies.tsx` gives it white. Dyeing it with the body's color is
 how Uranus's charcoal threads came out cyan once. Only a photographed strip
 takes the tint.
 

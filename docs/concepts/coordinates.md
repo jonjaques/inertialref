@@ -149,7 +149,7 @@ flowchart LR
 
 - **`translate`** — move by a displacement. Exact carry, as above.
 - **`difference`** — subtract two positions into a plain `Vec3` in meters. Valid
-  at any separation: a galaxy-crossing difference quantises to ~1e5 m, while the
+  at any separation: a galaxy-crossing difference quantizes to ~1e5 m, while the
   near-field differences that feed physics and rendering keep full double
   precision.
 - **`distance`** — the magnitude of that.

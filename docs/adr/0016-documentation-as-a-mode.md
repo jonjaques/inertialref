@@ -72,7 +72,7 @@ renderer in the application it would be published beside. It also splits the
 URL surface in two, which ADR-0011 spent its whole argument on.
 
 **TypeDoc's HTML with a custom theme, embedded.** The shortest road to a
-reference that is nearly the right colour, and the one that produces two sites
+reference that is nearly the right color, and the one that produces two sites
 wearing one palette: separate navigation, separate search, separate shell, and
 links that leave the router. Rejected on structure rather than on looks.
 

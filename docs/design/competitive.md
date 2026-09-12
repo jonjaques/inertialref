@@ -54,7 +54,7 @@ than a 120 GB install. And a defined, shippable MVP.
 
 **The lesson.** Star Citizen's scope has no floor, and it is the clearest
 cautionary example available of what happens when a design document contains no
-prioritisation. Every milestone in [production](production.md) exists partly to
+prioritization. Every milestone in [production](production.md) exists partly to
 avoid this outcome.
 
 ---

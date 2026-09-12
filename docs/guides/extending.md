@@ -125,7 +125,7 @@ export const myTask = defineTask<Request, Response>({
   name: 'universe.myThing',
   version: 1,
   run(payload, context) {
-    if (context.cancelled()) return partial
+    if (context.canceled()) return partial
     return result
   },
   transfers: (r) => [r.buffer.buffer], // if it returns a typed array
@@ -141,7 +141,7 @@ export const myTask = defineTask<Request, Response>({
    and a `SurfaceParameters` as a `WireSurface` through `encodeSurface` —
    the seed converted, everything else as it is.
 3. Declare `transfers` for large buffers.
-4. Poll `context.cancelled()` at a granularity where the check costs less than
+4. Poll `context.canceled()` at a granularity where the check costs less than
    the work.
 5. Test it **inline** and **through a pool**, and assert the results match.
 
@@ -177,7 +177,7 @@ adding a dynamic evaluator in `packages/universe/src/frames.ts`.
 
 `BodyKind` is a closed union and the tables keyed on it are
 `Record<BodyKind, …>`, so adding one is a compile error until every table has an
-entry — which is the point. `DENSITY`, `KIND_COLOUR`, `KIND_ALBEDO`,
+entry — which is the point. `DENSITY`, `KIND_COLOR`, `KIND_ALBEDO`,
 `KIND_ROUGHNESS` and `KIND_HAZE` all live in `packages/universe/src/system.ts`.
 
 Two things the type system does **not** catch and that a new kind has to answer:

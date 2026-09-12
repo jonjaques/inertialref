@@ -162,8 +162,8 @@ authored assets the whole game rests on. See [art](art.md).
 
 Until they exist, [ADR-0020](../adr/0020-the-face.md) draws the six from a
 parameterized palette: a reflectance ratio, a roughness, a grain and a bump per
-deposit, expressed against the body's own published colour so that Mars stays
-ochre and Callisto stays grey while both get the same internal contrast. The
+deposit, expressed against the body's own published color so that Mars stays
+ochre and Callisto stays gray while both get the same internal contrast. The
 lookup is split by who can answer — latitude, altitude and slope per pixel from
 the mesh, and an eight-byte _cover_ per vertex for what only the generator knows:
 where the flood basalt is, where a young crater has thrown fresh material, which

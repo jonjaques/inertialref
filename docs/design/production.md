@@ -149,12 +149,12 @@ exploration game that may grow.
 
 ## M6 — Conflict
 
-|              |                                                                                                                                                                                                                                        |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Delivers** | Something to be afraid of                                                                                                                                                                                                              |
-| **Scope**    | Weapons, 4 classes · shields, armour, countermeasures · [subsystem targeting](combat.md#subsystem-targeting--why-combat-is-about-disabling) · silent running · mass lock and interdiction · opponent AI, 4 types · encounter placement |
-| **Gate**     | An evenly-matched engagement lasts 45–90 s and is resolvable by disabling, by destruction, **or by escape** — all three viable, all three satisfying.                                                                                  |
-| **Estimate** | `[Assumption: 3–5 months]`                                                                                                                                                                                                             |
+|              |                                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Delivers** | Something to be afraid of                                                                                                                                                                                                             |
+| **Scope**    | Weapons, 4 classes · shields, armor, countermeasures · [subsystem targeting](combat.md#subsystem-targeting--why-combat-is-about-disabling) · silent running · mass lock and interdiction · opponent AI, 4 types · encounter placement |
+| **Gate**     | An evenly-matched engagement lasts 45–90 s and is resolvable by disabling, by destruction, **or by escape** — all three viable, all three satisfying.                                                                                 |
+| **Estimate** | `[Assumption: 3–5 months]`                                                                                                                                                                                                            |
 
 ---
 

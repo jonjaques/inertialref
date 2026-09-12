@@ -42,7 +42,7 @@ the finding.
 - **A measurement.** Numbers with units and the conditions they were taken under: tick
   rates, frame budgets, file sizes, counts. `docs/` describes design; this file records
   what was observed.
-- **A bug and its real cause**, phrased so reintroducing it is recognisable. "It was the
+- **A bug and its real cause**, phrased so reintroducing it is recognizable. "It was the
   triangle winding" is the useful half.
 - **Something tried and rejected**, and why. This is the highest-value content in the file
   and the easiest to leave out.

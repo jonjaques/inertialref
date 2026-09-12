@@ -620,7 +620,7 @@ is a fact about friction rather than about a planet.
 values.** `packages/rendering/src/terrainPalette.ts` holds it. Absolute colors
 make every rocky world the same sandstone, and they make the ground disagree
 with the datum sphere, the orbital tier and the dossier swatch, all of which
-read `appearance.colour`. As ratios, Mars stays ochre and Callisto stays grey
+read `appearance.color`. As ratios, Mars stays ochre and Callisto stays gray
 while both get the same internal contrast — lunar mare is 0.07 geometric albedo
 against 0.13 for the highlands, so basalt is 0.54 of the reference.
 

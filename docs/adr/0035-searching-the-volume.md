@@ -43,7 +43,7 @@ rather than asserting the filter returned something.
 
 **"Sea", not "water".** The generator's answer is whether the ground
 temperature admits a _liquid_, and on a cold world that liquid is methane
-([ADR-0026](0026-the-liquid.md)). Labelling it water would be the interface
+([ADR-0026](0026-the-liquid.md)). Labeling it water would be the interface
 inventing a fact the simulation is careful not to claim.
 
 ### Streaming is several jobs, because a job cannot report progress
@@ -148,7 +148,7 @@ no bodies at all.
   the same systems twice, which is the honest starting point — a cache keyed on
   seed, generation manifest and query is a later decision with a memory budget
   attached.
-- The sweep centre is the camera's eye, so a search run from Alpha Centauri
+- The sweep center is the camera's eye, so a search run from Alpha Centauri
   answers about a different volume from one run at Sol. That is the intended
   reading of "within 25 light years" and it does mean two searches with the
   same query can differ.

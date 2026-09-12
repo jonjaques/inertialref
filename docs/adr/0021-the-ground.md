@@ -156,7 +156,7 @@ there.
 body it is 4 × 10⁻¹⁴ against a float64 ulp of 2 × 10⁻¹⁶, which is a millimeter
 on the crater's own depth and a millimeter that differs between two patches
 computing the same direction by different routes. The sum of squared component
-differences is the same number with nothing cancelling. `ChordForm` is the
+differences is the same number with nothing canceling. `ChordForm` is the
 parameter, and the canonical ladder keeps the cheap form deliberately: changing
 it would move `elevationAt` in its last bits on every body.
 

@@ -60,8 +60,8 @@ Three frames exist per body, and the distinction is load-bearing:
   lot of subtle code for one case. A landed ship is attached kinematically to a
   surface frame instead and is not integrated at all.
 - Surface frames are minted on landing and regenerated from their id on load.
-  The id therefore has to determine the frame completely — angles are quantised
-  to 1e-6 rad and the ground elevation is derived from the quantised direction,
+  The id therefore has to determine the frame completely — angles are quantized
+  to 1e-6 rad and the ground elevation is derived from the quantized direction,
   not passed in.
 - Pose resolution is cached per instant, because a tick resolves the same
   handful of frames for every entity in them and an orbital frame's evaluator

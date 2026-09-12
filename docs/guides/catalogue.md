@@ -446,9 +446,9 @@ degree of longitude at 80° north is a sixth of a degree at the equator, so the
 horizontal gradient is divided by cos(latitude) or the poles come out as
 vertical smear. The scale calibrates itself against the height field's own range
 rather than a documented unit, which is the fix for a bug that produced a valid
-file and a **perfectly flat Moon**: `toColourspace('b-w')` is 8-bit in libvips,
+file and a **perfectly flat Moon**: `toColorspace('b-w')` is 8-bit in libvips,
 so it silently downcast LOLA's 16-bit product and every gradient came out 256
-times too small. `grey16` is the one that preserves it.
+times too small. `gray16` is the one that preserves it.
 
 **Luminance to alpha.** A cloud map published as a grayscale JPEG is a coverage
 mask wearing a color image's clothes. Drawn as color it is a gray shell over

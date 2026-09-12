@@ -97,8 +97,8 @@ routes. [Cloudflare routing documentation](https://developers.cloudflare.com/wor
 The first shipping CI run exposes an existing ellipse-comparison property
 failure at fast-check seed `-1913150845`. A rounded epoch state and the
 original elements differ in period by 4.885 microseconds; fifty revolutions
-amplify that to about 201 metres near periapsis. An independent calculation
-at 90 and 100 decimal digits agrees with the propagator within 2.173 metres.
+amplify that to about 201 meters near periapsis. An independent calculation
+at 90 and 100 decimal digits agrees with the propagator within 2.173 meters.
 The solver is unchanged. The test accounts for input-derived phase drift,
 retains the failing input as an example, and adds a separate reference-state
 check that rejects the original-element answer. Both physics test files pass

@@ -99,7 +99,7 @@ to draw nothing for a pipeline still building.**
   rig and the harness.** Declined: `renderer._nodes.nodeFrame` is private,
   and the app's correctness would still rest on three's loop and R3F's loop
   agreeing once per rAF, which they do by coincidence rather than by
-  contract. Keyed on the render call, the chain's behaviour is a function of
+  contract. Keyed on the render call, the chain's behavior is a function of
   its own calls.
 - **Patch `RenderPipeline.render` with a `finally` rather than restore in the
   app.** Declined: the app is the only caller, the restore is testable here

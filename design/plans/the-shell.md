@@ -203,7 +203,7 @@ the menu and the strip stay on screen while the panels keep clipping.
 ## Controls that do not name themselves
 
 `/planetarium` carries 45 icon-only controls. Ten have no accessible name at
-all, and the visible label sits in a sibling element with no `aria-labelledby`
+all, and the visible label sits in a sibling element with no `aria-labeledby`
 and no wrapping `<label>`, so a screen reader announces "switch, off" and
 "slider":
 
@@ -230,7 +230,7 @@ returns `false` on them, so Tab lands on an invisible stop and Tab again lands
 on the first item: two stops for one control, the first drawn as nothing.
 
 Nineteen focusable targets are under 24×24 CSS px, below WCAG 2.2 SC 2.5.8:
-nine 20×20 `NeighbourhoodRail` pips (correctly labeled, and adjacent on a
+nine 20×20 `NeighborhoodRail` pips (correctly labeled, and adjacent on a
 track), four 24×14 switches, six 14×14 slider parts. **Open to re-measurement**
 for the same reason: `hud/OptionGroup.tsx:71` sets the group's items to
 `h-6 min-w-6` naming that clause, and a labeled row is a larger target than the

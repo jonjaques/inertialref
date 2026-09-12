@@ -48,7 +48,7 @@ path — nothing derives a seed along an `r:` or `o:` label yet, because terrain
 derives from the body's surface seed and a direction rather than from a region
 address.
 
-Runtime entities carry an `EntityId` in one of two flavours, distinguishable at
+Runtime entities carry an `EntityId` in one of two flavors, distinguishable at
 a glance:
 
 - `@g:milky-way/s:SOL/b:2` — a generated thing; its identity _is_ its address.

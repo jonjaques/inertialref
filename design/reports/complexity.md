@@ -238,7 +238,7 @@ everything else in the file is two helpers.
 This one is _not_ a coverage finding — 44 of 51 functions are entered, 79%
 statements. It is a shape finding, and the honest version of it is that a
 1,130-line class with a cyclo of 91 is the thing fta exists to point at. The
-seven never-entered methods (`look`, `turn`, `setLook`, `centre`,
+seven never-entered methods (`look`, `turn`, `setLook`, `center`,
 `levelToHorizon`, `sites`, `stanceBounds`) are the aiming verbs, which suggests
 the seam: pose and aiming on one side, travel and arrival on the other.
 
@@ -247,8 +247,8 @@ the seam: pose and aiming on one side, travel and arrival on the other.
 Highest score in the repository (90.30) and highest cyclo (144), at 95%
 statements and 88% branches — well tested, and still the file most likely to be
 hard to change. Its last 170 lines are a general number-and-unit vocabulary:
-`round`, `significant`, `exponential`, `superscript`, `kilometres`, `period`,
-`pressurised`, `arcs`, `degrees`, `density`, `colourWord`. None of that is about
+`round`, `significant`, `exponential`, `superscript`, `kilometers`, `period`,
+`pressurised`, `arcs`, `degrees`, `density`, `colorWord`. None of that is about
 dossiers, and some of it exists twice already:
 
 - `superscript` — `dossier.ts:1576` and `universe/src/catalog/designations.ts:183`
@@ -337,7 +337,7 @@ behavior, and it is why `exports` is a warning here rather than an error.
 The `apps/ingest` eleven are a different matter, because they sit inside the two
 files findings 1 and 2 are about. `tableRows`, `firstNumber`, `rawDirectory`,
 `PlanetRecord`, `SatelliteRecord`, `SmallBodyRecord`, `ShapeEntry`,
-`TextureEntry`, `Licence` — an app at 7.6% coverage exporting eleven names that
+`TextureEntry`, `License` — an app at 7.6% coverage exporting eleven names that
 nothing outside it reads. Every one of them is a seam cut for a test that does
 not exist.
 
