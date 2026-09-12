@@ -255,12 +255,12 @@ function character(
  * of and what a smooth band lacks.
  */
 interface Band {
-  readonly centre: number
+  readonly center: number
   readonly half: number
   readonly inner: number
   readonly outer: number
   readonly alpha: number
-  readonly colour: Rgb
+  readonly color: Rgb
   readonly ripple: number
   readonly frequency: number
   readonly phase: number
@@ -268,7 +268,7 @@ interface Band {
 
 /** A sharp gap cut through whatever band it falls in — a Cassini division. */
 interface Division {
-  readonly centre: number
+  readonly center: number
   readonly width: number
 }
 
@@ -278,7 +278,7 @@ interface Profile {
 }
 
 /** The population's colour with one band's jitter about it. */
-function bandColour(
+function bandColor(
   albedo: number,
   tint: Rgb,
   random: () => number,
@@ -301,12 +301,12 @@ function thread(
   colour: Rgb,
 ): Band {
   return {
-    centre,
+    center: centre,
     half: 0,
     inner: width,
     outer: width,
     alpha,
-    colour,
+    color: colour,
     ripple: 0,
     frequency: 0,
     phase: 0,
@@ -343,12 +343,12 @@ function sheetBands(
     const half = (span * fill) / 2
     const centre = at + span / 2
     bands.push({
-      centre,
+      center: centre,
       half,
       inner: half * between(random, 0.12, 0.35),
       outer: half * between(random, 0.03, 0.14),
       alpha: i === densest ? 1 : between(random, 0.35, 0.9),
-      colour: bandColour(albedo, tint, random),
+      color: bandColor(albedo, tint, random),
       ripple: between(random, 0.06, 0.36),
       // At most sixty cycles across 512 texels: eight and a half texels a
       // cycle, so the grain is drawn rather than aliased.
@@ -379,7 +379,7 @@ function threadBands(
     const centre = between(random, from, to - 0.05)
     const width = between(random, 0.0012, 0.006)
     const alpha = between(random, 0.35, 0.85)
-    bands.push(thread(centre, width, alpha, bandColour(albedo, tint, random)))
+    bands.push(thread(centre, width, alpha, bandColor(albedo, tint, random)))
     if (random() < 0.2 && i + 1 < lesser) {
       i += 1
       bands.push(
@@ -387,7 +387,7 @@ function threadBands(
           centre + between(random, 0.006, 0.014),
           width * between(random, 0.6, 1.2),
           alpha * between(random, 0.6, 1),
-          bandColour(albedo, tint, random),
+          bandColor(albedo, tint, random),
         ),
       )
     }
@@ -397,7 +397,7 @@ function threadBands(
       between(random, to - 0.06, to),
       between(random, 0.008, 0.02),
       1,
-      bandColour(albedo, tint, random, 1.15),
+      bandColor(albedo, tint, random, 1.15),
     ),
   )
   return bands
@@ -414,13 +414,13 @@ function dust(
 ): Band {
   const half = (to - from) / 2
   return {
-    centre: from + half,
+    center: from + half,
     half: half * 0.8,
     inner: half * 0.3,
     outer: half * 0.2,
     alpha,
     // Dust is darker than the ice it was ground from, and bluer for being fine.
-    colour: bandColour(
+    color: bandColor(
       albedo,
       [tint[0] * 0.9, tint[1] * 0.95, tint[2]],
       random,
@@ -463,7 +463,7 @@ function profileFor(who: Character, random: () => number): Profile {
   for (let i = 0; i < cuts && wide.length > 0; i += 1) {
     const host = wide[Math.floor(random() * wide.length)] as Band
     divisions.push({
-      centre: host.centre + between(random, -0.6, 0.6) * host.half,
+      center: host.center + between(random, -0.6, 0.6) * host.half,
       width: between(random, 0.004, 0.015),
     })
   }
@@ -474,15 +474,15 @@ function profileFor(who: Character, random: () => number): Profile {
   for (let i = 0; i < ringlets && i + 1 < sheet.length; i += 1) {
     const before = sheet[i] as Band
     const after = sheet[i + 1] as Band
-    const gapFrom = before.centre + before.half
-    const gapTo = after.centre - after.half
+    const gapFrom = before.center + before.half
+    const gapTo = after.center - after.half
     if (gapTo - gapFrom < 0.02) continue
     bands.push(
       thread(
         between(random, gapFrom + 0.005, gapTo - 0.005),
         between(random, 0.002, 0.004),
         between(random, 0.3, 0.7),
-        bandColour(albedo, tint, random, 1.1),
+        bandColor(albedo, tint, random, 1.1),
       ),
     )
   }
@@ -495,7 +495,7 @@ function profileFor(who: Character, random: () => number): Profile {
       dust(
         random,
         0.0,
-        first.centre - first.half,
+        first.center - first.half,
         albedo,
         tint,
         between(random, 0.08, 0.22),
@@ -530,7 +530,7 @@ function profileFor(who: Character, random: () => number): Profile {
 
 /** A band's coverage at `at`: the plateau, then a fall-off per side. */
 function coverage(band: Band, at: number): number {
-  const offset = at - band.centre
+  const offset = at - band.center
   const beyond = Math.abs(offset) - band.half
   if (beyond <= 0) return 1
   const scale = offset < 0 ? band.inner : band.outer
@@ -578,7 +578,7 @@ export function proceduralRingStrip(kind: string, address: string): Texture {
   for (let x = 0; x < STRIP_WIDTH; x += 1) {
     const at = (x + 0.5) / STRIP_WIDTH
     let alpha = 0
-    let colour: Rgb = [0, 0, 0]
+    let color: Rgb = [0, 0, 0]
     for (const band of bands) {
       const grain =
         band.ripple === 0
@@ -592,18 +592,18 @@ export function proceduralRingStrip(kind: string, address: string): Texture {
       // dust is the hairline, and dust over nothing is dust.
       if (contribution > alpha) {
         alpha = contribution
-        colour = band.colour
+        color = band.color
       }
     }
     for (const division of divisions) {
-      const s = (at - division.centre) / division.width
+      const s = (at - division.center) / division.width
       // Flat-bottomed and steep-sided: a gap, not a dip.
       alpha *= 1 - 0.92 * Math.exp(-(s * s * s * s))
     }
     const index = x * 4
-    data[index] = Math.round(Math.min(1, colour[0]) * 255)
-    data[index + 1] = Math.round(Math.min(1, colour[1]) * 255)
-    data[index + 2] = Math.round(Math.min(1, colour[2]) * 255)
+    data[index] = Math.round(Math.min(1, color[0]) * 255)
+    data[index + 1] = Math.round(Math.min(1, color[1]) * 255)
+    data[index + 2] = Math.round(Math.min(1, color[2]) * 255)
     data[index + 3] = Math.round(Math.min(1, alpha) * 255)
   }
 

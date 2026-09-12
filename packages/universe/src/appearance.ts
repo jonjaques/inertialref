@@ -29,7 +29,7 @@ import type { BodyKind } from './system.ts'
 export interface LiquidAppearance {
   readonly kind: LiquidKind
   /** What the deep liquid scatters back, linear sRGB. Open sea from above. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   /** Absorption per meter of path, per channel. */
   readonly absorption: LinearRgb
   /** The liquid's own emission, linear — a magma sea's glow. Black elsewhere. */
@@ -54,38 +54,38 @@ export interface LiquidAppearance {
  * deposits contrast *against* it; the tone curve and the deposits keep it
  * from reading as paint.
  */
-export interface ColourFamily {
-  readonly colour: LinearRgb
+export interface ColorFamily {
+  readonly color: LinearRgb
   /** Weight at a temperate ground temperature. */
   readonly weight: number
   /** Where on the temperature axis the family is most likely, Kelvin, or null for anywhere. */
   readonly warmest: number | null
 }
 
-const ROCK_FAMILIES: readonly ColourFamily[] = [
-  { colour: { r: 0.25, g: 0.24, b: 0.23 }, weight: 2.0, warmest: null }, // basalt grey
-  { colour: { r: 0.38, g: 0.23, b: 0.13 }, weight: 2.0, warmest: 300 }, // iron-oxide ochre
-  { colour: { r: 0.42, g: 0.17, b: 0.1 }, weight: 1.2, warmest: 400 }, // red desert
-  { colour: { r: 0.44, g: 0.41, b: 0.37 }, weight: 1.2, warmest: null }, // pale feldspar
-  { colour: { r: 0.27, g: 0.3, b: 0.21 }, weight: 1.0, warmest: null }, // olivine
-  { colour: { r: 0.47, g: 0.36, b: 0.11 }, weight: 0.9, warmest: 700 }, // sulfur
-  { colour: { r: 0.15, g: 0.14, b: 0.13 }, weight: 0.9, warmest: null }, // carbonaceous
-  { colour: { r: 0.36, g: 0.25, b: 0.12 }, weight: 1.0, warmest: 120 }, // tholin amber
-  { colour: { r: 0.21, g: 0.32, b: 0.26 }, weight: 0.5, warmest: null }, // copper green
-  { colour: { r: 0.52, g: 0.46, b: 0.42 }, weight: 0.5, warmest: 350 }, // salt and dust
-  { colour: { r: 0.28, g: 0.23, b: 0.31 }, weight: 0.5, warmest: null }, // violet grey
+const ROCK_FAMILIES: readonly ColorFamily[] = [
+  { color: { r: 0.25, g: 0.24, b: 0.23 }, weight: 2.0, warmest: null }, // basalt grey
+  { color: { r: 0.38, g: 0.23, b: 0.13 }, weight: 2.0, warmest: 300 }, // iron-oxide ochre
+  { color: { r: 0.42, g: 0.17, b: 0.1 }, weight: 1.2, warmest: 400 }, // red desert
+  { color: { r: 0.44, g: 0.41, b: 0.37 }, weight: 1.2, warmest: null }, // pale feldspar
+  { color: { r: 0.27, g: 0.3, b: 0.21 }, weight: 1.0, warmest: null }, // olivine
+  { color: { r: 0.47, g: 0.36, b: 0.11 }, weight: 0.9, warmest: 700 }, // sulfur
+  { color: { r: 0.15, g: 0.14, b: 0.13 }, weight: 0.9, warmest: null }, // carbonaceous
+  { color: { r: 0.36, g: 0.25, b: 0.12 }, weight: 1.0, warmest: 120 }, // tholin amber
+  { color: { r: 0.21, g: 0.32, b: 0.26 }, weight: 0.5, warmest: null }, // copper green
+  { color: { r: 0.52, g: 0.46, b: 0.42 }, weight: 0.5, warmest: 350 }, // salt and dust
+  { color: { r: 0.28, g: 0.23, b: 0.31 }, weight: 0.5, warmest: null }, // violet grey
 ]
 
-const ICE_FAMILIES: readonly ColourFamily[] = [
-  { colour: { r: 0.66, g: 0.71, b: 0.76 }, weight: 2.0, warmest: null }, // clean ice
-  { colour: { r: 0.6, g: 0.72, b: 0.78 }, weight: 1.0, warmest: null }, // blue ice
-  { colour: { r: 0.72, g: 0.62, b: 0.55 }, weight: 1.0, warmest: 60 }, // methane-pink
-  { colour: { r: 0.55, g: 0.53, b: 0.48 }, weight: 1.0, warmest: null }, // dirty ice
-  { colour: { r: 0.62, g: 0.66, b: 0.55 }, weight: 0.5, warmest: null }, // sulfate-stained
+const ICE_FAMILIES: readonly ColorFamily[] = [
+  { color: { r: 0.66, g: 0.71, b: 0.76 }, weight: 2.0, warmest: null }, // clean ice
+  { color: { r: 0.6, g: 0.72, b: 0.78 }, weight: 1.0, warmest: null }, // blue ice
+  { color: { r: 0.72, g: 0.62, b: 0.55 }, weight: 1.0, warmest: 60 }, // methane-pink
+  { color: { r: 0.55, g: 0.53, b: 0.48 }, weight: 1.0, warmest: null }, // dirty ice
+  { color: { r: 0.62, g: 0.66, b: 0.55 }, weight: 0.5, warmest: null }, // sulfate-stained
 ]
 
 /** A family's weight at a ground temperature: its own, bent toward its warmest. */
-function familyWeight(family: ColourFamily, groundTemperature: Kelvin): number {
+function familyWeight(family: ColorFamily, groundTemperature: Kelvin): number {
   if (family.warmest === null) return family.weight
   const decades = Math.log10(groundTemperature / family.warmest)
   return family.weight * Math.exp(-decades * decades * 6)
@@ -93,13 +93,13 @@ function familyWeight(family: ColourFamily, groundTemperature: Kelvin): number {
 
 function drawFamily(
   rng: Rng,
-  families: readonly ColourFamily[],
+  families: readonly ColorFamily[],
   groundTemperature: Kelvin,
 ): LinearRgb {
   const index = rng.weightedIndex(
     families.map((family) => familyWeight(family, groundTemperature)),
   )
-  const base = (families[index] ?? families[0]) as ColourFamily
+  const base = (families[index] ?? families[0]) as ColorFamily
   /*
    * A little of its own: the value moves by a fifth and the chroma by a
    * quarter about the family's luminance, so the family is recognisable and
@@ -108,18 +108,18 @@ function drawFamily(
   const value = rng.range(0.82, 1.2)
   const chroma = rng.range(0.75, 1.25)
   const grey =
-    0.2126 * base.colour.r + 0.7152 * base.colour.g + 0.0722 * base.colour.b
+    0.2126 * base.color.r + 0.7152 * base.color.g + 0.0722 * base.color.b
   const channel = (c: number): number =>
     Math.max(0, (grey + (c - grey) * chroma) * value)
   return {
-    r: channel(base.colour.r),
-    g: channel(base.colour.g),
-    b: channel(base.colour.b),
+    r: channel(base.color.r),
+    g: channel(base.color.g),
+    b: channel(base.color.b),
   }
 }
 
 /** What a solid world's ground reflects, from its seed and its grammar. */
-export function surfaceColourFor(
+export function surfaceColorFor(
   rng: Rng,
   kind: BodyKind,
   grammar: SurfaceGrammar,
@@ -149,7 +149,7 @@ export function surfaceColourFor(
  * is gated by the temperature its chemistry survives at.
  */
 export interface HazeFamily {
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   readonly limb: LinearRgb
   readonly weight: number
   readonly coldest: Kelvin
@@ -159,7 +159,7 @@ export interface HazeFamily {
 const HAZE_FAMILIES: readonly HazeFamily[] = [
   // Rayleigh: a blue sky and an orange limb.
   {
-    colour: { r: 0.28, g: 0.48, b: 0.95 },
+    color: { r: 0.28, g: 0.48, b: 0.95 },
     limb: { r: 0.86, g: 0.45, b: 0.26 },
     weight: 3,
     coldest: 0,
@@ -167,7 +167,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   },
   // Dust: butterscotch by day, blue at the terminator.
   {
-    colour: { r: 0.74, g: 0.56, b: 0.36 },
+    color: { r: 0.74, g: 0.56, b: 0.36 },
     limb: { r: 0.42, g: 0.58, b: 0.92 },
     weight: 1.4,
     coldest: 150,
@@ -175,7 +175,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   },
   // Sulfuric: a yellow-white glare.
   {
-    colour: { r: 0.88, g: 0.8, b: 0.5 },
+    color: { r: 0.88, g: 0.8, b: 0.5 },
     limb: { r: 0.96, g: 0.72, b: 0.32 },
     weight: 1.2,
     coldest: 450,
@@ -183,7 +183,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   },
   // Tholin: orange all round.
   {
-    colour: { r: 0.82, g: 0.5, b: 0.2 },
+    color: { r: 0.82, g: 0.5, b: 0.2 },
     limb: { r: 0.92, g: 0.52, b: 0.24 },
     weight: 1.4,
     coldest: 0,
@@ -191,7 +191,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   },
   // Methane: a teal sky and a warm limb.
   {
-    colour: { r: 0.32, g: 0.7, b: 0.82 },
+    color: { r: 0.32, g: 0.7, b: 0.82 },
     limb: { r: 0.72, g: 0.58, b: 0.42 },
     weight: 1.0,
     coldest: 0,
@@ -199,7 +199,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   },
   // Thin and high: violet.
   {
-    colour: { r: 0.42, g: 0.36, b: 0.92 },
+    color: { r: 0.42, g: 0.36, b: 0.92 },
     limb: { r: 0.9, g: 0.42, b: 0.5 },
     weight: 0.6,
     coldest: 0,
@@ -207,7 +207,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   },
   // An oxidant-rich green, rare.
   {
-    colour: { r: 0.46, g: 0.76, b: 0.6 },
+    color: { r: 0.46, g: 0.76, b: 0.6 },
     limb: { r: 0.9, g: 0.62, b: 0.3 },
     weight: 0.35,
     coldest: 200,
@@ -218,7 +218,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
 export function hazeFor(
   rng: Rng,
   grammar: SurfaceGrammar,
-): { readonly colour: LinearRgb; readonly limb: LinearRgb } {
+): { readonly color: LinearRgb; readonly limb: LinearRgb } {
   const temperature = grammar.groundTemperature
   const index = rng.weightedIndex(
     HAZE_FAMILIES.map((family) =>
@@ -228,7 +228,7 @@ export function hazeFor(
     ),
   )
   const family = (HAZE_FAMILIES[index] ?? HAZE_FAMILIES[0]) as HazeFamily
-  return { colour: family.colour, limb: family.limb }
+  return { color: family.color, limb: family.limb }
 }
 
 /*
@@ -243,15 +243,15 @@ export function hazeFor(
  * chemistry rather than of a province.
  */
 export const PIGMENTS: readonly {
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   readonly weight: number
 }[] = [
-  { colour: { r: 0.08, g: 0.21, b: 0.05 }, weight: 3.5 }, // chlorophyll
-  { colour: { r: 0.16, g: 0.06, b: 0.19 }, weight: 1.2 }, // retinal purple
-  { colour: { r: 0.3, g: 0.19, b: 0.04 }, weight: 1.2 }, // carotenoid gold
-  { colour: { r: 0.24, g: 0.07, b: 0.05 }, weight: 1.2 }, // phycoerythrin red
-  { colour: { r: 0.05, g: 0.19, b: 0.16 }, weight: 0.9 }, // teal
-  { colour: { r: 0.05, g: 0.06, b: 0.05 }, weight: 0.8 }, // near-black
+  { color: { r: 0.08, g: 0.21, b: 0.05 }, weight: 3.5 }, // chlorophyll
+  { color: { r: 0.16, g: 0.06, b: 0.19 }, weight: 1.2 }, // retinal purple
+  { color: { r: 0.3, g: 0.19, b: 0.04 }, weight: 1.2 }, // carotenoid gold
+  { color: { r: 0.24, g: 0.07, b: 0.05 }, weight: 1.2 }, // phycoerythrin red
+  { color: { r: 0.05, g: 0.19, b: 0.16 }, weight: 0.9 }, // teal
+  { color: { r: 0.05, g: 0.06, b: 0.05 }, weight: 0.8 }, // near-black
 ]
 
 export function pigmentFor(rng: Rng): LinearRgb {
@@ -259,9 +259,9 @@ export function pigmentFor(rng: Rng): LinearRgb {
   const base = (PIGMENTS[index] ?? PIGMENTS[0]) as (typeof PIGMENTS)[number]
   const value = rng.range(0.8, 1.25)
   return {
-    r: base.colour.r * value,
-    g: base.colour.g * value,
-    b: base.colour.b * value,
+    r: base.color.r * value,
+    g: base.color.g * value,
+    b: base.color.b * value,
   }
 }
 
@@ -284,7 +284,7 @@ export function liquidAppearance(
     const turbidity = rng.range(0.8, 2.4)
     return {
       kind,
-      colour: {
+      color: {
         r: 0.01 + 0.006 * teal,
         g: 0.035 + 0.03 * teal,
         b: 0.13 - 0.03 * teal,
@@ -301,7 +301,7 @@ export function liquidAppearance(
     const stain = rng.range(0, 1)
     return {
       kind,
-      colour: { r: 0.045 + 0.02 * stain, g: 0.028, b: 0.012 },
+      color: { r: 0.045 + 0.02 * stain, g: 0.028, b: 0.012 },
       absorption: { r: 0.05, g: 0.12 + 0.1 * stain, b: 0.3 + 0.2 * stain },
       glow: { r: 0, g: 0, b: 0 },
     }
@@ -311,7 +311,7 @@ export function liquidAppearance(
   const heat = rng.range(0.8, 1.3)
   return {
     kind,
-    colour: { r: 0.12, g: 0.03, b: 0.01 },
+    color: { r: 0.12, g: 0.03, b: 0.01 },
     absorption: { r: 6, g: 6, b: 6 },
     glow: { r: 2.6 * heat, g: 0.55 * heat, b: 0.06 * heat },
   }

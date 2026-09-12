@@ -5,10 +5,10 @@ import type { BodyAppearance, LinearRgb } from '@inertialref/universe'
  * one. A small body's swatch carries its measured albedo even when a map is
  * present; multiplying both brightnesses would spend that albedo twice.
  */
-export function surfaceColour(
-  appearance: Pick<BodyAppearance, 'colour' | 'texture'>,
+export function surfaceColor(
+  appearance: Pick<BodyAppearance, 'color' | 'texture'>,
 ): LinearRgb {
-  const { colour, texture } = appearance
+  const { color: colour, texture } = appearance
   if (texture === null) return colour
   const peak = Math.max(colour.r, colour.g, colour.b)
   if (peak === 0 || peak === 1) return colour

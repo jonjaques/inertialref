@@ -271,7 +271,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
     {
       label: 'Radius',
       value: `${round(star.radius / SOLAR_RADIUS, 3)} R☉`,
-      note: kilometres(star.radius),
+      note: kilometers(star.radius),
     },
     { label: 'Mean density', value: density(star.mass, star.radius) },
     {
@@ -295,10 +295,10 @@ function starDossier(world: World, system: StarSystem): Dossier {
     {
       label: 'Color index',
       value:
-        cataloged?.physical.colourIndex == null
+        cataloged?.physical.colorIndex == null
           ? null
-          : round(cataloged.physical.colourIndex, 3),
-      ...(cataloged?.physical.colourIndex == null
+          : round(cataloged.physical.colorIndex, 3),
+      ...(cataloged?.physical.colorIndex == null
         ? {
             pending:
               'B−V requires two-band photometry. This star has been classified but not measured that way',
@@ -567,7 +567,7 @@ function physicalGroup(body: Body): FactGroup {
   if (figure === null) {
     facts.push({
       label: 'Radius',
-      value: kilometres(body.radius),
+      value: kilometers(body.radius),
       note: radiusNote(body.radius),
     })
     /*
@@ -583,7 +583,7 @@ function physicalGroup(body: Body): FactGroup {
     if (flattening > 1e-3) {
       facts.push({
         label: 'Polar radius',
-        value: kilometres(body.polarRadius),
+        value: kilometers(body.polarRadius),
         note: `${round(flattening * 100, 2)}% flattened`,
       })
     }
@@ -605,7 +605,7 @@ function physicalGroup(body: Body): FactGroup {
     })
     facts.push({
       label: 'Mean radius',
-      value: kilometres(meanRadius),
+      value: kilometers(meanRadius),
       note: 'same volume',
     })
   }
@@ -656,14 +656,14 @@ function orbitGroup(
   const facts: Fact[] = []
   const moonScale = body.address.kind === 'body' && body.address.body.length > 1
   const span = (metres: Meters): string =>
-    moonScale ? kilometres(metres) : `${round(metres / AU, 4)} AU`
+    moonScale ? kilometers(metres) : `${round(metres / AU, 4)} AU`
 
   facts.push({
     label: 'Semi-major axis',
     value: span(elements.semiMajorAxis),
     note: moonScale
       ? `${round(elements.semiMajorAxis / AU, 6)} AU`
-      : kilometres(elements.semiMajorAxis),
+      : kilometers(elements.semiMajorAxis),
   })
   /*
    * The gloss is days, and only where the value is not already days.
@@ -740,7 +740,7 @@ function orbitGroup(
   })
   facts.push({
     label: 'Sphere of influence',
-    value: kilometres(body.sphereOfInfluence),
+    value: kilometers(body.sphereOfInfluence),
     note: `${round(body.sphereOfInfluence / body.radius, 1)} radii`,
   })
   facts.push(
@@ -890,7 +890,7 @@ function geologyGroup(body: Body): FactGroup | null {
       label: 'Relief',
       value:
         body.surface.maxElevation > 0
-          ? kilometres(body.surface.maxElevation)
+          ? kilometers(body.surface.maxElevation)
           : 'None resolved',
       /*
        * Which of the three limits bit, named rather than implied. A reader who
@@ -914,7 +914,7 @@ function geologyGroup(body: Body): FactGroup | null {
           : g.craterDensity > 0.35
             ? 'Heavy'
             : 'Sparse',
-      note: `largest basin ${kilometres(g.largestCrater)} across; craters gain flat floors past ${kilometres(g.complexDiameter)}`,
+      note: `largest basin ${kilometers(g.largestCrater)} across; craters gain flat floors past ${kilometers(g.complexDiameter)}`,
     })
   } else {
     facts.push({
@@ -1011,12 +1011,12 @@ function atmosphereGroup(body: Body): FactGroup {
     },
     {
       label: 'Scale height',
-      value: kilometres(air.scaleHeight),
+      value: kilometers(air.scaleHeight),
       note: 'density falls to 1/e',
     },
     {
       label: 'Ceiling',
-      value: kilometres(air.ceiling),
+      value: kilometers(air.ceiling),
       note: 'the sensible atmosphere ends',
     },
   ]
@@ -1024,7 +1024,7 @@ function atmosphereGroup(body: Body): FactGroup {
   if (haze !== null) {
     facts.push({
       label: 'Visible haze',
-      value: kilometres(haze.height),
+      value: kilometers(haze.height),
       note: `optical thickness ${round(haze.thickness, 2)}`,
     })
   }
@@ -1033,7 +1033,7 @@ function atmosphereGroup(body: Body): FactGroup {
     value:
       body.appearance.clouds === null
         ? 'None'
-        : kilometres(body.appearance.clouds.altitude),
+        : kilometers(body.appearance.clouds.altitude),
     ...(body.appearance.clouds === null
       ? {}
       : {
@@ -1144,17 +1144,17 @@ function ringGroup(body: Body): FactGroup | null {
     facts: [
       {
         label: 'Inner edge',
-        value: kilometres(rings.innerRadius),
+        value: kilometers(rings.innerRadius),
         note: `${round(rings.innerRadius / body.radius, 2)} radii`,
       },
       {
         label: 'Outer edge',
-        value: kilometres(rings.outerRadius),
+        value: kilometers(rings.outerRadius),
         note: `${round(rings.outerRadius / body.radius, 2)} radii`,
       },
       {
         label: 'Width',
-        value: kilometres(rings.outerRadius - rings.innerRadius),
+        value: kilometers(rings.outerRadius - rings.innerRadius),
       },
       {
         label: 'Optical depth',
@@ -1588,7 +1588,7 @@ const SUPERSCRIPTS: Readonly<Record<string, string>> = {
 const superscript = (text: string): string =>
   [...text].map((char) => SUPERSCRIPTS[char] ?? char).join('')
 
-function kilometres(metres: Meters): string {
+function kilometers(metres: Meters): string {
   const km = metres / 1000
   if (!Number.isFinite(km)) return '—'
   if (Math.abs(km) >= 1e7) return `${round(km / 1e6, 3)} million km`

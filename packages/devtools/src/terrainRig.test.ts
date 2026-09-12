@@ -554,7 +554,7 @@ describe('the observatory on the ground', () => {
 
     expect(harness.observatory.state.distance).toBeCloseTo(framing, 6)
     expect(harness.observatory.state.azimuth).toBeCloseTo(azimuth, 9)
-    expect(harness.observerStatus()?.travelling).toBe(false)
+    expect(harness.observerStatus()?.traveling).toBe(false)
   })
 
   it('refuses a site it does not have, and leaves the camera where it was', () => {

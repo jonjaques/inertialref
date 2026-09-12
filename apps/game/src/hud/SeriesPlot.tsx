@@ -53,7 +53,7 @@ export function SeriesPlot({
   // time is the kind of garbage a performance overlay should be embarrassed by.
   const buffer = useMemo(() => new Float64Array(series.capacity), [series])
   const written = series.drain(buffer)
-  const stats = series.summarise()
+  const stats = series.summarize()
 
   const width = 100
   const height = 26

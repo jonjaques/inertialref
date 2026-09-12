@@ -157,7 +157,7 @@ export function regionForDirection(
 }
 
 /** Direction of a region's center. */
-export function regionCentreDirection(region: RegionAddress): Vec3 {
+export function regionCenterDirection(region: RegionAddress): Vec3 {
   const span = 2 ** region.level
   const u = ((region.i + 0.5) / span) * 2 - 1
   const v = ((region.j + 0.5) / span) * 2 - 1

@@ -125,7 +125,7 @@ interface Queued {
   readonly request: HeightfieldRequest
   readonly resolve: (response: HeightfieldResponse) => void
   readonly reject: (cause: Error) => void
-  cancelled: boolean
+  canceled: boolean
 }
 
 /**
@@ -203,14 +203,14 @@ export function createTileProducer(
     scheduled = false
     if (inFlight > 0 || !available) return
     // Drop what was cancelled while queued; a batch of nothing is no batch.
-    while (queue.length > 0 && (queue[0] as Queued).cancelled) queue.shift()
+    while (queue.length > 0 && (queue[0] as Queued).canceled) queue.shift()
     if (queue.length === 0) return
     const head = queue[0] as Queued
     const taken: Queued[] = []
     let cursor = 0
     while (taken.length < batch && cursor < queue.length) {
       const job = queue[cursor] as Queued
-      if (job.cancelled) {
+      if (job.canceled) {
         queue.splice(cursor, 1)
         continue
       }
@@ -272,7 +272,7 @@ export function createTileProducer(
         )
       }
       taken.forEach((job, i) => {
-        if (job.cancelled) {
+        if (job.canceled) {
           job.reject(new Error('canceled'))
           return
         }
@@ -359,7 +359,7 @@ export function createTileProducer(
         request,
         resolve,
         reject,
-        cancelled: false,
+        canceled: false,
       }
       // A refused request is this request's alone: it never reaches `pump`,
       // whose failure path retires the producer for the session. Heightfields
@@ -383,8 +383,8 @@ export function createTileProducer(
         id,
         result,
         cancel() {
-          if (job.cancelled) return
-          job.cancelled = true
+          if (job.canceled) return
+          job.canceled = true
           const at = queue.indexOf(job)
           // Still queued: gone before it costs anything. Dispatched: the
           // kernel runs it anyway, and the answer is discarded on arrival.

@@ -310,7 +310,7 @@ export function travelTargets(
       position: stub.position,
       detail: `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`,
       spectralType: stub.spectralType,
-      color: stub.colour,
+      color: stub.color,
       // The domain word, not the storage boolean. `catalogued` says which table
       // the row came out of; `observed` says somebody pointed a telescope at it,
       // which is what the listing is actually claiming.
@@ -323,7 +323,7 @@ export function travelTargets(
       position: system.position,
       detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
       spectralType: system.star.spectralType,
-      color: system.star.colour,
+      color: system.star.color,
       // A loaded system may be outside the survey radius, so this cannot be
       // inherited from the sweep above. Asked of the catalog directly, which is
       // the same question `catalogStub` answers with `catalogued: true` — and
@@ -479,7 +479,7 @@ function systemTarget(
     provenance: 'projected',
     bodyKind: null,
     spectralType: system?.star.spectralType ?? stub.spectralType,
-    color: system?.star.colour ?? stub.colour,
+    color: system?.star.color ?? stub.color,
     radius: system?.star.radius ?? 0,
     semiMajorAxis: 0,
     children: system === undefined ? 0 : planetCount(system),
@@ -636,7 +636,7 @@ function catalogStarTarget(
     provenance: 'observed' as const,
     bodyKind: null,
     spectralType: formatSpectralType(star.spectralType),
-    color: system?.star.colour ?? star.physical.colour,
+    color: system?.star.color ?? star.physical.color,
     radius: system?.star.radius ?? 0,
     semiMajorAxis: 0,
     children: system === undefined ? star.planets.length : planetCount(system),

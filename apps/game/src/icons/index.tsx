@@ -334,7 +334,7 @@ export const Comet = createLucideIcon('Comet', [
  * different distances around one that is here. It is the catalog's "near"
  * heading and the shape of the question that heading answers.
  */
-export const Neighbourhood = createLucideIcon('Neighbourhood', [
+export const Neighborhood = createLucideIcon('Neighbourhood', [
   ['circle', { cx: '12', cy: '12', r: '2.5', key: 'here' }],
   ['circle', { cx: '4', cy: '6', r: '1', key: 'near' }],
   ['circle', { cx: '20', cy: '8', r: '1', key: 'far' }],

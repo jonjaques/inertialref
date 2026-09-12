@@ -317,13 +317,13 @@ export function measureOf(row: TravelTarget): string {
 }
 
 /** The nearest systems, with the distance rail's own scale already applied. */
-export interface Neighbour {
+export interface Neighbor {
   readonly address: string
   readonly name: string
   readonly lightYears: number
   /** Where it sits on the rail, 0 at the observer and 1 at the survey edge. */
   readonly at: number
-  readonly colour: TravelTarget['color']
+  readonly color: TravelTarget['color']
   readonly loaded: boolean
 }
 
@@ -351,10 +351,10 @@ export interface Neighbour {
  */
 const RAIL_LIMIT = 24
 
-export function neighbours(
+export function neighbors(
   rows: readonly TravelTarget[],
   radiusLightYears: number,
-): readonly Neighbour[] {
+): readonly Neighbor[] {
   const limit = Math.max(1, radiusLightYears)
   return rows
     .filter((row) => row.kind === 'system')
@@ -365,7 +365,7 @@ export function neighbours(
         name: row.name,
         lightYears,
         at: Math.sqrt(lightYears / limit),
-        colour: row.color,
+        color: row.color,
         loaded: row.loaded,
       }
     })

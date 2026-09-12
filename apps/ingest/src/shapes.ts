@@ -159,7 +159,7 @@ function readObj(text: string, source: ShapeSource): Mesh {
       )
     }
   }
-  return centre({
+  return center({
     vertices: Float64Array.from(vertices),
     faces: Uint32Array.from(faces),
   })
@@ -189,7 +189,7 @@ function readVertexTable(text: string, source: ShapeSource): Mesh {
     faces[i * 3 + 1] = Number.parseInt(parts[2] as string, 10) - 1
     faces[i * 3 + 2] = Number.parseInt(parts[3] as string, 10) - 1
   }
-  return centre({ vertices, faces })
+  return center({ vertices, faces })
 }
 
 /* ------------------------------------------------------------------------- */
@@ -252,7 +252,7 @@ function volumeAndCentroid(mesh: Mesh): {
  * subtends from it, and it is also what "the body's center" means physically
  * for a uniform-density rubble pile.
  */
-function centre(mesh: Mesh): Mesh {
+function center(mesh: Mesh): Mesh {
   const { centroid } = volumeAndCentroid(mesh)
   const [dx, dy, dz] = centroid
   const vertices = mesh.vertices.slice()

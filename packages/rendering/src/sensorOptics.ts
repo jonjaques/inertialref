@@ -1,4 +1,4 @@
-import { blackbodyColour } from '@inertialref/universe'
+import { blackbodyColor } from '@inertialref/universe'
 import {
   effectiveFocalLength,
   pixelPitch,
@@ -45,7 +45,7 @@ export function whiteBalance(
   kelvin: number,
 ): readonly [number, number, number] {
   if (kelvin === 6500) return [1, 1, 1]
-  const white = blackbodyColour(Math.max(2000, Math.min(12000, kelvin)))
-  const reference = blackbodyColour(6500)
+  const white = blackbodyColor(Math.max(2000, Math.min(12000, kelvin)))
+  const reference = blackbodyColor(6500)
   return [reference.r / white.r, reference.g / white.g, reference.b / white.b]
 }

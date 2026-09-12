@@ -217,7 +217,7 @@ it('keeps paused and rebased sprites still while reporting observer and star mot
   const projection = createStarProjection(2)
   const field = createStarfieldMaterial(2, projection)
   field.size.value = 40
-  field.colours.array.fill(1)
+  field.colors.array.fill(1)
   const sprite = new Sprite(field.material)
   sprite.count = 1
   sprite.frustumCulled = false
@@ -289,7 +289,7 @@ it('keeps paused and rebased sprites still while reporting observer and star mot
     projection.dispose()
     for (const a of [
       field.positions,
-      field.colours,
+      field.colors,
       field.prominence,
       field.visibility,
       field.enabled,

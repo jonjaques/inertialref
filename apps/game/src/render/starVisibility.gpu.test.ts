@@ -18,7 +18,7 @@ it('draws an absolute V hierarchy and leaves no remote or extinguished sprite fl
   const transport = uniform(new Vector3(1, 1, 1))
   const field = createStarfieldMaterial(1, projection, transport)
   field.integrated.value = 1
-  field.colours.array.fill(1)
+  field.colors.array.fill(1)
   const sprite = new Sprite(field.material)
   sprite.count = 1
   sprite.frustumCulled = false
@@ -74,7 +74,7 @@ it('draws an absolute V hierarchy and leaves no remote or extinguished sprite fl
     field.material.dispose()
     for (const a of [
       field.positions,
-      field.colours,
+      field.colors,
       field.prominence,
       field.visibility,
       field.enabled,

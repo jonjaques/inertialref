@@ -19,7 +19,7 @@ import {
 
 /** Earth's authored haze, copied from `solar/bodies.ts`. */
 const EARTH_HAZE = {
-  colour: { r: 0.28, g: 0.48, b: 0.95 },
+  color: { r: 0.28, g: 0.48, b: 0.95 },
   limb: { r: 0.92, g: 0.42, b: 0.2 },
   thickness: 1,
 }

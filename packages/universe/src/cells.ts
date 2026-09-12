@@ -38,7 +38,7 @@ export function cellOf(position: UniverseVector): GalacticCell {
 export const cellOrigin = (cell: GalacticCell): UniverseVector =>
   UV.fromMeters(cell.x * CELL_SIZE, cell.y * CELL_SIZE, cell.z * CELL_SIZE)
 
-export const cellCentre = (cell: GalacticCell): UniverseVector =>
+export const cellCenter = (cell: GalacticCell): UniverseVector =>
   UV.translate(
     cellOrigin(cell),
     vec3(CELL_SIZE / 2, CELL_SIZE / 2, CELL_SIZE / 2),

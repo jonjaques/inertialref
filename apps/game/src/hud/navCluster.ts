@@ -30,7 +30,7 @@ export const nextSpeedMode = (mode: SpeedMode): SpeedMode =>
  * high enough to orbit, the reverse. Ten kilometers is inside the band on
  * every body that has air and well under any orbit that survives a lap.
  */
-export const SURFACE_BELOW_METRES = 10_000
+export const SURFACE_BELOW_METERS = 10_000
 
 export interface SpeedReading {
   /** Which figure is showing, resolved from `auto`. */
@@ -46,7 +46,7 @@ export function speedReading(
   const surface =
     player.surfaceSpeed !== null &&
     (player.landed ||
-      (player.altitude !== null && player.altitude < SURFACE_BELOW_METRES))
+      (player.altitude !== null && player.altitude < SURFACE_BELOW_METERS))
   const resolved = mode === 'auto' ? (surface ? 'surface' : 'orbit') : mode
   if (resolved === 'surface')
     return { mode: 'surface', value: player.surfaceSpeed }

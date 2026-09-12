@@ -540,17 +540,17 @@ export class GameHarness {
   systemsNearby(
     lightYears = 8,
   ): readonly { id: string; name: string; lightYears: number }[] {
-    const centre = this.#here()
+    const center = this.#here()
     return systemsWithin(
       this.world.galaxySeed,
       this.world.catalog,
-      centre,
+      center,
       boundedTravelRadius(lightYears),
     )
       .map((stub) => ({
         id: stub.id as string,
         name: stub.name,
-        lightYears: UV.distance(stub.position, centre) / LIGHT_YEAR,
+        lightYears: UV.distance(stub.position, center) / LIGHT_YEAR,
       }))
       .sort((a, b) => a.lightYears - b.lightYears)
   }
@@ -746,7 +746,7 @@ export class GameHarness {
             ? {
                 result: Promise.resolve(
                   findWorldsTask.run(payload, {
-                    cancelled: () => stopped,
+                    canceled: () => stopped,
                   }),
                 ),
                 cancel: () => {},

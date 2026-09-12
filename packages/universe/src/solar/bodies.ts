@@ -77,7 +77,7 @@ export interface SolarRings {
  */
 export interface SolarHaze {
   readonly height: Meters
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   readonly limb: LinearRgb
   /** Visible optical thickness, 0..1 with Earth at 1. See `HazeLayer`. */
   readonly thickness: number
@@ -340,7 +340,7 @@ const SATURNIAN: readonly SolarBody[] = [
     // is a featureless orange ball in every image taken in visible light.
     haze: {
       height: 400_000,
-      colour: { r: 0.86, g: 0.6, b: 0.3 },
+      color: { r: 0.86, g: 0.6, b: 0.3 },
       limb: { r: 0.95, g: 0.7, b: 0.35 },
       // Denser than Earth's by column: the smog is the whole view.
       thickness: 1,
@@ -459,7 +459,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'venus',
     haze: {
       height: 90_000,
-      colour: { r: 0.96, g: 0.9, b: 0.68 },
+      color: { r: 0.96, g: 0.9, b: 0.68 },
       limb: { r: 0.98, g: 0.78, b: 0.45 },
       thickness: 1,
     },
@@ -498,7 +498,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'earth',
     haze: {
       height: 100_000,
-      colour: { r: 0.28, g: 0.48, b: 0.95 },
+      color: { r: 0.28, g: 0.48, b: 0.95 },
       limb: { r: 0.92, g: 0.42, b: 0.2 },
       // The reference: what "1" means for every other body.
       thickness: 1,
@@ -537,7 +537,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'mars',
     haze: {
       height: 60_000,
-      colour: { r: 0.78, g: 0.6, b: 0.48 },
+      color: { r: 0.78, g: 0.6, b: 0.48 },
       limb: { r: 0.62, g: 0.66, b: 0.9 },
       // 600 Pa of CO₂ and dust: a translucent butterscotch limb that must
       // never whiten. Viking's oblique photographs are the reference.
@@ -646,7 +646,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'jupiter',
     haze: {
       height: 570_000,
-      colour: { r: 0.78, g: 0.76, b: 0.8 },
+      color: { r: 0.78, g: 0.76, b: 0.8 },
       limb: { r: 0.95, g: 0.78, b: 0.55 },
       // A giant's tangent haze is thin and high; Cassini and Voyager disks
       // show a whisper of limb line, not Earth's glowing ring.
@@ -696,7 +696,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'saturn',
     haze: {
       height: 480_000,
-      colour: { r: 0.88, g: 0.84, b: 0.72 },
+      color: { r: 0.88, g: 0.84, b: 0.72 },
       limb: { r: 0.95, g: 0.82, b: 0.58 },
       thickness: 0.3,
     },
@@ -746,7 +746,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'uranus',
     haze: {
       height: 200_000,
-      colour: { r: 0.5, g: 0.82, b: 0.86 },
+      color: { r: 0.5, g: 0.82, b: 0.86 },
       limb: { r: 0.62, g: 0.85, b: 0.88 },
       thickness: 0.45,
     },
@@ -787,7 +787,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'neptune',
     haze: {
       height: 200_000,
-      colour: { r: 0.32, g: 0.5, b: 0.92 },
+      color: { r: 0.32, g: 0.5, b: 0.92 },
       limb: { r: 0.45, g: 0.6, b: 0.95 },
       thickness: 0.45,
     },
@@ -827,7 +827,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
         },
         haze: {
           height: 40_000,
-          colour: { r: 0.6, g: 0.72, b: 0.9 },
+          color: { r: 0.6, g: 0.72, b: 0.9 },
           limb: { r: 0.8, g: 0.8, b: 0.9 },
           // 1.4 Pa of nitrogen: barely there, and that is the point of it.
           thickness: 0.05,

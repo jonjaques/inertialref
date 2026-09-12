@@ -78,7 +78,7 @@ export interface LookOffset {
 export const NO_LOOK: LookOffset = Object.freeze({ yaw: 0, pitch: 0 })
 
 /** Whether an offset is the composed aim itself, and so costs nothing. */
-export const isCentred = (look: LookOffset): boolean =>
+export const isCentered = (look: LookOffset): boolean =>
   look.yaw === 0 && look.pitch === 0
 
 /**
@@ -327,7 +327,7 @@ export function observerPose(
  * it hold under a later change to `multiply`.
  */
 export function turn(base: Quat, look: LookOffset): Quat {
-  if (isCentred(look)) return base
+  if (isCentered(look)) return base
   const yaw = Q.fromAxisAngle(vec3(0, 1, 0), look.yaw)
   const pitch = Q.fromAxisAngle(vec3(1, 0, 0), clampElevation(look.pitch))
   return Q.multiply(Q.multiply(base, yaw), pitch)

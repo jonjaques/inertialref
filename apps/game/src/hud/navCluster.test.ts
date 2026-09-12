@@ -15,7 +15,7 @@ import {
   orbitLine,
   SPEED_MODES,
   speedReading,
-  SURFACE_BELOW_METRES,
+  SURFACE_BELOW_METERS,
 } from './navCluster.ts'
 
 /** Only the fields the cluster reads; the rest is what a fixture is for. */
@@ -36,7 +36,7 @@ describe('the speed readout', () => {
       value: 7_600,
     })
     expect(
-      speedReading(player({ altitude: SURFACE_BELOW_METRES - 1 }), 'auto'),
+      speedReading(player({ altitude: SURFACE_BELOW_METERS - 1 }), 'auto'),
     ).toEqual({ mode: 'surface', value: 7_200 })
     expect(
       speedReading(player({ landed: true, altitude: 0 }), 'auto').mode,

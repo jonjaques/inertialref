@@ -1,7 +1,7 @@
 import {
   SURFACE_LUMINANCE,
   cloudShellAltitude,
-  surfaceColour,
+  surfaceColor,
   surfaceVisibilityGain,
 } from '@inertialref/rendering'
 import { useThree } from '@react-three/fiber'
@@ -334,7 +334,7 @@ export function Bodies({
   }, [gl, terrain, engine])
 
   const scratch = useMemo(
-    () => ({ axis: new Vector3(), sun: new Vector3(), centre: new Vector3() }),
+    () => ({ axis: new Vector3(), sun: new Vector3(), center: new Vector3() }),
     [],
   )
 
@@ -369,7 +369,7 @@ export function Bodies({
     // brightest-apparent-first, which is the same star `CameraRig` lights the
     // scene with — they must not disagree.
     const keyLight = scene.stars[0]?.placement.position ?? null
-    const keyColour = scene.stars[0]?.color ?? { r: 1, g: 1, b: 1 }
+    const keyColor = scene.stars[0]?.color ?? { r: 1, g: 1, b: 1 }
 
     const geometryFor = (angle: number): SphereGeometry =>
       (
@@ -561,18 +561,18 @@ export function Bodies({
               },
         )
         planet.sunDirection.value.copy(sun)
-        planet.sunColour.value.setRGB(
-          keyColour.r * (visibility ? 1 : body.sunlight),
-          keyColour.g * (visibility ? 1 : body.sunlight),
-          keyColour.b * (visibility ? 1 : body.sunlight),
+        planet.sunColor.value.setRGB(
+          keyColor.r * (visibility ? 1 : body.sunlight),
+          keyColor.g * (visibility ? 1 : body.sunlight),
+          keyColor.b * (visibility ? 1 : body.sunlight),
         )
         planet.spinAxis.value
           .set(0, 1, 0)
           .applyQuaternion(quaternion)
           .normalize()
-        planet.centre.value.copy(visual.mesh.position)
-        const colour = surfaceColour(appearance)
-        planet.baseColour.value.setRGB(colour.r, colour.g, colour.b)
+        planet.center.value.copy(visual.mesh.position)
+        const color = surfaceColor(appearance)
+        planet.baseColor.value.setRGB(color.r, color.g, color.b)
         /*
          * A generated body wears its bake once one is ready, and asking is
          * what starts it. Only where the archive has no photograph — a
@@ -594,8 +594,8 @@ export function Bodies({
          * Open-ocean blue where the record names no liquid: a photographed
          * body's mask is in its normal map, and its sea is water.
          */
-        const liquid = appearance.liquid?.colour ?? OPEN_OCEAN
-        planet.oceanColour.value.setRGB(liquid.r, liquid.g, liquid.b)
+        const liquid = appearance.liquid?.color ?? OPEN_OCEAN
+        planet.oceanColor.value.setRGB(liquid.r, liquid.g, liquid.b)
         planet.albedoScale.value = surfaceVisibilityGain(
           appearance.geometricAlbedo,
           placement.angularRadius,
@@ -630,10 +630,10 @@ export function Bodies({
         planet.hazeStrength.value =
           airHaze === null ? 0 : giant ? 0.18 : airHaze.thickness
         if (airHaze !== null) {
-          planet.hazeColour.value.setRGB(
-            airHaze.colour.r,
-            airHaze.colour.g,
-            airHaze.colour.b,
+          planet.hazeColor.value.setRGB(
+            airHaze.color.r,
+            airHaze.color.g,
+            airHaze.color.b,
           )
           planet.hazeLimb.value.setRGB(
             airHaze.limb.r,
@@ -700,23 +700,23 @@ export function Bodies({
           // drawn from the body's tint over the opaque fallback texel; a
           // mapped deck keeps its own colors untinted.
           if (cloudMap === null)
-            material.baseColour.value.setRGB(
-              appearance.colour.r,
-              appearance.colour.g,
-              appearance.colour.b,
+            material.baseColor.value.setRGB(
+              appearance.color.r,
+              appearance.color.g,
+              appearance.color.b,
             )
-          else material.baseColour.value.setRGB(1, 1, 1)
+          else material.baseColor.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
-          material.sunColour.value.setRGB(
-            keyColour.r * (visibility ? 1 : body.sunlight),
-            keyColour.g * (visibility ? 1 : body.sunlight),
-            keyColour.b * (visibility ? 1 : body.sunlight),
+          material.sunColor.value.setRGB(
+            keyColor.r * (visibility ? 1 : body.sunlight),
+            keyColor.g * (visibility ? 1 : body.sunlight),
+            keyColor.b * (visibility ? 1 : body.sunlight),
           )
           // The deck's dusk color is the body's authored sunset, so clouds
           // and air agree about what the low sun does here.
           const deckHaze = appearance.haze
           if (deckHaze !== null)
-            material.sunsetColour.value.setRGB(
+            material.sunsetColor.value.setRGB(
               deckHaze.limb.r,
               deckHaze.limb.g,
               deckHaze.limb.b,
@@ -750,13 +750,13 @@ export function Bodies({
               : texturesFor(ring.texture, anisotropy).ring,
           )
           material.sunDirection.value.copy(sun)
-          material.sunColour.value.setRGB(
-            keyColour.r * (visibility ? 1 : body.sunlight),
-            keyColour.g * (visibility ? 1 : body.sunlight),
-            keyColour.b * (visibility ? 1 : body.sunlight),
+          material.sunColor.value.setRGB(
+            keyColor.r * (visibility ? 1 : body.sunlight),
+            keyColor.g * (visibility ? 1 : body.sunlight),
+            keyColor.b * (visibility ? 1 : body.sunlight),
           )
           material.innerFraction.value = ring.innerScale / ring.outerScale
-          material.centre.value.copy(visual.mesh.position)
+          material.center.value.copy(visual.mesh.position)
           // In render meters: the eclipse test runs on `positionWorld`, so a
           // mesh-local value (1/outerScale) never shadowed a single fragment.
           material.bodyRadius.value = placement.scale
@@ -764,12 +764,12 @@ export function Bodies({
           // A generated strip carries its own grays — re-dying it with the
           // body's tint is how Uranus's charcoal threads came out cyan. Only
           // a photographed strip is neutral enough to take the tint.
-          if (ring.texture === null) material.baseColour.value.setRGB(1, 1, 1)
+          if (ring.texture === null) material.baseColor.value.setRGB(1, 1, 1)
           else
-            material.baseColour.value.setRGB(
-              appearance.colour.r,
-              appearance.colour.g,
-              appearance.colour.b,
+            material.baseColor.value.setRGB(
+              appearance.color.r,
+              appearance.color.g,
+              appearance.color.b,
             )
         }
       }
@@ -792,7 +792,7 @@ export function Bodies({
         // shading a surface. Written every frame for the same reason the matrix
         // is: distance compression rescales both radii whenever the tier moves.
         const air = visual.atmosphereMaterial
-        air.centre.value.copy(visual.mesh.position)
+        air.center.value.copy(visual.mesh.position)
         air.outerRadius.value = shell
         air.innerRadius.value = placement.scale
         air.spinAxis.value.set(0, 1, 0).applyQuaternion(quaternion).normalize()
@@ -818,10 +818,10 @@ export function Bodies({
               scattering.multiScatter,
             )
         }
-        air.sunColour.value.setRGB(
-          keyColour.r * (visibility ? 1 : body.sunlight),
-          keyColour.g * (visibility ? 1 : body.sunlight),
-          keyColour.b * (visibility ? 1 : body.sunlight),
+        air.sunColor.value.setRGB(
+          keyColor.r * (visibility ? 1 : body.sunlight),
+          keyColor.g * (visibility ? 1 : body.sunlight),
+          keyColor.b * (visibility ? 1 : body.sunlight),
         )
         if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
@@ -998,7 +998,7 @@ const STAR_APPEARANCE: RenderBody['appearance'] = {
   clouds: null,
   rings: null,
   haze: null,
-  colour: { r: 1, g: 1, b: 1 },
+  color: { r: 1, g: 1, b: 1 },
   pigment: { r: 1, g: 1, b: 1 },
   liquid: null,
 }

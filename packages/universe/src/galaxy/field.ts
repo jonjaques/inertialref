@@ -8,7 +8,7 @@ import {
 } from '@inertialref/procedural'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
-import { blackbodyColour, type LinearRgb } from '../catalog/photometry.ts'
+import { blackbodyColor, type LinearRgb } from '../catalog/photometry.ts'
 import { LOCAL_DENSITY } from './constants.ts'
 import { armStrength } from './arms.ts'
 import { localBubbleFactor, localCloudExtinction } from './localDust.ts'
@@ -42,7 +42,7 @@ export const GALAXY_POPULATIONS = Object.freeze({
   halo: Object.freeze({ meanSolarLuminosities: 0.1, temperature: 4800 }),
 })
 const COLOURS = POPULATION_NAMES.map((name) =>
-  blackbodyColour(GALAXY_POPULATIONS[name].temperature),
+  blackbodyColor(GALAXY_POPULATIONS[name].temperature),
 )
 const BAR_ANGLE = (27 * Math.PI) / 180
 
@@ -220,12 +220,12 @@ export function createGalaxyField(
         total += density
         const light = density * GALAXY_POPULATIONS[name].meanSolarLuminosities
         emission += light
-        const colour = COLOURS[i]!
+        const color = COLOURS[i]!
         // Green carries the measured V band; chromaticity cannot redefine its power.
-        const sum = colour.g
-        r += (light * colour.r) / sum
-        g += (light * colour.g) / sum
-        b += (light * colour.b) / sum
+        const sum = color.g
+        r += (light * color.r) / sum
+        g += (light * color.g) / sum
+        b += (light * color.b) / sum
       }
       return {
         populations,

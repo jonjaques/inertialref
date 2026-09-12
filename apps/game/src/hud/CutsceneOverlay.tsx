@@ -149,7 +149,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    */
   useEffect(() => {
     if (engine.cutsceneAudio !== null) return
-    let cancelled = false
+    let canceled = false
     const decoder = document.createElement('audio')
     const names = new Set<string>()
     for (const scene of scenes) {
@@ -163,7 +163,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
           const response = await fetch(candidate.src, { method: 'HEAD' }).catch(
             () => null,
           )
-          if (cancelled) return
+          if (canceled) return
           /*
            * `ok` is not enough, and the reason is the same one the Worker's
            * own media handler carries: a single-page fallback answers a path
@@ -187,7 +187,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
       }
     })()
     return () => {
-      cancelled = true
+      canceled = true
     }
   }, [engine, scenes])
 

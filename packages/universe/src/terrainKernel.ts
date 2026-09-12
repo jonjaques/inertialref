@@ -619,7 +619,7 @@ export function writeTileFrame(
     region.level <= MAX_TILE_LEVEL,
     `A tile frame's face coordinates are exact through level ${MAX_TILE_LEVEL}; got ${region.level}`,
   )
-  const centre = regionDirection(region, 0.5, 0.5)
+  const center = regionDirection(region, 0.5, 0.5)
   out[at] = region.face
   out[at + 1] = region.level
   out[at + 2] = region.i
@@ -627,9 +627,9 @@ export function writeTileFrame(
   const frame = (index: number, cells: number): void => {
     const cell = at + 4 + index * 8
     const fraction = cell + 4
-    writeAxisFrame(centre.x, cells, out, cell, fraction)
-    writeAxisFrame(centre.y, cells, out, cell + 1, fraction + 1)
-    writeAxisFrame(centre.z, cells, out, cell + 2, fraction + 2)
+    writeAxisFrame(center.x, cells, out, cell, fraction)
+    writeAxisFrame(center.y, cells, out, cell + 1, fraction + 1)
+    writeAxisFrame(center.z, cells, out, cell + 2, fraction + 2)
     out[cell + 3] = 0
     out[fraction + 3] = 0
   }

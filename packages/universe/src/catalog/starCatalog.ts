@@ -29,7 +29,7 @@ import {
   type SkySelection,
 } from './format.ts'
 import {
-  blackbodyColour,
+  blackbodyColor,
   effectiveTemperature,
   estimateMass,
   type LinearRgb,
@@ -89,11 +89,11 @@ export interface StarPhysical {
   readonly massBasis: 'derived' | 'typical'
   readonly temperature: Kelvin
   /** Linear sRGB of a blackbody at `temperature`, brightest channel normalized. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   /** Absolute visual magnitude as published, or null. */
   readonly absoluteMagnitude: number | null
   /** Color index B−V as published, or null. */
-  readonly colourIndex: number | null
+  readonly colorIndex: number | null
   /**
    * True when the physical values above rest on a fallback rather than a
    * measurement — no magnitude, or no classification. The system panel says so
@@ -192,11 +192,11 @@ const FALLBACK_LUMINOSITY = 0.02
 
 function derivePhysical(packed: PackedStar, type: SpectralType): StarPhysical {
   const temperature =
-    effectiveTemperature(type, packed.colourIndex) ?? FALLBACK_TEMPERATURE
+    effectiveTemperature(type, packed.colorIndex) ?? FALLBACK_TEMPERATURE
   const evolved = isGiant(type)
   const estimated =
     packed.absoluteMagnitude === null ||
-    (packed.colourIndex === null && type.spectralClass === null)
+    (packed.colorIndex === null && type.spectralClass === null)
 
   const solarLuminosities =
     packed.absoluteMagnitude === null
@@ -213,9 +213,9 @@ function derivePhysical(packed: PackedStar, type: SpectralType): StarPhysical {
     solarMasses: mass.solarMasses,
     massBasis: mass.basis,
     temperature,
-    colour: blackbodyColour(temperature),
+    color: blackbodyColor(temperature),
     absoluteMagnitude: packed.absoluteMagnitude,
-    colourIndex: packed.colourIndex,
+    colorIndex: packed.colorIndex,
     estimated,
   }
 }
@@ -745,7 +745,7 @@ const SOL_ROW: PackedStar = {
   y: 0,
   z: 0,
   absoluteMagnitude: 4.85,
-  colourIndex: 0.656,
+  colorIndex: 0.656,
   spectralType: 'G2V',
   components: 1,
   provenance: 'observed',

@@ -31,7 +31,7 @@ const candidate = fc
       .map(([x, y, z]) =>
         UV.fromMeters(x * LIGHT_YEAR, y * LIGHT_YEAR, z * LIGHT_YEAR),
       ),
-    colour: fc.tuple(
+    color: fc.tuple(
       fc.double({ min: 0, max: 1, noNaN: true }),
       fc.double({ min: 0, max: 1, noNaN: true }),
       fc.double({ min: 0, max: 1, noNaN: true }),
@@ -75,7 +75,7 @@ describe('selecting the drawn stars', () => {
       id: 'unmeasured',
       name: 'unmeasured',
       position: UV.fromMeters(LIGHT_YEAR, 0, 0),
-      colour: [1, 0.5, 0.2],
+      color: [1, 0.5, 0.2],
       solarLuminosities: 1,
       catalogued: true,
     }
@@ -93,7 +93,7 @@ describe('selecting the drawn stars', () => {
       id: String(i),
       name: String(i),
       position: UV.fromMeters((i + 1) * LIGHT_YEAR, 0, 0),
-      colour: [1, 1, 1],
+      color: [1, 1, 1],
       solarLuminosities: 1,
       visualLuminosities: 1,
     }))
@@ -114,7 +114,7 @@ describe('selecting the drawn stars', () => {
       id,
       name: id,
       position: UV.fromMeters(100 * LIGHT_YEAR, 0, 0),
-      colour: [1, 1, 1],
+      color: [1, 1, 1],
       solarLuminosities: 100 - visualLuminosities,
       visualLuminosities,
       catalogued: id === 'known',
@@ -202,7 +202,7 @@ describe('selecting the drawn stars', () => {
       id: 'HIP32349',
       name: 'Sirius',
       position: UV.fromMeters(8.6 * LIGHT_YEAR, 0, 0),
-      colour: [0.8, 0.9, 1],
+      color: [0.8, 0.9, 1],
       solarLuminosities: 25,
       visualLuminosities: 25,
     }
@@ -210,7 +210,7 @@ describe('selecting the drawn stars', () => {
       id: 'HIP27989',
       name: 'Betelgeuse',
       position: UV.fromMeters(0, 498 * LIGHT_YEAR, 0),
-      colour: [1, 0.6, 0.3],
+      color: [1, 0.6, 0.3],
       solarLuminosities: 31_700,
       visualLuminosities: 31_700,
     }

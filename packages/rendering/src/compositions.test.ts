@@ -16,7 +16,7 @@ import {
   clampElevation,
   ELEVATION_LIMIT,
   framingDistance,
-  isCentred,
+  isCentered,
   lookToward,
   MIN_DISTANCE_RADII,
   NO_LOOK,
@@ -171,7 +171,7 @@ describe('every composition', () => {
       )
       expect(placement.kind).toBe('orbit')
       if (placement.kind !== 'orbit') return
-      expect(isCentred(placement.look)).toBe(true)
+      expect(isCentered(placement.look)).toBe(true)
       // And the angles are `anglesForPhase`'s own, unrouted through the solve.
       const angles = anglesForPhase(
         SUN,

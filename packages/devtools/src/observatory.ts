@@ -76,7 +76,7 @@ import {
   framingDistance,
   heightForScrub,
   horizonPitch,
-  isCentred,
+  isCentered,
   localTriad,
   launchArc,
   type LookOffset,
@@ -236,7 +236,7 @@ export interface ObserverStatus {
   /** Where the camera is easing to. Equal to `state` once it has arrived. */
   readonly desired: ObserverState
   /** True while a fly-to is still visibly moving. */
-  readonly travelling: boolean
+  readonly traveling: boolean
   /** Distance from the target's *surface*, which is what a reader wants. */
   readonly altitude: Meters
   readonly altitudeText: string
@@ -787,8 +787,8 @@ export class Observatory {
     // "the viewer" while the viewer is standing on Iapetus must not sort by
     // where the viewer was before the descent.
     if (this.#stance !== null) return this.#surfacePose()?.position ?? null
-    const centre = this.#targetPosition(target)
-    return centre === null ? null : this.#orbitPose(centre).position
+    const center = this.#targetPosition(target)
+    return center === null ? null : this.#orbitPose(center).position
   }
 
   /**
@@ -804,8 +804,8 @@ export class Observatory {
     const target = this.#target
     if (target === null) return null
     if (this.#stance !== null) return this.#surfacePose()
-    const centre = this.#targetPosition(target)
-    return centre === null ? null : this.#orbitPose(centre)
+    const center = this.#targetPosition(target)
+    return center === null ? null : this.#orbitPose(center)
   }
 
   /**
@@ -1097,7 +1097,7 @@ export class Observatory {
   }
 
   /** Back to whatever the pose aims at. */
-  centre(): void {
+  center(): void {
     if (this.#stance !== null) {
       this.levelToHorizon()
       return
@@ -2178,8 +2178,8 @@ export class Observatory {
       state: { ...this.#state, distance },
       desired: { ...this.#desired, distance: this.#desired.distance * scale },
       look: this.#look,
-      aimed: !isCentred(this.#look),
-      travelling:
+      aimed: !isCentered(this.#look),
+      traveling:
         this.#galaxyView === null &&
         (this.#descent !== null ||
           this.#journey?.motion != null ||
@@ -2228,9 +2228,9 @@ export class Observatory {
       this.#state = this.#desired
     }
 
-    const centre = this.#targetPosition(target)
-    if (centre === null) return null
-    return this.#orbitPose(centre)
+    const center = this.#targetPosition(target)
+    if (center === null) return null
+    return this.#orbitPose(center)
   }
 
   /** Whether the ease has close enough that holding it open is noise. */
@@ -2415,8 +2415,8 @@ export class Observatory {
     const target = this.#target
     if (target === null || target.kind === 'star') return null
     const world = this.#host.world
-    const centre = this.#targetPosition(target)
-    if (centre === null) return null
+    const center = this.#targetPosition(target)
+    if (center === null) return null
     try {
       // Same instant as `#targetPosition`, for the same reason: the lighting
       // direction is measured between two points that must both be sampled at
@@ -2425,7 +2425,7 @@ export class Observatory {
         systemFrameId(target.system),
         this.time,
       ).position
-      const toStar = UV.difference(star, centre)
+      const toStar = UV.difference(star, center)
       return Vec.length(toStar) > 0 ? Vec.normalize(toStar) : null
     } catch {
       return null

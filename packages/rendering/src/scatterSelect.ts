@@ -3,7 +3,7 @@ import { Vec } from '@inertialref/spatial'
 import {
   type BodyFixedDirection,
   type RegionAddress,
-  regionCentreDirection,
+  regionCenterDirection,
   regionForDirection,
   regionNeighbor,
   regionSize,
@@ -182,7 +182,7 @@ export function selectScatterRegions(
        * costs the far half of the outermost ring, which is rocks at more than
        * the range and therefore under two pixels.
        */
-      const to = Vec.scale(regionCentreDirection(region), eye.ground)
+      const to = Vec.scale(regionCenterDirection(region), eye.ground)
       const distance = Vec.distance(to, from)
       if (distance > range + size * 0.5) continue
       found.push({ region, distance })

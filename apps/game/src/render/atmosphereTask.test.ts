@@ -25,7 +25,7 @@ import { createGameTaskRegistry } from '../workers/registry.ts'
 
 // Earth's authored haze, and the shell ratio `buildScene` gives it.
 const haze = {
-  colour: { r: 0.3, g: 0.55, b: 1 },
+  color: { r: 0.3, g: 0.55, b: 1 },
   limb: { r: 1, g: 0.6, b: 0.3 },
   thickness: 1,
 }

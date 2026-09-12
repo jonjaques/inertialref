@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { blackbodyColour } from '@inertialref/universe'
+import { blackbodyColor } from '@inertialref/universe'
 import {
   ACESFilmicToneMapping,
   CustomToneMapping,
@@ -32,7 +32,7 @@ it('preserves the catalog blackbody hue through the entire highlight range', asy
     LinearSRGBColorSpace,
   )
   for (const temperature of [3000, 10000]) {
-    const rgb = blackbodyColour(temperature)
+    const rgb = blackbodyColor(temperature)
     colour.value.set(rgb.r, rgb.g, rgb.b)
     const original = hue([rgb.r, rgb.g, rgb.b])
     let worst = 0

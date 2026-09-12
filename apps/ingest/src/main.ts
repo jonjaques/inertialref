@@ -101,7 +101,7 @@ function printReport(report: BuildReport): void {
 
   with a proper name      ${pad(report.withProperName)}   ${percent(report.withProperName, s)}
   with a spectral type    ${pad(report.withSpectralType)}   ${percent(report.withSpectralType, s)}
-  with a color index      ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
+  with a color index      ${pad(report.withColorIndex)}   ${percent(report.withColorIndex, s)}
   with a magnitude        ${pad(report.withMagnitude)}   ${percent(report.withMagnitude, s)}
 
   unparsed spectral types ${pad(report.spectralUnparsed)}   had a string the parser could not read
@@ -132,7 +132,7 @@ function printSkyReport(report: SkyBuildReport): void {
   multiple-star systems   ${pad(report.multiples)}   ${percent(report.multiples, s)}
   with a proper name      ${pad(report.withProperName)}   ${percent(report.withProperName, s)}
   with a spectral type    ${pad(report.withSpectralType)}   ${percent(report.withSpectralType, s)}
-  with a color index      ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
+  with a color index      ${pad(report.withColorIndex)}   ${percent(report.withColorIndex, s)}
   unparsed spectral types ${pad(report.spectralUnparsed)}
   ids only HYG can supply ${pad(report.unstableIds)}   ${percent(report.unstableIds, s)}
   duplicate ids dropped   ${pad(report.duplicateIds.length)}   ${report.duplicateIds.slice(0, 6).join(', ')}

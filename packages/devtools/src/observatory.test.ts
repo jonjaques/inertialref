@@ -266,7 +266,7 @@ describe('the observatory', () => {
     ir.look('s:SOL/b:2')
     ir.look('s:SOL/b:5')
     // The desired distance jumped; the actual one has not arrived yet.
-    expect(ir.observerStatus()?.travelling).toBe(true)
+    expect(ir.observerStatus()?.traveling).toBe(true)
     const status = ir.observerStatus()
     expect(status?.state.distance).toBeLessThan(status?.desired.distance ?? 0)
     // Earth's framing is *inside* Jupiter, so the ease does not start there —
@@ -277,7 +277,7 @@ describe('the observatory', () => {
     // still visibly running at four seconds. That is the intended feel; the
     // test just has to outlast it.
     for (let i = 0; i < 900; i += 1) ir.observerSample(1 / 60)
-    expect(ir.observerStatus()?.travelling).toBe(false)
+    expect(ir.observerStatus()?.traveling).toBe(false)
   })
 
   it('stops reporting a move once it has stopped moving, however far round', () => {
@@ -300,7 +300,7 @@ describe('the observatory', () => {
     // A preset, whose azimuth comes back in (−π, π] however far the drag went.
     ir.observatory.setPhase(150, 10)
     for (let i = 0; i < 900; i += 1) ir.observerSample(1 / 60)
-    expect(ir.observerStatus()?.travelling).toBe(false)
+    expect(ir.observerStatus()?.traveling).toBe(false)
   })
 
   it('never passes through the target on the way to it', () => {
@@ -861,7 +861,7 @@ describe('a drop', () => {
     const status = ir.observerStatus()
     const stance = status?.surface?.stance
     expect(status?.descent).toBeNull()
-    expect(status?.travelling).toBe(false)
+    expect(status?.traveling).toBe(false)
     // Degrees at the harness boundary, radians under it.
     expect(((stance?.latitude ?? 0) * 180) / Math.PI).toBeCloseTo(12, 9)
     expect(((stance?.longitude ?? 0) * 180) / Math.PI).toBeCloseTo(34, 9)
@@ -951,7 +951,7 @@ describe('a drop', () => {
     const half = ir.observerStatus()?.descent
     expect(half?.progress).toBeCloseTo(0.5, 2)
     expect(half?.remainingSeconds).toBeCloseTo(2, 2)
-    expect(ir.observerStatus()?.travelling).toBe(true)
+    expect(ir.observerStatus()?.traveling).toBe(true)
   })
 
   it('moves the camera without moving the ship', () => {

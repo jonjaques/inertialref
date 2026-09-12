@@ -158,9 +158,9 @@ export function patchGeometry(
   geometry.setIndex(index)
   geometry.boundingSphere = new Sphere(
     new Vector3(
-      patch.boundsCentre.x,
-      patch.boundsCentre.y,
-      patch.boundsCentre.z,
+      patch.boundsCenter.x,
+      patch.boundsCenter.y,
+      patch.boundsCenter.z,
     ),
     patch.boundsRadius,
   )
@@ -186,9 +186,9 @@ export function sheetGeometry(
   geometry.setIndex(index)
   geometry.boundingSphere = new Sphere(
     new Vector3(
-      sheet.boundsCentre.x,
-      sheet.boundsCentre.y,
-      sheet.boundsCentre.z,
+      sheet.boundsCenter.x,
+      sheet.boundsCenter.y,
+      sheet.boundsCenter.z,
     ),
     sheet.boundsRadius,
   )

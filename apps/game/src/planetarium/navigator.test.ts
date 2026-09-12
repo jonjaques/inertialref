@@ -6,7 +6,7 @@ import {
   groupBySystem,
   indentOf,
   measureOf,
-  neighbours,
+  neighbors,
   moveInList,
   orbitalOrder,
   searchRows,
@@ -262,7 +262,7 @@ describe('the readings at the end of a row', () => {
 
 describe('the neighborhood rail', () => {
   it('places the observer at the left end and the survey edge at the right', () => {
-    const placed = neighbours(
+    const placed = neighbors(
       [
         star({ address: 's:SOL', distance: 0 }),
         star({ address: 's:EDGE', distance: 10 * LIGHT_YEAR }),
@@ -279,7 +279,7 @@ describe('the neighborhood rail', () => {
      * edge and a linear rail piles the whole neighborhood into the left tenth.
      * At a quarter of the radius, √ puts a star at the halfway mark.
      */
-    const [quarter] = neighbours(
+    const [quarter] = neighbors(
       [star({ address: 's:A', distance: 2.5 * LIGHT_YEAR })],
       10,
     )
@@ -295,7 +295,7 @@ describe('the neighborhood rail', () => {
      * the "10 ly" tick, under a caption that then counts it as within 10.
      */
     expect(
-      neighbours([star({ address: 's:FAR', distance: 40 * LIGHT_YEAR })], 10),
+      neighbors([star({ address: 's:FAR', distance: 40 * LIGHT_YEAR })], 10),
     ).toHaveLength(0)
   })
 
@@ -305,13 +305,13 @@ describe('the neighborhood rail', () => {
     const many = Array.from({ length: 200 }, (_, at) =>
       star({ address: `s:S${at}`, distance: (at / 100) * LIGHT_YEAR }),
     )
-    const placed = neighbours(many, 10)
+    const placed = neighbors(many, 10)
     expect(placed).toHaveLength(24)
     expect(placed[0]?.address).toBe('s:S0')
   })
 
   it('is nearest first, whatever order the survey gave', () => {
-    const placed = neighbours(
+    const placed = neighbors(
       [
         star({ address: 's:B', distance: 8 * LIGHT_YEAR }),
         star({ address: 's:A', distance: 4 * LIGHT_YEAR }),
@@ -323,7 +323,7 @@ describe('the neighborhood rail', () => {
 
   it('ignores bodies — a rail of light years is a rail of stars', () => {
     expect(
-      neighbours([star({ address: 's:A' }), row({ address: 's:A/b:0' })], 10),
+      neighbors([star({ address: 's:A' }), row({ address: 's:A/b:0' })], 10),
     ).toHaveLength(1)
   })
 })

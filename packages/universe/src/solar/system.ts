@@ -19,7 +19,7 @@ import {
   systemId,
 } from '../address.ts'
 import { meanRadiusOf, tidalProxyOf } from '../archetype.ts'
-import { blackbodyColour } from '../catalog/photometry.ts'
+import { blackbodyColor } from '../catalog/photometry.ts'
 import { liquidAppearance, PIGMENTS } from '../appearance.ts'
 import { equilibriumTemperature, surfaceGrammar } from '../grammar.ts'
 import type { SystemStub } from '../galaxy.ts'
@@ -77,7 +77,7 @@ function theSun(name: string): Star {
     radius: SOLAR_RADIUS,
     temperature,
     luminosity: SOLAR_LUMINOSITY,
-    colour: blackbodyColour(temperature),
+    color: blackbodyColor(temperature),
     mu: mu(SOLAR_MASS),
   }
 }
@@ -102,10 +102,10 @@ const appearanceOf = (
   // Tints an albedo map that is grayscale — three of the four Galilean moons
   // were mapped in monochrome — and stands in entirely before the texture
   // arrives, so a body reads as itself on the first frame rather than as white.
-  colour: body.tint,
+  color: body.tint,
   // Earth's is chlorophyll and no other body here grows anything; the
   // pigment rides along because the record is total, not because it is read.
-  pigment: PIGMENTS[0]?.colour ?? { r: 0.08, g: 0.21, b: 0.05 },
+  pigment: PIGMENTS[0]?.color ?? { r: 0.08, g: 0.21, b: 0.05 },
   /*
    * The liquid the grammar admits, drawn from the surface seed exactly as a
    * projected world's is. Earth's sea is in its photograph and the renderer

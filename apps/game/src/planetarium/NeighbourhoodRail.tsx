@@ -1,6 +1,6 @@
-import type { Neighbour } from './navigator.ts'
+import type { Neighbor } from './navigator.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
-import { starColour } from './kinds.ts'
+import { starColor } from './kinds.ts'
 
 /**
  * Where you are, and what is around you — one rail, a few light years wide.
@@ -21,13 +21,13 @@ import { starColour } from './kinds.ts'
  * is that a survey's volume grows as r³, so linearly the whole neighborhood
  * piles into the left tenth of the rail.
  */
-export function NeighbourhoodRail({
+export function NeighborhoodRail({
   stars,
   radiusLightYears,
   target,
   onFocus,
 }: {
-  stars: readonly Neighbour[]
+  stars: readonly Neighbor[]
   radiusLightYears: number
   /** The system the camera is in, so its dot can be marked. */
   target: string | null
@@ -60,7 +60,7 @@ export function NeighbourhoodRail({
         />
         {stars.map((star) => {
           const here = star.address === target
-          const tint = starColour(star.colour)
+          const tint = starColor(star.color)
           return (
             <button
               key={star.address}

@@ -7,7 +7,7 @@ import {
   DEFAULT_FLIGHT_CAMERA,
   type FlightCameraState,
   type FlightView,
-  isCentred,
+  isCentered,
   type LookOffset,
   NO_LOOK,
   type ObserverState,
@@ -61,7 +61,7 @@ export class FlightCamera {
       view: this.#state.view,
       orbit: this.#state.orbit,
       look: this.#state.look,
-      aimed: !isCentred(this.#state.look),
+      aimed: !isCentered(this.#state.look),
     }
   }
 
@@ -148,7 +148,7 @@ export class FlightCamera {
   }
 
   /** Look where the view aims again. */
-  recentre(): FlightCameraStatus {
+  recenter(): FlightCameraStatus {
     this.#state = { ...this.#state, look: NO_LOOK }
     return this.status()
   }

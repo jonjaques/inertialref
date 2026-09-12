@@ -72,7 +72,7 @@ export interface GeneratedStar {
   readonly solarLuminosities: number
   readonly visualLuminosities?: number
   readonly temperature: number
-  readonly colour: readonly [number, number, number]
+  readonly color: readonly [number, number, number]
   readonly components: number
   readonly catalogued: boolean
   readonly planets: readonly CatalogPlanet[]
@@ -84,7 +84,7 @@ export type SkyStar = Pick<
   | 'id'
   | 'name'
   | 'position'
-  | 'colour'
+  | 'color'
   | 'solarLuminosities'
   | 'visualLuminosities'
 >
@@ -97,7 +97,7 @@ const encodeSkyStar = (stub: SystemStub): SkyStar => ({
   position: encodeUniverseVector(stub.position),
   solarLuminosities: stub.solarLuminosities,
   visualLuminosities: stub.visualLuminosities,
-  colour: [stub.colour.r, stub.colour.g, stub.colour.b],
+  color: [stub.color.r, stub.color.g, stub.color.b],
 })
 
 export const encodeStub = (stub: SystemStub): GeneratedStar => ({
@@ -132,7 +132,7 @@ export const decodeStub = (wire: GeneratedStar): SystemStub => ({
   solarLuminosities: wire.solarLuminosities,
   visualLuminosities: wire.visualLuminosities,
   temperature: wire.temperature,
-  colour: { r: wire.colour[0], g: wire.colour[1], b: wire.colour[2] },
+  color: { r: wire.color[0], g: wire.color[1], b: wire.color[2] },
   components: wire.components,
   catalogued: wire.catalogued,
   planets: wire.planets,
@@ -189,7 +189,7 @@ export const surveyRegionTask = defineTask<
           // Cancellation is checked per cell rather than per star: a cell is a
           // millisecond, so this bounds the wasted work without the check
           // costing more than the work.
-          if (context.cancelled()) return out
+          if (context.canceled()) return out
           const cell = { x, y, z }
           const stars = generateCell(parsed, cell, {
             catalogued: catalogued?.[cellKey(cell)] ?? 0,
@@ -229,7 +229,7 @@ export const surveySkyTask = defineTask<SurveySkyRequest, SurveySkyResponse>({
     const result = selectPopulationSky(
       createGalaxyField(parseSeed(request.seed)),
       UV.universeVector(...request.origin),
-      { ...request, cancelled: context.cancelled },
+      { ...request, canceled: context.canceled },
     )
     return {
       ...result,
@@ -569,7 +569,7 @@ export const findWorldsTask = defineTask<FindWorldsRequest, FindWorldsResponse>(
         decoded,
         query,
         UV.universeVector(from[0], from[1], from[2], from[3], from[4], from[5]),
-        context.cancelled,
+        context.canceled,
       )
       return { matches, generated: decoded.length }
     },

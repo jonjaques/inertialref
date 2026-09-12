@@ -15,7 +15,7 @@ import {
   geodeticDirection,
   systemId,
 } from '@inertialref/universe'
-import { buildScene, STRUCTURE_VISIBILITY_METRES } from './scene.ts'
+import { buildScene, STRUCTURE_VISIBILITY_METERS } from './scene.ts'
 
 describe('surface structures in a frame', () => {
   const prepare = () => {
@@ -75,7 +75,7 @@ describe('surface structures in a frame', () => {
       shot = snapshot(world, 0, 0),
       structure = shot.structures[0]!
     for (const distance of [
-      STRUCTURE_VISIBILITY_METRES + 1,
+      STRUCTURE_VISIBILITY_METERS + 1,
       mars.radius * 100,
     ]) {
       const eye = {

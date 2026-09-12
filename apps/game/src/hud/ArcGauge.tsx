@@ -29,8 +29,8 @@ export function ArcGauge({
   stroke?: number
   className?: string
 }) {
-  const centre = size / 2
-  const radius = centre - stroke
+  const center = size / 2
+  const radius = center - stroke
   return (
     <svg
       width={size}
@@ -40,13 +40,13 @@ export function ArcGauge({
       aria-hidden
     >
       <path
-        d={arcPath(centre, centre, radius, track.from, track.to)}
+        d={arcPath(center, center, radius, track.from, track.to)}
         className="stroke-slate-700/80"
         strokeWidth={stroke}
         fill="none"
       />
       <path
-        d={arcPath(centre, centre, radius, fill.from, fill.to)}
+        d={arcPath(center, center, radius, fill.from, fill.to)}
         className="stroke-sky-400"
         strokeWidth={stroke}
         fill="none"

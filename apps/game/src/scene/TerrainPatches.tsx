@@ -169,8 +169,8 @@ export function TerrainPatches({
           visibility,
         )
       const key = frame?.stars[0]
-      if (key !== undefined && state.centre !== null) {
-        const toStar = Vec.sub(key.placement.position, state.centre)
+      if (key !== undefined && state.center !== null) {
+        const toStar = Vec.sub(key.placement.position, state.center)
         // A body sitting exactly on its star leaves this zero-length, and a
         // normalized zero is a NaN across the whole surface.
         if (Vec.length(toStar) > 0) {
@@ -180,7 +180,7 @@ export function TerrainPatches({
           )
           terrain.sunDirection.value.set(local.x, local.y, local.z)
         }
-        terrain.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
+        terrain.sunColor.value.setRGB(key.color.r, key.color.g, key.color.b)
         const light = body?.sunlight ?? key.sunlight
         terrain.sunIntensity.value = visibility ? 1 : light
       }

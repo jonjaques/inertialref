@@ -126,7 +126,21 @@ export const RULES = [
  * in the table because the verb does need rewriting, and gated here instead:
  * the rule only fires when a letter that can only belong to the verb follows.
  */
-const GUARDED = new Map([['emphasis', /emphasis(e|ed|es|ing)/i]])
+// These nouns contain the same letters as the British verb stems.
+const GUARDED = new Map([
+  ['emphasis', '(?=e|ing)'],
+  ['realis', '(?=e|ing|ation|able)'],
+  ['organis', '(?=e|ing|ation|able)'],
+  ['optimis', '(?=e|ing|ation|able)'],
+  ['characteris', '(?=e|ing|ation|able)'],
+])
+
+function pattern(from) {
+  return new RegExp(from + (GUARDED.get(from) ?? ''), 'gi')
+}
+
+// A match cannot cross camel-case words: DescentReport contains centRe.
+const wordBoundary = /(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/
 
 const CASE = {
   upper: (s) => s.toUpperCase(),
@@ -147,20 +161,22 @@ function casingOf(matched) {
  * compare by identity.
  */
 export function americanize(word) {
-  let out = word
-  for (const [from, to] of RULES) {
-    const guard = GUARDED.get(from)
-    if (guard !== undefined && !guard.test(out)) continue
-    out = out.replace(new RegExp(from, 'gi'), (m) => CASE[casingOf(m)](to))
-  }
-  return out
+  return word
+    .split(wordBoundary)
+    .map((part) => {
+      let out = part
+      for (const [from, to] of RULES) {
+        out = out.replace(pattern(from), (m) => CASE[casingOf(m)](to))
+      }
+      return out
+    })
+    .join('')
 }
 
-/** Every rule that fires on `word`, for reporting which spelling was found. */
+/** Every rule that fires within a word, without crossing camel-case boundaries. */
 export function rulesFiring(word) {
-  return RULES.filter(([from]) => {
-    const guard = GUARDED.get(from)
-    if (guard !== undefined) return guard.test(word)
-    return new RegExp(from, 'i').test(word)
-  }).map(([from]) => from)
+  const parts = word.split(wordBoundary)
+  return RULES.filter(([from]) =>
+    parts.some((part) => pattern(from).test(part)),
+  ).map(([from]) => from)
 }

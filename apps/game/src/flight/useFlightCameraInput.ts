@@ -38,7 +38,7 @@ export function useFlightCameraInput(
     engine.harness.flightCamera.cycleView()
   })
   useActions(['flight.recentre'], () => {
-    engine.harness.flightCamera.recentre()
+    engine.harness.flightCamera.recenter()
   })
 
   useEffect(() => {
@@ -72,7 +72,7 @@ export function useFlightCameraInput(
       node.setPointerCapture(event.pointerId)
       down.set(event.pointerId, local(event))
       const points = [...down.values()]
-      phase = { centre: centroid(points), spread: spread(points) }
+      phase = { center: centroid(points), spread: spread(points) }
       if (down.size === 1) looking = event.button === 2
     }
 
@@ -100,7 +100,7 @@ export function useFlightCameraInput(
       }
       // A finger lifted from a pinch: re-seed, or the camera lurches.
       const points = [...down.values()]
-      phase = { centre: centroid(points), spread: spread(points) }
+      phase = { center: centroid(points), spread: spread(points) }
     }
 
     const onWheel = (event: WheelEvent): void => {

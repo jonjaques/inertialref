@@ -252,7 +252,7 @@ export function readHullField(
       if ((p[k] as number) < (low[k] as number)) low[k] = p[k] as number
       if ((p[k] as number) > (high[k] as number)) high[k] = p[k] as number
     }
-  const centre = [0, 1, 2].map(
+  const center = [0, 1, 2].map(
     (k) => ((low[k] as number) + (high[k] as number)) / 2,
   )
   const size = [0, 1, 2].map((k) => (high[k] as number) - (low[k] as number))
@@ -264,9 +264,9 @@ export function readHullField(
   const columns = new Map<number, [number, number]>()
   const extent = { x: 0, y: 0, z: 0 }
   for (const p of points) {
-    const x = flip * ((p[0] as number) - (centre[0] as number)) * scale
-    const y = ((p[1] as number) - (centre[1] as number)) * scale
-    const z = flip * ((p[2] as number) - (centre[2] as number)) * scale
+    const x = flip * ((p[0] as number) - (center[0] as number)) * scale
+    const y = ((p[1] as number) - (center[1] as number)) * scale
+    const z = flip * ((p[2] as number) - (center[2] as number)) * scale
     extent.x = Math.max(extent.x, Math.abs(x) * 2)
     extent.y = Math.max(extent.y, Math.abs(y) * 2)
     extent.z = Math.max(extent.z, Math.abs(z) * 2)

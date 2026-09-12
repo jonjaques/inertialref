@@ -106,10 +106,10 @@ describe('the shipped Mars pad', () => {
       generator: 'apps/ingest/models/build_mars_pad.py',
       units: 'metres',
       upAxis: '+y',
-      landingHeightMetres: 0,
-      landingRadiusMetres: 25,
-      foundationRadiusMetres: 45,
-      skirtDepthMetres: 6,
+      landingHeightMeters: 0,
+      landingRadiusMeters: 25,
+      foundationRadiusMeters: 45,
+      skirtDepthMeters: 6,
     })
   })
 

@@ -65,7 +65,7 @@ export function DropHandle({
     pointerId: number
     address: string | null
   } | null>(null)
-  const travelled = useRef(0)
+  const traveled = useRef(0)
   const dragging = aim !== null
   const guiding = dragging || dropping
   useEffect(() => {
@@ -168,7 +168,7 @@ export function DropHandle({
     if (event.pointerType === 'mouse' && event.button !== 0) return
     if (live.current !== null) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    travelled.current = 0
+    traveled.current = 0
     live.current = {
       x: event.clientX,
       y: event.clientY,
@@ -182,7 +182,7 @@ export function DropHandle({
     if (live.current === null || live.current.pointerId !== event.pointerId)
       return
     const previous = live.current
-    travelled.current += Math.hypot(
+    traveled.current += Math.hypot(
       event.clientX - previous.x,
       event.clientY - previous.y,
     )
@@ -208,7 +208,7 @@ export function DropHandle({
     engine.harness.observatory.previewDrop(null)
     // A press that never travelled is somebody discovering the control, not a
     // drop onto whatever happens to be under a resting cursor.
-    if (event.type === 'pointerup' && travelled.current < CLICK_SLOP) {
+    if (event.type === 'pointerup' && traveled.current < CLICK_SLOP) {
       onNotice(`Drag onto ${name ?? 'the world'} to stand there.`)
       return
     }

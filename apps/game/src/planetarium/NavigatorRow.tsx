@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { TravelTarget } from '@inertialref/devtools'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
-import { iconForKind, starColour } from './kinds.ts'
+import { iconForKind, starColor } from './kinds.ts'
 import { Marked } from './Marked.tsx'
 import type { Highlight } from './navigator.ts'
 
@@ -74,7 +74,7 @@ export function NavigatorRow({
   onFocus: () => void
 }) {
   const Glyph = iconForKind(row.bodyKind)
-  const tint = starColour(row.color)
+  const tint = starColor(row.color)
   const foldable = expanded !== undefined && onExpand !== undefined
   const Chevron = expanded === true ? ChevronDown : ChevronRight
   // The match lit inside the name when the name is what matched; when a

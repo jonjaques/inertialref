@@ -15,7 +15,7 @@ import {
 } from './address.ts'
 import {
   CELL_SIZE,
-  cellCentre,
+  cellCenter,
   cellKey,
   cellOf,
   cellOrigin,
@@ -26,7 +26,7 @@ import {
   SUN_GALACTOCENTRIC_RADIUS,
   SUN_POSITION,
 } from './catalog/astrometry.ts'
-import { blackbodyColour, type LinearRgb } from './catalog/photometry.ts'
+import { blackbodyColor, type LinearRgb } from './catalog/photometry.ts'
 import type {
   CatalogPlanet,
   CatalogStar,
@@ -87,7 +87,7 @@ export interface SystemStub {
   readonly visualLuminosities?: number
   readonly temperature: Kelvin
   /** Linear sRGB of a blackbody at `temperature`. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   /** Number of stellar components; >1 means the system is being simplified. */
   readonly components: number
   readonly catalogued: boolean
@@ -95,7 +95,7 @@ export interface SystemStub {
   readonly planets: readonly CatalogPlanet[]
 }
 
-export { CELL_SIZE, cellCentre, cellKey, cellOf, cellOrigin }
+export { CELL_SIZE, cellCenter as cellCentre, cellKey, cellOf, cellOrigin }
 export type { GalacticCell }
 
 /** Zigzag encoding, so negative cell coordinates survive the id character set. */
@@ -245,7 +245,7 @@ export function proceduralCount(
 ): number {
   return roundedPopulationCount(
     rng,
-    stellarDensity(cellCentre(cell), galaxySeed) * CELL_SIZE ** 3 -
+    stellarDensity(cellCenter(cell), galaxySeed) * CELL_SIZE ** 3 -
       cataloguedCount,
   )
 }
@@ -266,7 +266,7 @@ function generateLegacyCell(
   const rng = new Rng(seed)
   const count = roundedPopulationCount(
     rng,
-    legacyStellarDensity(cellCentre(cell)) * CELL_SIZE ** 3 -
+    legacyStellarDensity(cellCenter(cell)) * CELL_SIZE ** 3 -
       context.catalogued,
   )
 
@@ -303,7 +303,7 @@ function generateLegacyCell(
       spectralType: `${spectralClass}${starRng.int(0, 9)}V`,
       solarMasses,
       ...properties,
-      colour: blackbodyColour(properties.temperature),
+      color: blackbodyColor(properties.temperature),
       components: 1,
       catalogued: false,
       planets: [],
@@ -319,7 +319,7 @@ export function generateCell(
   context: CellContext = NO_CATALOGUE,
 ): readonly SystemStub[] {
   const generator = populationGenerator(galaxySeed)
-  const centre = cellCentre(cell)
+  const center = cellCenter(cell)
   const coverage = context.magnitudeCoverage ?? {
     radiusParsecs: 0,
     innerMagnitude: -Infinity,
@@ -331,7 +331,7 @@ export function generateCell(
     max = UV.translate(min, vec3(CELL_SIZE, CELL_SIZE, CELL_SIZE))
   for (const band of LUMINOSITY_BANDS) {
     for (const coarse of populationCellsWithin(
-      centre,
+      center,
       CELL_SIZE / 2,
       band.level,
     )) {
@@ -364,7 +364,7 @@ export const catalogStub = (star: CatalogStar): SystemStub => ({
       : 10 **
         ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
   temperature: star.physical.temperature,
-  colour: star.physical.colour,
+  color: star.physical.color,
   components: star.components,
   catalogued: true,
   planets: star.planets,

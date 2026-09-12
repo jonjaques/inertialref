@@ -41,7 +41,7 @@ export interface LoadedShip {
   /** The manifest's true length — what the hull was scaled to. */
   readonly lengthMeters: number
   /** Measured off the scaled bounding box, for placing things beside the hull. */
-  readonly beamMetres: number
+  readonly beamMeters: number
 }
 
 async function build(
@@ -74,7 +74,7 @@ async function build(
     id: spec.id,
     group: ship,
     lengthMeters: spec.lengthMeters,
-    beamMetres: size.x * scale,
+    beamMeters: size.x * scale,
   }
 }
 
@@ -110,7 +110,7 @@ export function loadShipModel(
       log.info('ship model ready', {
         id: spec.id,
         length: spec.lengthMeters,
-        beam: Math.round(ship.beamMetres),
+        beam: Math.round(ship.beamMeters),
       })
       return ship
     },

@@ -94,7 +94,7 @@ export interface WaterPatch {
   readonly depths: Float32Array
   readonly morphDepths: Float32Array
   /** Bounding sphere in the same anchor-relative axes the vertices are in. */
-  readonly boundsCentre: Vec3
+  readonly boundsCenter: Vec3
   readonly boundsRadius: Meters
 }
 
@@ -139,7 +139,7 @@ export interface RenderPatch {
    */
   readonly anchor: Vec3
   /** Bounding sphere in the same anchor-relative axes the vertices are in. */
-  readonly boundsCentre: Vec3
+  readonly boundsCenter: Vec3
   readonly boundsRadius: Meters
   /** Ground one grid cell covers: the patch's own LOD error, in meters. */
   readonly spacing: Meters
@@ -364,7 +364,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
     morphCover,
     indices: patchIndices(resolution),
     anchor,
-    boundsCentre: {
+    boundsCenter: {
       x: (lowX + highX) / 2,
       y: (lowY + highY) / 2,
       z: (lowZ + highZ) / 2,
@@ -462,7 +462,7 @@ function buildWater(
     morphPositions,
     depths,
     morphDepths,
-    boundsCentre: {
+    boundsCenter: {
       x: (lowX + highX) / 2,
       y: (lowY + highY) / 2,
       z: (lowZ + highZ) / 2,

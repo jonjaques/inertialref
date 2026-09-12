@@ -284,7 +284,7 @@ describe('a stand-in texture compiles the program the real one draws with', () =
     const real = createAtmosphereMaterial()
     const baked = scatteringFor(
       {
-        colour: { r: 0.3, g: 0.5, b: 0.9 },
+        color: { r: 0.3, g: 0.5, b: 0.9 },
         limb: { r: 1, g: 0.5, b: 0.2 },
         thickness: 1,
       },
@@ -643,7 +643,7 @@ describe('the sphere wearing a bake', () => {
    * 0.8: the normal tilts off the star, the albedo goes to the ocean colour,
    * and the centre is the sun-glint.
    */
-  async function centre(
+  async function center(
     relief: readonly [number, number, number],
   ): Promise<[number, number, number, number]> {
     const planet = createPlanetMaterial()
@@ -678,15 +678,15 @@ describe('the sphere wearing a bake', () => {
   }
 
   it('draws the reflectance where the relief record says dry ground', async () => {
-    const [red, green, blue] = await centre([0.5, 0.5, 0])
+    const [red, green, blue] = await center([0.5, 0.5, 0])
     expect(red).toBeCloseTo(0.8, 2)
     expect(green).toBeCloseTo(0.8, 2)
     expect(blue).toBeCloseTo(0.8, 2)
   })
 
   it('draws the sea where the relief record says so, and nothing else moved', async () => {
-    const [dryRed] = await centre([0.5, 0.5, 0])
-    const [red, , blue] = await centre([0.5, 0.5, 1])
+    const [dryRed] = await center([0.5, 0.5, 0])
+    const [red, , blue] = await center([0.5, 0.5, 1])
     // The ocean colour is a deep blue: darker than the ice, and bluer.
     expect(red).toBeLessThan(dryRed * 0.6)
     expect(blue).toBeGreaterThan(red)

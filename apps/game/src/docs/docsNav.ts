@@ -70,7 +70,7 @@ export function pagesOf(wing: DocWing): string[] {
   )
 }
 
-export interface Neighbours {
+export interface Neighbors {
   readonly previous: string | null
   readonly next: string | null
 }
@@ -83,7 +83,7 @@ export interface Neighbours {
  * next thing anybody wanted. The end of a wing is the end of a wing, and the
  * rail is how you get to the next one.
  */
-export function neighbours(manifest: DocManifest, route: string): Neighbours {
+export function neighbors(manifest: DocManifest, route: string): Neighbors {
   const wing = wingFor(manifest, route)
   if (wing === undefined) return { previous: null, next: null }
   const pages = pagesOf(wing)

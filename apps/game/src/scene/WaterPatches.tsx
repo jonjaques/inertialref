@@ -84,8 +84,8 @@ export function WaterPatches({
         water.setPixelAngle(display * perSample)
       }
       const key = engine.scene()?.stars[0]
-      if (key !== undefined && state.centre !== null) {
-        const toStar = Vec.sub(key.placement.position, state.centre)
+      if (key !== undefined && state.center !== null) {
+        const toStar = Vec.sub(key.placement.position, state.center)
         if (Vec.length(toStar) > 0) {
           const local = Q.rotate(
             Q.conjugate(state.orientation),
@@ -93,7 +93,7 @@ export function WaterPatches({
           )
           water.sunDirection.value.set(local.x, local.y, local.z)
         }
-        water.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
+        water.sunColor.value.setRGB(key.color.r, key.color.g, key.color.b)
         const light =
           engine
             .scene()

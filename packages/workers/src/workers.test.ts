@@ -75,7 +75,7 @@ it('transfers the bounded sky and retains canonical source identities', async ()
         id: source.id,
         name: source.name,
         position: source.position,
-        colour: source.colour,
+        color: source.color,
         solarLuminosities: source.solarLuminosities,
         visualLuminosities: source.visualLuminosities,
       })
@@ -241,7 +241,7 @@ describe('worker pool', () => {
     doomed.cancel()
     await expect(doomed.result).rejects.toThrow(/canceled/)
     await busy.result
-    expect(p.stats().cancelled).toBe(1)
+    expect(p.stats().canceled).toBe(1)
   })
 
   it('rejects everything outstanding when terminated', async () => {

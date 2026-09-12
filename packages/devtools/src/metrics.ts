@@ -91,7 +91,7 @@ export class Series {
     return written
   }
 
-  summarise(): SeriesStats {
+  summarize(): SeriesStats {
     if (this.#count === 0) return EMPTY
     // Reading slots `0..count` covers the window in both states and needs no
     // wrap: before the ring has filled, those are exactly the samples written;

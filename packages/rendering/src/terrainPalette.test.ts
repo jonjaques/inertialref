@@ -39,7 +39,7 @@ describe('the terrain palette', () => {
   it('leaves a mapped dark body’s brightness to its photograph and keeps its tint', () => {
     for (const name of ['Bennu', 'Ceres', 'Phobos', 'Vesta']) {
       const body = find(name)
-      const { colour } = body.appearance
+      const { color: colour } = body.appearance
       const peak = Math.max(colour.r, colour.g, colour.b)
       expect(terrainPalette(body).regolith.albedo, name).toEqual({
         r: colour.r / peak,
@@ -56,7 +56,7 @@ describe('the terrain palette', () => {
       appearance: { ...bennu.appearance, texture: null },
     }
     expect(terrainPalette(mapless).regolith.albedo).toEqual(
-      mapless.appearance.colour,
+      mapless.appearance.color,
     )
   })
 
@@ -194,8 +194,8 @@ describe('the terrain palette', () => {
      * veil in front of it, and its value is the veil's.
      */
     const mars = terrainPalette(find('Mars'))
-    expect(mars.hazeColour).not.toEqual(mars.skyColour)
-    expect(terrainPalette(find('Luna')).hazeColour).toEqual({
+    expect(mars.hazeColor).not.toEqual(mars.skyColor)
+    expect(terrainPalette(find('Luna')).hazeColor).toEqual({
       r: 0,
       g: 0,
       b: 0,
@@ -209,7 +209,7 @@ describe('the terrain palette', () => {
      * dimmer than a thin blue one for no reason anybody could name.
      */
     for (const name of ['Earth', 'Mars', 'Titan', 'Luna']) {
-      const sky = terrainPalette(find(name)).skyColour
+      const sky = terrainPalette(find(name)).skyColor
       const lit = 0.2126 * sky.r + 0.7152 * sky.g + 0.0722 * sky.b
       expect(`${name}: ${lit.toFixed(4)}`).toBe(`${name}: 1.0000`)
     }

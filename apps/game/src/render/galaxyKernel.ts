@@ -20,7 +20,7 @@ import {
 } from 'three/tsl'
 import { deriveSeed } from '@inertialref/procedural'
 import {
-  blackbodyColour,
+  blackbodyColor,
   GALAXY_ARMS,
   LUMINOSITY_BANDS,
   POPULATION_LUMINOSITY_WEIGHTS,
@@ -292,7 +292,7 @@ export const galaxyStructureAt = Fn(([p]: [Node<'vec3'>]) => {
 })
 const emissionColors = POPULATION_NAMES.map((name) => {
   const population = GALAXY_POPULATIONS[name]
-  const c = blackbodyColour(population.temperature)
+  const c = blackbodyColor(population.temperature)
   const factor = population.meanSolarLuminosities / c.g
   return [c.r * factor, c.g * factor, c.b * factor] as const
 })

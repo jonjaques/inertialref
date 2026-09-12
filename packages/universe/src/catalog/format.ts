@@ -118,7 +118,7 @@ export interface PackedStar {
   /** Absolute visual magnitude, or null. */
   readonly absoluteMagnitude: number | null
   /** Color index B−V, or null. */
-  readonly colourIndex: number | null
+  readonly colorIndex: number | null
   /**
    * The classification string exactly as the source catalog wrote it, or `''`.
    *
@@ -535,7 +535,7 @@ export function encodeCatalog(catalog: PackedCatalog): Uint8Array {
   for (const s of stars) w.i32(Math.round(s.y / POSITION_STEP_METERS))
   for (const s of stars) w.i32(Math.round(s.z / POSITION_STEP_METERS))
   for (const s of stars) w.i16(scaled(s.absoluteMagnitude, 100))
-  for (const s of stars) w.i16(scaled(s.colourIndex, 1_000))
+  for (const s of stars) w.i16(scaled(s.colorIndex, 1_000))
   for (const s of stars) w.u32(s.hip)
   for (const s of stars) w.u32(s.hd)
   for (const s of stars) w.u16(s.hr)
@@ -605,10 +605,8 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
   )
   // Packed catalogs can outlive a deployment in a browser cache. Their source
   // licenses must survive the spelling change without changing any star data.
-  type StoredSource = Omit<CatalogMetadata['sources'][number], 'license'> & {
-    readonly license?: string
-    readonly licence?: string
-  }
+  type StoredSource = Omit<CatalogMetadata['sources'][number], 'license'> &
+    Partial<Record<'license' | 'licence', string>>
   const stored = JSON.parse(decodeUtf8(r.slice(r.u32()))) as Omit<
     CatalogMetadata,
     'sources'
@@ -639,7 +637,7 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
   const y = column(starCount, () => r.i32())
   const z = column(starCount, () => r.i32())
   const absoluteMagnitude = column(starCount, () => r.i16())
-  const colourIndex = column(starCount, () => r.i16())
+  const colorIndex = column(starCount, () => r.i16())
   const hip = column(starCount, () => r.u32())
   const hd = column(starCount, () => r.u32())
   const hr = column(starCount, () => r.u16())
@@ -663,7 +661,7 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
       y: (y[i] as number) * POSITION_STEP_METERS,
       z: (z[i] as number) * POSITION_STEP_METERS,
       absoluteMagnitude: unscaled(absoluteMagnitude[i] as number, 100),
-      colourIndex: unscaled(colourIndex[i] as number, 1_000),
+      colorIndex: unscaled(colorIndex[i] as number, 1_000),
       spectralType: spectralType[i] as string,
       components: components[i] as number,
       provenance: PROVENANCE[provenance[i] as number] ?? 'observed',

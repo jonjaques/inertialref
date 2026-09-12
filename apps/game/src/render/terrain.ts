@@ -97,7 +97,7 @@ export interface TerrainMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Unit vector toward the star, **in the body's own rotating axes**. */
   readonly sunDirection: { value: Vector3 }
-  readonly sunColour: { value: Color }
+  readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
   /** Enhanced visibility on the lit surface; orbital bakes remain physical. */
   readonly albedoScale: { value: number }
@@ -169,7 +169,7 @@ const MICRO_RELIEF = 0.25
  * Seventy centimeters down to nine, at a slope of about fifteen degrees, which
  * is what lunar regolith measures at centimeter baselines.
  */
-export const GRAIN_METRES = 0.7
+export const GRAIN_METERS = 0.7
 
 /** Octaves of it. Two reaches 17 cm; the third, at 9 cm, was a fetch a pixel over the whole near ground for a band the chop under it already carries. */
 const GRAIN_OCTAVES = 2
@@ -204,7 +204,7 @@ export const GRAIN_PERIOD = NOISE_CELLS
 
 export function createTerrainMaterial(): TerrainMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
-  const sunColour = uniform(new Color(1, 1, 1))
+  const sunColor = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const albedoScale = uniform(1)
   const macroFrequency = uniform(1)
@@ -237,7 +237,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   const maxElevation = uniform(1)
   const seaEnabled = uniform(0)
   const seaDatum = uniform(0)
-  const oceanColour = uniform(
+  const oceanColor = uniform(
     new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
   )
   /*
@@ -267,8 +267,8 @@ export function createTerrainMaterial(): TerrainMaterial {
    * the stack to keep in step.
    */
   const bakeMode = uniform(0)
-  const skyColour = uniform(new Color(0, 0, 0))
-  const hazeColour = uniform(new Color(0, 0, 0))
+  const skyColor = uniform(new Color(0, 0, 0))
+  const hazeColor = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
   const sunsetTint = uniform(new Color(1, 1, 1))
   /**
@@ -558,8 +558,8 @@ export function createTerrainMaterial(): TerrainMaterial {
      */
     const grainFade = oneMinus(
       smoothstep(
-        float(GRAIN_METRES * 0.3),
-        float(GRAIN_METRES * 1.5),
+        float(GRAIN_METERS * 0.3),
+        float(GRAIN_METERS * 1.5),
         footprint,
       ),
     )
@@ -567,11 +567,11 @@ export function createTerrainMaterial(): TerrainMaterial {
     If(detailBands.greaterThan(1.5).and(grainFade.greaterThan(0)), () => {
       const field = fbmFetch(
         noise,
-        asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
+        asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METERS)))),
         GRAIN_OCTAVES,
       )
       grit.assign(
-        vec4(field.x, field.yzw.mul(float(1 / GRAIN_METRES))).mul(grainFade),
+        vec4(field.x, field.yzw.mul(float(1 / GRAIN_METERS))).mul(grainFade),
       )
     })
 
@@ -725,13 +725,13 @@ export function createTerrainMaterial(): TerrainMaterial {
     )
     const grown = saturate(cover2.y).mul(invented).mul(dry).mul(mantled)
 
-    let colour = mix(rock.albedo, regolith.albedo, mantled)
-    colour = mix(colour, basalt.albedo, flooded)
-    colour = mix(colour, sand.albedo, blown)
-    colour = mix(colour, evaporite.albedo, dried)
-    colour = mix(colour, seabed.albedo, seafloor)
-    colour = mix(colour, pigment.albedo, grown)
-    colour = mix(colour, ice.albedo, frozen)
+    let color = mix(rock.albedo, regolith.albedo, mantled)
+    color = mix(color, basalt.albedo, flooded)
+    color = mix(color, sand.albedo, blown)
+    color = mix(color, evaporite.albedo, dried)
+    color = mix(color, seabed.albedo, seafloor)
+    color = mix(color, pigment.albedo, grown)
+    color = mix(color, ice.albedo, frozen)
 
     let scalars = mix(rock.params, regolith.params, mantled)
     scalars = mix(scalars, basalt.params, flooded)
@@ -847,7 +847,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * gains energy at every bounce and blows out to white while its neighbours
      * are correctly exposed.
      */
-    const raw = colour.mul(published).mul(mineral).mul(mottle).mul(fresh)
+    const raw = color.mul(published).mul(mineral).mul(mottle).mul(fresh)
     /*
      * Ceilinged by the brightest channel, so the whole colour scales together.
      *
@@ -871,10 +871,10 @@ export function createTerrainMaterial(): TerrainMaterial {
      * bed through the water, so the channel is the bed tinted rather than
      * the deep colour laid on.
      */
-    const riverColour = mix(ground.mul(0.55), oceanColour.mul(2.2), float(0.6))
+    const riverColor = mix(ground.mul(0.55), oceanColor.mul(2.2), float(0.6))
     const surfaceAlbedo = mix(
-      mix(ground, oceanColour, water),
-      riverColour,
+      mix(ground, oceanColor, water),
+      riverColor,
       river.mul(seaSheet.add(oneMinus(seaEnabled))),
     ).mul(albedoScale)
     // Water is smooth and rock is not; the glint below is what the roughness
@@ -943,7 +943,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     // hundreds of kilometers of air. Nothing on an airless world.
     const lowSun = smoothstep(float(0.35), float(0.02), incidence)
     const tint = mix(vec3(1), sunsetTint, lowSun.mul(skyStrength).mul(0.85))
-    const sunlight = sunColour.mul(sunIntensity).mul(tint)
+    const sunlight = sunColor.mul(sunIntensity).mul(tint)
 
     /*
      * Skylight, which on a body with air is most of what lights a shadow — and
@@ -970,7 +970,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       .mul(daylight)
       .mul(sunlight)
       .mul(oneMinus(diffuse))
-    const ambient = skyColour
+    const ambient = skyColor
       .mul(diffuse)
       .mul(skyView)
       .mul(saturate(incidence.add(0.25)))
@@ -1041,13 +1041,13 @@ export function createTerrainMaterial(): TerrainMaterial {
     const veil = oneMinus(exp(airmass.mul(-0.15)))
       .mul(skyStrength)
       .mul(smoothstep(float(-0.06), float(0.28), incidence))
-    const veilColour = mix(hazeColour, vec3(1), veil.mul(0.55)).mul(sunlight)
+    const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(sunlight)
 
     const surface = direct.add(indirect).add(sunlight.mul(glint)).add(emission)
     // 0.68 for the reason the disk uses it: at 0.8 the whole thing goes milky
     // and the ocean loses its depth, where the photographs keep a saturated
     // blue mid-disk under the veil.
-    const lit = mix(surface, veilColour, veil.mul(0.68))
+    const lit = mix(surface, veilColor, veil.mul(0.68))
     /*
      * The bake: mode 1 is the reflectance alone; mode 2 is the sphere's
      * normal-map record — the mesh normal's components along geographic east
@@ -1079,7 +1079,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       oneMinus(seaMask),
     )
     const baked = mix(
-      mix(ground, riverColour, river),
+      mix(ground, riverColor, river),
       vec3(bakeSlope.mul(0.5).add(0.5), seaMask),
       saturate(bakeMode.sub(1)),
     )
@@ -1089,7 +1089,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   return {
     material,
     sunDirection,
-    sunColour,
+    sunColor: sunColor,
     sunIntensity,
     albedoScale,
     setPixelAngle(radians) {
@@ -1116,10 +1116,10 @@ export function createTerrainMaterial(): TerrainMaterial {
       seaEnabled.value = palette.seaLevel === null ? 0 : 1
       seaDatum.value = palette.seaLevel ?? 0
       seaSheet.value = palette.sheet
-      paint(oceanColour, palette.oceanColour)
+      paint(oceanColor, palette.oceanColor)
       paint(liquidGlow, palette.liquid?.glow ?? BLACK_RGB)
-      paint(skyColour, palette.skyColour)
-      paint(hazeColour, palette.hazeColour)
+      paint(skyColor, palette.skyColor)
+      paint(hazeColor, palette.hazeColor)
       skyStrength.value = palette.airThickness
       paint(sunsetTint, palette.sunsetTint)
       /*
@@ -1164,7 +1164,7 @@ export function createTerrainMaterial(): TerrainMaterial {
  * to happen on this side of the uniform.
  */
 export function grainWrap(meters: number): number {
-  const cycles = meters / GRAIN_METRES
+  const cycles = meters / GRAIN_METERS
   return cycles - Math.floor(cycles / GRAIN_PERIOD) * GRAIN_PERIOD
 }
 

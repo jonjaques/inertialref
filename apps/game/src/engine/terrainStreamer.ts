@@ -432,7 +432,7 @@ export interface TerrainState {
    */
   readonly orientation: Q.Quat | null
   /** The body's centre in render space, for the direction of its star. */
-  readonly centre: Vec3 | null
+  readonly center: Vec3 | null
   /**
    * The radius the patches were **built** on, meters.
    *
@@ -826,7 +826,7 @@ export class TerrainStreamer {
       level: this.#deepest,
       palette: this.#palette,
       orientation: pose?.orientation ?? null,
-      centre: pose?.position ?? null,
+      center: pose?.position ?? null,
       datumRadius: this.#datumRadius,
       lens: this.#lensView,
       scatter: this.#scatter.state(),

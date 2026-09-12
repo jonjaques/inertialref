@@ -171,7 +171,7 @@ export function acceptsRow(
  * legibility the floor was buying is already there, and the hue is what was
  * being spent for it.
  */
-export function starColour(colour: TravelTarget['color']): string | null {
+export function starColor(colour: TravelTarget['color']): string | null {
   if (colour === null) return null
   const channel = (linear: number): number => {
     const value = Math.min(1, Math.max(0, linear))

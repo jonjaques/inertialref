@@ -1,6 +1,6 @@
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { Neighbourhood } from '../icons/index.tsx'
+import { Neighborhood } from '../icons/index.tsx'
 import { NavigatorPanel } from '../planetarium/NavigatorPanel.tsx'
 
 /**
@@ -28,7 +28,7 @@ export function flightPanels(
       // The id is what a stored layout remembers; see `planetarium/registry.tsx`.
       id: 'catalogue',
       title: 'Navigator',
-      icon: Neighbourhood,
+      icon: Neighborhood,
       zone: 'right',
       hint: 'Everything within reach — fold it, filter it, fly to it',
       render: () => (

@@ -66,7 +66,7 @@ export interface BuildReport {
   readonly multiples: number
   readonly withProperName: number
   readonly withSpectralType: number
-  readonly withColourIndex: number
+  readonly withColorIndex: number
   readonly withMagnitude: number
   readonly unstableIds: number
   readonly duplicateIds: readonly string[]
@@ -307,7 +307,7 @@ function packSystems(
       y: cartesian.y,
       z: cartesian.z,
       absoluteMagnitude: primary.absmag,
-      colourIndex: primary.ci,
+      colorIndex: primary.ci,
       spectralType: primary.spect,
       components: components.length,
       provenance: 'observed',
@@ -387,7 +387,7 @@ export function buildCatalog(
       multiples: packed.multiples,
       withProperName: stars.filter((s) => s.proper !== '').length,
       withSpectralType: stars.filter((s) => s.spectralType !== '').length,
-      withColourIndex: stars.filter((s) => s.colourIndex !== null).length,
+      withColorIndex: stars.filter((s) => s.colorIndex !== null).length,
       withMagnitude: stars.filter((s) => s.absoluteMagnitude !== null).length,
       unstableIds: packed.unstableIds,
       duplicateIds: packed.duplicateIds,
@@ -424,7 +424,7 @@ export interface SkyBuildReport {
   readonly multiples: number
   readonly withProperName: number
   readonly withSpectralType: number
-  readonly withColourIndex: number
+  readonly withColorIndex: number
   readonly unstableIds: number
   readonly duplicateIds: readonly string[]
   /** Systems left out because the volume asset already holds their id. */
@@ -530,7 +530,7 @@ export function buildSkyCatalog(
       multiples: packed.multiples,
       withProperName: stars.filter((s) => s.proper !== '').length,
       withSpectralType: stars.filter((s) => s.spectralType !== '').length,
-      withColourIndex: stars.filter((s) => s.colourIndex !== null).length,
+      withColorIndex: stars.filter((s) => s.colorIndex !== null).length,
       unstableIds: packed.unstableIds,
       duplicateIds: packed.duplicateIds,
       inVolume,

@@ -316,9 +316,9 @@ export function frameToPixels(
 ): { x: (fx: number) => number; y: (fy: number) => number; scale: number } {
   const scale = height
   const half = (scale * TNG_LENS.aspect) / 2
-  const centre = width / 2
+  const center = width / 2
   return {
-    x: (fx) => centre + (fx - 0.5) * 2 * half,
+    x: (fx) => center + (fx - 0.5) * 2 * half,
     y: (fy) => fy * scale,
     scale,
   }

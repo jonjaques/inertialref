@@ -20,7 +20,7 @@ export interface StarField {
    * comes from a published color index for the cataloged half of the sky and
    * from a mass for the rest, and neither is available to a vertex program.
    */
-  readonly colours: readonly [number, number, number][]
+  readonly colors: readonly [number, number, number][]
   /**
    * Bolometric luminosity in solar units. The renderer turns this and the
    * distance into an apparent brightness; a star's size on screen is not a
@@ -36,7 +36,7 @@ export interface StarCandidate {
   readonly id: string
   readonly name: string
   readonly position: UniverseVector
-  readonly colour: readonly [number, number, number]
+  readonly color: readonly [number, number, number]
   readonly solarLuminosities: number
   readonly visualLuminosities?: number
   readonly catalogued?: boolean
@@ -47,7 +47,7 @@ export const EMPTY_STAR_FIELD: StarField = {
   catalogued: [],
   positions: [],
   names: [],
-  colours: [],
+  colors: [],
   luminosities: [],
   visualLuminosities: [],
 }
@@ -73,8 +73,8 @@ export function selectStars(
       // A missing V measurement cannot be replaced by bolometric luminosity.
       if (star.visualLuminosities === undefined) continue
       // The same finite point-source distance sets both rank and admission.
-      const metres = Math.max(UV.distance(star.position, centre), 1)
-      const flux = star.visualLuminosities / (metres * metres)
+      const meters = Math.max(UV.distance(star.position, centre), 1)
+      const flux = star.visualLuminosities / (meters * meters)
       const magnitude =
         GALAXY_SOLAR_V_MAGNITUDE -
         2.5 * Math.log10(flux) -
@@ -110,7 +110,7 @@ export function selectStars(
   const ids: string[] = new Array(chosen.length)
   const catalogued: boolean[] = new Array(chosen.length)
   const names: string[] = new Array(chosen.length)
-  const colours: [number, number, number][] = new Array(chosen.length)
+  const colors: [number, number, number][] = new Array(chosen.length)
   const luminosities: number[] = new Array(chosen.length)
   const visualLuminosities: number[] = new Array(chosen.length)
   for (let i = 0; i < chosen.length; i += 1) {
@@ -119,7 +119,7 @@ export function selectStars(
     catalogued[i] = star.catalogued ?? false
     positions[i] = star.position
     names[i] = star.name
-    colours[i] = [star.colour[0], star.colour[1], star.colour[2]]
+    colors[i] = [star.color[0], star.color[1], star.color[2]]
     luminosities[i] = star.solarLuminosities
     visualLuminosities[i] = star.visualLuminosities!
   }
@@ -128,7 +128,7 @@ export function selectStars(
     catalogued,
     positions,
     names,
-    colours,
+    colors: colors,
     luminosities,
     visualLuminosities,
     resolved,

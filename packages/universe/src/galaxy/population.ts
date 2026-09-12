@@ -5,7 +5,7 @@ import { systemId, type SystemId } from '../address.ts'
 import { CELL_SIZE, cellKey, type GalacticCell } from '../cells.ts'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
 import {
-  blackbodyColour,
+  blackbodyColor,
   luminosityFromAbsoluteMagnitude,
   mainSequenceMass,
   radiusFromLuminosity,
@@ -180,9 +180,9 @@ export function unresolvedPopulationFraction(
 const POPULATION_COLOURS = Object.fromEntries(
   POPULATION_NAMES.map((name) => [
     name,
-    blackbodyColour(GALAXY_POPULATIONS[name].temperature),
+    blackbodyColor(GALAXY_POPULATIONS[name].temperature),
   ]),
-) as Record<GalaxyPopulation, ReturnType<typeof blackbodyColour>>
+) as Record<GalaxyPopulation, ReturnType<typeof blackbodyColor>>
 
 /** The smooth field is an ensemble. This partitions its first moments, not individual realized stars. */
 export function partitionGalaxyEmission(
@@ -199,15 +199,15 @@ export function partitionGalaxyEmission(
       selection.apparentMagnitudeLimit,
       selection.levelMask,
     )
-    const colour = POPULATION_COLOURS[name]
+    const color = POPULATION_COLOURS[name]
     const light =
       (sample.populations[name] *
         GALAXY_POPULATIONS[name].meanSolarLuminosities *
         fraction) /
-      colour.g
-    unresolved.r += light * colour.r
-    unresolved.g += light * colour.g
-    unresolved.b += light * colour.b
+      color.g
+    unresolved.r += light * color.r
+    unresolved.g += light * color.g
+    unresolved.b += light * color.b
   }
   return {
     unresolved,
@@ -508,7 +508,7 @@ export function createPopulationGenerator(field: GalaxyField) {
       visualLuminosities,
       solarRadii: radiusFromLuminosity(solarLuminosities, temperature),
       temperature,
-      colour: blackbodyColour(temperature),
+      color: blackbodyColor(temperature),
       components: 1,
       catalogued: false,
       planets: [],
@@ -588,7 +588,7 @@ export interface PopulationSkyOptions {
   readonly cellCeiling?: number
   readonly apparentMagnitudeLimit?: number
   readonly coverage?: PopulationCoverage
-  readonly cancelled?: () => boolean
+  readonly canceled?: () => boolean
 }
 export interface PopulationSkySelection extends ResolvedPopulationSelection {
   readonly stars: readonly SystemStub[]
@@ -648,7 +648,7 @@ export function selectPopulationSky(
     cellsVisited = 0,
     levelMask = 0
   for (const band of LUMINOSITY_BANDS) {
-    if (options.cancelled?.())
+    if (options.canceled?.())
       return {
         origin,
         stars: [],
@@ -680,7 +680,7 @@ export function selectPopulationSky(
     candidateCount += candidates
     levelMask |= 1 << band.level
     for (const cell of cells) {
-      if (options.cancelled?.())
+      if (options.canceled?.())
         return {
           origin,
           stars: [],

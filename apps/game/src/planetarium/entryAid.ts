@@ -71,14 +71,14 @@ export function heldDropFromScreen(
     .normalize()
   const ray = { x: scratch.x, y: scratch.y, z: scratch.z }
   const forward = Q.rotate(camera.quaternion, { x: 0, y: 0, z: -1 })
-  const centre = drawn.placement.position
-  const offset = Vec.sub(centre, camera.position)
+  const center = drawn.placement.position
+  const offset = Vec.sub(center, camera.position)
   const depth = Vec.dot(offset, forward) - drawn.placement.scale * 1.15
   const along = Vec.dot(ray, forward)
   if (!(depth > 0) || !(along > 0)) return null
   const held = Vec.sub(
     Vec.add(camera.position, Vec.scale(ray, depth / along)),
-    centre,
+    center,
   )
   return {
     hold: Vec.scale(

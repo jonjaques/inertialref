@@ -35,7 +35,7 @@ it('draws the retained dust transmission through the production sprite material'
     projection,
     mix(vec3(1), varying(cache.sample(instanceIndex)), attenuate),
   )
-  material.colours.array.fill(1)
+  material.colors.array.fill(1)
   material.size.value = 30
   const sprite = new Sprite(material.material)
   sprite.count = 1
@@ -87,7 +87,7 @@ it('draws the retained dust transmission through the production sprite material'
     material.material.dispose()
     for (const a of [
       material.positions,
-      material.colours,
+      material.colors,
       material.prominence,
       material.visibility,
       material.enabled,

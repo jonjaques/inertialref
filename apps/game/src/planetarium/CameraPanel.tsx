@@ -168,7 +168,7 @@ export function CameraPanel(context: PlanetariumContext) {
                 label="Recenter"
                 title={`Point the camera back at ${eye.name}`}
                 disabled={!eye.aimed}
-                onClick={() => engine.harness.observatory.centre()}
+                onClick={() => engine.harness.observatory.center()}
               />
             </span>
           </div>

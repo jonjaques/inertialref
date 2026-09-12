@@ -43,7 +43,7 @@ import {
   liquidAppearance,
   PIGMENTS,
   pigmentFor,
-  surfaceColourFor,
+  surfaceColorFor,
 } from './appearance.ts'
 import { parseSpectralType, type SpectralClass } from './catalog/spectral.ts'
 import {
@@ -223,7 +223,7 @@ export interface Star {
   /** Bolometric luminosity, watts. */
   readonly luminosity: number
   /** Linear sRGB of a blackbody at `temperature`, brightest channel normalized. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   readonly mu: Mu
 }
 
@@ -410,7 +410,7 @@ export interface HazeLayer {
   /** Rendered thickness above the datum. Not `Atmosphere.ceiling`. */
   readonly height: Meters
   /** Scattering color looking straight down through it. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   /** Forward-scattered color at the terminator — the sunset seen from orbit. */
   readonly limb: LinearRgb
   /**
@@ -438,7 +438,7 @@ export interface BodyAppearance {
   readonly rings: RingSystem | null
   readonly haze: HazeLayer | null
   /** Used where there is no albedo map, and to tint one that is grayscale. */
-  readonly colour: LinearRgb
+  readonly color: LinearRgb
   /**
    * The colour a biosphere paints the ground, where the cover says one grows.
    *
@@ -528,7 +528,7 @@ function makeStar(stub: SystemStub): Star {
     radius: stub.solarRadii * SOLAR_RADIUS,
     temperature: stub.temperature,
     luminosity: stub.solarLuminosities * SOLAR_LUMINOSITY,
-    colour: stub.colour,
+    color: stub.color,
     mu: mu(mass),
   }
 }
@@ -1208,43 +1208,43 @@ const KIND_ROUGHNESS: Readonly<Record<BodyKind, number>> = {
  * cataloged bodies in `solar/` override it with published ones.
  */
 const KIND_HAZE: Readonly<
-  Record<BodyKind, { colour: LinearRgb; limb: LinearRgb }>
+  Record<BodyKind, { color: LinearRgb; limb: LinearRgb }>
 > = {
   rocky: {
-    colour: { r: 0.28, g: 0.48, b: 0.95 },
+    color: { r: 0.28, g: 0.48, b: 0.95 },
     limb: { r: 0.86, g: 0.45, b: 0.26 },
   },
   ice: {
-    colour: { r: 0.4, g: 0.6, b: 0.9 },
+    color: { r: 0.4, g: 0.6, b: 0.9 },
     limb: { r: 0.8, g: 0.6, b: 0.5 },
   },
   moon: {
-    colour: { r: 0.4, g: 0.55, b: 0.85 },
+    color: { r: 0.4, g: 0.55, b: 0.85 },
     limb: { r: 0.8, g: 0.55, b: 0.4 },
   },
   'gas-giant': {
-    colour: { r: 0.72, g: 0.74, b: 0.82 },
+    color: { r: 0.72, g: 0.74, b: 0.82 },
     limb: { r: 0.9, g: 0.72, b: 0.5 },
   },
   'ice-giant': {
-    colour: { r: 0.45, g: 0.72, b: 0.88 },
+    color: { r: 0.45, g: 0.72, b: 0.88 },
     limb: { r: 0.7, g: 0.75, b: 0.9 },
   },
   // Pluto's haze really is blue, for the same Rayleigh reason Earth's is, and
   // New Horizons photographed it backlit to prove it.
   dwarf: {
-    colour: { r: 0.45, g: 0.6, b: 0.9 },
+    color: { r: 0.45, g: 0.6, b: 0.9 },
     limb: { r: 0.8, g: 0.7, b: 0.6 },
   },
   // Neither of these can hold an atmosphere; a comet's coma is not one, and is
   // not drawn as one. Present so the record is total rather than because it is
   // ever read.
   asteroid: {
-    colour: { r: 0.4, g: 0.4, b: 0.4 },
+    color: { r: 0.4, g: 0.4, b: 0.4 },
     limb: { r: 0.5, g: 0.5, b: 0.5 },
   },
   comet: {
-    colour: { r: 0.5, g: 0.62, b: 0.7 },
+    color: { r: 0.5, g: 0.62, b: 0.7 },
     limb: { r: 0.7, g: 0.78, b: 0.8 },
   },
 }
@@ -1301,16 +1301,16 @@ function proceduralAppearance(
             height: giant
               ? radius * 0.008
               : Math.min(atmosphere.ceiling, radius * 0.02),
-            colour: hue.colour,
+            color: hue.color,
             limb: hue.limb,
             // A giant's limb has no bottom to thin out against; a terrestrial
             // one shows what its sea-level density can scatter. 1.2 kg/m³ is
             // Earth's, which is what "1" means everywhere this is read.
             thickness: giant ? 1 : Math.min(1, atmosphere.surfaceDensity / 1.2),
           },
-    colour: giant
+    color: giant
       ? (KIND_COLOUR[kind] ?? KIND_COLOUR.rocky)
-      : surfaceColourFor(palette.fork('surface'), kind, grammar),
+      : surfaceColorFor(palette.fork('surface'), kind, grammar),
     pigment: pigmentFor(palette.fork('pigment')),
     liquid: liquidAppearance(grammar.liquidKind, palette.fork('liquid')),
   }
@@ -1959,9 +1959,9 @@ function makeSmallBody(
        * clearest compositional gradient in the Solar System and it costs one
        * interpolation.
        */
-      colour: darkening(KIND_COLOUR[kind], insolationHere, rng),
+      color: darkening(KIND_COLOUR[kind], insolationHere, rng),
       // Nothing grows on a rubble pile and nothing pools on one.
-      pigment: PIGMENTS[0]?.colour ?? { r: 0.08, g: 0.21, b: 0.05 },
+      pigment: PIGMENTS[0]?.color ?? { r: 0.08, g: 0.21, b: 0.05 },
       liquid: null,
     },
     mu: bodyMu,

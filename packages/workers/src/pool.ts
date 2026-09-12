@@ -77,7 +77,7 @@ export interface PoolStats {
   readonly active: number
   readonly completed: number
   readonly failed: number
-  readonly cancelled: number
+  readonly canceled: number
   /** Rolling mean over the last 64 jobs, milliseconds. */
   readonly averageQueueMs: number
   readonly averageRunMs: number
@@ -119,7 +119,7 @@ export class WorkerPool {
   readonly #runSamples: number[] = []
   #completed = 0
   #failed = 0
-  #cancelled = 0
+  #canceled = 0
   #longestQueueMs = 0
   #terminated = false
   /**
@@ -200,7 +200,7 @@ export class WorkerPool {
     const queuedIndex = this.#queue.findIndex((job) => job.id === id)
     if (queuedIndex >= 0) {
       const [job] = this.#queue.splice(queuedIndex, 1)
-      this.#cancelled += 1
+      this.#canceled += 1
       job?.reject(new Error('canceled'))
       return
     }
@@ -245,7 +245,7 @@ export class WorkerPool {
       active: this.#active.size,
       completed: this.#completed,
       failed: this.#failed,
-      cancelled: this.#cancelled,
+      canceled: this.#canceled,
       averageQueueMs: mean(this.#queueSamples),
       averageRunMs: mean(this.#runSamples),
       longestQueueMs: this.#longestQueueMs,
@@ -345,7 +345,7 @@ export class WorkerPool {
       this.#completed += 1
       job.resolve(message.payload as never)
     } else if (message.error === 'canceled') {
-      this.#cancelled += 1
+      this.#canceled += 1
       job.reject(new Error('canceled'))
     } else {
       this.#failed += 1

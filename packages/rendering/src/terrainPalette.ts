@@ -5,7 +5,7 @@ import {
   type LiquidAppearance,
   seaDatumElevation,
 } from '@inertialref/universe'
-import { surfaceColour } from './surfaceColour.ts'
+import { surfaceColor } from './surfaceColour.ts'
 
 /*
  * What the six surface materials look like on one body.
@@ -124,7 +124,7 @@ export interface TerrainPalette {
   /** The ocean datum in meters, or null on a dry world. */
   readonly seaLevel: Meters | null
   /** What deep water looks like from above. */
-  readonly oceanColour: LinearRgb
+  readonly oceanColor: LinearRgb
   /**
    * The liquid the sea sheet and the rivers are drawn in, or null where
    * nothing runs. `oceanColour` is its deep colour where it exists; the
@@ -156,7 +156,7 @@ export interface TerrainPalette {
    * two multiply and a thin warm sky is dimmer than a thin blue one for no
    * reason anybody could name.
    */
-  readonly skyColour: LinearRgb
+  readonly skyColor: LinearRgb
   /**
    * The haze's own colour, unnormalized — what the air *in front of* the ground
    * looks like.
@@ -165,7 +165,7 @@ export interface TerrainPalette {
    * is a tint on the light arriving at the surface and carries no brightness;
    * this one is the aerial veil, and its value is the veil's own.
    */
-  readonly hazeColour: LinearRgb
+  readonly hazeColor: LinearRgb
   /**
    * The archive's texture-set key for this body, or null.
    *
@@ -194,7 +194,7 @@ export const REFLECTANCE_CEILING = 0.88
 
 /** Physical reference reflectance, or the tint over a published albedo map. */
 function referenceReflectance(body: Body): LinearRgb {
-  const colour = surfaceColour(body.appearance)
+  const colour = surfaceColor(body.appearance)
   if (body.appearance.texture !== null) return colour
   const grey = luminance(colour)
   // The hue is the colour's, normalized: a body whose swatch is warm grey stays
@@ -450,14 +450,14 @@ export function terrainPalette(body: Body): TerrainPalette {
     // The liquid's own deep colour where a body has one; open-ocean blue
     // otherwise, the same number the sphere draws a photographed sea in —
     // what orbit shows is water, not the bathymetry underneath it.
-    oceanColour: body.appearance.liquid?.colour ?? OPEN_OCEAN,
+    oceanColor: body.appearance.liquid?.color ?? OPEN_OCEAN,
     liquid: body.appearance.liquid,
     sheet: seaSheetDatum(body) === null ? 0 : 1,
 
     sunsetTint: body.appearance.haze?.limb ?? { r: 1, g: 1, b: 1 },
     airThickness: body.appearance.haze?.thickness ?? 0,
-    skyColour: unitLuminance(body.appearance.haze?.colour),
-    hazeColour: body.appearance.haze?.colour ?? { r: 0, g: 0, b: 0 },
+    skyColor: unitLuminance(body.appearance.haze?.color),
+    hazeColor: body.appearance.haze?.color ?? { r: 0, g: 0, b: 0 },
     textureKey: body.appearance.texture,
   }
 }

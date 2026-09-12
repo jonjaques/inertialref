@@ -182,11 +182,7 @@ const asCandidate = (star: CatalogStar): StarCandidate => ({
   id: star.id,
   name: star.name,
   position: star.position,
-  colour: [
-    star.physical.colour.r,
-    star.physical.colour.g,
-    star.physical.colour.b,
-  ],
+  color: [star.physical.color.r, star.physical.color.g, star.physical.color.b],
   solarLuminosities: star.physical.solarLuminosities,
   visualLuminosities:
     star.physical.absoluteMagnitude === null
@@ -617,7 +613,7 @@ export class GameEngine {
       spriteCount: this.#starField.positions.length,
       spriteCeiling: STAR_SPRITE_CEILING,
       pending: this.#starFieldPending,
-      center: this.#starFieldCentre,
+      center: this.#starFieldCenter,
     }
   }
 
@@ -854,7 +850,7 @@ export class GameEngine {
   #starField: StarField = EMPTY_STAR_FIELD
   #starFieldKnown: readonly StarCandidate[] | null = null
   #starFieldCoverage: ReturnType<typeof populationCoverage> | null = null
-  #starFieldCentre: UniverseVector | null = null
+  #starFieldCenter: UniverseVector | null = null
   #starFieldPending = false
   /*
    * Which world the in-flight survey belongs to. A survey is asynchronous and
@@ -1092,7 +1088,7 @@ export class GameEngine {
     this.#starField = EMPTY_STAR_FIELD
     this.#starFieldKnown = null
     this.#starFieldCoverage = null
-    this.#starFieldCentre = null
+    this.#starFieldCenter = null
     this.#starFieldWorld += 1
     this.orbits = []
     this.#orbitsSystems = ''
@@ -1577,11 +1573,11 @@ export class GameEngine {
   #maybeSurveyStars(centre: UniverseVector): void {
     if (this.#starFieldPending) return
     if (
-      this.#starFieldCentre !== null &&
-      UV.distance(this.#starFieldCentre, centre) <= STARFIELD_HYSTERESIS
+      this.#starFieldCenter !== null &&
+      UV.distance(this.#starFieldCenter, centre) <= STARFIELD_HYSTERESIS
     )
       return
-    this.#starFieldCentre = centre
+    this.#starFieldCenter = centre
     this.#starFieldPending = true
     const world = this.#starFieldWorld
     const catalog = this.world.catalog
@@ -1606,7 +1602,7 @@ export class GameEngine {
     void Promise.resolve()
       .then(() =>
         pool === null
-          ? surveySkyTask.run(payload, { cancelled: () => false })
+          ? surveySkyTask.run(payload, { canceled: () => false })
           : pool.run(surveySkyTask, payload),
       )
       .then((selection) => {
@@ -1616,7 +1612,7 @@ export class GameEngine {
           id: star.id,
           name: star.name,
           position: UV.universeVector(...star.position),
-          colour: star.colour,
+          color: star.color,
           solarLuminosities: star.solarLuminosities,
           visualLuminosities: star.visualLuminosities,
           catalogued: false,
