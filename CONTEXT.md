@@ -9684,7 +9684,12 @@ declarations in 86 files with 1,997 references is 456 in 117 with 3,409.
 The identifier migration uses the TypeScript language service before rewriting
 comments and prose. Cancellation messages, manifest keys, and the catalog
 fields move with their producers and consumers. Stored panel ids and preference
-keys use the same spelling as the source; published paths advance directly.
+keys use the same spelling as the source; published paths advance directly. The
+action ids inside `controls.keymap` are stored keys too, and `resolveBindings`
+drops an override naming an id this build does not have: a rebound Recenter
+comes back as Home, and the unread `flight.recentre` entry stays behind it. The
+loss is deliberate for the same reason as the rest — a compatibility reader for
+one rename is a reader nothing ever removes.
 
 Source licenses also live inside both packed star catalogs. The attribution
 test failed when only the TypeScript field moved, and passed after migrating
