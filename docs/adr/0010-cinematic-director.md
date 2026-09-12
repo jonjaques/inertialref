@@ -57,7 +57,11 @@ A cutscene is **presentation borrowed from a running world, returned intact**:
   state, control, assist and clock settings through the same verbs a save-load
   uses; `stop`, the final frame, and Esc restore them; a world replaced
   mid-scene abandons without restoring, because the captured state belongs to
-  the discarded world.
+  the discarded world. A scene played with `hold` — the cinema player's way of
+  watching — parks on its last frame with the clock paused and restores on
+  `stop` instead: restoring on the final frame hands the camera to the ship
+  for a frame, and the terrain streamer, which follows the eye, drops the
+  body the scene was on.
 - **The game never plays one uninvited.** The boot path is untouched; entry
   points are the dock's cutscene section and `ir.play`, and both are the same
   harness verb.

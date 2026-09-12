@@ -1160,6 +1160,51 @@ describe('cutscene director lifecycle', () => {
     expect(harness.cutsceneStatus()).toBeNull()
   })
 
+  it('holds the last frame on stage when asked, and pauses the clock', () => {
+    /*
+     * The cinema player's way of watching. Restoring on the final frame hands
+     * the camera to the ship for a frame, wherever the ship is, and the
+     * terrain streamer drops the body the scene was on: measured at 3200×1800
+     * the Mars hover's 2,170 patches went to zero on that frame and the
+     * reopened last frame rebuilt them from the cube faces up.
+     */
+    const session = openSession()
+    const harness = session.harness
+    const player = session.player()!
+    const before = { ...session.world.entities.require(player).state.position }
+    harness.play('tng-intro', { hold: true })
+    const at = (frame: number) => harness.cutsceneSample(100 + frame / FPS)
+    expect(at(0)).not.toBeNull()
+
+    const last = TNG_INTRO.durationFrames - 1
+    const held = at(TNG_INTRO.durationFrames + 5)
+    expect(held).not.toBeNull()
+    expect(held!.frame).toBe(last)
+    expect(harness.cutsceneStatus()?.frame).toBeCloseTo(last, 6)
+    expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+    expect(session.world.clock.paused).toBe(true)
+    // Still on stage: the player has not been given back.
+    expect(session.world.entities.require(player).state.position).toEqual(
+      before,
+    )
+
+    // Every later sample is the same still, and the outcome is written once.
+    const outcome = harness.cutsceneOutcome()
+    expect(at(TNG_INTRO.durationFrames + 50)!.frame).toBe(last)
+    expect(harness.cutsceneOutcome()).toBe(outcome)
+
+    // A seek away is the scene playing again.
+    harness.seekCutscene(100)
+    expect(harness.cutsceneOutcome()).toBeNull()
+    expect(at(TNG_INTRO.durationFrames + 50)!.frame).toBeCloseTo(100, 6)
+
+    // And a stop restores, as it always does.
+    harness.stopCutscene()
+    expect(harness.cutsceneStatus()).toBeNull()
+    expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
+    expect(session.world.clock.paused).toBe(false)
+  })
+
   it('seeks to an exact reference frame', () => {
     const { harness, at } = playing()
     at(500)

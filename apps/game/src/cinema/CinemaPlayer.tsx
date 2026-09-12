@@ -119,9 +119,9 @@ export function CinemaPlayer({
       // mode would hand the camera to a script nobody asked for.
       //
       // Through the session rather than straight at the harness, because the
-      // session has state of its own to put down: it is what reopens an ended
-      // scene on its final frame and pauses the clock to hold the picture, and
-      // it does that from a sampler that keeps running after this unmounts.
+      // session has state of its own to put down: the claim on the scene and
+      // the end card, both read from a sampler that keeps running after this
+      // unmounts.
       session.stop()
     }
   }, [engine, id, open, params, session])
@@ -253,9 +253,10 @@ export function CinemaPlayer({
   /*
    * A scene with no picture at all — the player opened and the director never
    * produced a frame, or something outside the player stopped the scene
-   * mid-run and the stop was respected. The natural end of a scene no longer
-   * reaches this branch: the session reopens the final frame, so what is on
-   * screen is the last shot, and the End of Scene card is drawn *over* it.
+   * mid-run and the stop was respected. The natural end of a scene does not
+   * reach this branch: the director holds the final frame on stage, so what
+   * is on screen is the last shot, and the End of Scene card is drawn *over*
+   * it.
    */
   if (playhead === null) {
     return (

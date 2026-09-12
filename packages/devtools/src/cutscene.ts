@@ -42,6 +42,21 @@ export interface CutsceneScript {
   prepare(world: World): PreparedCutscene
 }
 
+/** How `play` is asked to run a scene. */
+export interface PlayOptions {
+  /**
+   * Keep the last frame on stage rather than restoring the player on it.
+   *
+   * On the final frame the director parks the playhead there, pauses the
+   * clock and reports the scene `ended` while `status()` stays live and
+   * `sample` keeps answering with that frame; `stop` restores as it always
+   * does. Off, the final frame restores the player and returns null, which
+   * is what a driver's `ir.play` and every measurement want. A seek away
+   * from a held end is the scene playing again, and clears the outcome.
+   */
+  readonly hold?: boolean
+}
+
 export interface PreparedCutscene {
   sample(frame: number): CinematicSample
 }
@@ -69,6 +84,8 @@ interface ActiveCutscene {
   readonly world: World
   readonly player: EntityId
   readonly saved: SavedPlayerState
+  /** Whether the last frame is held on stage. See `PlayOptions`. */
+  readonly hold: boolean
   /** Sim `renderTime` at frame 0. Null until the first sample lands. */
   epoch: number | null
   /** A seek issued before the next sample; applied when it arrives. */
@@ -113,7 +130,8 @@ export class CutsceneDirector {
   }
 
   /**
-   * How the last scene left, or `null` if none ever has.
+   * How the last scene left, or `null` if none ever has — or, for a scene
+   * held on its last frame, that it ended while it is still on stage.
    *
    * `status()` answers "is a scene playing" and goes null for three different
    * reasons; this is what tells them apart. Without it a caller has to
@@ -123,7 +141,7 @@ export class CutsceneDirector {
    * identical evidence.
    *
    * Cleared by `play`, so it always describes the *last* scene rather than an
-   * older one.
+   * older one, and by a seek away from a held end.
    */
   lastOutcome(): CutsceneOutcome | null {
     return this.#last
@@ -144,7 +162,7 @@ export class CutsceneDirector {
     }
   }
 
-  play(id: string): CutsceneStatus {
+  play(id: string, options: PlayOptions = {}): CutsceneStatus {
     const script = this.#scripts.find((candidate) => candidate.id === id)
     if (script === undefined) {
       throw new Error(
@@ -190,6 +208,7 @@ export class CutsceneDirector {
       world,
       player,
       saved,
+      hold: options.hold ?? false,
       epoch: null,
       pendingSeekFrame: null,
       lastRenderTime: null,
@@ -270,6 +289,10 @@ export class CutsceneDirector {
     } else {
       active.epoch = active.lastRenderTime - clamped / active.script.fps
     }
+    // A held end is over once the playhead leaves it: the scene is playing
+    // again, and its next ending is a new one. Only a held scene can be
+    // active with an outcome at all.
+    if (this.#last !== null && this.#last.ending === 'ended') this.#last = null
     return this.status() as CutsceneStatus
   }
 
@@ -278,7 +301,8 @@ export class CutsceneDirector {
    *
    * Called by the host once per rendered frame with the snapshot's
    * `renderTime`. The first call anchors frame 0; the final frame restores the
-   * player and returns null, so a host needs no separate end-of-scene check.
+   * player and returns null, so a host needs no separate end-of-scene check —
+   * unless the scene was played with `hold`, in which case it stays.
    */
   sample(renderTime: number): CinematicSample | null {
     const active = this.#active
@@ -304,6 +328,7 @@ export class CutsceneDirector {
 
     const frame = (renderTime - active.epoch) * active.script.fps
     if (frame >= active.script.durationFrames) {
+      if (active.hold) return this.#holdLastFrame(active, renderTime)
       // `ended`, not `stopped`. It is the same restore either way, and it is a
       // completely different thing to a player: one draws an end card, the
       // other closes the transport.
@@ -311,6 +336,34 @@ export class CutsceneDirector {
       return null
     }
     return active.prepared.sample(Math.max(0, frame))
+  }
+
+  /**
+   * Park on the last frame and stay there.
+   *
+   * The epoch is re-based so the playhead reads exactly the last frame and
+   * the clock is paused so it stays put; a resume walks off the end on the
+   * next sample and lands back here, which is why the session's play at the
+   * end is a seek to the top. The outcome is written once, not per frame:
+   * this runs on every sample while the picture is held, and the clock being
+   * paused does not stop the host sampling.
+   */
+  #holdLastFrame(active: ActiveCutscene, renderTime: number): CinematicSample {
+    const last = active.script.durationFrames - 1
+    active.epoch = renderTime - last / active.script.fps
+    active.world.clock.setPaused(true)
+    if (this.#last === null) {
+      this.#last = {
+        id: active.script.id,
+        ending: 'ended',
+        durationFrames: active.script.durationFrames,
+        fps: active.script.fps,
+      }
+      log.info('cutscene ended, holding its last frame', {
+        id: active.script.id,
+      })
+    }
+    return active.prepared.sample(last)
   }
 
   /**

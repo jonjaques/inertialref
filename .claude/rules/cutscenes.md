@@ -71,6 +71,12 @@ second scene** — the traps below are the index, not the explanation.
   card and keeps its transport, the others close it. Never reconstruct the answer from a
   remembered playhead: a stop near the final frame produces identical evidence, which is
   exactly the bug that made the player undo a console `stopCutscene` within 100 ms.
+- **The cinema session plays with `hold`; a measurement does not.** Held, the director
+  parks the last frame with the clock paused and `status()` live, so the end card sits
+  over the last shot. Restoring on the final frame hands the camera to the ship for a
+  frame and the streamer drops every patch of the body the scene was on; the reopened
+  frame then rebuilt the Mars hover's ground from the cube faces up under the card.
+  Never reopen a scene to put its last frame back.
 - **One playhead, one set of verbs, one transport.** `apps/game/src/cinema/session.ts`
   publishes the playhead through the engine store's sampler; the player, the overlay
   and the mode all read that, and none reads `world.clock.paused` for itself. The

@@ -18,8 +18,9 @@ import type { CutsceneOutcome, CutsceneStatus } from '@inertialref/devtools'
  * engine store's sampler, which is already running.
  *
  * ADR-0010's director is untouched by this. A session *reading* it contradicts
- * nothing; the one thing this needed from it was a richer status, which is
- * additive and leaves `sample(frame)` exactly as pure as it was.
+ * nothing; the two things this needed from it are additive — a richer status,
+ * and a `hold` that keeps the last frame on stage — and leave `sample(frame)`
+ * exactly as pure as it was.
  */
 
 /** Where a scene is, and whether it is over. */
@@ -50,6 +51,22 @@ export interface CutsceneHost {
   status(): CutsceneStatus | null
   outcome(): CutsceneOutcome | null
   paused(): boolean
+  /**
+   * Open a scene held at its end: on the last frame the director parks the
+   * playhead, pauses the clock and reports `ended` while the scene stays on
+   * stage, rather than restoring the player and going dark.
+   *
+   * That is the whole difference between watching a scene and measuring
+   * one. A director that restores on the final frame hands the camera back
+   * to the ship for a frame — wherever the ship is, which for a player who
+   * opened the library from the menu is Earth orbit — and the terrain
+   * streamer, which follows the eye, drops every patch it holds for the body
+   * it was drawing. Reopening the scene a frame later put the camera back
+   * over an empty cache, and the ground under the end card rebuilt itself
+   * from the cube faces up at eight patches a frame: measured at 3200×1800,
+   * the hover's 2,170 patches went to zero on the ending frame and were at
+   * 221, level 6 of 16, two seconds later.
+   */
   play(id: string): CutsceneStatus
   seek(frame: number): void
   pause(): void
@@ -59,10 +76,11 @@ export interface CutsceneHost {
 
 export interface CutsceneSession {
   /**
-   * Read the playhead, and react to a scene that has just ended.
+   * Read the playhead, and notice a scene that has just ended.
    *
-   * Called once per engine sample. It is the *one* place that acts on an
-   * ending — see `restoreFinalFrame` below for the one thing it does.
+   * Called once per engine sample. It is the *one* place that raises the end
+   * card, and the only thing it does about an ending is raise it: the
+   * director is holding the last frame already.
    */
   sample(): Playhead | null
   /**
@@ -93,14 +111,6 @@ export interface CutsceneSession {
   hold(held: boolean): void
 }
 
-/**
- * How far short of the end a re-open lands, in frames.
- *
- * Two, not one: the director reports the scene done *on* the final frame, so a
- * re-open at exactly the end would end again on the next sample and loop.
- */
-const REOPEN_MARGIN = 2
-
 export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
   /*
    * Whether an end card is up.
@@ -114,15 +124,13 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
    */
   let carded = false
   /*
-   * Whether this session has already reacted to the ending it can see.
+   * Whether this session has already raised a card for the ending it can see.
    *
-   * Reset when a scene *starts* — the director clears its outcome in `play`,
-   * so an open scene with no outcome is one whose next ending is a new one.
-   * That is what lets the same scene end twice: dismiss the card, seek back,
-   * play on, and the second ending raises a second card.
-   *
-   * It also bounds `restoreFinalFrame`: a reopen that throws leaves the
-   * director ended, and without this the next sample would try again forever.
+   * Reset whenever the director has no outcome — a scene started fresh, or a
+   * held ending that a seek has moved the playhead away from — so an open
+   * scene with no outcome is one whose next ending is a new one. That is what
+   * lets the same scene end twice: dismiss the card, seek back, play on, and
+   * the second ending raises a second card.
    */
   let handled = false
   /** A pointer owns a scrubber; the published frame stands still. */
@@ -132,13 +140,11 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
    *
    * `sample()` runs on the engine store's sampler, which is session-wide and
    * does not stop when the cinema does — so an ending is visible here whether
-   * or not anybody is watching. `restoreFinalFrame` reacts to one by reopening
-   * the scene two frames short and pausing the world clock, which is right for
-   * a player holding an end card and wrong for every other way a scene can
-   * end. A driver's `ir.play('tngIntro')` is the case that bites: the director
-   * restores the clock when the scene ends, this reopened it and paused it
-   * again, and everything measured afterwards described a frozen world with
-   * nothing on screen to say so.
+   * or not anybody is watching, and a card must only go up for a scene
+   * somebody opened through this session to watch. A driver's
+   * `ir.play('tng-intro')` is the case that bites: that scene ends by
+   * restoring the player and the clock, and a session that claimed it would
+   * publish an ended playhead for a scene that is no longer on stage.
    *
    * The *id* rather than a boolean, because "did I open something" and "did I
    * open **this**" are different questions and only the second one is safe.
@@ -176,78 +182,36 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     }
   }
 
-  /*
-   * Put the last picture back.
-   *
-   * The director restores the ship and stops on the final frame, which is
-   * correct — a scene that kept the camera after it ended would be a script
-   * nobody could get out of. What it leaves on screen, though, is whatever the
-   * chase camera happens to see: the debug hull in front of Earth, a
-   * composition nobody wrote, arriving as a hard cut on the last beat of a
-   * title sequence. Reopening two frames short and pausing puts the picture
-   * back, and hands back a scrubber with the end of the scene under it rather
-   * than an empty bar.
-   *
-   * It is a side effect inside a read, and that is deliberate: this is the
-   * session's tick, it is called from exactly one place, and the alternative —
-   * a component noticing the ending and calling `play` again — is the
-   * arrangement this module replaced.
-   */
-  const restoreFinalFrame = (outcome: CutsceneOutcome): void => {
-    try {
-      host.play(outcome.id)
-      host.seek(Math.max(0, outcome.durationFrames - REOPEN_MARGIN))
-      host.pause()
-    } catch {
-      // A scene that will not reopen is a scene that ended. Nothing to say.
-    }
-  }
-
   return {
     sample() {
       if (held) return last
       const status = host.status()
-      const outcome = host.outcome()
-      const ended = outcome !== null && outcome.ending === 'ended'
-
-      if (status !== null) {
-        // An open scene the director has no outcome for was started fresh, so
-        // whatever it does next is a new ending. `restoreFinalFrame` reopens
-        // through `play`, which is what clears the director's outcome — so the
-        // re-opened final frame arrives here and keeps its card up.
-        if (outcome === null) handled = false
-        last = {
-          id: status.id,
-          frame: status.frame,
-          durationFrames: status.durationFrames,
-          fps: status.fps,
-          paused: host.paused(),
-          ended: carded,
-        }
-        return last
-      }
-
-      // Stopped, abandoned, never opened, or opened by somebody who is not
-      // this session: there is no playhead, and that is the whole answer. No
-      // window around the final frame, no remembered playhead to compare
-      // against — and, for the last of those, no clock to pause on behalf of a
-      // reader who does not exist.
-      if (!ended || outcome === null || outcome.id !== mine) {
+      if (status === null) {
+        // Stopped, abandoned, never opened, or a scene somebody else played
+        // to its end without a hold: there is no playhead, and that is the
+        // whole answer. No window around the final frame, no remembered
+        // playhead to compare against.
         last = null
         carded = false
         return null
       }
-
-      if (!handled) {
+      const outcome = host.outcome()
+      if (outcome === null) {
+        handled = false
+      } else if (
+        !handled &&
+        outcome.ending === 'ended' &&
+        outcome.id === mine
+      ) {
+        // The director is holding the last frame; the card goes over it.
         handled = true
         carded = true
-        restoreFinalFrame(outcome)
       }
       last = {
-        id: outcome.id,
-        frame: outcome.durationFrames,
-        durationFrames: outcome.durationFrames,
-        fps: outcome.fps,
+        id: status.id,
+        frame: status.frame,
+        durationFrames: status.durationFrames,
+        fps: status.fps,
         paused: host.paused(),
         ended: carded,
       }
@@ -265,8 +229,19 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // card about how it went. Lowering a card that is not up is a no-op,
       // which is what makes an ordinary mid-scene pause cost nothing.
       carded = false
-      if (host.paused()) host.resume()
-      else host.pause()
+      if (!host.paused()) {
+        host.pause()
+        return
+      }
+      // From the top when the playhead is on the last frame, whether the card
+      // is up or was dismissed: the director holds that frame, so a resume
+      // there would park again on the next sample and the button would do
+      // nothing anybody could see.
+      const status = host.status()
+      if (status !== null && status.frame >= status.durationFrames - 1) {
+        host.seek(0)
+      }
+      host.resume()
     },
 
     seek(frame) {
@@ -285,9 +260,8 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     stop() {
       carded = false
       handled = false
-      // Before `host.stop()`, so a director that has already ended — the
-      // ending arriving in the same sample the player unmounts in — cannot be
-      // reacted to on the way out.
+      // Before `host.stop()`, so an ending that arrives in the same sample the
+      // player unmounts in cannot be reacted to on the way out.
       mine = null
       host.stop()
     },

@@ -882,7 +882,11 @@ export class GameEngine {
       // The one reader of this field on the presentation side. It used to have
       // three, in three components, answering the same question.
       paused: () => this.world.clock.paused,
-      play: (id) => this.harness.play(id),
+      // Held, because this is watching: the last frame stays on stage under
+      // the end card. Without it the ending frame hands the camera to the
+      // ship and the streamer drops the ground — `cinema/session.ts` has the
+      // measurement.
+      play: (id) => this.harness.play(id, { hold: true }),
       seek: (frame) => void this.harness.seekCutscene(frame),
       pause: () => this.harness.pause(),
       resume: () => this.harness.resume(),

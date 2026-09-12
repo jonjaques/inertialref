@@ -126,6 +126,7 @@ import {
   CutsceneDirector,
   type CutsceneOutcome,
   type CutsceneStatus,
+  type PlayOptions,
 } from './cutscene.ts'
 import {
   Observatory,
@@ -1427,10 +1428,12 @@ export class GameHarness {
    * follow the script while the world keeps ticking, and stopping — or the
    * script ending — restores the player's captured state, clock settings
    * included. The game boots exactly as it always did; this runs only when
-   * asked to, from the dock's cutscene section or here.
+   * asked to, from the dock's cutscene section or here. `hold` keeps the last
+   * frame on stage instead of restoring on it — the cinema player's way of
+   * watching; a measurement wants the default.
    */
-  play(id = 'tng-intro'): CutsceneStatus {
-    return this.#cutscenes.play(id)
+  play(id = 'tng-intro', options?: PlayOptions): CutsceneStatus {
+    return this.#cutscenes.play(id, options)
   }
 
   /** Stop the running cutscene and restore the player. Safe when idle. */
