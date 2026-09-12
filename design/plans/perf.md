@@ -576,53 +576,40 @@ engine a frame, 1.9 of it `terrain.select`, which walks every frame because
 the scripted camera never converges. No strobe: a 240-frame cast at 60.3 fps
 over the approach reported no isolated frames.
 
-### Every tick samples the pad's support disk, at any altitude
+### What a placement costs the tick and the frame
 
-`flight.ts` calls `world.contactRadius` on every integrated tick with a body
-binding, unconditionally, where `groundAltitude` beside it skips terrain
-outside `groundBand`. `world.ts` then evaluates `surfaceSupportRadius` per
-placement, and that function samples `surfaceRadius` — a terrain noise call —
-before the cheap disk rejection. A ship in a 400 km Mars orbit pays a frame
-pose, a canonical position, an address format and a noise sample a tick for a
-pad it cannot reach. Not visible in the 4.0 ms orbit figure with one pad in
-the world; it is a per-placement cost on the tick, and the tick is the thing
-that runs at warp. The experiment: `pnpm sim` tick benchmark at 400 km with
-zero, one and twenty placements on Mars. The fix is two reorders — the disk
-test on `body.radius + height` before the noise sample, and the whole branch
-behind `datum > groundBand + contactHeight`.
+The integrator's contact test is gated on the datum: above the ground band
+and the body's tallest deck a tick touches neither the spin pose, the terrain
+nor the body's placements, and inside the band one direction and one terrain
+sample serve the ground and the deck alike. `contactHeight` is a number
+cached on the world per body, and the placements are indexed per body; both
+are rebuilt when a placement changes, never at the call. A ray that misses a
+deck is rejected on the body's radius before the terrain under the pad is
+sampled, so a ship hovering over Mars pays one noise call a tick for the
+ground and none for a pad it is not above. The regression in
+`structureContact.test.ts` counts the asks: an orbiter at 400 km with the
+drive lit makes none over 640 ticks, a probe 60 m over the pad makes one a
+tick.
 
-### The body frame pose is evaluated twice per body per frame
+The snapshot resolves each body's rotating pose once, for the placements it
+carries and for its own visible orientation, and formats its address once.
+`Engine/snapshot` is 0.24–0.32 ms a frame with Sol loaded; the pose it no
+longer repeats is a Kepler solve up the chain per body, unmeasured on its own.
 
-`snapshot.ts` resolves the spin pose once for the structures and then
-re-evaluates the same `frames.pose` for the body's own orientation two
-statements later, for every body in every loaded system, every frame.
-`formatAddress` runs per placement inside the loop and once more after it.
-Unmeasured; `Engine/snapshot` is 0.24–0.32 ms a frame with Sol loaded, so the
-ceiling is that.
+A glTF that fails to load stays failed until the page reloads, in the loader
+and in the structure pass, because the pass asks for every instance it lacks
+on every frame. The pass allocates nothing per frame: one reused set of
+active ids, and the Cinema stage goes through the same placement path as a
+world structure rather than being spread into a fresh list. Boot warms the
+assets of the structures placed in loaded systems, so the cover's cost grows
+with what is built near the player and not with the catalog; a structure
+elsewhere compiles on first sight.
 
-### A structure whose glTF fails to load is requested again every frame
-
-`surfaceModels.ts` deletes the cache entry when the load rejects and resolves
-`null`; `SurfaceStructures.tsx` clears its pending key on resolve, finds no
-instance next frame and calls the loader again — a new `GLTFLoader` and a
-network request at the frame rate for as long as the structure is in view. A
-404 or an unfetched LFS pointer is the trigger. Cache the failure. Not
-measured; the shape is enough.
-
-### Per-frame allocations in the structure pass, in every mode
-
-`SurfaceStructures.tsx` builds a `Set` and a mapped array each frame, and in
-the cinema spreads the stage into a new array and object; `World.structures`
-sorts and freezes a fresh array on every `snapshot()`. Small, and outside the
-cinema it is the one worth removing because it runs in every mode with a
-scene. `cinematicStage.ts` allocates through `Vec` and `Q` for the Sun
-direction each frame, cinema only.
-
-### Every surface asset is fetched and compiled at boot
-
-`SurfaceStructures` warms every entry of `SURFACE_ASSETS` at mount, wherever
-the player is. One 1.5 MB asset today; the pattern is a boot cost that grows
-with the catalog of structures rather than with what is near.
+Still open, and unmeasured: `buildScene` samples the drawn terrain radius
+under every visible structure every frame, and `cinematicStage.ts` allocates
+through `Vec` and `Q` for the Sun direction each frame, cinema only. The
+`pnpm sim` tick benchmark at 400 km with zero, one and twenty placements is
+the experiment that would put a figure on the gate; it has not been run.
 
 ## The order it is worth taking
 
