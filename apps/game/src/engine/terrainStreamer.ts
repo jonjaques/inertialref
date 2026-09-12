@@ -28,6 +28,7 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
+  COARSEN_STEP,
   DEFAULT_CELL_PIXELS,
   DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
@@ -626,6 +627,20 @@ export class TerrainStreamer {
   #cacheEpoch = 0
   /** How many times the walks have actually run. `summary()` reports it. */
   #selections = 0
+  /*
+   * The tolerance the ideal selection settled at, and how many patches it
+   * wanted there — the two numbers the next walk starts from.
+   *
+   * `selectTerrain` loosens `cellPixels` when the cap binds and hands the
+   * multiple back; starting the next walk from it is one walk a frame while
+   * the cap keeps binding, where starting from 1 is two. Coming back down is
+   * the streamer's call, because only it has last frame's count: one step
+   * finer is tried once the count at the current step would fit at the next
+   * one, and a guess that turns out wrong costs one extra walk on that frame
+   * and lands back where it was.
+   */
+  #coarsening = 1
+  #wanted = 0
 
   /**
    * The optics the selection is measured against.
@@ -684,6 +699,7 @@ export class TerrainStreamer {
     readonly culled: number
     readonly starved: number
     readonly saturated: boolean
+    readonly coarsening: number
     readonly selections: number
     readonly lens: LensView | null
     readonly producer: string
@@ -722,6 +738,7 @@ export class TerrainStreamer {
       culled: this.#culled,
       starved: this.#starved,
       saturated: this.#saturated,
+      coarsening: this.#coarsening,
       // Total walks, not walks a second: a hover that stops re-selecting is
       // visible as this number standing still while the frame count climbs.
       selections: this.#selections,
@@ -1036,14 +1053,29 @@ export class TerrainStreamer {
       readonly lens: LensView['lens']
       readonly viewport: LensView['viewport']
       readonly cellPixels: number
+      readonly maxPatches?: number
     },
     /** `pixelsPerRadian(lens, viewport) / cellPixels`, computed by the caller. */
     optics: number,
   ): void {
+    /*
+     * Both walks start from the tolerance the last ideal selection settled
+     * at, one step finer once that selection had room for it. The ideal one
+     * decides, because the draw set is gated on geometry and comes in under
+     * the cap for as long as the cache is cold — it would report a tolerance
+     * of 1 on every frame of an arrival and hand the drawn ground a level it
+     * loses the moment the cache fills.
+     */
+    const coarsening =
+      this.#coarsening > 1 &&
+      this.#wanted * COARSEN_STEP < (options.maxPatches ?? DEFAULT_MAX_PATCHES)
+        ? this.#coarsening / COARSEN_STEP
+        : this.#coarsening
     // What to draw: refine only into ground already in the cache, so a patch
     // that has not arrived costs detail rather than leaving a hole.
     const drawn = selectTerrain(eye, {
       ...options,
+      coarsening,
       /*
        * Geometry, not the heightfield.
        *
@@ -1080,8 +1112,10 @@ export class TerrainStreamer {
         previous,
         eye,
       ),
-      options,
+      { ...options, coarsening },
     )
+    this.#coarsening = wanted.coarsening
+    this.#wanted = wanted.patches.length
     // What the walks were made against, captured before `#build` and `#evict`
     // change it — see the method's own doc for why that ordering is the memo.
     const cacheEpoch = this.#cacheEpoch
@@ -1537,6 +1571,9 @@ export class TerrainStreamer {
     this.#cacheEpoch += 1
     this.#fields.clear()
     this.#patches.clear()
+    // The tolerance was settled for an eye over another body.
+    this.#coarsening = 1
+    this.#wanted = 0
     /*
      * The in-flight window is cancelled and dropped, which is two fixes.
      *

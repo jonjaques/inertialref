@@ -216,8 +216,18 @@ export interface TerrainReport {
   readonly culled: number
   /** Nodes drawn coarse because a child's heightfield had not arrived yet. */
   readonly starved: number
-  /** True when the patch budget stopped the refinement a level early. */
+  /**
+   * True when the patch budget stopped the refinement a level early at the
+   * loosest tolerance. The budget binds first by loosening `cellPixels`, and
+   * `coarsening` below says by how much.
+   */
   readonly saturated: boolean
+  /**
+   * The multiple of the quality step's cell pixels the last ideal selection
+   * was made at — 1 while the budget is not binding, 1.5 and its powers
+   * while it is. `terrainSelect.ts` § `COARSEN_STEP`.
+   */
+  readonly coarsening: number
   /**
    * How many times the quadtree walks have actually run, since the streamer
    * was made.
