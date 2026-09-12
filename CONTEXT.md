@@ -9605,6 +9605,40 @@ engine's cutscene port now clears the field as it stops, and the player's
 unmount cleanup calls `sampleOnce` after `session.stop()`. Twenty frames
 sampled after the click: the front door is up on the first.
 
+## The landing went smooth under the Roci, and the last frame rebuilt Mars (12 Sep 2026)
+
+Three defects in Cinema, all invisible at the driver's default window and
+all found by asking headlessly first. The title theme played over the Mars
+landing from its first frame because the overlay owned one track and started
+it for whatever was open; a script now declares its `soundtrack` by name and
+the overlay drives only the open scene's.
+
+The craters under the ship went smooth in steps during the last ten seconds
+of the landing, and only on a retina window. The per-frame selection through
+the scene's own camera and lens is stable at 1600×900 — 874 patches, level
+16 underfoot from 41 s on — but at 3200×1800 display pixels the hover wants
+1,583 against the cap of 1,280, and the breadth-first cut took the deepest
+level from the whole disk at once, including the node the camera stands in:
+16→15→14→13 between 32 s and 37.5 s as the lens narrowed 46°→34° through the
+settle, eight times the cell a meter off the ground. The cap is met by
+loosening the tolerance now — 1.5× the cell pixels, up to three steps — and
+only cut past that; loosened once the same eye wants 1,011 with level 16
+still underfoot, since a node the eye is inside is at distance zero. The
+ladder does nothing where the tree is balance-limited: at the flight lens
+over the same window the 2:1 grading sets the count and 3.4× the tolerance
+removes under 5% of the patches across thirty-six eyes on Mars and Earth.
+Through the 34° lens one step removes at least 20% of every one of them.
+
+The whole scene regenerated on the final frame because the director restored
+the player there and the session reopened the scene two frames short a
+sample later. In between the camera fell to the ship — Earth orbit, for a
+player who came from the menu — and the streamer, which follows the eye,
+dropped every Mars patch: 2,170 to zero on the ending frame, 221 and level 6
+two seconds later, rebuilding at eight patches a frame under the End of Scene
+card. `play` takes `hold`; the cinema session uses it and the director parks
+the last frame with the clock paused. A measurement's `ir.play` keeps the
+frame-null ending every rig depends on.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered

@@ -576,6 +576,14 @@ engine a frame, 1.9 of it `terrain.select`, which walks every frame because
 the scripted camera never converges. No strobe: a 240-frame cast at 60.3 fps
 over the approach reported no isolated frames.
 
+At DPR 2 the hover's selection is over the patch cap — 1,583 wanted against
+1,280 — and the cap is met by loosening the cell tolerance to 1.5×
+(`terrainSelect.ts` § `COARSEN_STEP`), which draws 1,011 patches with level
+16 underfoot rather than the cut tree's 1,184 at level 13. In Node the walk
+is 1.51 ms warm at that eye and 1.98 ms on the frame that climbs a step; the
+streamer hands the settled multiple back, so the step is paid once per
+crossing rather than per frame. The fill figure above is unchanged by it.
+
 ### What a placement costs the tick and the frame
 
 The integrator's contact test is gated on the datum: above the ground band
