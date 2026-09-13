@@ -121,10 +121,22 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
                 void runtime.startTour('system', true, voice)
               }}
             />
+            <Action
+              label="Listen to Saturn"
+              icon={Volume2}
+              disabled={
+                connecting ||
+                state.voice ||
+                !state.capabilities?.features.controlledSpeech
+              }
+              onClick={() => {
+                void runtime.startTour('saturn', true, voice)
+              }}
+            />
           </div>
           <p className="type-micro text-slate-400">
-            Listen to tour needs no microphone and advances after each spoken
-            stop. Live voice uses Next.
+            Listening needs no microphone and advances after each spoken stop.
+            Live voice uses Next.
           </p>
         </div>
       )}
