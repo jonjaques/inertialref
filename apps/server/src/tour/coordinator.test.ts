@@ -5,6 +5,7 @@ import type {
   ToolRequest,
   TourAction,
   TourContext,
+  TourPlan,
   TourServerMessage,
   TourWorldQuery,
 } from '@inertialref/protocol'
@@ -12,6 +13,7 @@ import {
   TourCoordinator,
   newSessionRecord,
   type DirectorDecision,
+  type CoordinatorPorts,
 } from './coordinator.ts'
 import { withAstronomyNotes } from './knowledge/astronomy.ts'
 
@@ -79,8 +81,10 @@ function setup(
     context: TourContext,
     signal: AbortSignal,
     maxRounds: 1 | 2,
+    priorGoal?: string,
   ) => Promise<DirectorDecision>,
   initial = context(),
+  options: Partial<Pick<CoordinatorPorts, 'preset' | 'persist'>> = {},
 ) {
   const messages: TourServerMessage[] = []
   const saved: unknown[] = []
@@ -109,6 +113,7 @@ function setup(
       spoken.push({ brief, delegationId })
     },
     close: async () => {},
+    ...options,
   })
   return { coordinator, messages, saved, spoken }
 }
@@ -379,6 +384,7 @@ describe('tour read continuation and evidence', () => {
   it.each([
     { tool: 'resolve_subject', query: 'Titan' },
     { tool: 'find_worlds', query: worldQuery, radiusLightYears: 8, limit: 4 },
+    { tool: 'read_subject', subjectId: 'saturn' },
   ] satisfies readonly TourAction[])(
     'continues $tool with the refreshed candidate context exactly once',
     async (action) => {
@@ -466,11 +472,56 @@ describe('tour read continuation and evidence', () => {
     ).toBe(true)
   })
 
+  it('returns a noncurrent subject record to the director while the camera stays put', async () => {
+    let calls = 0
+    const { coordinator, messages } = setup(async () => {
+      calls++
+      return calls === 1
+        ? {
+            kind: 'actions',
+            text: '',
+            factIds: [],
+            plan: null,
+            actions: [{ tool: 'read_subject', subjectId: 'titan' }],
+          }
+        : {
+            kind: 'explanation',
+            text: 'Titan has a recorded radius of 2,574.73 kilometers.',
+            factIds: ['titan-radius'],
+            plan: null,
+            actions: [],
+          }
+    }, returnedTitan())
+    await coordinator.receive({
+      type: 'ask',
+      text: 'How large is Titan?',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    const read = toolMessages(messages)[0]!
+    await arrive(coordinator, read, returnedTitan())
+    expect(calls).toBe(2)
+    expect(toolMessages(messages)).toHaveLength(1)
+    expect(coordinator.context?.subjectId).toBe('saturn')
+    expect(
+      messages.find((message) => message.type === 'narration'),
+    ).toMatchObject({
+      brief: {
+        text: 'Titan has a recorded radius of 2,574.73 kilometers.',
+        factIds: ['titan-radius'],
+      },
+    })
+  })
+
   it('shares six executed tools across director continuations', async () => {
     let calls = 0
     const { coordinator, messages } = setup(async () => {
       calls++
-      const read: TourAction = { tool: 'read_subject', subjectId: 'saturn' }
+      const read: TourAction = {
+        tool: 'set_picture_time',
+        mode: 'hold',
+        value: null,
+      }
       return {
         kind: 'actions',
         text: '',
@@ -509,7 +560,7 @@ describe('tour read continuation and evidence', () => {
     ).toBe(true)
   })
 
-  it('keeps curated stop facts on the server while returning a client-valid plan', async () => {
+  it('keeps authored stop sources while returning a client-valid plan', async () => {
     const current = context()
     const note = {
       ...current.brief!.facts[0]!,
@@ -560,6 +611,8 @@ describe('tour read continuation and evidence', () => {
               objective: 'Explain the rings.',
               factIds: [note.id],
               minimumViewSeconds: 20,
+              narration: note.speech,
+              sources: [brief.sources[1]!],
             },
           ],
         },
@@ -595,9 +648,10 @@ describe('tour read continuation and evidence', () => {
     expect(narration.brief.text).toContain(note.speech)
     expect(narration.brief.text).not.toContain('58,232 kilometers')
     expect(narration.brief.sources).toEqual([brief.sources[1]])
+    expect(narration.brief.origin).toBe('authored')
   })
 
-  it('gives the authored ring stop one ring story instead of a repeated data recital', async () => {
+  it('uses raw numerical records when no authored or model prose is available', async () => {
     const { coordinator, messages } = setup(async () => {
       throw new Error('No director call is needed')
     }, withAstronomyNotes(context()))
@@ -609,10 +663,11 @@ describe('tour read continuation and evidence', () => {
     })
     const narration = messages.find((message) => message.type === 'narration')
     if (narration?.type !== 'narration') throw new Error('No narration')
-    expect(narration.brief.factIds).toEqual(['saturn:note:saturn-rings'])
-    expect(narration.brief.text).not.toContain('58,232')
+    expect(narration.brief.factIds).toEqual(['radius'])
+    expect(narration.brief.text).toContain('58,232')
+    expect(narration.brief.origin).toBe('records')
     expect(narration.brief.sources.map((source) => source.id)).toEqual([
-      'curated:saturn-rings',
+      'record',
     ])
   })
 
@@ -672,5 +727,391 @@ describe('tour read continuation and evidence', () => {
       'titan-record',
     ])
     expect(narration.brief.subjectId).toBe('saturn')
+  })
+})
+
+function storyPlan(overrides: Partial<TourPlan> = {}): TourPlan {
+  return {
+    id: 'story-tour',
+    goal: 'Meet the worlds as places with stories.',
+    durationSeconds: 60,
+    automatic: true,
+    stops: [
+      {
+        id: 'saturn-story',
+        subjectId: 'saturn',
+        framingId: 'overview',
+        siteId: null,
+        objective: 'The first telescopes meet a very strange planet.',
+        factIds: [],
+        minimumViewSeconds: 20,
+        narration: 'Imagine seeing those rings through a tiny early telescope.',
+        motion: 'orbit',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function planContext(): TourContext {
+  const current = context()
+  return { ...current, briefs: [current.brief!] }
+}
+
+describe('tour stories and conversation controls', () => {
+  it('speaks model-written historical flavor without substituting unrelated records', async () => {
+    const text =
+      'Galileo saw something so puzzling that he drew Saturn with companions on either side.'
+    const { coordinator, messages } = setup(
+      async () => ({
+        kind: 'explanation',
+        text,
+        factIds: [],
+        plan: null,
+        actions: [],
+      }),
+      withAstronomyNotes(context()),
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Tell me a story about Saturn.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    const narration = messages.find((message) => message.type === 'narration')
+    expect(narration).toMatchObject({
+      type: 'narration',
+      brief: { text, origin: 'model', factIds: [], sourceIds: [], sources: [] },
+    })
+  })
+
+  it('holds action narration until the matching destination has arrived', async () => {
+    const text =
+      'Welcome to Titan, where familiar-looking rivers have a rather unfamiliar ingredient. Its recorded radius is 2,574.73 kilometers.'
+    const initial = returnedTitan()
+    const { coordinator, messages } = setup(
+      async () => ({
+        kind: 'actions',
+        text,
+        factIds: ['titan-radius'],
+        plan: null,
+        actions: [{ tool: 'show_subject', subjectId: 'titan' }],
+      }),
+      initial,
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Show me Titan.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(messages.some((message) => message.type === 'narration')).toBe(false)
+    const request = toolMessages(messages)[0]!
+    await coordinator.receive({
+      type: 'receipt',
+      receipt: {
+        operationId: request.operationId,
+        requestRevision: 1,
+        status: 'accepted',
+        viewRevision: 0,
+        pictureTime: 123,
+        subjectId: 'titan',
+        reason: null,
+      },
+    })
+    expect(messages.some((message) => message.type === 'narration')).toBe(false)
+    const titan = initial.briefs[1]!
+    await arrive(coordinator, request, {
+      ...initial,
+      viewRevision: 1,
+      subjectId: 'titan',
+      brief: { ...titan, observer: { ...titan.observer, arrived: true } },
+    })
+    expect(
+      messages.find((message) => message.type === 'narration'),
+    ).toMatchObject({
+      type: 'narration',
+      brief: {
+        text,
+        origin: 'model',
+        factIds: ['titan-radius'],
+        sourceIds: ['titan-record'],
+        sources: titan.sources,
+      },
+    })
+  })
+
+  it('speaks an automatic stop with no selected facts using controlled playback', async () => {
+    const plan = storyPlan()
+    const { coordinator, messages, spoken } = setup(
+      async () => ({ kind: 'plan', text: '', factIds: [], plan, actions: [] }),
+      planContext(),
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'A short tour, please.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(spoken).toEqual([])
+    await coordinator.receive({
+      type: 'narration-ready',
+      stopId: 'saturn-story',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(
+      messages.find((message) => message.type === 'narration'),
+    ).toMatchObject({
+      type: 'narration',
+      brief: {
+        text: plan.stops[0]!.narration,
+        origin: 'model',
+        playback: 'controlled',
+        factIds: [],
+        sources: [],
+      },
+    })
+  })
+
+  it('rejects an accepted stop when a different subject is currently in view', async () => {
+    const initial = returnedTitan()
+    const plan = storyPlan({
+      stops: [
+        { ...storyPlan().stops[0]!, subjectId: 'titan', id: 'titan-story' },
+      ],
+    })
+    const { coordinator, messages } = setup(
+      async () => ({ kind: 'plan', text: '', factIds: [], plan, actions: [] }),
+      initial,
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Tour Titan.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    await coordinator.receive({
+      type: 'narration-ready',
+      stopId: 'titan-story',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(messages.some((message) => message.type === 'narration')).toBe(false)
+  })
+
+  it('cites only the authored stop sources when its story uses no record facts', async () => {
+    const source = {
+      id: 'galileo-source',
+      title: 'The early telescopes',
+      url: 'https://example.com/galileo',
+      origin: 'curated' as const,
+    }
+    const plan = storyPlan({
+      stops: [{ ...storyPlan().stops[0]!, sources: [source] }],
+    })
+    const { coordinator, messages } = setup(
+      async () => ({ kind: 'plan', text: '', factIds: [], plan, actions: [] }),
+      planContext(),
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Tell that first telescope story.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    await coordinator.receive({
+      type: 'narration-ready',
+      stopId: 'saturn-story',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(
+      messages.find((message) => message.type === 'narration'),
+    ).toMatchObject({
+      brief: {
+        text: plan.stops[0]!.narration,
+        factIds: [],
+        sourceIds: [source.id],
+        sources: [source],
+        origin: 'authored',
+        playback: 'controlled',
+      },
+    })
+  })
+
+  it('rejects invented stop IDs once a plan has been accepted', async () => {
+    const { coordinator, messages } = setup(
+      async () => ({
+        kind: 'plan',
+        text: '',
+        factIds: [],
+        plan: storyPlan(),
+        actions: [],
+      }),
+      planContext(),
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'A tour.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    await coordinator.receive({
+      type: 'narration-ready',
+      stopId: 'not-a-stop',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(messages.some((message) => message.type === 'narration')).toBe(false)
+  })
+
+  it('returns a validated authored preset before reserving any provider budget', async () => {
+    let calls = 0
+    const plan = storyPlan()
+    const { coordinator, messages } = setup(
+      async () => {
+        calls++
+        throw new Error('No inference needed')
+      },
+      planContext(),
+      { preset: () => plan },
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'A five-minute Solar System tour.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(calls).toBe(0)
+    expect(coordinator.record.budget).toMatchObject({
+      spent: 0,
+      reserved: 0,
+      calls: 0,
+    })
+    expect(messages.find((message) => message.type === 'plan')).toMatchObject({
+      plan,
+      requestRevision: 1,
+    })
+  })
+
+  it('does not publish a preset with an unavailable subject', async () => {
+    const plan = storyPlan({
+      stops: [{ ...storyPlan().stops[0]!, subjectId: 'invented' }],
+    })
+    const { coordinator, messages } = setup(
+      async () => {
+        throw new Error('No inference needed')
+      },
+      planContext(),
+      { preset: () => plan },
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'A tour.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    expect(messages.some((message) => message.type === 'plan')).toBe(false)
+    expect(coordinator.record.budget.calls).toBe(0)
+    expect(messages).toContainEqual(
+      expect.objectContaining({ type: 'error', code: 'plan' }),
+    )
+  })
+
+  it('passes the ordered prior plan into a conversational revision', async () => {
+    const prior: (string | undefined)[] = []
+    const plan = storyPlan()
+    const { coordinator } = setup(
+      async (_text, _context, _signal, _rounds, priorGoal) => {
+        prior.push(priorGoal)
+        return { kind: 'plan', text: '', factIds: [], plan, actions: [] }
+      },
+      planContext(),
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'A short tour.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    await coordinator.receive({
+      type: 'narration-ready',
+      stopId: 'saturn-story',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Spend longer on the history.',
+      requestRevision: 2,
+      viewRevision: 0,
+    })
+    expect(prior[0]).toBeUndefined()
+    expect(prior[1]).toContain(plan.goal)
+    expect(prior[1]).toContain('Saturn')
+    expect(prior[1]).toContain('orbit')
+    expect(prior[1]).toContain('telescopes')
+    expect(prior[1]).toContain('"subjectId":"saturn"')
+    expect(prior[1]).toContain('"currentStopId":"saturn-story"')
+  })
+
+  it.each(['pause', 'resume', 'next', 'back', 'end'] as const)(
+    'executes spoken %s without inference or an early server close',
+    async (command) => {
+      let calls = 0
+      const { coordinator, messages } = setup(async () => {
+        calls++
+        throw new Error('No inference needed')
+      })
+      await coordinator.delegate('spoken-control', `${command.toUpperCase()}.`)
+      expect(calls).toBe(0)
+      expect(messages).toContainEqual({
+        type: 'control',
+        command,
+        requestRevision: 1,
+      })
+      expect(coordinator.record.state).toBe('open')
+      expect(coordinator.record.budget.calls).toBe(0)
+      expect(messages.some((message) => message.type === 'closed')).toBe(false)
+      await coordinator.delegate('spoken-control', command)
+      expect(
+        messages.filter((message) => message.type === 'control'),
+      ).toHaveLength(1)
+    },
+  )
+
+  it('does not deliver a stale spoken control after a newer one supersedes its write', async () => {
+    let release!: () => void
+    let started!: () => void
+    const waiting = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let writes = 0
+    const { coordinator, messages } = setup(
+      async () => {
+        throw new Error('No inference needed')
+      },
+      context(),
+      {
+        persist: async () => {
+          if (++writes === 1) {
+            started()
+            await blocked
+          }
+        },
+      },
+    )
+    const pause = coordinator.delegate('pause-first', 'Pause.')
+    await waiting
+    const resume = coordinator.delegate('resume-second', 'Resume.')
+    release()
+    await Promise.all([pause, resume])
+    expect(messages.filter((message) => message.type === 'control')).toEqual([
+      { type: 'control', command: 'resume', requestRevision: 2 },
+    ])
   })
 })

@@ -6,6 +6,7 @@ import {
   type ToolReceipt,
   type TourAction,
   type TourClientMessage,
+  type TourCommand,
   type TourContext,
   type TourManifest,
   type TourPlan,
@@ -99,7 +100,9 @@ export interface CoordinatorPorts {
     context: TourContext,
     signal: AbortSignal,
     maxRounds: 1 | 2,
+    priorGoal?: string,
   ) => Promise<DirectorDecision>
+  readonly preset?: (text: string, context: TourContext) => TourPlan | null
   readonly narrate: (
     brief: NarrationBrief,
     delegationId: string | null,
@@ -115,6 +118,7 @@ export class TourCoordinator {
   #abort: AbortController | null = null
   #queue: TourAction[] = []
   #facts: readonly string[] = []
+  #answer = ''
   #narrations = new Map<string, NarrationBrief>()
   #spoken = new Set<string>()
   #narrated = new Set<string>()
@@ -128,6 +132,7 @@ export class TourCoordinator {
   #tools = 0
   #lastText = ''
   #plan: TourPlan | null = null
+  #currentStopId: string | null = null
 
   constructor(
     record: SessionRecord,
@@ -216,12 +221,29 @@ export class TourCoordinator {
     this.#supersede(this.#record.requestRevision + 1)
     this.#delegationId = id
     this.#paused = false
-    this.pauseForSpeech()
     this.#ports.send({
       type: 'ready',
       sessionId: this.#record.sessionId,
       requestRevision: this.#record.requestRevision,
     })
+    const command = spokenCommand(text)
+    if (command !== null) {
+      const requestRevision = this.#record.requestRevision
+      this.#paused = command === 'pause' || command === 'end'
+      await this.#save()
+      if (
+        requestRevision !== this.#record.requestRevision ||
+        this.#record.state !== 'open'
+      )
+        return
+      this.#ports.send({
+        type: 'control',
+        command,
+        requestRevision,
+      })
+      return
+    }
+    this.pauseForSpeech()
     this.#ports.send({
       type: 'status',
       state: 'planning',
@@ -333,6 +355,7 @@ export class TourCoordinator {
     this.#abort = null
     this.#queue = []
     this.#facts = []
+    this.#answer = ''
     this.#delegationId = null
     this.#record = { ...this.#record, requestRevision: revision }
     this.#narrations.clear()
@@ -346,6 +369,11 @@ export class TourCoordinator {
     if (!context || !text.trim()) return
     const requestRevision = this.#record.requestRevision
     this.#lastText = text
+    const preset = this.#ports.preset?.(text, context)
+    if (preset) {
+      await this.#publishPlan(preset, context, requestRevision)
+      return
+    }
     const remainingMs = 12_000 - (this.#ports.now() - this.#requestStarted)
     if (this.#rounds >= 3 || remainingMs <= 0) {
       this.#error(
@@ -379,6 +407,7 @@ export class TourCoordinator {
         context,
         abort.signal,
         maxRounds,
+        priorPlan(this.#plan, context, this.#currentStopId),
       )
       if (decision.usage)
         actual = Math.ceil(
@@ -403,16 +432,9 @@ export class TourCoordinator {
         return
       }
       this.#facts = decision.factIds
+      this.#answer = decision.text.trim()
       if (decision.kind === 'plan' && decision.plan) {
-        this.#plan = decision.plan
-        const plan = {
-          ...decision.plan,
-          stops: decision.plan.stops.map((stop) => ({
-            ...stop,
-            factIds: stop.factIds.filter((id) => !id.includes(':note:')),
-          })),
-        }
-        this.#ports.send({ type: 'plan', plan, requestRevision })
+        await this.#publishPlan(decision.plan, context, requestRevision)
       } else if (decision.kind === 'actions') {
         this.#queue = [...decision.actions]
         await this.#dispatch()
@@ -433,6 +455,7 @@ export class TourCoordinator {
             factIds: [],
             sourceIds: [],
             sources: [],
+            origin: 'model',
           },
           this.#delegationId,
         )
@@ -454,6 +477,42 @@ export class TourCoordinator {
       }
       await this.#save()
     }
+  }
+
+  async #publishPlan(
+    plan: TourPlan,
+    context: TourContext,
+    requestRevision: number,
+  ): Promise<void> {
+    if (
+      !validateTourPlan(plan, context).ok ||
+      plan.stops.some(
+        (stop) =>
+          new TextEncoder().encode(stop.narration ?? '').byteLength > 2000,
+      )
+    ) {
+      this.#error('plan', 'The guide could not prepare a supported tour.')
+      return
+    }
+    this.#plan = plan
+    this.#currentStopId = null
+    await this.#save()
+    if (
+      requestRevision !== this.#record.requestRevision ||
+      this.#record.state !== 'open'
+    )
+      return
+    this.#ports.send({
+      type: 'plan',
+      plan: {
+        ...plan,
+        stops: plan.stops.map((stop) => ({
+          ...stop,
+          factIds: stop.factIds.filter((id) => !id.includes(':note:')),
+        })),
+      },
+      requestRevision,
+    })
   }
 
   async #dispatch(): Promise<void> {
@@ -503,6 +562,7 @@ export class TourCoordinator {
     if (
       receipt.status === 'arrived' &&
       'subjectId' in entry.request.action &&
+      entry.request.action.tool !== 'read_subject' &&
       receipt.subjectId !== entry.request.action.subjectId
     )
       return
@@ -521,7 +581,8 @@ export class TourCoordinator {
         return
       if (
         entry.request.action.tool === 'resolve_subject' ||
-        entry.request.action.tool === 'find_worlds'
+        entry.request.action.tool === 'find_worlds' ||
+        entry.request.action.tool === 'read_subject'
       )
         await this.#ask(this.#lastText)
       else await this.#dispatch()
@@ -534,38 +595,29 @@ export class TourCoordinator {
   async #narration(stopId: string | null): Promise<void> {
     const context = this.#context
     const brief = context?.brief
+    const stop =
+      stopId === null
+        ? undefined
+        : this.#plan?.stops.find((item) => item.id === stopId)
     if (
       !context ||
       !brief ||
       context.traveling ||
       !brief.observer.arrived ||
       brief.subjectId !== context.subjectId ||
-      brief.observer.pictureTime !== context.pictureTime
+      brief.observer.pictureTime !== context.pictureTime ||
+      (stopId !== null && this.#plan !== null && !stop) ||
+      (stop !== undefined && stop.subjectId !== context.subjectId)
     )
       return
+    if (stop) this.#currentStopId = stop.id
     const key = `${this.#record.requestRevision}/${context.viewRevision}/${stopId ?? 'answer'}`
     if (this.#narrated.has(key)) return
-    let selected =
-      stopId === null
-        ? this.#facts
-        : (this.#plan?.stops.find((stop) => stop.id === stopId)?.factIds ?? [])
-    const quiet =
-      stopId !== null &&
-      this.#plan?.stops.some(
-        (stop) => stop.id === stopId && stop.factIds.length === 0,
-      )
-    if (selected.length === 0 && !quiet) {
-      // Authored local stops select their story by stable ID. A general visit
-      // gets one supported story; explicit director fact selections stay intact.
-      const stories = brief.facts.filter((fact) =>
-        fact.sourceIds.some((id) => id.startsWith('curated:')),
-      )
-      const story =
-        stories.find(
-          (fact) => fact.id === `${brief.subjectId}:note:${stopId}`,
-        ) ?? stories[0]
-      if (story !== undefined) selected = [story.id]
-    }
+    const selected = stopId === null ? this.#facts : (stop?.factIds ?? [])
+    const prose = (
+      stopId === null ? this.#answer : (stop?.narration ?? '')
+    ).trim()
+    const quiet = stop !== undefined && selected.length === 0 && !prose
     const recordBriefs =
       selected.length === 0
         ? [brief]
@@ -575,22 +627,33 @@ export class TourCoordinator {
               (item) => item.subjectId !== brief.subjectId,
             ),
           ]
-    const available = quiet
-      ? []
-      : recordBriefs
-          .flatMap((item) =>
-            item.facts
-              .filter(
-                (fact) => selected.length === 0 || selected.includes(fact.id),
-              )
-              .map((fact) => ({
-                fact,
-                subject: item.name,
-                subjectId: item.subjectId,
-                provenance: item.provenance,
-              })),
-          )
-          .slice(0, selected.length === 0 ? 2 : 5)
+    const available =
+      quiet || (prose && selected.length === 0)
+        ? []
+        : recordBriefs
+            .flatMap((item) =>
+              item.facts
+                .filter(
+                  (fact) =>
+                    (selected.length === 0 || selected.includes(fact.id)) &&
+                    (prose ||
+                      (fact.quantity !== null &&
+                        fact.sourceIds.every((id) =>
+                          item.sources.some(
+                            (source) =>
+                              source.id === id &&
+                              source.origin === 'application',
+                          ),
+                        ))),
+                )
+                .map((fact) => ({
+                  fact,
+                  subject: item.name,
+                  subjectId: item.subjectId,
+                  provenance: item.provenance,
+                })),
+            )
+            .slice(0, prose ? 12 : selected.length === 0 ? 2 : 5)
     const first = available[0] ?? {
       subject: brief.name,
       subjectId: brief.subjectId,
@@ -625,24 +688,39 @@ export class TourCoordinator {
       subjectId = item.subjectId
       facts.push(item.fact)
     }
-    const sourceIds = [...new Set(facts.flatMap((fact) => fact.sourceIds))]
+    const usedFacts = prose ? available.map((item) => item.fact) : facts
+    const sourceIds = [
+      ...new Set([
+        ...usedFacts.flatMap((fact) => fact.sourceIds),
+        ...(prose ? (stop?.sources?.map((source) => source.id) ?? []) : []),
+      ]),
+    ]
     const narration: NarrationBrief = {
       id: this.#ports.id(),
       requestRevision: this.#record.requestRevision,
       stopId,
       viewRevision: context.viewRevision,
       subjectId: context.subjectId,
-      text: description,
-      factIds: facts.map((fact) => fact.id),
+      text: prose || description,
+      factIds: usedFacts.map((fact) => fact.id),
       sourceIds,
       sources: [
         ...new Map(
-          recordBriefs
-            .flatMap((item) => item.sources)
+          [
+            ...recordBriefs.flatMap((item) => item.sources),
+            ...(prose ? (stop?.sources ?? []) : []),
+          ]
             .filter((source) => sourceIds.includes(source.id))
             .map((source) => [source.id, source]),
         ).values(),
       ],
+      origin: prose
+        ? stop?.sources?.length
+          ? 'authored'
+          : 'model'
+        : 'records',
+      playback:
+        stop !== undefined && this.#plan?.automatic ? 'controlled' : 'live',
     }
     this.#narrated.add(key)
     if (this.#narrated.size > 64)
@@ -708,7 +786,11 @@ function validDecision(
   decision: DirectorDecision,
   context: TourContext,
 ): boolean {
-  if (decision.actions.length > 6 || decision.text.length > 2048) return false
+  if (
+    decision.actions.length > 6 ||
+    new TextEncoder().encode(decision.text).byteLength > 2000
+  )
+    return false
   const facts = new Set(
     [context.brief, ...context.briefs].flatMap(
       (brief) => brief?.facts.map((fact) => fact.id) ?? [],
@@ -736,5 +818,53 @@ function validDecision(
     if (action.tool === 'stand_at_site')
       return candidate.sites.some((site) => site.id === action.siteId)
     return true
+  })
+}
+
+function spokenCommand(text: string): TourCommand | null {
+  const commands: Readonly<Record<string, TourCommand>> = {
+    pause: 'pause',
+    stop: 'pause',
+    'pause tour': 'pause',
+    resume: 'resume',
+    'resume tour': 'resume',
+    next: 'next',
+    'next stop': 'next',
+    back: 'back',
+    'previous stop': 'back',
+    end: 'end',
+    'end tour': 'end',
+  }
+  return (
+    commands[
+      text
+        .trim()
+        .toLowerCase()
+        .replace(/[.!?]+$/, '')
+        .trim()
+    ] ?? null
+  )
+}
+
+function priorPlan(
+  plan: TourPlan | null,
+  context: TourContext,
+  currentStopId: string | null,
+): string | undefined {
+  if (plan === null) return undefined
+  return JSON.stringify({
+    goal: plan.goal.slice(0, 240),
+    durationSeconds: plan.durationSeconds,
+    automatic: plan.automatic ?? false,
+    currentStopId,
+    stops: plan.stops.map((stop) => ({
+      id: stop.id,
+      subjectId: stop.subjectId,
+      name: context.candidates.find((item) => item.id === stop.subjectId)?.name,
+      objective: stop.objective.slice(0, 120),
+      motion: stop.motion ?? 'hold',
+      framingId: stop.framingId,
+      siteId: stop.siteId,
+    })),
   })
 }
