@@ -9,16 +9,17 @@ Build an optional Planetarium guide with **GPT Live as the narrator and GPT-6
 Astra as the director**, connected through an application-owned backend. The
 director chooses subjects, builds an itinerary, and requests bounded camera
 actions. The narrator talks with the visitor, explains the current view, and
-handles interruptions. The existing observatory executes every movement. The
-director also sees rendered scene images and evaluates the result of its camera
-choices. Visual composition is a required capability of the guide.
+handles interruptions. The existing observatory executes every movement. The core guide uses scene
+metadata and registered camera controls. Image-based questions and visual
+composition are optional later additions, described in phases 6 and 7.
+Images are sent only for a current user question about the view or an explicit
+request to improve its framing, never automatically during a tour.
 
 Start with Astra to establish the quality baseline the feature wants. Compare
 GPT-5.6 Sol and Terra on the same tasks before choosing cheaper routing. Simple
 navigation, itinerary execution, fact formatting, and progress updates run in
 code. A frontier model is consulted when a request needs interpretation,
-selection, explanation, or a deliberate visual critique. It does not steer
-continuously or run once per frame.
+selection or explanation. It does not steer continuously or run once per frame.
 
 The first useful demonstration is a short Saturn tour: an overview, a ring
 composition, and Titan. A visitor can interrupt with a question, change the
@@ -114,7 +115,7 @@ Protocol, which cannot be the production guide's screenshot mechanism.
 The [scene projection](../../apps/game/src/planetarium/project.ts),
 [sensor chain](../../apps/game/src/render/sensor.ts), and
 [GPU readback helper](../../apps/game/src/render/gpuHarness.ts) provide useful
-building blocks. The plan adds the missing capture port and composition tools.
+building blocks. The optional final phases add the missing capture port and composition tools; neither blocks the core guide.
 
 The server currently serves health and media and reserves
 `/ws` with a 501 response. There is no implemented authentication adapter in the inspected source or
@@ -182,7 +183,7 @@ renderer preload census or make a network request on an ordinary page visit.
 flowchart LR
   Visitor[Visitor] <--> Browser[Planetarium guide client]
   Browser <-->|WebRTC audio and captions| Live[GPT Live narrator]
-  Browser <-->|Authenticated control socket and scene images| Session[Tour session coordinator]
+  Browser <-->|Authenticated application WebSocket| Session[Tour session coordinator]
   Session <-->|Live sideband| Live
   Session <-->|Responses requests| Director[GPT-6 Astra director]
   Session --> Facts[Curated external astronomy sources]
@@ -209,11 +210,10 @@ The browser's application socket carries context and local action receipts.
 It does not relay arbitrary OpenAI commands. Browser and backend may observe
 the same Live event, but only the coordinator schedules director work.
 
-The same coordinator receives requested scene images and supplies them to the
-director's vision calls. It retains image bytes only for the active bounded
-request, discards stale uploads, and enforces an image allowance alongside
-token and session budgets. The narrator receives checked visual descriptions,
-not pixels.
+In optional phases 6 and 7, the coordinator also handles images requested for a
+user's visual question or framing request. Core tour admission, navigation,
+stop arrival, and narration never trigger image capture. The optional image
+path and its budgets are specified in section 17.
 
 The sideband attaches to
 `wss://api.openai.com/v1/live/sessions/{session_id}/attach`; it joins a running
@@ -336,10 +336,11 @@ the other. Null values and their reasons survive extraction.
 Send context at admission, meaningful selection changes, arrival, photographic
 time changes, and delegation. Coalesce rapid input. Do not stream the 8 Hz
 engine snapshot, the entire catalog, a canvas video, or every orbit sample.
-Dynamic geometric claims are recomputed for the narration request. Scene
-images go to the vision-capable director, never to Live. Starting the visual
-guide explains that it shares images of the Planetarium view. The director
-uses both pixels and frame-matched metadata in the loop below.
+Dynamic geometric claims are recomputed for the narration request. This
+metadata is sufficient for the core guide. The optional visual path sends an
+image to the director only when it helps answer the user's current visual
+question or explicit composition request. Opening the guide or starting a tour
+does not authorize automatic image sampling. See section 17.
 
 Treat browser context as untrusted input at the server. Validate shapes,
 allowlists, manifest identity, and bounds. A modified browser can falsify its
@@ -396,121 +397,6 @@ Initial execution budgets are hypotheses to test:
 Independent reads can run concurrently inside those limits. Camera actions
 cannot. The server sends a concise verified result directly to Live; it does
 not pay for another model simply to turn a tool receipt into a sentence.
-
-### A director that sees the picture
-
-The composition loop is **observe, propose, execute, observe again**. A named
-preset starts a composition, and the director can improve it for the actual
-aspect ratio, lighting, visible moons, and visitor request. Examples include
-putting Saturn off-center with Titan separated from its limb, finding a
-crescent that leaves room for the rings, lowering a surface horizon, or
-pulling back until a moon and its parent both fit.
-
-Astra receives a Responses message containing the actual scene image and
-structured frame context. Use `input_image` with a bounded data URL so no
-public image bucket or durable file upload is necessary. Choose `detail`
-explicitly and test a larger image only when small-object composition needs
-it. Vision can misidentify objects and struggle with exact localization, so
-geometry and identity remain the application's responsibility.
-[OpenAI image input and limitations](https://developers.openai.com/api/docs/guides/images-vision).
-
-Add these tools and records to the contracts above:
-
-| Addition                                   | Contract                                                                                                                                                                             |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `observe_view` tool                        | Capture a settled scene and matching annotations, or return unavailable/not-ready.                                                                                                   |
-| `reframe_view` tool                        | Request subject placement, fill, and pair separation against a current observation. A pure solver derives a bounded observatory adjustment.                                          |
-| `set_viewpoint` tool                       | Request a bounded phase and elevation around the current subject, or a returned surface viewpoint. The observatory owns the pose and safe distance.                                  |
-| `ViewObservation` record                   | Observation ID, request/view revisions, frame and photographic time, image size/crop/color transform, camera/lens state, subject annotations, readiness, and image reference.        |
-| `CompositionIntent` record                 | Returned subject IDs, desired normalized screen positions and fill, phase/viewpoint constraints, movement budget, and the observation ID it is based on.                             |
-| `POST /api/tour/sessions/:id/observations` | Upload one requested scene image with frame/context identity. Require a current observation ticket, bounded dimensions/bytes, and allowed image type. No arbitrary remote image URL. |
-
-Implement an on-demand capture port in the browser render adapter. Request a
-copy of the displayed scene's processed color into an owned, bounded render
-target during the render lifecycle, then read it asynchronously and encode
-outside the critical frame path. The capture represents the current camera
-and sensor settings. It must not render a second simulation frame, advance
-sensor temporal history, or change the visitor's exposure to make a prettier
-image for the model.
-
-The driver documents that a delayed `canvas.toDataURL()` can return transparent
-black after the WebGPU swap-chain image expires. Do not build the production
-capture around that call. The exact tap in the sensor chain is a phase-0
-prototype item. Compare captured pixels with the driver's composited
-screenshot, and extend the render adapter if the current chain cannot expose
-a faithful copy. The production browser requires neither CDP nor a browser
-extension, desktop capture permission, or access to another tab.
-
-Capture the scene only. Exclude the transcript, account UI, other dock panels,
-and browser chrome. Normalize to a declared SDR sRGB representation for image
-input, using a documented transform for an HDR/P3 presentation. Retain the
-original aspect ratio and identify any crop. Captures must not silently
-brighten a dark frame or imply that a tone-mapped export is identical to the
-HDR display. Verify the conversion in daylight, night-side, bright-star, and
-faint-sky cases.
-
-`ViewObservation` couples the image to metadata from the same rendered frame:
-
-- Camera and resolved lens, photographic time, viewport aspect ratio, and
-  view/request revisions. Domain poses use the existing precise formats,
-  never absolute `Vec3` coordinates.
-- Stable subject IDs with normalized screen centers, approximate bounds,
-  apparent size, and projection/visibility diagnostics. Mark approximations.
-  A projected center or radius alone does not prove complete visibility of
-  rings, an irregular limb, or terrain.
-- Selected subject, tracking target, framing mode, camera motion, renderer
-  readiness, and whether terrain or texture work is still pending.
-- Crop and resize transforms so a suggested image location maps back to the
-  same frame. Normalized coordinates use a documented top-left origin and
-  the range zero to one.
-
-Return a clean image plus structured annotations first. A second annotated
-image is an evaluated option for ambiguous small targets, clearly marked as
-an annotation. Do not ask the model to guess which single-pixel point is
-Enceladus. If DOM sky labels are absent from the scene capture, identify that
-difference and supply their positions as metadata rather than silently
-pretending the image includes them.
-
-The model outputs `CompositionIntent`, not mouse gestures or raw camera
-matrices. Adapt existing `frameTarget`, `track`, `framePair`, `setAngles`,
-`setLook`, and `setPhase` where they express the request. Add a pure framing
-solver when off-center placement or constrained pair layout is not already
-supported. That solver uses the resolved lens, target-relative geometry, and
-existing distance/terrain constraints. The observatory remains the pose writer.
-
-Do not treat an API no-op as success. Several observatory orbit setters decline
-to act while a surface stance or fixed galaxy view is active. Publish current
-camera capabilities, reject unsupported intents, and use the appropriate
-surface heading/pitch or instrument action when available. Prove composition
-algebra with property tests across aspect ratios and zoom.
-
-Start with two adjustments and three observations per composition request.
-The first image proposes a change, the next checks it, and the final image
-checks an optional correction. This shares the director's model-round and
-spend limits. At the limit, keep the best valid view and report any remaining
-constraint. The model cannot repeatedly capture or orbit until a self-assigned
-aesthetic score improves.
-
-Capture after an explicit visual request, a selected tour-stop arrival, or a
-permitted adjustment. Initially allow one outstanding readback, at least two
-seconds between images, and at most 16 observations per ten-minute tour.
-Start with a 1,024-pixel long edge and a 512 KiB upload ceiling; measure quality
-and encoding cost before changing them. A higher-resolution crop uses the
-same allowance. No continuous video stream enters the model.
-
-After each adjustment, wait for the matching arrival and readiness receipt,
-then capture again. Manual drag, an aspect-ratio change, a new time, or a new
-target invalidates the pending judgment. Continuous scenes carry a captured
-time and freshness limit; a director cannot apply a five-second-old pixel
-correction to a fast-moving moon. Hold photographic time temporarily for
-composition when appropriate, under the guide's existing ownership rules.
-
-The director judges composition from pixels and supported geometry, then gives
-Live a short description of the verified result. The narrator can say the moon
-is separated from the ring silhouette only after the new observation supports
-it. Screenshots do not establish atmospheric chemistry, real dimensions, or
-other scientific facts absent from the record. If capture is unavailable,
-declare that limitation and use a named composition without claiming inspection.
 
 ## 8. Delegation, corrections, and stale results
 
@@ -692,7 +578,7 @@ what the provider generated.
 ## 11. Privacy, reliability, and observability
 
 Starting voice explains that microphone audio goes to OpenAI and that the
-server processes conversation, scene images, and scene context to run the guide. Mic status
+server processes conversation and scene context to run the guide. The optional image feature separately explains scene-image sharing before its first use. Mic status
 stays visible. End releases capture. Mute microphone disables capture in the
 browser as well as applying the selected upstream input policy; server-side
 input mute alone does not stop local capture or reflected input audio.
@@ -756,7 +642,7 @@ These totals exclude vision inputs and additional composition rounds, hosting, s
 speech generation rather than connected session duration; compare measured
 whole-tour cost. The pricing inputs are the model cards in section 1.
 
-Budget visual composition separately. If ten additional Astra inspections each
+For optional phases 6 and 7, budget user-requested visual assistance separately. If ten additional Astra inspections each
 consume a hypothetical 2,000 billed image-input tokens, 1,000 text-input tokens,
 and 500 output tokens, they add $0.55 at the listed standard rates. That makes
 the all-Astra example $1.77 before hosting and other exclusions. The image
@@ -765,9 +651,9 @@ measure it for the chosen detail setting. Reused images are charged again when
 included without an applicable cache benefit. If those inspections add two
 minutes of open Live time, the voice component also rises by $0.10.
 
-The $2 allowance below is an initial private-alpha target, not a promise that
-every eight-stop visual tour fits. Admission and per-call reservations account
-for images, extra reasoning, and actual elapsed time.
+The $2 allowance below is an initial private-alpha target. Optional visual
+requests consume the same remaining allowance, including images, extra
+reasoning, and elapsed time; they are not automatic per-stop costs.
 
 Start the private alpha with a proposed $2 session allowance, one active guide
 per user, and a configurable daily allowance. Reserve against worst-case call
@@ -795,14 +681,6 @@ separately. A friendly acknowledgment is not the completed answer. Compare
 Astra, Sol, and Terra at the same quality threshold before changing the default.
 
 ## 13. File ownership and implementation boundaries
-
-Visual capture also adds proposed `apps/game/src/render/guideCapture.ts`,
-`apps/game/src/tour/observe.ts`, and
-`packages/devtools/src/tour/composition.ts`. The first owns GPU resources and
-readback, the second binds image/annotations to a frame, and the third solves
-bounded composition intent. Extend the existing render-host port with an
-explicit unavailable result for headless adapters. A capture request is a
-presentation operation and never a new session constructor.
 
 Paths in this table are proposed unless section 2 identifies them as existing.
 
@@ -836,18 +714,17 @@ network and voice dependencies do not become canonical session requirements.
 
 Estimates assume one engineer and working provider access. They are planning
 allowances, not measured delivery promises. The critical path is roughly
-four to five weeks, including visual composition, voice evaluation, and failure handling.
+three to four weeks for core phases 0 through 5, including voice evaluation
+and failure handling. Optional phases 6 and 7 add roughly four to six working
+days after the core guide passes its release gates.
 
-### Phase 0. Prove voice and visual capture, two to three days
+### Phase 0. Prove the Live contract, one to two days
 
 Build an opt-in transport probe in the existing app/server adapters. Connect
 Live to a static Saturn brief, then delegate one typed and one spoken request
 to Astra. Save sanitized event fixtures and the exact SDK/model configuration.
 
-Prototype the in-product scene capture at the sensor boundary. Send one real
-frame and matched annotations to Astra for a composition critique. Verify that
-its image describes the browser's view, including crop, color, subject, and
-photographic time. A framing-state JSON object alone does not pass this probe.
+Use structured scene context in this probe. Image capture is deferred to optional phase 6.
 
 Verify project access, voices, startup order, sideband attachment, transcript
 timing, late fragments, append acknowledgments, close/usage behavior, and
@@ -869,7 +746,7 @@ gate as unverified; do not relabel a different model as GPT Live.
 
 Implement briefs, candidate references, plan validation, deterministic Saturn
 and current-system tours, and the runner with injected events. Add the narrow
-executor against the existing observatory and photographic time. Define observation and composition-intent records and the missing pure framing math.
+executor against the existing observatory and photographic time. Use the registered compositions and current scene metadata; visual capture and new framing math belong to the optional final phases.
 
 Acceptance: a headless tour reaches valid stops, cancellation prevents later
 movement, rejected plans do nothing, and state hashes match a control session
@@ -882,31 +759,24 @@ expected to freeze an otherwise running simulation.
 Implement authenticated admission, the Durable Object, provider ports, the
 application socket, request revisions, operation receipts, spend reservation,
 idempotent create/close, and lease cleanup. Add required bindings and migrations
-and regenerate `worker-configuration.d.ts`. Add bounded observation uploads, image tickets, and image-spend reservations.
+and regenerate `worker-configuration.d.ts`. Keep image upload routes and image budgets out of this core phase.
 
 Acceptance: a typed request runs through the real coordinator and fake model;
 duplicate delivery executes once; another user's session is inaccessible;
 unbounded/unknown commands are rejected; disconnect cleanup releases the lease.
 Verify the new socket through `pnpm dev` and the preview Worker.
 
-### Phase 3. Add the director and visual composition, four to six days
+### Phase 3. Add the frontier director, two to three days
 
 Connect Astra, strict output, bounded tool rounds, curated notes, and factual
 validation. Implement direct local handling for Next/Back/Pause and object
 names. Add the themed-tour path and one changed-goal path.
 
-Finish the on-demand capture adapter and frame-matched annotations. Implement
-the observe/adjust/verify loop and bounded framing/viewpoint tools. Require
-before-and-after images for a Saturn-and-moon layout, a crescent, and a surface
-horizon. Keep an accepted view if a later proposal is invalid, and demonstrate
-manual takeover during a pending visual judgment.
+The director uses subject briefs, scene metadata, and existing camera controls. It does not capture or upload images in this phase.
 
 Acceptance: the evaluation set passes with no unsupported action and no
 unresolved exact factual error in release fixtures. Compare Sol and Terra and
-record quality, latency, image usage, and failure examples. Compare visual
-composition with the same prompts supplied only structured metadata; the image
-path must demonstrate useful improvement. Routing changes need those results;
-cost alone does not select the director.
+record quality, latency, usage, and failure examples. Routing changes need those results; cost alone does not select the director.
 
 ### Phase 4. Deliver voice and the first automatic tour, three to four days
 
@@ -933,6 +803,35 @@ without rebuilding the renderer. No secret appears in a client artifact; no
 orphan session survives its lease; no required operation depends on a hidden
 prompt instruction for authorization. Reassess public access after measured
 usage and an account/quota design exist.
+
+### Phase 6. Optional visual questions and image capture, two to three days
+
+Start after core acceptance. Prototype the in-product scene capture at the
+sensor boundary, bind annotations to the captured frame, and add bounded
+observation uploads and image-spend reservations. This phase supports questions
+such as "What is that bright point beside Saturn?" A question answered by
+existing metadata or a dossier does not need an image.
+
+Acceptance: an explicit user question can supply a real scene image to Astra,
+the answer refers to the correct frame and subject, and the capture matches
+the browser's view. Normal touring, arrival at a stop, silence, timers, and
+proactive narration produce zero captures and zero image uploads. Test the
+feature-disabled path as well as a failed or stale capture.
+
+### Phase 7. Optional composition help on request, two to three days
+
+Build on phase 6 when visual questions work. Add bounded framing/viewpoint
+intent and any missing pure solver. Only an explicit request such as "Frame
+Saturn and Titan together" or "Improve this composition" starts an
+observe/adjust/verify cycle. A routine navigation request uses existing tools
+without images.
+
+Acceptance: requested reframing improves the relevant composition in a bounded
+number of steps, preserves the accepted view on failure, and stops when the
+user takes over. Check a Saturn-and-moon layout, a crescent, and a surface
+horizon. Compare image-assisted results with the same request using metadata
+alone, and keep the image path only where it adds value. This phase is not a
+prerequisite for the guide's private alpha.
 
 ## 15. Verification and evaluation
 
@@ -967,15 +866,6 @@ same short briefs and a longer five-minute tour. Do not select a voice from a
 single greeting. Record device, browser, network, prompt, voice, model, and
 sample count with latency and cost results.
 
-Add visual evaluation fixtures for dark frames, cold loading, tiny moons,
-partial ring occlusion, off-center subjects, extreme aspect ratios, held dates,
-and frames invalidated during inference. Measure visibility, requested
-placement/fill error, bounds violations, stale actions, and human preference
-against the registered-preset baseline. Use renderer tests for pixel readback
-and color correctness and property tests for projection/placement math.
-Prove capture does not advance simulation or sensor history twice, and measure
-frame cost while capture and encoding are active.
-
 Run `pnpm check` before source changes and at the required completion gate;
 use focused tests while each phase is implemented. Commit coherent reversible
 steps before lengthy verification. Renderer or browser tests are warranted by
@@ -991,9 +881,7 @@ and record-grounded astronomy. The remaining questions are concrete tests:
   concurrency, and can the backend constrain frontend session controls?
 - Does workerd support the chosen adapter and sideband lifetime without
   unexpected buffering, disconnects, or cost?
-- Does scene capture match the displayed picture, and does visual feedback
-  improve compositions over the metadata-only baseline within its image and
-  iteration budget?
+- For the optional final phases, does image assistance improve answers or requested compositions enough to justify its image and iteration budget?
 - Can Live satisfy the factuality and automatic-stop timing gates, or do
   prepared stops need controlled narration?
 - Which voice remains pleasant after five minutes and pronounces the actual
@@ -1004,6 +892,163 @@ and record-grounded astronomy. The remaining questions are concrete tests:
   adding unnecessary context or search work?
 
 The first implementation step is the Live transport and voice probe beside a
-sourced Saturn brief, together with one real scene image sent to Astra. It
-settles the highest-risk voice and visual-feedback assumptions before the
-guide grows a full tool inventory.
+sourced Saturn brief and structured scene context. It settles the highest-risk
+voice assumptions before the guide grows a full tool inventory. Image capture
+and visual composition remain optional work after the core guide is useful.
+
+## 17. Optional image assistance, after the core guide
+
+This section specifies phases 6 and 7. It is a nice-to-have extension, not a
+core implementation or release requirement. The default guide uses no images.
+A current user question about something visible or an explicit composition
+request can enable a bounded image task when the optional capability is on.
+No tour event, elapsed interval, or autonomous model curiosity can start one.
+
+A visual question usually needs one observation and an answer, with no camera
+movement. The adjustment loop below applies only when the user asks for
+composition help. All images in that loop must serve the same active request;
+a correction or cancellation expires its observation tickets.
+
+The composition loop is **observe, propose, execute, observe again**. A named
+preset starts a composition, and the director can improve it for the actual
+aspect ratio, lighting, visible moons, and visitor request. Examples include
+putting Saturn off-center with Titan separated from its limb, finding a
+crescent that leaves room for the rings, lowering a surface horizon, or
+pulling back until a moon and its parent both fit.
+
+Astra receives a Responses message containing the actual scene image and
+structured frame context. Use `input_image` with a bounded data URL so no
+public image bucket or durable file upload is necessary. Choose `detail`
+explicitly and test a larger image only when small-object composition needs
+it. Vision can misidentify objects and struggle with exact localization, so
+geometry and identity remain the application's responsibility.
+[OpenAI image input and limitations](https://developers.openai.com/api/docs/guides/images-vision).
+
+Add these tools and records to the contracts above:
+
+| Addition                                   | Contract                                                                                                                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `observe_view` tool                        | Capture a settled scene and matching annotations, or return unavailable/not-ready.                                                                                                   |
+| `reframe_view` tool                        | Request subject placement, fill, and pair separation against a current observation. A pure solver derives a bounded observatory adjustment.                                          |
+| `set_viewpoint` tool                       | Request a bounded phase and elevation around the current subject, or a returned surface viewpoint. The observatory owns the pose and safe distance.                                  |
+| `ViewObservation` record                   | Observation ID, request/view revisions, frame and photographic time, image size/crop/color transform, camera/lens state, subject annotations, readiness, and image reference.        |
+| `CompositionIntent` record                 | Returned subject IDs, desired normalized screen positions and fill, phase/viewpoint constraints, movement budget, and the observation ID it is based on.                             |
+| `POST /api/tour/sessions/:id/observations` | Upload one requested scene image with frame/context identity. Require a current observation ticket, bounded dimensions/bytes, and allowed image type. No arbitrary remote image URL. |
+
+Implement an on-demand capture port in the browser render adapter. Request a
+copy of the displayed scene's processed color into an owned, bounded render
+target during the render lifecycle, then read it asynchronously and encode
+outside the critical frame path. The capture represents the current camera
+and sensor settings. It must not render a second simulation frame, advance
+sensor temporal history, or change the visitor's exposure to make a prettier
+image for the model.
+
+The driver documents that a delayed `canvas.toDataURL()` can return transparent
+black after the WebGPU swap-chain image expires. Do not build the production
+capture around that call. The exact tap in the sensor chain is a phase-6
+prototype item. Compare captured pixels with the driver's composited
+screenshot, and extend the render adapter if the current chain cannot expose
+a faithful copy. The production browser requires neither CDP nor a browser
+extension, desktop capture permission, or access to another tab.
+
+Capture the scene only. Exclude the transcript, account UI, other dock panels,
+and browser chrome. Normalize to a declared SDR sRGB representation for image
+input, using a documented transform for an HDR/P3 presentation. Retain the
+original aspect ratio and identify any crop. Captures must not silently
+brighten a dark frame or imply that a tone-mapped export is identical to the
+HDR display. Verify the conversion in daylight, night-side, bright-star, and
+faint-sky cases.
+
+`ViewObservation` couples the image to metadata from the same rendered frame:
+
+- Camera and resolved lens, photographic time, viewport aspect ratio, and
+  view/request revisions. Domain poses use the existing precise formats,
+  never absolute `Vec3` coordinates.
+- Stable subject IDs with normalized screen centers, approximate bounds,
+  apparent size, and projection/visibility diagnostics. Mark approximations.
+  A projected center or radius alone does not prove complete visibility of
+  rings, an irregular limb, or terrain.
+- Selected subject, tracking target, framing mode, camera motion, renderer
+  readiness, and whether terrain or texture work is still pending.
+- Crop and resize transforms so a suggested image location maps back to the
+  same frame. Normalized coordinates use a documented top-left origin and
+  the range zero to one.
+
+Return a clean image plus structured annotations first. A second annotated
+image is an evaluated option for ambiguous small targets, clearly marked as
+an annotation. Do not ask the model to guess which single-pixel point is
+Enceladus. If DOM sky labels are absent from the scene capture, identify that
+difference and supply their positions as metadata rather than silently
+pretending the image includes them.
+
+The model outputs `CompositionIntent`, not mouse gestures or raw camera
+matrices. Adapt existing `frameTarget`, `track`, `framePair`, `setAngles`,
+`setLook`, and `setPhase` where they express the request. Add a pure framing
+solver when off-center placement or constrained pair layout is not already
+supported. That solver uses the resolved lens, target-relative geometry, and
+existing distance/terrain constraints. The observatory remains the pose writer.
+
+Do not treat an API no-op as success. Several observatory orbit setters decline
+to act while a surface stance or fixed galaxy view is active. Publish current
+camera capabilities, reject unsupported intents, and use the appropriate
+surface heading/pitch or instrument action when available. Prove composition
+algebra with property tests across aspect ratios and zoom.
+
+Start with two adjustments and three observations per composition request.
+The first image proposes a change, the next checks it, and the final image
+checks an optional correction. This shares the director's model-round and
+spend limits. At the limit, keep the best valid view and report any remaining
+constraint. The model cannot repeatedly capture or orbit until a self-assigned
+aesthetic score improves.
+
+Capture only to answer a current user question about the view or to complete
+an explicitly requested composition change. A permitted verification capture
+must belong to that same request. Starting a tour, arrival at a stop, and
+scheduled intervals never request images. Initially allow one outstanding
+readback, at least two seconds between images, and at most 16 observations
+across user requests in a ten-minute session.
+Start with a 1,024-pixel long edge and a 512 KiB upload ceiling; measure quality
+and encoding cost before changing them. A higher-resolution crop uses the
+same allowance. No continuous video stream enters the model.
+
+After each adjustment, wait for the matching arrival and readiness receipt,
+then capture again. Manual drag, an aspect-ratio change, a new time, or a new
+target invalidates the pending judgment. Continuous scenes carry a captured
+time and freshness limit; a director cannot apply a five-second-old pixel
+correction to a fast-moving moon. Hold photographic time temporarily for
+composition when appropriate, under the guide's existing ownership rules.
+
+The director judges composition from pixels and supported geometry, then gives
+Live a short description of the verified result. The narrator can say the moon
+is separated from the ring silhouette only after the new observation supports
+it. Screenshots do not establish atmospheric chemistry, real dimensions, or
+other scientific facts absent from the record. If capture is unavailable,
+declare that limitation and use a named composition without claiming inspection.
+
+### Optional implementation files
+
+Visual capture also adds proposed `apps/game/src/render/guideCapture.ts`,
+`apps/game/src/tour/observe.ts`, and
+`packages/devtools/src/tour/composition.ts`. The first owns GPU resources and
+readback, the second binds image/annotations to a frame, and the third solves
+bounded composition intent. Extend the existing render-host port with an
+explicit unavailable result for headless adapters. A capture request is a
+presentation operation and never a new session constructor.
+
+### Optional visual acceptance
+
+Add visual evaluation fixtures for dark frames, cold loading, tiny moons,
+partial ring occlusion, off-center subjects, extreme aspect ratios, held dates,
+and frames invalidated during inference. Measure visibility, requested
+placement/fill error, bounds violations, stale actions, and human preference
+against the registered-preset baseline. Use renderer tests for pixel readback
+and color correctness and property tests for projection/placement math.
+Prove capture does not advance simulation or sensor history twice, and measure
+frame cost while capture and encoding are active.
+
+Enforce the request gate on both browser and server. An observation upload must
+match an unexpired ticket issued for an eligible user request. A model tool
+call cannot mint that eligibility. Verify zero captures and zero image bytes
+for an uninterrupted tour, including every automatic transition and narrated
+stop. Disabling optional image assistance removes these tools and routes from
+the admitted session capabilities.
