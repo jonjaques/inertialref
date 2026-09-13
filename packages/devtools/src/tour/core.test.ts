@@ -3,6 +3,8 @@ import fc from 'fast-check'
 import {
   decode,
   decodeTourContext,
+  decodeTourClientMessage,
+  decodeTourMessage,
   validateTourPlan,
 } from '@inertialref/protocol'
 import { openSession } from '../session.ts'
@@ -47,6 +49,22 @@ describe('the guide reads a bounded universe', () => {
         context,
       ).ok,
     ).toBe(false)
+    session.dispose()
+  })
+  it('fits a focused Saturn context and its complete wire envelope', () => {
+    const session = openSession()
+    session.harness.look('s:SOL/b:5')
+    const context = createTourContext(session.harness, 'Saturn')
+    expect(new Set(context.briefs.map((brief) => brief.subjectId)).size).toBe(
+      context.briefs.length,
+    )
+    expect(
+      decodeTourMessage(
+        decodeTourClientMessage,
+        JSON.stringify({ type: 'context', context }),
+      ).ok,
+    ).toBe(true)
+    expect(deterministicTour(context, 'saturn')?.stops).toHaveLength(3)
     session.dispose()
   })
 })

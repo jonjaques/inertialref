@@ -11,6 +11,7 @@ import {
 import {
   TOUR_LIMITS,
   TOUR_PROTOCOL_VERSION,
+  tourMessageBytes,
   type SubjectBrief,
   type TourCandidate,
   type TourContext,
@@ -320,7 +321,7 @@ export function createTourContext(
       ? null
       : (briefs.find((brief) => brief.address === selected) ??
         subjectBrief(harness, selected))
-  return {
+  const context: TourContext = {
     protocolVersion: TOUR_PROTOCOL_VERSION,
     manifest: {
       seed: harness.world.seedText,
@@ -337,4 +338,28 @@ export function createTourContext(
       unique.some((candidate) => candidate.address === brief.address),
     ),
   }
+  let bounded = context
+  // Admission also carries the manifest, transport, and SDP outside this record.
+  const bytes = TOUR_LIMITS.messageBytes - 4096
+  while (tourMessageBytes(JSON.stringify(bounded)) > bytes) {
+    const removable = [...bounded.candidates]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.id !== bounded.subjectId &&
+          candidate.name !== 'Saturn' &&
+          candidate.name !== 'Titan',
+      )
+    if (removable === undefined) break
+    bounded = {
+      ...bounded,
+      candidates: bounded.candidates.filter(
+        (candidate) => candidate.id !== removable.id,
+      ),
+      briefs: bounded.briefs.filter(
+        (brief) => brief.subjectId !== removable.id,
+      ),
+    }
+  }
+  return bounded
 }
