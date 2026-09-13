@@ -10,6 +10,42 @@ function audioFake() {
   return element
 }
 
+function silenceFake() {
+  const track = { enabled: true, stop: vi.fn() }
+  const stream = { getTracks: () => [track] } as unknown as MediaStream
+  const destination = { stream, channelCount: 2, disconnect: vi.fn() }
+  const gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() }
+  const source = {
+    connect: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    disconnect: vi.fn(),
+  }
+  const context = {
+    createMediaStreamDestination: vi.fn(() => destination),
+    createGain: vi.fn(() => gain),
+    createOscillator: vi.fn(() => source),
+    resume: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+    destination: {},
+  }
+  return { track, stream, destination, gain, source, context }
+}
+
+function peerFake() {
+  const sender = { replaceTrack: vi.fn(async () => {}) }
+  const peer = {
+    createDataChannel: () => new EventTarget(),
+    addTrack: vi.fn(() => sender),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    createOffer: async () => ({ type: 'offer', sdp: 'offer' }),
+    setLocalDescription: vi.fn(async () => {}),
+    close: vi.fn(),
+  }
+  return { sender, peer }
+}
+
 describe('controlled narration', () => {
   it('requires actual playback end and discards stale completion after stopping', async () => {
     const element = audioFake()
@@ -108,6 +144,12 @@ describe('Live admission', () => {
   })
 
   it('reacquires capture only on explicit unmute and discards it after End', async () => {
+    const silent = silenceFake()
+    const secondSilence = silenceFake()
+    const createContext = vi
+      .fn()
+      .mockReturnValueOnce(silent.context)
+      .mockReturnValueOnce(secondSilence.context)
     const original = { enabled: true, stop: vi.fn() }
     const replacement = { enabled: true, stop: vi.fn() }
     const late = { enabled: true, stop: vi.fn() }
@@ -141,14 +183,29 @@ describe('Live admission', () => {
       peer: () => peer as unknown as RTCPeerConnection,
       audio: audioFake,
       capture,
+      context: createContext,
     })
     await media.prepare()
+    expect(createContext).not.toHaveBeenCalled()
     await media.muteMicrophone(true)
     expect(original.stop).toHaveBeenCalledOnce()
     expect(capture).toHaveBeenCalledTimes(1)
+    expect(sender.replaceTrack).toHaveBeenLastCalledWith(silent.track)
+    expect(silent.destination.channelCount).toBe(1)
+    expect(silent.source.start).toHaveBeenCalledOnce()
+    expect(silent.gain.gain.value).toBeGreaterThan(0)
+    expect(silent.gain.gain.value).toBeLessThan(0.000001)
+    expect(silent.source.connect).toHaveBeenCalledWith(silent.gain)
+    expect(silent.gain.connect).toHaveBeenCalledWith(silent.destination)
+    expect(silent.gain.connect).not.toHaveBeenCalledWith(
+      silent.context.destination,
+    )
     await media.muteMicrophone(false)
     expect(capture).toHaveBeenCalledTimes(2)
     expect(sender.replaceTrack).toHaveBeenLastCalledWith(replacement)
+    expect(silent.source.stop).toHaveBeenCalledOnce()
+    expect(silent.track.stop).toHaveBeenCalledOnce()
+    expect(silent.context.close).toHaveBeenCalledOnce()
     await media.muteMicrophone(true)
     expect(replacement.stop).toHaveBeenCalledOnce()
     const pending = media.muteMicrophone(false)
@@ -157,6 +214,112 @@ describe('Live admission', () => {
     await pending
     expect(late.stop).toHaveBeenCalledOnce()
     expect(sender.replaceTrack).not.toHaveBeenCalledWith(late)
+    expect(secondSilence.track.stop).toHaveBeenCalledOnce()
+    expect(secondSilence.context.close).toHaveBeenCalledOnce()
+  })
+
+  it('starts an already-muted connection without requesting microphone capture', async () => {
+    const silent = silenceFake()
+    const { peer, sender } = peerFake()
+    const capture = vi.fn()
+    const context = vi.fn(() => silent.context as unknown as AudioContext)
+    const media = new LiveConnection({
+      peer: () => peer as unknown as RTCPeerConnection,
+      audio: audioFake,
+      capture,
+      context,
+    })
+    await media.muteMicrophone(true)
+    expect(context).not.toHaveBeenCalled()
+    expect(await media.prepare()).toBe('offer')
+    expect(capture).not.toHaveBeenCalled()
+    expect(peer.addTrack).toHaveBeenCalledWith(silent.track, silent.stream)
+    expect(sender.replaceTrack).toHaveBeenLastCalledWith(silent.track)
+    media.stop()
+    media.stop()
+    expect(silent.source.stop).toHaveBeenCalledOnce()
+    expect(silent.source.disconnect).toHaveBeenCalledOnce()
+    expect(silent.gain.disconnect).toHaveBeenCalledOnce()
+    expect(silent.destination.disconnect).toHaveBeenCalledOnce()
+    expect(silent.track.stop).toHaveBeenCalledOnce()
+    expect(silent.context.close).toHaveBeenCalledOnce()
+  })
+
+  it('releases silence immediately on End and cannot attach it after delayed startup', async () => {
+    const silent = silenceFake()
+    const { peer, sender } = peerFake()
+    const real = { enabled: true, stop: vi.fn() }
+    let finish!: () => void
+    silent.context.resume.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const capture = vi.fn(
+      async () => ({ getTracks: () => [real] }) as unknown as MediaStream,
+    )
+    const media = new LiveConnection({
+      peer: () => peer as unknown as RTCPeerConnection,
+      audio: audioFake,
+      capture,
+      context: () => silent.context as unknown as AudioContext,
+    })
+    await media.prepare()
+    const muting = media.muteMicrophone(true)
+    expect(real.stop).toHaveBeenCalledOnce()
+    expect(capture).toHaveBeenCalledOnce()
+    media.stop()
+    expect(silent.track.stop).toHaveBeenCalledOnce()
+    expect(silent.context.close).toHaveBeenCalledOnce()
+    finish()
+    await muting
+    expect(sender.replaceTrack).not.toHaveBeenCalled()
+  })
+
+  it('restores the silent carrier when explicit unmute fails during its startup', async () => {
+    const silent = silenceFake()
+    const { peer, sender } = peerFake()
+    const real = { enabled: true, stop: vi.fn() }
+    let resume!: () => void
+    let deny!: (cause: Error) => void
+    silent.context.resume.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resume = resolve
+        }),
+    )
+    const capture = vi
+      .fn<() => Promise<MediaStream>>()
+      .mockResolvedValueOnce({
+        getTracks: () => [real],
+      } as unknown as MediaStream)
+      .mockImplementationOnce(
+        () =>
+          new Promise<MediaStream>((_resolve, reject) => {
+            deny = reject
+          }),
+      )
+    const media = new LiveConnection({
+      peer: () => peer as unknown as RTCPeerConnection,
+      audio: audioFake,
+      capture,
+      context: () => silent.context as unknown as AudioContext,
+    })
+    await media.prepare()
+    const muting = media.muteMicrophone(true)
+    const unmuting = media.muteMicrophone(false)
+    resume()
+    await muting
+    expect(sender.replaceTrack).not.toHaveBeenCalled()
+    deny(new Error('Microphone denied'))
+    await expect(unmuting).rejects.toThrow('Microphone denied')
+    expect(sender.replaceTrack).toHaveBeenLastCalledWith(silent.track)
+    expect(capture).toHaveBeenCalledTimes(2)
+    expect(real.stop).toHaveBeenCalledOnce()
+    expect(silent.track.stop).not.toHaveBeenCalled()
+    media.stop()
+    expect(silent.context.close).toHaveBeenCalledOnce()
   })
 
   it('releases media acquired after the guide has ended', async () => {

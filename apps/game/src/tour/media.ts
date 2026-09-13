@@ -83,6 +83,45 @@ interface LiveHost {
   peer(): RTCPeerConnection
   capture(): Promise<MediaStream>
   audio(): HTMLAudioElement
+  context?(): AudioContext
+}
+
+interface SilentCarrier {
+  readonly stream: MediaStream
+  readonly track: MediaStreamTrack
+  readonly ready: Promise<void>
+  stop(): void
+}
+
+/** A live source keeps input RTP moving; replaceTrack(null) stops sending.
+ * It has no microphone input and is never connected to the speaker destination. */
+function silentCarrier(context: AudioContext): SilentCarrier {
+  const destination = context.createMediaStreamDestination()
+  destination.channelCount = 1
+  const gain = context.createGain()
+  // A nonzero source avoids browser graph pruning while remaining inaudible.
+  gain.gain.value = 1e-8
+  const source = context.createOscillator()
+  source.connect(gain)
+  gain.connect(destination)
+  source.start()
+  let stopped = false
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    source.stop()
+    source.disconnect()
+    gain.disconnect()
+    destination.disconnect()
+    for (const track of destination.stream.getTracks()) track.stop()
+    void context.close().catch(() => {})
+  }
+  const track = destination.stream.getTracks()[0]
+  if (track === undefined) {
+    stop()
+    throw new Error('The browser could not keep muted voice audio connected.')
+  }
+  return { stream: destination.stream, track, ready: context.resume(), stop }
 }
 
 const liveHost: LiveHost = {
@@ -111,6 +150,7 @@ export class LiveConnection {
   #micMuted = false
   #captureRevision = 0
   #resuming: Promise<void> | null = null
+  #silence: SilentCarrier | null = null
   readonly #senders: RTCRtpSender[] = []
   readonly #retired = new WeakSet<MediaStreamTrack>()
   #guideMuted = false
@@ -129,12 +169,15 @@ export class LiveConnection {
   }
 
   async prepare(): Promise<string> {
-    const stream = await this.#host.capture()
+    if (this.#stopped) throw new Error('The guide has ended.')
+    const carrier = this.#micMuted ? this.#silentCarrier() : null
+    const stream = carrier?.stream ?? (await this.#host.capture())
     if (this.#stopped) {
-      this.#stopCapture(stream)
+      if (carrier === null) this.#stopCapture(stream)
+      else carrier.stop()
       throw new Error('The guide has ended.')
     }
-    this.#stream = stream
+    this.#stream = carrier === null ? stream : null
     const peer = this.#host.peer()
     this.#peer = peer
     const audio = this.#host.audio()
@@ -195,7 +238,7 @@ export class LiveConnection {
       peer.removeEventListener('connectionstatechange', connection)
     }
     for (const input of stream.getTracks()) {
-      input.enabled = !this.#micMuted
+      input.enabled = carrier !== null || !this.#micMuted
       const sender = peer.addTrack(input, stream)
       if (sender !== undefined) this.#senders.push(sender)
     }
@@ -241,9 +284,9 @@ export class LiveConnection {
       this.#captureRevision++
       this.#stopCapture(this.#stream)
       this.#stream = null
-      return Promise.all(
-        this.#senders.map((sender) => sender.replaceTrack(null)),
-      ).then(() => {})
+      if (this.#stopped || this.#peer === null || this.#senders.length === 0)
+        return Promise.resolve()
+      return this.#sendSilence(this.#captureRevision)
     }
     if (this.#stopped || this.#peer === null || this.#stream !== null)
       return Promise.resolve()
@@ -258,6 +301,37 @@ export class LiveConnection {
     return pending
   }
 
+  #silentCarrier(): SilentCarrier {
+    this.#silence ??= silentCarrier(
+      this.#host.context?.() ?? new AudioContext({ sampleRate: 48000 }),
+    )
+    return this.#silence
+  }
+
+  async #sendSilence(revision: number): Promise<void> {
+    const carrier = this.#silentCarrier()
+    try {
+      await carrier.ready
+      if (
+        this.#stopped ||
+        !this.#micMuted ||
+        revision !== this.#captureRevision
+      )
+        return
+      await Promise.all(
+        this.#senders.map((sender) => sender.replaceTrack(carrier.track)),
+      )
+    } catch (cause) {
+      if (this.#silence === carrier) this.#stopSilence()
+      throw cause
+    }
+  }
+
+  #stopSilence(): void {
+    this.#silence?.stop()
+    this.#silence = null
+  }
+
   #stopCapture(stream: MediaStream | null): void {
     for (const track of stream?.getTracks() ?? []) {
       if (this.#retired.has(track)) continue
@@ -268,7 +342,16 @@ export class LiveConnection {
   }
 
   async #resumeCapture(revision: number): Promise<void> {
-    const stream = await this.#host.capture()
+    let stream: MediaStream
+    try {
+      stream = await this.#host.capture()
+    } catch (cause) {
+      if (!this.#stopped && revision === this.#captureRevision) {
+        this.#micMuted = true
+        await this.#sendSilence(revision).catch(() => {})
+      }
+      throw cause
+    }
     if (this.#stopped || this.#micMuted || revision !== this.#captureRevision) {
       this.#stopCapture(stream)
       if (!this.#stopped && !this.#micMuted)
@@ -287,6 +370,7 @@ export class LiveConnection {
       }
       if (this.#stopped || this.#micMuted || revision !== this.#captureRevision)
         this.#stopCapture(stream)
+      else this.#stopSilence()
     } catch (cause) {
       this.#stopCapture(stream)
       if (this.#stream === stream) this.#stream = null
@@ -309,6 +393,7 @@ export class LiveConnection {
     this.#release = null
     this.#stopCapture(this.#stream)
     this.#stream = null
+    this.#stopSilence()
     this.#audio?.pause()
     if (this.#audio !== null) this.#audio.srcObject = null
     this.#audio = null
