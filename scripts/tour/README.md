@@ -18,7 +18,10 @@ Run a small director smoke test with
 `node scripts/tour/evaluate.mjs --allow-spend --limit=3 --repetitions=1`.
 For the release comparison, use all 60 requests and three repetitions for each
 of `gpt-6-astra`, `gpt-5.6-sol`, and `gpt-5.6-terra`, with a separate `--out`
-directory per model. The default is Astra. A comparison model changes only
+directory per model. The default is Astra. `--max-cost-usd=6` reserves each
+round before sending and settles reported token usage, using dated standard
+rates in `budget.mjs`. A missing usage report keeps its full reservation.
+Reaching the budget stops the run and preserves its incomplete denominator. A comparison model changes only
 this explicit run, never production routing.
 
 Each run records its fixture, decision, model, prompt version, duration, token

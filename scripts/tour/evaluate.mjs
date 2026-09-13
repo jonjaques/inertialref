@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { parseArgs } from 'node:util'
 import { resolve } from 'node:path'
+import { EvaluationBudget } from './budget.mjs'
 import {
   interpretTourRequest,
   DIRECTOR_PROMPT_VERSION,
@@ -21,6 +22,7 @@ const { values } = parseArgs({
     model: { type: 'string', default: 'gpt-6-astra' },
     repetitions: { type: 'string', default: '3' },
     limit: { type: 'string', default: '60' },
+    'max-cost-usd': { type: 'string', default: '6' },
     out: { type: 'string', default: '.scratch/tour-evaluation' },
     'env-file': { type: 'string', default: '.env.local' },
     help: { type: 'boolean', default: false },
@@ -28,7 +30,7 @@ const { values } = parseArgs({
 })
 if (values.help) {
   console.log(
-    'node scripts/tour/evaluate.mjs --allow-spend --model=gpt-6-astra --repetitions=3 --out=.scratch/tour-astra\nRuns paid director evaluations. Repeat unchanged with gpt-5.6-sol and gpt-5.6-terra. No scene actions execute. Every factual result still needs human review.',
+    'node scripts/tour/evaluate.mjs --allow-spend --model=gpt-6-astra --repetitions=3 --max-cost-usd=6 --out=.scratch/tour-astra\nRuns paid director evaluations. Repeat unchanged with gpt-5.6-sol and gpt-5.6-terra. No scene actions execute. Every factual result still needs human review.',
   )
   process.exit(0)
 }
@@ -40,6 +42,10 @@ if (!DIRECTOR_MODELS.includes(values.model))
   )
 const repetitions = Number(values.repetitions)
 const limit = Number(values.limit)
+const budget = new EvaluationBudget(
+  Number(values['max-cost-usd']),
+  limit * repetitions * 2,
+)
 if (
   !Number.isInteger(repetitions) ||
   repetitions < 1 ||
@@ -63,13 +69,64 @@ const context = evaluationContext()
 const records = []
 const controller = new AbortController()
 process.once('SIGINT', () => controller.abort())
+let budgetStopped = false
+let providerRounds = []
+const budgetedFetch = async (url, init) => {
+  const request = JSON.parse(String(init.body))
+  let ticket
+  try {
+    ticket = budget.reserve(request.model)
+  } catch (error) {
+    budgetStopped = true
+    throw error
+  }
+  const started = process.hrtime.bigint()
+  const round = {
+    status: null,
+    durationMs: 0,
+    inputTokens: null,
+    outputTokens: null,
+    proposal: null,
+  }
+  try {
+    const response = await fetch(url, init)
+    round.status = response.status
+    if (response.ok) {
+      try {
+        const body = await response.clone().json()
+        round.inputTokens = body.usage?.input_tokens ?? null
+        round.outputTokens = body.usage?.output_tokens ?? null
+        const text = (body.output ?? [])
+          .filter((item) => item.type === 'message')
+          .flatMap((item) => item.content ?? [])
+          .filter((part) => part.type === 'output_text')
+          .map((part) => part.text)
+          .join('')
+        try {
+          round.proposal = JSON.parse(text)
+        } catch {}
+      } catch {}
+    }
+    return response
+  } finally {
+    round.durationMs = Number(process.hrtime.bigint() - started) / 1e6
+    ticket.settle(
+      round.inputTokens === null || round.outputTokens === null
+        ? null
+        : { inputTokens: round.inputTokens, outputTokens: round.outputTokens },
+    )
+    providerRounds.push(round)
+  }
+}
+
 for (
   let repetition = 1;
-  repetition <= repetitions && !controller.signal.aborted;
+  repetition <= repetitions && !controller.signal.aborted && !budgetStopped;
   repetition++
 ) {
   for (const fixture of TOUR_EVAL_REQUESTS.slice(0, limit)) {
-    if (controller.signal.aborted) break
+    if (controller.signal.aborted || budgetStopped) break
+    providerRounds = []
     const started = process.hrtime.bigint()
     let record
     try {
@@ -80,6 +137,7 @@ for (
         priorGoal: fixture.priorGoal,
         signal: controller.signal,
         model: values.model,
+        fetch: budgetedFetch,
       })
       record = {
         id: fixture.id,
@@ -94,10 +152,14 @@ for (
         repetition,
         decision: null,
         grading: null,
-        error:
-          error instanceof GuideProviderError ? error.code : 'evaluation-error',
+        error: budgetStopped
+          ? 'budget-limit'
+          : error instanceof GuideProviderError
+            ? error.code
+            : 'evaluation-error',
       }
     }
+    record.providerRounds = providerRounds
     record.durationMs = Number(process.hrtime.bigint() - started) / 1e6
     records.push(record)
     await writeFile(
@@ -109,6 +171,7 @@ for (
           fixtures: TOUR_EVAL_REQUESTS.slice(0, limit),
           context,
           records,
+          budget: budget.snapshot(),
         },
         null,
         2,
@@ -137,8 +200,14 @@ const summary = {
     (sum, record) => sum + record.decision.usage.outputTokens,
     0,
   ),
+  budget: budget.snapshot(),
+  stopped: budgetStopped
+    ? 'budget-limit'
+    : controller.signal.aborted
+      ? 'interrupted'
+      : null,
   failedCallUsage:
-    'May be incomplete when the provider request fails or final output cannot be validated.',
+    'Provider-round records retain reported usage even when semantic validation fails. Calls without final usage retain their full reservation in the budget estimate.',
   failures: records
     .filter((record) => record.error || !record.grading?.intendedTask)
     .map((record) => ({
