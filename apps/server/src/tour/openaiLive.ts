@@ -70,7 +70,10 @@ export async function createLiveSession(options: {
           Authorization: `Bearer ${options.apiKey}`,
           'Content-Type': 'application/json',
         },
-        signal: options.signal ?? AbortSignal.timeout(12_000),
+        signal:
+          options.signal === undefined
+            ? AbortSignal.timeout(12_000)
+            : AbortSignal.any([options.signal, AbortSignal.timeout(12_000)]),
         body: JSON.stringify({
           session: {
             model: 'gpt-live-1',
@@ -320,7 +323,8 @@ export class LiveSideband {
               ? event.reason
               : 'unknown',
         })
-        this.#finish?.()
+        if (this.#finish !== null) this.#finish()
+        else this.disconnect()
       } else this.#onEvent({ type: 'usage', seconds: this.#seconds })
     }
     if (type === 'error')

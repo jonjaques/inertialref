@@ -24,6 +24,54 @@ function socket() {
 }
 
 describe('Live provider boundary', () => {
+  it('keeps the startup deadline when the caller supplies its own cancellation signal', async () => {
+    const deadline = new AbortController()
+    const caller = new AbortController()
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(deadline.signal)
+    try {
+      const fetcher = vi.fn(
+        async (_url: RequestInfo | URL, init?: RequestInit) => {
+          await new Promise<void>((_resolve, reject) =>
+            init?.signal?.addEventListener(
+              'abort',
+              () => reject(new Error('aborted')),
+              { once: true },
+            ),
+          )
+          return new Response()
+        },
+      )
+      const pending = createLiveSession({
+        apiKey: 'fake',
+        sdp: 'offer',
+        signal: caller.signal,
+        fetch: fetcher as typeof fetch,
+      })
+      expect(timeout).toHaveBeenCalledWith(12_000)
+      deadline.abort()
+      await expect(pending).rejects.toMatchObject({ code: 'unavailable' })
+      expect(caller.signal.aborted).toBe(false)
+    } finally {
+      timeout.mockRestore()
+    }
+  })
+  it('releases the socket when the provider closes before an application close request', async () => {
+    const wire = socket()
+    const live = new LiveSideband(wire as LiveSocket, () => {})
+    wire.emit({
+      type: 'session.closed',
+      usage: { seconds: 17 },
+      reason: 'expired',
+    })
+    expect(wire.close).toHaveBeenCalledTimes(1)
+    await expect(live.close()).resolves.toEqual({
+      finalized: true,
+      seconds: 17,
+    })
+  })
+
   it('revokes a lost sideband through HTTP without inventing final usage', async () => {
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
