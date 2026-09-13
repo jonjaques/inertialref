@@ -515,6 +515,48 @@ describe('Live provider boundary', () => {
 })
 
 describe('Responses provider boundary', () => {
+  it('allows a narrative plan to finish while retaining a finite provider deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      const request = callResponsesDirector({
+        apiKey: 'fake',
+        input: '{}',
+        instructions: 'Plan a visit.',
+        schema: {},
+        fetch: ((_url, init) =>
+          new Promise((resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new Error('aborted')),
+            )
+            setTimeout(
+              () =>
+                resolve(
+                  Response.json({
+                    status: 'completed',
+                    output: [
+                      {
+                        type: 'message',
+                        content: [
+                          { type: 'output_text', text: '{"plan":"ready"}' },
+                        ],
+                      },
+                    ],
+                    usage: { input_tokens: 1, output_tokens: 1 },
+                  }),
+                ),
+              14000,
+            )
+          })) as typeof fetch,
+      })
+      const completed = expect(request).resolves.toMatchObject({
+        value: { plan: 'ready' },
+      })
+      await vi.advanceTimersByTimeAsync(14000)
+      await completed
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('gives controlled speech warmth and varied cadence while keeping its exact script', async () => {
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>

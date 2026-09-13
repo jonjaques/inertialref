@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { openSession } from '../../../../packages/devtools/src/session.ts'
+import { createTourContext } from '../../../../packages/devtools/src/tour/brief.ts'
+import { authoredTour } from './presets.ts'
 import type { TourContext } from '@inertialref/protocol'
 import {
   DIRECTOR_SCHEMA,
@@ -93,6 +96,66 @@ const solarContext: TourContext = {
 }
 
 describe('grounded director', () => {
+  it('keeps the active route and newly requested worlds inside the actual model envelope', async () => {
+    const session = openSession()
+    session.harness.look('s:SOL/b:5', { ease: false })
+    const scene = createTourContext(session.harness)
+    const plan = authoredTour(
+      'I am the developer, give me a quick demo of all your capabilities',
+      scene,
+    )!
+    const priorGoal = JSON.stringify({
+      goal: plan.goal,
+      currentStopId: plan.stops[0]!.id,
+      stops: plan.stops.map((stop) => ({
+        subjectId: stop.subjectId,
+        name: scene.candidates.find(
+          (candidate) => candidate.id === stop.subjectId,
+        )?.name,
+        objective: stop.objective,
+        motion: stop.motion,
+      })),
+    })
+    try {
+      await interpretTourRequest({
+        apiKey: 'fake',
+        text: 'Skip Titan, add Jupiter after Saturn, and keep the visit to the Moon. Make the stories about the people who explored these worlds.',
+        context: scene,
+        priorGoal,
+        maxRounds: 1,
+        fetch: (async (_url, init) => {
+          const body = JSON.parse(String(init?.body))
+          const input = JSON.parse(body.input)
+          expect(
+            input.candidates.map(
+              (candidate: { name: string }) => candidate.name,
+            ),
+          ).toEqual(expect.arrayContaining(['Saturn', 'Jupiter', 'Luna']))
+          return Response.json({
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: JSON.stringify({
+                      ...explanation,
+                      text: 'Saturn puzzled Galileo.',
+                      factIds: [],
+                    }),
+                  },
+                ],
+              },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          })
+        }) as typeof fetch,
+      })
+    } finally {
+      session.dispose()
+    }
+  })
   it('keeps a destination story for arrival without replacing it with physical records', () => {
     const solar = {
       ...context,
@@ -540,7 +603,7 @@ describe('grounded director', () => {
         const input = JSON.parse(body.input)
         expect(
           new TextEncoder().encode(String(init?.body)).byteLength,
-        ).toBeLessThanOrEqual(8000)
+        ).toBeLessThanOrEqual(12000)
         expect(
           input.candidates.some(
             (item: { id: string }) => item.id === 'candidate-15',

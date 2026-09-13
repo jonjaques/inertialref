@@ -1,3 +1,4 @@
+import { TOUR_POLICY } from './policy.ts'
 /** HTTP only: the Worker owns credentials, deadlines, and provider retention. */
 export const DIRECTOR_MODEL = 'gpt-6-astra'
 export const DIRECTOR_MODELS = [
@@ -123,7 +124,7 @@ export async function callResponsesDirector(
   const body = {
     model,
     reasoning: { effort: 'low' },
-    max_output_tokens: 2000,
+    max_output_tokens: TOUR_POLICY.directorOutputTokens,
     store: false,
     instructions: request.instructions,
     input: request.input,
@@ -136,13 +137,13 @@ export async function callResponsesDirector(
       },
     },
   }
-  if (!withinTextBudget(JSON.stringify(body), 8000))
+  if (!withinTextBudget(JSON.stringify(body), TOUR_POLICY.directorRequestBytes))
     throw new GuideProviderError('input-limit')
   const controller = new AbortController()
   const abort = () => controller.abort()
   if (request.signal?.aborted) controller.abort()
   else request.signal?.addEventListener('abort', abort, { once: true })
-  const timer = setTimeout(abort, 12_000)
+  const timer = setTimeout(abort, TOUR_POLICY.directorDeadlineMs)
   emitProviderTrace(request.trace, {
     event: 'provider.request',
     model,

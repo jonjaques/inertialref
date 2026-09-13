@@ -1,3 +1,4 @@
+import { TOUR_POLICY } from '../../apps/server/src/tour/policy.ts'
 /** Evaluation-only standard rates, checked against model cards on 2026-09-13. */
 export const EVALUATION_PRICES = {
   'gpt-6-astra': { input: 10, output: 50 },
@@ -32,7 +33,9 @@ export class EvaluationBudget {
     if (!price) throw new Error('Unsupported evaluation model.')
     if (this.#rounds >= this.#maxRounds)
       throw new Error('Evaluation round limit reached.')
-    const reserved = 8000 * price.input + 2000 * price.output
+    const reserved =
+      TOUR_POLICY.directorRequestBytes * price.input +
+      TOUR_POLICY.directorOutputTokens * price.output
     if (this.#spent + this.#reserved + reserved > this.#limit)
       throw new Error('Evaluation budget reached.')
     this.#reserved += reserved

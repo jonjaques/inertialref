@@ -83,8 +83,8 @@ settle it conservatively. Session state and usage are application records;
 they do not enter simulation saves.
 
 GPT-6 Astra is the director through Responses, with low reasoning effort,
-strict structured output, at most two rounds within twelve seconds, an
-8,000-byte request envelope, and 2,000 output tokens per round. The application
+strict structured output, at most two rounds per inference within a 25-second request deadline, an
+12,000-byte request envelope, and 2,000 output tokens per round. The application
 validates selected facts and actions after schema validation. Exact local
 commands and explicit authored tour presets avoid inference.
 Sol and Terra remain evaluation alternatives until measured results support

@@ -3,7 +3,7 @@ import { EvaluationBudget } from './budget.mjs'
 
 describe('explicit provider evaluation budget', () => {
   it('reserves the full next round before sending and settles its actual usage', () => {
-    const budget = new EvaluationBudget(0.2)
+    const budget = new EvaluationBudget(0.25)
     const first = budget.reserve('gpt-6-astra')
     expect(() => budget.reserve('gpt-6-astra')).toThrow('budget')
     first.settle({ inputTokens: 1000, outputTokens: 100 })
@@ -16,7 +16,7 @@ describe('explicit provider evaluation budget', () => {
     const second = budget.reserve('gpt-6-astra')
     second.settle(null)
     expect(budget.snapshot()).toMatchObject({
-      spentUsd: 0.195,
+      spentUsd: 0.235,
       uncertainRounds: 1,
     })
     expect(() => budget.reserve('gpt-6-astra')).toThrow('budget')

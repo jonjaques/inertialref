@@ -374,7 +374,9 @@ export class TourCoordinator {
       await this.#publishPlan(preset, context, requestRevision)
       return
     }
-    const remainingMs = 12_000 - (this.#ports.now() - this.#requestStarted)
+    const remainingMs =
+      TOUR_POLICY.directorDeadlineMs -
+      (this.#ports.now() - this.#requestStarted)
     if (this.#rounds >= 3 || remainingMs <= 0) {
       this.#error(
         'deadline',
