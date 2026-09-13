@@ -60,21 +60,44 @@ export function requestedRecords(
   }
   if (/\b(heavy|weigh)\b/i.test(request)) words.add('mass')
   if (/\b(hot|cold|warm)\b/i.test(request)) words.add('temperature')
+  const duration = /\b(how long|length|duration|longer|shorter|period)\b/i.test(
+    request,
+  )
+  const rotation =
+    /\b(rotat(?:ion|e|es|ing)|spin(?:s|ning)?)\b/i.test(request) ||
+    (duration && /\bdays?\b/i.test(request))
+  const orbit =
+    /\b(orbit(?:al|s|ing)?|revolv(?:e|es|ing)|revolution)\b/i.test(request) ||
+    (duration && /\byears?\b/i.test(request))
+  if (rotation || orbit) {
+    // Both records say "period"; the qualified question selects the right one.
+    words.delete('period')
+    words.delete('periods')
+    if (rotation) words.add('rotation')
+    if (orbit) words.add('orbital')
+  }
   const applicationSources = new Set(
     brief.sources
       .filter((source) => source.origin === 'application')
       .map((source) => source.id),
   )
-  return brief.facts
-    .filter(
-      (fact) =>
-        fact.sourceIds.length > 0 &&
-        fact.sourceIds.every((id) => applicationSources.has(id)) &&
-        (fact.label.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).some((word) =>
-          words.has(word),
-        ),
-    )
-    .slice(0, 4)
+  const applicationFacts = brief.facts.filter(
+    (fact) =>
+      fact.sourceIds.length > 0 &&
+      fact.sourceIds.every((id) => applicationSources.has(id)),
+  )
+  const matching = applicationFacts.filter((fact) =>
+    (fact.label.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).some((word) =>
+      words.has(word),
+    ),
+  )
+  const overview = /\b(measurements?|properties|records?|numbers)\b/i.test(
+    request,
+  )
+  return (matching.length ? matching : overview ? applicationFacts : []).slice(
+    0,
+    4,
+  )
 }
 
 export function modelRecord(fact: TourFact): Record<string, unknown> {

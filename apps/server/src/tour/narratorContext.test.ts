@@ -3,6 +3,7 @@ import type { TourContext, TourFact } from '@inertialref/protocol'
 import {
   narratorContext,
   NARRATOR_CONTEXT_MAX_BYTES,
+  requestedRecords,
 } from './narratorContext.ts'
 
 const measured = (speech: string): TourFact => ({
@@ -67,6 +68,111 @@ const context = (facts: readonly TourFact[] = []): TourContext => ({
 })
 
 describe('Live context describes the scene and reads measurements on demand', () => {
+  it('resolves day, year, rotation and spin questions to their distinct recorded periods', () => {
+    const brief = {
+      ...context().brief!,
+      name: 'Venus',
+      facts: [
+        {
+          ...measured('COOKED ROTATION'),
+          id: 'rotation',
+          label: 'Sidereal rotation period',
+          quantity: 5832.5,
+          unit: 'h',
+        },
+        {
+          ...measured('COOKED ORBIT'),
+          id: 'orbit',
+          label: 'Orbital period',
+          quantity: 224.7,
+          unit: 'd',
+        },
+      ],
+    }
+    for (const question of [
+      'How long is Venus’s day?',
+      'What is Venus’s rotation period?',
+      'How fast does Venus spin?',
+      'How fast is Venus spinning?',
+    ])
+      expect(requestedRecords(brief, question).map((fact) => fact.id)).toEqual([
+        'rotation',
+      ])
+    for (const question of [
+      'How long is Venus’s year?',
+      'What is its orbital period?',
+      'How long does Venus take to revolve around the Sun?',
+    ])
+      expect(requestedRecords(brief, question).map((fact) => fact.id)).toEqual([
+        'orbit',
+      ])
+    expect(
+      requestedRecords(
+        brief,
+        'Compare the length of Venus’s day and year.',
+      ).map((fact) => fact.id),
+    ).toEqual(['rotation', 'orbit'])
+    expect(
+      requestedRecords(
+        brief,
+        'Tell me the history of Venus exploration over the years.',
+      ),
+    ).toEqual([])
+  })
+
+  it('returns a bounded raw-record overview only when measurements are explicitly requested', () => {
+    const base = context().brief!
+    const brief = {
+      ...base,
+      facts: [
+        { ...measured('COOKED NOTE'), id: 'note', sourceIds: ['curated'] },
+        ...[
+          'Radius',
+          'Mass',
+          'Temperature',
+          'Orbital period',
+          'Sidereal rotation period',
+        ].map((label, index) => ({
+          ...measured('COOKED MEASUREMENT'),
+          id: `record-${index}`,
+          label,
+        })),
+      ],
+      sources: [
+        ...base.sources,
+        {
+          id: 'curated',
+          title: 'COOKED SOURCE',
+          origin: 'curated' as const,
+          url: 'https://example.invalid',
+        },
+      ],
+    }
+    for (const question of [
+      'Show me its measurements.',
+      'What properties are recorded?',
+      'Show the app record.',
+      'Give me the numbers.',
+    ])
+      expect(requestedRecords(brief, question).map((fact) => fact.id)).toEqual([
+        'record-0',
+        'record-1',
+        'record-2',
+        'record-3',
+      ])
+    expect(
+      requestedRecords(brief, 'Show the radius record.').map((fact) => fact.id),
+    ).toEqual(['record-0'])
+    expect(requestedRecords(brief, 'Tell me its history.')).toEqual([])
+    const instructions = narratorContext(
+      { ...context(), brief },
+      'Show its measurements.',
+    )
+    expect(instructions).toContain('"quantity":60268000')
+    expect(instructions).not.toContain('COOKED')
+    expect(instructions).not.toContain('https://')
+  })
+
   it('keeps current view, nearby names, and real guide capabilities without prepared stories', () => {
     const current = context([measured('COOKED RADIUS STORY')])
     const instructions = narratorContext({
