@@ -9829,6 +9829,52 @@ enabling it deliberately includes conversation text. The measured director
 results, fixture corrections, and remaining evaluations live in the
 [evaluation report](design/reports/the-agentic-tour-guide.md).
 
+## The route needs room for a story (13 Sep 2026)
+
+The visitor wants history, curiosity, and congenial delivery, not a recital of
+physical measurements. Ordinary model context now carries the current view,
+nearby names, and supported actions. Requested measurements cross as raw
+records; the server no longer injects cooked astronomy notes. Observed Solar
+System objects can receive model-written historical narration. Projected worlds
+still have no invented mission biography or measurements.
+
+Freshly authored Solar System, Saturn, and developer-demo scripts remain
+explicit presets with their own sources. The Solar route visits Sol, Venus,
+Luna, Mars, Jupiter, Saturn, Neptune, and Earth; the developer demo opens
+Saturn's rings, approaches Titan, and uses a returned lunar surface site.
+The application preserves these subjects by compacting nearby records instead
+of dropping itinerary destinations. A record read expands the requested body
+without changing the camera.
+
+Automatic clips can play while Live listens. Actual clip completion starts
+any promised quiet look; a pause freezes that interval. Finite camera gestures
+run inside the observatory's existing sample loop. Stopping their future frames
+must not increment the explicit view revision: doing so would invalidate the
+question that just interrupted the tour. The panel reads the runtime's ordered
+plan, progress, camera intent, and bounded revision history.
+
+A real Astra follow-up exposed a context-envelope failure. With the narrative
+schema and the current three-stop plan, an 8 KB envelope retained only Saturn.
+The compact input now prioritizes requested and existing route subjects; a
+12 KB envelope retains eight candidates in the 9,710-byte regression example.
+The worst-case reservation grows with the envelope. A second call reached the
+12-second deadline; narrative requests share a bounded 25-second deadline.
+The corrected call returns Saturn, Jupiter, and Luna, preserves the surface
+stop, and writes stories about their explorers using 1,988 input and 586 output
+tokens. The reply's three narratives have empty fact selections and no invented
+citations. These are one-call acceptance findings, not a replacement for the
+older multi-model evaluation or a human listening score.
+
+The exact developer introduction exposed a Live routing failure: the model
+listed capabilities instead of starting a demo. Prompt version 6 delegates
+demonstrations and tours first. The repeated synthetic-input run completes
+Saturn, Titan, and Luna in 116 seconds, with three real audio-ended events and
+camera gestures during speech. End closes the provider and synthetic track
+with no retained reservation. An accelerated local fixture completes all eight
+Solar System stops; its silent one-second clips do not measure five-minute
+listening quality. A separate fixture displays the real Astra revision with
+Jupiter added and Titan removed.
+
 ## Known gaps
 
 - **The cloud guide still needs release evaluations.** Human listening and

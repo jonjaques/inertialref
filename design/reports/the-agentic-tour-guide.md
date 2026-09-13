@@ -195,3 +195,100 @@ of the current prompt and arrival guard remains open. Sol and Terra still
 need the complete repeated evaluation before a routing change. Passing these
 fixtures establishes neither universal request understanding nor knowledge
 beyond the supplied records and notes.
+
+## Stories, revised routes, and a smaller scene context
+
+The September 13 follow-up uses protocol `2`, director prompt
+`planetarium-director-4`, and narrator prompt `planetarium-live-6`.
+The earlier repeated evaluations above belong to their stated prompt versions.
+They do not qualify this more expressive narration policy.
+
+Ordinary inference receives scene identity, nearby subjects, and supported
+commands. Raw measurements are included on request. Cooked astronomy notes,
+source prose, application manifests, and object summaries are excluded.
+Explicit authored scripts supply the Solar System, Saturn, and developer
+presets; model-written Solar System explanations can use established
+background knowledge without selecting a canned fact.
+
+A real request to skip Titan, add Jupiter after Saturn, and keep the Moon
+initially fails semantic validation. Inspection shows the 8 KB request budget
+retains only Saturn after carrying the schema and current route. A second call
+with the corrected candidate inventory reaches the 12-second deadline. These
+failures are recorded as failures, not scored successes or automatic retries.
+
+The final one-round Astra call returns the requested Saturn–Jupiter–Luna plan,
+including a returned lunar site, reveal/orbit/hold direction, and historical
+stories about telescope pioneers, spacecraft teams, and astronauts. All three
+stories have empty fact selections and no fabricated source links. The call
+uses 1,988 input and 586 output tokens, with a measured HTTP latency of
+13,067 ms and a rate-based cost of $0.049180. It runs inside the corrected
+25-second request deadline. This is one observed follow-up, not a new benchmark
+or independent verification of every historical sentence.
+
+The Director request example carries eight model candidates in 9,710
+bytes, including the current route and newly requested Jupiter. The 12 KB
+ceiling includes instructions and structured-output schema. The two-round
+reservation grows to $0.44 so the larger worst-case input remains reserved
+before inference. The application retains its separate $2 session allowance.
+
+Local evidence is `.scratch/tour-v2-provider-result.json` and
+`.scratch/tour-v2-provider-trace.json`. The synthetic developer utterance is a verified 7.464-second generated clip.
+The attempted local macOS speech file contains no audio and is rejected by the
+browser; that failed fixture run closes its Live session with 15 confirmed
+billable seconds and no retained reservation. No test captures a real
+microphone.
+
+The first valid developer utterance with narrator prompt version 5 produces a
+spoken capability list without starting a tour. The test stops that session;
+it is a failed delegation, not a successful demonstration. Prompt version 6
+makes demo and tour requests delegate before describing capabilities, with
+both requested audience scenarios as examples.
+
+With version 6, the same synthetic utterance starts the developer route within
+ten seconds. Saturn, Titan, and Luna each reach viewing state and play their
+authored story. Their real mini-TTS clips last 25.104, 15.120, and 26.016
+seconds; each emits `ended` before the next stop. The route completes in
+116.083 seconds including connection and visitor input. The camera samples
+235 in-place gesture frames: Saturn's reveal changes orientation during
+narration while keeping its explicit view revision, and Titan's approach
+advances during its story. Luna holds the view at its selected site.
+
+End closes the session with 114 confirmed Live seconds, three speech calls,
+and $0.455000 charged by the application's conservative ledger. The synthetic
+input track is ended and disabled. The local usage ledger has zero active
+sessions and zero reserved funds. Additional verification after the visitor's
+$1 extension uses $0.556667 in session charges, plus one synthetic input clip
+whose $0.12 allowance keeps the conservative total below $0.68. No further
+provider calls are needed for the local route and layout fixtures.
+
+Evidence is `.scratch/tour-v2-live-acceptance.json` and
+`.data/drive/guide-v2-live-desktop.jpg`. The screenshot shows Saturn's ring
+reveal beside the three-stop itinerary, its speaking state, elapsed time,
+camera direction, and quiet looking interval. This establishes the audio and
+camera sequence, not a subjective listening grade.
+
+The grandparents request also completes the eight-stop Solar System route in
+the browser: Sol, Venus, Luna, Mars, Jupiter, Saturn, Neptune, and Earth. This
+run intercepts every tour endpoint with local fixtures and uses one-second
+silent WAV clips. All eight clips emit `ended`, and the runner completes at
+69.182 seconds before End disconnects the session. It verifies route execution
+and audio gating, not a five-minute listening experience. The authored route
+estimates 302 seconds from its word count, travel, and looking intervals.
+Evidence is `.scratch/tour-v2-solar-acceptance.json`.
+
+The itinerary revision fixture replays the real Astra plan after a developer
+demo request. At 1600 × 900, the panel shows Saturn–Jupiter–Luna, exactly one
+current step, revision 2, "Added Jupiter", "Removed Titan", and the duration
+change. Pausing clears the active camera gesture. Both the document and the
+262-pixel panel section have no horizontal overflow. These requests and audio
+clips stay local; the earlier paid call supplies the saved revised plan.
+
+At 390 × 844, opening Panels → Guide shows the same current stop and revision
+summary in the existing compact sheet. The 348-pixel section and 390-pixel
+document have no horizontal overflow. The initial fixture probe finds no
+section because the compact picker starts closed; opening the Guide is the
+required setup, not a product fix. Evidence is
+`.scratch/tour-v2-revised-desktop.json`,
+`.scratch/tour-v2-revised-mobile.json`, and the corresponding screenshots in
+`.data/drive/`. The narrow screenshot `guide-v2-mobile-changes.jpg` includes
+the added/removed summary and its panel picker.
