@@ -84,6 +84,10 @@ and disarms the level itself.
 Steps run in the order written, in one process and one session. Prefer one command with
 five steps to five commands.
 
+Add `--user-gesture` when a `--js` or `--file` step tests audio or another API
+that requires visitor activation. Only those explicit script evaluations carry
+the gesture; boot, readiness probes and frame sampling keep their usual behavior.
+
 **Shutdown is a separate invocation.** `--down` exits before any steps run,
 regardless of where it appears in the command. Appending it to `--js`, `--file`
 or `--shot` closes Chrome without performing those checks. Run the inspection

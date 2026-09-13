@@ -83,6 +83,8 @@ const OPTIONS = {
   fresh: { type: 'boolean', default: false },
   /** Preserve local storage and cookies, and permit a warm attach. */
   'keep-storage': { type: 'boolean', default: false },
+  /** Explicit script steps can exercise APIs gated on visitor activation. */
+  'user-gesture': { type: 'boolean', default: false },
   /** Public HTML can be inspected before a runtime exists or when it fails. */
   document: { type: 'boolean', default: false },
   javascript: { type: 'boolean', default: true },
@@ -178,6 +180,8 @@ Session flags:
   --fresh            re-boot even if the attached page is already rendering
   --keep-storage     retain local storage/cookies and allow a warm attach;
                      default clears both before booting the requested page
+  --user-gesture     activate only --js/--file evaluations as user gestures;
+                     opt in to test audio or other activation-gated actions
   --document         wait for HTML readiness, without waiting for the renderer
   --no-javascript    disable page scripts before navigation; implies --document.
                      --js still evaluates inspection expressions through CDP.
@@ -309,6 +313,11 @@ const count = (arg, flag, least) => {
  *  six-second boot: a typo'd `--wait` should cost a line of output, not the
  *  whole start-up it sits behind. */
 function checkScript() {
+  if (
+    values['user-gesture'] === true &&
+    !script.some(({ step }) => step === 'js' || step === 'file')
+  )
+    throw new Error('--user-gesture needs a --js or --file step')
   for (const { step, arg } of script) {
     if (!JAVASCRIPT && (step === 'sample' || step === 'cast'))
       throw new Error(`--${step} needs page scripts; omit --no-javascript`)
@@ -518,11 +527,12 @@ function body(expression) {
   return bare ? `return (${expression})` : expression
 }
 
-async function evaluate(send, expression) {
+async function evaluate(send, expression, userGesture = false) {
   const result = await send('Runtime.evaluate', {
     expression: `(async () => { ${body(expression)} })()`,
     awaitPromise: true,
     returnByValue: true,
+    ...(userGesture ? { userGesture: true } : {}),
   })
   if (result.exceptionDetails) {
     throw new Error(
@@ -1005,7 +1015,11 @@ async function main() {
       case 'file': {
         const expression =
           step === 'file' ? await readFile(arg, 'utf8') : String(arg)
-        const value = await evaluate(send, expression)
+        const value = await evaluate(
+          send,
+          expression,
+          values['user-gesture'] === true,
+        )
         results.push({ step, value })
         say(`js: ${JSON.stringify(value ?? null)}`)
         break
