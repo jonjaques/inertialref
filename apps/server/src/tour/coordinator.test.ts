@@ -13,6 +13,7 @@ import {
   newSessionRecord,
   type DirectorDecision,
 } from './coordinator.ts'
+import { withAstronomyNotes } from './knowledge/astronomy.ts'
 
 const context = (viewRevision = 0): TourContext => ({
   protocolVersion: 1,
@@ -594,6 +595,25 @@ describe('tour read continuation and evidence', () => {
     expect(narration.brief.text).toContain(note.speech)
     expect(narration.brief.text).not.toContain('58,232 kilometers')
     expect(narration.brief.sources).toEqual([brief.sources[1]])
+  })
+
+  it('gives the authored ring stop one ring story instead of a repeated data recital', async () => {
+    const { coordinator, messages } = setup(async () => {
+      throw new Error('No director call is needed')
+    }, withAstronomyNotes(context()))
+    await coordinator.receive({
+      type: 'narration-ready',
+      stopId: 'saturn-rings',
+      requestRevision: 0,
+      viewRevision: 0,
+    })
+    const narration = messages.find((message) => message.type === 'narration')
+    if (narration?.type !== 'narration') throw new Error('No narration')
+    expect(narration.brief.factIds).toEqual(['saturn:note:saturn-rings'])
+    expect(narration.brief.text).not.toContain('58,232')
+    expect(narration.brief.sources.map((source) => source.id)).toEqual([
+      'curated:saturn-rings',
+    ])
   })
 
   it('names the answer subject when the visitor asks about another visible record', async () => {

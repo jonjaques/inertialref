@@ -545,10 +545,27 @@ export class TourCoordinator {
       return
     const key = `${this.#record.requestRevision}/${context.viewRevision}/${stopId ?? 'answer'}`
     if (this.#narrated.has(key)) return
-    const selected =
+    let selected =
       stopId === null
         ? this.#facts
         : (this.#plan?.stops.find((stop) => stop.id === stopId)?.factIds ?? [])
+    const quiet =
+      stopId !== null &&
+      this.#plan?.stops.some(
+        (stop) => stop.id === stopId && stop.factIds.length === 0,
+      )
+    if (selected.length === 0 && !quiet) {
+      // Authored local stops select their story by stable ID. A general visit
+      // gets one supported story; explicit director fact selections stay intact.
+      const stories = brief.facts.filter((fact) =>
+        fact.sourceIds.some((id) => id.startsWith('curated:')),
+      )
+      const story =
+        stories.find(
+          (fact) => fact.id === `${brief.subjectId}:note:${stopId}`,
+        ) ?? stories[0]
+      if (story !== undefined) selected = [story.id]
+    }
     const recordBriefs =
       selected.length === 0
         ? [brief]
@@ -558,11 +575,6 @@ export class TourCoordinator {
               (item) => item.subjectId !== brief.subjectId,
             ),
           ]
-    const quiet =
-      stopId !== null &&
-      this.#plan?.stops.some(
-        (stop) => stop.id === stopId && stop.factIds.length === 0,
-      )
     const available = quiet
       ? []
       : recordBriefs
