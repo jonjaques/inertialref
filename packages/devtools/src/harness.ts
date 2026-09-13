@@ -85,6 +85,7 @@ import {
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import {
   describeDrift,
+  TOUR_LIMITS,
   encodeUniverseVector,
   type VersionDrift,
 } from '@inertialref/protocol'
@@ -194,7 +195,43 @@ export interface FrameStats {
  * not a set of `?.` calls, a test can supply the two members it is about and
  * no reader ever asks whether a member is there.
  */
+/** Conversation diagnostics exclude transcript and provider credentials. */
+export interface GuideStatus {
+  readonly available: boolean
+  readonly loaded: boolean
+  readonly state: string
+  readonly connection: 'offline' | 'connecting' | 'connected'
+  readonly planId: string | null
+  readonly stopIndex: number | null
+  readonly requestRevision: number
+  readonly viewRevision: number | null
+  readonly microphone: 'off' | 'muted' | 'active'
+  readonly guideMuted: boolean
+  readonly automatic: boolean
+}
+
+export interface GuideHostPort {
+  status(): GuideStatus
+  ask(text: string): Promise<GuideStatus>
+}
+
+export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
+  available: false,
+  loaded: false,
+  state: 'unavailable',
+  connection: 'offline',
+  planId: null,
+  stopIndex: null,
+  requestRevision: 0,
+  viewRevision: null,
+  microphone: 'off',
+  guideMuted: false,
+  automatic: false,
+})
+
 export interface RenderHost {
+  /** The active mode supplies this lazy adapter; a headless host need not. */
+  guide?(): GuideHostPort | null
   scene(): RenderScene | null
   frameStats(): FrameStats | null
   /**
@@ -311,6 +348,7 @@ export interface RenderHost {
 export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
   let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
   return {
+    guide: overrides.guide ?? (() => null),
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
     galaxyRender: overrides.galaxyRender ?? (() => null),
@@ -2217,6 +2255,24 @@ export class GameHarness {
     return this.#observatory.sample(dt)
   }
 
+  /** Read the existing guide without importing it or opening a connection. */
+  guideStatus(): GuideStatus {
+    return this.#host.render.guide?.()?.status() ?? UNAVAILABLE_GUIDE
+  }
+
+  /** An explicit console request uses the same active guide as its dock panel. */
+  async guideAsk(text: string): Promise<GuideStatus> {
+    if (
+      typeof text !== 'string' ||
+      !text.trim() ||
+      text.length > TOUR_LIMITS.requestCharacters
+    )
+      throw new Error(
+        `A guide request needs 1 to ${TOUR_LIMITS.requestCharacters} characters.`,
+      )
+    return this.#host.render.guide?.()?.ask(text.trim()) ?? UNAVAILABLE_GUIDE
+  }
+
   /** Text help, so the console is discoverable without reading this file. */
   help(): string {
     return [
@@ -2253,6 +2309,8 @@ export class GameHarness {
       '  ir.moveStructure(record)      replace an existing anchor atomically',
       '  ir.visitStructure(id, height?) surface anchors; angles in degrees, heights in meters',
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
+      '  ir.guideStatus()              inspect the active Planetarium guide without starting it',
+      '  await ir.guideAsk(text)        ask the active guide through its bounded runtime',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',
       '  ir.compose(id)                a named composition, camera only',

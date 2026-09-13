@@ -15,7 +15,11 @@ import {
   type TourStop,
   type TourTranscript,
 } from '@inertialref/protocol'
-import { deterministicTour, TourRunner } from '@inertialref/devtools'
+import {
+  deterministicTour,
+  TourRunner,
+  type GuideStatus,
+} from '@inertialref/devtools'
 import { ControlledPlayback, LiveConnection, type LiveEvent } from './media.ts'
 
 export interface GuideExecutor {
@@ -145,6 +149,26 @@ export class GuideRuntime {
     }
   }
   getSnapshot = (): GuideSnapshot => this.#snapshot
+  diagnostics(): GuideStatus {
+    const state = this.#snapshot
+    return {
+      available: true,
+      loaded: true,
+      state: state.state,
+      connection: state.connection,
+      planId: state.plan?.id ?? null,
+      stopIndex: state.plan === null ? null : state.stopIndex,
+      requestRevision: this.#requestRevision,
+      viewRevision: this.#executor?.viewRevision ?? null,
+      microphone: state.voice
+        ? state.microphoneMuted
+          ? 'muted'
+          : 'active'
+        : 'off',
+      guideMuted: state.guideMuted,
+      automatic: state.automatic,
+    }
+  }
   #update(next: Partial<GuideSnapshot>): void {
     this.#snapshot = { ...this.#snapshot, ...next }
     for (const listener of this.#listeners) listener()
