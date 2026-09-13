@@ -29,6 +29,39 @@ function socket() {
 }
 
 describe('Live provider boundary', () => {
+  it('instructs the narrator to answer about Titan while Saturn remains in view', async () => {
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          session: { id: 'session-1' },
+          transport: { sdp: 'answer' },
+        }),
+    )
+    await createLiveSession({
+      apiKey: 'fake',
+      sdp: 'offer',
+      context: 'Current view: Saturn. Verified brief: Saturn has rings.',
+      fetch: fetcher as typeof fetch,
+    })
+    const instructions = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
+      .session.instructions as string
+    expect(instructions).toContain(
+      'Application commentary is a new verified answer to the latest visitor request.',
+    )
+    expect(instructions).toContain(
+      'Speak that answer faithfully, even when its subject differs from the current view.',
+    )
+    expect(instructions).toContain(
+      'Never substitute an older brief for the new answer.',
+    )
+    expect(instructions).toContain(
+      'Do not claim the view changed without application confirmation.',
+    )
+    expect(instructions).toContain(
+      'Never speak stage directions such as Pause; apply them silently to your delivery.',
+    )
+  })
+
   it('supplies the verified initial brief and keeps a failed trace sink out of socket control', async () => {
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
