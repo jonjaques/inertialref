@@ -58,13 +58,17 @@ const nullableString = { type: ['string', 'null'] }
 const strings = { type: 'array', items: string }
 const action = {
   anyOf: [
-    object({ tool: { const: 'resolve_subject' }, query: string }),
     object({
-      tool: { const: 'find_worlds' },
+      tool: { type: 'string', const: 'resolve_subject' },
+      query: string,
+    }),
+    object({
+      tool: { type: 'string', const: 'find_worlds' },
       query: object({
         kinds: {
           type: 'array',
           items: {
+            type: 'string',
             enum: [
               'rocky',
               'ice',
@@ -80,6 +84,7 @@ const action = {
         starClasses: {
           type: 'array',
           items: {
+            type: 'string',
             enum: ['O', 'B', 'A', 'F', 'G', 'K', 'M', 'L', 'T', 'Y', 'D'],
           },
         },
@@ -96,28 +101,34 @@ const action = {
       limit: { type: 'number' },
     }),
     object({
-      tool: { enum: ['show_subject', 'read_subject'] },
+      tool: { type: 'string', enum: ['show_subject', 'read_subject'] },
       subjectId: string,
     }),
     object({
-      tool: { const: 'compose_view' },
+      tool: { type: 'string', const: 'compose_view' },
       subjectId: string,
       framingId: string,
     }),
     object({
-      tool: { const: 'stand_at_site' },
+      tool: { type: 'string', const: 'stand_at_site' },
       subjectId: string,
       siteId: string,
     }),
     object({
-      tool: { const: 'set_picture_time' },
-      mode: { enum: ['hold', 'live', 'pause', 'resume', 'set', 'rate'] },
+      tool: { type: 'string', const: 'set_picture_time' },
+      mode: {
+        type: 'string',
+        enum: ['hold', 'live', 'pause', 'resume', 'set', 'rate'],
+      },
       value: { type: ['number', 'null'] },
     }),
   ],
 }
 export const DIRECTOR_SCHEMA: Record<string, unknown> = object({
-  kind: { enum: ['explanation', 'clarification', 'plan', 'actions'] },
+  kind: {
+    type: 'string',
+    enum: ['explanation', 'clarification', 'plan', 'actions'],
+  },
   text: string,
   factIds: strings,
   plan: {

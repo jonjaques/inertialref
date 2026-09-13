@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { TourContext } from '@inertialref/protocol'
 import {
+  DIRECTOR_SCHEMA,
   interpretTourRequest,
   prepareNarration,
   validateDirectorDecision,
@@ -80,6 +81,27 @@ const explanation = {
 }
 
 describe('grounded director', () => {
+  it('declares a type on every strict-schema enum and constant', () => {
+    const visit = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        node.forEach(visit)
+        return
+      }
+      const record = node as Record<string, unknown>
+      if ('enum' in record || 'const' in record)
+        expect(record.type).toBe('string')
+      if (record.type === 'object') {
+        expect(record.additionalProperties).toBe(false)
+        expect(record.required).toEqual(
+          Object.keys(record.properties as object),
+        )
+      }
+      Object.values(record).forEach(visit)
+    }
+    visit(DIRECTOR_SCHEMA)
+  })
+
   it('permits bounded reads but requires their results before a later camera action', () => {
     const base = { kind: 'actions', text: '', factIds: [], plan: null }
     expect(
