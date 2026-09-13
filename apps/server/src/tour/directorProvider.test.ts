@@ -80,6 +80,156 @@ const explanation = {
 }
 
 describe('grounded director', () => {
+  it('permits bounded reads but requires their results before a later camera action', () => {
+    const base = { kind: 'actions', text: '', factIds: [], plan: null }
+    expect(
+      validateDirectorDecision(
+        { ...base, actions: [{ tool: 'resolve_subject', query: 'Triton' }] },
+        context,
+      ).actions,
+    ).toEqual([{ tool: 'resolve_subject', query: 'Triton' }])
+    expect(() =>
+      validateDirectorDecision(
+        {
+          ...base,
+          actions: [
+            { tool: 'resolve_subject', query: 'Triton' },
+            { tool: 'show_subject', subjectId: 'saturn' },
+          ],
+        },
+        context,
+      ),
+    ).toThrow()
+    const query = {
+      kinds: ['rocky'],
+      starClasses: [],
+      atmosphere: null,
+      sea: true,
+      rings: null,
+      habitable: null,
+      landable: null,
+      moons: null,
+      minRadius: null,
+      maxRadius: null,
+    }
+    expect(
+      validateDirectorDecision(
+        {
+          ...base,
+          actions: [
+            { tool: 'find_worlds', query, radiusLightYears: 4, limit: 8 },
+          ],
+        },
+        context,
+      ).actions,
+    ).toHaveLength(1)
+    expect(() =>
+      validateDirectorDecision(
+        {
+          ...base,
+          actions: [
+            { tool: 'find_worlds', query, radiusLightYears: 9, limit: 8 },
+          ],
+        },
+        context,
+      ),
+    ).toThrow()
+  })
+  it('obeys a one-round continuation allowance after semantic failure', async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json({
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            content: [
+              {
+                type: 'output_text',
+                text: JSON.stringify({ ...explanation, factIds: ['invented'] }),
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    )
+    await expect(
+      interpretTourRequest({
+        apiKey: 'fake',
+        text: 'Explain Saturn',
+        context,
+        maxRounds: 1,
+        fetch: fetcher as typeof fetch,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-output' })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('fits a full sixteen-candidate scene while retaining a late named subject and ring preset', async () => {
+    const candidates = Array.from({ length: 16 }, (_, index) => ({
+      ...context.candidates[0]!,
+      id: index === 0 ? 'saturn' : `candidate-${index}`,
+      name: index === 0 ? 'Saturn' : `Candidate ${index}`,
+      framings: [
+        'portrait',
+        'blue-marble',
+        'close',
+        'wide',
+        'half-lit',
+        'raking',
+        'high-angle',
+        'far-crescent',
+        'preset:the-rings',
+      ],
+      sites: [
+        {
+          id: 'site',
+          name: 'A registered survey site',
+          detail: 'Bounded survey data',
+        },
+      ],
+    }))
+    const fetcher = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body))
+        const input = JSON.parse(body.input)
+        expect(
+          new TextEncoder().encode(String(init?.body)).byteLength,
+        ).toBeLessThanOrEqual(8000)
+        expect(
+          input.candidates.some(
+            (item: { id: string }) => item.id === 'candidate-15',
+          ),
+        ).toBe(true)
+        expect(
+          input.candidates.find((item: { id: string }) => item.id === 'saturn')
+            .framings,
+        ).toContain('preset:the-rings')
+        return Response.json({
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              content: [
+                { type: 'output_text', text: JSON.stringify(explanation) },
+              ],
+            },
+          ],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        })
+      },
+    )
+    await expect(
+      interpretTourRequest({
+        apiKey: 'fake',
+        text: 'Explain Saturn’s rings, then compare Candidate 15.',
+        context: { ...context, candidates },
+        fetch: fetcher as typeof fetch,
+      }),
+    ).resolves.toMatchObject({ kind: 'explanation' })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
   it('builds narration only from selected facts, never an unsupported exact model claim', () => {
     expect(validateDirectorDecision(explanation, context)).toMatchObject({
       text: 'Saturn has a test radius of ten meters.',
