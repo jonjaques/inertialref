@@ -24,6 +24,7 @@ import {
   tourJson,
 } from './http.ts'
 import { LIVE_VOICES, type LiveVoice } from './openaiLive.ts'
+import { createTourTrace } from './trace.ts'
 
 export interface TourCreation {
   readonly protocolVersion: number
@@ -85,6 +86,18 @@ export function decodeCreation(value: unknown): TourCreation {
 }
 
 export async function serveTour(request: Request, env: Env): Promise<Response> {
+  const trace = createTourTrace(env, () => ({
+    path: new URL(request.url).pathname,
+    method: request.method,
+  }))
+  trace({
+    event: 'http.request',
+    model: 'application',
+    data: {
+      origin: request.headers.get('origin'),
+      upgrade: request.headers.get('upgrade'),
+    },
+  })
   try {
     const path = new URL(request.url).pathname
     const configured = Boolean(
@@ -138,8 +151,19 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
           boundedString(input.password, 1024),
           env.TOUR_GUIDE_PASSWORD,
         ))
-      )
+      ) {
+        trace({
+          event: 'auth.result',
+          model: 'application',
+          data: { authenticated: false },
+        })
         throw new TourHttpError('The guide password is incorrect.', 401)
+      }
+      trace({
+        event: 'auth.result',
+        model: 'application',
+        data: { authenticated: true },
+      })
       return tourJson({ authenticated: true }, 200, {
         'set-cookie': await loginCookie(
           env.TOUR_GUIDE_PASSWORD,
@@ -185,6 +209,7 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
     headers.set('x-tour-owner', user)
     return await session.fetch(new Request(request, { headers }))
   } catch (error) {
+    trace({ event: 'http.error', model: 'application', data: error })
     if (error instanceof TourHttpError)
       return tourJson({ error: error.message }, error.status)
     return tourJson(

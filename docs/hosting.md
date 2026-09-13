@@ -72,6 +72,16 @@ These limits bound an experiment; they are not a measured cost per tour.
 The authenticated usage and status endpoints expose the ledger needed to
 inspect failures and remaining allowance.
 
+`TOUR_GUIDE_TRACE=true` enables verbose structured Worker logs with session IDs,
+model IDs, prompts, responses, transcript fragments, receipts, timing, and usage.
+It is disabled in the committed deployment configuration. The local adapter
+reads the switch from `.env.local`; restart it after changing the value.
+This explicit diagnostic mode retains conversation text in the chosen log sink.
+Credentials, cookies, SDP, and binary audio are omitted or redacted.
+`ir.guideTrace(true)` separately enables the browser's application-message log;
+`ir.guideTrace()` returns its last 200 entries. See the
+[evaluation scripts](../scripts/tour/README.md#verbose-message-tracing).
+
 Live audio uses browser WebRTC and a server sideband. The server writes the
 Live configuration and forbids browser-authored upstream data-channel events.
 Only bounded application messages can request local camera work. The default

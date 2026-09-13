@@ -46,8 +46,10 @@ browser, device, network, voice, prompt version, sample count, and the six
 listening scores in the scorecard. Hide voice names during comparison where
 practical. Do not infer a preferred voice from one greeting.
 
-Verify the WebRTC offer exchange against the development Worker and preview
-Worker, the outbound sideband, and closure with final cumulative seconds.
+Verify the WebRTC offer exchange against the development Worker and an
+authenticated staging Worker, the outbound sideband, and closure with final
+cumulative seconds. Durable Object classes prevent automatic version preview
+URLs for this Worker.
 A sideband attaches to a running session without a second start command.
 The browser's data channel cannot submit model commands. Verify this denial
 with the selected project before admitting an alpha session.
@@ -66,3 +68,24 @@ obsolete completion never moves the camera.
 and [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) describe
 the selected provider contracts. Account access and a passing fixture suite do
 not establish listening quality or deployed transport behavior.
+
+## Verbose message tracing
+
+Set `TOUR_GUIDE_TRACE=true` in the root `.env.local` and restart `pnpm dev`
+to print structured JSON events in the Worker terminal. Each event identifies
+its session, sequence, event kind, and model. Traces include application
+messages, director inputs and decisions, Live transcript fragments and control
+messages, speech text, HTTP timing, token usage, reservations, and finalization.
+Model IDs distinguish Astra reasoning, Live conversation, and mini-TTS clips.
+
+Tracing is disabled in the committed deployment configuration. Enabling it in a
+Worker environment deliberately logs conversation text. The trace sink redacts
+credentials and cookies, omits SDP and binary audio, bounds each record, and
+cannot interrupt a session when its writer fails. Ordinary operation keeps
+conversation text out of Worker logs.
+
+In the browser console, `ir.guideTrace(true)` enables application-message logs
+with the `[tour browser]` prefix. `ir.guideTrace()` returns detached copies of
+the latest 200 entries; `ir.guideTrace(false)` stops recording. It never records
+the password form or authentication requests. Provider details remain in the
+Worker trace, where the requests are actually sent.

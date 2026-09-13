@@ -116,6 +116,13 @@ surface rejection, photographic time, and unchanged canonical hashes. They do
 not establish model quality, spoken delivery, provider account access, or
 deployed reliability.
 
+Verbose tracing is an explicit host setting. It can record conversation text,
+model inputs and outputs, tool receipts, and usage for diagnosis. The committed
+deployment disables it. A bounded trace sink removes credentials, SDP and raw
+audio; browser tracing is separately enabled through `ir.guideTrace(true)` and
+retains at most 200 application messages in memory. Trace writer failures do
+not affect session behavior.
+
 An active outbound Live socket keeps its Durable Object active; inbound
 socket hibernation does not remove that cost. Session deadlines and closure
 are therefore part of the adapter, consistent with

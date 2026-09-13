@@ -27,9 +27,11 @@ import {
   type LiveEvent,
   type LiveSideband,
 } from './openaiLive.ts'
-import { synthesizeSpeech } from './openaiResponses.ts'
+import { synthesizeSpeech, type ProviderTrace } from './openaiResponses.ts'
 import { TOUR_POLICY } from './policy.ts'
 import type { TourCreation } from './routes.ts'
+import { createTourTrace } from './trace.ts'
+import { narratorContext } from './narratorContext.ts'
 
 export class TourSession extends DurableObject<Env> {
   #coordinator: TourCoordinator | null = null
@@ -44,9 +46,14 @@ export class TourSession extends DurableObject<Env> {
   #messages = 0
   #messageWindow = 0
   #creationFailed = false
+  readonly #trace: ProviderTrace
+  #narratorView = ''
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
+    this.#trace = createTourTrace(env, () => ({
+      sessionId: this.#coordinator?.record.sessionId ?? this.ctx.id.toString(),
+    }))
     this.ctx.blockConcurrencyWhile(async () => {
       const stored = await this.ctx.storage.get<SessionRecord>('session')
       if (stored) {
@@ -112,6 +119,11 @@ export class TourSession extends DurableObject<Env> {
     fingerprint: string,
   ): Promise<Response> {
     const now = Date.now()
+    this.#trace({
+      event: 'session.begin',
+      model: 'application',
+      data: creation,
+    })
     const initial = {
       ...newSessionRecord({
         sessionId,
@@ -133,16 +145,22 @@ export class TourSession extends DurableObject<Env> {
     )
     try {
       if (creation.transport === 'live' && creation.sdp !== null) {
+        this.#narratorView = narratorContext(
+          withAstronomyNotes(creation.context),
+        )
         const live = await createLiveSession({
           apiKey: this.env.OPENAI_API_KEY,
           sdp: creation.sdp,
           voice: creation.voice,
+          context: this.#narratorView,
+          trace: this.#trace,
         })
         await this.#coordinator.setProvider(live.id)
         this.#sideband = await attachLiveSession({
           apiKey: this.env.OPENAI_API_KEY,
           id: live.id,
           onEvent: (event) => this.#onLive(event),
+          trace: this.#trace,
         })
         this.#sdp = live.sdp
       }
@@ -191,11 +209,6 @@ export class TourSession extends DurableObject<Env> {
           finalized: coordinator.record.finalized,
         })
       }
-      if (
-        coordinator.record.expiresAt <= Date.now() ||
-        coordinator.record.state !== 'open'
-      )
-        return tourJson({ error: 'The guide session has ended.' }, 410)
       if (url.pathname.endsWith('/status') && request.method === 'GET') {
         const held = coordinator.record
         return tourJson({
@@ -211,6 +224,11 @@ export class TourSession extends DurableObject<Env> {
           finalized: held.finalized,
         })
       }
+      if (
+        coordinator.record.expiresAt <= Date.now() ||
+        coordinator.record.state !== 'open'
+      )
+        return tourJson({ error: 'The guide session has ended.' }, 410)
       if (
         url.pathname.endsWith('/events') &&
         request.method === 'GET' &&
@@ -231,6 +249,7 @@ export class TourSession extends DurableObject<Env> {
             apiKey: this.env.OPENAI_API_KEY,
             id: coordinator.record.providerId,
             onEvent: (event) => this.#onLive(event),
+            trace: this.#trace,
           })
         }
         const pair = new WebSocketPair()
@@ -304,6 +323,7 @@ export class TourSession extends DurableObject<Env> {
         try {
           const bytes = await synthesizeSpeech({
             apiKey: this.env.OPENAI_API_KEY,
+            trace: this.#trace,
             text: brief.text,
           })
           if (
@@ -340,6 +360,11 @@ export class TourSession extends DurableObject<Env> {
   }
 
   async #receive(message: TourClientMessage): Promise<void> {
+    this.#trace({
+      event: 'application.receive',
+      model: 'application',
+      data: message,
+    })
     if (message.type === 'context')
       message = { ...message, context: withAstronomyNotes(message.context) }
     if (message.type === 'live-startup') {
@@ -358,6 +383,17 @@ export class TourSession extends DurableObject<Env> {
       return
     }
     await this.#coordinator?.receive(message)
+    if (
+      message.type === 'context' &&
+      this.#sideband &&
+      this.#coordinator?.context === message.context
+    ) {
+      const view = narratorContext(message.context)
+      if (view !== this.#narratorView) {
+        this.#narratorView = view
+        this.#sideband.append('instructions', view)
+      }
+    }
   }
 
   #makeCoordinator(
@@ -368,7 +404,21 @@ export class TourSession extends DurableObject<Env> {
       now: Date.now,
       id: () => crypto.randomUUID(),
       send: (message) => this.#send(message),
-      persist: (snapshot) => this.ctx.storage.put('session', snapshot),
+      persist: (snapshot) => {
+        this.#trace({
+          event: 'coordinator.state',
+          model: 'application',
+          data: {
+            state: snapshot.state,
+            requestRevision: snapshot.requestRevision,
+            budget: snapshot.budget,
+            operations: snapshot.operations.length,
+            liveSeconds: snapshot.liveSeconds,
+            finalized: snapshot.finalized,
+          },
+        })
+        return this.ctx.storage.put('session', snapshot)
+      },
       director: async (text, view, signal, maxRounds) => {
         const result = await interpretTourRequest({
           apiKey: this.env.OPENAI_API_KEY,
@@ -376,6 +426,7 @@ export class TourSession extends DurableObject<Env> {
           context: view,
           signal,
           maxRounds,
+          trace: this.#trace,
         })
         return result
       },
@@ -387,11 +438,17 @@ export class TourSession extends DurableObject<Env> {
   }
 
   #send(message: TourServerMessage): void {
+    this.#trace({
+      event: 'application.send',
+      model: 'application',
+      data: message,
+    })
     if (this.#socket?.readyState === WebSocket.OPEN)
       this.#socket.send(JSON.stringify(message))
   }
 
   #onLive(event: LiveEvent): void {
+    this.#trace({ event: 'live.normalized', model: 'gpt-live-1', data: event })
     if (event.type === 'transcript') {
       this.#transcripts.add(event)
       if (this.#transcriptIds.has(event.id)) return
@@ -455,6 +512,7 @@ export class TourSession extends DurableObject<Env> {
           apiKey: this.env.OPENAI_API_KEY,
           id: coordinator.record.providerId,
           onEvent: (event) => this.#onLive(event),
+          trace: this.#trace,
         })
       } catch {
         /* The lease alarm retries uncertain finalization. */
@@ -473,6 +531,7 @@ export class TourSession extends DurableObject<Env> {
         await hangupLiveSession({
           apiKey: this.env.OPENAI_API_KEY,
           id: coordinator.record.providerId,
+          trace: this.#trace,
         })
         revoked = true
       } catch {
@@ -481,6 +540,17 @@ export class TourSession extends DurableObject<Env> {
     }
     await this.ctx.storage.put('provider-revoked', revoked)
     await coordinator.finalized(complete, seconds)
+    this.#trace({
+      event: 'session.finalized',
+      model:
+        coordinator.record.transport === 'live' ? 'gpt-live-1' : 'application',
+      data: {
+        complete,
+        revoked,
+        seconds,
+        budget: coordinator.record.budget,
+      },
+    })
     const cost =
       complete && !this.#creationFailed
         ? coordinator.record.budget.spent + coordinator.record.budget.reserved
