@@ -124,6 +124,7 @@ export class GuideRuntime {
   #requestRevision = 0
   #microphoneRevision = 0
   #generation = 0
+  #playbackRevision = 0
   #operation: { id: string; stop: TourStop } | null = null
   #socket: WebSocket | null = null
   #live: LiveConnection | null = null
@@ -573,7 +574,10 @@ export class GuideRuntime {
     }
     const context = this.#sendContext()
     this.#runner?.arrived(operation.stop.id, receipt.viewRevision)
-    if (this.#snapshot.connection === 'connected') {
+    if (
+      this.#snapshot.connection === 'connected' &&
+      this.#runner?.status().state !== 'paused'
+    ) {
       this.#send({
         type: 'narration-ready',
         stopId: operation.stop.id,
@@ -812,7 +816,10 @@ export class GuideRuntime {
         return
       case 'status':
         if (event.state === 'paused') {
-          this.#invalidate()
+          // Speech can interrupt a clip without withdrawing the director's
+          // current request. Only a new revision or visitor command does that.
+          this.#playbackRevision++
+          this.#playback?.stop()
           this.#runner?.command('pause')
           this.#live?.muteGuide(true)
           this.#update({ state: 'paused' })
@@ -860,6 +867,7 @@ export class GuideRuntime {
     )
       return
     const generation = this.#generation
+    const playbackRevision = this.#playbackRevision
     const sources = brief.sources
     this.#update({ explanation: brief.text, sources })
     if (this.#snapshot.voice) {
@@ -875,6 +883,7 @@ export class GuideRuntime {
       const blob = await response.blob()
       if (
         generation !== this.#generation ||
+        playbackRevision !== this.#playbackRevision ||
         brief.viewRevision !== this.#executor?.viewRevision
       )
         return
@@ -885,6 +894,7 @@ export class GuideRuntime {
         () => {
           if (
             generation !== this.#generation ||
+            playbackRevision !== this.#playbackRevision ||
             brief.stopId === null ||
             brief.viewRevision !== this.#executor?.viewRevision
           )
@@ -898,7 +908,11 @@ export class GuideRuntime {
           })
         },
         () => {
-          if (generation !== this.#generation) return
+          if (
+            generation !== this.#generation ||
+            playbackRevision !== this.#playbackRevision
+          )
+            return
           this.#runner?.fail('Audio playback stopped.')
           this.#update({
             message:
@@ -906,7 +920,10 @@ export class GuideRuntime {
           })
         },
       )
-      if (generation === this.#generation)
+      if (
+        generation === this.#generation &&
+        playbackRevision === this.#playbackRevision
+      )
         this.#transcript({
           eventId: `clip:${brief.id}`,
           text: brief.text,
@@ -915,7 +932,11 @@ export class GuideRuntime {
           endMs: this.#host.presentationNow(),
         })
     } catch (cause) {
-      if (generation !== this.#generation) return
+      if (
+        generation !== this.#generation ||
+        playbackRevision !== this.#playbackRevision
+      )
+        return
       this.#runner?.fail('Audio playback could not start.')
       this.#update({
         message: `${message(cause)} Use Next to continue, or resume to retry this stop.`,

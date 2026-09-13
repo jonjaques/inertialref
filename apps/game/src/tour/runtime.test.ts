@@ -47,6 +47,7 @@ function rig() {
   let run: (() => void) | null = null
   let visibility: ((visible: boolean) => void) | null = null
   let createResponse: (() => Promise<Response>) | null = null
+  let speechResponse: (() => Promise<Response>) | null = null
   const host: GuideHost = {
     now: () => time,
     presentationNow: () => time,
@@ -77,7 +78,9 @@ function rig() {
               sdp: 'answer',
             })
       if (path.endsWith('/speech'))
-        return new Response(new Blob(['voice'], { type: 'audio/mpeg' }))
+        return speechResponse
+          ? speechResponse()
+          : new Response(new Blob(['voice'], { type: 'audio/mpeg' }))
       return Response.json({ closed: true })
     },
     socket: () => {
@@ -162,6 +165,9 @@ function rig() {
     hide: () => visibility?.(false),
     pendingCreate: (create: () => Promise<Response>) => {
       createResponse = create
+    },
+    pendingSpeech: (speech: () => Promise<Response>) => {
+      speechResponse = speech
     },
     dispose: () => {
       runtime.end()
@@ -280,6 +286,85 @@ describe('the browser guide runtime', () => {
     f.hide()
     expect(f.runtime.getSnapshot().state).toBe('paused')
     expect(f.live.muteMicrophone).toHaveBeenLastCalledWith(true)
+    f.dispose()
+  })
+
+  it('pauses for a spoken backchannel without revoking the director request', async () => {
+    const f = rig()
+    await f.runtime.startVoice('marin')
+    await f.runtime.startTour('saturn')
+    f.arrive()
+    const socket = f.sockets[0]!
+    const context = socket.sent
+      .filter((event) => event.type === 'context')
+      .at(-1)!.context
+    const requestRevision = socket.sent
+      .filter((event) => event.type === 'command')
+      .at(-1)!.requestRevision
+    const titan = context.candidates.find(
+      (candidate) => candidate.name === 'Titan',
+    )!
+    socket.receive({ type: 'status', state: 'paused', message: 'Listening.' })
+    socket.receive({
+      type: 'tool',
+      request: {
+        sessionId: 'remote',
+        requestRevision,
+        expectedViewRevision: context.viewRevision,
+        operationId: 'pending-director',
+        expiresAt: 10000,
+        action: { tool: 'show_subject', subjectId: titan.id },
+      },
+    })
+    expect(f.session.harness.observatory.target?.name).toBe('Titan')
+    expect(f.runtime.getSnapshot().state).toBe('paused')
+    f.dispose()
+  })
+
+  it('discards a clip fetched before speech paused progression', async () => {
+    const f = rig()
+    let complete!: (response: Response) => void
+    f.pendingSpeech(
+      () =>
+        new Promise<Response>((resolve) => {
+          complete = resolve
+        }),
+    )
+    await f.runtime.startTour('saturn', true)
+    f.arrive()
+    await settle()
+    expect(complete).toBeTypeOf('function')
+    f.sockets[0]!.receive({
+      type: 'status',
+      state: 'paused',
+      message: 'Listening.',
+    })
+    const response = new Response()
+    response.blob = async () => new Blob(['voice'], { type: 'audio/mpeg' })
+    complete(response)
+    await settle()
+    expect(f.clips).toHaveLength(0)
+    expect(f.runtime.getSnapshot().state).toBe('paused')
+    expect(f.runtime.getSnapshot().transcripts).toHaveLength(0)
+    f.dispose()
+  })
+
+  it('reports arrival while speech has paused without starting tour narration', async () => {
+    const f = rig()
+    await f.runtime.startTour('saturn', true)
+    const socket = f.sockets[0]!
+    socket.receive({ type: 'status', state: 'paused', message: 'Listening.' })
+    f.arrive()
+    expect(
+      socket.sent.some(
+        (event) =>
+          event.type === 'receipt' && event.receipt.status === 'arrived',
+      ),
+    ).toBe(true)
+    expect(socket.sent.some((event) => event.type === 'narration-ready')).toBe(
+      false,
+    )
+    expect(f.runtime.getSnapshot().state).toBe('paused')
     f.dispose()
   })
 
