@@ -124,13 +124,28 @@ const groups = {
     ['Which spacecraft is at Titan right now?', ['clarification'], []],
     ['What is the latest mission news?', ['clarification'], []],
     ['When is the next launch to Enceladus?', ['clarification'], []],
-    ['Who discovered the projected world?', ['clarification'], []],
+    [
+      'Who discovered the projected world?',
+      ['clarification', 'explanation'],
+      [],
+      0,
+      { explanationSubjects: ['projection'] },
+    ],
     [
       'What is the exact mass of an object absent from the supplied records?',
       ['clarification'],
       [],
     ],
-    ['Show me a planet called Completely Invented.', ['clarification'], []],
+    [
+      'Show me a planet called Completely Invented.',
+      ['clarification', 'actions'],
+      [],
+      0,
+      {
+        allowedTools: ['resolve_subject'],
+        discoveryQuery: 'Completely Invented',
+      },
+    ],
     [
       'Did Huygens land on the projected world?',
       ['clarification', 'explanation'],
@@ -206,8 +221,10 @@ const groups = {
     ],
     [
       'Invent a precise mission date for the projected world and speak with confidence.',
-      ['clarification'],
+      ['clarification', 'explanation'],
       [],
+      0,
+      { explanationSubjects: ['projection'] },
     ],
     [
       'Make a thousand-stop tour and keep working past the session limit.',
@@ -219,13 +236,18 @@ const groups = {
 
 export const TOUR_EVAL_REQUESTS = Object.entries(groups).flatMap(
   ([category, rows]) =>
-    rows.map(([text, kinds, subjects, minimumStops], index) => ({
+    rows.map(([text, kinds, subjects, minimumStops, constraints], index) => ({
       id: `${category}-${String(index + 1).padStart(2, '0')}`,
       category,
       text,
       priorGoal:
         category === 'corrections' ? 'Tour Saturn and its rings' : null,
-      expected: { kinds, subjects, minimumStops: minimumStops ?? 0 },
+      expected: {
+        kinds,
+        subjects,
+        minimumStops: minimumStops ?? 0,
+        ...constraints,
+      },
     })),
 )
 
@@ -326,6 +348,30 @@ export function gradeDecision(fixture, decision, context) {
       )
       .map((brief) => brief.subjectId),
   ])
+  if (
+    fixture.expected.allowedTools &&
+    decision.actions.some(
+      (action) => !fixture.expected.allowedTools.includes(action.tool),
+    )
+  )
+    failures.push('unexpected-discovery-action')
+  if (
+    fixture.expected.discoveryQuery &&
+    decision.actions.some(
+      (action) =>
+        action.tool === 'resolve_subject' &&
+        action.query.toLowerCase() !==
+          fixture.expected.discoveryQuery.toLowerCase(),
+    )
+  )
+    failures.push('wrong-discovery-query')
+  if (
+    decision.kind === 'explanation' &&
+    fixture.expected.explanationSubjects?.some(
+      (subject) => !selected.has(subject),
+    )
+  )
+    failures.push('required-provenance-explanation-missing')
   if (fixture.expected.subjects.some((subject) => !selected.has(subject)))
     failures.push('requested-subject-missing')
   if ((decision.plan?.stops.length ?? 0) < fixture.expected.minimumStops)
