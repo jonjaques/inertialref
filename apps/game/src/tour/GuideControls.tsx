@@ -35,7 +35,7 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
         <Action
           label="Start tour"
           onClick={() => {
-            void runtime.startTour('system')
+            void runtime.startTour('system', state.voice, voice)
           }}
           disabled={connecting}
           tone="primary"
@@ -43,7 +43,7 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
         <Action
           label="Saturn tour"
           onClick={() => {
-            void runtime.startTour('saturn')
+            void runtime.startTour('saturn', state.voice, voice)
           }}
           disabled={connecting}
         />
@@ -114,9 +114,7 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
               label="Listen to tour"
               icon={Volume2}
               disabled={
-                connecting ||
-                state.voice ||
-                !state.capabilities?.features.controlledSpeech
+                connecting || !state.capabilities?.features.controlledSpeech
               }
               onClick={() => {
                 void runtime.startTour('system', true, voice)
@@ -126,9 +124,7 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
               label="Listen to Saturn"
               icon={Volume2}
               disabled={
-                connecting ||
-                state.voice ||
-                !state.capabilities?.features.controlledSpeech
+                connecting || !state.capabilities?.features.controlledSpeech
               }
               onClick={() => {
                 void runtime.startTour('saturn', true, voice)
@@ -137,7 +133,7 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
           </div>
           <p className="type-micro text-slate-400">
             Listening needs no microphone and advances after each spoken stop.
-            Live voice uses Next.
+            Live voice stays available for questions during the tour.
           </p>
         </div>
       )}

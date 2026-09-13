@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { groundedNarration, openSession } from '@inertialref/devtools'
+import {
+  deterministicTour,
+  groundedNarration,
+  openSession,
+} from '@inertialref/devtools'
 import { tourMessageBytes, TOUR_LIMITS } from '@inertialref/protocol'
 import type {
   TourClientMessage,
@@ -88,6 +92,23 @@ function rig() {
       let context: TourContext | null = null
       socket.respond = (event) => {
         if (event.type === 'context') context = event.context
+        if (
+          event.type === 'ask' &&
+          context !== null &&
+          event.text.startsWith('Give us a ')
+        ) {
+          const plan = deterministicTour(
+            context,
+            event.text.includes('Saturn') ? 'saturn' : 'system',
+          )!
+          queueMicrotask(() =>
+            socket.receive({
+              type: 'plan',
+              plan: { ...plan, automatic: true },
+              requestRevision: event.requestRevision,
+            }),
+          )
+        }
         if (event.type === 'narration-ready' && context !== null) {
           const brief = groundedNarration(
             context,
@@ -181,6 +202,53 @@ const settle = async () => {
 }
 
 describe('the browser guide runtime', () => {
+  it('keeps Live listening while tour clips and quiet looks drive the visible plan', async () => {
+    const f = rig()
+    await f.runtime.startVoice('marin')
+    const socket = f.sockets[0]!
+    const context = socket.sent
+      .filter((event) => event.type === 'context')
+      .at(-1)!.context
+    const base = deterministicTour(context, 'saturn')!
+    const plan = {
+      ...base,
+      automatic: true,
+      rationale: 'A relaxed visit with your grandparents.',
+      stops: base.stops.map((stop) => ({
+        ...stop,
+        motion: 'orbit' as const,
+        lookSeconds: 3,
+      })),
+    }
+    socket.receive({ type: 'plan', plan, requestRevision: 0 })
+    f.arrive()
+    await settle()
+    await vi.waitFor(() => expect(f.clips).toHaveLength(1))
+    expect(f.runtime.getSnapshot().voice).toBe(true)
+    expect(f.live.stop).not.toHaveBeenCalled()
+    expect(f.live.muteGuide).toHaveBeenLastCalledWith(true)
+    expect(f.runtime.getSnapshot().planHistory[0]?.reason).toContain(
+      'grandparents',
+    )
+    expect(Object.values(f.runtime.getSnapshot().subjectNames)).toContain(
+      'Saturn',
+    )
+    f.advance(40000)
+    expect(f.runtime.getSnapshot().stopIndex).toBe(0)
+    f.clips[0]!.dispatchEvent(new Event('ended'))
+    expect(f.runtime.getSnapshot().narrationState).toBe('looking')
+    f.advance(2999)
+    expect(f.runtime.getSnapshot().stopIndex).toBe(0)
+    f.advance(1)
+    expect(f.runtime.getSnapshot().stopIndex).toBe(1)
+    socket.receive({
+      type: 'control',
+      command: 'pause',
+      requestRevision: f.runtime.diagnostics().requestRevision!,
+    })
+    expect(f.runtime.getSnapshot().state).toBe('paused')
+    f.dispose()
+  })
   it('records opt-in message traces without credentials and returns bounded detached copies', async () => {
     const f = rig()
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})

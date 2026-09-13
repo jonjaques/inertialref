@@ -9,6 +9,7 @@ import {
   type ToolRequest,
   type TourClientMessage,
   type TourCommand,
+  type TourCameraMotion,
   type TourContext,
   type TourPlan,
   type TourSource,
@@ -37,6 +38,9 @@ export interface GuideExecutor {
   supersede(revision: number): void
   cancel(reason?: string): void
   dispose(): void
+  queueMotion?(kind: TourCameraMotion, durationSeconds: number): void
+  startMotion?(kind: TourCameraMotion, durationSeconds: number): number
+  stopMotion?(): void
 }
 
 export interface GuideCapabilities {
@@ -88,6 +92,17 @@ export interface GuideSnapshot {
   readonly state: string
   readonly plan: TourPlan | null
   readonly stopIndex: number
+  readonly planRevision: number
+  readonly planHistory: readonly {
+    revision: number
+    goal: string
+    reason: string
+    changes: readonly string[]
+  }[]
+  readonly subjectNames: Readonly<Record<string, string>>
+  readonly stopElapsedSeconds: number
+  readonly narrationState: 'idle' | 'loading' | 'speaking' | 'looking'
+  readonly narrationOrigin: 'records' | 'authored' | 'model'
   readonly explanation: string | null
   readonly sources: readonly TourSource[]
   readonly transcripts: readonly TourTranscript[]
@@ -109,6 +124,12 @@ export class GuideRuntime {
     state: 'idle',
     plan: null,
     stopIndex: 0,
+    planRevision: 0,
+    planHistory: [],
+    subjectNames: {},
+    stopElapsedSeconds: 0,
+    narrationState: 'idle',
+    narrationOrigin: 'records',
     explanation: null,
     sources: [],
     transcripts: [],
@@ -126,6 +147,7 @@ export class GuideRuntime {
   #microphoneRevision = 0
   #generation = 0
   #playbackRevision = 0
+  #lastQuestion = ''
   #operation: { id: string; stop: TourStop } | null = null
   #socket: WebSocket | null = null
   #live: LiveConnection | null = null
@@ -249,9 +271,15 @@ export class GuideRuntime {
   ): Promise<void> {
     try {
       if (audio) {
-        await this.#connect(false, voice)
+        await this.#connect(false, voice, true)
         if (!this.#snapshot.capabilities?.features.controlledSpeech)
           throw new Error('Spoken tours are unavailable.')
+        await this.ask(
+          kind === 'saturn'
+            ? 'Give us a tour of Saturn and its moons.'
+            : 'Give us a five minute tour of the Solar system.',
+        )
+        return
       }
       const context = this.#context(kind === 'saturn' ? 'Saturn' : undefined)
       const plan = deterministicTour(context, kind)
@@ -266,6 +294,7 @@ export class GuideRuntime {
   async ask(text: string): Promise<void> {
     const query = text.trim().slice(0, 4000)
     if (!query) return
+    this.#lastQuestion = query
     const command = exactCommand(query)
     if (command !== null) {
       this.command(command)
@@ -329,6 +358,10 @@ export class GuideRuntime {
       this.#update({ message: 'Choose an object to read its record.' })
       return
     }
+    if (this.#snapshot.connection === 'connected') {
+      void this.ask(`Tell me something interesting about ${brief.name}.`)
+      return
+    }
     this.command('pause')
     this.#update({
       explanation: [
@@ -366,12 +399,20 @@ export class GuideRuntime {
     })
     this.#mutating = true
     if (command === 'resume' && this.#runner !== null) {
-      const context = this.#context()
+      let context = this.#context()
       const status = this.#runner.status()
       const stop = this.#snapshot.plan?.stops[status.index]
       if (stop && context.subjectId !== stop.subjectId)
         this.#runner.command('next')
       else {
+        if (stop && status.arrived) {
+          this.#executor.startMotion?.(
+            stop.motion ?? 'hold',
+            motionSeconds(stop),
+          )
+          this.#knownViewRevision = this.#executor.viewRevision
+          context = this.#context()
+        }
         this.#runner.resumeAt(context.viewRevision)
         if (
           stop &&
@@ -415,7 +456,14 @@ export class GuideRuntime {
     }
   }
   muteGuide(muted: boolean): void {
-    this.#live?.muteGuide(muted)
+    this.#live?.muteGuide(
+      muted ||
+        (this.#snapshot.voice &&
+          ['loading', 'speaking', 'looking'].includes(
+            this.#snapshot.narrationState,
+          ) &&
+          this.#snapshot.automatic),
+    )
     this.#playback?.mute(muted)
     this.#update({ guideMuted: muted })
   }
@@ -465,6 +513,7 @@ export class GuideRuntime {
       if (JSON.stringify(search) !== JSON.stringify(this.#snapshot.search))
         this.#update({ search })
       this.#runner?.tick()
+      this.#refreshRunner()
     })
     this.#visibilityRelease ??= this.#host.visibility((visible) => {
       if (!visible) {
@@ -492,6 +541,7 @@ export class GuideRuntime {
     this.#generation++
     this.#operation = null
     this.#playback?.stop()
+    this.#update({ narrationState: 'idle' })
     for (const controller of this.#pending) controller.abort()
     this.#pending.clear()
     if (cancel) this.#executor?.cancel('The visitor changed the request.')
@@ -506,19 +556,41 @@ export class GuideRuntime {
   }
 
   #startPlan(plan: TourPlan, automatic: boolean): void {
-    const checked = validateTourPlan(plan, this.#context())
+    const context = this.#context()
+    const checked = validateTourPlan(plan, context)
     if (!checked.ok) throw new Error(checked.error)
     this.#invalidate(!this.#mutating)
     this.#runner?.command('end')
+    const subjectNames = {
+      ...this.#snapshot.subjectNames,
+      ...Object.fromEntries(
+        context.candidates.map((candidate) => [candidate.id, candidate.name]),
+      ),
+    }
+    const planRevision = this.#snapshot.planRevision + 1
+    const changes = planChanges(this.#snapshot.plan, plan, subjectNames)
     this.#update({
       plan,
       automatic,
+      planRevision,
+      subjectNames,
+      planHistory: [
+        ...this.#snapshot.planHistory,
+        {
+          revision: planRevision,
+          goal: plan.goal,
+          reason:
+            plan.rationale ?? (this.#lastQuestion || 'Started this tour.'),
+          changes,
+        },
+      ].slice(-6),
+      narrationState: 'idle',
+      stopElapsedSeconds: 0,
       explanation: null,
       sources: [],
       message: null,
     })
-    const automaticEnabled = () =>
-      this.#snapshot.automatic && !this.#snapshot.voice
+    const automaticEnabled = () => this.#snapshot.automatic
     this.#runner = new TourRunner({
       now: this.#host.presentationNow,
       get automatic() {
@@ -535,9 +607,20 @@ export class GuideRuntime {
     if (status === undefined) return
     if (
       status.state !== this.#snapshot.state ||
-      status.index !== this.#snapshot.stopIndex
+      status.index !== this.#snapshot.stopIndex ||
+      Math.floor(status.elapsedSeconds) !== this.#snapshot.stopElapsedSeconds
     )
-      this.#update({ state: status.state, stopIndex: status.index })
+      this.#update({
+        state: status.state,
+        stopIndex: status.index,
+        stopElapsedSeconds: Math.floor(status.elapsedSeconds),
+      })
+    if (status.state === 'ended') {
+      this.#executor?.stopMotion?.()
+      this.#live?.muteGuide(this.#snapshot.guideMuted)
+      if (this.#snapshot.narrationState !== 'idle')
+        this.#update({ narrationState: 'idle' })
+    }
   }
   #move(stop: TourStop): void {
     this.#activate()
@@ -553,6 +636,7 @@ export class GuideRuntime {
         viewRevision: this.#executor!.viewRevision,
       })
     }
+    this.#executor!.queueMotion?.(stop.motion ?? 'hold', motionSeconds(stop))
     const operationId = this.#host.id()
     this.#operation = { id: operationId, stop }
     const request: ToolRequest = {
@@ -800,13 +884,18 @@ export class GuideRuntime {
         this.#executor?.supersede(this.#requestRevision)
         this.#readyResolve?.()
         return
+      case 'control':
+        if (event.requestRevision === this.#requestRevision)
+          this.command(event.command)
+        return
       case 'plan':
         if (event.requestRevision !== this.#requestRevision) return
         try {
           this.#mutating = true
           this.#startPlan(
             event.plan,
-            this.#snapshot.automatic && !this.#snapshot.voice,
+            (event.plan.automatic ?? this.#snapshot.automatic) &&
+              Boolean(this.#snapshot.capabilities?.features.controlledSpeech),
           )
         } catch (cause) {
           this.#update({ message: message(cause) })
@@ -845,6 +934,9 @@ export class GuideRuntime {
           this.#playbackRevision++
           this.#playback?.stop()
           this.#runner?.command('pause')
+          this.#executor?.stopMotion?.()
+          this.#knownViewRevision = this.#executor?.viewRevision ?? -1
+          this.#update({ narrationState: 'idle' })
           // Live manages conversational interruption and the following reply.
           // Pausing itinerary progress must not mute that reply.
           this.#live?.muteGuide(this.#snapshot.guideMuted)
@@ -903,12 +995,19 @@ export class GuideRuntime {
     const generation = this.#generation
     const playbackRevision = this.#playbackRevision
     const sources = brief.sources
-    this.#update({ explanation: brief.text, sources })
-    if (this.#snapshot.voice) {
+    this.#update({
+      explanation: brief.text,
+      sources,
+      narrationOrigin: brief.origin ?? 'records',
+    })
+    const controlledStop = brief.stopId !== null && this.#snapshot.automatic
+    if (this.#snapshot.voice && !controlledStop) {
       this.#live?.muteGuide(this.#snapshot.guideMuted)
       return
     }
     if (!this.#snapshot.automatic || this.#sessionId === null) return
+    if (this.#snapshot.voice) this.#live?.muteGuide(true)
+    this.#update({ narrationState: 'loading' })
     try {
       const response = await this.#request(
         `/api/tour/sessions/${encodeURIComponent(this.#sessionId)}/speech`,
@@ -923,6 +1022,7 @@ export class GuideRuntime {
         return
       this.#playback ??= this.#host.playback()
       this.#playback.mute(this.#snapshot.guideMuted)
+      this.#update({ narrationState: 'speaking' })
       await this.#playback.play(
         blob,
         () => {
@@ -934,6 +1034,7 @@ export class GuideRuntime {
           )
             return
           this.#runner?.narrationEnded(brief.stopId, brief.viewRevision)
+          this.#update({ narrationState: 'looking' })
           this.#send({
             type: 'narration-ended',
             stopId: brief.stopId,
@@ -947,6 +1048,8 @@ export class GuideRuntime {
             playbackRevision !== this.#playbackRevision
           )
             return
+          this.#executor?.stopMotion?.()
+          this.#update({ narrationState: 'idle' })
           this.#runner?.fail('Audio playback stopped.')
           this.#update({
             message:
@@ -971,6 +1074,8 @@ export class GuideRuntime {
         playbackRevision !== this.#playbackRevision
       )
         return
+      this.#executor?.stopMotion?.()
+      this.#update({ narrationState: 'idle' })
       this.#runner?.fail('Audio playback could not start.')
       this.#update({
         message: `${message(cause)} Use Next to continue, or resume to retry this stop.`,
@@ -1058,4 +1163,43 @@ function exactCommand(text: string): TourCommand | null {
     'start tour': 'start',
   }
   return commands[text.toLowerCase()] ?? null
+}
+
+function motionSeconds(stop: TourStop): number {
+  return Math.min(
+    90,
+    Math.max(
+      12,
+      (stop.narration?.split(/\s+/).length ?? 50) / 2.4 +
+        (stop.lookSeconds ?? 0),
+    ),
+  )
+}
+
+function planChanges(
+  previous: TourPlan | null,
+  next: TourPlan,
+  names: Readonly<Record<string, string>>,
+): string[] {
+  if (!previous) return [`${next.stops.length} stops planned`]
+  const label = (id: string) => names[id] ?? 'Object'
+  const before = previous.stops.map((stop) => stop.subjectId)
+  const after = next.stops.map((stop) => stop.subjectId)
+  const changes = [
+    ...[...new Set(after.filter((id) => !before.includes(id)))].map(
+      (id) => `Added ${label(id)}`,
+    ),
+    ...[...new Set(before.filter((id) => !after.includes(id)))].map(
+      (id) => `Removed ${label(id)}`,
+    ),
+  ]
+  if (changes.length === 0 && before.join('/') !== after.join('/'))
+    changes.push('Changed the order of stops')
+  if (previous.durationSeconds !== next.durationSeconds)
+    changes.push(
+      `Timing changed to about ${Math.round(next.durationSeconds / 60)} minutes`,
+    )
+  if (changes.length === 0)
+    changes.push('Updated the stories and camera direction')
+  return changes
 }
