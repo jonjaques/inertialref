@@ -16,7 +16,7 @@ import {
 import { withAstronomyNotes } from './knowledge/astronomy.ts'
 
 const context = (viewRevision = 0): TourContext => ({
-  protocolVersion: 1,
+  protocolVersion: 2,
   manifest: { seed: '1', catalogVersion: 'test', generation: { terrain: 1 } },
   viewRevision,
   pictureTime: 123,

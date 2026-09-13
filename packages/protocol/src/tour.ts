@@ -5,13 +5,14 @@ import {
   decodeEnum,
   decodeNumber,
   decodeObject,
+  decodeOptional,
   decodeString,
   type Decoder,
   type Decoded,
   type Shape,
 } from './codec.ts'
 
-export const TOUR_PROTOCOL_VERSION = 1
+export const TOUR_PROTOCOL_VERSION = 2
 export const TOUR_LIMITS = {
   messageBytes: 65_536,
   candidates: 16,
@@ -86,6 +87,8 @@ export interface TourContext {
   readonly brief: SubjectBrief | null
   readonly briefs: readonly SubjectBrief[]
 }
+export type TourCameraMotion =
+  'hold' | 'orbit' | 'push-in' | 'pull-back' | 'reveal'
 export interface TourStop {
   readonly id: string
   readonly subjectId: string
@@ -94,12 +97,19 @@ export interface TourStop {
   readonly objective: string
   readonly factIds: readonly string[]
   readonly minimumViewSeconds: number
+  /** Quiet looking time after the host confirms narration has ended. */
+  readonly lookSeconds?: number
+  readonly narration?: string
+  readonly motion?: TourCameraMotion
+  readonly sources?: readonly TourSource[]
 }
 export interface TourPlan {
   readonly id: string
   readonly goal: string
   readonly durationSeconds: number
   readonly stops: readonly TourStop[]
+  readonly automatic?: boolean
+  readonly rationale?: string
 }
 export type TourCommand = 'start' | 'pause' | 'resume' | 'next' | 'back' | 'end'
 export interface TourWorldQuery {
@@ -177,6 +187,7 @@ export interface NarrationBrief {
   readonly factIds: readonly string[]
   readonly sourceIds: readonly string[]
   readonly sources: readonly TourSource[]
+  readonly origin?: 'records' | 'authored' | 'model'
 }
 export type TourClientMessage =
   | { readonly type: 'context'; readonly context: TourContext }
@@ -420,12 +431,27 @@ export const decodeTourStop: Decoder<TourStop> = strict({
   objective: text(512),
   factIds: list(id, TOUR_LIMITS.facts),
   minimumViewSeconds: boundedNumber(2, 120),
+  lookSeconds: decodeOptional<number | undefined>(
+    boundedNumber(0, 30),
+    undefined,
+  ),
+  narration: decodeOptional<string | undefined>(text(2000, 0), undefined),
+  motion: decodeOptional<TourCameraMotion | undefined>(
+    decodeEnum('hold', 'orbit', 'push-in', 'pull-back', 'reveal'),
+    undefined,
+  ),
+  sources: decodeOptional<readonly TourSource[] | undefined>(
+    list(source, 8),
+    undefined,
+  ),
 })
 export const decodeTourPlan: Decoder<TourPlan> = strict({
   id,
   goal: text(1024),
   durationSeconds: boundedNumber(2, TOUR_LIMITS.durationSeconds),
   stops: list(decodeTourStop, TOUR_LIMITS.stops, 1),
+  automatic: decodeOptional<boolean | undefined>(decodeBoolean, undefined),
+  rationale: decodeOptional<string | undefined>(text(512, 0), undefined),
 })
 const pictureTime = strict({
   tool: decodeEnum('set_picture_time'),
@@ -547,6 +573,10 @@ export const decodeNarrationBrief: Decoder<NarrationBrief> = strict({
   factIds: list(id, TOUR_LIMITS.facts),
   sourceIds: list(id, 16),
   sources: list(source, 16),
+  origin: decodeOptional<'records' | 'authored' | 'model' | undefined>(
+    decodeEnum('records', 'authored', 'model'),
+    undefined,
+  ),
 })
 const transcriptFields = {
   eventId: id,

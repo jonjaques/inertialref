@@ -9,7 +9,7 @@ import {
 import { withAstronomyNotes } from './knowledge/astronomy.ts'
 
 const context: TourContext = {
-  protocolVersion: 1,
+  protocolVersion: 2,
   manifest: {
     seed: 'seed',
     catalogVersion: 'catalog',

@@ -18,7 +18,7 @@ const measured = (speech: string): TourFact => ({
 })
 
 const context = (facts: readonly TourFact[] = []): TourContext => ({
-  protocolVersion: 1,
+  protocolVersion: 2,
   manifest: { seed: '1', catalogVersion: 'test', generation: { terrain: 1 } },
   viewRevision: 7,
   pictureTime: 123,

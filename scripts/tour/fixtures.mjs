@@ -298,7 +298,7 @@ export function evaluationContext() {
     },
   }))
   return withAstronomyNotes({
-    protocolVersion: 1,
+    protocolVersion: 2,
     manifest: {
       seed: 'tour-evaluation',
       catalogVersion: 'curated-fixture-1',

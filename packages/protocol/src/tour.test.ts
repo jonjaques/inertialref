@@ -18,8 +18,44 @@ const request = {
 }
 
 describe('tour wire boundary', () => {
+  it('carries bounded narration and a named camera motion in an automatic plan', () => {
+    const plan = {
+      id: 'solar-family',
+      goal: 'Five minutes around the Solar System',
+      durationSeconds: 300,
+      automatic: true,
+      rationale: 'A relaxed tour with time to look.',
+      stops: [
+        {
+          id: 'saturn',
+          subjectId: 'subject-1',
+          framingId: 'portrait',
+          siteId: null,
+          objective: 'The rings that puzzled Galileo',
+          factIds: [],
+          minimumViewSeconds: 38,
+          narration: 'Saturn gave early telescope observers quite a puzzle.',
+          motion: 'reveal',
+          sources: [],
+        },
+      ],
+    }
+    expect(decode(decodeTourPlan, plan)).toEqual({ ok: true, value: plan })
+    expect(
+      decode(decodeTourPlan, {
+        ...plan,
+        stops: [{ ...plan.stops[0], motion: 'execute-javascript' }],
+      }).ok,
+    ).toBe(false)
+    expect(
+      decode(decodeTourPlan, {
+        ...plan,
+        stops: [{ ...plan.stops[0], narration: 'x'.repeat(2001) }],
+      }).ok,
+    ).toBe(false)
+  })
   it('decodes the current protocol and bounded scene operation', () => {
-    expect(TOUR_PROTOCOL_VERSION).toBe(1)
+    expect(TOUR_PROTOCOL_VERSION).toBe(2)
     expect(decode(decodeToolRequest, request)).toEqual({
       ok: true,
       value: request,
