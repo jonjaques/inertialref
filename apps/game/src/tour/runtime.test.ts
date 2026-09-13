@@ -341,6 +341,37 @@ describe('the browser guide runtime', () => {
     f.dispose()
   })
 
+  it('keeps local Next usable after the online connection is lost', async () => {
+    const f = rig()
+    await f.runtime.startTour('saturn', true)
+    f.arrive()
+    await settle()
+    f.sockets[0]!.dispatchEvent(new Event('close'))
+    expect(f.runtime.getSnapshot().connection).toBe('offline')
+    f.runtime.command('next')
+    expect(f.runtime.getSnapshot().stopIndex).toBe(1)
+    expect(
+      f.requests.filter((request) => request.path === '/api/tour/sessions'),
+    ).toHaveLength(1)
+    f.dispose()
+  })
+
+  it('explains an uncertain admission conflict without issuing another create', async () => {
+    const f = rig()
+    f.pendingCreate(async () =>
+      Response.json(
+        { error: 'Creation belongs to another request.' },
+        { status: 409 },
+      ),
+    )
+    await f.runtime.startVoice('marin')
+    expect(f.runtime.getSnapshot().message).toContain('30 seconds')
+    expect(
+      f.requests.filter((request) => request.path === '/api/tour/sessions'),
+    ).toHaveLength(1)
+    f.dispose()
+  })
+
   it('closes an admitted session that resolves after End even when abort fails', async () => {
     const f = rig()
     let complete!: (response: Response) => void

@@ -302,6 +302,8 @@ export class GuideRuntime {
       void this.startTour('system')
       return
     }
+    if (this.#executor === null && this.#snapshot.plan !== null)
+      this.#activate()
     if (this.#executor === null) return
     this.#invalidate()
     this.#requestRevision++
@@ -358,6 +360,7 @@ export class GuideRuntime {
   }
 
   end(): void {
+    this.#creationKey = null
     this.#invalidate()
     this.#runner?.command('end')
     this.#disconnect()
@@ -928,6 +931,9 @@ export class GuideRuntime {
         } catch {
           /* A proxy failure can return an HTML error page. */
         }
+        if (response.status === 409 && path === '/api/tour/sessions')
+          detail =
+            'An earlier connection may still be closing. Wait up to 30 seconds, then choose End before starting again.'
         throw new Error(detail)
       }
       return response
