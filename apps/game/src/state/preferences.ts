@@ -436,6 +436,14 @@ export const PLANETARIUM_FLARE = define({
  * that it goes away and stays gone: one that came back on the next reload would
  * be an advertisement rather than an introduction.
  */
+export const PLANETARIUM_GUIDE_VOICE = define<string>({
+  key: 'planetarium.guide.voice',
+  group: 'planetarium',
+  what: 'the guide voice for the next conversation',
+  initial: 'marin',
+  accept: oneOf(['marin', 'gleam', 'meridian', 'vesper']),
+})
+
 export const PLANETARIUM_HINTED = define({
   key: 'planetarium.hinted',
   group: 'planetarium',
@@ -573,6 +581,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   PLANETARIUM_SHIP,
   PLANETARIUM_FLARE,
   PLANETARIUM_HINTED,
+  PLANETARIUM_GUIDE_VOICE,
   NAVIGATOR_RADIUS,
   NAVIGATOR_CLASSES,
   NAVIGATOR_FILTERING,

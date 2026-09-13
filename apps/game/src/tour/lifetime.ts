@@ -9,6 +9,10 @@ export class GuideLifetime<T extends { end(): void }> {
     this.#create = create
   }
 
+  get current(): T | null {
+    return this.#runtime
+  }
+
   acquire(): () => void {
     this.#claims++
     let released = false
@@ -31,11 +35,16 @@ export class GuideLifetime<T extends { end(): void }> {
   load(): Promise<T> {
     if (this.#pending !== null) return this.#pending
     const generation = this.#generation
-    this.#pending = this.#create().then((runtime) => {
-      if (generation !== this.#generation || this.#claims === 0) runtime.end()
-      else this.#runtime = runtime
-      return runtime
-    })
+    this.#pending = this.#create()
+      .then((runtime) => {
+        if (generation !== this.#generation || this.#claims === 0) runtime.end()
+        else this.#runtime = runtime
+        return runtime
+      })
+      .catch((cause: unknown) => {
+        this.#pending = null
+        throw cause
+      })
     return this.#pending
   }
 }

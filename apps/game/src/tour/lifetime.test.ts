@@ -34,7 +34,7 @@ describe('the guide belongs to the mode', () => {
     let complete!: (value: typeof runtime) => void
     const owner = new GuideLifetime(
       () =>
-        new Promise((resolve) => {
+        new Promise<typeof runtime>((resolve) => {
           complete = resolve
         }),
     )

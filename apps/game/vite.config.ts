@@ -291,6 +291,10 @@ export function gameVite(
        * `no server` — which is the offline path, exercised by default.
        */
       proxy: {
+        '^/api/tour/sessions/[^/]+/events$': {
+          target: 'http://127.0.0.1:8787',
+          ws: true,
+        },
         '^/api($|/)': { target: 'http://127.0.0.1:8787' },
         '^/ws$': { target: 'ws://127.0.0.1:8787', ws: true },
       },
