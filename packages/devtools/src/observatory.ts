@@ -93,6 +93,8 @@ import {
   riseStance,
   scrubForHeight,
   shortestAngle,
+  smooth,
+  expApproach,
   stanceToward,
   type SurfaceStance,
   surfaceHeightBounds,
@@ -217,6 +219,18 @@ interface Descent {
   blend: number
 }
 
+export interface ObserverMotionRecipe {
+  readonly durationSeconds: Seconds
+  readonly azimuthDelta: Radians
+  readonly elevationDelta: Radians
+  readonly distanceFactor: number
+}
+
+export interface ObserverMotionStatus {
+  readonly elapsedSeconds: Seconds
+  readonly durationSeconds: Seconds
+}
+
 export interface ObserverStatus {
   readonly time: number
   readonly heldTime: number | null
@@ -237,6 +251,8 @@ export interface ObserverStatus {
   readonly desired: ObserverState
   /** True while a fly-to is still visibly moving. */
   readonly traveling: boolean
+  /** Finite motion within an arrived view, independent of travel to that view. */
+  readonly motion: ObserverMotionStatus | null
   /** Distance from the target's *surface*, which is what a reader wants. */
   readonly altitude: Meters
   readonly altitudeText: string
@@ -344,6 +360,12 @@ export interface DropAim {
 export class Observatory {
   #mutationRevision = 0
   #sampling = false
+  #motion: {
+    readonly from: ObserverState
+    readonly to: ObserverState
+    readonly duration: Seconds
+    elapsed: Seconds
+  } | null = null
 
   /** Explicit camera and photographic-time edits, excluding render advancement. */
   get mutationRevision(): number {
@@ -351,7 +373,89 @@ export class Observatory {
   }
 
   #changed(): void {
-    if (!this.#sampling) this.#mutationRevision += 1
+    if (!this.#sampling) {
+      this.#motion = null
+      this.#mutationRevision += 1
+    }
+  }
+
+  /** A finite, target-relative move sampled by this camera's existing owner. */
+  startMotion(recipe: ObserverMotionRecipe): boolean {
+    if (
+      ![
+        recipe.durationSeconds,
+        recipe.azimuthDelta,
+        recipe.elevationDelta,
+        recipe.distanceFactor,
+      ].every(Number.isFinite) ||
+      recipe.durationSeconds < 12 ||
+      recipe.durationSeconds > 90 ||
+      Math.abs(recipe.azimuthDelta) > Math.PI / 4 ||
+      Math.abs(recipe.elevationDelta) > Math.PI / 18 ||
+      recipe.distanceFactor < 0.8 ||
+      recipe.distanceFactor > 1.3
+    )
+      throw new Error(
+        'Choose a bounded camera motion lasting 12 to 90 seconds.',
+      )
+    if (
+      this.#target === null ||
+      this.#stance !== null ||
+      this.#galaxyView !== null
+    )
+      return false
+    this.#changed()
+    this.#stopJourneyTravel()
+    this.#phaseOrbit = null
+    const from = { ...this.#state }
+    const scale = this.#trackingTransform().scale
+    const to = {
+      azimuth: from.azimuth + recipe.azimuthDelta,
+      elevation: clampElevation(from.elevation + recipe.elevationDelta),
+      distance:
+        clampDistance(
+          from.distance * scale * recipe.distanceFactor,
+          this.#target.radius,
+        ) / scale,
+    }
+    this.#desired = from
+    this.#motion = { from, to, duration: recipe.durationSeconds, elapsed: 0 }
+    return true
+  }
+
+  /** Stop only future recipe frames; the sampled view keeps its revision. */
+  stopMotion(): boolean {
+    if (this.#motion === null) return false
+    this.#motion = null
+    this.#desired = { ...this.#state }
+    return true
+  }
+
+  #advanceMotion(dt: Seconds): void {
+    const motion = this.#motion
+    if (motion === null) return
+    motion.elapsed = Math.min(motion.duration, motion.elapsed + Math.max(0, dt))
+    if (motion.duration - motion.elapsed < 1e-9)
+      motion.elapsed = motion.duration
+    const t = motion.elapsed / motion.duration
+    const eased = smooth(t)
+    this.#state = this.#desired =
+      t === 1
+        ? motion.to
+        : {
+            azimuth:
+              motion.from.azimuth +
+              shortestAngle(motion.from.azimuth, motion.to.azimuth) * eased,
+            elevation:
+              motion.from.elevation +
+              (motion.to.elevation - motion.from.elevation) * eased,
+            distance: expApproach(
+              motion.from.distance,
+              motion.to.distance,
+              eased,
+            ),
+          }
+    if (t === 1) this.#motion = null
   }
 
   /** Stop presentation travel at the current pose without touching the world. */
@@ -2240,6 +2344,13 @@ export class Observatory {
         (this.#descent !== null ||
           this.#journey?.motion != null ||
           !this.#arrived()),
+      motion:
+        this.#motion === null
+          ? null
+          : {
+              elapsedSeconds: this.#motion.elapsed,
+              durationSeconds: this.#motion.duration,
+            },
       // Standing, the reader wants the height above the ground under their feet
       // — not the distance from a datum the orbit arm was last left at.
       altitude: surface?.stance.height ?? altitude,
@@ -2287,6 +2398,7 @@ export class Observatory {
     }
 
     this.#advanceJourney(dt)
+    this.#advanceMotion(dt)
     if (!this.#arrived()) {
       this.#state = approachState(this.#state, this.#desired, dt, TRAVEL_TAU)
     } else {

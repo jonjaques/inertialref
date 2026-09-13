@@ -8,7 +8,7 @@ import type {
 } from '@inertialref/protocol'
 import { TourExecutor } from './executor.ts'
 
-function setup() {
+function setup(ready?: () => boolean) {
   const session = openSession()
   session.harness.look('s:SOL/b:2', { ease: false })
   let now = 1000
@@ -21,6 +21,7 @@ function setup() {
     onTakeover: () => {
       takeovers += 1
     },
+    ready,
   })
   const context = executor.context('Saturn')
   const saturn = context.candidates.find(
@@ -48,6 +49,84 @@ function setup() {
 }
 
 describe('the guide local executor', () => {
+  it('starts queued motion only on ready arrival and publishes its new revision', () => {
+    let ready = false
+    const { session, executor, request, receipts, takeovers } = setup(
+      () => ready,
+    )
+    executor.queueMotion('orbit', 20)
+    expect(executor.execute(request).status).toBe('accepted')
+    const eye = session.harness.observatory
+    for (let frame = 0; frame < 1000; frame++) eye.sample(1 / 60)
+    executor.poll()
+    expect(eye.status().motion).toBeNull()
+    expect(receipts.at(-1)?.status).toBe('accepted')
+    ready = true
+    executor.poll()
+    expect(receipts.at(-1)).toMatchObject({
+      status: 'arrived',
+      viewRevision: eye.mutationRevision,
+    })
+    expect(eye.status().motion?.durationSeconds).toBe(20)
+    eye.sample(5)
+    executor.poll()
+    expect(takeovers()).toBe(0)
+    executor.cancel()
+    const held = eye.status().state
+    expect(eye.status().motion).toBeNull()
+    eye.sample(50)
+    expect(eye.status().state).toEqual(held)
+    executor.dispose()
+    session.dispose()
+  })
+
+  it('starts and stops a ready-view gesture without canceling a visitor replacement', () => {
+    const { session, executor, takeovers } = setup()
+    const eye = session.harness.observatory
+    const revision = executor.startMotion('push-in', 20)
+    expect(revision).toBe(eye.mutationRevision)
+    eye.sample(4)
+    executor.poll()
+    expect(takeovers()).toBe(0)
+    executor.stopMotion()
+    expect(executor.viewRevision).toBe(revision)
+    const held = eye.status().state
+    eye.sample(20)
+    expect(eye.status().state).toEqual(held)
+    executor.startMotion('reveal', 20)
+    eye.sample(2)
+    eye.startMotion({
+      durationSeconds: 12,
+      azimuthDelta: -0.2,
+      elevationDelta: 0,
+      distanceFactor: 1.1,
+    })
+    const visitor = eye.status().state
+    executor.poll()
+    executor.stopMotion()
+    executor.cancel()
+    expect(takeovers()).toBe(1)
+    expect(eye.status().motion?.durationSeconds).toBe(12)
+    eye.sample(6)
+    expect(eye.status().state).not.toEqual(visitor)
+    executor.dispose()
+    expect(eye.status().motion?.durationSeconds).toBe(12)
+    session.dispose()
+  })
+
+  it('discards queued motion when the request is superseded', () => {
+    const { session, executor, request } = setup()
+    executor.queueMotion('orbit', 20)
+    executor.execute(request)
+    executor.supersede(1)
+    for (let frame = 0; frame < 1000; frame++)
+      session.harness.observatory.sample(1 / 60)
+    executor.poll()
+    expect(session.harness.observatory.status().motion).toBeNull()
+    executor.dispose()
+    session.dispose()
+  })
+
   const query: TourWorldQuery = {
     kinds: ['gas-giant'],
     starClasses: [],

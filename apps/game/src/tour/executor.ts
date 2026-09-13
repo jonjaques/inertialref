@@ -2,11 +2,13 @@ import {
   createTourContext,
   tourSubjectId,
   type GameHarness,
+  type ObserverMotionRecipe,
 } from '@inertialref/devtools'
 import {
   decodeToolRequest,
   TOUR_LIMITS,
   type TourAction,
+  type TourCameraMotion,
   type TourContext,
   type ToolReceipt,
   type ToolRequest,
@@ -27,6 +29,53 @@ interface Operation {
   receipt: ToolReceipt
 }
 
+function motionRecipe(
+  kind: TourCameraMotion,
+  durationSeconds: number,
+): ObserverMotionRecipe | null {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0)
+    throw new Error('Choose a finite camera motion duration.')
+  const duration = Math.min(90, Math.max(12, durationSeconds))
+  switch (kind) {
+    case 'hold':
+      return null
+    case 'orbit':
+      return {
+        durationSeconds: duration,
+        azimuthDelta: Math.PI / 6,
+        elevationDelta: 0,
+        distanceFactor: 1,
+      }
+    case 'push-in':
+      return {
+        durationSeconds: duration,
+        azimuthDelta: 0,
+        elevationDelta: 0,
+        distanceFactor: 0.8,
+      }
+    case 'pull-back':
+      return {
+        durationSeconds: duration,
+        azimuthDelta: 0,
+        elevationDelta: 0,
+        distanceFactor: 1.25,
+      }
+    case 'reveal':
+      return {
+        durationSeconds: duration,
+        azimuthDelta: Math.PI / 4,
+        elevationDelta: Math.PI / 24,
+        distanceFactor: 1.15,
+      }
+    default:
+      throw new Error('Unknown guide camera motion.')
+  }
+}
+
+interface QueuedMotion {
+  readonly recipe: ObserverMotionRecipe | null
+}
+
 export class TourExecutor {
   readonly #harness: GameHarness
   readonly #options: TourExecutorOptions
@@ -40,6 +89,9 @@ export class TourExecutor {
   #count = 0
   #disposed = false
   #timeOwned = false
+  #motionOwned = false
+  #queuedMotion: QueuedMotion | null = null
+  #pendingMotion: QueuedMotion | null = null
   #query = ''
   #extraAddresses: readonly string[] = []
   #search: { request: ToolRequest; cancel: () => void } | null = null
@@ -63,6 +115,52 @@ export class TourExecutor {
   }
   get requestRevision(): number {
     return this.#requestRevision
+  }
+
+  /** Call after supersede and before execute; covers immediate arrivals too. */
+  queueMotion(kind: TourCameraMotion, durationSeconds: number): void {
+    const recipe = motionRecipe(kind, durationSeconds)
+    this.poll()
+    if (this.#pending !== null)
+      throw new Error('Queue motion before starting a view operation.')
+    if (this.#disposed || this.#requestRevision === this.#revokedRevision)
+      return
+    this.#queuedMotion = { recipe }
+  }
+
+  /** Start on an already-ready view; use the returned revision for narration. */
+  startMotion(kind: TourCameraMotion, durationSeconds: number): number {
+    const recipe = motionRecipe(kind, durationSeconds)
+    this.poll()
+    if (
+      this.#disposed ||
+      this.#options.active?.() === false ||
+      this.#requestRevision === this.#revokedRevision ||
+      this.#pending !== null ||
+      this.#search !== null ||
+      this.#harness.observatory.status().traveling ||
+      this.#options.ready?.() === false
+    )
+      return this.viewRevision
+    this.#beginMotion({ recipe })
+    return this.viewRevision
+  }
+
+  /** Freeze only our finite gesture, including after its arrival was published. */
+  stopMotion(): void {
+    if (this.#motionOwned && this.viewRevision === this.#seenRevision) {
+      this.#harness.observatory.stopMotion()
+      this.#seenRevision = this.viewRevision
+    }
+    this.#motionOwned = false
+  }
+
+  #beginMotion(motion: QueuedMotion | null): void {
+    if (motion === null) return
+    this.stopMotion()
+    if (motion.recipe !== null)
+      this.#motionOwned = this.#harness.observatory.startMotion(motion.recipe)
+    this.#seenRevision = this.viewRevision
   }
 
   get searchStatus(): Readonly<{
@@ -195,6 +293,16 @@ export class TourExecutor {
           this.#options.ready?.() !== false)
           ? 'arrived'
           : 'accepted'
+      if (
+        action.tool === 'show_subject' ||
+        action.tool === 'compose_view' ||
+        action.tool === 'stand_at_site'
+      ) {
+        const motion = this.#queuedMotion
+        this.#queuedMotion = null
+        if (status === 'arrived') this.#beginMotion(motion)
+        else this.#pendingMotion = motion
+      }
       const receipt = this.#receipt(request, status, null)
       this.#operations.set(request.operationId, { fingerprint, receipt })
       if (status === 'accepted') this.#pending = request
@@ -362,6 +470,10 @@ export class TourExecutor {
       this.#options.onTakeover?.()
       return
     }
+    if (this.#motionOwned && this.#options.active?.() === false) {
+      this.cancel('The guide left the Planetarium.')
+      return
+    }
     if (
       this.#search !== null &&
       (this.#search.request.expiresAt <= this.#options.now() ||
@@ -400,6 +512,9 @@ export class TourExecutor {
       this.#options.ready?.() !== false
     ) {
       this.#pending = null
+      const motion = this.#pendingMotion
+      this.#pendingMotion = null
+      this.#beginMotion(motion)
       this.#publish(this.#receipt(pending, 'arrived', null))
     }
   }
@@ -408,6 +523,10 @@ export class TourExecutor {
   }
   #cancel(reason: string, hold: boolean): void {
     this.#revokedRevision = this.#requestRevision
+    this.#queuedMotion = null
+    this.#pendingMotion = null
+    if (hold) this.stopMotion()
+    else this.#motionOwned = false
     const search = this.#search
     this.#search = null
     if (search !== null) {
