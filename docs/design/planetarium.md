@@ -41,27 +41,36 @@ or type a different question. Opening the panel loads the guide; ordinary
 Planetarium use creates no cloud session. Local templates and controls remain
 available when the cloud guide is disabled or its allowance is exhausted.
 
-The guide has one audible personality. Its director selects subjects and facts
-backstage. GPT Live handles explicit voice conversation; the automatic tour
-uses controlled spoken clips. The visitor chooses when to enable voice and
+The guide is a friendly astronomy nerd: congenial, curious, and happy to share
+a historical surprise. Its director plans subjects, stories, and camera
+movement backstage. GPT Live handles explicit voice conversation; automatic
+tours use controlled spoken clips while Live stays available for questions. The visitor chooses when to enable voice and
 sees an AI voice disclosure. Microphone mute, guide mute, and Pause tour have
 separate controls because they stop different things. Explanations and sources
 remain readable with guide audio muted.
 
-The initial Saturn route is an overview, the registered ring composition, and
-Titan. Next, Back, Pause, Resume, and End act locally. Automatic progression
-requires arrival, a minimum viewing interval, and completion of the current
-spoken clip. Live uses explicit Next, since its transcript does not establish
-playback completion.
+Authored presets cover a roughly five-minute Solar System visit, Saturn's
+rings and moons, and a short developer demonstration. The panel shows the
+ordered plan, current stop, camera movement, narration phase, and changes made
+through conversation. Next, Back, Pause, Resume, and End act locally, including
+when requested through Live. Automatic progression requires arrival, a minimum
+viewing interval, actual completion of the current clip, and a few quiet
+seconds when the plan promises time to look.
 
 A question holds the current stop. A changed destination supersedes pending
 work. Manual camera input pauses the guide, and a late model result cannot
 replace the view the visitor chose. The observatory executes every movement
-through its existing camera controls and photographic clock. The simulation
+through its existing camera controls and photographic clock. Gentle finite
+orbits, approaches, pullbacks, and reveals continue during narration and stop
+when the visitor takes over or interrupts. The simulation
 continues according to its own inputs.
 
-Scientific claims come from numeric application records or separately cited
-astronomy notes. Projected worlds are identified as projections; missing
+Application records supply measurements and scene truth. For observed Solar
+System objects, the models use their own established astronomy and historical
+knowledge to explain why a place is interesting. Authored presets carry their
+own sources; ordinary model context excludes those scripts and cooked fact
+blurbs, retaining the current view, nearby subjects, available actions, and
+requested raw measurements. Projected worlds are identified as projections; missing
 measurements keep their reasons. The guide separates an object's properties
 from what this camera can currently see. It sends no screenshots or continuous
 video. Image-based questions and requested composition help remain deferred.

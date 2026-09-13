@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { openSession } from '../../../../packages/devtools/src/session.ts'
 import { createTourContext } from '../../../../packages/devtools/src/tour/brief.ts'
 import { validateTourPlan, type TourContext } from '@inertialref/protocol'
-import solar from '../../../../design/narration/solar-system-tour.json'
-import saturn from '../../../../design/narration/saturn-tour.json'
-import demo from '../../../../design/narration/developer-demo.json'
+import solar from '../../../../design/narration/solar-system-tour.json' with { type: 'json' }
+import saturn from '../../../../design/narration/saturn-tour.json' with { type: 'json' }
+import demo from '../../../../design/narration/developer-demo.json' with { type: 'json' }
 import { authoredTour } from './presets.ts'
 
 const solarRequest =

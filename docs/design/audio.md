@@ -88,8 +88,11 @@ Voice starts with a deliberate action and an AI voice disclosure. Muting the
 guide preserves readable explanations; muting the microphone and pausing the
 tour remain separate controls.
 
-GPT Live supports the conversational path, with explicit Next between tour
-stops. Automatic tours use controlled `gpt-4o-mini-tts` clips with `marin`.
+GPT Live supports conversation and interruptions while automatic tours use
+controlled `gpt-4o-mini-tts` clips with `marin`. Live output stays quiet during a
+tour clip and its looking pause; the microphone remains available. Speaking
+pauses the tour and makes the conversational reply audible. Manual tours use
+Next.
 Only playback completion for the current view can satisfy the runner's audio
 gate. Captions and an estimated duration cannot. Provider access, pronunciation,
 device behavior, and listening quality remain measured acceptance work, not

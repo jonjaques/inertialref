@@ -11,9 +11,9 @@ import {
   SOLAR_PLANETS,
   type SolarBody,
 } from '@inertialref/universe'
-import solar from '../../../../design/narration/solar-system-tour.json'
-import saturn from '../../../../design/narration/saturn-tour.json'
-import demo from '../../../../design/narration/developer-demo.json'
+import solar from '../../../../design/narration/solar-system-tour.json' with { type: 'json' }
+import saturn from '../../../../design/narration/saturn-tour.json' with { type: 'json' }
+import demo from '../../../../design/narration/developer-demo.json' with { type: 'json' }
 
 interface Story {
   readonly id: string
@@ -168,19 +168,26 @@ function assemble(
           Math.max(0, script.durationSeconds - speechSeconds - travelSeconds) /
             quietSeconds,
         )
+  const pacedStops = stops.map((stop) => ({
+    ...stop,
+    lookSeconds: Math.round(stop.lookSeconds! * quietScale),
+  }))
   const plan: TourPlan = {
     id: `${script.id}-${context.viewRevision}`,
     goal: script.title,
-    durationSeconds: Math.ceil(
-      speechSeconds + travelSeconds + quietSeconds * quietScale,
+    durationSeconds: Math.round(
+      speechSeconds +
+        travelSeconds +
+        pacedStops.reduce((sum, stop) => sum + stop.lookSeconds, 0),
     ),
     automatic: true,
     rationale:
-      'Authored stories with confirmed arrivals, finite camera movement, and a quiet look after each spoken passage. Duration estimates speech at 150 words per minute and four seconds per journey.',
-    stops: stops.map((stop) => ({
-      ...stop,
-      lookSeconds: Math.round(stop.lookSeconds! * quietScale * 100) / 100,
-    })),
+      script.id === 'developer-demo'
+        ? 'A quick demonstration of camera moves, conversation, and a route you can change.'
+        : script.id === 'saturn-tour'
+          ? 'A closer look at Saturn’s rings and two moons, with a story and time to look at each stop.'
+          : 'An unhurried trip out among the planets, with a few human stories and a return to Earth.',
+    stops: pacedStops,
   }
   return validateTourPlan(plan, context).ok ? plan : null
 }

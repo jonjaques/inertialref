@@ -30,16 +30,30 @@ pool, with cancellation, an eight-light-year radius ceiling, and a result cap.
 `packages/devtools` extracts quantities directly from domain records. A fact
 has its quantity, unit, display wording, speech wording, provenance, and
 source IDs. Missing values retain their reasons. Observer altitude, apparent
-fill, arrival, and photographic time occupy a separate record. Curated
-astronomy notes have server-owned sources and remain distinguishable from
-application records supplied by a browser.
+fill, arrival, and photographic time occupy a separate record. Ordinary model
+context contains the current view, nearby subjects, and available actions.
+Requested measurements cross as raw quantities and units; hand-written fact
+blurbs, summaries, manifests, and source prose do not. The full application
+context remains available for ID validation and on-demand record reads.
+
+For observed Solar System subjects, both models can contribute established
+astronomy, discovery history, and analogies from their own knowledge. Game
+measurements and scene state remain authoritative. Model prose has no invented
+citations and does not imply a historical event is rendered. Projected worlds
+have no invented mission history. Explicit Solar System, Saturn, and developer
+demo presets have separately authored scripts and sources; they are not
+background context for ordinary conversation.
 
 The local executor deduplicates operation IDs and checks the current request
 revision, expected view revision, session, expiry, and allowed arguments.
 Acceptance and arrival are different receipts. Explicit observatory changes
 advance a mutation revision; rendered easing and photographic playback do not.
 Taking over the camera revokes pending work. Holding a canceled movement stops
-the presentation pose without moving the ship.
+the presentation pose without moving the ship. Named finite orbit, push-in,
+pull-back, and reveal gestures run inside the observatory's existing sample
+loop while narration plays. They use bounded target-relative angles and range,
+not another camera producer. Starting a gesture precedes its arrival receipt;
+sampling and stopping its future frames preserve that receipt's revision.
 
 Time commands hold `observatory.time` before changing photographic playback.
 They never call simulation pause, time warp, or teleport. This applies
@@ -72,7 +86,7 @@ GPT-6 Astra is the director through Responses, with low reasoning effort,
 strict structured output, at most two rounds within twelve seconds, an
 8,000-byte request envelope, and 2,000 output tokens per round. The application
 validates selected facts and actions after schema validation. Exact local
-commands and deterministic Saturn/current-system templates avoid inference.
+commands and explicit authored tour presets avoid inference.
 Sol and Terra remain evaluation alternatives until measured results support
 a routing change.
 
@@ -84,12 +98,19 @@ time intervals; fragments do not execute commands. This follows the documented
 [client delegation contract](https://developers.openai.com/api/docs/guides/live-delegation)
 and [Live WebRTC startup](https://developers.openai.com/api/docs/guides/voice-webrtc?api=live).
 
-Live tours use explicit Next. The automatic path uses controlled
-`gpt-4o-mini-tts` clips with the `marin` voice. The runner advances only after
-the matching view arrives, its minimum viewing time elapses, and the host
-reports that the matching clip has ended. A transcript or an estimated speech
-duration is insufficient. Muted captions remain readable without becoming
-evidence that audio played.
+Automatic tours use controlled `gpt-4o-mini-tts` clips with the `marin` voice,
+including when Live is connected. Live stays available for interruptions and
+questions; its output is muted during the clip and quiet looking interval.
+The sideband tells it to listen without repeating the script. Speech pauses
+the runner and finite camera gesture, then makes conversational replies
+audible. Exact spoken transport commands use the same client controls.
+
+The runner advances only after the matching view arrives, its minimum viewing
+time elapses, the matching clip actually ends, and any promised quiet look
+finishes. Pausing freezes elapsed looking time. A transcript or an estimated
+speech duration is insufficient. Manual tours still use Next. The panel shows
+the ordered stops, camera intent, current narration phase, and bounded plan
+revision history; a conversational edit updates that structure.
 
 The core guide sends no images. Visual questions and composition adjustment
 are deferred extensions. An image capture port, observation tickets, and image

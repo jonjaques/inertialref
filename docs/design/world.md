@@ -88,7 +88,8 @@ always text. Flight has no performed narrator.
 
 The [Planetarium guide](planetarium.md#the-optional-guide) is an explicit
 exception outside that fiction. The visitor can request an expressive spoken
-explanation of the record, interrupt it, and take over the camera. The guide
+tour with astronomy stories and historical context, interrupt it, and take
+over the camera. The guide
 does not speak for the Survey, invent a mission, or announce how the visitor
 should feel. It distinguishes observed objects, projections, and missing
 measurements. [Audio](audio.md#voice) describes its deliberate activation and

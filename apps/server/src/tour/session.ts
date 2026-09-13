@@ -3,6 +3,7 @@ import {
   decodeTourClientMessage,
   decodeTourMessage,
   type TourClientMessage,
+  type TourContext,
   type TourServerMessage,
 } from '@inertialref/protocol'
 import {
@@ -18,7 +19,7 @@ import {
   tourJson,
   TourHttpError,
 } from './http.ts'
-import { withAstronomyNotes } from './knowledge/astronomy.ts'
+import { authoredTour } from './presets.ts'
 import {
   attachLiveSession,
   createLiveSession,
@@ -141,13 +142,11 @@ export class TourSession extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(now + TOUR_POLICY.reconnectMs)
     this.#coordinator = this.#makeCoordinator(
       { ...initial, state: 'open' },
-      withAstronomyNotes(creation.context),
+      creation.context,
     )
     try {
       if (creation.transport === 'live' && creation.sdp !== null) {
-        this.#narratorView = narratorContext(
-          withAstronomyNotes(creation.context),
-        )
+        this.#narratorView = narratorContext(creation.context)
         const live = await createLiveSession({
           apiKey: this.env.OPENAI_API_KEY,
           sdp: creation.sdp,
@@ -365,8 +364,6 @@ export class TourSession extends DurableObject<Env> {
       model: 'application',
       data: message,
     })
-    if (message.type === 'context')
-      message = { ...message, context: withAstronomyNotes(message.context) }
     if (message.type === 'live-startup') {
       if (this.#startup || this.#coordinator?.record.transport !== 'live')
         return
@@ -398,7 +395,7 @@ export class TourSession extends DurableObject<Env> {
 
   #makeCoordinator(
     held: SessionRecord,
-    context: Parameters<typeof withAstronomyNotes>[0] | null,
+    context: TourContext | null,
   ): TourCoordinator {
     return new TourCoordinator(held, context, {
       now: Date.now,
@@ -419,19 +416,27 @@ export class TourSession extends DurableObject<Env> {
         })
         return this.ctx.storage.put('session', snapshot)
       },
-      director: async (text, view, signal, maxRounds) => {
+      preset: authoredTour,
+      director: async (text, view, signal, maxRounds, priorGoal) => {
         const result = await interpretTourRequest({
           apiKey: this.env.OPENAI_API_KEY,
           text,
           context: view,
           signal,
           maxRounds,
+          priorGoal,
           trace: this.#trace,
         })
         return result
       },
       narrate: async (brief, delegationId) => {
-        this.#sideband?.append('commentary', brief.text, delegationId)
+        if (brief.playback === 'controlled') {
+          this.#sideband?.append(
+            'thinking',
+            `The app is playing a tour narration about ${this.#coordinator?.context?.brief?.name ?? 'the current object'}. Stay quiet and listen for the visitor; do not repeat it.`,
+            delegationId,
+          )
+        } else this.#sideband?.append('commentary', brief.text, delegationId)
       },
       close: () => this.#finish(),
     })
