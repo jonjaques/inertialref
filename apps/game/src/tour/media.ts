@@ -15,12 +15,15 @@ export class ControlledPlayback {
   #audio: HTMLAudioElement | null = null
   #release: (() => void) | null = null
   #muted = false
-  constructor(private readonly host: ClipHost = clipHost) {}
+  readonly #host: ClipHost
+  constructor(host: ClipHost = clipHost) {
+    this.#host = host
+  }
 
   async play(blob: Blob, ended: () => void): Promise<void> {
     this.stop()
-    const audio = this.host.audio()
-    const url = this.host.url(blob)
+    const audio = this.#host.audio()
+    const url = this.#host.url(blob)
     this.#audio = audio
     audio.src = url
     audio.muted = this.#muted
@@ -32,7 +35,7 @@ export class ControlledPlayback {
     audio.addEventListener('ended', onEnd, { once: true })
     this.#release = () => {
       audio.removeEventListener('ended', onEnd)
-      this.host.revoke(url)
+      this.#host.revoke(url)
     }
     try {
       await audio.play()
@@ -97,22 +100,29 @@ export class LiveConnection {
   #micMuted = false
   #guideMuted = false
 
+  readonly #host: LiveHost
+  readonly #onEvent: (event: LiveEvent) => void
+  readonly #onFailure: (message: string) => void
   constructor(
-    private readonly host: LiveHost = liveHost,
-    private readonly onEvent: (event: LiveEvent) => void = () => {},
-    private readonly onFailure: (message: string) => void = () => {},
-  ) {}
+    host: LiveHost = liveHost,
+    onEvent: (event: LiveEvent) => void = () => {},
+    onFailure: (message: string) => void = () => {},
+  ) {
+    this.#host = host
+    this.#onEvent = onEvent
+    this.#onFailure = onFailure
+  }
 
   async prepare(): Promise<string> {
-    const stream = await this.host.capture()
+    const stream = await this.#host.capture()
     if (this.#stopped) {
       for (const track of stream.getTracks()) track.stop()
       throw new Error('The guide has ended.')
     }
     this.#stream = stream
-    const peer = this.host.peer()
+    const peer = this.#host.peer()
     this.#peer = peer
-    const audio = this.host.audio()
+    const audio = this.#host.audio()
     this.#audio = audio
     audio.autoplay = true
     audio.muted = this.#guideMuted
@@ -140,14 +150,14 @@ export class LiveConnection {
         this.#started = true
         this.#resolve?.()
       }
-      this.onEvent(value)
+      this.#onEvent(value)
     }
     const track = (event: RTCTrackEvent) => {
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track])
       void audio
         .play()
         .catch(() =>
-          this.onFailure(
+          this.#onFailure(
             'Audio playback is blocked. Captions remain available.',
           ),
         )
@@ -157,7 +167,7 @@ export class LiveConnection {
         peer.connectionState === 'failed' ||
         peer.connectionState === 'disconnected'
       )
-        this.onFailure(
+        this.#onFailure(
           'The voice connection was interrupted. Resume with text or start voice again.',
         )
     }

@@ -4,7 +4,10 @@ export class GuideLifetime<T extends { end(): void }> {
   #generation = 0
   #pending: Promise<T> | null = null
   #runtime: T | null = null
-  constructor(private readonly create: () => Promise<T>) {}
+  readonly #create: () => Promise<T>
+  constructor(create: () => Promise<T>) {
+    this.#create = create
+  }
 
   acquire(): () => void {
     this.#claims++
@@ -28,7 +31,7 @@ export class GuideLifetime<T extends { end(): void }> {
   load(): Promise<T> {
     if (this.#pending !== null) return this.#pending
     const generation = this.#generation
-    this.#pending = this.create().then((runtime) => {
+    this.#pending = this.#create().then((runtime) => {
       if (generation !== this.#generation || this.#claims === 0) runtime.end()
       else this.#runtime = runtime
       return runtime
