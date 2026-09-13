@@ -590,7 +590,7 @@ export class TourCoordinator {
                 provenance: item.provenance,
               })),
           )
-          .slice(0, 5)
+          .slice(0, selected.length === 0 ? 2 : 5)
     const first = available[0] ?? {
       subject: brief.name,
       subjectId: brief.subjectId,
