@@ -6,7 +6,7 @@ import {
 } from './narratorContext.ts'
 
 const measured = (speech: string): TourFact => ({
-  id: speech,
+  id: 'radius',
   label: 'Radius',
   quantity: 60268000,
   unit: 'm',
@@ -16,15 +16,30 @@ const measured = (speech: string): TourFact => ({
   provenance: 'observed',
   sourceIds: ['application-record'],
 })
-
 const context = (facts: readonly TourFact[] = []): TourContext => ({
   protocolVersion: 2,
-  manifest: { seed: '1', catalogVersion: 'test', generation: { terrain: 1 } },
+  manifest: {
+    seed: 'private-seed',
+    catalogVersion: 'test',
+    generation: { terrain: 1 },
+  },
   viewRevision: 7,
   pictureTime: 123,
   subjectId: 'saturn',
   traveling: false,
-  candidates: [],
+  candidates: [
+    {
+      id: 'titan',
+      address: 'g:milky-way/s:SOL/b:5/m:0',
+      name: 'Titan',
+      provenance: 'observed',
+      kind: 'moon',
+      parentId: 'saturn',
+      framings: ['portrait'],
+      sites: [],
+      factIds: [],
+    },
+  ],
   briefs: [],
   brief: {
     subjectId: 'saturn',
@@ -32,9 +47,16 @@ const context = (facts: readonly TourFact[] = []): TourContext => ({
     name: 'Saturn',
     provenance: 'observed',
     classification: 'gas giant',
-    summary: 'Unselected summary must not be narrated.',
+    summary: 'COOKED SUMMARY',
     facts,
-    sources: [],
+    sources: [
+      {
+        id: 'application-record',
+        title: 'SOURCE PROSE',
+        url: null,
+        origin: 'application',
+      },
+    ],
     observer: {
       pictureTime: 123,
       altitudeMeters: null,
@@ -44,119 +66,142 @@ const context = (facts: readonly TourFact[] = []): TourContext => ({
   },
 })
 
-describe('Live narration receives only the current verified view', () => {
-  it('includes current subject, time, arrival and at most three complete evidence entries', () => {
-    const facts = [
-      measured('Saturn has rings.'),
+describe('Live context describes the scene and reads measurements on demand', () => {
+  it('keeps current view, nearby names, and real guide capabilities without prepared stories', () => {
+    const current = context([measured('COOKED RADIUS STORY')])
+    const instructions = narratorContext({
+      ...current,
+      candidates: [
+        ...current.candidates,
+        {
+          ...current.candidates[0]!,
+          id: 'saturn',
+          name: 'Saturn',
+          framings: ['ring-profile'],
+        },
+      ],
+    })
+    for (const expected of [
+      'Saturn',
+      'Titan',
+      'Provenance: observed',
+      'Picture time: 123',
+      'Arrival: verified',
+      'Application measurements and current-view state are authoritative',
+      'Use established Solar System knowledge',
+      'read_subject',
+      'find_worlds',
+      'stand_at_site',
+      'ring-profile',
+    ])
+      expect(instructions).toContain(expected)
+    for (const excluded of [
+      'COOKED',
+      'SOURCE PROSE',
+      '60268000',
+      '60,268 km',
+      'private-seed',
+      's:SOL',
+    ])
+      expect(instructions).not.toContain(excluded)
+  })
+
+  it('includes only an asked raw measurement and excludes authored note speech even when asked', () => {
+    const current = context([
+      measured('COOKED RADIUS STORY'),
       {
-        ...measured('unused'),
-        label: 'Core composition',
-        speech: null,
+        ...measured('COOKED RINGS STORY'),
+        id: 'note',
+        label: 'Rings',
+        sourceIds: ['nasa'],
         quantity: null,
         unit: null,
         display: null,
-        provenance: 'unknown' as const,
-        reason: 'No direct sample has measured the core.',
       },
-      measured('Saturn has a recorded radius.'),
-      measured('This fourth fact is outside the allowance.'),
-    ]
-    const instructions = narratorContext(context(facts))
-    expect(instructions).toContain('Saturn')
-    expect(instructions).toContain('Provenance: observed')
-    expect(instructions).toContain('Picture time: 123')
-    expect(instructions).toContain('Arrival: verified')
-    expect(instructions).toContain(facts[0]!.speech)
-    expect(instructions).toContain(
-      'Unknown Core composition: No direct sample has measured the core.',
-    )
-    expect(instructions).toContain(facts[2]!.speech)
-    expect(instructions).not.toContain(facts[3]!.speech)
-    expect(instructions).not.toContain('application-record')
-    expect(instructions).not.toContain('Unselected summary')
-    expect(instructions).toContain('Use only these verified facts')
-    expect(instructions).toContain('Delegate other factual requests')
-    expect(instructions).toContain('Do not recite this context unsolicited')
-  })
-
-  it('never announces arrival during travel even when the brief reports an arrived observer', () => {
-    const instructions = narratorContext({ ...context(), traveling: true })
-    expect(instructions).toContain('Arrival: traveling')
-    expect(instructions).not.toContain('Arrival: verified')
-    expect(instructions).toContain('Do not announce arrival while traveling')
-  })
-
-  it('replaces the previous subject evidence and rejects a stale current brief', () => {
-    const previous = context([measured('Saturn has rings.')])
-    const current: TourContext = {
-      ...previous,
-      subjectId: 'titan',
+    ])
+    const enriched = {
+      ...current,
       brief: {
-        ...previous.brief!,
-        subjectId: 'titan',
-        name: 'Titan',
-        provenance: 'projected',
-        facts: [measured('Titan has an atmosphere.')],
+        ...current.brief!,
+        sources: [
+          ...current.brief!.sources,
+          {
+            id: 'nasa',
+            title: 'SOURCE PROSE',
+            url: 'https://example.invalid',
+            origin: 'curated' as const,
+          },
+        ],
       },
-      briefs: [previous.brief!],
     }
-    const instructions = narratorContext(current)
-    expect(instructions).toContain('Titan has an atmosphere.')
-    expect(instructions).toContain('Provenance: projected')
-    expect(instructions).not.toContain('Saturn')
-    const mismatched = narratorContext({ ...current, brief: previous.brief })
-    expect(mismatched).not.toContain('Saturn')
-    expect(mismatched).toContain('Arrival: unverified')
-  })
-
-  it('counts UTF-8 bytes and skips a whole oversized sentence while retaining later complete evidence', () => {
-    const oversized = `${'遠'.repeat(400)}.`
-    const complete = `${'🌌'.repeat(100)}.`
-    const short = 'This complete fact still fits.'
     const instructions = narratorContext(
-      context([measured(oversized), measured(complete), measured(short)]),
+      enriched,
+      'What is Saturn’s radius and the history of its rings?',
     )
-    expect(instructions).not.toContain('遠')
-    expect(instructions).toContain(complete)
-    expect(instructions).toContain(short)
-    expect(
-      new TextEncoder().encode(instructions).byteLength,
-    ).toBeLessThanOrEqual(NARRATOR_CONTEXT_MAX_BYTES)
-    expect(instructions).not.toContain('\uFFFD')
-    expect(instructions.endsWith('.')).toBe(true)
+    expect(instructions).toContain('"quantity":60268000')
+    expect(instructions).toContain('"unit":"m"')
+    expect(instructions).toContain('60,268 km')
+    for (const excluded of [
+      'COOKED',
+      'SOURCE PROSE',
+      'https://',
+      '"id":"note"',
+    ])
+      expect(instructions).not.toContain(excluded)
   })
 
-  it('keeps its byte limit even when the subject name consumes the evidence budget', () => {
-    const current = context([measured(`${'🌌'.repeat(300)}.`)])
+  it('does not announce arrival during travel or with stale observer time', () => {
+    expect(narratorContext({ ...context(), traveling: true })).toContain(
+      'Arrival: traveling',
+    )
+    expect(narratorContext({ ...context(), pictureTime: 124 })).toContain(
+      'Arrival: unverified',
+    )
+    expect(narratorContext(context())).toContain(
+      'Do not announce arrival while traveling',
+    )
+  })
+
+  it('separates projected-world properties from actual mission history', () => {
+    const current = context()
     const instructions = narratorContext({
       ...current,
-      brief: { ...current.brief!, name: '空'.repeat(160) },
+      brief: { ...current.brief!, provenance: 'projected' },
     })
-    expect(instructions).toContain('空'.repeat(160))
-    expect(instructions).not.toContain('🌌')
-    expect(
-      new TextEncoder().encode(instructions).byteLength,
-    ).toBeLessThanOrEqual(1500)
+    expect(instructions).toContain(
+      'Projected worlds have no real mission or discovery history',
+    )
+    expect(instructions).not.toContain(
+      'Use established Solar System knowledge for history',
+    )
   })
 
-  it('omits unfinished speech and completes a whole unknown reason without inventing a value', () => {
-    const unknown: TourFact = {
-      ...measured('unused'),
-      label: 'Interior',
-      speech: null,
-      quantity: null,
-      unit: null,
-      display: null,
-      provenance: 'unknown',
-      reason: 'no sample has reached the interior',
+  it('rejects a mismatched brief and never borrows its old subject', () => {
+    const instructions = narratorContext({ ...context(), subjectId: 'titan' })
+    expect(instructions).not.toContain('Saturn')
+    expect(instructions).toContain('Current subject: unavailable')
+    expect(instructions).toContain('Arrival: unverified')
+  })
+
+  it('bounds UTF-8 bytes without cutting an oversized record or name', () => {
+    const current = context([
+      {
+        ...measured('COOKED'),
+        quantity: null,
+        display: null,
+        reason: '遠'.repeat(1200),
+      },
+    ])
+    for (const name of ['Saturn', '空'.repeat(160), '空'.repeat(2000)]) {
+      const instructions = narratorContext(
+        { ...current, brief: { ...current.brief!, name } },
+        'What is the radius?',
+      )
+      expect(
+        new TextEncoder().encode(instructions).byteLength,
+      ).toBeLessThanOrEqual(NARRATOR_CONTEXT_MAX_BYTES)
+      expect(instructions).not.toContain('遠')
+      expect(instructions).not.toContain('\uFFFD')
     }
-    const instructions = narratorContext(
-      context([measured('A cut off claim that says'), unknown]),
-    )
-    expect(instructions).not.toContain('A cut off claim')
-    expect(instructions).toContain(
-      'Unknown Interior: no sample has reached the interior.',
-    )
-    expect(instructions).not.toContain('60,268')
   })
 })

@@ -80,7 +80,235 @@ const explanation = {
   actions: [],
 }
 
+const solarContext: TourContext = {
+  ...context,
+  candidates: context.candidates.map((candidate) => ({
+    ...candidate,
+    address: 'g:milky-way/s:SOL/b:5',
+  })),
+  briefs: context.briefs.map((brief) => ({
+    ...brief,
+    address: 'g:milky-way/s:SOL/b:5',
+  })),
+}
+
 describe('grounded director', () => {
+  it('allows an observed Solar System story without requiring a supplied note', () => {
+    const story =
+      'Cassini spent years exploring Saturn and its moons. The mission ended with a final plunge into Saturn’s atmosphere.'
+    expect(
+      validateDirectorDecision(
+        { ...explanation, text: story, factIds: [] },
+        solarContext,
+      ),
+    ).toMatchObject({ kind: 'explanation', text: story, factIds: [] })
+    for (const other of [
+      context,
+      {
+        ...solarContext,
+        candidates: solarContext.candidates.map((candidate) => ({
+          ...candidate,
+          provenance: 'projected' as const,
+        })),
+      },
+    ])
+      expect(() =>
+        validateDirectorDecision(
+          { ...explanation, text: story, factIds: [] },
+          other,
+        ),
+      ).toThrow()
+  })
+
+  it('rejects fabricated citations and scene completion in model-written history', () => {
+    for (const text of [
+      'The camera has arrived at Saturn.',
+      'Cassini explored Saturn. https://invented.example/cassini',
+      'A new Saturn mission launched today.',
+    ])
+      expect(() =>
+        validateDirectorDecision(
+          { ...explanation, text, factIds: [] },
+          solarContext,
+        ),
+      ).toThrow()
+  })
+
+  it('keeps a short stop story, meaningful objective, motion, and automatic pacing', () => {
+    const plan = {
+      id: 'history',
+      goal: 'A short history of Saturn exploration',
+      durationSeconds: 90,
+      automatic: true,
+      rationale: 'Connect the view of Saturn to Cassini’s exploration.',
+      stops: [
+        {
+          id: 'cassini',
+          subjectId: 'saturn',
+          framingId: 'rings',
+          siteId: null,
+          objective: 'Connect the rings to Cassini’s long watch',
+          factIds: [],
+          minimumViewSeconds: 20,
+          narration:
+            'Cassini turned Saturn from a distant point of light into a world we could explore in detail. Its long watch revealed how much these rings and moons can change.',
+          motion: 'orbit',
+          lookSeconds: 8,
+        },
+      ],
+    }
+    const proposal = { kind: 'plan', text: '', factIds: [], plan, actions: [] }
+    expect(validateDirectorDecision(proposal, solarContext).plan).toEqual(plan)
+    const stop = plan.stops[0]!
+    expect(() =>
+      validateDirectorDecision(
+        {
+          ...proposal,
+          plan: {
+            ...plan,
+            stops: [{ ...stop, narration: 'word '.repeat(81) }],
+          },
+        },
+        solarContext,
+      ),
+    ).toThrow()
+    expect(() =>
+      validateDirectorDecision(
+        {
+          ...proposal,
+          plan: {
+            ...plan,
+            stops: [
+              {
+                ...stop,
+                sources: [
+                  {
+                    id: 'fake',
+                    title: 'Invented citation',
+                    url: 'https://invented.example',
+                    origin: 'curated',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        solarContext,
+      ),
+    ).toThrow()
+    expect(() =>
+      validateDirectorDecision(proposal, {
+        ...solarContext,
+        candidates: solarContext.candidates.map((candidate) => ({
+          ...candidate,
+          provenance: 'projected' as const,
+        })),
+      }),
+    ).toThrow()
+  })
+
+  it('passes the previous goal and Solar System eligibility into replanning', async () => {
+    const fetcher = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body))
+        const input = JSON.parse(body.input)
+        expect(input.priorGoal).toBe(
+          'Visit Mars and Saturn in five minutes, with history.',
+        )
+        expect(input.candidates[0].solarSystem).toBe(true)
+        expect(body.instructions).toContain('skip, shorten, or change emphasis')
+        return Response.json({
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    ...explanation,
+                    text: 'Cassini explored Saturn and its moons.',
+                    factIds: [],
+                  }),
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 12, output_tokens: 7 },
+        })
+      },
+    )
+    await expect(
+      interpretTourRequest({
+        apiKey: 'fake',
+        text: 'Skip Mars and make it shorter.',
+        context: solarContext,
+        priorGoal: 'Visit Mars and Saturn in five minutes, with history.',
+        fetch: fetcher as typeof fetch,
+      }),
+    ).resolves.toMatchObject({ kind: 'explanation' })
+  })
+
+  it('omits cooked stories and source prose while supplying an asked raw app measurement', async () => {
+    const enriched = withAstronomyNotes(solarContext)
+    const current = {
+      ...enriched,
+      briefs: enriched.briefs.map((brief) => ({
+        ...brief,
+        summary: 'COOKED SUMMARY',
+        facts: brief.facts.map((fact) => ({
+          ...fact,
+          speech: `COOKED ${fact.id}`,
+        })),
+      })),
+    }
+    const payloads: string[] = []
+    const fetcher = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body))
+        payloads.push(body.input)
+        return Response.json({
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    ...explanation,
+                    text: 'Cassini explored Saturn and its moons.',
+                    factIds: [],
+                  }),
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        })
+      },
+    )
+    for (const text of [
+      'Tell me Saturn’s history.',
+      'What is Saturn’s radius?',
+    ])
+      await interpretTourRequest({
+        apiKey: 'fake',
+        text,
+        context: current,
+        fetch: fetcher as typeof fetch,
+      })
+    for (const payload of payloads) {
+      expect(payload).not.toContain('COOKED')
+      expect(payload).not.toContain('https://')
+      expect(payload).not.toContain('saturn-address')
+      expect(payload).not.toContain('note:')
+    }
+    expect(JSON.parse(payloads[0]!).candidates[0].facts).toEqual([])
+    expect(JSON.parse(payloads[1]!).candidates[0].facts).toEqual([
+      expect.objectContaining({ id: 'radius', quantity: 10, unit: 'm' }),
+    ])
+  })
   it('forwards model traces and distinguishes the validated decision from its proposal', async () => {
     const trace = vi.fn()
     await interpretTourRequest({
@@ -364,7 +592,7 @@ describe('grounded director', () => {
     ).toThrow()
   })
 
-  it('rejects plans with invented facts and normalizes stop objectives to registered subjects', () => {
+  it('rejects plans with invented facts and retains meaningful stop objectives', () => {
     const plan = {
       id: 'tour',
       goal: 'rings',
@@ -375,7 +603,7 @@ describe('grounded director', () => {
           subjectId: 'saturn',
           framingId: 'rings',
           siteId: null,
-          objective: 'Saturn is secretly made of cheese',
+          objective: 'Notice the rings around Saturn',
           factIds: ['radius'],
           minimumViewSeconds: 15,
         },
@@ -386,7 +614,7 @@ describe('grounded director', () => {
         { kind: 'plan', text: '', factIds: [], plan, actions: [] },
         context,
       ).plan?.stops[0]?.objective,
-    ).toBe('Explore Saturn')
+    ).toBe('Notice the rings around Saturn')
     expect(() =>
       validateDirectorDecision(
         {

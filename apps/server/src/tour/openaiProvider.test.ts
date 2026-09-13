@@ -47,11 +47,23 @@ describe('Live provider boundary', () => {
     expect(instructions).toContain('friendly astronomy nerd')
     expect(instructions).toContain('natural contractions')
     expect(instructions).toContain(
-      'specific curiosity hook already supported by the supplied text',
+      'specific curiosity hook from established astronomy or the supplied records',
     )
     expect(instructions).toContain('Vary your cadence')
     expect(instructions).toContain(
-      'Never add a scientific claim, number, analogy, or personal experience that the supplied text does not support.',
+      'Application measurements and current-view state remain authoritative.',
+    )
+    expect(instructions).toContain(
+      'Use your established knowledge of real Solar System history, discoveries, science, and fun facts without delegating every factual question.',
+    )
+    expect(instructions).toContain(
+      'Projected worlds have no real mission or discovery history.',
+    )
+    expect(instructions).toContain(
+      'When the application says a tour narration is playing, stay quiet and listen; do not repeat the clip or fill its looking pause.',
+    )
+    expect(instructions).toContain(
+      'Delegate spoken pause, resume, next, back, and end controls immediately instead of only acknowledging them.',
     )
   })
 
@@ -72,7 +84,7 @@ describe('Live provider boundary', () => {
     const instructions = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
       .session.instructions as string
     expect(instructions).toContain(
-      'Application commentary is a new verified answer to the latest visitor request.',
+      'Application commentary is the prepared answer to the latest visitor request.',
     )
     expect(instructions).toContain(
       'Speak that answer faithfully, even when its subject differs from the current view.',
@@ -364,7 +376,7 @@ describe('Live provider boundary', () => {
     })
     expect(body.session.audio.output.voice).toBe('marin')
     expect(body.session.instructions).toContain(
-      'No verified brief is available.',
+      'No current-view record is available.',
     )
   })
 
