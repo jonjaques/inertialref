@@ -94,6 +94,9 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
         },
         poll: () => executor.poll(),
         supersede: (revision) => executor.supersede(revision),
+        queueMotion: (kind, seconds) => executor.queueMotion(kind, seconds),
+        startMotion: (kind, seconds) => executor.startMotion(kind, seconds),
+        stopMotion: () => executor.stopMotion(),
         cancel: (reason) => executor.cancel(reason),
         dispose: () => {
           unsubscribe()

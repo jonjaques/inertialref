@@ -93,6 +93,36 @@ const solarContext: TourContext = {
 }
 
 describe('grounded director', () => {
+  it('keeps a destination story for arrival without replacing it with physical records', () => {
+    const solar = {
+      ...context,
+      candidates: context.candidates.map((candidate) => ({
+        ...candidate,
+        address: 's:SOL/b:5',
+      })),
+    }
+    const story = {
+      kind: 'actions',
+      text: 'Saturn puzzled Galileo: those strange shapes beside the planet looked like ears.',
+      factIds: [],
+      plan: null,
+      actions: [{ tool: 'show_subject', subjectId: 'saturn' }],
+    }
+    expect(validateDirectorDecision(story, solar).text).toBe(story.text)
+    expect(() => validateDirectorDecision(story, context)).toThrow()
+    expect(() =>
+      validateDirectorDecision(
+        {
+          ...story,
+          actions: [
+            { tool: 'read_subject', subjectId: 'saturn' },
+            ...story.actions,
+          ],
+        },
+        solar,
+      ),
+    ).toThrow()
+  })
   it('allows an observed Solar System story without requiring a supplied note', () => {
     const story =
       'Cassini spent years exploring Saturn and its moons. The mission ended with a final plunge into Saturn’s atmosphere.'

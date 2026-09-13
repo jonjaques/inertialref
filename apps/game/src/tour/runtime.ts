@@ -38,9 +38,9 @@ export interface GuideExecutor {
   supersede(revision: number): void
   cancel(reason?: string): void
   dispose(): void
-  queueMotion?(kind: TourCameraMotion, durationSeconds: number): void
-  startMotion?(kind: TourCameraMotion, durationSeconds: number): number
-  stopMotion?(): void
+  queueMotion(kind: TourCameraMotion, durationSeconds: number): void
+  startMotion(kind: TourCameraMotion, durationSeconds: number): number
+  stopMotion(): void
 }
 
 export interface GuideCapabilities {
