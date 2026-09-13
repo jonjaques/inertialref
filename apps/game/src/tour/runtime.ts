@@ -19,6 +19,7 @@ import {
   deterministicTour,
   TourRunner,
   type GuideStatus,
+  type GuideTraceEntry,
 } from '@inertialref/devtools'
 import { ControlledPlayback, LiveConnection, type LiveEvent } from './media.ts'
 
@@ -140,6 +141,9 @@ export class GuideRuntime {
   #readyReject: ((error: Error) => void) | null = null
   #mutating = false
   #knownViewRevision = -1
+  #traceEnabled = false
+  #traceSequence = 0
+  #traceEntries: GuideTraceEntry[] = []
 
   constructor(host: GuideHost) {
     this.#host = host
@@ -151,6 +155,25 @@ export class GuideRuntime {
     }
   }
   getSnapshot = (): GuideSnapshot => this.#snapshot
+  trace(enabled?: boolean): readonly GuideTraceEntry[] {
+    if (enabled !== undefined) this.#traceEnabled = enabled
+    return structuredClone(this.#traceEntries)
+  }
+  #record(
+    direction: GuideTraceEntry['direction'],
+    message: GuideTraceEntry['message'],
+  ): void {
+    if (!this.#traceEnabled) return
+    const entry: GuideTraceEntry = {
+      sequence: ++this.#traceSequence,
+      at: this.#host.now(),
+      direction,
+      message: structuredClone(message),
+    }
+    this.#traceEntries.push(entry)
+    if (this.#traceEntries.length > 200) this.#traceEntries.shift()
+    console.debug('[tour browser]', structuredClone(entry))
+  }
   diagnostics(): GuideStatus {
     const state = this.#snapshot
     return {
@@ -765,6 +788,7 @@ export class GuideRuntime {
   }
 
   #receive(event: import('@inertialref/protocol').TourServerMessage): void {
+    this.#record('receive', event)
     switch (event.type) {
       case 'ready':
         if (event.sessionId !== this.#sessionId) return
@@ -954,7 +978,10 @@ export class GuideRuntime {
     }
   }
   #send(event: TourClientMessage): void {
-    if (this.#socket?.readyState === 1) this.#socket.send(JSON.stringify(event))
+    if (this.#socket?.readyState === 1) {
+      this.#record('send', event)
+      this.#socket.send(JSON.stringify(event))
+    }
   }
   #disconnect(): void {
     this.#readyReject?.(new Error('The guide connection closed.'))

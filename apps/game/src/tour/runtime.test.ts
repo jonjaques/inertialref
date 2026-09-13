@@ -181,6 +181,76 @@ const settle = async () => {
 }
 
 describe('the browser guide runtime', () => {
+  it('records opt-in message traces without credentials and returns bounded detached copies', async () => {
+    const f = rig()
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    try {
+      expect(f.runtime.trace()).toEqual([])
+      expect(f.requests).toHaveLength(0)
+      await f.runtime.ask('Which worlds should we compare?')
+      expect(f.runtime.trace()).toEqual([])
+      expect(debug).not.toHaveBeenCalled()
+      f.runtime.trace(true)
+      await f.runtime.login('password-never-recorded')
+      await f.runtime.ask('Tell me about the rings')
+      const socket = f.sockets[0]!
+      socket.receive({
+        type: 'status',
+        state: 'awaiting-next',
+        message: 'Here is the answer.',
+      })
+      expect(
+        f.runtime
+          .trace()
+          .some(
+            (entry) =>
+              entry.direction === 'send' && entry.message.type === 'ask',
+          ),
+      ).toBe(true)
+      expect(
+        f.runtime
+          .trace()
+          .some(
+            (entry) =>
+              entry.direction === 'receive' && entry.message.type === 'status',
+          ),
+      ).toBe(true)
+      expect(JSON.stringify(f.runtime.trace())).not.toContain(
+        'password-never-recorded',
+      )
+      expect(debug).toHaveBeenCalledWith('[tour browser]', expect.any(Object))
+      for (let i = 0; i < 205; i++)
+        socket.receive({
+          type: 'status',
+          state: 'awaiting-next',
+          message: `Reply ${i}`,
+        })
+      const snapshot = f.runtime.trace()
+      expect(snapshot).toHaveLength(200)
+      expect(snapshot[0]!.sequence).toBeGreaterThan(1)
+      ;(
+        snapshot[0] as unknown as { message: { message: string } }
+      ).message.message = 'changed by reader'
+      expect(JSON.stringify(f.runtime.trace())).not.toContain(
+        'changed by reader',
+      )
+      f.runtime.trace(false)
+      debug.mockClear()
+      socket.receive({
+        type: 'status',
+        state: 'awaiting-next',
+        message: 'Unrecorded reply',
+      })
+      expect(debug).not.toHaveBeenCalled()
+      expect(JSON.stringify(f.runtime.trace())).not.toContain(
+        'Unrecorded reply',
+      )
+    } finally {
+      f.dispose()
+      debug.mockRestore()
+    }
+  })
+
   it('is inert until requested and executes local object names without a model', async () => {
     const f = rig()
     expect(f.requests).toEqual([])

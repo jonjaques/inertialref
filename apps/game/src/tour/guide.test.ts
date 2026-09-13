@@ -14,6 +14,7 @@ describe('the guide diagnostic adapter', () => {
         loaded: true,
       }),
       ask: vi.fn(async () => {}),
+      trace: vi.fn(() => []),
       end: vi.fn(),
     }
     const create = vi.fn(async () => runtime as unknown as GuideRuntime)
@@ -25,10 +26,17 @@ describe('the guide diagnostic adapter', () => {
       loaded: false,
     })
     expect(create).not.toHaveBeenCalled()
+    expect(engine.guide!.trace!()).toEqual([])
+    expect(create).not.toHaveBeenCalled()
+    expect(engine.guide!.trace!(true)).toEqual([])
     await engine.guide!.ask('Saturn')
     expect(await guide.load()).toBe(runtime)
     expect(create).toHaveBeenCalledOnce()
     expect(runtime.ask).toHaveBeenCalledWith('Saturn')
+    expect(runtime.trace).toHaveBeenCalledWith(true)
+    expect(runtime.trace.mock.invocationCallOrder[0]).toBeLessThan(
+      runtime.ask.mock.invocationCallOrder[0]!,
+    )
     release()
     expect(engine.guide).toBeNull()
     await Promise.resolve()

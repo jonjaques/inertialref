@@ -213,6 +213,17 @@ export interface GuideStatus {
 export interface GuideHostPort {
   status(): GuideStatus
   ask(text: string): Promise<GuideStatus>
+  trace?(enabled?: boolean): readonly GuideTraceEntry[]
+}
+
+/** Optional, in-memory application messages; never authentication traffic. */
+export interface GuideTraceEntry {
+  readonly sequence: number
+  readonly at: number
+  readonly direction: 'send' | 'receive'
+  readonly message:
+    | import('@inertialref/protocol').TourClientMessage
+    | import('@inertialref/protocol').TourServerMessage
 }
 
 export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
@@ -2260,6 +2271,11 @@ export class GameHarness {
     return this.#host.render.guide?.()?.status() ?? UNAVAILABLE_GUIDE
   }
 
+  /** Read recent messages, or explicitly toggle console tracing for this mode. */
+  guideTrace(enabled?: boolean): readonly GuideTraceEntry[] {
+    return this.#host.render.guide?.()?.trace?.(enabled) ?? []
+  }
+
   /** An explicit console request uses the same active guide as its dock panel. */
   async guideAsk(text: string): Promise<GuideStatus> {
     if (
@@ -2310,6 +2326,7 @@ export class GameHarness {
       '  ir.visitStructure(id, height?) surface anchors; angles in degrees, heights in meters',
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.guideStatus()              inspect the active Planetarium guide without starting it',
+      '  ir.guideTrace(enabled?)        recent 200 messages; true logs to console, false stops',
       '  await ir.guideAsk(text)        ask the active guide through its bounded runtime',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',

@@ -6,6 +6,8 @@ describe('the optional guide host', () => {
   it('is unavailable headlessly and never constructs a conversation', async () => {
     const session = openSession()
     expect(session.harness.guideStatus().available).toBe(false)
+    expect(session.harness.guideTrace()).toEqual([])
+    expect(session.harness.guideTrace(true)).toEqual([])
     expect((await session.harness.guideAsk('Saturn')).available).toBe(false)
     session.dispose()
   })
@@ -25,11 +27,14 @@ describe('the optional guide host', () => {
       automatic: false,
     }
     const ask = vi.fn(async () => status)
+    const trace = vi.fn(() => [])
     const session = openSession({
-      render: { guide: () => ({ status: () => status, ask }) },
+      render: { guide: () => ({ status: () => status, ask, trace }) },
     })
     expect(session.harness.guideStatus()).toEqual(status)
     expect(ask).not.toHaveBeenCalled()
+    expect(session.harness.guideTrace(true)).toEqual([])
+    expect(trace).toHaveBeenCalledWith(true)
     await session.harness.guideAsk('  Saturn  ')
     expect(ask).toHaveBeenCalledWith('Saturn')
     await expect(session.harness.guideAsk('x'.repeat(4001))).rejects.toThrow(

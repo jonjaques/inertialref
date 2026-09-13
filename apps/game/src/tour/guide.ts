@@ -17,6 +17,7 @@ export function mountGuide(
   guide: GuideLifetime<GuideRuntime>,
 ): () => void {
   const release = guide.acquire()
+  let tracing = false
   const port: GuideHostPort = {
     status: () =>
       guide.current?.diagnostics() ?? {
@@ -29,6 +30,18 @@ export function mountGuide(
       if (engine.guide !== port) return UNAVAILABLE_GUIDE
       await runtime.ask(text)
       return runtime.diagnostics()
+    },
+    trace: (enabled) => {
+      if (enabled !== undefined) tracing = enabled
+      if (guide.current !== null) return guide.current.trace(enabled)
+      if (enabled === true)
+        void guide.load().then(
+          (runtime) => {
+            if (engine.guide === port) runtime.trace(tracing)
+          },
+          () => {},
+        )
+      return []
     },
   }
   engine.guide = port
