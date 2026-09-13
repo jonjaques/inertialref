@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { parseArgs } from 'node:util'
 import { resolve } from 'node:path'
 import { EvaluationBudget } from './budget.mjs'
+import { evaluationCounts } from './report.mjs'
 import {
   interpretTourRequest,
   DIRECTOR_PROMPT_VERSION,
@@ -189,7 +190,7 @@ const summary = {
   promptVersion: DIRECTOR_PROMPT_VERSION,
   requestedRuns: limit * repetitions,
   completedRuns: records.length,
-  providerSuccesses: completed.length,
+  ...evaluationCounts(records),
   intendedTaskSuccesses: intended,
   intendedTaskRate: records.length ? intended / records.length : 0,
   inputTokens: completed.reduce(

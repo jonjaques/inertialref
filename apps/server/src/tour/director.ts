@@ -15,7 +15,7 @@ import {
   type DirectorUsage,
 } from './openaiResponses.ts'
 
-export const DIRECTOR_PROMPT_VERSION = 'planetarium-director-1'
+export const DIRECTOR_PROMPT_VERSION = 'planetarium-director-2'
 export const CLARIFICATIONS = {
   evidence: 'I can describe a view after the camera confirms arrival.',
   subject: 'Which object do you mean?',
