@@ -10,7 +10,7 @@ const args = [
   'wrangler',
   'dev',
   ...(existsSync(local) ? ['--env-file', local] : []),
-  ...process.argv.slice(2),
+  ...process.argv.slice(2).filter((argument) => argument !== '--'),
 ]
 // Only the Worker receives this file. Vite never inherits the provider secrets.
 const child = spawn('pnpm', args, { cwd: server, stdio: 'inherit' })

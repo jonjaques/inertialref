@@ -166,8 +166,10 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
           429,
         )
       const fingerprint = await digest(JSON.stringify(creation))
-      return env.TOUR_SESSIONS.getByName(reserved.reservation.sessionId).begin(
-        creation,
+      return await env.TOUR_SESSIONS.getByName(
+        reserved.reservation.sessionId,
+      ).begin(
+        JSON.parse(JSON.stringify(creation)),
         user,
         reserved.reservation.sessionId,
         fingerprint,
@@ -181,7 +183,7 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
     const session = env.TOUR_SESSIONS.getByName(match[1]!)
     const headers = new Headers(request.headers)
     headers.set('x-tour-owner', user)
-    return session.fetch(new Request(request, { headers }))
+    return await session.fetch(new Request(request, { headers }))
   } catch (error) {
     if (error instanceof TourHttpError)
       return tourJson({ error: error.message }, error.status)

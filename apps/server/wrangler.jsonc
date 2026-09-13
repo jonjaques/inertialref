@@ -78,7 +78,7 @@
    * `pnpm sim` binds that port; Attach Node is aimed at it. workerd listens
    * here instead so the two can run together.
    */
-  "dev": { "inspector_port": 9230 },
+  "dev": { "inspector_port": 9230, "host": "localhost" },
 
   /*
    * The site's object storage (docs/hosting.md H-8).

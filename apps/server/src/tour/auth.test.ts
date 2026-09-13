@@ -67,6 +67,34 @@ describe('private guide gate', () => {
     expect(await passwordMatches('', '')).toBe(false)
   })
 
+  it('permits same-origin read requests without relaxing mutations or upgrades', () => {
+    const read = new Request('https://inertialref.app/api/tour/usage', {
+      headers: { 'sec-fetch-site': 'same-origin' },
+    })
+    expect(allowedOrigin(read)).toBe(true)
+    expect(allowedOrigin(new Request(read, { method: 'POST' }))).toBe(false)
+    expect(
+      allowedOrigin(
+        new Request(read, {
+          headers: { 'sec-fetch-site': 'same-origin', upgrade: 'websocket' },
+        }),
+      ),
+    ).toBe(false)
+    expect(
+      allowedOrigin(
+        new Request(read, { headers: { 'sec-fetch-site': 'cross-site' } }),
+      ),
+    ).toBe(false)
+    expect(
+      allowedOrigin(
+        new Request('http://localhost/api/tour/login', {
+          method: 'POST',
+          headers: { origin: 'http://localhost' },
+        }),
+      ),
+    ).toBe(true)
+  })
+
   it('bounds streaming JSON even without a content-length header', async () => {
     const input = new Request('https://inertialref.app', {
       method: 'POST',

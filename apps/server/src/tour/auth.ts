@@ -6,6 +6,8 @@ const HOSTS = new Set([
   'https://inertialref.jonjaques.com',
 ])
 const DEVELOPMENT = new Set([
+  'http://localhost',
+  'http://127.0.0.1',
   'http://localhost:5173',
   'http://localhost:8787',
   'http://127.0.0.1:5173',
@@ -15,7 +17,16 @@ const DEVELOPMENT = new Set([
 export function allowedOrigin(request: Request): boolean {
   const origin = request.headers.get('origin')
   const target = new URL(request.url).origin
-  if (!origin) return false
+  if (!origin) {
+    // Browsers omit Origin on same-origin GETs. Mutations and WebSocket
+    // upgrades still require the exact origin and the signed cookie.
+    return (
+      request.method === 'GET' &&
+      request.headers.get('upgrade') === null &&
+      request.headers.get('sec-fetch-site') === 'same-origin' &&
+      (HOSTS.has(target) || DEVELOPMENT.has(target))
+    )
+  }
   if (HOSTS.has(target)) return origin === target
   if (DEVELOPMENT.has(target)) return DEVELOPMENT.has(origin)
   // Version preview origins are exact: the request cannot choose another host.
