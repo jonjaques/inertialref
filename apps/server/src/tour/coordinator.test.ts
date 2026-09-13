@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { TourContext, TourServerMessage } from '@inertialref/protocol'
+import type {
+  SubjectBrief,
+  ToolRequest,
+  TourAction,
+  TourContext,
+  TourServerMessage,
+  TourWorldQuery,
+} from '@inertialref/protocol'
 import {
   TourCoordinator,
   newSessionRecord,
@@ -69,7 +76,9 @@ function setup(
     text: string,
     context: TourContext,
     signal: AbortSignal,
+    maxRounds: 1 | 2,
   ) => Promise<DirectorDecision>,
+  initial = context(),
 ) {
   const messages: TourServerMessage[] = []
   const saved: unknown[] = []
@@ -82,7 +91,7 @@ function setup(
     manifest: context().manifest,
     fingerprint: 'fp',
   })
-  const coordinator = new TourCoordinator(record, context(), {
+  const coordinator = new TourCoordinator(record, initial, {
     now: () => 101,
     id: (() => {
       let id = 0
@@ -218,5 +227,353 @@ describe('tour coordinator ordering', () => {
       },
     })
     expect(coordinator.context?.viewRevision).toBe(2)
+  })
+})
+
+const worldQuery: TourWorldQuery = {
+  kinds: ['moon'],
+  starClasses: [],
+  atmosphere: null,
+  sea: null,
+  rings: null,
+  habitable: null,
+  landable: true,
+  moons: null,
+  minRadius: null,
+  maxRadius: null,
+}
+
+function returnedTitan(): TourContext {
+  const current = context()
+  const titan: SubjectBrief = {
+    ...current.brief!,
+    subjectId: 'titan',
+    address: 'b:returned-titan',
+    name: 'Titan',
+    classification: 'moon',
+    summary: 'A returned moon record.',
+    facts: [
+      {
+        ...current.brief!.facts[0]!,
+        id: 'titan-radius',
+        quantity: 2574730,
+        display: '2,574.73 km',
+        speech:
+          'Titan has a separately recorded radius of 2,574.73 kilometers.',
+        sourceIds: ['titan-record'],
+      },
+    ],
+    sources: [
+      {
+        id: 'titan-record',
+        title: 'Titan application record',
+        url: null,
+        origin: 'application',
+      },
+    ],
+    observer: {
+      ...current.brief!.observer,
+      fill: null,
+      arrived: false,
+    },
+  }
+  return {
+    ...current,
+    candidates: [
+      ...current.candidates,
+      {
+        ...current.candidates[0]!,
+        id: titan.subjectId,
+        address: titan.address,
+        name: titan.name,
+        kind: 'moon',
+        parentId: 'saturn',
+        factIds: titan.facts.map((fact) => fact.id),
+      },
+    ],
+    briefs: [current.brief!, titan],
+  }
+}
+
+function toolMessages(
+  messages: readonly TourServerMessage[],
+): readonly ToolRequest[] {
+  return messages.flatMap((message) =>
+    message.type === 'tool' ? [message.request] : [],
+  )
+}
+
+async function arrive(
+  coordinator: TourCoordinator,
+  request: ToolRequest,
+  current: TourContext,
+): Promise<void> {
+  await coordinator.receive({ type: 'context', context: current })
+  await coordinator.receive({
+    type: 'receipt',
+    receipt: {
+      operationId: request.operationId,
+      requestRevision: request.requestRevision,
+      status: 'arrived',
+      viewRevision: current.viewRevision,
+      pictureTime: current.pictureTime,
+      subjectId: current.subjectId,
+      reason: null,
+    },
+  })
+}
+
+describe('tour read continuation and evidence', () => {
+  it.each([
+    { tool: 'resolve_subject', query: 'Titan' },
+    { tool: 'find_worlds', query: worldQuery, radiusLightYears: 8, limit: 4 },
+  ] satisfies readonly TourAction[])(
+    'continues $tool with the refreshed candidate context exactly once',
+    async (action) => {
+      const calls: TourContext[] = []
+      const { coordinator, messages } = setup(async (_text, current) => {
+        calls.push(current)
+        return calls.length === 1
+          ? {
+              kind: 'actions',
+              text: '',
+              factIds: [],
+              plan: null,
+              actions: [action],
+              rounds: 1,
+            }
+          : {
+              kind: 'actions',
+              text: '',
+              factIds: ['titan-radius'],
+              plan: null,
+              actions: [{ tool: 'show_subject', subjectId: 'titan' }],
+              rounds: 1,
+            }
+      })
+      await coordinator.receive({
+        type: 'ask',
+        text: 'Find Titan and show it.',
+        requestRevision: 1,
+        viewRevision: 0,
+      })
+      const read = toolMessages(messages)[0]!
+      expect(read.action).toEqual(action)
+      expect(
+        calls[0]?.candidates.some((candidate) => candidate.id === 'titan'),
+      ).toBe(false)
+      const refreshed = returnedTitan()
+      await arrive(coordinator, read, refreshed)
+      expect(calls).toHaveLength(2)
+      expect(
+        calls[1]?.candidates.find((candidate) => candidate.id === 'titan')
+          ?.address,
+      ).toBe('b:returned-titan')
+      expect(toolMessages(messages)[1]?.action).toEqual({
+        tool: 'show_subject',
+        subjectId: 'titan',
+      })
+      await arrive(coordinator, read, refreshed)
+      expect(calls).toHaveLength(2)
+      expect(toolMessages(messages)).toHaveLength(2)
+    },
+  )
+
+  it('shares the three-round allowance across completed reads', async () => {
+    const allowances: number[] = []
+    const { coordinator, messages } = setup(
+      async (_text, _context, _signal, maxRounds) => {
+        allowances.push(maxRounds)
+        return {
+          kind: 'actions',
+          text: '',
+          factIds: [],
+          plan: null,
+          actions: [{ tool: 'resolve_subject', query: 'Titan' }],
+          rounds: 1,
+        }
+      },
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Find a moon.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    for (let index = 0; index < 3; index++) {
+      const request = toolMessages(messages)[index]
+      expect(request).toBeDefined()
+      await arrive(coordinator, request!, returnedTitan())
+    }
+    expect(allowances).toEqual([2, 2, 1])
+    expect(toolMessages(messages)).toHaveLength(3)
+    expect(
+      messages.some(
+        (message) => message.type === 'error' && message.code === 'deadline',
+      ),
+    ).toBe(true)
+  })
+
+  it('shares six executed tools across director continuations', async () => {
+    let calls = 0
+    const { coordinator, messages } = setup(async () => {
+      calls++
+      const read: TourAction = { tool: 'read_subject', subjectId: 'saturn' }
+      return {
+        kind: 'actions',
+        text: '',
+        factIds: [],
+        plan: null,
+        rounds: 1,
+        actions:
+          calls === 1
+            ? [
+                read,
+                read,
+                read,
+                read,
+                { tool: 'resolve_subject', query: 'Titan' },
+              ]
+            : [read, read, read, read, read, read],
+      }
+    })
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Compare these readings.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    for (let index = 0; index < 6; index++) {
+      const request = toolMessages(messages)[index]
+      expect(request).toBeDefined()
+      await arrive(coordinator, request!, returnedTitan())
+    }
+    expect(calls).toBe(2)
+    expect(toolMessages(messages)).toHaveLength(6)
+    expect(
+      messages.some(
+        (message) => message.type === 'error' && message.code === 'operations',
+      ),
+    ).toBe(true)
+  })
+
+  it('keeps curated stop facts on the server while returning a client-valid plan', async () => {
+    const current = context()
+    const note = {
+      ...current.brief!.facts[0]!,
+      id: 'saturn:note:rings',
+      label: 'Ring material',
+      quantity: null,
+      unit: null,
+      display: 'A curated astronomy note.',
+      speech: 'This selected statement comes from the curated ring note.',
+      sourceIds: ['nasa-saturn'],
+    }
+    const brief = {
+      ...current.brief!,
+      facts: [...current.brief!.facts, note],
+      sources: [
+        ...current.brief!.sources,
+        {
+          id: 'nasa-saturn',
+          title: 'NASA Saturn',
+          url: 'https://science.nasa.gov/saturn/',
+          origin: 'curated' as const,
+        },
+      ],
+    }
+    const initial: TourContext = {
+      ...current,
+      candidates: [{ ...current.candidates[0]!, factIds: ['radius', note.id] }],
+      brief,
+      briefs: [brief],
+    }
+    const { coordinator, messages } = setup(
+      async () => ({
+        kind: 'plan',
+        text: '',
+        factIds: [],
+        actions: [],
+        rounds: 1,
+        plan: {
+          id: 'rings-tour',
+          goal: 'Read the ring note.',
+          durationSeconds: 40,
+          stops: [
+            {
+              id: 'rings-stop',
+              subjectId: 'saturn',
+              framingId: 'overview',
+              siteId: null,
+              objective: 'Explain the rings.',
+              factIds: [note.id],
+              minimumViewSeconds: 20,
+            },
+          ],
+        },
+      }),
+      initial,
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Give me a ring tour.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    const plan = messages.find((message) => message.type === 'plan')
+    expect(plan?.type).toBe('plan')
+    if (plan?.type !== 'plan') throw new Error('No plan')
+    expect(plan.plan.stops[0]?.factIds).toEqual([])
+    await coordinator.receive({
+      type: 'command',
+      command: 'start',
+      requestRevision: 2,
+      viewRevision: 0,
+    })
+    await coordinator.receive({
+      type: 'narration-ready',
+      stopId: 'rings-stop',
+      requestRevision: 2,
+      viewRevision: 0,
+    })
+    const narration = messages.find((message) => message.type === 'narration')
+    expect(narration?.type).toBe('narration')
+    if (narration?.type !== 'narration') throw new Error('No narration')
+    expect(narration.brief.factIds).toEqual([note.id])
+    expect(narration.brief.text).toContain(note.speech)
+    expect(narration.brief.text).not.toContain('58,232 kilometers')
+    expect(narration.brief.sources).toEqual([brief.sources[1]])
+  })
+
+  it('retains selected cross-subject facts and each source in one explanation', async () => {
+    const initial = returnedTitan()
+    const { coordinator, messages } = setup(
+      async () => ({
+        kind: 'explanation',
+        text: '',
+        factIds: ['radius', 'titan-radius'],
+        plan: null,
+        actions: [],
+        rounds: 1,
+      }),
+      initial,
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Compare Saturn and Titan.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    const narration = messages.find((message) => message.type === 'narration')
+    expect(narration?.type).toBe('narration')
+    if (narration?.type !== 'narration') throw new Error('No narration')
+    expect(narration.brief.factIds).toEqual(['radius', 'titan-radius'])
+    expect(narration.brief.text).toContain('58,232 kilometers')
+    expect(narration.brief.text).toContain('2,574.73 kilometers')
+    expect(narration.brief.sources.map((source) => source.id)).toEqual([
+      'record',
+      'titan-record',
+    ])
+    expect(narration.brief.subjectId).toBe('saturn')
   })
 })
