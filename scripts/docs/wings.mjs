@@ -163,6 +163,10 @@ export const WINGS = [
             'docs/adr/0040-structures-keep-a-body-fixed-anchor.md',
             'Body-fixed structures',
           ],
+          [
+            'docs/adr/0041-the-guide-requests-the-view.md',
+            'The Planetarium guide',
+          ],
         ],
       },
     ],

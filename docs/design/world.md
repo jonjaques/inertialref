@@ -75,7 +75,7 @@ of a person a long way from help.
 
 ## Voice
 
-All text in the game is one of three registers, and they never mix:
+The simulation's text uses three registers:
 
 | Register           | Used for                           | Example                                                                                                                             |
 | ------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -83,9 +83,16 @@ All text in the game is one of three registers, and they never mix:
 | **Record**         | Almanac, catalog panels, revisions | `b:3 · rocky · 1.09 M⊕ · thin CO₂ · surveyed 2026-09-14 · hyg-4.1`                                                                  |
 | **Correspondence** | Survey messages, commissions       | _"Third request. The Anselm group still needs sub-2-Earth-mass confirmations and they are still not being fussy about which ones."_ |
 
-Correspondence is the only place with a human voice, it arrives rarely, and it is
-always text. **No voice acting anywhere**, which is a scope decision as much as a
-tonal one — see [audio](audio.md).
+Correspondence carries the Survey's human voice. It arrives rarely and is
+always text. Flight has no performed narrator.
+
+The [Planetarium guide](planetarium.md#the-optional-guide) is an explicit
+exception outside that fiction. The visitor can request an expressive spoken
+explanation of the record, interrupt it, and take over the camera. The guide
+does not speak for the Survey, invent a mission, or announce how the visitor
+should feel. It distinguishes observed objects, projections, and missing
+measurements. [Audio](audio.md#voice) describes its deliberate activation and
+its separation from the ship's annunciator.
 
 ---
 
@@ -141,7 +148,7 @@ paying out, which is honest about what it is.
 | Factions at war           | Adds nothing to a survey game and makes the emptiness a lie                                 |
 | Aliens                    | The single most expensive promise in science fiction. Not made, not hinted, not foreclosed. |
 | Lore dumps, codex entries | The [Almanac](exploration.md#the-almanac) is the codex, and the player wrote it             |
-| A narrator                | Rule 2                                                                                      |
+| A narrator in flight      | Rule 2; the optional Planetarium guide explains the record when requested                   |
 
 ---
 

@@ -24,13 +24,55 @@ which is therefore worth examining rather than merely flying through.
 Space Engine is the reference, and the debt is worth stating plainly. What is
 different here is that the planetarium and the flight simulation are the **same
 running world**: you can leave a ship in orbit of Mars, spend ten minutes on
-Saturn's rings, and come back to find the ship exactly where it was with the
-same state hash. There is no "load a different mode".
+Saturn's rings, and come back to the ship where the running simulation puts it.
+Equal canonical inputs produce the same state hash with or without that camera
+visit. There is no "load a different mode".
 
 ✅ **Built.** Camera — in orbit and standing on the ground — catalog with folds
 and class filters, orbit traces, labels, the body record, composed shots,
 dockable panels, touch. What is not built is listed at the bottom, along with the
 astronomy nothing has measured yet.
+
+## The optional guide
+
+The Guide is a closed-by-default workspace panel. A visitor can start a short
+current-system tour, ask about the current object, request the Saturn tour,
+or type a different question. Opening the panel loads the guide; ordinary
+Planetarium use creates no cloud session. Local templates and controls remain
+available when the cloud guide is disabled or its allowance is exhausted.
+
+The guide has one audible personality. Its director selects subjects and facts
+backstage. GPT Live handles explicit voice conversation; the automatic tour
+uses controlled spoken clips. The visitor chooses when to enable voice and
+sees an AI voice disclosure. Microphone mute, guide mute, and Pause tour have
+separate controls because they stop different things. Explanations and sources
+remain readable with guide audio muted.
+
+The initial Saturn route is an overview, the registered ring composition, and
+Titan. Next, Back, Pause, Resume, and End act locally. Automatic progression
+requires arrival, a minimum viewing interval, and completion of the current
+spoken clip. Live uses explicit Next, since its transcript does not establish
+playback completion.
+
+A question holds the current stop. A changed destination supersedes pending
+work. Manual camera input pauses the guide, and a late model result cannot
+replace the view the visitor chose. The observatory executes every movement
+through its existing camera controls and photographic clock. The simulation
+continues according to its own inputs.
+
+Scientific claims come from numeric application records or separately cited
+astronomy notes. Projected worlds are identified as projections; missing
+measurements keep their reasons. The guide separates an object's properties
+from what this camera can currently see. It sends no screenshots or continuous
+video. Image-based questions and requested composition help remain deferred.
+
+This is an explicit Planetarium exception to the game's
+[voice direction](audio.md#voice). It explains the record without telling the
+visitor what to feel. The cloud service is a password-gated private alpha;
+provider access, listening quality, and deployed acceptance require their own
+verification. [ADR-0041](../adr/0041-the-guide-requests-the-view.md) records the
+ownership and transport decisions, and [hosting](../hosting.md#the-private-planetarium-guide)
+describes admission and operation.
 
 ---
 

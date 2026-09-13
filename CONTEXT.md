@@ -39,12 +39,12 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
 | `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames                                                                                                 |
 | `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
-| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                                                                        |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas, bounded guide contracts                                                                                                                               |
 | `workers`       | 5     | done — typed tasks, ports, pool, seven shared tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                            |
 | `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                                                                            |
 | `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                                                                             |
 | `rendering`     | 5     | done — camera and lens math, LOD, depth compression, terrain meshing, galaxy presentation                                                                                                                   |
-| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                                                                         |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`, guide briefs and runner                                                                                                                |
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
 
@@ -9748,7 +9748,43 @@ The clipping and smoothing regressions fail with the defects reintroduced.
 Saturn's ring/atmosphere compositing stays unchanged: ordering the whole shell
 last also paints over foreground rings, while splitting the rings adds work.
 
+## The guide cannot speak a canceled arrival (13 Sep 2026)
+
+A guide action needs two receipts. Accepting a focus only starts the camera;
+arrival is read from the observatory after easing. An operation ID replays its
+last receipt, and canceling a request revokes even an operation the browser has
+not received yet. Removing that revocation guard made the focused regression
+accept the late operation. Restoring it rejects the operation before movement.
+
+The observatory's explicit mutation revision separates visitor takeover from
+render advancement. A pose hold cancels remaining presentation motion without
+moving a ship. Headless checks preserve identical canonical hashes for paused
+worlds and for running worlds given equal tick inputs. The runner independently
+requires arrival, minimum viewing time, and controlled audio completion.
+[ADR-0041](docs/adr/0041-the-guide-requests-the-view.md) records the cloud and
+narration boundary.
+
+The first sixteen-subject Saturn context exceeded the application's 64 KiB
+WebSocket envelope. The context now trims late candidates with their matching
+briefs using serialized UTF-8 size, preserving the selected subject and the
+Saturn/Titan template. The focused Sol-only headless fixture contains eleven
+candidates and its complete context message is 58,754 bytes. A count limit alone
+does not bound variable-length source notes and reasons for missing facts.
+
+Live's transcript is not playback completion, so its tour uses explicit Next.
+Automatic narration uses controlled mini-TTS clips. The alpha password identifies
+one shared quota principal; a new cookie cannot replenish its allowance.
+Provider adapters and deterministic tests do not establish a listening result
+or a deployed acceptance result. The provider and browser gates remain explicit.
+
 ## Known gaps
+
+- **The cloud guide still needs release evaluations.** Provider access, spoken
+  delivery, pronunciation, repeated model comparisons, browser/device behavior,
+  and deployed session cleanup require measured acceptance. Cloudflare version
+  preview URLs do not support Workers implementing the guide's Durable Objects;
+  an authenticated staging Worker requires separate configuration. Optional
+  image questions and composition assistance are not implemented.
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
   survey and fuzzy-search rows need the eye and body sampled at the same instant.

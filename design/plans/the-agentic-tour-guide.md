@@ -1,5 +1,22 @@
 # The agentic tour guide
 
+## Implementation status, 13 September 2026
+
+Core code for phases 1 through 5 is implemented: the bounded contract, numeric
+briefs, deterministic itineraries, observatory executor, application session
+coordinator, frontier director, Guide panel, conversational Live adapter,
+controlled narration, and private alpha admission. The architecture is recorded
+in [ADR-0041](../../docs/adr/0041-the-guide-requests-the-view.md).
+
+Headless and provider-fixture checks cover core behavior. The release gates
+remain separate: actual provider transport and closure, listening, repeated
+model evaluation, browser/device behavior, and an authenticated deployed
+environment. An implemented adapter does not satisfy phase 0's spoken-reply
+gate. Live uses explicit Next; automatic progression uses controlled clips and
+their actual playback completion. Sol/Terra routing comparisons remain
+evaluation work. Phases 6 and 7, including all image capture and visual
+composition assistance, are deferred and absent from core capabilities.
+
 Research spike and implementation plan. Researched 13 September 2026 against
 repository commit `0d9262d` and the official API documentation linked below.
 This is a proposed implementation. No model calls, voice auditions, latency
