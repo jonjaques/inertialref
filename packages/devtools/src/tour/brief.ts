@@ -1,4 +1,11 @@
-import { GRAVITATIONAL_CONSTANT } from '@inertialref/shared'
+import {
+  AU,
+  GRAVITATIONAL_CONSTANT,
+  SECONDS_PER_DAY,
+  formatDuration,
+  metersToAu,
+  metersToKilometers,
+} from '@inertialref/shared'
 import { COMPOSITIONS, MIN_DISTANCE_RADII } from '@inertialref/rendering'
 import {
   walkBodies,
@@ -30,12 +37,89 @@ export function tourSubjectId(address: string): string {
   return `subject-${(hash >>> 0).toString(36)}`
 }
 
+const smallIntegers = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+  'thirteen',
+  'fourteen',
+  'fifteen',
+  'sixteen',
+  'seventeen',
+  'eighteen',
+  'nineteen',
+]
+const tens = [
+  '',
+  '',
+  'twenty',
+  'thirty',
+  'forty',
+  'fifty',
+  'sixty',
+  'seventy',
+  'eighty',
+  'ninety',
+]
+
+/** A finite double's scientific exponent fits within three decimal digits. */
+function spokenExponent(value: number): string {
+  if (value < 0) return `minus ${spokenExponent(-value)}`
+  if (value < 20) return smallIntegers[value]!
+  if (value < 100)
+    return `${tens[Math.floor(value / 10)]}${value % 10 === 0 ? '' : `-${smallIntegers[value % 10]}`}`
+  return `${smallIntegers[Math.floor(value / 100)]} hundred${value % 100 === 0 ? '' : ` ${spokenExponent(value % 100)}`}`
+}
+
+// A fixed locale makes the same narration independent of the browser's locale.
+const speechNumber = new Intl.NumberFormat('en-US', {
+  maximumSignificantDigits: 4,
+})
+
 function spokenNumber(value: number): string {
-  const rounded = Number(value.toPrecision(4))
-  const parts = rounded.toString().split('e')
-  return parts.length === 1
-    ? parts[0]!
-    : `${parts[0]} times ten to the power ${Number(parts[1])}`
+  const magnitude = Math.abs(value)
+  if (magnitude === 0 || (magnitude >= 1e-3 && magnitude < 1e6))
+    return speechNumber.format(value)
+  const [mantissa, exponent] = value.toExponential(3).split('e')
+  return `${Number(mantissa)} times ten to the power of ${spokenExponent(Number(exponent))}`
+}
+
+function spokenMeasurement(
+  value: number,
+  unit: string,
+  unitName: string,
+): string {
+  if (unit === 'm' && Math.abs(value) >= 1000)
+    return `${spokenNumber(metersToKilometers(value))} kilometers`
+  if (unit === 'kg/m³')
+    return `${spokenNumber(value / 1000)} grams per cubic centimeter`
+  if (unit === 'km' && Math.abs(value) >= AU / 1000)
+    return `${spokenNumber(metersToAu(value * 1000))} astronomical units`
+  if (unit === 'day' || unit === 'h') {
+    const [quantity, abbreviation] = formatDuration(
+      value * (unit === 'day' ? SECONDS_PER_DAY : 3600),
+    ).split(' ')
+    const names: Readonly<Record<string, string>> = {
+      yr: 'years',
+      d: 'days',
+      h: 'hours',
+      min: 'minutes',
+      s: 'seconds',
+    }
+    const name = names[abbreviation!]!
+    return `${Number(quantity)} ${Number(quantity) === 1 ? name.slice(0, -1) : name}`
+  }
+  return `${spokenNumber(value)} ${unitName}`
 }
 
 export function subjectBrief(
@@ -75,7 +159,7 @@ export function subjectBrief(
       quantity,
       unit,
       display: `${Number(quantity.toPrecision(5))} ${unit}`,
-      speech: `${page.name}'s ${label.toLowerCase()} is about ${spokenNumber(quantity)} ${spokenUnit}.`,
+      speech: `${page.name}'s ${label.toLowerCase()} is about ${spokenMeasurement(quantity, unit, spokenUnit)}.`,
       reason: null,
       provenance: basis,
       sourceIds: [source.id],
