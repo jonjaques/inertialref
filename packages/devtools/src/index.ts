@@ -19,6 +19,9 @@ export * from './session.ts'
 export * from './terrainBaseline.ts'
 export * from './terrainZoo.ts'
 export * from './travel.ts'
+export * from './tour/brief.ts'
+export * from './tour/itinerary.ts'
+export * from './tour/runner.ts'
 
 export * from './galaxy.ts'
 export {

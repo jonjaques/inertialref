@@ -342,6 +342,29 @@ export interface DropAim {
 }
 
 export class Observatory {
+  #mutationRevision = 0
+  #sampling = false
+
+  /** Explicit camera and photographic-time edits, excluding render advancement. */
+  get mutationRevision(): number {
+    return this.#mutationRevision
+  }
+
+  #changed(): void {
+    if (!this.#sampling) this.#mutationRevision += 1
+  }
+
+  /** Stop presentation travel at the current pose without touching the world. */
+  hold(): ObserverStatus {
+    this.#changed()
+    this.#stopJourneyTravel()
+    this.#desired = { ...this.#state }
+    this.#phaseOrbit = null
+    this.#descent = null
+    this.#aim = null
+    return this.status()
+  }
+
   #time: number | null = null
   #timePaused = true
   #timeScale = 1
@@ -352,9 +375,11 @@ export class Observatory {
     return this.#timeScale
   }
   setTimePaused(paused: boolean): void {
+    this.#changed()
     this.#timePaused = paused
   }
   setTimeScale(scale: number): void {
+    this.#changed()
     if (!Number.isFinite(scale) || scale <= 0 || scale > 100000)
       throw new Error('Invalid photographic time rate.')
     this.#timeScale = scale
@@ -375,6 +400,7 @@ export class Observatory {
     return this.#time
   }
   setTime(time: number | null): void {
+    this.#changed()
     if (
       time !== null &&
       (!Number.isFinite(time) || Math.abs(time) > 3.15576e12)
@@ -463,6 +489,7 @@ export class Observatory {
     address: string,
     framing: Extract<PictureFraming, { kind: 'camera' }>,
   ): ObserverStatus {
+    this.#changed()
     this.focus(address, { ease: false })
     if (framing.surface !== null) this.stand(undefined, framing.surface)
     this.#state = this.#desired = { ...framing.state }
@@ -520,6 +547,7 @@ export class Observatory {
 
   /** Target a companion while keeping the current orbit anchor and composition. */
   track(address: string | null): ObserverStatus {
+    this.#changed()
     const target = address === null ? null : this.#resolve(address)
     if (target !== null) {
       if (
@@ -553,6 +581,7 @@ export class Observatory {
 
   /** Fit the pair inside the vertical field while retaining its orbit angles. */
   framePair(): void {
+    this.#changed()
     if (this.#target === null || this.#tracking === null) return
     const pair = this.#pair(this.#target, this.#tracking.target, this.time)
     this.#look = NO_LOOK
@@ -613,6 +642,7 @@ export class Observatory {
   }
 
   travelGalaxy(progress: number, seconds: number): ObserverStatus {
+    this.#changed()
     validateGalaxyJourney(progress, seconds)
     if (this.#journey === null) {
       this.focus('s:SOL/b:2', { ease: false })
@@ -642,6 +672,7 @@ export class Observatory {
 
   /** Hold the displayed pose, including an orbit gesture made during the journey. */
   holdGalaxyJourney(): ObserverStatus {
+    this.#changed()
     this.#stopJourneyTravel()
     this.#desired = this.#state
     return this.status()
@@ -697,6 +728,7 @@ export class Observatory {
   }
 
   viewGalaxy(view: GalaxyView): ObserverStatus {
+    this.#changed()
     if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
     this.clear()
     this.#galaxyView = view
@@ -845,6 +877,7 @@ export class Observatory {
     destination: string,
     options: { fill?: number; ease?: boolean } = {},
   ): ObserverStatus {
+    this.#changed()
     const target = this.#resolve(destination)
     const previous = this.#target
     this.#galaxyView = null
@@ -923,6 +956,7 @@ export class Observatory {
    * "restore" step and nothing to put back, because nothing was taken.
    */
   clear(): void {
+    this.#changed()
     this.#time = null
     this.#journey = null
     this.#galaxyView = null
@@ -961,6 +995,7 @@ export class Observatory {
     dyPixels: number,
     sensitivity = this.dragSensitivity(),
   ): void {
+    this.#changed()
     if (this.#stance !== null || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     // Both are written, not just the desired: a drag is direct manipulation and
@@ -971,6 +1006,7 @@ export class Observatory {
 
   /** Zoom by a ratio. Above 1 retreats. */
   zoom(factor: number): void {
+    this.#changed()
     if (this.#stance !== null || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     const radius = this.#target?.radius ?? 0
@@ -988,11 +1024,13 @@ export class Observatory {
 
   /** Zoom by whole wheel notches. Positive retreats. */
   zoomNotches(notches: number): void {
+    this.#changed()
     this.zoom(zoomFactorForNotches(notches))
   }
 
   /** Set the distance directly — the panel's slider and the presets. */
   setDistance(distance: Meters, ease = true): void {
+    this.#changed()
     if (this.#stance !== null || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     const radius = this.#target?.radius ?? 0
@@ -1019,6 +1057,7 @@ export class Observatory {
     ease = true,
     look: LookOffset = NO_LOOK,
   ): void {
+    this.#changed()
     if (this.#stance !== null || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     this.#desired = {
@@ -1032,6 +1071,7 @@ export class Observatory {
 
   /** Re-frame the current target so it fills `fill` of the frame height. */
   frameTarget(fill = DEFAULT_FILL): void {
+    this.#changed()
     if (this.#target === null) return
     // `F` is a new picture of the subject, so the head comes back to it. This
     // is the difference between framing and dollying, and it is the whole
@@ -1071,6 +1111,7 @@ export class Observatory {
    * idea of the optics.
    */
   turn(dxPixels: number, dyPixels: number): void {
+    this.#changed()
     const sensitivity = this.dragSensitivity()
     const stance = this.#stance
     if (stance !== null) {
@@ -1088,6 +1129,7 @@ export class Observatory {
 
   /** Aim the head at an absolute offset, radians. `ir.aim`. */
   setLook(yaw: number, pitch: number): void {
+    this.#changed()
     const stance = this.#stance
     if (stance !== null) {
       this.#stance = { ...stance, heading: yaw, pitch: clampPitch(pitch) }
@@ -1098,6 +1140,7 @@ export class Observatory {
 
   /** Back to whatever the pose aims at. */
   center(): void {
+    this.#changed()
     if (this.#stance !== null) {
       this.levelToHorizon()
       return
@@ -1125,6 +1168,7 @@ export class Observatory {
    * the other three.
    */
   setPhase(phaseDeg: number, elevationDeg = 10, ease = true): void {
+    this.#changed()
     const toStar = this.#starDirection()
     if (toStar === null) return
     const { azimuth, elevation } = anglesForPhase(
@@ -1144,6 +1188,7 @@ export class Observatory {
    * which is the caller, is forbidden from changing that warp to fix it.
    */
   orbitPhase(phase: number, rate: number, tilt = 10): void {
+    this.#changed()
     if (this.#target === null || this.#stance !== null) return
     this.#phaseOrbit = { phase, rate, tilt }
     this.setPhase(phase, tilt, false)
@@ -1168,6 +1213,7 @@ export class Observatory {
    * for exactly this reason before the surface arm existed to receive them.
    */
   compose(id: string): ObserverStatus {
+    this.#changed()
     this.track(null)
     this.#basis = Q.IDENTITY
     const composition = findComposition(id)
@@ -1250,6 +1296,7 @@ export class Observatory {
   rise(
     options: { readonly clearance?: Radians; readonly height?: Meters } = {},
   ): { readonly status: ObserverStatus; readonly fovDeg: number } {
+    this.#changed()
     const body = this.#body()
     if (body === null) throw new Error('The observatory is not on a body')
     const parent = this.#parentBody(body)
@@ -1389,6 +1436,7 @@ export class Observatory {
       readonly pitch?: Radians
     } = {},
   ): ObserverStatus {
+    this.#changed()
     const wanted =
       destination === undefined ? this.#target : this.#resolve(destination)
     if (wanted === null) {
@@ -1462,6 +1510,7 @@ export class Observatory {
 
   /** Back to orbit, at whatever framing the camera had before the descent. */
   leaveSurface(): ObserverStatus {
+    this.#changed()
     // A drop in flight is abandoned, not finished: the orbit state underneath
     // is the one the camera left, so this is also how a drop is canceled.
     this.#descent = null
@@ -1500,6 +1549,7 @@ export class Observatory {
     point: { readonly latitude: Radians; readonly longitude: Radians },
     options: { readonly seconds?: Seconds } = {},
   ): ObserverStatus {
+    this.#changed()
     const wanted =
       destination === undefined ? this.#target : this.#resolve(destination)
     if (wanted === null) {
@@ -2037,6 +2087,7 @@ export class Observatory {
 
   /** Move the stance without changing the height or the heading. */
   moveTo(site: string | { latitude: Radians; longitude: Radians }): void {
+    this.#changed()
     const stance = this.#stance
     const body = this.#body()
     if (stance === null || body === null) return
@@ -2067,6 +2118,7 @@ export class Observatory {
    * finger and the picture is lag rather than easing.
    */
   setStanceHeight(height: Meters): void {
+    this.#changed()
     const stance = this.#stance
     const body = this.#body()
     if (stance === null || body === null) return
@@ -2086,6 +2138,7 @@ export class Observatory {
 
   /** Set the height from a scrub position in [0, 1]. See `heightForScrub`. */
   setStanceScrub(t: number): void {
+    this.#changed()
     const body = this.#body()
     if (body === null) return
     this.setStanceHeight(heightForScrub(body.radius, t))
@@ -2093,6 +2146,7 @@ export class Observatory {
 
   /** Compass heading in radians: 0 is north, increasing toward east. */
   setHeading(heading: Radians): void {
+    this.#changed()
     // A heading has no bound to clamp to — it wraps — so the only thing to
     // refuse is the one value that is not an angle. See the note above
     // `clampPitch`: NaN here is a NaN quaternion and a black frame.
@@ -2102,6 +2156,7 @@ export class Observatory {
 
   /** Above the horizontal, radians. Clamped short of vertical. */
   setPitch(pitch: Radians): void {
+    this.#changed()
     if (this.#stance === null) return
     this.#stance = { ...this.#stance, pitch: clampPitch(pitch) }
   }
@@ -2118,6 +2173,7 @@ export class Observatory {
    * tracking never resumes.
    */
   levelToHorizon(): void {
+    this.#changed()
     const stance = this.#stance
     const body = this.#body()
     if (stance === null || body === null) return
@@ -2202,6 +2258,15 @@ export class Observatory {
    * also freezes a fly-to mid-flight would be a bug in every screenshot.
    */
   sample(dt: Seconds): ObserverPose | null {
+    this.#sampling = true
+    try {
+      return this.#sample(dt)
+    } finally {
+      this.#sampling = false
+    }
+  }
+
+  #sample(dt: Seconds): ObserverPose | null {
     if (this.#galaxyView !== null) return GALAXY_VIEWS[this.#galaxyView].pose
     const target = this.#target
     if (target === null) return null
