@@ -16,6 +16,12 @@ means something.
 > through `pnpm test:slow`, alongside galaxy convergence and population checks;
 > both regular and slow suites are in `pnpm check`.
 
+The regular suite runs at most four files concurrently, or fewer when the host
+has fewer available cores. This bounds contention between procedural
+generation and CPU rendering tests while preserving the 20-second timeout.
+Use `VITEST_MAX_WORKERS=2 pnpm check` for a more constrained verification run;
+do not raise timeouts before investigating contention.
+
 ---
 
 ## Verify the committed change

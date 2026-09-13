@@ -298,3 +298,13 @@ objective edits: 2,571 regular tests in 231 files, eight slow tests in four
 files, type checking, repository checks, and a production build with 122
 rendered documents verified. Existing lint warnings and four Astro hints
 remain. The complete local log is `/tmp/ir-tour-v2-completion-check.log`.
+
+A subsequent Stop-hook run and exact `pnpm test` rerun each time out in the
+unchanged galaxy plate and world-query monotonicity tests. Both pass alone in
+about eight seconds. An isolated checkout of `6d1d31ac` passes all 2,522 older
+tests, so a pre-existing failing baseline is not established. The expanded
+suite passes all 2,571 tests with four workers and the same 20-second timeout;
+the regular configuration now caps concurrency at four available cores.
+No test is skipped or weakened. Reproduction logs are
+`/tmp/ir-tour-hook-focused.log`, `/tmp/ir-tour-hook-retest.log`,
+`/tmp/ir-tour-hook-baseline.log`, and `/tmp/ir-tour-hook-four-workers.log`.

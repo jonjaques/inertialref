@@ -9875,6 +9875,14 @@ Solar System stops; its silent one-second clips do not measure five-minute
 listening quality. A separate fixture displays the real Astra revision with
 Jupiter added and Titan removed.
 
+The Stop hook then exposed CPU contention in the expanded regular suite:
+default nine-worker runs twice timed out in unchanged galaxy-plate and
+world-query tests, while each passed in about eight seconds in isolation.
+The pre-change suite passed in a separate checkout; this is not recorded as a
+proven failing baseline. The same expanded suite passes with four workers and
+the original 20-second timeout. Its default concurrency is now capped at four
+available cores so the ordinary command and Stop hook share that bound.
+
 ## Known gaps
 
 - **The cloud guide still needs release evaluations.** Human listening and
