@@ -127,6 +127,10 @@ export async function attachLiveSession(options: {
 }): Promise<LiveSideband> {
   if (!options.id || options.id.length > 256)
     throw new GuideProviderError('input-limit')
+  // The deadline belongs to the HTTP upgrade. An armed fetch signal can close
+  // its upgraded WebSocket later, after the Live conversation has begun.
+  const handshake = new AbortController()
+  const deadline = setTimeout(() => handshake.abort(), 12_000)
   try {
     const response = await (options.fetch ?? fetch)(
       `https://api.openai.com/v1/live/sessions/${encodeURIComponent(options.id)}/attach`,
@@ -135,7 +139,7 @@ export async function attachLiveSession(options: {
           Authorization: `Bearer ${options.apiKey}`,
           Upgrade: 'websocket',
         },
-        signal: AbortSignal.timeout(12_000),
+        signal: handshake.signal,
       },
     )
     const socket = response.webSocket
@@ -147,6 +151,8 @@ export async function attachLiveSession(options: {
   } catch (error) {
     if (error instanceof GuideProviderError) throw error
     throw new GuideProviderError('unavailable')
+  } finally {
+    clearTimeout(deadline)
   }
 }
 
@@ -190,7 +196,7 @@ export class LiveSideband {
   ): string {
     if (
       !content ||
-      !withinTextBudget(content, 500) ||
+      !withinTextBudget(content, 2000) ||
       (delegationId !== null && !boundedId(delegationId))
     )
       throw new GuideProviderError('input-limit')

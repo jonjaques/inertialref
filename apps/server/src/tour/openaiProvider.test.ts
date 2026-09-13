@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  attachLiveSession,
   createLiveSession,
   hangupLiveSession,
   LiveSideband,
@@ -24,6 +25,76 @@ function socket() {
 }
 
 describe('Live provider boundary', () => {
+  it('releases the upgrade deadline after the sideband is accepted', async () => {
+    vi.useFakeTimers()
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms) => {
+        const controller = new AbortController()
+        setTimeout(() => controller.abort(), ms)
+        return controller.signal
+      })
+    const wire = socket()
+    let signal: AbortSignal | null | undefined
+    let live: LiveSideband | undefined
+    try {
+      live = await attachLiveSession({
+        apiKey: 'fake',
+        id: 'live-session',
+        onEvent: () => {},
+        fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+          signal = init?.signal
+          return { status: 101, webSocket: wire } as unknown as Response
+        }) as typeof fetch,
+      })
+      expect(wire.accept).toHaveBeenCalledOnce()
+      expect(signal).toBeDefined()
+      await vi.advanceTimersByTimeAsync(13_000)
+      expect(signal?.aborted).toBe(false)
+    } finally {
+      live?.disconnect()
+      timeout.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('still aborts a sideband handshake that does not complete by its deadline', async () => {
+    vi.useFakeTimers()
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms) => {
+        const controller = new AbortController()
+        setTimeout(() => controller.abort(), ms)
+        return controller.signal
+      })
+    let signal: AbortSignal | null | undefined
+    try {
+      const pending = attachLiveSession({
+        apiKey: 'fake',
+        id: 'live-session',
+        onEvent: () => {},
+        fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+          signal = init?.signal
+          await new Promise<void>((_resolve, reject) => {
+            signal?.addEventListener('abort', () =>
+              reject(new Error('aborted')),
+            )
+          })
+          return new Response()
+        }) as typeof fetch,
+      })
+      const rejected = expect(pending).rejects.toMatchObject({
+        code: 'unavailable',
+      })
+      await vi.advanceTimersByTimeAsync(12_000)
+      await rejected
+      expect(signal?.aborted).toBe(true)
+    } finally {
+      timeout.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps the startup deadline when the caller supplies its own cancellation signal', async () => {
     const deadline = new AbortController()
     const caller = new AbortController()
@@ -162,6 +233,23 @@ describe('Live provider boundary', () => {
       finalized: false,
       seconds: 0,
     })
+  })
+
+  it('accepts the coordinator narration budget and measures its limit in UTF-8 bytes', () => {
+    const wire = socket()
+    const live = new LiveSideband(wire as LiveSocket, () => {})
+    const content = 'é'.repeat(1000)
+
+    expect(live.append('commentary', content, 'delegation-1')).toBe('guide-1')
+    expect(JSON.parse(wire.send.mock.calls[0]?.[0] as string)).toMatchObject({
+      type: 'session.commentary.append',
+      content,
+      delegation_id: 'delegation-1',
+    })
+    expect(() => live.append('commentary', `${content}a`)).toThrowError(
+      expect.objectContaining({ code: 'input-limit' }),
+    )
+    expect(wire.send).toHaveBeenCalledTimes(1)
   })
 
   it('preserves raw transcript spacing and waits for late correction fragments', async () => {
