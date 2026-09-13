@@ -413,6 +413,34 @@ describe('Live provider boundary', () => {
       transcript.request({ type: 'delegation', id: 'd', offsetMs: 1000 }),
     ).resolves.toBeNull()
   })
+
+  it('includes the real Titan boundary fragment once without borrowing the next utterance', async () => {
+    const transcript = new TranscriptAssembler(0)
+    const fragments = [
+      { id: 'a', delta: 'Please', startMs: 1000, endMs: 1200 },
+      { id: 'b', delta: ' show', startMs: 1200, endMs: 1400 },
+      { id: 'c', delta: ' me', startMs: 1400, endMs: 1600 },
+      { id: 'd', delta: ' Titan.', startMs: 2000, endMs: 2200 },
+      { id: 'e', delta: 'Actually, Enceladus.', startMs: 2200, endMs: 2800 },
+    ]
+    for (const fragment of fragments)
+      transcript.add({ ...fragment, type: 'transcript', speaker: 'user' })
+
+    await expect(
+      transcript.request({ type: 'delegation', id: 'first', offsetMs: 2000 }),
+    ).resolves.toEqual({
+      id: 'first',
+      offsetMs: 2000,
+      text: 'Please show me Titan.',
+    })
+    await expect(
+      transcript.request({ type: 'delegation', id: 'second', offsetMs: 2800 }),
+    ).resolves.toEqual({
+      id: 'second',
+      offsetMs: 2800,
+      text: 'Actually, Enceladus.',
+    })
+  })
 })
 
 describe('Responses provider boundary', () => {

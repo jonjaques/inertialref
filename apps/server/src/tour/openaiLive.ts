@@ -636,8 +636,10 @@ export class TranscriptAssembler {
       .filter(
         (item) =>
           item.speaker === 'user' &&
-          item.endMs > after &&
-          item.startMs < delegation.offsetMs,
+          // Start times partition fragments between delegations. Including the
+          // upper boundary must not repeat its crossing fragment in the next one.
+          item.startMs > after &&
+          item.startMs <= delegation.offsetMs,
       )
       .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs)
       .map((item) => item.delta)
