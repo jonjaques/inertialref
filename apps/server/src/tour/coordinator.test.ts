@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type {
+  NarrationBrief,
   SubjectBrief,
   ToolRequest,
   TourAction,
@@ -82,6 +83,7 @@ function setup(
 ) {
   const messages: TourServerMessage[] = []
   const saved: unknown[] = []
+  const spoken: { brief: NarrationBrief; delegationId: string | null }[] = []
   const record = newSessionRecord({
     sessionId: 's1',
     user: 'alpha',
@@ -102,13 +104,30 @@ function setup(
       saved.push(structuredClone(value))
     },
     director,
-    narrate: async () => {},
+    narrate: async (brief, delegationId) => {
+      spoken.push({ brief, delegationId })
+    },
     close: async () => {},
   })
-  return { coordinator, messages, saved }
+  return { coordinator, messages, saved, spoken }
 }
 
 describe('tour coordinator ordering', () => {
+  it('returns a spoken clarification to the delegation that needs it', async () => {
+    const { coordinator, spoken } = setup(async () => ({
+      kind: 'clarification',
+      text: 'Which object do you mean?',
+      factIds: [],
+      plan: null,
+      actions: [],
+    }))
+    await coordinator.delegate('delegation-1', 'Show that object')
+    expect(spoken).toHaveLength(1)
+    expect(spoken[0]).toMatchObject({
+      delegationId: 'delegation-1',
+      brief: { text: 'Which object do you mean?', factIds: [], sources: [] },
+    })
+  })
   it('settles confirmed Live time once using cumulative provider usage', async () => {
     const messages: TourServerMessage[] = []
     const initial = newSessionRecord({

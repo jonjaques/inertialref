@@ -416,13 +416,27 @@ export class TourCoordinator {
       } else if (decision.kind === 'actions') {
         this.#queue = [...decision.actions]
         await this.#dispatch()
-      } else if (decision.kind === 'clarification')
+      } else if (decision.kind === 'clarification') {
         this.#ports.send({
           type: 'status',
           state: 'awaiting-next',
           message: decision.text,
         })
-      else await this.#narration(null)
+        await this.#ports.narrate(
+          {
+            id: this.#ports.id(),
+            requestRevision,
+            stopId: null,
+            viewRevision: context.viewRevision,
+            subjectId: context.subjectId,
+            text: decision.text,
+            factIds: [],
+            sourceIds: [],
+            sources: [],
+          },
+          this.#delegationId,
+        )
+      } else await this.#narration(null)
     } catch {
       if (requestRevision === this.#record.requestRevision)
         this.#error(
