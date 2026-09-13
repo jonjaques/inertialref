@@ -13,6 +13,7 @@ export interface TourRunnerStatus {
   readonly arrived: boolean
   readonly completedNarration: boolean
   readonly reason: string | null
+  readonly elapsedSeconds: number
 }
 export interface TourRunnerOptions {
   /** Monotonic milliseconds, injected by the host. */
@@ -29,6 +30,7 @@ export class TourRunner {
   #state: TourRunnerStatus['state'] = 'idle'
   #arrival: { time: number; revision: number } | null = null
   #narration = false
+  #narrationAt: number | null = null
   #reason: string | null = null
   #pausedAt: number | null = null
 
@@ -45,6 +47,14 @@ export class TourRunner {
       arrived: this.#arrival !== null,
       completedNarration: this.#narration,
       reason: this.#reason,
+      elapsedSeconds:
+        this.#arrival === null
+          ? 0
+          : Math.max(
+              0,
+              ((this.#pausedAt ?? this.#options.now()) - this.#arrival.time) /
+                1000,
+            ),
     }
   }
   get #stop(): TourStop | null {
@@ -59,6 +69,7 @@ export class TourRunner {
   #enter(): void {
     this.#arrival = null
     this.#narration = false
+    this.#narrationAt = null
     this.#reason = null
     this.#pausedAt = null
     const stop = this.#stop
@@ -84,10 +95,12 @@ export class TourRunner {
         this.#enter()
         return
       }
-      this.#arrival.time += Math.max(
+      const pausedFor = Math.max(
         0,
         this.#options.now() - (this.#pausedAt ?? this.#options.now()),
       )
+      this.#arrival.time += pausedFor
+      if (this.#narrationAt !== null) this.#narrationAt += pausedFor
       this.#pausedAt = null
       this.#state = 'viewing'
       this.#reason = null
@@ -115,6 +128,7 @@ export class TourRunner {
     }
     this.#arrival = { time: this.#options.now(), revision: viewRevision }
     this.#narration = false
+    this.#narrationAt = null
     this.#pausedAt = null
     this.#reason = null
     this.#state = 'viewing'
@@ -139,6 +153,7 @@ export class TourRunner {
     )
       return
     this.#narration = true
+    this.#narrationAt ??= this.#options.now()
     this.#options.onChange?.()
   }
   tick(): void {
@@ -152,7 +167,10 @@ export class TourRunner {
       return
     if (
       this.#options.now() - this.#arrival.time >=
-      this.#stop.minimumViewSeconds * 1000
+        this.#stop.minimumViewSeconds * 1000 &&
+      this.#narrationAt !== null &&
+      this.#options.now() - this.#narrationAt >=
+        (this.#stop.lookSeconds ?? 0) * 1000
     )
       this.command('next')
   }

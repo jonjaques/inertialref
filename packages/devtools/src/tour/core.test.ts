@@ -111,6 +111,40 @@ describe('the guide reads a bounded universe', () => {
 })
 
 describe('the guide runner waits for playback and the view independently', () => {
+  it('keeps the promised quiet look after real playback and freezes it while paused', () => {
+    const session = openSession()
+    const base = deterministicTour(
+      createTourContext(session.harness, 'Saturn'),
+      'saturn',
+    )!
+    const plan = {
+      ...base,
+      stops: base.stops.map((stop) => ({ ...stop, lookSeconds: 5 })),
+    }
+    let now = 0
+    const runner = new TourRunner({
+      now: () => now,
+      automatic: true,
+      onStop: () => {},
+    })
+    runner.start(plan)
+    runner.arrived(plan.stops[0]!.id, 1)
+    now = 60000
+    runner.narrationEnded(plan.stops[0]!.id, 1)
+    runner.tick()
+    expect(runner.status().index).toBe(0)
+    now += 2000
+    runner.command('pause')
+    now += 90000
+    expect(runner.status().elapsedSeconds).toBe(62)
+    runner.command('resume')
+    runner.tick()
+    expect(runner.status().index).toBe(0)
+    now += 3000
+    runner.tick()
+    expect(runner.status().index).toBe(1)
+    session.dispose()
+  })
   it('does not infer playback completion from dwell or captions', () => {
     const session = openSession()
     const plan = deterministicTour(

@@ -188,6 +188,7 @@ export interface NarrationBrief {
   readonly sourceIds: readonly string[]
   readonly sources: readonly TourSource[]
   readonly origin?: 'records' | 'authored' | 'model'
+  readonly playback?: 'controlled' | 'live'
 }
 export type TourClientMessage =
   | { readonly type: 'context'; readonly context: TourContext }
@@ -215,6 +216,11 @@ export type TourClientMessage =
       readonly viewRevision: number
     }
 export type TourServerMessage =
+  | {
+      readonly type: 'control'
+      readonly command: TourCommand
+      readonly requestRevision: number
+    }
   | {
       readonly type: 'ready'
       readonly sessionId: string
@@ -577,6 +583,10 @@ export const decodeNarrationBrief: Decoder<NarrationBrief> = strict({
     decodeEnum('records', 'authored', 'model'),
     undefined,
   ),
+  playback: decodeOptional<'controlled' | 'live' | undefined>(
+    decodeEnum('controlled', 'live'),
+    undefined,
+  ),
 })
 const transcriptFields = {
   eventId: id,
@@ -629,6 +639,11 @@ export const decodeTourClientMessage: Decoder<TourClientMessage> =
   })
 export const decodeTourServerMessage: Decoder<TourServerMessage> =
   union<TourServerMessage>({
+    control: strict({
+      type: decodeEnum('control'),
+      command: decodeEnum('start', 'pause', 'resume', 'next', 'back', 'end'),
+      requestRevision: revision,
+    }),
     ready: strict({
       type: decodeEnum('ready'),
       sessionId: id,
