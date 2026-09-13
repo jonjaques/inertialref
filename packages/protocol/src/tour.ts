@@ -473,6 +473,10 @@ export const decodeTourTranscript: Decoder<TourTranscript> =
 
 export const decodeTourClientMessage: Decoder<TourClientMessage> =
   union<TourClientMessage>({
+    'live-startup': strict({
+      type: decodeEnum('live-startup'),
+      events: list(decodeTourTranscript, 64),
+    }),
     context: strict({
       type: decodeEnum('context'),
       context: decodeTourContext,
