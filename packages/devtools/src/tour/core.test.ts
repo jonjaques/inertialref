@@ -9,7 +9,7 @@ import {
 } from '@inertialref/protocol'
 import { openSession } from '../session.ts'
 import { createTourContext, subjectBrief } from './brief.ts'
-import { deterministicTour } from './itinerary.ts'
+import { deterministicTour, groundedNarration } from './itinerary.ts'
 import { TourRunner } from './runner.ts'
 
 describe('the guide reads a bounded universe', () => {
@@ -35,8 +35,33 @@ describe('the guide reads a bounded universe', () => {
   it('builds the Saturn, rings, Titan tour using only returned references', () => {
     const session = openSession()
     const context = createTourContext(session.harness, 'Saturn')
+    const canonical = session.world.stateHash()
+    const viewRevision = session.harness.observatory.mutationRevision
+    const saturn = context.candidates.find(
+      (subject) => subject.name === 'Saturn',
+    )!
+    const titan = context.candidates.find(
+      (subject) => subject.name === 'Titan',
+    )!
     const plan = deterministicTour(context, 'saturn')!
     expect(plan.stops).toHaveLength(3)
+    expect(
+      plan.stops.map(({ id, subjectId, framingId }) => ({
+        id,
+        subjectId,
+        framingId,
+      })),
+    ).toEqual([
+      { id: 'saturn-overview', subjectId: saturn.id, framingId: 'portrait' },
+      {
+        id: 'saturn-rings',
+        subjectId: saturn.id,
+        framingId: 'preset:the-rings',
+      },
+      { id: 'titan-weather', subjectId: titan.id, framingId: 'crescent' },
+    ])
+    expect(session.world.stateHash()).toBe(canonical)
+    expect(session.harness.observatory.mutationRevision).toBe(viewRevision)
     expect(validateTourPlan(plan, context).ok).toBe(true)
     expect(
       context.candidates.find(
@@ -49,6 +74,22 @@ describe('the guide reads a bounded universe', () => {
         context,
       ).ok,
     ).toBe(false)
+    const narration = groundedNarration(
+      context,
+      {
+        ...plan.stops[0]!,
+        objective: 'An unverified teaching objective is never evidence.',
+        factIds: [],
+      },
+      0,
+      'narration',
+    )
+    expect(narration.text).not.toContain('unverified teaching objective')
+    expect(narration.factIds).toEqual([])
+    const system = deterministicTour(context, 'system')!
+    expect(system.stops.map((stop) => stop.id)).toEqual(
+      system.stops.map((_stop, index) => `stop-${index + 1}`),
+    )
     session.dispose()
   })
   it('fits a focused Saturn context and its complete wire envelope', () => {

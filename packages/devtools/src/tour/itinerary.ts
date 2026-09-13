@@ -15,12 +15,13 @@ export function deterministicTour(
     subjectId: string,
     framingId: string | null,
     objective: string,
+    id = `stop-${stops.length + 1}`,
   ): void => {
     const candidate = context.candidates.find((item) => item.id === subjectId)
     const brief = context.briefs.find((item) => item.subjectId === subjectId)
     if (candidate === undefined || brief === undefined) return
     stops.push({
-      id: `stop-${stops.length + 1}`,
+      id,
       subjectId,
       framingId:
         framingId !== null && candidate.framings.includes(framingId)
@@ -39,13 +40,24 @@ export function deterministicTour(
     const saturn = context.candidates.find((item) => item.name === 'Saturn')
     const titan = context.candidates.find((item) => item.name === 'Titan')
     if (saturn === undefined || titan === undefined) return null
-    add(saturn.id, 'portrait', 'Meet Saturn and its scale.')
+    add(
+      saturn.id,
+      'portrait',
+      'How does a giant like Saturn have such a short day?',
+      'saturn-overview',
+    )
     add(
       saturn.id,
       'preset:the-rings',
-      'Look at the registered ring composition.',
+      'How do countless orbiting particles look like a solid disc?',
+      'saturn-rings',
     )
-    add(titan.id, 'crescent', 'Meet Titan and its atmosphere.')
+    add(
+      titan.id,
+      'crescent',
+      'What happens when a moon’s rain is made of methane?',
+      'titan-weather',
+    )
   } else {
     const star = context.candidates.find((item) => item.kind === 'star')
     if (star !== undefined) add(star.id, null, `Meet ${star.name}.`)
