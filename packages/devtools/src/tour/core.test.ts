@@ -13,6 +13,60 @@ import { deterministicTour, groundedNarration } from './itinerary.ts'
 import { TourRunner } from './runner.ts'
 
 describe('the guide reads a bounded universe', () => {
+  it('keeps a full newest read while bounding a large retained search inventory', () => {
+    const session = openSession()
+    const addresses = [
+      ...new Set(session.harness.searchEntries().map((item) => item.address)),
+    ].slice(0, 16)
+    const context = createTourContext(session.harness, '', addresses)
+    expect(
+      decodeTourMessage(
+        decodeTourClientMessage,
+        JSON.stringify({ type: 'context', context }),
+      ).ok,
+    ).toBe(true)
+    const newest = context.briefs.find(
+      (brief) => brief.address === addresses[0],
+    )!
+    expect(newest.facts).toEqual(
+      subjectBrief(session.harness, addresses[0]!)?.facts,
+    )
+    expect(context.candidates).toHaveLength(16)
+    session.dispose()
+  })
+  it('keeps authored Solar subjects in the bounded inventory and full explicit records', () => {
+    const session = openSession()
+    const eye = session.harness.observatory
+    eye.focus('s:SOL/b:5', { ease: false })
+    const context = createTourContext(session.harness, 'Neptune')
+    expect(context.candidates.map((candidate) => candidate.name)).toEqual(
+      expect.arrayContaining([
+        'Sol',
+        'Venus',
+        'Luna',
+        'Mars',
+        'Jupiter',
+        'Saturn',
+        'Neptune',
+        'Earth',
+        'Titan',
+        'Enceladus',
+      ]),
+    )
+    for (const name of ['Saturn', 'Neptune']) {
+      const candidate = context.candidates.find((item) => item.name === name)!
+      expect(
+        context.briefs.find((brief) => brief.subjectId === candidate.id)?.facts,
+      ).toEqual(subjectBrief(session.harness, candidate.address)?.facts)
+    }
+    expect(
+      decodeTourMessage(
+        decodeTourClientMessage,
+        JSON.stringify({ type: 'context', context }),
+      ).ok,
+    ).toBe(true)
+    session.dispose()
+  })
   it('provides numeric quantities, unknown reasons, and separate observer facts', () => {
     const session = openSession()
     const ir = session.harness

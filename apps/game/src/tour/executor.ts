@@ -375,7 +375,20 @@ export class TourExecutor {
     const candidate = this.#context.candidates.find(
       (item) => item.id === action.subjectId,
     )!
-    if (action.tool === 'read_subject') return
+    if (action.tool === 'read_subject') {
+      this.#extraAddresses = [
+        candidate.address,
+        ...this.#extraAddresses.filter(
+          (address) => address !== candidate.address,
+        ),
+      ].slice(0, TOUR_LIMITS.candidates)
+      this.#context = createTourContext(
+        this.#harness,
+        this.#query,
+        this.#extraAddresses,
+      )
+      return
+    }
     if (action.tool === 'show_subject') {
       eye.focus(candidate.address)
       return

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { openSession } from '@inertialref/devtools'
+import { openSession, subjectBrief } from '@inertialref/devtools'
 import type {
   ToolReceipt,
   ToolRequest,
@@ -139,6 +139,35 @@ describe('the guide local executor', () => {
     minRadius: null,
     maxRadius: null,
   }
+  it('reads a compact inventory record fully without changing the camera', () => {
+    const { session, executor, request } = setup()
+    const before = executor.context()
+    const candidate = before.candidates.find((item) => item.name === 'Neptune')!
+    const full = subjectBrief(session.harness, candidate.address)!
+    expect(
+      before.briefs.find((brief) => brief.subjectId === candidate.id)!.facts
+        .length,
+    ).toBeLessThan(full.facts.length)
+    const pose = session.harness.observatory.pose()
+    const revision = executor.viewRevision
+    expect(
+      executor.execute({
+        ...request,
+        action: { tool: 'read_subject', subjectId: candidate.id },
+      }).status,
+    ).toBe('arrived')
+    const after = executor.context()
+    expect(
+      after.briefs.find((brief) => brief.subjectId === candidate.id)?.facts,
+    ).toEqual(full.facts)
+    expect(
+      after.candidates.find((item) => item.id === candidate.id)?.factIds,
+    ).toEqual(full.facts.map((fact) => fact.id))
+    expect(executor.viewRevision).toBe(revision)
+    expect(session.harness.observatory.pose()).toEqual(pose)
+    executor.dispose()
+    session.dispose()
+  })
   it('resolves a body name locally without changing the view', () => {
     const { session, executor, request } = setup()
     const before = session.harness.observatory.pose()
