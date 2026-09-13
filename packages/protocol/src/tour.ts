@@ -146,6 +146,7 @@ export interface NarrationBrief {
   readonly text: string
   readonly factIds: readonly string[]
   readonly sourceIds: readonly string[]
+  readonly sources: readonly TourSource[]
 }
 export type TourClientMessage =
   | { readonly type: 'context'; readonly context: TourContext }
@@ -460,6 +461,7 @@ export const decodeNarrationBrief: Decoder<NarrationBrief> = strict({
   text: text(8000),
   factIds: list(id, TOUR_LIMITS.facts),
   sourceIds: list(id, 16),
+  sources: list(source, 16),
 })
 const transcriptFields = {
   eventId: id,
