@@ -1,4 +1,5 @@
 import type { TourTranscript } from '@inertialref/protocol'
+import { transcriptRows } from './transcript.ts'
 
 export function GuideTranscript({
   transcripts,
@@ -12,9 +13,9 @@ export function GuideTranscript({
       role="log"
       aria-label="Guide captions"
       aria-live="polite"
-      aria-relevant="additions"
+      aria-relevant="additions text"
     >
-      {transcripts.map((item) => (
+      {transcriptRows(transcripts).map((item) => (
         <p key={item.eventId} className="type-ui text-pretty text-slate-300">
           <span className="text-slate-400">
             {item.speaker === 'guide' ? 'Guide' : 'You'}:{' '}

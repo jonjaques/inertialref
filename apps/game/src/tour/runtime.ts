@@ -453,11 +453,12 @@ export class GuideRuntime {
       sources: [],
       message: null,
     })
-    const runtime = this
+    const automaticEnabled = () =>
+      this.#snapshot.automatic && !this.#snapshot.voice
     this.#runner = new TourRunner({
       now: this.#host.presentationNow,
       get automatic() {
-        return runtime.#snapshot.automatic && !runtime.#snapshot.voice
+        return automaticEnabled()
       },
       onStop: (stop: TourStop) => this.#move(stop),
       onChange: () => this.#refreshRunner(),
@@ -838,21 +839,32 @@ export class GuideRuntime {
         return
       this.#playback ??= this.#host.playback()
       this.#playback.mute(this.#snapshot.guideMuted)
-      await this.#playback.play(blob, () => {
-        if (
-          generation !== this.#generation ||
-          brief.stopId === null ||
-          brief.viewRevision !== this.#executor?.viewRevision
-        )
-          return
-        this.#runner?.narrationEnded(brief.stopId, brief.viewRevision)
-        this.#send({
-          type: 'narration-ended',
-          stopId: brief.stopId,
-          requestRevision: brief.requestRevision,
-          viewRevision: brief.viewRevision,
-        })
-      })
+      await this.#playback.play(
+        blob,
+        () => {
+          if (
+            generation !== this.#generation ||
+            brief.stopId === null ||
+            brief.viewRevision !== this.#executor?.viewRevision
+          )
+            return
+          this.#runner?.narrationEnded(brief.stopId, brief.viewRevision)
+          this.#send({
+            type: 'narration-ended',
+            stopId: brief.stopId,
+            requestRevision: brief.requestRevision,
+            viewRevision: brief.viewRevision,
+          })
+        },
+        () => {
+          if (generation !== this.#generation) return
+          this.#runner?.fail('Audio playback stopped.')
+          this.#update({
+            message:
+              'Audio playback stopped. Use Next to continue, or resume to retry this stop.',
+          })
+        },
+      )
       if (generation === this.#generation)
         this.#transcript({
           eventId: `clip:${brief.id}`,

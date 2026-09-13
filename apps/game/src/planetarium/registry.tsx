@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
+import { LazyGuidePanel as GuidePanel } from '../tour/LazyGuidePanel.tsx'
 import { Aperture, Eye, Image, Sun, AudioLines } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import { Neighborhood, StarBody } from '../icons/index.tsx'
@@ -9,12 +10,6 @@ import { ObjectPanel } from './ObjectPanel.tsx'
 import { PresetsPanel } from './PresetsPanel.tsx'
 import { TimePanel } from './TimePanel.tsx'
 import { ViewPanel } from './ViewPanel.tsx'
-
-const GuidePanel = lazy(() =>
-  import('../tour/GuidePanel.tsx').then((module) => ({
-    default: module.GuidePanel,
-  })),
-)
 
 /**
  * The panels the planetarium offers, with the zone each one belongs in.

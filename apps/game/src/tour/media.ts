@@ -20,7 +20,11 @@ export class ControlledPlayback {
     this.#host = host
   }
 
-  async play(blob: Blob, ended: () => void): Promise<void> {
+  async play(
+    blob: Blob,
+    ended: () => void,
+    failed: () => void = () => {},
+  ): Promise<void> {
     this.stop()
     const audio = this.#host.audio()
     const url = this.#host.url(blob)
@@ -32,9 +36,16 @@ export class ControlledPlayback {
       this.stop()
       ended()
     }
+    const onError = () => {
+      if (this.#audio !== audio) return
+      this.stop()
+      failed()
+    }
+    audio.addEventListener('error', onError, { once: true })
     audio.addEventListener('ended', onEnd, { once: true })
     this.#release = () => {
       audio.removeEventListener('ended', onEnd)
+      audio.removeEventListener('error', onError)
       this.#host.revoke(url)
     }
     try {

@@ -29,6 +29,22 @@ describe('controlled narration', () => {
     expect(ended).toHaveBeenCalledTimes(1)
   })
 
+  it('reports a decoding failure after playback has started and removes its completion', async () => {
+    const element = audioFake()
+    const ended = vi.fn()
+    const failed = vi.fn()
+    const playback = new ControlledPlayback({
+      audio: () => element,
+      url: () => 'blob:clip',
+      revoke: vi.fn(),
+    })
+    await playback.play(new Blob(['clip']), ended, failed)
+    element.dispatchEvent(new Event('error'))
+    element.dispatchEvent(new Event('ended'))
+    expect(failed).toHaveBeenCalledOnce()
+    expect(ended).not.toHaveBeenCalled()
+  })
+
   it('keeps audio mute independent and stops rejected playback', async () => {
     const element = audioFake()
     const revoke = vi.fn()

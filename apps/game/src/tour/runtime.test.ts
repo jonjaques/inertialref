@@ -283,6 +283,64 @@ describe('the browser guide runtime', () => {
     f.dispose()
   })
 
+  it('takes a fresh server revision before executing a spoken delegation', async () => {
+    const f = rig()
+    await f.runtime.startVoice('marin')
+    await f.runtime.startTour('saturn')
+    f.arrive()
+    const socket = f.sockets[0]!
+    const contexts = socket.sent.filter((event) => event.type === 'context')
+    const context = contexts.at(-1)!.context
+    const titan = context.candidates.find(
+      (candidate) => candidate.name === 'Titan',
+    )!
+    const requestRevision = 10
+    socket.receive({ type: 'status', state: 'paused', message: 'Listening.' })
+    socket.receive({ type: 'ready', sessionId: 'remote', requestRevision })
+    socket.receive({
+      type: 'status',
+      state: 'planning',
+      message: 'Considering your request.',
+    })
+    socket.receive({
+      type: 'tool',
+      request: {
+        sessionId: 'remote',
+        requestRevision,
+        expectedViewRevision: context.viewRevision,
+        operationId: 'spoken-destination',
+        expiresAt: 10000,
+        action: { tool: 'show_subject', subjectId: titan.id },
+      },
+    })
+    expect(f.session.harness.observatory.target?.name).toBe('Titan')
+    f.arrive()
+    const receiptIndex = socket.sent.findIndex(
+      (event) =>
+        event.type === 'receipt' &&
+        event.receipt.operationId === 'spoken-destination' &&
+        event.receipt.status === 'arrived',
+    )
+    expect(socket.sent[receiptIndex - 1]?.type).toBe('context')
+    f.dispose()
+  })
+
+  it('keeps typed requests usable after microphone denial', async () => {
+    const f = rig()
+    f.live.prepare.mockRejectedValueOnce(
+      new Error('Microphone permission was denied.'),
+    )
+    await f.runtime.startVoice('marin')
+    expect(f.runtime.getSnapshot().connection).toBe('offline')
+    expect(
+      f.requests.some((request) => request.path === '/api/tour/sessions'),
+    ).toBe(false)
+    await f.runtime.ask('Why does Saturn have rings?')
+    expect(f.sockets[0]!.sent.some((event) => event.type === 'ask')).toBe(true)
+    expect(f.live.prepare).toHaveBeenCalledOnce()
+    f.dispose()
+  })
+
   it('closes an admitted session that resolves after End even when abort fails', async () => {
     const f = rig()
     let complete!: (response: Response) => void
