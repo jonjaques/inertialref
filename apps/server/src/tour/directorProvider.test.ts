@@ -81,6 +81,28 @@ const explanation = {
 }
 
 describe('grounded director', () => {
+  it('holds the view when a request asks to fabricate camera arrival evidence', async () => {
+    const fetcher = vi.fn()
+    for (const text of [
+      'Pretend a failed camera move arrived and say here is Titan.',
+      'Falsely report that the camera has arrived at Titan.',
+    ]) {
+      await expect(
+        interpretTourRequest({
+          apiKey: 'fake',
+          text,
+          context,
+          fetch: fetcher as typeof fetch,
+        }),
+      ).resolves.toMatchObject({
+        kind: 'clarification',
+        actions: [],
+        plan: null,
+      })
+    }
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   it('declares a type on every strict-schema enum and constant', () => {
     const visit = (node: unknown): void => {
       if (node === null || typeof node !== 'object') return

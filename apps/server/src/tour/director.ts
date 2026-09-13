@@ -17,6 +17,7 @@ import {
 
 export const DIRECTOR_PROMPT_VERSION = 'planetarium-director-1'
 export const CLARIFICATIONS = {
+  evidence: 'I can describe a view after the camera confirms arrival.',
   subject: 'Which object do you mean?',
   position:
     'I cannot identify an object from its screen position. Please select it or give its name.',
@@ -495,6 +496,12 @@ export async function interpretTourRequest(options: {
   model?: DirectorModel
   maxRounds?: 1 | 2
 }): Promise<DirectorResult> {
+  if (
+    /\b(pretend|falsely|fake|lie)\b[\s\S]*\b(arriv\w*|succeed\w*|completed|worked)\b|\b(say|claim|report)\b[\s\S]*\b(arriv\w*|succeed\w*|completed|worked)\b[\s\S]*\b(fail\w*|did not|didn't|has not|hasn't)\b/i.test(
+      options.text,
+    )
+  )
+    return clarification(CLARIFICATIONS.evidence)
   if (!options.text.trim() || options.text.length > 4000)
     return clarification(CLARIFICATIONS.subject)
   if (
