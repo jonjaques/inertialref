@@ -95,12 +95,68 @@ describe('Live admission', () => {
     expect(await media.prepare()).toBe('offer')
     await media.accept('answer')
     expect(pc.createDataChannel).toHaveBeenCalledWith('oai-events')
-    media.muteMicrophone(true)
+    await media.muteMicrophone(true)
     expect(track.enabled).toBe(false)
+    expect(track.stop).toHaveBeenCalledOnce()
     expect(audio.muted).not.toBe(true)
+    media.muteGuide(true)
+    media.muteGuide(false)
+    expect(audio.pause).not.toHaveBeenCalled()
     media.stop()
     expect(track.stop).toHaveBeenCalledTimes(1)
     expect(pc.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('reacquires capture only on explicit unmute and discards it after End', async () => {
+    const original = { enabled: true, stop: vi.fn() }
+    const replacement = { enabled: true, stop: vi.fn() }
+    const late = { enabled: true, stop: vi.fn() }
+    let finish!: (value: MediaStream) => void
+    const sender = { replaceTrack: vi.fn(async () => {}) }
+    const channel = new EventTarget()
+    const peer = {
+      createDataChannel: () => channel,
+      addTrack: () => sender,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createOffer: async () => ({ type: 'offer', sdp: 'offer' }),
+      setLocalDescription: vi.fn(async () => {}),
+      close: vi.fn(),
+    }
+    const capture = vi
+      .fn<() => Promise<MediaStream>>()
+      .mockResolvedValueOnce({
+        getTracks: () => [original],
+      } as unknown as MediaStream)
+      .mockResolvedValueOnce({
+        getTracks: () => [replacement],
+      } as unknown as MediaStream)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      )
+    const media = new LiveConnection({
+      peer: () => peer as unknown as RTCPeerConnection,
+      audio: audioFake,
+      capture,
+    })
+    await media.prepare()
+    await media.muteMicrophone(true)
+    expect(original.stop).toHaveBeenCalledOnce()
+    expect(capture).toHaveBeenCalledTimes(1)
+    await media.muteMicrophone(false)
+    expect(capture).toHaveBeenCalledTimes(2)
+    expect(sender.replaceTrack).toHaveBeenLastCalledWith(replacement)
+    await media.muteMicrophone(true)
+    expect(replacement.stop).toHaveBeenCalledOnce()
+    const pending = media.muteMicrophone(false)
+    media.stop()
+    finish({ getTracks: () => [late] } as unknown as MediaStream)
+    await pending
+    expect(late.stop).toHaveBeenCalledOnce()
+    expect(sender.replaceTrack).not.toHaveBeenCalledWith(late)
   })
 
   it('releases media acquired after the guide has ended', async () => {

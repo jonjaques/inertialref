@@ -160,7 +160,9 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
               state.microphoneMuted ? 'Unmute microphone' : 'Mute microphone'
             }
             icon={state.microphoneMuted ? MicOff : Mic}
-            onClick={() => runtime.muteMicrophone(!state.microphoneMuted)}
+            onClick={() => {
+              void runtime.muteMicrophone(!state.microphoneMuted)
+            }}
           />
           <span className="type-micro self-center text-slate-400" role="status">
             {state.microphoneMuted ? 'Microphone muted' : 'Microphone on'}

@@ -122,6 +122,7 @@ export class GuideRuntime {
   #creationKey: string | null = null
   #expiresAt = Infinity
   #requestRevision = 0
+  #microphoneRevision = 0
   #generation = 0
   #operation: { id: string; stop: TourStop } | null = null
   #socket: WebSocket | null = null
@@ -367,15 +368,27 @@ export class GuideRuntime {
     if (command === 'pause') this.#live?.muteGuide(true)
     if (command === 'resume') {
       this.#live?.muteGuide(this.#snapshot.guideMuted)
-      this.#live?.muteMicrophone(this.#snapshot.microphoneMuted)
+      void this.muteMicrophone(this.#snapshot.microphoneMuted)
       this.#update({ message: null })
     }
     this.#refreshRunner()
   }
 
-  muteMicrophone(muted: boolean): void {
-    this.#live?.muteMicrophone(muted)
-    this.#update({ microphoneMuted: muted })
+  async muteMicrophone(muted: boolean): Promise<void> {
+    const revision = ++this.#microphoneRevision
+    const live = this.#live
+    if (muted) this.#update({ microphoneMuted: true })
+    try {
+      await live?.muteMicrophone(muted)
+      if (live === this.#live && revision === this.#microphoneRevision)
+        this.#update({ microphoneMuted: muted })
+    } catch (cause) {
+      if (live === this.#live && revision === this.#microphoneRevision)
+        this.#update({
+          microphoneMuted: true,
+          message: `${message(cause)} Typed requests remain available.`,
+        })
+    }
   }
   muteGuide(muted: boolean): void {
     this.#live?.muteGuide(muted)
@@ -432,7 +445,7 @@ export class GuideRuntime {
     this.#visibilityRelease ??= this.#host.visibility((visible) => {
       if (!visible) {
         this.command('pause')
-        this.#live?.muteMicrophone(true)
+        void this.muteMicrophone(true)
         this.#update({
           message:
             'Tour paused while this tab is hidden. Resume when you are ready.',
@@ -625,12 +638,13 @@ export class GuideRuntime {
         },
       )
       this.#live = live
-      live.muteMicrophone(this.#snapshot.microphoneMuted)
+      await live.muteMicrophone(this.#snapshot.microphoneMuted)
       live.muteGuide(this.#snapshot.guideMuted)
       sdp = await live.prepare()
     }
     if (generation !== this.#generation)
       throw new Error('The guide request was canceled.')
+    if (voice) this.#update({ voice: true })
     this.#creationKey ??= this.#host.id()
     this.#tabId ??= this.#host.id()
     const context = this.#context()

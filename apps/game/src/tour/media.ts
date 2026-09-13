@@ -109,6 +109,10 @@ export class LiveConnection {
   #resolve: (() => void) | null = null
   #reject: ((cause: Error) => void) | null = null
   #micMuted = false
+  #captureRevision = 0
+  #resuming: Promise<void> | null = null
+  readonly #senders: RTCRtpSender[] = []
+  readonly #retired = new WeakSet<MediaStreamTrack>()
   #guideMuted = false
 
   readonly #host: LiveHost
@@ -127,7 +131,7 @@ export class LiveConnection {
   async prepare(): Promise<string> {
     const stream = await this.#host.capture()
     if (this.#stopped) {
-      for (const track of stream.getTracks()) track.stop()
+      this.#stopCapture(stream)
       throw new Error('The guide has ended.')
     }
     this.#stream = stream
@@ -192,8 +196,10 @@ export class LiveConnection {
     }
     for (const input of stream.getTracks()) {
       input.enabled = !this.#micMuted
-      peer.addTrack(input, stream)
+      const sender = peer.addTrack(input, stream)
+      if (sender !== undefined) this.#senders.push(sender)
     }
+    if (this.#micMuted) await this.muteMicrophone(true)
     const offer = await peer.createOffer()
     if (this.#stopped) throw new Error('The guide has ended.')
     await peer.setLocalDescription(offer)
@@ -229,9 +235,64 @@ export class LiveConnection {
     })
   }
 
-  muteMicrophone(muted: boolean): void {
+  muteMicrophone(muted: boolean): Promise<void> {
     this.#micMuted = muted
-    for (const track of this.#stream?.getTracks() ?? []) track.enabled = !muted
+    if (muted) {
+      this.#captureRevision++
+      this.#stopCapture(this.#stream)
+      this.#stream = null
+      return Promise.all(
+        this.#senders.map((sender) => sender.replaceTrack(null)),
+      ).then(() => {})
+    }
+    if (this.#stopped || this.#peer === null || this.#stream !== null)
+      return Promise.resolve()
+    if (this.#resuming !== null) return this.#resuming
+    const pending = this.#resumeCapture(this.#captureRevision)
+    this.#resuming = pending
+    void pending
+      .finally(() => {
+        if (this.#resuming === pending) this.#resuming = null
+      })
+      .catch(() => {})
+    return pending
+  }
+
+  #stopCapture(stream: MediaStream | null): void {
+    for (const track of stream?.getTracks() ?? []) {
+      if (this.#retired.has(track)) continue
+      this.#retired.add(track)
+      track.enabled = false
+      track.stop()
+    }
+  }
+
+  async #resumeCapture(revision: number): Promise<void> {
+    const stream = await this.#host.capture()
+    if (this.#stopped || this.#micMuted || revision !== this.#captureRevision) {
+      this.#stopCapture(stream)
+      if (!this.#stopped && !this.#micMuted)
+        throw new Error(
+          'Microphone capture was canceled. Unmute the microphone to try again.',
+        )
+      return
+    }
+    this.#stream = stream
+    try {
+      const tracks = stream.getTracks()
+      for (const [index, sender] of this.#senders.entries()) {
+        const track = tracks[index] ?? null
+        if (track !== null) track.enabled = true
+        await sender.replaceTrack(track)
+      }
+      if (this.#stopped || this.#micMuted || revision !== this.#captureRevision)
+        this.#stopCapture(stream)
+    } catch (cause) {
+      this.#stopCapture(stream)
+      if (this.#stream === stream) this.#stream = null
+      this.#micMuted = true
+      throw cause
+    }
   }
 
   muteGuide(muted: boolean): void {
@@ -242,10 +303,11 @@ export class LiveConnection {
   stop(): void {
     if (this.#stopped) return
     this.#stopped = true
+    this.#captureRevision++
     this.#reject?.(new Error('The guide has ended.'))
     this.#release?.()
     this.#release = null
-    for (const track of this.#stream?.getTracks() ?? []) track.stop()
+    this.#stopCapture(this.#stream)
     this.#stream = null
     this.#audio?.pause()
     if (this.#audio !== null) this.#audio.srcObject = null
