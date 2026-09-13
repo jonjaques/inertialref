@@ -45,6 +45,11 @@ describe('Live provider boundary', () => {
     const instructions = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
       .session.instructions as string
     expect(instructions).toContain('friendly astronomy nerd')
+    expect(instructions).toContain(
+      'Delegate demo and tour requests immediately',
+    )
+    expect(instructions).toContain('quick demo of all your capabilities')
+    expect(instructions).toContain('grandparents')
     expect(instructions).toContain('natural contractions')
     expect(instructions).toContain(
       'specific curiosity hook from established astronomy or the supplied records',
