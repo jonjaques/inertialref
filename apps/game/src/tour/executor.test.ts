@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import { openSession } from '@inertialref/devtools'
-import type { ToolReceipt, ToolRequest } from '@inertialref/protocol'
+import type {
+  ToolReceipt,
+  ToolRequest,
+  TourWorldQuery,
+} from '@inertialref/protocol'
 import { TourExecutor } from './executor.ts'
 
 function setup() {
@@ -44,6 +48,61 @@ function setup() {
 }
 
 describe('the guide local executor', () => {
+  const query: TourWorldQuery = {
+    kinds: ['gas-giant'],
+    starClasses: [],
+    atmosphere: null,
+    sea: null,
+    rings: null,
+    habitable: null,
+    landable: null,
+    moons: null,
+    minRadius: null,
+    maxRadius: null,
+  }
+  it('resolves a body name locally without changing the view', () => {
+    const { session, executor, request } = setup()
+    const before = session.harness.observatory.pose()
+    expect(
+      executor.execute({
+        ...request,
+        action: { tool: 'resolve_subject', query: 'Titan' },
+      }).status,
+    ).toBe('arrived')
+    expect(
+      executor
+        .context()
+        .candidates.some((candidate) => candidate.name === 'Titan'),
+    ).toBe(true)
+    expect(session.harness.observatory.pose()).toEqual(before)
+    executor.dispose()
+    session.dispose()
+  })
+  it('publishes capped search results and discards canceled completion', async () => {
+    const { session, executor, request } = setup()
+    const searchRequest: ToolRequest = {
+      ...request,
+      action: { tool: 'find_worlds', query, radiusLightYears: 0.01, limit: 1 },
+    }
+    expect(executor.execute(searchRequest).status).toBe('accepted')
+    await executor.searchDone
+    expect(executor.searchStatus.running).toBe(false)
+    expect(executor.searchStatus.total).toBeGreaterThanOrEqual(2)
+    expect(executor.execute(searchRequest).status).toBe('arrived')
+    executor.supersede(1)
+    const next = {
+      ...searchRequest,
+      operationId: 'two',
+      requestRevision: 1,
+      expectedViewRevision: executor.viewRevision,
+    }
+    executor.execute(next)
+    executor.cancel()
+    await executor.searchDone
+    expect(executor.execute(next).status).toBe('canceled')
+    executor.dispose()
+    session.dispose()
+  })
   it('executes once and replays the eventual arrival receipt', () => {
     const { session, executor, request } = setup()
     const accepted = executor.execute(request)

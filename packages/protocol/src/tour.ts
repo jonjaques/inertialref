@@ -102,7 +102,37 @@ export interface TourPlan {
   readonly stops: readonly TourStop[]
 }
 export type TourCommand = 'start' | 'pause' | 'resume' | 'next' | 'back' | 'end'
+export interface TourWorldQuery {
+  readonly kinds: readonly (
+    | 'rocky'
+    | 'ice'
+    | 'gas-giant'
+    | 'ice-giant'
+    | 'moon'
+    | 'dwarf'
+    | 'asteroid'
+    | 'comet'
+  )[]
+  readonly starClasses: readonly (
+    'O' | 'B' | 'A' | 'F' | 'G' | 'K' | 'M' | 'L' | 'T' | 'Y' | 'D'
+  )[]
+  readonly atmosphere: boolean | null
+  readonly sea: boolean | null
+  readonly rings: boolean | null
+  readonly habitable: boolean | null
+  readonly landable: boolean | null
+  readonly moons: number | null
+  readonly minRadius: number | null
+  readonly maxRadius: number | null
+}
 export type TourAction =
+  | { readonly tool: 'resolve_subject'; readonly query: string }
+  | {
+      readonly tool: 'find_worlds'
+      readonly query: TourWorldQuery
+      readonly radiusLightYears: number
+      readonly limit: number
+    }
   | { readonly tool: 'show_subject'; readonly subjectId: string }
   | {
       readonly tool: 'compose_view'
@@ -402,8 +432,63 @@ const pictureTime = strict({
   mode: decodeEnum('hold', 'live', 'pause', 'resume', 'set', 'rate'),
   value: nullable(instant),
 })
+const queryShape = strict({
+  kinds: list(
+    decodeEnum(
+      'rocky',
+      'ice',
+      'gas-giant',
+      'ice-giant',
+      'moon',
+      'dwarf',
+      'asteroid',
+      'comet',
+    ),
+    8,
+  ),
+  starClasses: list(
+    decodeEnum('O', 'B', 'A', 'F', 'G', 'K', 'M', 'L', 'T', 'Y', 'D'),
+    11,
+  ),
+  atmosphere: nullable(decodeBoolean),
+  sea: nullable(decodeBoolean),
+  rings: nullable(decodeBoolean),
+  habitable: nullable(decodeBoolean),
+  landable: nullable(decodeBoolean),
+  moons: nullable(boundedNumber(0, 100, true)),
+  minRadius: nullable(boundedNumber(0, 100)),
+  maxRadius: nullable(boundedNumber(0, 100)),
+})
+export const decodeTourWorldQuery: Decoder<TourWorldQuery> = (value, path) => {
+  const result = queryShape(value, path)
+  if (!result.ok) return result
+  const query = result.value
+  if (
+    query.kinds.length === 0 &&
+    query.starClasses.length === 0 &&
+    Object.values(query).every((item) => item === null || Array.isArray(item))
+  )
+    return err(`${path}: choose a bounded search predicate`)
+  if (
+    query.minRadius !== null &&
+    query.maxRadius !== null &&
+    query.minRadius > query.maxRadius
+  )
+    return err(`${path}: radius range is reversed`)
+  return result
+}
 export const decodeTourAction: Decoder<TourAction> = union<TourAction>(
   {
+    resolve_subject: strict({
+      tool: decodeEnum('resolve_subject'),
+      query: text(160),
+    }),
+    find_worlds: strict({
+      tool: decodeEnum('find_worlds'),
+      query: decodeTourWorldQuery,
+      radiusLightYears: boundedNumber(0.01, 8),
+      limit: boundedNumber(1, TOUR_LIMITS.candidates, true),
+    }),
     show_subject: strict({ tool: decodeEnum('show_subject'), subjectId: id }),
     read_subject: strict({ tool: decodeEnum('read_subject'), subjectId: id }),
     compose_view: strict({

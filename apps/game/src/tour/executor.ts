@@ -11,6 +11,7 @@ import {
   type ToolReceipt,
   type ToolRequest,
 } from '@inertialref/protocol'
+import type { WorldQuery } from '@inertialref/universe'
 
 export interface TourExecutorOptions {
   readonly sessionId: string
@@ -39,6 +40,11 @@ export class TourExecutor {
   #count = 0
   #disposed = false
   #timeOwned = false
+  #query = ''
+  #extraAddresses: readonly string[] = []
+  #search: { request: ToolRequest; cancel: () => void } | null = null
+  #searchDone: Promise<void> = Promise.resolve()
+  #searchStatus = { systems: 0, progress: 0, total: 0, running: false }
 
   constructor(harness: GameHarness, options: TourExecutorOptions) {
     this.#harness = harness
@@ -59,9 +65,25 @@ export class TourExecutor {
     return this.#requestRevision
   }
 
-  context(query = ''): TourContext {
+  get searchStatus(): Readonly<{
+    systems: number
+    progress: number
+    total: number
+    running: boolean
+  }> {
+    return this.#searchStatus
+  }
+  get searchDone(): Promise<void> {
+    return this.#searchDone
+  }
+  context(query?: string): TourContext {
     this.poll()
-    this.#context = createTourContext(this.#harness, query)
+    if (query !== undefined) this.#query = query
+    this.#context = createTourContext(
+      this.#harness,
+      this.#query,
+      this.#extraAddresses,
+    )
     return this.#context
   }
   supersede(requestRevision: number): void {
@@ -136,10 +158,14 @@ export class TourExecutor {
       return reject('The operation lease is too long.')
     if (this.#operations.size >= 512 || this.#count >= TOUR_LIMITS.operations)
       return reject('The operation budget is exhausted.')
-    if (this.#pending !== null && request.action.tool !== 'read_subject')
+    if (
+      (this.#pending !== null || this.#search !== null) &&
+      request.action.tool !== 'read_subject' &&
+      request.action.tool !== 'resolve_subject'
+    )
       return reject('Another view operation is in progress.')
     const action = request.action
-    if (action.tool !== 'set_picture_time') {
+    if ('subjectId' in action) {
       const candidate = this.#context.candidates.find(
         (item) => item.id === action.subjectId,
       )
@@ -158,10 +184,13 @@ export class TourExecutor {
     }
     this.#count += 1
     try {
+      if (action.tool === 'find_worlds')
+        return this.#startSearch(request, action, fingerprint)
       this.#apply(action)
       this.#seenRevision = this.viewRevision
       const status =
         action.tool === 'read_subject' ||
+        action.tool === 'resolve_subject' ||
         (!this.#harness.observatory.status().traveling &&
           this.#options.ready?.() !== false)
           ? 'arrived'
@@ -199,6 +228,24 @@ export class TourExecutor {
   }
   #apply(action: TourAction): void {
     const eye = this.#harness.observatory
+    if (action.tool === 'find_worlds') return
+    if (action.tool === 'resolve_subject') {
+      this.#query = action.query
+      this.#extraAddresses = this.#harness
+        .searchEntries()
+        .filter(
+          (entry) =>
+            entry.text.toLowerCase() === action.query.trim().toLowerCase(),
+        )
+        .map((entry) => entry.address)
+        .slice(0, TOUR_LIMITS.candidates)
+      this.#context = createTourContext(
+        this.#harness,
+        action.query,
+        this.#extraAddresses,
+      )
+      return
+    }
     if (action.tool === 'set_picture_time') {
       this.#timeOwned = true
       if (action.mode === 'live') {
@@ -237,6 +284,75 @@ export class TourExecutor {
     if (eye.target?.address !== candidate.address) eye.focus(candidate.address)
     eye.compose(action.framingId)
   }
+  #startSearch(
+    request: ToolRequest,
+    action: Extract<TourAction, { tool: 'find_worlds' }>,
+    fingerprint: string,
+  ): ToolReceipt {
+    const held = { request, cancel: () => {} }
+    this.#search = held
+    this.#extraAddresses = []
+    const query: WorldQuery = {
+      kinds: action.query.kinds,
+      starClasses: action.query.starClasses,
+      ...Object.fromEntries(
+        Object.entries(action.query).filter(
+          ([key, value]) =>
+            key !== 'kinds' && key !== 'starClasses' && value !== null,
+        ),
+      ),
+    }
+    const search = this.#harness.findWorlds(query, {
+      lightYears: action.radiusLightYears,
+      limit: action.limit,
+      onBatch: (_found, progress, total) => {
+        if (this.#search !== held) return
+        this.#searchStatus = { ...this.#searchStatus, progress, total }
+      },
+    })
+    held.cancel = search.cancel
+    this.#searchStatus = {
+      systems: search.systems,
+      progress: 0,
+      total: 0,
+      running: true,
+    }
+    const receipt = this.#receipt(request, 'accepted', null)
+    this.#operations.set(request.operationId, { fingerprint, receipt })
+    this.#searchDone = search.done
+      .then((found) => {
+        this.poll()
+        if (this.#search !== held) return
+        this.#search = null
+        this.#searchStatus = {
+          ...this.#searchStatus,
+          progress: 1,
+          running: false,
+        }
+        this.#extraAddresses = found
+          .map((match) => match.address)
+          .slice(0, action.limit)
+        this.#context = createTourContext(
+          this.#harness,
+          this.#query,
+          this.#extraAddresses,
+        )
+        this.#publish(this.#receipt(request, 'arrived', null))
+      })
+      .catch(() => {
+        if (this.#search !== held) return
+        this.#search = null
+        this.#searchStatus = { ...this.#searchStatus, running: false }
+        this.#publish(
+          this.#receipt(
+            request,
+            'rejected',
+            'The bounded search could not finish.',
+          ),
+        )
+      })
+    return this.#publish(receipt)
+  }
   poll(): void {
     if (this.#disposed) return
     if (this.viewRevision !== this.#seenRevision) {
@@ -244,6 +360,15 @@ export class TourExecutor {
       this.#timeOwned = false
       this.#cancel('The visitor changed the view.', false)
       this.#options.onTakeover?.()
+      return
+    }
+    if (
+      this.#search !== null &&
+      (this.#search.request.expiresAt <= this.#options.now() ||
+        this.#search.request.requestRevision !== this.#requestRevision ||
+        this.#options.active?.() === false)
+    ) {
+      this.cancel('The search lease ended.')
       return
     }
     const pending = this.#pending
@@ -283,6 +408,13 @@ export class TourExecutor {
   }
   #cancel(reason: string, hold: boolean): void {
     this.#revokedRevision = this.#requestRevision
+    const search = this.#search
+    this.#search = null
+    if (search !== null) {
+      search.cancel()
+      this.#searchStatus = { ...this.#searchStatus, running: false }
+      this.#publish(this.#receipt(search.request, 'canceled', reason))
+    }
     const pending = this.#pending
     this.#pending = null
     if (pending === null) return

@@ -252,6 +252,7 @@ export function tourCandidate(
 export function createTourContext(
   harness: GameHarness,
   query = '',
+  additionalAddresses: readonly string[] = [],
 ): TourContext {
   const eye = harness.observatory
   const addresses: string[] = []
@@ -260,6 +261,8 @@ export function createTourContext(
       addresses.push(address)
   }
   const selected = eye.target?.address
+  for (const address of additionalAddresses.slice(0, TOUR_LIMITS.candidates))
+    add(address)
   add(selected)
   const entries = harness.searchEntries()
   const normalized = query.trim().toLowerCase()
