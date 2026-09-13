@@ -109,6 +109,38 @@ function setup(
 }
 
 describe('tour coordinator ordering', () => {
+  it('settles confirmed Live time once using cumulative provider usage', async () => {
+    const messages: TourServerMessage[] = []
+    const initial = newSessionRecord({
+      sessionId: 'live',
+      user: 'alpha',
+      tabId: 'tab',
+      now: 100,
+      transport: 'live',
+      manifest: context().manifest,
+      fingerprint: 'fp',
+    })
+    const coordinator = new TourCoordinator(initial, context(), {
+      now: () => 101,
+      id: () => 'id',
+      send: (event) => messages.push(event),
+      persist: async () => {},
+      director: async () => {
+        throw new Error('unused')
+      },
+      narrate: async () => {},
+      close: async () => {},
+    })
+    await coordinator.usage(60)
+    await coordinator.usage(30)
+    await coordinator.finalized(true, 60)
+    await coordinator.finalized(true, 60)
+    expect(coordinator.record.liveSeconds).toBe(60)
+    expect(coordinator.record.budget).toMatchObject({
+      spent: 50_000,
+      reserved: 0,
+    })
+  })
   it('discards a slow director result after an explicit stop even when abort is ignored', async () => {
     let resolve!: (value: DirectorDecision) => void
     let markStarted!: () => void

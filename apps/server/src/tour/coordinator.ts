@@ -295,11 +295,24 @@ export class TourCoordinator {
     }
   }
   async finalized(complete: boolean, seconds: number): Promise<void> {
+    if (this.#record.finalized) return
+    const liveSeconds = Math.max(this.#record.liveSeconds, seconds)
+    const budget =
+      complete && this.#record.transport === 'live'
+        ? commitSpend(
+            this.#record.budget,
+            TOUR_POLICY.liveReservation,
+            Math.ceil(
+              (liveSeconds * TOUR_POLICY.liveMicroDollarsPerMinute) / 60,
+            ),
+          )
+        : this.#record.budget
     this.#record = {
       ...this.#record,
       state: 'closed',
       finalized: complete,
-      liveSeconds: Math.max(this.#record.liveSeconds, seconds),
+      liveSeconds,
+      budget,
     }
     await this.#save()
   }

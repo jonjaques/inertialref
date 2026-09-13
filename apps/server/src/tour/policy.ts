@@ -11,6 +11,7 @@ export const TOUR_POLICY = {
   directorOutputMicroDollarsPerToken: 50,
   speechReservation: 120_000,
   liveReservation: 500_000,
+  liveMicroDollarsPerMinute: 50_000,
 } as const
 
 export interface AdmissionReservation {
