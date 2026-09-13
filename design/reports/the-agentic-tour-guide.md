@@ -292,3 +292,9 @@ required setup, not a product fix. Evidence is
 `.scratch/tour-v2-revised-mobile.json`, and the corresponding screenshots in
 `.data/drive/`. The narrow screenshot `guide-v2-mobile-changes.jpg` includes
 the added/removed summary and its panel picker.
+
+The final `pnpm check` passes after the Live delegation fix and visitor-facing
+objective edits: 2,571 regular tests in 231 files, eight slow tests in four
+files, type checking, repository checks, and a production build with 122
+rendered documents verified. Existing lint warnings and four Astro hints
+remain. The complete local log is `/tmp/ir-tour-v2-completion-check.log`.
