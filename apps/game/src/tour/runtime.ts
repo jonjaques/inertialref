@@ -823,8 +823,16 @@ export class GuideRuntime {
           this.#runner?.command('pause')
           this.#live?.muteGuide(true)
           this.#update({ state: 'paused' })
+        } else {
+          const runner = this.#runner?.status()
+          const itineraryActive =
+            runner !== undefined &&
+            runner.state !== 'idle' &&
+            runner.state !== 'ended'
+          this.#update({
+            state: itineraryActive ? runner.state : event.state,
+          })
         }
-        if (event.state === 'planning') this.#update({ state: 'planning' })
         this.#update({ message: event.message || null })
     }
   }

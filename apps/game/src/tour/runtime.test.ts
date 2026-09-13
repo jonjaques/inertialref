@@ -426,6 +426,42 @@ describe('the browser guide runtime', () => {
     f.dispose()
   })
 
+  it('shows a completed answer status without overwriting itinerary progress', async () => {
+    const f = rig()
+    await f.runtime.ask('Which of these worlds should we compare?')
+    expect(f.runtime.diagnostics().state).toBe('planning')
+    const socket = f.sockets[0]!
+    socket.receive({
+      type: 'status',
+      state: 'awaiting-next',
+      message: 'Which worlds interest you?',
+    })
+    expect(f.runtime.diagnostics().state).toBe('awaiting-next')
+    await f.runtime.startTour('saturn')
+    socket.receive({
+      type: 'status',
+      state: 'awaiting-next',
+      message: 'Ready when you are.',
+    })
+    expect(f.runtime.diagnostics().state).toBe('traveling')
+    f.arrive()
+    socket.receive({
+      type: 'status',
+      state: 'awaiting-next',
+      message: 'Ready when you are.',
+    })
+    expect(f.runtime.diagnostics().state).toBe('viewing')
+    f.runtime.command('pause')
+    await f.runtime.ask('What is the next stop about?')
+    socket.receive({
+      type: 'status',
+      state: 'awaiting-next',
+      message: 'The next stop is Titan.',
+    })
+    expect(f.runtime.diagnostics().state).toBe('paused')
+    f.dispose()
+  })
+
   it('keeps local Next usable after the online connection is lost', async () => {
     const f = rig()
     await f.runtime.startTour('saturn', true)
