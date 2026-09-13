@@ -8,11 +8,13 @@ import {
 } from '@inertialref/protocol'
 import {
   callResponsesDirector,
+  emitProviderTrace,
   GuideProviderError,
   providerRecord,
   withinTextBudget,
   type DirectorModel,
   type DirectorUsage,
+  type ProviderTrace,
 } from './openaiResponses.ts'
 
 export const DIRECTOR_PROMPT_VERSION = 'planetarium-director-2'
@@ -495,6 +497,7 @@ export async function interpretTourRequest(options: {
   fetch?: typeof fetch
   model?: DirectorModel
   maxRounds?: 1 | 2
+  trace?: ProviderTrace
 }): Promise<DirectorResult> {
   if (
     /\b(pretend|falsely|fake|lie)\b[\s\S]*\b(arriv\w*|succeed\w*|completed|worked)\b|\b(say|claim|report)\b[\s\S]*\b(arriv\w*|succeed\w*|completed|worked)\b[\s\S]*\b(fail\w*|did not|didn't|has not|hasn't)\b/i.test(
@@ -544,18 +547,43 @@ export async function interpretTourRequest(options: {
         signal: controller.signal,
         fetch: options.fetch,
         model: options.model,
+        trace: options.trace,
       })
       usage.inputTokens += response.usage.inputTokens
       usage.outputTokens += response.usage.outputTokens
       if (controller.signal.aborted) throw new GuideProviderError('timeout')
       try {
-        return {
+        const result = {
           ...validateDirectorDecision(response.value, options.context),
           usage,
           model: response.model,
           rounds: round + 1,
         }
+        emitProviderTrace(options.trace, {
+          event: 'provider.response',
+          model: response.model,
+          data: {
+            phase: 'validated-decision',
+            promptVersion: DIRECTOR_PROMPT_VERSION,
+            round: round + 1,
+            output: result,
+          },
+        })
+        return result
       } catch (error) {
+        emitProviderTrace(options.trace, {
+          event: 'provider.error',
+          model: response.model,
+          data: {
+            phase: 'semantic-validation',
+            round: round + 1,
+            code:
+              error instanceof GuideProviderError
+                ? error.code
+                : 'invalid-output',
+            repair: round < maxRounds - 1,
+          },
+        })
         if (
           !(error instanceof GuideProviderError) ||
           error.code !== 'invalid-output' ||

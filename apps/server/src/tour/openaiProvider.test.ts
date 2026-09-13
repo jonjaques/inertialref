@@ -7,7 +7,7 @@ import {
   TranscriptAssembler,
   type LiveSocket,
 } from './openaiLive.ts'
-import { callResponsesDirector } from './openaiResponses.ts'
+import { callResponsesDirector, synthesizeSpeech } from './openaiResponses.ts'
 
 function socket() {
   const listeners = new Map<string, (event: { data: unknown }) => void>()
@@ -21,10 +21,128 @@ function socket() {
     ) => listeners.set(name, listener),
     emit: (data: unknown) =>
       listeners.get('message')?.({ data: JSON.stringify(data) }),
+    finish: (code: number) =>
+      listeners.get('close')?.({ code, wasClean: false } as unknown as {
+        data: unknown
+      }),
   }
 }
 
 describe('Live provider boundary', () => {
+  it('supplies the verified initial brief and keeps a failed trace sink out of socket control', async () => {
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          session: { id: 'session-1' },
+          transport: { sdp: 'answer' },
+        }),
+    )
+    await createLiveSession({
+      apiKey: 'fake',
+      sdp: 'offer',
+      context: 'Current verified brief: Saturn has rings.',
+      fetch: fetcher as typeof fetch,
+    })
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
+    expect(body.session.instructions).toContain(
+      'Current verified brief: Saturn has rings.',
+    )
+    const wire = socket()
+    const events = vi.fn()
+    const live = new LiveSideband(wire as LiveSocket, events, () => {
+      throw new Error('sink failed')
+    })
+    expect(live.append('commentary', 'Saturn has rings.')).toBe('guide-1')
+    wire.finish(1006)
+    expect(events).toHaveBeenCalledWith({
+      type: 'error',
+      code: 'connection-lost',
+    })
+  })
+
+  it('traces Live messages and lifecycle without credentials, SDP, or reflected audio', async () => {
+    const trace = vi.fn()
+    await createLiveSession({
+      apiKey: 'credential-canary',
+      sdp: 'offer-canary',
+      trace,
+      fetch: (async () =>
+        Response.json({
+          session: { id: 'session-1' },
+          transport: { sdp: 'answer-canary' },
+        })) as typeof fetch,
+    })
+    const wire = socket()
+    const live = new LiveSideband(wire as LiveSocket, () => {}, trace)
+    live.append('commentary', 'Saturn has rings.', 'delegation-1')
+    wire.emit({ type: 'session.output_audio.delta', audio: 'audio-canary' })
+    wire.emit({
+      type: 'session.input_transcript.delta',
+      event_id: 'transcript-1',
+      delta: 'Tell me about Saturn.',
+      start_ms: 0,
+      end_ms: 100,
+      audio: 'extra-audio-canary',
+    })
+    wire.emit({
+      type: 'error',
+      code: 'invalid_request',
+      message: 'credential-canary',
+    })
+    live.disconnect()
+    const events = trace.mock.calls.map(([event]) => event)
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: 'provider.request',
+          model: 'gpt-live-1',
+          data: expect.objectContaining({
+            endpoint: '/v1/live/sessions',
+            instructions: expect.any(String),
+          }),
+        }),
+        expect.objectContaining({
+          event: 'provider.response',
+          model: 'gpt-live-1',
+          data: expect.objectContaining({
+            status: 200,
+            sessionId: 'session-1',
+          }),
+        }),
+        expect.objectContaining({
+          event: 'live.send',
+          model: 'gpt-live-1',
+          data: expect.objectContaining({ content: 'Saturn has rings.' }),
+        }),
+        expect.objectContaining({
+          event: 'live.receive',
+          model: 'gpt-live-1',
+          data: expect.objectContaining({ delta: 'Tell me about Saturn.' }),
+        }),
+        expect.objectContaining({
+          event: 'provider.error',
+          model: 'gpt-live-1',
+          data: expect.objectContaining({ code: 'invalid_request' }),
+        }),
+        expect.objectContaining({
+          event: 'live.close',
+          model: 'gpt-live-1',
+          data: expect.objectContaining({ origin: 'application' }),
+        }),
+      ]),
+    )
+    const logged = JSON.stringify(events)
+    for (const secret of [
+      'credential-canary',
+      'offer-canary',
+      'answer-canary',
+      'audio-canary',
+      'extra-audio-canary',
+      'Authorization',
+    ])
+      expect(logged).not.toContain(secret)
+  })
+
   it('releases the upgrade deadline after the sideband is accepted', async () => {
     vi.useFakeTimers()
     const timeout = vi
@@ -186,6 +304,9 @@ describe('Live provider boundary', () => {
       transport: { type: 'webrtc', sdp: 'offer' },
     })
     expect(body.session.audio.output.voice).toBe('marin')
+    expect(body.session.instructions).toContain(
+      'No verified brief is available.',
+    )
   })
 
   it('does not retain reflected audio, treats usage as cumulative and waits for finalization', async () => {
@@ -295,6 +416,101 @@ describe('Live provider boundary', () => {
 })
 
 describe('Responses provider boundary', () => {
+  it('traces Astra text, structured output and usage while sanitizing failures', async () => {
+    const trace = vi.fn()
+    await callResponsesDirector({
+      apiKey: 'credential-canary',
+      input: 'Tell me about Saturn.',
+      instructions: 'Use the supplied facts.',
+      schema: { type: 'object' },
+      trace,
+      fetch: (async () =>
+        Response.json({
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              content: [
+                { type: 'output_text', text: '{"kind":"explanation"}' },
+              ],
+            },
+          ],
+          usage: { input_tokens: 12, output_tokens: 3 },
+        })) as typeof fetch,
+    })
+    await expect(
+      callResponsesDirector({
+        apiKey: 'credential-canary',
+        input: 'request',
+        instructions: 'instructions',
+        schema: {},
+        trace,
+        fetch: (async () =>
+          new Response('credential-canary', { status: 401 })) as typeof fetch,
+      }),
+    ).rejects.toMatchObject({ code: 'unavailable' })
+    const events = trace.mock.calls.map(([event]) => event)
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: 'provider.request',
+          model: 'gpt-6-astra',
+          data: expect.objectContaining({
+            endpoint: '/v1/responses',
+            input: 'Tell me about Saturn.',
+            instructions: 'Use the supplied facts.',
+          }),
+        }),
+        expect.objectContaining({
+          event: 'provider.response',
+          model: 'gpt-6-astra',
+          data: expect.objectContaining({
+            status: 200,
+            output: { kind: 'explanation' },
+            usage: { inputTokens: 12, outputTokens: 3 },
+            latencyMs: expect.any(Number),
+          }),
+        }),
+        expect.objectContaining({
+          event: 'provider.error',
+          model: 'gpt-6-astra',
+          data: expect.objectContaining({ status: 401, code: 'unavailable' }),
+        }),
+      ]),
+    )
+    expect(JSON.stringify(events)).not.toContain('credential-canary')
+    expect(JSON.stringify(events)).not.toContain('Authorization')
+  })
+
+  it('traces controlled speech text and byte counts without logging audio', async () => {
+    const trace = vi.fn()
+    await synthesizeSpeech({
+      apiKey: 'credential-canary',
+      text: 'Saturn has rings.',
+      trace,
+      fetch: (async () => new Response('audio-canary')) as typeof fetch,
+    })
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'provider.request',
+        model: 'gpt-4o-mini-tts',
+        data: expect.objectContaining({
+          input: 'Saturn has rings.',
+          voice: 'marin',
+        }),
+      }),
+    )
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'provider.response',
+        model: 'gpt-4o-mini-tts',
+        data: expect.objectContaining({ audioBytes: 12 }),
+      }),
+    )
+    expect(JSON.stringify(trace.mock.calls)).not.toContain('audio-canary')
+    expect(JSON.stringify(trace.mock.calls)).not.toContain('credential-canary')
+  })
+
   it('bounds Astra reasoning/output and never stores input', async () => {
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>

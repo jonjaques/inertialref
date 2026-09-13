@@ -81,6 +81,49 @@ const explanation = {
 }
 
 describe('grounded director', () => {
+  it('forwards model traces and distinguishes the validated decision from its proposal', async () => {
+    const trace = vi.fn()
+    await interpretTourRequest({
+      apiKey: 'credential-canary',
+      text: 'Explain Saturn.',
+      context,
+      trace,
+      fetch: (async () =>
+        Response.json({
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              content: [
+                { type: 'output_text', text: JSON.stringify(explanation) },
+              ],
+            },
+          ],
+          usage: { input_tokens: 12, output_tokens: 5 },
+        })) as typeof fetch,
+    })
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'provider.request',
+        model: 'gpt-6-astra',
+        data: expect.objectContaining({ endpoint: '/v1/responses' }),
+      }),
+    )
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'provider.response',
+        model: 'gpt-6-astra',
+        data: expect.objectContaining({
+          phase: 'validated-decision',
+          output: expect.objectContaining({
+            text: 'Saturn has a test radius of ten meters.',
+          }),
+        }),
+      }),
+    )
+    expect(JSON.stringify(trace.mock.calls)).not.toContain('credential-canary')
+  })
+
   it('holds the view when a request asks to fabricate camera arrival evidence', async () => {
     const fetcher = vi.fn()
     for (const text of [

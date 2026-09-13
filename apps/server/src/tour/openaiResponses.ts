@@ -7,6 +7,24 @@ export const DIRECTOR_MODELS = [
 ] as const
 export type DirectorModel = (typeof DIRECTOR_MODELS)[number]
 
+export type ProviderTrace = (entry: {
+  event: string
+  model: string
+  data: unknown
+}) => void
+
+/** Diagnostics never participate in provider control flow. The host bounds its sink. */
+export function emitProviderTrace(
+  trace: ProviderTrace | undefined,
+  entry: Parameters<ProviderTrace>[0],
+): void {
+  try {
+    trace?.(entry)
+  } catch {
+    // A disabled or failed diagnostic sink must not interrupt the guide.
+  }
+}
+
 export class GuideProviderError extends Error {
   readonly code:
     | 'unavailable'
@@ -41,6 +59,7 @@ export interface ResponsesRequest {
   fetch?: typeof fetch
   /** Only the explicit evaluation runner selects a comparison model. */
   model?: DirectorModel
+  trace?: ProviderTrace
 }
 
 export function providerRecord(value: unknown): Record<string, unknown> | null {
@@ -98,6 +117,9 @@ export async function callResponsesDirector(
   model: DirectorModel
 }> {
   const model = request.model ?? DIRECTOR_MODEL
+  const endpoint = '/v1/responses'
+  const started = Date.now()
+  let status: number | null = null
   const body = {
     model,
     reasoning: { effort: 'low' },
@@ -121,6 +143,11 @@ export async function callResponsesDirector(
   if (request.signal?.aborted) controller.abort()
   else request.signal?.addEventListener('abort', abort, { once: true })
   const timer = setTimeout(abort, 12_000)
+  emitProviderTrace(request.trace, {
+    event: 'provider.request',
+    model,
+    data: { endpoint, ...body },
+  })
   try {
     const response = await (request.fetch ?? fetch)(
       'https://api.openai.com/v1/responses',
@@ -134,6 +161,7 @@ export async function callResponsesDirector(
         signal: controller.signal,
       },
     )
+    status = response.status
     const value = providerRecord(await readProviderJson(response))
     if (controller.signal.aborted) throw new GuideProviderError('timeout')
     if (value?.status !== 'completed')
@@ -164,18 +192,43 @@ export async function callResponsesDirector(
     )
       throw new GuideProviderError('invalid-output')
     try {
-      return {
+      const result = {
         value: JSON.parse(output) as unknown,
         usage: { inputTokens, outputTokens },
         model,
       }
+      emitProviderTrace(request.trace, {
+        event: 'provider.response',
+        model,
+        data: {
+          endpoint,
+          status,
+          latencyMs: Date.now() - started,
+          output: result.value,
+          usage: result.usage,
+        },
+      })
+      return result
     } catch {
       throw new GuideProviderError('invalid-output')
     }
   } catch (error) {
-    if (controller.signal.aborted) throw new GuideProviderError('timeout')
-    if (error instanceof GuideProviderError) throw error
-    throw new GuideProviderError('unavailable')
+    const failure = controller.signal.aborted
+      ? new GuideProviderError('timeout')
+      : error instanceof GuideProviderError
+        ? error
+        : new GuideProviderError('unavailable')
+    emitProviderTrace(request.trace, {
+      event: 'provider.error',
+      model,
+      data: {
+        endpoint,
+        status,
+        latencyMs: Date.now() - started,
+        code: failure.code,
+      },
+    })
+    throw failure
   } finally {
     clearTimeout(timer)
     request.signal?.removeEventListener('abort', abort)
@@ -188,6 +241,7 @@ export async function synthesizeSpeech(options: {
   text: string
   signal?: AbortSignal
   fetch?: typeof fetch
+  trace?: ProviderTrace
 }): Promise<Uint8Array> {
   if (!options.text || !withinTextBudget(options.text, 2000))
     throw new GuideProviderError('input-limit')
@@ -196,6 +250,23 @@ export async function synthesizeSpeech(options: {
   if (options.signal?.aborted) controller.abort()
   else options.signal?.addEventListener('abort', abort, { once: true })
   const timer = setTimeout(abort, 20_000)
+  const model = 'gpt-4o-mini-tts'
+  const endpoint = '/v1/audio/speech'
+  const started = Date.now()
+  let status: number | null = null
+  const body = {
+    model,
+    voice: 'marin',
+    input: options.text,
+    response_format: 'mp3',
+    instructions:
+      'Speak as a curious planetarium guide. Use clear emphasis and a measured pace, with a pause between ideas. Read the supplied text faithfully. Io is EYE-oh; Enceladus is en-SELL-uh-dus; Iapetus is eye-APP-eh-tus.',
+  }
+  emitProviderTrace(options.trace, {
+    event: 'provider.request',
+    model,
+    data: { endpoint, ...body },
+  })
   try {
     const response = await (options.fetch ?? fetch)(
       'https://api.openai.com/v1/audio/speech',
@@ -206,16 +277,10 @@ export async function synthesizeSpeech(options: {
           'Content-Type': 'application/json',
         },
         signal: controller.signal,
-        body: JSON.stringify({
-          model: 'gpt-4o-mini-tts',
-          voice: 'marin',
-          input: options.text,
-          response_format: 'mp3',
-          instructions:
-            'Speak as a curious planetarium guide. Use clear emphasis and a measured pace, with a pause between ideas. Read the supplied text faithfully. Io is EYE-oh; Enceladus is en-SELL-uh-dus; Iapetus is eye-APP-eh-tus.',
-        }),
+        body: JSON.stringify(body),
       },
     )
+    status = response.status
     if (!response.ok || !response.body) {
       await response.body?.cancel()
       throw new GuideProviderError('unavailable')
@@ -240,15 +305,39 @@ export async function synthesizeSpeech(options: {
         audio.set(chunk, offset)
         offset += chunk.byteLength
       }
+      emitProviderTrace(options.trace, {
+        event: 'provider.response',
+        model,
+        data: {
+          endpoint,
+          status,
+          latencyMs: Date.now() - started,
+          audioBytes: size,
+          format: 'mp3',
+        },
+      })
       return audio
     } finally {
       await reader.cancel().catch(() => {})
       reader.releaseLock()
     }
   } catch (error) {
-    if (controller.signal.aborted) throw new GuideProviderError('timeout')
-    if (error instanceof GuideProviderError) throw error
-    throw new GuideProviderError('unavailable')
+    const failure = controller.signal.aborted
+      ? new GuideProviderError('timeout')
+      : error instanceof GuideProviderError
+        ? error
+        : new GuideProviderError('unavailable')
+    emitProviderTrace(options.trace, {
+      event: 'provider.error',
+      model,
+      data: {
+        endpoint,
+        status,
+        latencyMs: Date.now() - started,
+        code: failure.code,
+      },
+    })
+    throw failure
   } finally {
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', abort)
