@@ -4,6 +4,11 @@ import { MEDIA, resolveRange } from './media.ts'
 import { routeFor } from './routes.ts'
 
 describe('worker routing', () => {
+  it('routes guide requests through the authenticated host adapter', () => {
+    expect(routeFor('/api/tour/capabilities').kind).toBe('tour')
+    expect(routeFor('/api/tour/sessions/abc/events').kind).toBe('tour')
+    expect(routeFor('/api/tourish').kind).toBe('api-not-found')
+  })
   it('sends the two live paths to the script', () => {
     expect(routeFor(HEALTH_PATH).kind).toBe('health')
     expect(routeFor(SOCKET_PATH).kind).toBe('socket')

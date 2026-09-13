@@ -102,12 +102,15 @@ function setup(
 describe('tour coordinator ordering', () => {
   it('discards a slow director result after an explicit stop even when abort is ignored', async () => {
     let resolve!: (value: DirectorDecision) => void
-    const started = Promise.withResolvers<void>()
+    let markStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
     const { coordinator, messages } = setup(
       () =>
         new Promise((done) => {
           resolve = done
-          started.resolve()
+          markStarted()
         }),
     )
     const pending = coordinator.receive({
@@ -116,7 +119,7 @@ describe('tour coordinator ordering', () => {
       requestRevision: 1,
       viewRevision: 0,
     })
-    await started.promise
+    await started
     await coordinator.receive({
       type: 'command',
       command: 'pause',

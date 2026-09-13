@@ -3,6 +3,20 @@
   "name": "inertialrefd",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-20",
+  "secrets": { "required": ["OPENAI_API_KEY", "TOUR_GUIDE_PASSWORD"] },
+  "vars": { "TOUR_GUIDE_ENABLED": "true" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "TOUR_SESSIONS", "class_name": "TourSession" },
+      { "name": "TOUR_ADMISSION", "class_name": "TourAdmission" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "tour-v1",
+      "new_sqlite_classes": ["TourSession", "TourAdmission"],
+    },
+  ],
 
   /* Both hosts serve the same app without a redirect. Service workers and
    * IndexedDB saves belong to their origin, so the legacy host must keep

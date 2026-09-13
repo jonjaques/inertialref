@@ -6,7 +6,7 @@ export const TOUR_POLICY = {
   dailyLimit: 10_000_000,
   sessionLimit: 2_000_000,
   globalConcurrency: 4,
-  directorReservation: 180_000,
+  directorReservation: 360_000,
   speechReservation: 120_000,
   liveReservation: 500_000,
 } as const

@@ -23,6 +23,7 @@ import { type MediaObject, mediaFor } from './media.ts'
  */
 
 export type Route =
+  | { readonly kind: 'tour' }
   | { readonly kind: 'health' }
   | { readonly kind: 'socket' }
   | { readonly kind: 'api-not-found' }
@@ -33,6 +34,8 @@ export type Route =
 const API_ROOT = API_PREFIX.slice(0, -1)
 
 export function routeFor(pathname: string): Route {
+  if (pathname === '/api/tour' || pathname.startsWith('/api/tour/'))
+    return { kind: 'tour' }
   if (pathname === HEALTH_PATH) return { kind: 'health' }
   if (pathname === SOCKET_PATH) return { kind: 'socket' }
   /*
