@@ -575,22 +575,31 @@ export class TourCoordinator {
                 fact,
                 subject: item.name,
                 subjectId: item.subjectId,
+                provenance: item.provenance,
               })),
           )
           .slice(0, 5)
+    const first = available[0] ?? {
+      subject: brief.name,
+      subjectId: brief.subjectId,
+      provenance: brief.provenance,
+    }
     let description = [
-      brief.name + '.',
-      brief.provenance === 'projected'
+      first.subject + '.',
+      first.provenance === 'projected'
         ? 'This is a projected world. Its properties are inferred.'
         : '',
     ]
       .filter(Boolean)
       .join(' ')
     const facts = []
-    let subjectId = brief.subjectId
+    let subjectId = first.subjectId
     for (const item of available) {
       const sentence = [
         item.subjectId === subjectId ? '' : `${item.subject}.`,
+        item.subjectId !== subjectId && item.provenance === 'projected'
+          ? 'This is a projected world. Its properties are inferred.'
+          : '',
         item.fact.speech ??
           `${item.fact.label} is unknown. ${item.fact.reason ?? ''}`,
       ]

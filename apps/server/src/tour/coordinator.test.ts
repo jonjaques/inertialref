@@ -596,6 +596,32 @@ describe('tour read continuation and evidence', () => {
     expect(narration.brief.sources).toEqual([brief.sources[1]])
   })
 
+  it('names the answer subject when the visitor asks about another visible record', async () => {
+    const { coordinator, messages } = setup(
+      async () => ({
+        kind: 'explanation',
+        text: '',
+        factIds: ['titan-radius'],
+        plan: null,
+        actions: [],
+        rounds: 1,
+      }),
+      returnedTitan(),
+    )
+    await coordinator.receive({
+      type: 'ask',
+      text: 'Tell me about Titan.',
+      requestRevision: 1,
+      viewRevision: 0,
+    })
+    const narration = messages.find((message) => message.type === 'narration')
+    if (narration?.type !== 'narration') throw new Error('No narration')
+    expect(narration.brief.text).toMatch(/^Titan\./)
+    expect(narration.brief.text).not.toContain('Saturn.')
+    expect(narration.brief.subjectId).toBe('saturn')
+    expect(messages.some((message) => message.type === 'tool')).toBe(false)
+  })
+
   it('retains selected cross-subject facts and each source in one explanation', async () => {
     const initial = returnedTitan()
     const { coordinator, messages } = setup(
