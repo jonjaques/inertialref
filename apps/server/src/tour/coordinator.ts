@@ -24,6 +24,11 @@ export interface DirectorDecision {
   readonly factIds: readonly string[]
   readonly plan: TourPlan | null
   readonly actions: readonly TourAction[]
+  readonly rounds?: number
+  readonly usage?: {
+    readonly inputTokens: number
+    readonly outputTokens: number
+  }
 }
 
 export interface OperationRecord {
@@ -93,6 +98,7 @@ export interface CoordinatorPorts {
     text: string,
     context: TourContext,
     signal: AbortSignal,
+    maxRounds: 1 | 2,
   ) => Promise<DirectorDecision>
   readonly narrate: (
     brief: NarrationBrief,
@@ -117,6 +123,11 @@ export class TourCoordinator {
   #lastAsk = -1
   #writes: Promise<void> = Promise.resolve()
   #paused = false
+  #requestStarted = 0
+  #rounds = 0
+  #tools = 0
+  #lastText = ''
+  #plan: TourPlan | null = null
 
   constructor(
     record: SessionRecord,
@@ -312,16 +323,28 @@ export class TourCoordinator {
     this.#delegationId = null
     this.#record = { ...this.#record, requestRevision: revision }
     this.#narrations.clear()
+    this.#requestStarted = this.#ports.now()
+    this.#rounds = 0
+    this.#tools = 0
   }
 
   async #ask(text: string): Promise<void> {
     const context = this.#context
     if (!context || !text.trim()) return
     const requestRevision = this.#record.requestRevision
-    const budget = reserveSpend(
-      this.#record.budget,
-      TOUR_POLICY.directorReservation,
-    )
+    this.#lastText = text
+    const remainingMs = 12_000 - (this.#ports.now() - this.#requestStarted)
+    if (this.#rounds >= 3 || remainingMs <= 0) {
+      this.#error(
+        'deadline',
+        'The guide reached this request’s limit. The search results remain available for another request.',
+      )
+      return
+    }
+    const maxRounds = this.#rounds >= 2 ? 1 : 2
+    const reservation = (TOUR_POLICY.directorReservation / 2) * maxRounds
+    let actual = reservation
+    const budget = reserveSpend(this.#record.budget, reservation)
     if (!budget) {
       this.#error('budget', 'The guide has reached its spending allowance.')
       return
@@ -330,15 +353,27 @@ export class TourCoordinator {
     const abort = new AbortController()
     this.#abort = abort
     await this.#save()
-    if (abort.signal.aborted || this.#record.state !== 'open') return
-    const deadline = setTimeout(() => abort.abort(), 12_000)
+    const deadline = setTimeout(() => abort.abort(), remainingMs)
     this.#ports.send({
       type: 'status',
       state: 'planning',
       message: 'Considering your request.',
     })
     try {
-      const decision = await this.#ports.director(text, context, abort.signal)
+      if (abort.signal.aborted || this.#record.state !== 'open') return
+      const decision = await this.#ports.director(
+        text,
+        context,
+        abort.signal,
+        maxRounds,
+      )
+      if (decision.usage)
+        actual = Math.ceil(
+          decision.usage.inputTokens *
+            TOUR_POLICY.directorInputMicroDollarsPerToken +
+            decision.usage.outputTokens *
+              TOUR_POLICY.directorOutputMicroDollarsPerToken,
+        )
       if (
         abort.signal.aborted ||
         requestRevision !== this.#record.requestRevision ||
@@ -346,6 +381,7 @@ export class TourCoordinator {
         this.#record.state !== 'open'
       )
         return
+      this.#rounds += decision.rounds ?? maxRounds
       if (!validDecision(decision, context)) {
         this.#error(
           'decision',
@@ -354,9 +390,17 @@ export class TourCoordinator {
         return
       }
       this.#facts = decision.factIds
-      if (decision.kind === 'plan' && decision.plan)
-        this.#ports.send({ type: 'plan', plan: decision.plan, requestRevision })
-      else if (decision.kind === 'actions') {
+      if (decision.kind === 'plan' && decision.plan) {
+        this.#plan = decision.plan
+        const plan = {
+          ...decision.plan,
+          stops: decision.plan.stops.map((stop) => ({
+            ...stop,
+            factIds: stop.factIds.filter((id) => !id.includes(':note:')),
+          })),
+        }
+        this.#ports.send({ type: 'plan', plan, requestRevision })
+      } else if (decision.kind === 'actions') {
         this.#queue = [...decision.actions]
         await this.#dispatch()
       } else if (decision.kind === 'clarification')
@@ -367,23 +411,19 @@ export class TourCoordinator {
         })
       else await this.#narration(null)
     } catch {
-      if (
-        !abort.signal.aborted &&
-        requestRevision === this.#record.requestRevision
-      )
+      if (requestRevision === this.#record.requestRevision)
         this.#error(
           'director',
-          'The guide could not finish this request. Your view is unchanged.',
+          abort.signal.aborted
+            ? 'The guide reached the request deadline. Try a shorter request.'
+            : 'The guide could not finish this request. Your view is unchanged.',
         )
     } finally {
       clearTimeout(deadline)
       if (this.#abort === abort) this.#abort = null
       this.#record = {
         ...this.#record,
-        budget: commitSpend(
-          this.#record.budget,
-          TOUR_POLICY.directorReservation,
-        ),
+        budget: commitSpend(this.#record.budget, reservation, actual),
       }
       await this.#save()
     }
@@ -396,10 +436,11 @@ export class TourCoordinator {
       await this.#narration(null)
       return
     }
-    if (this.#record.operations.length >= 64) {
+    if (this.#record.operations.length >= 64 || this.#tools >= 6) {
       this.#error('operations', 'The guide has reached its action limit.')
       return
     }
+    this.#tools++
     const request: ToolRequest = {
       sessionId: this.#record.sessionId,
       requestRevision: this.#record.requestRevision,
@@ -451,7 +492,12 @@ export class TourCoordinator {
         this.#context?.subjectId !== receipt.subjectId
       )
         return
-      await this.#dispatch()
+      if (
+        entry.request.action.tool === 'resolve_subject' ||
+        entry.request.action.tool === 'find_worlds'
+      )
+        await this.#ask(this.#lastText)
+      else await this.#dispatch()
     } else if (receipt.status !== 'accepted') {
       this.#queue = []
       this.#error('action', receipt.reason ?? 'The view could not be reached.')
@@ -472,23 +518,65 @@ export class TourCoordinator {
       return
     const key = `${this.#record.requestRevision}/${context.viewRevision}/${stopId ?? 'answer'}`
     if (this.#narrated.has(key)) return
-    const facts = brief.facts
-      .filter(
-        (fact) => this.#facts.length === 0 || this.#facts.includes(fact.id),
+    const selected =
+      stopId === null
+        ? this.#facts
+        : (this.#plan?.stops.find((stop) => stop.id === stopId)?.factIds ?? [])
+    const recordBriefs =
+      selected.length === 0
+        ? [brief]
+        : [
+            brief,
+            ...context.briefs.filter(
+              (item) => item.subjectId !== brief.subjectId,
+            ),
+          ]
+    const quiet =
+      stopId !== null &&
+      this.#plan?.stops.some(
+        (stop) => stop.id === stopId && stop.factIds.length === 0,
       )
-      .slice(0, 5)
-    const description = [
+    const available = quiet
+      ? []
+      : recordBriefs
+          .flatMap((item) =>
+            item.facts
+              .filter(
+                (fact) => selected.length === 0 || selected.includes(fact.id),
+              )
+              .map((fact) => ({
+                fact,
+                subject: item.name,
+                subjectId: item.subjectId,
+              })),
+          )
+          .slice(0, 5)
+    let description = [
       brief.name + '.',
       brief.provenance === 'projected'
         ? 'This is a projected world. Its properties are inferred.'
         : '',
-      ...facts.map(
-        (fact) =>
-          fact.speech ?? `${fact.label} is unknown. ${fact.reason ?? ''}`,
-      ),
     ]
       .filter(Boolean)
       .join(' ')
+    const facts = []
+    let subjectId = brief.subjectId
+    for (const item of available) {
+      const sentence = [
+        item.subjectId === subjectId ? '' : `${item.subject}.`,
+        item.fact.speech ??
+          `${item.fact.label} is unknown. ${item.fact.reason ?? ''}`,
+      ]
+        .filter(Boolean)
+        .join(' ')
+      const next = `${description} ${sentence}`
+      // Preserve complete factual sentences inside Live's conservative append
+      // budget, and cite only the facts actually included in the narration.
+      if (new TextEncoder().encode(next).byteLength > 2000) break
+      description = next
+      subjectId = item.subjectId
+      facts.push(item.fact)
+    }
     const sourceIds = [...new Set(facts.flatMap((fact) => fact.sourceIds))]
     const narration: NarrationBrief = {
       id: this.#ports.id(),
@@ -496,10 +584,17 @@ export class TourCoordinator {
       stopId,
       viewRevision: context.viewRevision,
       subjectId: context.subjectId,
-      text: description.slice(0, 1400),
+      text: description,
       factIds: facts.map((fact) => fact.id),
       sourceIds,
-      sources: brief.sources.filter((source) => sourceIds.includes(source.id)),
+      sources: [
+        ...new Map(
+          recordBriefs
+            .flatMap((item) => item.sources)
+            .filter((source) => sourceIds.includes(source.id))
+            .map((source) => [source.id, source]),
+        ).values(),
+      ],
     }
     this.#narrated.add(key)
     if (this.#narrated.size > 64)
@@ -509,6 +604,8 @@ export class TourCoordinator {
     this.#narrations.set(narration.id, narration)
     this.#ports.send({ type: 'narration', brief: narration })
     await this.#ports.narrate(narration, this.#delegationId)
+    if (stopId === null)
+      this.#ports.send({ type: 'status', state: 'awaiting-next', message: '' })
   }
 
   #currentView(revision: number): boolean {
@@ -563,7 +660,7 @@ function validDecision(
   decision: DirectorDecision,
   context: TourContext,
 ): boolean {
-  if (decision.actions.length > 6 || decision.text.length > 1024) return false
+  if (decision.actions.length > 6 || decision.text.length > 2048) return false
   const facts = new Set(
     [context.brief, ...context.briefs].flatMap(
       (brief) => brief?.facts.map((fact) => fact.id) ?? [],
@@ -576,7 +673,12 @@ function validDecision(
   )
     return false
   return decision.actions.every((action) => {
-    if (action.tool === 'set_picture_time') return true
+    if (
+      action.tool === 'set_picture_time' ||
+      action.tool === 'resolve_subject' ||
+      action.tool === 'find_worlds'
+    )
+      return true
     const candidate = context.candidates.find(
       (one) => one.id === action.subjectId,
     )

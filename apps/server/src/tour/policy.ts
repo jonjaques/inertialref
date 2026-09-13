@@ -7,6 +7,8 @@ export const TOUR_POLICY = {
   sessionLimit: 2_000_000,
   globalConcurrency: 4,
   directorReservation: 360_000,
+  directorInputMicroDollarsPerToken: 10,
+  directorOutputMicroDollarsPerToken: 50,
   speechReservation: 120_000,
   liveReservation: 500_000,
 } as const

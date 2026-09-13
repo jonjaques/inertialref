@@ -22,6 +22,7 @@ import { withAstronomyNotes } from './knowledge/astronomy.ts'
 import {
   attachLiveSession,
   createLiveSession,
+  hangupLiveSession,
   TranscriptAssembler,
   type LiveEvent,
   type LiveSideband,
@@ -368,12 +369,13 @@ export class TourSession extends DurableObject<Env> {
       id: () => crypto.randomUUID(),
       send: (message) => this.#send(message),
       persist: (snapshot) => this.ctx.storage.put('session', snapshot),
-      director: async (text, view, signal) => {
+      director: async (text, view, signal, maxRounds) => {
         const result = await interpretTourRequest({
           apiKey: this.env.OPENAI_API_KEY,
           text,
           context: view,
           signal,
+          maxRounds,
         })
         return result
       },
@@ -446,6 +448,7 @@ export class TourSession extends DurableObject<Env> {
     socket?.close(1000, 'Guide ended')
     let complete = coordinator.record.transport === 'text'
     let seconds = coordinator.record.liveSeconds
+    let revoked = coordinator.record.transport === 'text'
     if (!this.#sideband && coordinator.record.providerId) {
       try {
         this.#sideband = await attachLiveSession({
@@ -460,10 +463,23 @@ export class TourSession extends DurableObject<Env> {
     if (this.#sideband) {
       const final = await this.#sideband.close(TOUR_POLICY.finalizeMs)
       complete = final.finalized
+      revoked = complete
       seconds = Math.max(seconds, final.seconds)
       this.#sideband.disconnect()
       this.#sideband = null
     }
+    if (!revoked && coordinator.record.providerId) {
+      try {
+        await hangupLiveSession({
+          apiKey: this.env.OPENAI_API_KEY,
+          id: coordinator.record.providerId,
+        })
+        revoked = true
+      } catch {
+        /* Retry from the stored provider identity. */
+      }
+    }
+    await this.ctx.storage.put('provider-revoked', revoked)
     await coordinator.finalized(complete, seconds)
     const cost =
       complete && !this.#creationFailed
@@ -473,7 +489,7 @@ export class TourSession extends DurableObject<Env> {
       coordinator.record.sessionId,
       cost,
     )
-    if (!complete && coordinator.record.providerId)
+    if (!revoked && coordinator.record.providerId)
       await this.ctx.storage.setAlarm(Date.now() + 30_000)
     else await this.ctx.storage.deleteAlarm()
     this.#startup = null
@@ -492,7 +508,11 @@ export class TourSession extends DurableObject<Env> {
     const coordinator = this.#coordinator
     if (!coordinator) return
     if (coordinator.record.state === 'closed') {
-      if (!coordinator.record.finalized && coordinator.record.providerId) {
+      if (
+        !coordinator.record.finalized &&
+        coordinator.record.providerId &&
+        !(await this.ctx.storage.get<boolean>('provider-revoked'))
+      ) {
         this.#finishing = null
         await this.#finish()
       }
