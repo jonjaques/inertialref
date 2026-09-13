@@ -8,7 +8,7 @@
     {
       "id": "saturn-opens-the-view",
       "subject": "Saturn",
-      "objective": "Reveal Saturn's rings with a gentle change of angle while speaking, and invite a different composition through conversation.",
+      "objective": "Explore Saturn's rings from a new angle, and choose your own view.",
       "narration": "Galileo once saw odd little ears beside Saturn. His telescope couldn't show him the rings clearly. Let's ease around and open up their shape. You can ask for a different angle while we talk; there's plenty here worth lingering over.",
       "minimumViewSeconds": 6,
       "cameraIdeas": [
@@ -26,7 +26,7 @@
     {
       "id": "titan-invites-a-closer-look",
       "subject": "Titan",
-      "objective": "Push closer while speaking and distinguish the guide's astronomy background from measurements supplied by the planetarium when visitors ask.",
+      "objective": "Get to know Titan's strange weather, with room for your questions.",
       "narration": "Titan has methane rain and rivers, with water ice taking the role of rock. Strange weather, familiar shapes. As we drift closer, ask for the astronomy behind it, or for this moon's measurements recorded in the planetarium we're exploring together.",
       "minimumViewSeconds": 6,
       "cameraIdeas": [
@@ -44,7 +44,7 @@
     {
       "id": "moon-makes-room-for-a-question",
       "subject": "Moon",
-      "objective": "Hold at a returned lunar surface site when available, giving visitors time to interrupt, ask questions, and change the itinerary.",
+      "objective": "Pause by the Moon, consider Apollo's footprints, and choose where we go next.",
       "narration": "Let's settle here for a moment. Apollo's trails linger because the Moon has no wind or rain to erase them. A closer view makes a good place for questions. You can interrupt me and change where we go next.",
       "minimumViewSeconds": 6,
       "cameraIdeas": [

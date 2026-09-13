@@ -8,7 +8,7 @@
     {
       "id": "the-star-in-our-everyday-life",
       "subject": "Sun",
-      "objective": "Connect the Sun's unfamiliar scale and fusion to the warmth of ordinary life.",
+      "objective": "Follow the Sun's warmth from its busy heart to a sunny afternoon.",
       "narration": "Let's begin with the star we know best. The Sun can seem so ordinary that we forget what it is. Deep inside, hydrogen nuclei join together to make helium, releasing the energy that eventually shines out into space. Some of that energy warms your face on a sunny afternoon. I rather like that connection: all this astonishing physics, and at the other end, a pleasant spot to sit.",
       "minimumViewSeconds": 5,
       "cameraIdeas": [
@@ -25,7 +25,7 @@
     {
       "id": "venus-keeps-her-own-hours",
       "subject": "Venus",
-      "objective": "Use Venus's reverse rotation and thick atmosphere to make a familiar-looking neighbor surprising.",
+      "objective": "Discover why Venus is so hot and turns the other way.",
       "narration": "Now Venus, our dazzling evening or morning companion. She's nearly Earth's size, but she keeps a very different household. Her thick atmosphere traps enough heat to melt lead at the surface. And Venus spins the opposite way from Earth: if you could see through those clouds, the Sun would rise in the west. Even sunrise, something that feels utterly dependable at home, has other arrangements out here.",
       "minimumViewSeconds": 5,
       "cameraIdeas": [
@@ -42,7 +42,7 @@
     {
       "id": "a-place-where-footsteps-linger",
       "subject": "Moon",
-      "objective": "Give the Moon a human connection through the Apollo tracks and the lack of weather that would erase them.",
+      "objective": "Consider the long life of a footprint on the Moon.",
       "narration": "Before we head farther out, here's our Moon. Think of the Apollo astronauts trying out their first awkward steps in that powdery ground. Their tracks linger because there's no wind or rain to sweep them away. Lunar orbiters have photographed the trails they left. A walk on a beach disappears with the tide; a walk here can become part of the landscape's long memory. Let's stay with that thought for a moment.",
       "minimumViewSeconds": 6,
       "cameraIdeas": [
@@ -59,7 +59,7 @@
     {
       "id": "a-stream-written-in-stone",
       "subject": "Mars",
-      "objective": "Explain how rounded pebbles let scientists recognize an ancient stream on Mars.",
+      "objective": "Learn how rounded pebbles revealed an ancient stream on Mars.",
       "narration": "Mars has a story hidden in something wonderfully modest: pebbles. The Curiosity rover found rounded stones cemented into ancient rock. Flowing water had rolled and worn them, just as a stream smooths stones on Earth. Imagine standing beside that Martian stream long ago, hearing water over the gravel. We don't know whether anything ever lived there. But we can recognize a place where water once ran, from the shape of a stone.",
       "minimumViewSeconds": 5,
       "cameraIdeas": [
@@ -80,7 +80,7 @@
     {
       "id": "galileos-moving-lights",
       "subject": "Jupiter",
-      "objective": "Tell how repeated observations of Jupiter's moons challenged the idea that everything circles Earth.",
+      "objective": "Follow Galileo's little points of light to a much bigger discovery.",
       "narration": "At Jupiter, a few little lights helped change our place in the universe. In sixteen ten, Galileo noticed points of light beside this planet. He kept looking, night after night. They changed places, but stayed with Jupiter. They were moons circling another world. Everything in the heavens couldn't be circling Earth after all. Picture him returning to that small telescope, notebook ready, wondering where tonight's dots would be.",
       "minimumViewSeconds": 5,
       "cameraIdeas": [
@@ -97,7 +97,7 @@
     {
       "id": "saturn-deserves-a-moment",
       "subject": "Saturn",
-      "objective": "Let Saturn's appearance lead into the physical reality of its rings.",
+      "objective": "Linger with Saturn and the countless icy journeys that form its rings.",
       "narration": "Ah, Saturn. Let's give this one a little room. Those rings look almost too tidy to be real, like someone has carefully set the planet into a piece of jewelry. Yet they're made mostly of countless pieces of water ice, all traveling around Saturn. From a distance, all those separate journeys become this graceful shape. I could happily linger here. We will, for a few quiet seconds.",
       "minimumViewSeconds": 7,
       "cameraIdeas": [
@@ -114,7 +114,7 @@
     {
       "id": "a-planet-found-on-paper",
       "subject": "Neptune",
-      "objective": "Make Neptune's mathematical discovery understandable as a prediction tested by a telescope.",
+      "objective": "Follow the astronomical detective work that found Neptune on paper.",
       "narration": "Our farthest stop is Neptune, a planet with a marvelous entrance. Astronomers noticed that Uranus wasn't quite following its predicted path. Could another planet be tugging on it? The mathematician Le Verrier worked out where to look. In eighteen forty-six, Galle found Neptune on his first night of searching. A calculation on paper had pointed toward a whole unseen world. That's a very satisfying piece of detective work.",
       "minimumViewSeconds": 5,
       "cameraIdeas": [
@@ -131,7 +131,7 @@
     {
       "id": "the-world-that-took-the-picture",
       "subject": "Earth",
-      "objective": "Return home through Voyager's Pale Blue Dot photograph and leave space for personal reflection.",
+      "objective": "Come home to Earth with Voyager's distant view in mind.",
       "narration": "And here we are, back at Earth. In nineteen ninety, Voyager One looked homeward and photographed our planet as a tiny point of light: the Pale Blue Dot. After visiting these other worlds, that picture feels especially dear. Somewhere on this globe are the streets you know, the people you're fond of, and the place you'll sleep tonight. Let's enjoy seeing our own planet as a destination.",
       "minimumViewSeconds": 7,
       "cameraIdeas": [

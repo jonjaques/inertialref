@@ -8,7 +8,7 @@
     {
       "id": "the-planet-with-ears",
       "subject": "Saturn",
-      "objective": "Introduce Saturn through Galileo's puzzlement and Huygens's explanation, without portraying either observer as foolish.",
+      "objective": "See why Saturn's changing appearance puzzled its earliest telescopic observers.",
       "narration": "Imagine seeing this through a small telescope, with nobody to tell you what you're looking at. In sixteen ten, Galileo found strange shapes beside Saturn. They looked like ears. Later, they seemed to disappear! His telescope couldn't reveal what we see so clearly. Christiaan Huygens eventually worked out that a ring surrounded the planet. The disappearing act happened when the thin rings turned edge-on to Earth. Even Saturn has an angle that makes it camera-shy.",
       "minimumViewSeconds": 5,
       "cameraIdeas": [
@@ -29,7 +29,7 @@
     {
       "id": "a-ring-made-of-many-journeys",
       "subject": "Saturn",
-      "objective": "Reveal the rings as orbiting ice and invite an unhurried change of perspective.",
+      "objective": "Watch Saturn's rings open into view and discover what they're made of.",
       "narration": "Let's open up that view again. Huygens thought the ring was solid. We now know it's mostly pieces of water ice, from tiny grains to great chunks, each circling Saturn. Think of how many individual journeys make this one lovely shape. There's something deliciously improbable about a planet wearing ice. We'll take a few seconds to watch the angle change. Saturn rewards a little patience.",
       "minimumViewSeconds": 7,
       "cameraIdeas": [
@@ -46,7 +46,7 @@
     {
       "id": "huygens-finds-a-familiar-strangeness",
       "subject": "Titan",
-      "objective": "Link the Huygens probe to its namesake and show how familiar weather processes work with unfamiliar materials on Titan.",
+      "objective": "Imagine a world where ice is rock and methane falls as rain.",
       "narration": "Here's Titan, wrapped in haze. In two thousand five, a probe named Huygens parachuted down and sent back pictures from the ground. After all that traveling, what greeted it? Pebbles. But these were water ice. It's so cold here that ice plays the part of rock, while methane can fall as rain and flow through channels. Imagine recognizing a river landscape on another world, then discovering that even the rain has a different recipe.",
       "minimumViewSeconds": 6,
       "cameraIdeas": [
@@ -67,7 +67,7 @@
     {
       "id": "the-ocean-that-comes-to-meet-us",
       "subject": "Enceladus",
-      "objective": "Explain how Cassini sampled a hidden ocean through Enceladus's plume, keeping habitability distinct from finding life.",
+      "objective": "Discover how a hidden ocean sent clues out into space.",
       "narration": "And little Enceladus has an ocean hidden beneath its ice. The Cassini spacecraft discovered jets spraying water vapor and ice into space, then flew through the spray to sample it. Usually, an ocean beneath a frozen crust sounds terribly hard to investigate. This one sends material out to meet you. Cassini found water, organic chemistry, and evidence of energy that life might use. No life was detected. Still, what an invitation to keep asking questions.",
       "minimumViewSeconds": 6,
       "cameraIdeas": [
