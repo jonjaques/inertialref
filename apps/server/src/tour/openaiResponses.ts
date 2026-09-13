@@ -260,7 +260,7 @@ export async function synthesizeSpeech(options: {
     input: options.text,
     response_format: 'mp3',
     instructions:
-      'Speak as a curious planetarium guide. Use clear emphasis and a measured pace, with a pause between ideas. Read the supplied text faithfully. Io is EYE-oh; Enceladus is en-SELL-uh-dus; Iapetus is eye-APP-eh-tus.',
+      'Sound like a friendly astronomy nerd sharing a fascinating detail with one curious visitor: warm, congenial, lightly playful, and easy to talk to. Let the specific curiosity hook already in the script brighten your voice. Vary your cadence with a little lift on the surprising detail and a softer beat to let it land. Let contractions in the script sound natural. Share delight without relentless hype, stock cheerleading, a formal fact-list voice, or a robotic rhythm. Take one idea, then leave a little room to look. Read the supplied text exactly; do not add words, facts, jokes, or personal experiences. Express personality through emphasis, timing, and warmth while preserving the scientific meaning and uncertainty. Io is EYE-oh; Enceladus is en-SELL-uh-dus; Iapetus is eye-APP-eh-tus.',
   }
   emitProviderTrace(options.trace, {
     event: 'provider.request',

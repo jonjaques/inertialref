@@ -29,6 +29,32 @@ function socket() {
 }
 
 describe('Live provider boundary', () => {
+  it('authors a friendly astronomy enthusiast voice without permitting invented science', async () => {
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          session: { id: 'session-1' },
+          transport: { sdp: 'answer' },
+        }),
+    )
+    await createLiveSession({
+      apiKey: 'fake',
+      sdp: 'offer',
+      fetch: fetcher as typeof fetch,
+    })
+    const instructions = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
+      .session.instructions as string
+    expect(instructions).toContain('friendly astronomy nerd')
+    expect(instructions).toContain('natural contractions')
+    expect(instructions).toContain(
+      'specific curiosity hook already supported by the supplied text',
+    )
+    expect(instructions).toContain('Vary your cadence')
+    expect(instructions).toContain(
+      'Never add a scientific claim, number, analogy, or personal experience that the supplied text does not support.',
+    )
+  })
+
   it('instructs the narrator to answer about Titan while Saturn remains in view', async () => {
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -477,6 +503,34 @@ describe('Live provider boundary', () => {
 })
 
 describe('Responses provider boundary', () => {
+  it('gives controlled speech warmth and varied cadence while keeping its exact script', async () => {
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response('audio'),
+    )
+    const text =
+      'Titan has a dense atmosphere and a weather cycle involving methane.'
+    await synthesizeSpeech({
+      apiKey: 'fake',
+      text,
+      fetch: fetcher as typeof fetch,
+    })
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))
+    expect(body).toMatchObject({
+      model: 'gpt-4o-mini-tts',
+      voice: 'marin',
+      input: text,
+    })
+    expect(body.instructions).toContain('friendly astronomy nerd')
+    expect(body.instructions).toContain('Vary your cadence')
+    expect(body.instructions).toContain(
+      'Read the supplied text exactly; do not add words, facts, jokes, or personal experiences.',
+    )
+    expect(body.instructions).toContain(
+      'one idea, then leave a little room to look',
+    )
+  })
+
   it('traces Astra text, structured output and usage while sanitizing failures', async () => {
     const trace = vi.fn()
     await callResponsesDirector({
