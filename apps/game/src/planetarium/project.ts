@@ -1,6 +1,9 @@
 import { Vector3, type PerspectiveCamera } from 'three/webgpu'
 import {
   type Lens,
+  occludedAt,
+  physicalViewPosition,
+  sceneOccluders,
   pixelsPerRadian,
   type RenderScene,
 } from '@inertialref/rendering'
@@ -59,6 +62,7 @@ export function projectScene(
   // chances for a guard added to one to be missing from the other.
   const perRadian = pixelsPerRadian(lens, size)
   const candidates: PickCandidate[] = []
+  const occluders = sceneOccluders(scene)
 
   const add = (
     address: string,
@@ -87,6 +91,14 @@ export function projectScene(
   }
 
   for (const body of scene.bodies) {
+    if (
+      occludedAt(
+        physicalViewPosition(scene, body.placement),
+        occluders,
+        body.address,
+      )
+    )
+      continue
     add(
       body.address,
       body.name,
@@ -96,6 +108,14 @@ export function projectScene(
     )
   }
   for (const star of scene.stars) {
+    if (
+      occludedAt(
+        physicalViewPosition(scene, star.placement),
+        occluders,
+        star.system,
+      )
+    )
+      continue
     // A bare designation, which `resolveDestination` accepts and turns into a
     // system address — the same string a person types into the search box.
     add(

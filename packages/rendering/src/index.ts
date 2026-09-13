@@ -35,3 +35,5 @@ export * from './starVisibility.ts'
 export * from './cloudShell.ts'
 
 export * from './nearFieldLighting.ts'
+export * from './orbitCurve.ts'
+export * from './occlusion.ts'

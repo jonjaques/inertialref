@@ -61,6 +61,31 @@ for it. A rebase is a rigid translation of render space and nothing else; with
 compression measured from the origin it was also a distortion, so mechanism 1
 could not be reasoned about without mechanism 2.
 
+### Visibility of orbit traces and names
+
+The radial mapping is monotonic for a fixed radius. Objects with different
+radii do not share one depth mapping: a moon's trace can compress in front of
+its planet even when its physical position is behind the planet.
+
+Orbit traces therefore resolve visibility before placement. Their analytic
+ellipses are subdivided to a quarter-pixel chord target, bounded at 4,096
+segments per orbit. Camera-local physical segments are cut at the tangent
+cones and surfaces of the scene's oriented ellipsoids. Spheroids use the
+rendered polar flattening; irregular bodies use their three measured axes,
+which approximate the detailed shape's silhouette. Stars contribute solid
+spheres. Rings and atmospheric shells remain translucent scene layers.
+
+The surviving directions are placed on an eye-centered shell with depth
+testing disabled. This keeps a foreground transit visible and a background
+trace hidden without a second scene pass or a per-fragment occluder loop.
+Names and picking use the same physical ray intersections, excluding the
+candidate's own body. A hidden candidate does not consume a label slot.
+
+A trace buffer can be reused while its projected curve and the occluding
+silhouettes each move less than 0.05 pixels from the geometry's reference
+frame. Lens, viewport, path identity and visibility changes invalidate that
+reuse. The bound is cumulative, so slow movement cannot leave a stale trace.
+
 ## Alternatives considered
 
 - **A single far shell** (all distant objects at one radius). Simpler, but it
@@ -68,6 +93,9 @@ could not be reasoned about without mechanism 2.
 - **Multiple cameras / render passes** by depth band. A common technique and
   perfectly workable; it costs draw calls and complicates every effect. Worth
   revisiting if the single compressed pass runs out of precision.
+- **Depth testing alone for traces.** A larger depth buffer cannot reconcile
+  the different mappings produced by the planet and moon radii. Physical
+  segment clipping resolves that disagreement before rasterization.
 - **Reversed-Z depth buffer.** Complementary rather than alternative; the
   logarithmic depth buffer is enabled and this can be added later.
 
@@ -82,8 +110,7 @@ could not be reasoned about without mechanism 2.
   — measured from the eye, which is also what selects the LOD tier and the
   angular radius.
 - Anything that places geometry in the compressed shell has to be given the same
-  eye the scene was built with, or it drifts against the bodies around it. The
-  orbit traces are the one such caller outside `buildScene`.
+  eye the scene was built with, or it drifts against the bodies around it.
 - The mapping is non-decreasing everywhere but only _strictly_ increasing while
   the separation survives double precision. Past ~1e17 m two objects a hundred
   meters apart compress to the same depth. They are also the same pixel.

@@ -1,134 +1,188 @@
-import { useMemo, useRef } from 'react'
-import { BufferAttribute, BufferGeometry, type Group, Line } from 'three/webgpu'
-import { UV, Vec } from '@inertialref/spatial'
-import { placePathInto } from '@inertialref/rendering'
+import { useEffect, useMemo, useRef } from 'react'
+import {
+  BufferAttribute,
+  BufferGeometry,
+  DynamicDrawUsage,
+  type Group,
+  LineSegments,
+} from 'three/webgpu'
+import { UV, Vec, type Vec3 } from '@inertialref/spatial'
+import {
+  clipOccludedSegment,
+  orbitCurve,
+  orbitViewChange,
+  occluderViewChange,
+  pixelsPerRadian,
+  sceneOccluders,
+  tessellateOrbit,
+  viewOrbit,
+  type OrbitCurve,
+  type Occluder,
+} from '@inertialref/rendering'
+import type { OrbitPath } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createOrbitTraceMaterial } from '../render/orbitTrace.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
-/*
- * Orbit traces, when the planetarium asks for them.
- *
- * One `Line` per body, its vertex buffer rewritten each frame. Rewriting rather
- * than transforming, because there is no single transform that would do: each
- * point goes through `placeAt` with the *body's own radius*, which is the only
- * way the curve lands where the body is drawn — render compression keys off an
- * object's radius, so a trace placed as a radius-zero point sits six times
- * nearer than Jupiter does at Jupiter's range, and the planet floats visibly
- * off its own orbit.
- *
- * The curve itself is not recomputed here. `engine.orbits` carries the anchor
- * each trace was built against, so following a moving primary is one vector
- * difference for a whole path rather than a period of Kepler solves.
- */
-const ORBIT_CAPACITY = 4096
+/** Geometry carries directions; physical visibility is resolved before placement. */
+const TRACE_SHELL = 1e6
 
 export function OrbitTraces({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
-  const lines = useRef(new Map<string, Line>())
-  // Context over the picture at a fixed brightness, whatever the exposure —
-  // `render/orbitTrace.ts` says why a pre-exposed trace was wrong at both
-  // ends of the lens's range.
+  const lines = useRef(new Map<string, LineSegments>())
+  const curves = useRef(new WeakMap<object, OrbitCurve>())
+  const previous = useRef(
+    new Map<
+      string,
+      {
+        path: OrbitPath
+        occluders: readonly Occluder[]
+        curve: Omit<OrbitCurve, 'anchor'>
+        nearDepth: number
+        perRadian: number
+        width: number
+        height: number
+      }
+    >(),
+  )
   const material = useMemo(() => createOrbitTraceMaterial(), [])
 
-  useTimedFrame('orbitTraces', () => {
+  useEffect(() => {
+    const held = lines.current
+    return () => {
+      for (const line of held.values()) {
+        line.removeFromParent()
+        line.geometry.dispose()
+      }
+      held.clear()
+      previous.current.clear()
+      material.dispose()
+    }
+  }, [material])
+
+  useTimedFrame('orbitTraces', ({ size }) => {
     const parent = group.current
-    /*
-     * The origin *and* the eye off the same scene, never one of each.
-     *
-     * The eye is a render-space vector, so it only means anything paired with
-     * the origin it was measured against. `engine.origin` is the live one and
-     * runs ahead of `engine.scene()` on any frame `#step` returns early from —
-     * a load, a save being applied — so reading one from each would compress
-     * the trace about a point up to `REBASE_THRESHOLD` from the camera, which
-     * is the very error that made the small moons vibrate. See `placement.ts`.
-     */
     const scene = engine.scene()
     if (parent === null) return
     if (!engine.showOrbits || scene === null) {
       parent.visible = false
       return
     }
-    const origin = scene.origin
-    const eye = scene.camera.position
     parent.visible = true
-
-    const live = new Set<string>()
+    parent.position.copy(scene.camera.position)
+    parent.quaternion.copy(scene.camera.orientation)
+    const perRadian = pixelsPerRadian(engine.lens, size)
+    const halfX = size.width / (2 * perRadian),
+      halfY = size.height / (2 * perRadian)
+    const occluders = sceneOccluders(scene).filter(
+      ({ bounds: [left, right, bottom, top] }) =>
+        left <= halfX && right >= -halfX && bottom <= halfY && top >= -halfY,
+    )
+    // A primary's translation is shared by every satellite trace.
+    const shifts = new Map<string, Vec3>()
+    const prepared = []
     for (const path of engine.orbits) {
-      if (path.points.length < 2 || path.points.length > ORBIT_CAPACITY)
-        continue
+      if (path.points.length < 9) continue
+      let curve = curves.current.get(path.points)
+      if (curve === undefined) {
+        curve = orbitCurve(path.points)
+        curves.current.set(path.points, curve)
+      }
+      let shift = shifts.get(path.parent)
+      if (shift === undefined) {
+        // The anchor belongs to the path's sampling instant, while this pose
+        // must match the snapshot being drawn, including a held photograph.
+        shift = engine.world.frames.has(path.parent)
+          ? UV.difference(
+              engine.world.frames.pose(
+                path.parent,
+                engine.snapshot?.renderTime ?? engine.world.clock.renderTime,
+              ).position,
+              path.anchor,
+            )
+          : Vec.ZERO
+        shifts.set(path.parent, shift)
+      }
+      prepared.push({ path, curve: viewOrbit(curve, shift, scene) })
+    }
+    const live = new Set<string>()
+    for (const { path, curve } of prepared) {
       live.add(path.address)
-
+      const held = previous.current.get(path.address)
+      if (
+        held !== undefined &&
+        held.path === path &&
+        held.width === size.width &&
+        held.height === size.height &&
+        held.perRadian === perRadian &&
+        occluderViewChange(held.occluders, occluders, perRadian, size) < 0.05 &&
+        orbitViewChange(held.curve, curve, held.nearDepth, perRadian, size) <
+          0.05
+      )
+        continue
       let line = lines.current.get(path.address)
       if (line === undefined) {
         const geometry = new BufferGeometry()
         geometry.setAttribute(
           'position',
-          new BufferAttribute(new Float32Array(path.points.length * 3), 3),
+          new BufferAttribute(new Float32Array(512 * 6), 3).setUsage(
+            DynamicDrawUsage,
+          ),
         )
-        line = new Line(geometry, material)
-        // The trace is drawn in the compressed shell along with everything
-        // else, so its bounds are meaningless to the culler and a wrong
-        // bounding sphere makes an orbit vanish when its center leaves the
-        // frustum — which is most of the time, since the camera is usually
-        // inside the orbit it is looking at.
+        line = new LineSegments(geometry, material)
         line.frustumCulled = false
         lines.current.set(path.address, line)
         parent.add(line)
       }
-
-      // Where the primary is *now*, against where it was when the trace was
-      // built. `frames.pose` rather than a search through the scene: a trace
-      // exists for bodies the render culled, and losing the anchor would leave
-      // the curve behind while the planet moved on.
-      //
-      // `renderTime`, because "now" here means the instant the frame depicts
-      // and the bodies this ring is drawn around came off a snapshot taken at
-      // that instant. At `clock.time` the ring hangs off its primary by that
-      // primary's velocity times up to a tick — 375 m for anything riding Mars
-      // — and sawtooths as alpha resets. Negligible seen whole, and not
-      // negligible at all where the ring passes near the camera: framed on
-      // Phobos, the near segment is ~37 km away and 375 m of it is 15 pixels.
-      // `path.anchor` is built at a fixed instant and cancels out of the
-      // difference, so only this lookup has to move.
-      const shift = engine.world.frames.has(path.parent)
-        ? UV.difference(
-            engine.world.frames.pose(
-              path.parent,
-              engine.snapshot?.renderTime ?? engine.world.clock.renderTime,
-            ).position,
-            path.anchor,
-          )
-        : Vec.ZERO
-
-      const attribute = line.geometry.getAttribute(
-        'position',
-      ) as BufferAttribute
-      // One call for the whole path, writing the buffer directly. Per point
-      // this was a `UV.translate`, a `placeAt` and the placement record it
-      // returns — see `placePathInto`, which is the same arithmetic without
-      // the several thousand objects a frame.
-      placePathInto(
-        origin,
-        path.points,
-        shift,
-        path.radius,
-        eye,
-        attribute.array as Float32Array,
+      let attribute = line.geometry.getAttribute('position') as BufferAttribute
+      let buffer = attribute.array as Float32Array
+      let count = 0
+      const emit = (a: Vec3, b: Vec3): void => {
+        if (count + 6 > buffer.length) {
+          const grown = new Float32Array(buffer.length * 2)
+          grown.set(buffer)
+          buffer = grown
+        }
+        for (const p of [a, b]) {
+          const factor = TRACE_SHELL / Math.hypot(p.x, p.y, p.z)
+          buffer[count++] = p.x * factor
+          buffer[count++] = p.y * factor
+          buffer[count++] = p.z * factor
+        }
+      }
+      const nearDepth = tessellateOrbit(curve, perRadian, size, (a, b) =>
+        clipOccludedSegment(a, b, occluders, emit),
       )
-      attribute.needsUpdate = true
+      previous.current.set(path.address, {
+        path,
+        curve,
+        nearDepth,
+        occluders,
+        perRadian,
+        width: size.width,
+        height: size.height,
+      })
+      if (buffer !== attribute.array) {
+        // Replacing a GPU-backed attribute alone leaves its old allocation
+        // alive. This line owns its geometry and shares no index buffer.
+        line.geometry.dispose()
+        attribute = new BufferAttribute(buffer, 3).setUsage(DynamicDrawUsage)
+        line.geometry.setAttribute('position', attribute)
+      }
+      line.geometry.setDrawRange(0, count / 3)
+      attribute.clearUpdateRanges()
+      if (count > 0) {
+        attribute.addUpdateRange(0, count)
+        attribute.needsUpdate = true
+      }
     }
-
-    // A save loaded in another system leaves traces for bodies that are no
-    // longer anywhere. Dropping them here rather than on world replacement
-    // keeps the whole lifetime of a line in one place.
     for (const [address, line] of lines.current) {
       if (live.has(address)) continue
       parent.remove(line)
       line.geometry.dispose()
       lines.current.delete(address)
+      previous.current.delete(address)
     }
   })
-
   return <group ref={group} />
 }

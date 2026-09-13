@@ -9715,6 +9715,39 @@ A one-tick drop reproduces the 0.374625-frame discrepancy deterministically.
 The assertion now samples at the seek's actual time anchor; production timing
 is unchanged.
 
+## Saturn was in front of its moons, but behind their traces (12 Sep 2026)
+
+A trace already had depth testing enabled. The disagreement was earlier:
+compression depends on each body's radius, so a moon's physically distant
+orbit could land in front of Saturn's rendered sphere. Names had no solid-body
+visibility test at all. [ADR-0003](docs/adr/0003-render-coordinates.md) now
+records physical segment clipping and the shared ray test for names and picks.
+The irregular-body case uses measured ellipsoids, not the detailed shape mesh.
+
+Ninety-six straight edges also exposed corners near a large orbit. The sampled
+ellipse supplies its analytic basis without another sweep of Kepler solves.
+A first adaptive limit of eight subdivisions still missed a close planetary
+arc by 12.73 pixels. A shared 4,096-segment budget permits deeper refinement
+only where it is needed; that regression stays below a third of a pixel.
+
+Rebuilding every clipped trace each frame cost roughly 0.6 ms in the first
+Saturn development capture. Each trace now reuses its buffer until cumulative
+curve or silhouette displacement reaches 0.05 pixels. A trace crossing the eye
+does not invalidate its siblings, and spinning a sphere does not move its
+silhouette. No render pass or fragment-stage occluder loop is added.
+
+The final production build, at 1071 × 975 CSS pixels and DPR 2, holds 60 fps
+in both the held-time `the-rings` preset and a side view at azimuth 3.7,
+elevation 0.25, and 220,000 km from Saturn. Orbit work averages 0.18 and
+0.16 ms respectively over three-second captures, with no frame above 25 ms.
+These are stationary-camera measurements, not a bound for every view.
+
+The full gate passes 2,391 regular tests and eight slow tests. Two physical
+GPU readbacks hold trace brightness, hidden fragments and foreground transits.
+The clipping and smoothing regressions fail with the defects reintroduced.
+Saturn's ring/atmosphere compositing stays unchanged: ordering the whole shell
+last also paints over foreground rings, while splitting the rings adds work.
+
 ## Known gaps
 
 - **Navigator body distances ignore held photographic time.** Observer-centered

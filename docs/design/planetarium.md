@@ -399,6 +399,11 @@ lists them: a sky captioned with six provisional designations and no planets.
 Minor bodies are therefore a switch of their own. A dwarf planet is not in that
 class, for the same reason its orbit is drawn.
 
+Names behind a solid body are removed before decluttering and picking. The
+visibility test follows the camera-to-body ray in physical coordinates, so
+radius-dependent render compression cannot bring a hidden moon's name in
+front of its planet. A candidate never occludes its own name.
+
 ### Orbit traces
 
 Affordable here for a reason specific to this engine: **orbits are analytic**
@@ -439,6 +444,18 @@ shows on screen:
   nowhere near its own orbit line. `M = E − e·sin E` is Kepler's equation run
   _forwards_ and needs no solver; the same ninety-six points then walk the
   ellipse at nearly constant arc length.
+
+The sampled points define an analytic ellipse. Visible arcs are subdivided
+against a quarter-pixel chord target, with a fixed 4,096-segment budget, while
+arcs outside the viewport are culled. The buffer is reused while the curve
+and solid silhouettes each move less than 0.05 pixels. This keeps a wide view
+cheap and a close view smooth without another period of Kepler evaluations.
+
+Solid bodies clip the traces at their silhouettes and surfaces before the
+remaining directions reach the GPU. Foreground transits stay visible. The
+same ellipsoids hide labels, including axial tilt and polar flattening;
+measured axes approximate irregular silhouettes. This avoids relying on
+compressed depth to order objects of different radii.
 
 ### The light, in the photographer's terms
 
