@@ -24,11 +24,7 @@ export function GuideTransport({
         {state.connection === 'connecting'
           ? 'Connecting…'
           : state.state.replaceAll('-', ' ')}
-        {active && ` · ${state.stopIndex + 1} of ${state.plan!.stops.length}`}
       </p>
-      {state.plan && (
-        <p className="type-ui text-slate-300">{state.plan.goal}</p>
-      )}
       {(active || state.connection !== 'offline' || state.message !== null) && (
         <div className="flex flex-wrap gap-1.5">
           <Action

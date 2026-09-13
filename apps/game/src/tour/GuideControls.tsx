@@ -10,6 +10,7 @@ import type { GuideRuntime } from './runtime.ts'
 import { GuideTransport } from './GuideTransport.tsx'
 import { GuideTranscript } from './GuideTranscript.tsx'
 import { GuideSources } from './GuideSources.tsx'
+import { GuidePlan } from './GuidePlan.tsx'
 
 export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
   const state = useSyncExternalStore(
@@ -189,6 +190,7 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
         />
       )}
       <GuideTransport runtime={runtime} state={state} />
+      <GuidePlan state={state} />
       {state.search && (
         <p className="type-micro text-slate-400" role="status">
           {state.search.running ? 'Searching' : 'Searched'}{' '}
