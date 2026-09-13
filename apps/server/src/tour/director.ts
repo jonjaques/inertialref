@@ -376,7 +376,7 @@ export async function interpretTourRequest(options: {
   if (!options.text.trim() || options.text.length > 4000)
     return clarification(CLARIFICATIONS.subject)
   if (
-    /\b(latest|current mission|mission news|today|this week|next launch)\b/i.test(
+    /\b(latest|current mission|mission news|next launch)\b|\b(spacecraft|missions?)\b.*\b(right now|today|this week)\b/i.test(
       options.text,
     )
   )

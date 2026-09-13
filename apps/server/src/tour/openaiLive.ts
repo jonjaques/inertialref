@@ -309,8 +309,15 @@ export class LiveSideband {
           type: 'closed',
           seconds: this.#seconds,
           reason:
-            typeof event.reason === 'string'
-              ? event.reason.slice(0, 80)
+            typeof event.reason === 'string' &&
+            [
+              'close_requested',
+              'expired',
+              'content',
+              'remote_hangup',
+              'connection_lost',
+            ].includes(event.reason)
+              ? event.reason
               : 'unknown',
         })
         this.#finish?.()
@@ -388,5 +395,29 @@ export class TranscriptAssembler {
       offsetMs: delegation.offsetMs,
       text: text.slice(-4096),
     }
+  }
+}
+
+/** A successful hangup revokes the session but does not confirm final usage. */
+export async function hangupLiveSession(options: {
+  apiKey: string
+  id: string
+  fetch?: typeof fetch
+}): Promise<void> {
+  if (!boundedId(options.id)) throw new GuideProviderError('input-limit')
+  try {
+    const response = await (options.fetch ?? fetch)(
+      `https://api.openai.com/v1/live/sessions/${encodeURIComponent(options.id)}/hangup`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${options.apiKey}` },
+        signal: AbortSignal.timeout(5000),
+      },
+    )
+    await response.body?.cancel()
+    if (!response.ok) throw new GuideProviderError('unavailable')
+  } catch (error) {
+    if (error instanceof GuideProviderError) throw error
+    throw new GuideProviderError('unavailable')
   }
 }

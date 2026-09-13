@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   createLiveSession,
+  hangupLiveSession,
   LiveSideband,
   TranscriptAssembler,
   type LiveSocket,
@@ -23,6 +24,23 @@ function socket() {
 }
 
 describe('Live provider boundary', () => {
+  it('revokes a lost sideband through HTTP without inventing final usage', async () => {
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { status: 204 }),
+    )
+    await expect(
+      hangupLiveSession({
+        apiKey: 'secret',
+        id: 'opaque/session',
+        fetch: fetcher as typeof fetch,
+      }),
+    ).resolves.toBeUndefined()
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      'https://api.openai.com/v1/live/sessions/opaque%2Fsession/hangup',
+    )
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe('POST')
+  })
   it('creates the Live WebRTC shape and denies client-side commands', async () => {
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
