@@ -8,19 +8,22 @@ coordinator, frontier director, Guide panel, conversational Live adapter,
 controlled narration, and private alpha admission. The architecture is recorded
 in [ADR-0041](../../docs/adr/0041-the-guide-requests-the-view.md).
 
-Headless and provider-fixture checks cover core behavior. The release gates
-remain separate: actual provider transport and closure, listening, repeated
-model evaluation, browser/device behavior, and an authenticated deployed
-environment. An implemented adapter does not satisfy phase 0's spoken-reply
-gate. Live uses explicit Next; automatic progression uses controlled clips and
-their actual playback completion. Sol/Terra routing comparisons remain
-evaluation work. Phases 6 and 7, including all image capture and visual
+Headless and provider-fixture checks cover core behavior. Local Chromium tests
+establish authenticated Live transport, synthetic spoken input, delegation to
+Astra, camera arrival, spoken output, and confirmed provider closure. The full
+60-request, three-repetition Astra evaluation and a six-request comparison with
+Sol and Terra are recorded in the [evaluation report](../reports/the-agentic-tour-guide.md).
+Human listening, the full alternative-model comparison, browser/device coverage,
+and an authenticated staging deployment remain release evaluations. Live uses
+explicit Next; automatic progression uses controlled clips and their actual
+playback completion. Phases 6 and 7, including image capture and visual
 composition assistance, are deferred and absent from core capabilities.
 
 Research spike and implementation plan. Researched 13 September 2026 against
 repository commit `0d9262d` and the official API documentation linked below.
-This is a proposed implementation. No model calls, voice auditions, latency
-measurements, or account-access checks accompany this research.
+The research below predates implementation and its measurements. Its proposed
+tests remain useful acceptance criteria; the status above and evaluation report
+identify which have actually run.
 
 Build an optional Planetarium guide with **GPT Live as the narrator and GPT-6
 Astra as the director**, connected through an application-owned backend. The

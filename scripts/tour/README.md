@@ -14,6 +14,14 @@ The output directory contains MP3 files, source notes, generation latency, and
 an unfilled listening scorecard. This baseline uses `gpt-4o-mini-tts` and
 `marin`. Its completion signal comes from the browser audio element.
 
+Both voice adapters aim for a friendly astronomy enthusiast: warm,
+conversational, lightly playful, and interested in one specific surprise at a
+time. Controlled speech reads the authored story faithfully; delivery changes
+cannot add facts. The Saturn overview, rings, and Titan stops have separate
+curated stories, selected by their stable stop IDs. A general visit prefers one
+curated story over a list of numerical properties. Human listening still
+decides whether the delivery achieves that intent.
+
 Run a small director smoke test with
 `node scripts/tour/evaluate.mjs --allow-spend --limit=3 --repetitions=1`.
 For the release comparison, use all 60 requests and three repetitions for each

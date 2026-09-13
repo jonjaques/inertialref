@@ -9777,11 +9777,66 @@ one shared quota principal; a new cookie cannot replenish its allowance.
 Provider adapters and deterministic tests do not establish a listening result
 or a deployed acceptance result. The provider and browser gates remain explicit.
 
+## The voice clock kept moving, and the trace named its model (13 Sep 2026)
+
+A Live sideband accepted with HTTP 101 was still carrying the twelve-second
+abort signal used for its handshake. The signal later closed the healthy
+WebSocket. Clearing a dedicated handshake timer after acceptance preserves
+the connection. A synthetic spoken request then exposed a second boundary:
+Live can put the last word's start at the delegation offset. Comparing strictly
+before that offset dropped "Titan" from "Please show me Titan." Partitioning
+fragments by start time, after the previous offset and through the current one,
+keeps that word exactly once. Both defects have focused regressions.
+
+The local Chromium test now follows a synthetic request through Live, Astra's
+subject selection, the observatory's accepted and arrived receipts, and actual
+spoken output. The same session accepts a typed follow-up and closes cleanly
+with 29 confirmed billable seconds, no retained reservation, and stopped input
+tracks. The synthetic input needs a continuous silent carrier: an exhausted
+WebAudio source stalls the provider's audio clock even while WebRTC stays
+connected. An open connection alone did not establish usable conversation.
+
+Microphone mute therefore replaces the sender with a silent synthetic track
+after stopping real capture. Unmute and End dispose its WebAudio resources.
+The final typed Titan question plays its methane-weather answer while the
+captured track remains ended and Saturn remains in view. Provider closure
+confirms 24 seconds with no remaining reservation. The earlier answer started
+with the current view's name, "Saturn. Titan.", and Live spoke about Saturn;
+the narration now introduces its selected evidence subject instead.
+
+The controlled Saturn overview, rings, and Titan tour completes in 137.881
+seconds. Its clips last 31.968, 35.568, and 39.168 seconds, and every automatic
+advance follows an actual audio-ended event. A separate pause/resume run
+reaches the last stop before the driver's two-minute evaluation timeout fires.
+The complete run starts an asynchronous page task and reads its result after
+bounded waits within one driver connection. Increasing the tour's speed would
+have hidden the test driver's timeout rather than verified the actual clips.
+
+The first Saturn script repeated the same five facts at both views, then read
+mass and density as long numbers. The visitor called the result dull and
+robotic. Stable authored stop IDs now select separate overview, rings, and
+Titan stories. The short scripts carry a sourced surprise, such as Titan's
+methane rain, while the voice instructions ask for the warmth and varied
+cadence of a friendly astronomy nerd. General visits prefer one curated story;
+explicit questions still select their requested facts. The new copy is an
+audition, not an established listening score.
+
+Opt-in Worker tracing records each model request, response, transcript,
+application message, and budget transition with its session and model. It
+redacts credentials and omits SDP and audio bytes. Browser tracing retains the
+latest 200 application messages. Production tracing remains off by default;
+enabling it deliberately includes conversation text. The measured director
+results, fixture corrections, and remaining evaluations live in the
+[evaluation report](design/reports/the-agentic-tour-guide.md).
+
 ## Known gaps
 
-- **The cloud guide still needs release evaluations.** Provider access, spoken
-  delivery, pronunciation, repeated model comparisons, browser/device behavior,
-  and deployed session cleanup require measured acceptance. Cloudflare version
+- **The cloud guide still needs release evaluations.** Human listening and
+  pronunciation, the full Sol/Terra comparison, browser/device coverage, and
+  deployed session cleanup require measured acceptance. Local Chromium has
+  exercised synthetic input, spoken replies, camera arrival, and confirmed Live
+  closure; the full Astra evaluation and a small model comparison are recorded.
+  Cloudflare version
   preview URLs do not support Workers implementing the guide's Durable Objects;
   an authenticated staging Worker requires separate configuration. Optional
   image questions and composition assistance are not implemented.

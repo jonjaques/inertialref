@@ -280,11 +280,10 @@ addresses still return 404. TypeDoc validation runs in both builds.
 branch. See the [development guide](guides/development.md#toolchain) and
 [ADR-0039](adr/0039-the-shell-before-the-scene.md).
 
-The Durable Object and D1 bindings are **not** in the deployed config; they
-arrive with the milestone that uses them, so nothing is bound that nothing
-reads. When the DO does land, `new_sqlite_classes` — not `new_classes` — is
-what makes the object SQLite-backed rather than key-value backed; the key-value
-backend is not available on the Free plan and has no reason to be used here.
+The checked-in configuration binds the guide's `TourSession` and
+`TourAdmission` Durable Objects. Their `tour-v1` migration uses
+`new_sqlite_classes` for SQLite storage. Multiplayer partition objects and D1
+bindings remain future milestones; the guide does not require them.
 
 `version_metadata` was not in the original sketch and earns its place: the
 health record reports the deployment's version id, so "am I talking to the
