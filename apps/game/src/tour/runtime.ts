@@ -821,7 +821,9 @@ export class GuideRuntime {
           this.#playbackRevision++
           this.#playback?.stop()
           this.#runner?.command('pause')
-          this.#live?.muteGuide(true)
+          // Live manages conversational interruption and the following reply.
+          // Pausing itinerary progress must not mute that reply.
+          this.#live?.muteGuide(this.#snapshot.guideMuted)
           this.#update({ state: 'paused' })
         } else {
           const runner = this.#runner?.status()

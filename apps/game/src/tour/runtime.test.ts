@@ -349,6 +349,20 @@ describe('the browser guide runtime', () => {
     f.dispose()
   })
 
+  it('keeps Live replies audible during a speech pause unless the visitor muted the guide', async () => {
+    const f = rig()
+    await f.runtime.startVoice('marin')
+    const socket = f.sockets[0]!
+    f.live.muteGuide.mockClear()
+    socket.receive({ type: 'status', state: 'paused', message: 'Listening.' })
+    expect(f.live.muteGuide).toHaveBeenLastCalledWith(false)
+    f.runtime.muteGuide(true)
+    socket.receive({ type: 'status', state: 'paused', message: 'Listening.' })
+    expect(f.live.muteGuide).toHaveBeenLastCalledWith(true)
+    expect(f.runtime.getSnapshot().state).toBe('paused')
+    f.dispose()
+  })
+
   it('reports arrival while speech has paused without starting tour narration', async () => {
     const f = rig()
     await f.runtime.startTour('saturn', true)
