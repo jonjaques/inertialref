@@ -30,7 +30,12 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
         now: () => Date.now(),
         onArrival,
         onTakeover,
-        active: () => engine.harness.observatory.target !== null,
+        // The mode's own claim on the guide, not the presence of a subject: a
+        // Milky Way view clears the observatory's target, and a guide gated on
+        // one answers "not active in this mode" to the `go_to` that would end
+        // the empty sky. `mountGuide` sets this while the Planetarium is
+        // mounted and clears it on the way out.
+        active: () => engine.guide !== null,
         lens: () => engine.framingLens(),
         aspect: () =>
           window.innerHeight > 0

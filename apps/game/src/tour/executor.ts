@@ -10,6 +10,7 @@ import {
 } from '@inertialref/devtools'
 import {
   GUIDE_LIMITS,
+  isGuideCameraTool,
   type GuideCall,
   type GuideToolOutput,
   type SubjectBrief,
@@ -211,9 +212,15 @@ export class GuideExecutor {
   }
 
   async execute(call: GuideCall): Promise<GuideToolOutput> {
-    this.poll()
+    const taken = this.#poll()
     if (this.#disposed || this.#options.active?.() === false)
       return reject('The guide is not active in this mode.')
+    // The poll above is what notices the gesture, and a move decided before it
+    // is a move the visitor has already overruled. Running it anyway takes the
+    // camera back and publishes an arrival for a call the loop answered
+    // canceled in the same turn. Queries are harmless and still answer.
+    if (taken && isGuideCameraTool(call.name))
+      return { status: 'canceled', reason: 'The visitor took the camera.' }
     try {
       switch (call.name) {
         case 'go_to':
@@ -256,7 +263,12 @@ export class GuideExecutor {
 
   /** Publish arrivals, notice takeovers, and keep the gesture honest. */
   poll(): void {
-    if (this.#disposed) return
+    this.#poll()
+  }
+
+  /** As `poll`, answering whether this pass handed the camera to the visitor. */
+  #poll(): boolean {
+    if (this.#disposed) return false
     if (this.viewRevision !== this.#seenRevision) {
       // Someone else moved the camera: a drag, a preset, a scrub. Whatever
       // the guide had pending is theirs now, and the framing it composed is
@@ -268,20 +280,21 @@ export class GuideExecutor {
       this.#framing = null
       this.#cancelSearch()
       this.#options.onTakeover()
-      return
+      return true
     }
     if (this.#options.active?.() === false) {
       this.cancel()
-      return
+      return false
     }
     const pending = this.#pending
-    if (pending === null) return
+    if (pending === null) return false
     const eye = this.#harness.observatory
     if (eye.target?.address !== pending.address) {
       this.#pending = null
-      return
+      return false
     }
-    if (eye.status().traveling || this.#options.ready?.() === false) return
+    if (eye.status().traveling || this.#options.ready?.() === false)
+      return false
     this.#pending = null
     this.#beginMotion(pending.motion)
     this.#options.onArrival({
@@ -290,6 +303,7 @@ export class GuideExecutor {
       framing: pending.framing,
       viewRevision: this.viewRevision,
     })
+    return false
   }
 
   /** Stop what the guide started, and hold the camera where it is. */
@@ -465,6 +479,23 @@ export class GuideExecutor {
     if (subject.candidate.address === companion.candidate.address)
       return reject('Choose two different bodies to frame together.')
     const eye = this.#harness.observatory
+    // Every refusal comes before the focus commits. `track` raises the
+    // observatory's revision and *then* throws — for a companion outside the
+    // subject's system, or for any companion at all from a surface — by which
+    // point the focus has started a fly-to nobody will receive an arrival for,
+    // and the unclaimed revision reads to the next poll as the visitor taking
+    // the camera. `Observatory.stand` learned the same lesson.
+    if (eye.status().surface !== null)
+      return reject('Leave the surface before framing a pair.')
+    const systemOf = (address: string): string | null =>
+      this.#harness.dossier(address)?.system.id ?? null
+    if (
+      systemOf(subject.candidate.address) !==
+      systemOf(companion.candidate.address)
+    )
+      return reject(
+        `${companion.candidate.name} is not in the same system as ${subject.candidate.name}.`,
+      )
     this.#cancelSearch()
     if (eye.target?.address !== subject.candidate.address)
       eye.focus(subject.candidate.address)

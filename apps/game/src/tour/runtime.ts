@@ -232,6 +232,11 @@ export class GuideRuntime {
         this.#update({ capabilities: value })
       })
       .catch((cause: unknown) => {
+        // A failed read is not an answer. Keeping the settled promise would
+        // leave `capabilities` null for the life of the page, and the panel
+        // draws no Start without it — so "close and reopen it to try again",
+        // which is what the panel says, would do nothing.
+        this.#inspect = null
         this.#update({ message: message(cause) })
       })
     return this.#inspect
