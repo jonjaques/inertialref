@@ -19,6 +19,14 @@ describe('the guide tool inventory', () => {
       )
     }
   })
+  it('carries no bound the provider cannot serialize', () => {
+    // A fractional `minimum` made the provider refuse the whole session with
+    // "Type is not JSON serializable: decimal.Decimal"; the decoders hold the
+    // bounds instead.
+    expect(JSON.stringify(GUIDE_TOOLS)).not.toMatch(
+      /"(maxLength|minLength|maxItems|minItems|minimum|maximum)"/,
+    )
+  })
   it('never lets the browser change the session', () => {
     expect(GUIDE_CLIENT_EVENTS).not.toContain('session.update')
     expect(GUIDE_CLIENT_EVENTS).toContain('session.close')

@@ -15,7 +15,10 @@
    * it cannot see. And Cloudflare does not issue version preview URLs for a
    * Worker that implements a Durable Object, so removing the two classes is
    * what makes `wrangler versions upload` produce a URL again. The `tour-v2`
-   * migration deletes the classes the `tour-v1` deployment created.
+   * migration deletes the classes the `tour-v1` deployment created — and a
+   * version upload refuses a Worker with a pending migration (error 10211),
+   * so the first deployment after this change is `pnpm run deploy:worker`;
+   * every version upload after that one gets its preview URL.
    */
   "migrations": [
     {

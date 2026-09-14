@@ -158,16 +158,17 @@ export type GuideToolOutput = Readonly<Record<string, unknown>> & {
 const nullable = (schema: Record<string, unknown>) => ({
   anyOf: [schema, { type: 'null' }],
 })
-const text = (description: string) => ({
-  type: 'string',
-  description,
-  maxLength: GUIDE_LIMITS.text,
-})
+// No `maxLength`, `maxItems`, `minimum` or `maximum` anywhere in the schema:
+// the provider refused a session whose tool schema carried a fractional bound
+// ("Type is not JSON serializable: decimal.Decimal"). Bounds are stated in
+// the description for the model and enforced by the decoders below.
+const text = (description: string) => ({ type: 'string', description })
 const number = (description: string, minimum?: number, maximum?: number) => ({
   type: 'number',
-  description,
-  ...(minimum === undefined ? {} : { minimum }),
-  ...(maximum === undefined ? {} : { maximum }),
+  description:
+    minimum === undefined || maximum === undefined
+      ? description
+      : `${description} Between ${minimum} and ${maximum}.`,
 })
 const choice = (description: string, values: readonly string[]) => ({
   type: 'string',
@@ -299,9 +300,9 @@ export const GUIDE_TOOLS = [
       subject: text('The object by name.'),
       fields: nullable({
         type: 'array',
-        description: 'Fact labels to return, or null for the whole record.',
-        items: { type: 'string', maxLength: GUIDE_LIMITS.text },
-        maxItems: 12,
+        description:
+          'Up to twelve fact labels to return, or null for the whole record.',
+        items: { type: 'string' },
       }),
     },
   ),
@@ -329,12 +330,10 @@ export const GUIDE_TOOLS = [
           kinds: {
             type: 'array',
             items: { type: 'string', enum: [...GUIDE_WORLD_KINDS] },
-            maxItems: 8,
           },
           star_classes: {
             type: 'array',
             items: { type: 'string', enum: [...GUIDE_STAR_CLASSES] },
-            maxItems: 11,
           },
           atmosphere: nullable({ type: 'boolean' }),
           sea: nullable({ type: 'boolean' }),

@@ -688,25 +688,38 @@ reasoning tokens appeared once, 56, at low effort. Five sessions totaled about
 500 billable voice seconds. At the recorded rates the whole phase cost about
 one dollar; that is an estimate from reported usage, not an invoice.
 
-### Phase 1. The browser loop, two days
+### Phase 1. The browser loop: done, 14 September 2026
 
 `guideTools.ts`, `loop.ts`, `scene.ts`, data-channel sending in `media.ts`,
 the executor's tool outputs, and the Worker reduced to sign-in and create,
-with a fake data channel that replays phase-0 traces. Acceptance: a delegated
-`go_to` starts a move through the harness, returns `moving`, and its arrival
-reaches the backend as a developer message that produces a narrated beat; a
-correction during travel supersedes the pending arrival and is delegated
-within a second; duplicate function-call events execute once; the Worker
-implements no Durable Object class and a version preview deploys; both object
-classes and their tests are gone and `pnpm check` is green.
+with a fake data channel that replays the phase-0 event shapes
+(`loop.test.ts`, `runtime.test.ts`). Acceptance met: a delegated `go_to`
+starts a move through the harness, returns `moving`, and its arrival reaches
+the backend as a developer message with `response.create`; a correction
+during travel replaces the pending arrival and is answered at once; a
+redelivered function-call event executes once; both object classes and their
+tests are gone and `pnpm check` is green. Two findings changed details. The
+provider refuses a tool schema that carries a fractional bound ("Invalid AVAS
+session_data: Type is not JSON serializable: decimal.Decimal"), so the schema
+states bounds in words and the decoders enforce them; `guideTools.test.ts`
+guards it. And a version upload refuses a Worker with a pending Durable Object
+migration (error 10211), so the preview URL needs one ordinary
+`pnpm run deploy:worker` to apply `tour-v2` first; that deployment is pending.
 
-### Phase 2. Tools, the view, and the panel, one to two days
+### Phase 2. Tools, the view, and the panel: done, 14 September 2026
 
-The remaining tools, `describe_view`, the simplified runtime, the panel, the
-keymap, and the preference. Acceptance: headless sessions execute every tool
-through the harness with identical canonical hashes; the panel is three
-controls and a picker at 1600 × 900 and 390 × 844; a takeover cancels a pending
-move and the guide's next line is about the new view.
+Every tool executes headlessly through the harness with the canonical hash
+unchanged (`executor.test.ts`); the panel is eleven voices and Start, Pause
+and End at 1600 × 900 and 390 × 844; a takeover cancels the pending move and
+the guide's next line reads the new view. The first real session from the
+drive rig on 14 September — a typed "short tour of Saturn with two stops"
+through `ir.guideAsk` with a silent microphone — ran the whole beat: `go_to`
+returning `moving`, the arrival prompted, `linger` for five seconds, the words
+measured as a spoken beat by the remote-track clock, the quiet prompt, the
+second stop, its narration, and End closing the session with its usage. That
+session cost 59 voice seconds and 11 backend responses (44,546 input tokens
+of which 39,342 cached, 377 output), about fifteen cents at the recorded
+rates. Phase 3 tunes the clock against traces like it.
 
 ### Phase 3. Pacing and the first real tour, one to two days
 
