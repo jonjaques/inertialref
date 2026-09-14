@@ -13,6 +13,7 @@ import {
   TourHttpError,
   tourJson,
 } from './http.ts'
+import { log, span } from './log.ts'
 import { createLiveSession, GuideProviderError } from './openaiLive.ts'
 
 /*
@@ -37,9 +38,36 @@ import { createLiveSession, GuideProviderError } from './openaiLive.ts'
 /** Sign-in attempts per source per minute, when the binding is present. */
 const LOGIN_LIMIT_KEY = 'tour-login'
 
-export async function serveTour(request: Request, env: Env): Promise<Response> {
+/*
+ * Every route runs inside one span named for it, with the provider round trip
+ * as a child, and every answer that is not a plain success writes a record
+ * saying why. The invocation log already carries the method, the path, the
+ * status, the colo and the ray id, so the records here carry only what it
+ * cannot: which check refused the request, and what the provider said.
+ */
+export async function serveTour(
+  request: Request,
+  env: Env,
+  tracing?: Tracing,
+): Promise<Response> {
+  const path = new URL(request.url).pathname
+  return span(tracing, `tour ${request.method} ${path}`, async (span) => {
+    span?.setAttributes({
+      'http.request.method': request.method,
+      'url.path': path,
+    })
+    const response = await handle(request, env, path)
+    span?.setAttribute('http.response.status_code', response.status)
+    return response
+  })
+}
+
+async function handle(
+  request: Request,
+  env: Env,
+  path: string,
+): Promise<Response> {
   try {
-    const path = new URL(request.url).pathname
     const configured = Boolean(
       env.OPENAI_API_KEY &&
       env.TOUR_GUIDE_PASSWORD &&
@@ -101,6 +129,11 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
         voice: input.voice,
         scene: boundedString(input.scene, 1500),
       })
+      log('info', 'session created', {
+        sessionId: created.id,
+        voice: input.voice,
+        expiresAt: created.expiresAt,
+      })
       return tourJson({
         sessionId: created.id,
         expiresAt: created.expiresAt,
@@ -109,10 +142,32 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
     }
     throw new TourHttpError('No such guide endpoint.', 404)
   } catch (error) {
-    if (error instanceof TourHttpError)
+    if (error instanceof TourHttpError) {
+      // A refused request is the visitor's problem at 4xx and the
+      // deployment's at 503, and the level says which.
+      log(error.status >= 500 ? 'error' : 'warn', 'request refused', {
+        path,
+        status: error.status,
+        reason: error.message,
+      })
       return tourJson({ error: error.message }, error.status)
-    if (error instanceof GuideProviderError)
+    }
+    if (error instanceof GuideProviderError) {
+      log('error', 'provider refused the session', {
+        path,
+        code: error.code,
+        ...error.detail,
+      })
       return tourJson({ error: 'The guide could not start a session.' }, 503)
+    }
+    log('error', 'request failed', {
+      path,
+      error:
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return tourJson(
       { error: 'The guide could not complete this request.' },
       503,
