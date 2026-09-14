@@ -4,7 +4,9 @@ The guide is one voice: GPT Live listens and speaks, GPT-6 Astra thinks
 through Responses delegation, and the browser executes every tool over the
 WebRTC data channel. The design is
 [the guide in one voice](../../design/plans/the-guide-in-one-voice.md); the
-execution boundary is
+one-voice decision is
+[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) and the
+execution boundary it keeps is
 [ADR-0041](../../docs/adr/0041-the-guide-requests-the-view.md).
 
 Provider calls run only when an operator invokes a script with
@@ -59,7 +61,30 @@ skill. Ask the same requests of several voices — a Saturn tour, "what is that
 point to the left?", a correction during travel — and record the browser,
 device, voice, prompt version, and the listening scores. Hide voice names
 during comparison where practical, and do not infer a preferred voice from one
-greeting.
+greeting. **Listen with the driver's window on screen:** an off-screen occluded
+window produces no audio pipeline, so the remote-track clock reads every beat
+as silent and the tour advances on the clock's start timeout rather than on the
+voice. That proves the loop, not the pacing.
+
+## The conversation replay
+
+`replay.mjs` reads a recorded session and checks the beat structure, the one
+camera move per turn, and the pacing the clock is tuned for. It replaces the
+old director grader: the backend composes the tour on the spot, so there is no
+plan to score. It talks to no provider.
+
+```
+node scripts/tour/replay.mjs .scratch/guide-live/session-*.json
+node scripts/tour/replay.mjs --floor 0.003 --quiet 2500 <recording> …
+```
+
+The recording is the in-page recorder's dump under `.scratch/guide-live/`
+(every data-channel message both directions, the remote-track level as the
+clock samples it, and the runtime's notes; no audio, no credentials — see the
+`inertialref-guide-human-session-rig` memory). The floor and quiet default to
+the clock's own numbers; pass others to see how the same conversation would
+have beaten under different ones. It exits nonzero on any failed check, so a
+committed recording could gate the pacing in CI.
 
 [Live delegation](https://developers.openai.com/api/docs/guides/live-delegation),
 [Live session lifecycle](https://developers.openai.com/api/docs/guides/live-conversations),

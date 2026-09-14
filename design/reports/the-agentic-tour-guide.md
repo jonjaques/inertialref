@@ -1,5 +1,15 @@
 # The agentic tour guide evaluation
 
+> **Superseded, 14 September 2026.** This grades the two-model director that
+> [ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) removed:
+> there is no director planning stops now, so a plan score is a grade on a
+> model that no longer plans. It is kept for the measured denominator and the
+> record of what the director-era evaluation could and could not establish.
+> The current evaluation is the conversation replay
+> (`scripts/tour/replay.mjs`) and a person on headphones; the
+> [one-voice plan](../plans/the-guide-in-one-voice.md) § 12 records its
+> results.
+
 Recorded 13 September 2026. The Astra baseline completes all 180 requested
 decisions. Its original task grade is 167/180; correcting nine fixture
 expectations produces 176/180 without changing any recorded response. One

@@ -8,10 +8,11 @@ behind that URL before the persistent universe is possible.
 > and persistent mutations remain planned.** The client is live at
 > <https://inertialref.app> and the retained `inertialref.jonjaques.com` origin.
 > `apps/server` serves the static bundle, `/api/health`, and the authenticated
-> `/api/tour` application service. `TourSession` and `TourAdmission` are Durable
-> Objects for guide coordination and quotas. The multiplayer `/ws` path still
-> returns a deliberate 501; partition authorities and D1 are planned. Guide
-> application data is separate from simulation authority and saves.
+> `/api/tour` service that signs in and creates a GPT Live session. The Worker
+> implements no Durable Object; the browser holds the guide conversation over
+> WebRTC ([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)). The
+> multiplayer `/ws` path still returns a deliberate 501; partition authorities
+> and D1 are planned, and are where the first Durable Object will land.
 >
 > [ADR-0008](adr/0008-multiplayer-partitions.md) is the decision it implements,
 > [modes](design/modes.md) is what each tier owes the player, and
@@ -40,37 +41,32 @@ pnpm --filter @inertialref/server exec wrangler secret put OPENAI_API_KEY
 pnpm --filter @inertialref/server exec wrangler secret put TOUR_GUIDE_PASSWORD
 ```
 
-`apps/server/wrangler.jsonc` binds `TOUR_SESSIONS` to `TourSession` and
-`TOUR_ADMISSION` to `TourAdmission`. The `tour-v1` migration creates both as
-SQLite Durable Objects. Regenerate host declarations with
-`pnpm --filter @inertialref/server types` when bindings change. Deployment
-applies the Durable Object migration; it does not require a simulation or D1
-migration.
+The Worker implements no Durable Object. [ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)
+moved the conversation into the browser, and the `tour-v2` migration deletes
+the `TourSession` and `TourAdmission` classes the earlier design bound.
+Regenerate host declarations with `pnpm --filter @inertialref/server types`
+when bindings change. Deployment applies the class-deletion migration; it does
+not require a simulation or D1 migration.
 
-| Endpoint                             | Purpose                                                                    |
-| ------------------------------------ | -------------------------------------------------------------------------- |
-| `GET /api/tour/capabilities`         | Availability, admission, voices, and enabled features; images are disabled |
-| `POST /api/tour/login`               | Password admission with a signed cookie and login throttling               |
-| `POST /api/tour/sessions`            | Idempotent session creation, manifest validation, and quota reservation    |
-| `GET /api/tour/sessions/:id/events`  | Authenticated application WebSocket for one controlling tab                |
-| `POST /api/tour/sessions/:id/speech` | Speak a server-accepted narration ID through the controlled clip adapter   |
-| `POST /api/tour/sessions/:id/close`  | Idempotent closure and provider finalization                               |
-| `GET /api/tour/sessions/:id/status`  | Session state and usage for the admitted principal                         |
-| `GET /api/tour/usage`                | Private alpha allowance and session reservations                           |
+| Endpoint                     | Purpose                                                                          |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `GET /api/tour/capabilities` | Availability, admission, and the voices the panel offers; images are disabled    |
+| `POST /api/tour/login`       | Password admission with a signed cookie and login throttling                     |
+| `POST /api/tour/sessions`    | Creates one GPT Live session: writes the configuration, exchanges the WebRTC SDP |
 
-Tour responses are uncached. Mutating routes and socket upgrades validate the
-origin; the session also validates its cookie and controlling tab. The cookie
-lasts 24 hours, is HttpOnly and SameSite Strict, and is Secure on HTTPS.
-Every holder of the shared password uses the same alpha quota principal.
-Clearing cookies or creating another session does not create a fresh allowance.
+The browser holds the session over its own WebRTC peer connection and data
+channel; there is no application socket, no `/speech`, `/close`, `/status`, or
+`/usage` route, and no controlling tab. Tour responses are uncached, and the
+mutating routes validate the origin and the session cookie. The cookie lasts
+24 hours, is HttpOnly and SameSite Strict, and is Secure on HTTPS. Every holder
+of the shared password uses the same alpha principal; clearing cookies does not
+create a fresh one.
 
-A session lasts at most ten minutes, with a thirty-second socket reconnect
-lease. Admission reserves up to two dollars per session against the shared
-alpha's ten-dollar daily allowance. Provider calls reserve budget before
-execution, and uncertain upstream outcomes retain conservative reservations.
-These limits bound an experiment; they are not a measured cost per tour.
-The authenticated usage and status endpoints expose the ledger needed to
-inspect failures and remaining allowance.
+The Worker keeps no session ledger and no session timer. The spending bound is
+the OpenAI project's own limit and the duration bound is the provider's session
+expiry, two hours out; a browser that vanishes ends its session within three
+seconds without the Worker's help, so there is nothing to time. These are
+configured bounds on an experiment, not a measured cost per tour.
 
 `TOUR_GUIDE_TRACE=true` enables verbose structured Worker logs with session IDs,
 model IDs, prompts, responses, transcript fragments, receipts, timing, and usage.
@@ -82,20 +78,20 @@ Credentials, cookies, SDP, and binary audio are omitted or redacted.
 `ir.guideTrace()` returns its last 200 entries. See the
 [evaluation scripts](../scripts/tour/README.md#verbose-message-tracing).
 
-Live audio uses browser WebRTC and a server sideband. The server writes the
-Live configuration and forbids browser-authored upstream data-channel events.
-Only bounded application messages can request local camera work. The default
-director is Astra; controlled narration uses `gpt-4o-mini-tts` with `marin`.
-A live sideband keeps its Durable Object active, so session deadlines and
-closure matter even when the visitor is silent.
+Live audio uses browser WebRTC. The server writes the Live configuration —
+one voice, Astra as the delegated backend, and a data-channel allow list that
+omits `session.update` — and the browser runs the tool loop over that channel.
+There is one voice and no controlled clips; the browser's own clock, reading
+the remote audio track, decides when a stop has been heard.
 
 Guide admission and operation are separate from public hosting. Do not claim a
 provider gate from a successful page build or a `session.started` event. Real
-spoken replies, delegation, closure, listening, and repeated model evaluation
-need explicit verification. Cloudflare does not generate version preview URLs
-for Workers implementing Durable Objects, so deployed guide verification needs
-a separately configured staging Worker. Local workerd supports the guide's
-Durable Objects. See the [current preview limitation](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/).
+spoken replies, delegation, closure, and repeated listening need explicit
+verification. Because the Worker implements no Durable Object, Cloudflare
+generates a version preview URL for it, and deployed guide verification uses an
+ordinary `pnpm --filter @inertialref/server run versions:upload` preview under
+the account's `workers.dev` subdomain — the origin rule admits that subdomain
+so a preview can sign in.
 
 ---
 
@@ -185,16 +181,16 @@ have sidestepped one real problem for free.
 
 ## What each Cloudflare primitive is for
 
-| Primitive              | Holds                                                           | Why this one and not another                                                                                                                                                                                |
-| ---------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workers**            | The client bundle, the API, WebSocket upgrade routing           | Static asset requests are free and never reach the script. One deploy, one origin, one artifact.                                                                                                            |
-| **Durable Objects**    | Guide sessions and admission; partition authorities are planned | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics.                                                           |
-| **DO SQLite**          | Per-partition durable state, co-located with the authority      | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                  |
-| **D1**                 | Account-scoped and globally-unique data                         | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                     |
-| **R2** ✅              | What the repository will not carry; biome material sets later   | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant. |
-| **Workers KV**         | ⛔ nothing                                                      | The catalog is 366 KB brotli across two files and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                   |
-| **Queues / Workflows** | ⛔ nothing yet                                                  | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                 |
-| **Cloudflare Pages**   | ⛔ nothing                                                      | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                  |
+| Primitive              | Holds                                                         | Why this one and not another                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Workers**            | The client bundle, the API, WebSocket upgrade routing         | Static asset requests are free and never reach the script. One deploy, one origin, one artifact.                                                                                                                   |
+| **Durable Objects**    | ⛔ nothing today; partition authorities are planned           | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics — the guide needed none, so the first one lands with multiplayer. |
+| **DO SQLite**          | Per-partition durable state, co-located with the authority    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                         |
+| **D1**                 | Account-scoped and globally-unique data                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                            |
+| **R2** ✅              | What the repository will not carry; biome material sets later | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant.        |
+| **Workers KV**         | ⛔ nothing                                                    | The catalog is 366 KB brotli across two files and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                          |
+| **Queues / Workflows** | ⛔ nothing yet                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                        |
+| **Cloudflare Pages**   | ⛔ nothing                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                         |
 
 ### Numbers, with their source
 
@@ -280,10 +276,13 @@ addresses still return 404. TypeDoc validation runs in both builds.
 branch. See the [development guide](guides/development.md#toolchain) and
 [ADR-0039](adr/0039-the-shell-before-the-scene.md).
 
-The checked-in configuration binds the guide's `TourSession` and
-`TourAdmission` Durable Objects. Their `tour-v1` migration uses
-`new_sqlite_classes` for SQLite storage. Multiplayer partition objects and D1
-bindings remain future milestones; the guide does not require them.
+The checked-in configuration binds no Durable Object. The guide's original
+`TourSession` and `TourAdmission` classes were created by the `tour-v1`
+migration and deleted by `tour-v2` once the browser took over the conversation
+([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)); the deleted-class
+migration must stay in the list so a deploy from a version that had them
+applies the deletion. Multiplayer partition objects and D1 bindings are the
+next `new_sqlite_classes` migration, and are future milestones.
 
 `version_metadata` was not in the original sketch and earns its place: the
 health record reports the deployment's version id, so "am I talking to the

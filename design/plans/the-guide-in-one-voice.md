@@ -783,19 +783,33 @@ deferred prompt at 20.0 s, "You're standing at Europa's north pole" at
 append, and one scene block; End closed in 616 ms. Fifteen voice seconds
 and three backend responses.
 
-### Phase 4. Listening and the record, one day
+### Phase 4. Listening and the record: done except the listen, 14 September 2026
 
-Headphone listening across four voices with the same requests; the ADR that
-supersedes the split and the relay; the context-log entry; the plan and report
-status; the hosting guide's note that the Worker implements no Durable Object
-and preview URLs apply to it. The evaluation script becomes a conversation
-replay rather than a director grader. Two things the phase-3 record says
-about the voice prompt belong here: Live composes ahead of the arrival,
-narrating Mars from its own knowledge while the camera is still traveling and
-adding "there it is" when it lands, so the "speak them and then stop" rule
-needs to cover the travel line too; and when the visitor speaks during the
-quiet prompt, "continue the tour" stays queued as state that the visitor's
-delegation reads.
+The record is aligned to the one-voice shape.
+[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) supersedes the
+director, the controlled clips, the application socket, and the Durable Object
+session store of ADR-0041, and keeps that ADR's execution boundary;
+[hosting](../../docs/hosting.md#the-private-planetarium-guide) records the three routes, the absent
+Durable Object, and that preview URLs now apply; the Planetarium, audio, and
+world design pages describe one voice with no backstage director; `CONTEXT.md`
+records the pacing tuning and the four feel changes. The old director-grader
+report and its fixtures are gone; the evaluation is a conversation replay,
+`scripts/tour/replay.mjs`, which reads a recorded session and asserts the beat
+structure, the one-move-per-turn rule, and the pacing figures — a director
+score was a grade on a model that no longer plans.
+
+The four changes the first conversations asked for landed with the code:
+concurrent query tools with one move per turn, a stop per showable object, the
+voice-named introduction, and the "name the destination and wait" travel-line
+rule (`one-voice-2`). The linger prompt asks for three or four seconds on an
+ordinary stop, and the countdown runs from the last word.
+
+**What remains is a person on headphones.** Spoken delivery across voices, the
+introduction aloud, pronunciation, and whether a cheaper backend than Astra
+paces a routine beat well are a listen, not a test. Measure with the window on
+screen: the off-screen drive rig produces no audio pipeline, so a rig session
+reads every beat as silent and falls back to the clock's start timeout, which
+proves the loop but not the pacing.
 
 ## 13. Cost
 

@@ -167,6 +167,10 @@ export const WINGS = [
             'docs/adr/0041-the-guide-requests-the-view.md',
             'The Planetarium guide',
           ],
+          [
+            'docs/adr/0042-the-guide-speaks-in-one-voice.md',
+            'The guide in one voice',
+          ],
         ],
       },
     ],

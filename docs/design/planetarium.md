@@ -35,42 +35,46 @@ astronomy nothing has measured yet.
 
 ## The optional guide
 
-The Guide is a closed-by-default workspace panel. A visitor can start a short
-current-system tour, ask about the current object, request the Saturn tour,
-or type a different question. Opening the panel loads the guide; ordinary
-Planetarium use creates no cloud session. Local templates and controls remain
-available when the cloud guide is disabled or its allowance is exhausted.
+The Guide is a closed-by-default workspace panel: a voice picker and three
+controls, Start, Pause, and End. Opening the panel loads the guide; ordinary
+Planetarium use creates no cloud session. The ordinary scene and its controls
+remain available when the cloud guide is disabled.
 
 The guide is a friendly astronomy nerd: congenial, curious, and happy to share
-a historical surprise. Its director plans subjects, stories, and camera
-movement backstage. GPT Live handles explicit voice conversation; automatic
-tours use controlled spoken clips while Live stays available for questions. The visitor chooses when to enable voice and
-sees an AI voice disclosure. Microphone mute, guide mute, and Pause tour have
-separate controls because they stop different things. Explanations and sources
-remain readable with guide audio muted.
+a historical surprise. It speaks in one voice. GPT Live listens and speaks, and
+delegates the thinking to GPT-6 Astra, which sees the current view, holds the
+tool inventory, composes a tour on the spot, and paces it with the browser's
+clock ([ADR-0042](../adr/0042-the-guide-speaks-in-one-voice.md)). It introduces
+itself by voice name and says what the visitor can ask for. There is no
+backstage director, no separate speech model, no authored itinerary, and no
+plan panel. The visitor chooses when to enable voice and sees an AI voice
+disclosure; microphone mute and pause are separate controls.
 
-Authored presets cover a roughly five-minute Solar System visit, Saturn's
-rings and moons, and a short developer demonstration. The panel shows the
-ordered plan, current stop, camera movement, narration phase, and changes made
-through conversation. Next, Back, Pause, Resume, and End act locally, including
-when requested through Live. Automatic progression requires arrival, a minimum
-viewing interval, actual completion of the current clip, and a few quiet
-seconds when the plan promises time to look.
+A tour is a series of beats, and the browser is the metronome. The backend
+names where it is heading, the observatory travels, and when the arrival
+receipt comes the backend narrates what is actually on screen and declares how
+long to linger; the browser waits for the words to be spoken, reading the
+remote audio track, and then for the quiet look, and then prompts the next
+stop. When the visitor asks about several things that can be shown — a planet's
+moons, a system's planets — the guide visits each in turn and keeps its words
+about the object on screen.
 
-A question holds the current stop. A changed destination supersedes pending
-work. Manual camera input pauses the guide, and a late model result cannot
-replace the view the visitor chose. The observatory executes every movement
-through its existing camera controls and photographic clock. Gentle finite
-orbits, approaches, pullbacks, and reveals continue during narration and stop
-when the visitor takes over or interrupts. The simulation
-continues according to its own inputs.
+A question holds the current view. A changed destination supersedes pending
+work, and a correction spoken during a non-blocking move is delegated at once.
+Manual camera input takes the camera, and a late model result cannot replace
+the view the visitor chose. The observatory executes every movement through its
+existing camera controls and photographic clock; the backend may ask for
+several records at once but for only one move per turn, so the camera cannot
+thrash. Gentle finite orbits, approaches, pullbacks, and reveals continue
+during narration and stop when the visitor takes over or interrupts. The
+simulation continues according to its own inputs.
 
 Application records supply measurements and scene truth. For observed Solar
 System objects, the models use their own established astronomy and historical
-knowledge to explain why a place is interesting. Authored presets carry their
-own sources; ordinary model context excludes those scripts and cooked fact
-blurbs, retaining the current view, nearby subjects, available actions, and
-requested raw measurements. Projected worlds are identified as projections; missing
+knowledge to explain why a place is interesting. Ordinary model context is the
+current view, nearby subjects, available actions, and requested raw
+measurements; a fact reaches the backend as a raw quantity and unit, not as a
+cooked blurb. Projected worlds are identified as projections; missing
 measurements keep their reasons. The guide separates an object's properties
 from what this camera can currently see. It sends no screenshots or continuous
 video. Image-based questions and requested composition help remain deferred.
@@ -80,8 +84,10 @@ This is an explicit Planetarium exception to the game's
 visitor what to feel. The cloud service is a password-gated private alpha;
 provider access, listening quality, and deployed acceptance require their own
 verification. [ADR-0041](../adr/0041-the-guide-requests-the-view.md) records the
-ownership and transport decisions, and [hosting](../hosting.md#the-private-planetarium-guide)
-describes admission and operation.
+execution boundary — the bounded inventory, the receipts, the revisions —
+and [ADR-0042](../adr/0042-the-guide-speaks-in-one-voice.md) the one-voice
+shape; [hosting](../hosting.md#the-private-planetarium-guide) describes
+admission and operation.
 
 ---
 

@@ -88,15 +88,16 @@ Voice starts with a deliberate action and an AI voice disclosure. Muting the
 guide preserves readable explanations; muting the microphone and pausing the
 tour remain separate controls.
 
-GPT Live supports conversation and interruptions while automatic tours use
-controlled `gpt-4o-mini-tts` clips with `marin`. Live output stays quiet during a
-tour clip and its looking pause; the microphone remains available. Speaking
-pauses the tour and makes the conversational reply audible. Manual tours use
-Next.
-Only playback completion for the current view can satisfy the runner's audio
-gate. Captions and an estimated duration cannot. Provider access, pronunciation,
-device behavior, and listening quality remain measured acceptance work, not
-properties established by a model name.
+The guide speaks in one voice: GPT Live listens and talks, and delegates the
+thinking to a backend model, so a tour and a conversation are the same voice
+with no clip to hand off to
+([ADR-0042](../adr/0042-the-guide-speaks-in-one-voice.md)). Speaking interrupts
+the guide, and the microphone remains available. Because there is no separate
+speech source, the only honest signal that a stop has been heard is the voice
+the visitor is already hearing: the browser reads the level of the remote audio
+track and treats a stop as spoken once the words have played and gone quiet.
+Provider access, pronunciation, device behavior, and listening quality remain
+measured acceptance work, not properties established by a model name.
 
 **The ship's annunciator has twelve fixed synthesized strings.**
 

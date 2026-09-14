@@ -1,6 +1,11 @@
 # ADR-0041: The guide requests the view through the observatory
 
-Status: accepted · 13 Sep 2026. Core implementation; provider, listening, and deployed acceptance remain separate release gates.
+Status: accepted · 13 Sep 2026. The execution boundary stands.
+[ADR-0042](0042-the-guide-speaks-in-one-voice.md) supersedes the two-model
+narration, the controlled clips, the application socket, and the Durable
+Object session store described here; read it for the current shape of the
+guide, and read this for the executor, receipts, revisions, and the bounded
+inventory it keeps.
 
 ## Context
 

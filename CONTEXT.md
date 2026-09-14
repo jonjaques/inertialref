@@ -9883,17 +9883,70 @@ proven failing baseline. The same expanded suite passes with four workers and
 the original 20-second timeout. Its default concurrency is now capped at four
 available cores so the ordinary command and Stop hook share that bound.
 
+## The guide learned to pace itself against real conversations (14 Sep 2026)
+
+Four conversations with a real microphone in the drive rig's Chrome, ten
+minutes and 601 billable voice seconds, recorded in the page — every
+data-channel message both directions, the remote-track level exactly as the
+clock samples it, and the runtime's notes — set the numbers the phase-0 probe
+had only guessed. Silence on the track decodes to exact zero (1,792 quiet
+samples, 99th percentile 0.00001); speech reads 0.005 to 0.2, half of it below
+0.01 at consonants and sentence ends. So the speech floor is a small positive
+number, 0.003, not a threshold separating quiet from soft speech. The voice
+pauses up to 2.3 s between the sentences of one narration and 3.2 s where it
+says "there it is" only after the camera lands, so a beat is quiet after 2.5 s,
+not 1.5 s; the 1.5 s beat survived the six recorded beats by luck and would
+have ended six of twenty-four utterances mid-sentence.
+
+The recordings found two defects and one pacing waste. A stop that arrives
+inside an open backend chain — a stand, a hold, a reframe — was answered with
+the travel line and never narrated, because a developer message queued into an
+open chain is read by the continuation as state, not an instruction. The
+runtime now keeps a deferred arrival's view revision and prompts it at the
+first tick with no chain in flight and the visitor quiet, dropping it if the
+view moves on. A three-second camera drag queued twenty-five takeover messages
+and as many thinking appends, because the observatory advances its mutation
+revision on every frame; the runtime now reports one takeover per gesture. And
+the linger countdown began when the clock was _sure_ the words had ended, 2.5 s
+after the last word — counting the settle time as looking time twice — so it
+now counts from the last loud sample.
+
+Then the first conversations asked for four things (Jon, 14 Sep). Concurrent
+tool calls: `parallel_tool_calls` is on, and the loop runs a response's query
+tools together while serializing the camera tools and executing only the first
+move of a response — a second move is answered rejected, because a move
+replacing a move still starting is a camera that thrashes. A response continues
+only once every call it made has its output, since a continuation with one
+missing is refused. "Tell me about the moons" narrated four moons over one
+orbiting view; the backend prompt now treats a question about several showable
+things as a tour with one stop each, and a verification session visited Io,
+Europa, Ganymede, and Callisto in turn. The guide introduces itself by voice
+name — the provider's voice id is not in the session's instructions, so the
+browser tells it. And Live was narrating a destination from memory while the
+camera still traveled, so the prompt now tells it to name where it is heading
+and wait for the arrival words.
+[ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md) records the one-voice
+decision; the recording rig is `.scratch/guide-live/` and is not committed.
+
 ## Known gaps
 
-- **The cloud guide still needs release evaluations.** Human listening and
-  pronunciation, the full Sol/Terra comparison, browser/device coverage, and
-  deployed session cleanup require measured acceptance. Local Chromium has
-  exercised synthetic input, spoken replies, camera arrival, and confirmed Live
-  closure; the full Astra evaluation and a small model comparison are recorded.
-  Cloudflare version
-  preview URLs do not support Workers implementing the guide's Durable Objects;
-  an authenticated staging Worker requires separate configuration. Optional
-  image questions and composition assistance are not implemented.
+- **The cloud guide still needs a human on headphones.** Spoken delivery across
+  voices, the introduction's wording aloud, pronunciation, and whether a
+  cheaper backend than Astra paces a routine beat well are judged by listening,
+  not by a test or a model name. The functional beat, correction, pause, end,
+  concurrent-query, and one-move-per-turn behavior are verified against the
+  provider; the off-screen drive rig produces no audio pipeline, so a rig
+  session reads every beat as silent and falls back to the clock's start
+  timeout. Measure pacing with the window on screen.
+- **The cloud guide still needs deployed acceptance.** Browser and device
+  coverage, and a small Astra-versus-cheaper-backend comparison for routine
+  beats, require measured runs. Local Chromium has exercised the beat, spoken
+  replies, camera arrival, and Live closure against the provider. The Worker
+  implements no Durable Object now
+  ([ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md)), so Cloudflare
+  generates a version preview URL for it and deployed verification uses an
+  ordinary preview rather than a separate staging Worker. Optional image
+  questions and composition assistance are not implemented.
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
   survey and fuzzy-search rows need the eye and body sampled at the same instant.
