@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GUIDE_CLIENT_EVENTS, GUIDE_TOOLS } from '@inertialref/protocol'
 import { loginCookie } from './auth.ts'
 import { serveTour } from './routes.ts'
@@ -28,6 +28,15 @@ function post(path: string, body: unknown, cookie?: string): Request {
 }
 
 describe('the guide Worker', () => {
+  // Every refusal writes a record; the test output is not where they go.
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('reports availability and voices without a cookie', async () => {
     const response = await serveTour(
       new Request(`${ORIGIN}/api/tour/capabilities`, {
@@ -177,6 +186,7 @@ describe('the guide Worker', () => {
       'fetch',
       vi.fn(async () => new Response('upstream detail', { status: 500 })),
     )
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const cookie = (await loginCookie(PASSWORD, ORIGIN, Date.now())).split(
         ';',
@@ -191,8 +201,131 @@ describe('the guide Worker', () => {
       )
       expect(response.status).toBe(503)
       expect(await response.text()).not.toContain('upstream detail')
+      // The browser gets nothing; the log gets the status and the path.
+      expect(error).toHaveBeenCalledOnce()
+      expect(error.mock.calls[0]![0]).toMatchObject({
+        scope: 'server.tour',
+        message: 'provider refused the session',
+        path: '/api/tour/sessions',
+        code: 'unavailable',
+        status: 500,
+      })
     } finally {
+      error.mockRestore()
       vi.unstubAllGlobals()
     }
+  })
+
+  it("logs the provider's error record for a refused key, without the key", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                message: 'Your API key has been invalidated.',
+                type: 'invalid_request_error',
+                code: 'token_invalidated',
+                param: null,
+              },
+            }),
+            {
+              status: 401,
+              headers: { 'x-request-id': 'req_probe' },
+            },
+          ),
+      ),
+    )
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const cookie = (await loginCookie(PASSWORD, ORIGIN, Date.now())).split(
+        ';',
+      )[0]!
+      const response = await serveTour(
+        post(
+          '/api/tour/sessions',
+          { voice: 'marin', sdp: 'offer', scene: 'x' },
+          cookie,
+        ),
+        env(),
+      )
+      expect(response.status).toBe(503)
+      expect(await response.text()).not.toContain('token_invalidated')
+      expect(error.mock.calls[0]![0]).toMatchObject({
+        status: 401,
+        providerType: 'invalid_request_error',
+        providerCode: 'token_invalidated',
+        providerMessage: 'Your API key has been invalidated.',
+        requestId: 'req_probe',
+      })
+      expect(JSON.stringify(error.mock.calls)).not.toContain('key-canary')
+    } finally {
+      error.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('names a thrown fetch as the cause when the provider never answers', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Invalid header value')
+      }),
+    )
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const cookie = (await loginCookie(PASSWORD, ORIGIN, Date.now())).split(
+        ';',
+      )[0]!
+      const response = await serveTour(
+        post(
+          '/api/tour/sessions',
+          { voice: 'marin', sdp: 'offer', scene: 'x' },
+          cookie,
+        ),
+        env(),
+      )
+      expect(response.status).toBe(503)
+      expect(error.mock.calls[0]![0]).toMatchObject({
+        code: 'unavailable',
+        cause: 'TypeError: Invalid header value',
+      })
+    } finally {
+      error.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('runs each route inside a span that records the status', async () => {
+    const attributes: Record<string, unknown> = {}
+    const spans: string[] = []
+    const tracing = {
+      enterSpan: (name: string, callback: (span: unknown) => unknown) => {
+        spans.push(name)
+        return callback({
+          setAttribute: (key: string, value: unknown) => {
+            attributes[key] = value
+          },
+          setAttributes: (values: Record<string, unknown>) => {
+            Object.assign(attributes, values)
+          },
+        })
+      },
+    } as unknown as Tracing
+    const response = await serveTour(
+      new Request(`${ORIGIN}/api/tour/capabilities`, {
+        headers: { 'sec-fetch-site': 'same-origin' },
+      }),
+      env(),
+      tracing,
+    )
+    expect(response.status).toBe(200)
+    expect(spans).toEqual(['tour GET /api/tour/capabilities'])
+    expect(attributes).toEqual({
+      'http.request.method': 'GET',
+      'url.path': '/api/tour/capabilities',
+      'http.response.status_code': 200,
+    })
   })
 })

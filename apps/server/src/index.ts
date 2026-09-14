@@ -58,12 +58,12 @@ const IDENTITY = {
 } as const satisfies Omit<ServerHealth, 'revision' | 'colo'>
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const route = routeFor(new URL(request.url).pathname)
 
     switch (route.kind) {
       case 'tour':
-        return serveTour(request, env)
+        return serveTour(request, env, ctx.tracing)
       case 'health': {
         if (request.method !== 'GET' && request.method !== 'HEAD') {
           return api({ error: 'health is a GET' }, 405)

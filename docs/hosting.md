@@ -68,9 +68,22 @@ expiry, two hours out; a browser that vanishes ends its session within three
 seconds without the Worker's help, so there is nothing to time. These are
 configured bounds on an experiment, not a measured cost per tour.
 
-The Worker has no diagnostic mode and no conversation log, because it holds no
-conversation: it never sees a prompt, a response, a transcript fragment or a
-tool call. The message log lives where the messages do. `ir.guideTrace(true)`
+The Worker has no conversation log, because it holds no conversation: it never
+sees a prompt, a response, a transcript fragment or a tool call. What it does
+record is every answer that is not a plain success, and why. Workers Logs keeps
+a record per refused request naming the check that refused it, and one per
+provider failure carrying the provider's status, error type, error code,
+message and request id — the browser sees only the 503, so this record is the
+one place a revoked key or a spent project is readable. Workers Traces holds a
+span per route with the provider round trip as a child. Both are unsampled and
+persisted; `apps/server/wrangler.jsonc` says why. Read them in the dashboard
+under the Worker's Logs and Traces tabs, or live:
+
+```bash
+pnpm --filter @inertialref/server run tail
+```
+
+The message log lives where the messages do. `ir.guideTrace(true)`
 enables the browser's application-message log and `ir.guideTrace()` returns its
 last 200 entries; it carries no credentials, cookies, SDP or audio. The
 [conversation replay](../scripts/tour/README.md#the-conversation-replay) reads a
@@ -260,7 +273,11 @@ The asset routing is configured in `apps/server/wrangler.jsonc`:
     "run_worker_first": ["/api", "/api/*", "/ws", "/media/*"],
   },
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true,
+    "logs": { "invocation_logs": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 1 },
+  },
 }
 ```
 
@@ -997,7 +1014,7 @@ is why it won out over a deploy workflow in Actions.
 | Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.          |
 | Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                                        |
 | Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                    |
-| Observability   | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                                                                                                                                                                                                                                                       |
+| Observability   | Workers Logs and Workers Traces, unsampled and persisted. `apps/server/src/tour/log.ts` writes one object per record in the `scope` / `message` / fields shape `packages/shared` uses, with the level as the console method; the guide section above says what is recorded and how to read it.                                                                                                                       |
 
 ### Durable Objects require a different review environment
 

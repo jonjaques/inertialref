@@ -89,7 +89,40 @@
    */
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
 
-  "observability": { "enabled": true },
+  /*
+   * Everything the platform will record, unsampled. The guide is a few
+   * requests an hour from a handful of trusted alpha visitors, so the volume
+   * that makes sampling a question elsewhere does not exist here, and the
+   * request worth reading is always the one that failed. There is no level
+   * knob on this side: Workers Logs keeps every console record and takes
+   * its level from the console method, so the level is chosen in
+   * `src/tour/log.ts` at the call and filtered in the query builder.
+   *
+   *   logs    — every console record, plus one invocation log per request
+   *             with the method, path, status, colo, ray and version. A 503
+   *             from the guide is an `error` record beside it naming the
+   *             provider's status and error code.
+   *   traces  — a span per request, the `fetch` to the provider as a child
+   *             with its status, and the route's own span around both, so a
+   *             slow or refused session shows where the time and the
+   *             failure sat. `traces.enabled` turns tracing on regardless
+   *             of the compatibility date.
+   *   persist — both stay queryable in the dashboard; a destination would
+   *             forward them somewhere else, and there is nowhere else yet.
+   *
+   * Live: `pnpm --filter @inertialref/server run tail`.
+   */
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+    },
+    "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true },
+  },
 
   /*
    * Client source maps are files in `apps/game/dist` and ride with the asset

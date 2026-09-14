@@ -27,13 +27,69 @@ import { BACKEND_PROMPT, LIVE_PROMPT } from './prompts.ts'
 export const LIVE_MODEL = 'gpt-live-1'
 export const BACKEND_MODEL = 'gpt-6-astra'
 
+/**
+ * What the provider said, for the log and the trace. The browser never sees
+ * it: the route answers every provider failure with the same 503, and this is
+ * what makes that answer diagnosable from Workers Logs rather than from a
+ * probe run with the deployment's key. `providerCode` is OpenAI's own
+ * `error.code` — `token_invalidated` for a revoked key, `insufficient_quota`
+ * for a spent project — and `requestId` is the id to quote at their support.
+ */
+export interface GuideProviderDetail {
+  readonly status?: number
+  readonly providerType?: string
+  readonly providerCode?: string
+  readonly providerMessage?: string
+  readonly requestId?: string
+  readonly cause?: string
+}
+
 export class GuideProviderError extends Error {
   readonly code: 'unavailable' | 'invalid-output' | 'input-limit'
-  constructor(code: GuideProviderError['code']) {
+  readonly detail: GuideProviderDetail
+  constructor(
+    code: GuideProviderError['code'],
+    detail: GuideProviderDetail = {},
+  ) {
     super('The guide provider is unavailable.')
     this.name = 'GuideProviderError'
     this.code = code
+    this.detail = detail
   }
+}
+
+/** How much of a refusal body is read for its error record. */
+const REFUSAL_LIMIT = 4096
+
+/**
+ * The provider's refusal, reduced to its error record. The record is bounded
+ * and the body is never stored: a 401 for a revoked key is forty bytes of
+ * JSON, and a proxy's HTML error page is not worth the log line it would
+ * fill. The body is read whole rather than through the chunked reader above
+ * because the host is known and its error pages are kilobytes, not the
+ * megabytes the success path guards against.
+ */
+async function providerRefusal(
+  response: Response,
+): Promise<GuideProviderDetail> {
+  const detail: {
+    -readonly [K in keyof GuideProviderDetail]: GuideProviderDetail[K]
+  } = { status: response.status }
+  const requestId = response.headers.get('x-request-id')
+  if (requestId) detail.requestId = requestId.slice(0, 64)
+  try {
+    const text = (await response.text()).slice(0, REFUSAL_LIMIT)
+    const error = providerRecord(providerRecord(JSON.parse(text))?.error)
+    if (typeof error?.type === 'string')
+      detail.providerType = error.type.slice(0, 64)
+    if (typeof error?.code === 'string')
+      detail.providerCode = error.code.slice(0, 64)
+    if (typeof error?.message === 'string')
+      detail.providerMessage = error.message.slice(0, 256)
+  } catch {
+    /* Not JSON, or not readable: the status and request id are the record. */
+  }
+  return detail
 }
 
 export function providerRecord(value: unknown): Record<string, unknown> | null {
@@ -46,10 +102,8 @@ export async function readProviderJson(
   response: Response,
   limit = 128 * 1024,
 ): Promise<unknown> {
-  if (!response.ok) {
-    await response.body?.cancel()
-    throw new GuideProviderError('unavailable')
-  }
+  if (!response.ok)
+    throw new GuideProviderError('unavailable', await providerRefusal(response))
   const reader = response.body?.getReader()
   if (!reader) throw new GuideProviderError('invalid-output')
   const chunks: Uint8Array[] = []
@@ -165,8 +219,16 @@ export async function createLiveSession(options: {
         }),
       },
     )
-  } catch {
-    throw new GuideProviderError('unavailable')
+  } catch (error) {
+    // A thrown fetch is the network, the twelve-second timeout, or a header
+    // the runtime refuses — a secret pasted with a trailing newline arrives
+    // here as a TypeError, not as a provider status.
+    throw new GuideProviderError('unavailable', {
+      cause:
+        error instanceof Error
+          ? `${error.name}: ${error.message}`.slice(0, 256)
+          : String(error).slice(0, 256),
+    })
   }
   const value = providerRecord(await readProviderJson(response))
   const session = providerRecord(value?.session)
