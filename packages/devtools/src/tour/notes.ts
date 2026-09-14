@@ -92,7 +92,14 @@ export function astronomySource(note: AstronomyNote): TourSource {
   }
 }
 
-function enrichBrief(brief: SubjectBrief): SubjectBrief {
+/**
+ * A record with its curated notes added as cited facts.
+ *
+ * Only an observed body gets a note, and only by name: a projected world that
+ * happens to be called Titan has no Huygens landing, and the guide describing
+ * one there would be the exact fabrication the record exists to prevent.
+ */
+export function withNotes(brief: SubjectBrief): SubjectBrief {
   if (brief.provenance !== 'observed') return brief
   const notes = ASTRONOMY_NOTES.filter(
     (note) => note.object === brief.name && note.freshness === 'timeless',
@@ -126,11 +133,11 @@ function enrichBrief(brief: SubjectBrief): SubjectBrief {
 
 /** Projected records never inherit measured-world mission history by name. */
 export function withAstronomyNotes(context: TourContext): TourContext {
-  const briefs = context.briefs.map(enrichBrief)
+  const briefs = context.briefs.map(withNotes)
   return {
     ...context,
     briefs,
-    brief: context.brief === null ? null : enrichBrief(context.brief),
+    brief: context.brief === null ? null : withNotes(context.brief),
     candidates: context.candidates.map((candidate) => ({
       ...candidate,
       factIds:

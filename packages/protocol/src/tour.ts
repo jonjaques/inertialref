@@ -5,22 +5,31 @@ import {
   decodeEnum,
   decodeNumber,
   decodeObject,
-  decodeOptional,
   decodeString,
   type Decoder,
   type Decoded,
   type Shape,
 } from './codec.ts'
 
-export const TOUR_PROTOCOL_VERSION = 2
+/*
+ * The guide's record of the scene: what the browser knows about the bodies in
+ * view and can hand the backend model on request.
+ *
+ * Nothing here crosses a wire between the browser and the Worker. The Worker
+ * creates the voice session and never sees the scene; the browser executes
+ * every tool itself and answers the model with these records serialized as
+ * tool output. The decoders remain because a record that reaches a model is a
+ * record that must be bounded, and because a fuzz test is the cheapest proof
+ * that a hash-derived subject id, a fact, and a source all stay inside their
+ * limits.
+ */
+
+export const TOUR_PROTOCOL_VERSION = 3
 export const TOUR_LIMITS = {
   messageBytes: 65_536,
   candidates: 16,
   facts: 12,
-  stops: 8,
   requestCharacters: 4_000,
-  durationSeconds: 600,
-  operations: 6,
 } as const
 
 export interface TourManifest {
@@ -89,29 +98,6 @@ export interface TourContext {
 }
 export type TourCameraMotion =
   'hold' | 'orbit' | 'push-in' | 'pull-back' | 'reveal'
-export interface TourStop {
-  readonly id: string
-  readonly subjectId: string
-  readonly framingId: string | null
-  readonly siteId: string | null
-  readonly objective: string
-  readonly factIds: readonly string[]
-  readonly minimumViewSeconds: number
-  /** Quiet looking time after the host confirms narration has ended. */
-  readonly lookSeconds?: number
-  readonly narration?: string
-  readonly motion?: TourCameraMotion
-  readonly sources?: readonly TourSource[]
-}
-export interface TourPlan {
-  readonly id: string
-  readonly goal: string
-  readonly durationSeconds: number
-  readonly stops: readonly TourStop[]
-  readonly automatic?: boolean
-  readonly rationale?: string
-}
-export type TourCommand = 'start' | 'pause' | 'resume' | 'next' | 'back' | 'end'
 export interface TourWorldQuery {
   readonly kinds: readonly (
     | 'rocky'
@@ -134,125 +120,6 @@ export interface TourWorldQuery {
   readonly moons: number | null
   readonly minRadius: number | null
   readonly maxRadius: number | null
-}
-export type TourAction =
-  | { readonly tool: 'resolve_subject'; readonly query: string }
-  | {
-      readonly tool: 'find_worlds'
-      readonly query: TourWorldQuery
-      readonly radiusLightYears: number
-      readonly limit: number
-    }
-  | { readonly tool: 'show_subject'; readonly subjectId: string }
-  | {
-      readonly tool: 'compose_view'
-      readonly subjectId: string
-      readonly framingId: string
-    }
-  | {
-      readonly tool: 'stand_at_site'
-      readonly subjectId: string
-      readonly siteId: string
-    }
-  | { readonly tool: 'read_subject'; readonly subjectId: string }
-  | {
-      readonly tool: 'set_picture_time'
-      readonly mode: 'hold' | 'live' | 'pause' | 'resume' | 'set' | 'rate'
-      readonly value: number | null
-    }
-export interface ToolRequest {
-  readonly sessionId: string
-  readonly requestRevision: number
-  readonly operationId: string
-  readonly expectedViewRevision: number
-  readonly expiresAt: number
-  readonly action: TourAction
-}
-export interface ToolReceipt {
-  readonly operationId: string
-  readonly requestRevision: number
-  readonly status: 'accepted' | 'arrived' | 'rejected' | 'canceled'
-  readonly viewRevision: number
-  readonly pictureTime: number
-  readonly subjectId: string | null
-  readonly reason: string | null
-}
-export interface NarrationBrief {
-  readonly id: string
-  readonly requestRevision: number
-  readonly stopId: string | null
-  readonly viewRevision: number
-  readonly subjectId: string | null
-  readonly text: string
-  readonly factIds: readonly string[]
-  readonly sourceIds: readonly string[]
-  readonly sources: readonly TourSource[]
-  readonly origin?: 'records' | 'authored' | 'model'
-  readonly playback?: 'controlled' | 'live'
-}
-export type TourClientMessage =
-  | { readonly type: 'context'; readonly context: TourContext }
-  | {
-      readonly type: 'ask'
-      readonly text: string
-      readonly requestRevision: number
-      readonly viewRevision: number
-    }
-  | {
-      readonly type: 'command'
-      readonly command: TourCommand
-      readonly requestRevision: number
-      readonly viewRevision: number
-    }
-  | { readonly type: 'receipt'; readonly receipt: ToolReceipt }
-  | {
-      readonly type: 'live-startup'
-      readonly events: readonly TourTranscript[]
-    }
-  | {
-      readonly type: 'narration-ready' | 'narration-ended'
-      readonly stopId: string
-      readonly requestRevision: number
-      readonly viewRevision: number
-    }
-export type TourServerMessage =
-  | {
-      readonly type: 'control'
-      readonly command: TourCommand
-      readonly requestRevision: number
-    }
-  | {
-      readonly type: 'ready'
-      readonly sessionId: string
-      readonly requestRevision: number
-    }
-  | {
-      readonly type: 'status'
-      readonly state: string
-      readonly message: string
-    }
-  | {
-      readonly type: 'plan'
-      readonly plan: TourPlan
-      readonly requestRevision: number
-    }
-  | { readonly type: 'tool'; readonly request: ToolRequest }
-  | { readonly type: 'narration'; readonly brief: NarrationBrief }
-  | {
-      readonly type: 'error'
-      readonly code: string
-      readonly message: string
-      readonly retryable: boolean
-    }
-  | { readonly type: 'closed'; readonly reason: string }
-  | ({ readonly type: 'transcript' } & TourTranscript)
-
-export interface TourTranscript {
-  readonly eventId: string
-  readonly text: string
-  readonly speaker: 'visitor' | 'guide'
-  readonly startMs: number
-  readonly endMs: number
 }
 
 function strict<S extends Shape>(shape: S): Decoder<Decoded<S>> {
@@ -302,23 +169,6 @@ function list<T>(
       ? decodeArray(inner)(value, path)
       : err(`${path}: array outside bounds`)
 }
-function union<T>(
-  variants: Readonly<Record<string, Decoder<T>>>,
-  key = 'type',
-): Decoder<T> {
-  return (value, path) => {
-    if (value === null || typeof value !== 'object' || Array.isArray(value))
-      return err(`${path}: expected object`)
-    const tag = (value as Record<string, unknown>)[key]
-    const decoder =
-      typeof tag === 'string' && Object.hasOwn(variants, tag)
-        ? variants[tag]
-        : undefined
-    return decoder === undefined
-      ? err(`${path}.${key}: unknown variant`)
-      : decoder(value, path)
-  }
-}
 const id = text(160)
 const revision = boundedNumber(0, Number.MAX_SAFE_INTEGER, true)
 const instant = boundedNumber(-3.15576e12, 3.15576e12)
@@ -358,7 +208,7 @@ const factShape = strict({
   label: text(160),
   quantity: nullable(decodeNumber),
   unit: nullable(text(64)),
-  display: nullable(text(512)),
+  display: nullable(text(768)),
   speech: nullable(text(768)),
   reason: nullable(text(768)),
   provenance: decodeEnum('observed', 'projected', 'derived', 'unknown'),
@@ -429,250 +279,6 @@ export const decodeTourContext: Decoder<TourContext> = strict({
   brief: nullable(decodeSubjectBrief),
   briefs: list(decodeSubjectBrief, TOUR_LIMITS.candidates),
 })
-export const decodeTourStop: Decoder<TourStop> = strict({
-  id,
-  subjectId: id,
-  framingId: nullable(id),
-  siteId: nullable(id),
-  objective: text(512),
-  factIds: list(id, TOUR_LIMITS.facts),
-  minimumViewSeconds: boundedNumber(2, 120),
-  lookSeconds: decodeOptional<number | undefined>(
-    boundedNumber(0, 30),
-    undefined,
-  ),
-  narration: decodeOptional<string | undefined>(text(2000, 0), undefined),
-  motion: decodeOptional<TourCameraMotion | undefined>(
-    decodeEnum('hold', 'orbit', 'push-in', 'pull-back', 'reveal'),
-    undefined,
-  ),
-  sources: decodeOptional<readonly TourSource[] | undefined>(
-    list(source, 8),
-    undefined,
-  ),
-})
-export const decodeTourPlan: Decoder<TourPlan> = strict({
-  id,
-  goal: text(1024),
-  durationSeconds: boundedNumber(2, TOUR_LIMITS.durationSeconds),
-  stops: list(decodeTourStop, TOUR_LIMITS.stops, 1),
-  automatic: decodeOptional<boolean | undefined>(decodeBoolean, undefined),
-  rationale: decodeOptional<string | undefined>(text(512, 0), undefined),
-})
-const pictureTime = strict({
-  tool: decodeEnum('set_picture_time'),
-  mode: decodeEnum('hold', 'live', 'pause', 'resume', 'set', 'rate'),
-  value: nullable(instant),
-})
-const queryShape = strict({
-  kinds: list(
-    decodeEnum(
-      'rocky',
-      'ice',
-      'gas-giant',
-      'ice-giant',
-      'moon',
-      'dwarf',
-      'asteroid',
-      'comet',
-    ),
-    8,
-  ),
-  starClasses: list(
-    decodeEnum('O', 'B', 'A', 'F', 'G', 'K', 'M', 'L', 'T', 'Y', 'D'),
-    11,
-  ),
-  atmosphere: nullable(decodeBoolean),
-  sea: nullable(decodeBoolean),
-  rings: nullable(decodeBoolean),
-  habitable: nullable(decodeBoolean),
-  landable: nullable(decodeBoolean),
-  moons: nullable(boundedNumber(0, 100, true)),
-  minRadius: nullable(boundedNumber(0, 100)),
-  maxRadius: nullable(boundedNumber(0, 100)),
-})
-export const decodeTourWorldQuery: Decoder<TourWorldQuery> = (value, path) => {
-  const result = queryShape(value, path)
-  if (!result.ok) return result
-  const query = result.value
-  if (
-    query.kinds.length === 0 &&
-    query.starClasses.length === 0 &&
-    Object.values(query).every((item) => item === null || Array.isArray(item))
-  )
-    return err(`${path}: choose a bounded search predicate`)
-  if (
-    query.minRadius !== null &&
-    query.maxRadius !== null &&
-    query.minRadius > query.maxRadius
-  )
-    return err(`${path}: radius range is reversed`)
-  return result
-}
-export const decodeTourAction: Decoder<TourAction> = union<TourAction>(
-  {
-    resolve_subject: strict({
-      tool: decodeEnum('resolve_subject'),
-      query: text(160),
-    }),
-    find_worlds: strict({
-      tool: decodeEnum('find_worlds'),
-      query: decodeTourWorldQuery,
-      radiusLightYears: boundedNumber(0.01, 8),
-      limit: boundedNumber(1, TOUR_LIMITS.candidates, true),
-    }),
-    show_subject: strict({ tool: decodeEnum('show_subject'), subjectId: id }),
-    read_subject: strict({ tool: decodeEnum('read_subject'), subjectId: id }),
-    compose_view: strict({
-      tool: decodeEnum('compose_view'),
-      subjectId: id,
-      framingId: id,
-    }),
-    stand_at_site: strict({
-      tool: decodeEnum('stand_at_site'),
-      subjectId: id,
-      siteId: id,
-    }),
-    set_picture_time: (value, path) => {
-      const result = pictureTime(value, path)
-      if (!result.ok) return result
-      const action = result.value
-      if (
-        (action.mode === 'set' || action.mode === 'rate') !==
-        (action.value !== null)
-      )
-        return err(`${path}: time mode/value mismatch`)
-      if (
-        action.mode === 'rate' &&
-        (action.value === null || action.value <= 0 || action.value > 100000)
-      )
-        return err(`${path}: invalid picture rate`)
-      return result
-    },
-  },
-  'tool',
-)
-export const decodeToolRequest: Decoder<ToolRequest> = strict({
-  sessionId: id,
-  requestRevision: revision,
-  operationId: id,
-  expectedViewRevision: revision,
-  expiresAt: boundedNumber(0, Number.MAX_SAFE_INTEGER),
-  action: decodeTourAction,
-})
-export const decodeToolReceipt: Decoder<ToolReceipt> = strict({
-  operationId: id,
-  requestRevision: revision,
-  status: decodeEnum('accepted', 'arrived', 'rejected', 'canceled'),
-  viewRevision: revision,
-  pictureTime: instant,
-  subjectId: nullable(id),
-  reason: nullable(text(512)),
-})
-export const decodeNarrationBrief: Decoder<NarrationBrief> = strict({
-  id,
-  requestRevision: revision,
-  stopId: nullable(id),
-  viewRevision: revision,
-  subjectId: nullable(id),
-  text: text(8000),
-  factIds: list(id, TOUR_LIMITS.facts),
-  sourceIds: list(id, 16),
-  sources: list(source, 16),
-  origin: decodeOptional<'records' | 'authored' | 'model' | undefined>(
-    decodeEnum('records', 'authored', 'model'),
-    undefined,
-  ),
-  playback: decodeOptional<'controlled' | 'live' | undefined>(
-    decodeEnum('controlled', 'live'),
-    undefined,
-  ),
-})
-const transcriptFields = {
-  eventId: id,
-  text: text(8000, 0),
-  speaker: decodeEnum('visitor', 'guide'),
-  startMs: boundedNumber(0, 1e12),
-  endMs: boundedNumber(0, 1e12),
-}
-export const decodeTourTranscript: Decoder<TourTranscript> =
-  strict(transcriptFields)
-
-export const decodeTourClientMessage: Decoder<TourClientMessage> =
-  union<TourClientMessage>({
-    'live-startup': strict({
-      type: decodeEnum('live-startup'),
-      events: list(decodeTourTranscript, 64),
-    }),
-    context: strict({
-      type: decodeEnum('context'),
-      context: decodeTourContext,
-    }),
-    ask: strict({
-      type: decodeEnum('ask'),
-      text: text(TOUR_LIMITS.requestCharacters),
-      requestRevision: revision,
-      viewRevision: revision,
-    }),
-    command: strict({
-      type: decodeEnum('command'),
-      command: decodeEnum('start', 'pause', 'resume', 'next', 'back', 'end'),
-      requestRevision: revision,
-      viewRevision: revision,
-    }),
-    receipt: strict({
-      type: decodeEnum('receipt'),
-      receipt: decodeToolReceipt,
-    }),
-    'narration-ready': strict({
-      type: decodeEnum('narration-ready'),
-      stopId: id,
-      requestRevision: revision,
-      viewRevision: revision,
-    }),
-    'narration-ended': strict({
-      type: decodeEnum('narration-ended'),
-      stopId: id,
-      requestRevision: revision,
-      viewRevision: revision,
-    }),
-  })
-export const decodeTourServerMessage: Decoder<TourServerMessage> =
-  union<TourServerMessage>({
-    control: strict({
-      type: decodeEnum('control'),
-      command: decodeEnum('start', 'pause', 'resume', 'next', 'back', 'end'),
-      requestRevision: revision,
-    }),
-    ready: strict({
-      type: decodeEnum('ready'),
-      sessionId: id,
-      requestRevision: revision,
-    }),
-    status: strict({
-      type: decodeEnum('status'),
-      state: text(80),
-      message: text(1024, 0),
-    }),
-    plan: strict({
-      type: decodeEnum('plan'),
-      plan: decodeTourPlan,
-      requestRevision: revision,
-    }),
-    tool: strict({ type: decodeEnum('tool'), request: decodeToolRequest }),
-    narration: strict({
-      type: decodeEnum('narration'),
-      brief: decodeNarrationBrief,
-    }),
-    error: strict({
-      type: decodeEnum('error'),
-      code: text(80),
-      message: text(1024),
-      retryable: decodeBoolean,
-    }),
-    closed: strict({ type: decodeEnum('closed'), reason: text(512) }),
-    transcript: strict({ type: decodeEnum('transcript'), ...transcriptFields }),
-  })
 
 /** Count UTF-8 without requiring a host TextEncoder in a portable package. */
 export function tourMessageBytes(text: string): number {
@@ -683,62 +289,12 @@ export function tourMessageBytes(text: string): number {
   }
   return size
 }
-export function decodeTourMessage<T>(
-  decoder: Decoder<T>,
-  text: string,
-): Result<T, string> {
-  if (
-    text.length > TOUR_LIMITS.messageBytes ||
-    tourMessageBytes(text) > TOUR_LIMITS.messageBytes
-  )
-    return err('Tour message exceeds 64 KiB.')
-  try {
-    return decoder(JSON.parse(text), '')
-  } catch {
-    return err('Invalid tour JSON.')
-  }
-}
 
-export function validateTourPlan(
-  plan: TourPlan,
-  context: TourContext,
-): Result<TourPlan, string> {
-  const shape = decodeTourPlan(plan, 'plan')
-  if (!shape.ok) return shape
-  const ids = new Set<string>()
-  let duration = 0
-  for (const stop of plan.stops) {
-    if (ids.has(stop.id)) return err('A stop ID is repeated.')
-    ids.add(stop.id)
-    const candidate = context.candidates.find(
-      (item) => item.id === stop.subjectId,
-    )
-    const brief = context.briefs.find(
-      (item) => item.subjectId === stop.subjectId,
-    )
-    if (candidate === undefined || brief === undefined)
-      return err('A stop names an unavailable subject.')
-    if (stop.framingId !== null && !candidate.framings.includes(stop.framingId))
-      return err('A stop names an unavailable framing.')
-    if (
-      stop.siteId !== null &&
-      !candidate.sites.some((site) => site.id === stop.siteId)
-    )
-      return err('A stop names an unavailable site.')
-    if (stop.framingId !== null && stop.siteId !== null)
-      return err('A stop chooses both a framing and a site.')
-    if (
-      new Set(stop.factIds).size !== stop.factIds.length ||
-      stop.factIds.some(
-        (id) =>
-          !candidate.factIds.includes(id) ||
-          !brief.facts.some((fact) => fact.id === id),
-      )
-    )
-      return err('A stop names an unsupported fact.')
-    duration += stop.minimumViewSeconds
-  }
-  return duration > plan.durationSeconds
-    ? err('The stops exceed the tour duration.')
-    : ok(plan)
+/** Whether a record fits the bound every serialized record is held to. */
+export function withinTourBytes(value: unknown): Result<true, string> {
+  const text = JSON.stringify(value)
+  return text.length > TOUR_LIMITS.messageBytes ||
+    tourMessageBytes(text) > TOUR_LIMITS.messageBytes
+    ? err('Tour record exceeds 64 KiB.')
+    : ok(true)
 }

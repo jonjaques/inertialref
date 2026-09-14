@@ -1,322 +1,283 @@
 import { describe, expect, it } from 'vitest'
-import fc from 'fast-check'
-import { openSession, subjectBrief } from '@inertialref/devtools'
-import type {
-  ToolReceipt,
-  ToolRequest,
-  TourWorldQuery,
-} from '@inertialref/protocol'
-import { TourExecutor } from './executor.ts'
+import { openSession } from '@inertialref/devtools'
+import type { GuideCall, TourCameraMotion } from '@inertialref/protocol'
+import { GuideExecutor, type GuideArrival } from './executor.ts'
 
-function setup(ready?: () => boolean) {
+function rig(ready?: () => boolean) {
   const session = openSession()
   session.harness.look('s:SOL/b:2', { ease: false })
-  let now = 1000
-  const receipts: ToolReceipt[] = []
+  const arrivals: GuideArrival[] = []
   let takeovers = 0
-  const executor = new TourExecutor(session.harness, {
-    sessionId: 'session',
+  let now = 1000
+  const executor = new GuideExecutor(session.harness, {
     now: () => now,
-    onReceipt: (receipt) => receipts.push(receipt),
+    onArrival: (arrival) => arrivals.push(arrival),
     onTakeover: () => {
       takeovers += 1
     },
     ready,
   })
-  const context = executor.context('Saturn')
-  const saturn = context.candidates.find(
-    (candidate) => candidate.name === 'Saturn',
-  )!
-  const request: ToolRequest = {
-    sessionId: 'session',
-    requestRevision: 0,
-    operationId: 'one',
-    expectedViewRevision: executor.viewRevision,
-    expiresAt: 5000,
-    action: { tool: 'show_subject', subjectId: saturn.id },
+  const settle = () => {
+    for (let frame = 0; frame < 600; frame += 1)
+      session.harness.observatory.sample(1 / 60)
+    executor.poll()
   }
   return {
     session,
+    eye: session.harness.observatory,
     executor,
-    receipts,
-    request,
-    saturn,
-    time: (value: number) => {
-      now = value
-    },
+    arrivals,
     takeovers: () => takeovers,
+    settle,
+    advance: (ms: number) => {
+      now += ms
+    },
+    dispose: () => {
+      executor.dispose()
+      session.dispose()
+    },
   }
 }
 
-describe('the guide local executor', () => {
-  it('starts queued motion only on ready arrival and publishes its new revision', () => {
+const goTo = (
+  subject: string,
+  framing: string | null = null,
+  motion: TourCameraMotion | null = null,
+): GuideCall => ({ name: 'go_to', subject, framing, motion })
+
+describe('the guide executor moves without blocking', () => {
+  it('returns moving at once and publishes one arrival when the view is drawn', async () => {
     let ready = false
-    const { session, executor, request, receipts, takeovers } = setup(
-      () => ready,
-    )
-    executor.queueMotion('orbit', 20)
-    expect(executor.execute(request).status).toBe('accepted')
-    const eye = session.harness.observatory
-    for (let frame = 0; frame < 1000; frame++) eye.sample(1 / 60)
-    executor.poll()
-    expect(eye.status().motion).toBeNull()
-    expect(receipts.at(-1)?.status).toBe('accepted')
+    const f = rig(() => ready)
+    const hash = f.session.world.stateHash()
+    const output = await f.executor.execute(goTo('Saturn', 'portrait', 'orbit'))
+    expect(output).toMatchObject({
+      status: 'moving',
+      subject: 'Saturn',
+      framing: 'portrait',
+    })
+    expect(f.executor.pending).toBe('go_to')
+    f.settle()
+    expect(f.arrivals).toHaveLength(0)
     ready = true
-    executor.poll()
-    expect(receipts.at(-1)).toMatchObject({
-      status: 'arrived',
-      viewRevision: eye.mutationRevision,
+    f.executor.poll()
+    expect(f.arrivals).toEqual([
+      {
+        tool: 'go_to',
+        subject: 'Saturn',
+        framing: 'portrait',
+        viewRevision: f.eye.mutationRevision,
+      },
+    ])
+    expect(f.eye.status().motion?.durationSeconds).toBe(30)
+    f.executor.poll()
+    expect(f.arrivals).toHaveLength(1)
+    expect(f.takeovers()).toBe(0)
+    expect(f.session.world.stateHash()).toBe(hash)
+    f.dispose()
+  })
+
+  it('lets a second move replace the first and never publishes the stale arrival', async () => {
+    const f = rig()
+    await f.executor.execute(goTo('Titan'))
+    expect(f.executor.pendingSubject).toBe('Titan')
+    await f.executor.execute(goTo('Enceladus'))
+    expect(f.executor.pendingSubject).toBe('Enceladus')
+    f.settle()
+    expect(f.arrivals.map((arrival) => arrival.subject)).toEqual(['Enceladus'])
+    f.dispose()
+  })
+
+  it('treats the visitor moving the camera as a takeover that cancels the pending move', async () => {
+    const f = rig()
+    await f.executor.execute(goTo('Titan'))
+    f.eye.zoom(2)
+    f.executor.poll()
+    expect(f.takeovers()).toBe(1)
+    expect(f.executor.pending).toBeNull()
+    f.settle()
+    expect(f.arrivals).toHaveLength(0)
+    f.dispose()
+  })
+
+  it('answers an unknown name with the nearest candidates rather than a guess', async () => {
+    const f = rig()
+    const output = await f.executor.execute(goTo('Saturnalia'))
+    expect(output.status).toBe('unknown')
+    expect(Array.isArray(output.candidates)).toBe(true)
+    expect(f.executor.pending).toBeNull()
+    const framing = await f.executor.execute(goTo('Saturn', 'from-the-rings'))
+    expect(framing.status).toBe('rejected')
+    expect(framing.framings).toContain('portrait')
+    f.dispose()
+  })
+})
+
+describe('every guide tool runs through the harness without touching the world', () => {
+  it('executes the whole inventory headlessly with the canonical hash unchanged', async () => {
+    const f = rig()
+    const hash = f.session.world.stateHash()
+    const run = (call: GuideCall) => f.executor.execute(call)
+
+    expect(
+      await run({ name: 'resolve_name', query: 'the moon' }),
+    ).toMatchObject({
+      status: 'ok',
+      candidates: [{ name: 'Luna' }],
     })
-    expect(eye.status().motion?.durationSeconds).toBe(20)
-    eye.sample(5)
-    executor.poll()
-    expect(takeovers()).toBe(0)
-    executor.cancel()
-    const held = eye.status().state
-    expect(eye.status().motion).toBeNull()
-    eye.sample(50)
-    expect(eye.status().state).toEqual(held)
-    executor.dispose()
-    session.dispose()
-  })
+    await run(goTo('Saturn', 'portrait'))
+    f.settle()
+    const view = await run({ name: 'describe_view' })
+    expect(view.status).toBe('ok')
+    expect(view.subject).toBe('Saturn')
+    expect(view.framing).toBe('portrait')
+    expect(
+      (view.on_screen as { name: string; place: string }[]).find(
+        (item) => item.name === 'Saturn',
+      )?.place,
+    ).toBe('center')
 
-  it('starts and stops a ready-view gesture without canceling a visitor replacement', () => {
-    const { session, executor, takeovers } = setup()
-    const eye = session.harness.observatory
-    const revision = executor.startMotion('push-in', 20)
-    expect(revision).toBe(eye.mutationRevision)
-    eye.sample(4)
-    executor.poll()
-    expect(takeovers()).toBe(0)
-    executor.stopMotion()
-    expect(executor.viewRevision).toBe(revision)
-    const held = eye.status().state
-    eye.sample(20)
-    expect(eye.status().state).toEqual(held)
-    executor.startMotion('reveal', 20)
-    eye.sample(2)
-    eye.startMotion({
-      durationSeconds: 12,
-      azimuthDelta: -0.2,
-      elevationDelta: 0,
-      distanceFactor: 1.1,
+    const record = await run({
+      name: 'read_subject',
+      subject: 'Saturn',
+      fields: null,
     })
-    const visitor = eye.status().state
-    executor.poll()
-    executor.stopMotion()
-    executor.cancel()
-    expect(takeovers()).toBe(1)
-    expect(eye.status().motion?.durationSeconds).toBe(12)
-    eye.sample(6)
-    expect(eye.status().state).not.toEqual(visitor)
-    executor.dispose()
-    expect(eye.status().motion?.durationSeconds).toBe(12)
-    session.dispose()
-  })
+    expect(record.status).toBe('ok')
+    const facts = record.facts as { label: string; speech: string | null }[]
+    expect(facts.some((fact) => fact.label === 'Equatorial radius')).toBe(true)
+    expect(facts.some((fact) => fact.label === 'Saturn rings')).toBe(true)
+    const radius = await run({
+      name: 'read_subject',
+      subject: 'Saturn',
+      fields: ['radius'],
+    })
+    expect((radius.facts as unknown[]).length).toBe(1)
 
-  it('discards queued motion when the request is superseded', () => {
-    const { session, executor, request } = setup()
-    executor.queueMotion('orbit', 20)
-    executor.execute(request)
-    executor.supersede(1)
-    for (let frame = 0; frame < 1000; frame++)
-      session.harness.observatory.sample(1 / 60)
-    executor.poll()
-    expect(session.harness.observatory.status().motion).toBeNull()
-    executor.dispose()
-    session.dispose()
-  })
+    const system = await run({
+      name: 'list_subjects',
+      scope: 'system',
+      of: null,
+      limit: null,
+    })
+    expect(
+      (system.bodies as { name: string }[]).map((body) => body.name),
+    ).toContain('Saturn')
+    const moons = await run({
+      name: 'list_subjects',
+      scope: 'moons',
+      of: 'Saturn',
+      limit: null,
+    })
+    expect(
+      (moons.moons as { name: string }[]).map((moon) => moon.name),
+    ).toContain('Titan')
+    const few = await run({
+      name: 'list_subjects',
+      scope: 'moons',
+      of: 'Saturn',
+      limit: 4,
+    })
+    expect((few.moons as unknown[]).length).toBe(4)
+    const stars = await run({
+      name: 'list_subjects',
+      scope: 'nearby_stars',
+      of: null,
+      limit: 3,
+    })
+    expect(stars.status).toBe('ok')
 
-  const query: TourWorldQuery = {
-    kinds: ['gas-giant'],
-    starClasses: [],
-    atmosphere: null,
-    sea: null,
-    rings: null,
-    habitable: null,
-    landable: null,
-    moons: null,
-    minRadius: null,
-    maxRadius: null,
-  }
-  it('reads a compact inventory record fully without changing the camera', () => {
-    const { session, executor, request } = setup()
-    const before = executor.context()
-    const candidate = before.candidates.find((item) => item.name === 'Neptune')!
-    const full = subjectBrief(session.harness, candidate.address)!
+    const adjusted = await run({
+      name: 'adjust_view',
+      azimuth_deg: 45,
+      elevation_deg: 20,
+      distance_radii: 6,
+      zoom_factor: null,
+    })
+    expect(adjusted).toMatchObject({
+      status: 'ok',
+      azimuth_deg: 45,
+      elevation_deg: 20,
+      distance_radii: 6,
+    })
+    expect(f.takeovers()).toBe(0)
+
+    expect(await run({ name: 'hold_view' })).toMatchObject({
+      status: 'held',
+      subject: 'Saturn',
+    })
+
+    const pair = await run({
+      name: 'frame_pair',
+      subject: 'Saturn',
+      companion: 'Titan',
+    })
+    expect(pair.status).toBe('moving')
+    f.settle()
+    expect(f.arrivals.at(-1)?.tool).toBe('frame_pair')
+
     expect(
-      before.briefs.find((brief) => brief.subjectId === candidate.id)!.facts
-        .length,
-    ).toBeLessThan(full.facts.length)
-    const pose = session.harness.observatory.pose()
-    const revision = executor.viewRevision
+      await run({ name: 'stand_at', subject: 'Saturn', site: 'summit' }),
+    ).toMatchObject({ status: 'rejected' })
+    const stood = await run({
+      name: 'stand_at',
+      subject: 'Mars',
+      site: 'summit',
+    })
+    expect(stood.status).toBe('moving')
+    f.settle()
+    expect(f.arrivals.at(-1)?.tool).toBe('stand_at')
     expect(
-      executor.execute({
-        ...request,
-        action: { tool: 'read_subject', subjectId: candidate.id },
-      }).status,
-    ).toBe('arrived')
-    const after = executor.context()
+      await run({ name: 'look_around', heading_deg: 90, pitch_deg: 10 }),
+    ).toMatchObject({ status: 'ok', heading_deg: 90, pitch_deg: 10 })
+    expect(await run({ name: 'leave_surface' })).toMatchObject({
+      status: 'moving',
+    })
+    f.settle()
+    expect(f.arrivals.at(-1)?.tool).toBe('leave_surface')
+
+    const held = await run({
+      name: 'set_time',
+      mode: 'set',
+      instant: '2026-09-13T21:04:10Z',
+      rate: null,
+    })
+    expect(held).toMatchObject({
+      status: 'ok',
+      mode: 'hold',
+      picture_time: '2026-09-13T21:04:10Z',
+    })
     expect(
-      after.briefs.find((brief) => brief.subjectId === candidate.id)?.facts,
-    ).toEqual(full.facts)
+      await run({ name: 'set_time', mode: 'rate', instant: null, rate: 100 }),
+    ).toMatchObject({ status: 'ok', mode: 'rate', rate: 100 })
+    expect(f.eye.heldTime).not.toBeNull()
+
     expect(
-      after.candidates.find((item) => item.id === candidate.id)?.factIds,
-    ).toEqual(full.facts.map((fact) => fact.id))
-    expect(executor.viewRevision).toBe(revision)
-    expect(session.harness.observatory.pose()).toEqual(pose)
-    executor.dispose()
-    session.dispose()
-  })
-  it('resolves a body name locally without changing the view', () => {
-    const { session, executor, request } = setup()
-    const before = session.harness.observatory.pose()
-    expect(
-      executor.execute({
-        ...request,
-        action: { tool: 'resolve_subject', query: 'Titan' },
-      }).status,
-    ).toBe('arrived')
-    expect(
-      executor
-        .context()
-        .candidates.some((candidate) => candidate.name === 'Titan'),
-    ).toBe(true)
-    expect(session.harness.observatory.pose()).toEqual(before)
-    executor.dispose()
-    session.dispose()
-  })
-  it('publishes capped search results and discards canceled completion', async () => {
-    const { session, executor, request } = setup()
-    const searchRequest: ToolRequest = {
-      ...request,
-      action: { tool: 'find_worlds', query, radiusLightYears: 0.01, limit: 1 },
-    }
-    expect(executor.execute(searchRequest).status).toBe('accepted')
-    await executor.searchDone
-    expect(executor.searchStatus.running).toBe(false)
-    expect(executor.searchStatus.total).toBeGreaterThanOrEqual(2)
-    expect(executor.execute(searchRequest).status).toBe('arrived')
-    executor.supersede(1)
-    const next = {
-      ...searchRequest,
-      operationId: 'two',
-      requestRevision: 1,
-      expectedViewRevision: executor.viewRevision,
-    }
-    executor.execute(next)
-    executor.cancel()
-    await executor.searchDone
-    expect(executor.execute(next).status).toBe('canceled')
-    executor.dispose()
-    session.dispose()
-  })
-  it('executes once and replays the eventual arrival receipt', () => {
-    const { session, executor, request } = setup()
-    const accepted = executor.execute(request)
-    expect(accepted.status).toBe('accepted')
-    const revision = executor.viewRevision
-    expect(executor.execute(request)).toEqual(accepted)
-    expect(executor.viewRevision).toBe(revision)
-    for (let i = 0; i < 1000; i += 1) session.harness.observatory.sample(1 / 60)
-    executor.poll()
-    expect(executor.execute(request).status).toBe('arrived')
-    executor.dispose()
-    session.dispose()
-  })
-  it('rejects superseded requests even when aborting failed', () => {
-    const { session, executor, request } = setup()
-    executor.supersede(1)
-    const before = session.harness.observatory.pose()
-    expect(executor.execute(request).status).toBe('rejected')
-    expect(session.harness.observatory.pose()).toEqual(before)
-    executor.dispose()
-    session.dispose()
-  })
-  it('cancel revokes unseen operations from the same request', () => {
-    const { session, executor, request } = setup()
-    executor.cancel()
-    expect(executor.execute(request).status).toBe('rejected')
-    executor.supersede(1)
-    expect(
-      executor.execute({ ...request, operationId: 'fresh', requestRevision: 1 })
-        .status,
-    ).toBe('accepted')
-    executor.dispose()
-    session.dispose()
-  })
-  it('manual input cancels travel without applying a later receipt', () => {
-    const { session, executor, request, receipts, takeovers } = setup()
-    executor.execute(request)
-    session.harness.observatory.drag(10, 0)
-    executor.poll()
-    expect(receipts.at(-1)?.status).toBe('canceled')
-    expect(takeovers()).toBe(1)
-    expect(executor.execute(request).status).toBe('canceled')
-    executor.dispose()
-    session.dispose()
-  })
-  it('rejects surface requests and unknown framing before changing the pose', () => {
-    const { session, executor, request, saturn } = setup()
-    const before = session.harness.observatory.pose()
-    expect(
-      executor.execute({
-        ...request,
-        action: {
-          tool: 'stand_at_site',
-          subjectId: saturn.id,
-          siteId: 'invented',
-        },
-      }).status,
-    ).toBe('rejected')
-    expect(
-      executor.execute({
-        ...request,
-        operationId: 'two',
-        action: {
-          tool: 'compose_view',
-          subjectId: saturn.id,
-          framingId: 'eval',
-        },
-      }).status,
-    ).toBe('rejected')
-    expect(session.harness.observatory.pose()).toEqual(before)
-    executor.dispose()
-    session.dispose()
-  })
-  it('picture playback holds render time without changing the simulation', () => {
-    const { session, executor, request } = setup()
-    const before = session.world.stateHash()
-    const time = session.harness.observatory.time
-    expect(
-      executor.execute({
-        ...request,
-        action: { tool: 'set_picture_time', mode: 'resume', value: null },
-      }).status,
-    ).toBe('arrived')
-    expect(session.harness.observatory.heldTime).toBe(time)
-    expect(session.world.stateHash()).toBe(before)
-    executor.dispose()
-    session.dispose()
-  })
-  it('cancellation wins at every arrival ordering', () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 0, max: 100 }), (frames) => {
-        const { session, executor, request } = setup()
-        executor.execute(request)
-        for (let i = 0; i < frames; i += 1)
-          session.harness.observatory.sample(1 / 60)
-        executor.cancel('Stopped')
-        const pose = session.harness.observatory.pose()
-        for (let i = 0; i < 100; i += 1)
-          session.harness.observatory.sample(1 / 60)
-        executor.poll()
-        expect(session.harness.observatory.pose()).toEqual(pose)
-        expect(executor.execute(request).status).toBe('canceled')
-        executor.dispose()
-        session.dispose()
-      }),
-      { numRuns: 10 },
-    )
+      await run({ name: 'linger', seconds: 10, reason: 'the rings' }),
+    ).toEqual({ status: 'scheduled', seconds: 10 })
+
+    const worlds = await run({
+      name: 'find_worlds',
+      query: {
+        kinds: ['gas-giant'],
+        starClasses: [],
+        atmosphere: null,
+        sea: null,
+        rings: null,
+        habitable: null,
+        landable: null,
+        moons: null,
+        minRadius: null,
+        maxRadius: null,
+      },
+      radius_light_years: 0.1,
+      limit: 2,
+    })
+    expect(['ok', 'none']).toContain(worlds.status)
+    expect(f.takeovers()).toBe(0)
+    expect(f.session.world.stateHash()).toBe(hash)
+
+    f.executor.dispose()
+    expect(f.eye.heldTime).toBeNull()
+    f.session.dispose()
   })
 })

@@ -1,6 +1,6 @@
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { TourExecutor } from './executor.ts'
-import { ControlledPlayback, LiveConnection } from './media.ts'
+import { GuideExecutor } from './executor.ts'
+import { LiveConnection } from './media.ts'
 import { textureSetReady } from '../render/planetTextures.ts'
 import { CAMERA_LENS, subscribe } from '../state/preferences.ts'
 import { ViewReadiness } from './readiness.ts'
@@ -10,14 +10,13 @@ import { GuideRuntime } from './runtime.ts'
 export function createGuideRuntime(engine: GameEngine): GuideRuntime {
   return new GuideRuntime({
     now: () => Date.now(),
-    presentationNow: () => engine.presentationTime * 1000,
-    id: () => crypto.randomUUID(),
-    request: (path, body, signal, keepalive = false) =>
+    localTime: () =>
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    request: (path, body, signal) =>
       fetch(path, {
         method: body === undefined ? 'GET' : 'POST',
         credentials: 'same-origin',
         cache: 'no-store',
-        keepalive,
         headers:
           body === undefined
             ? undefined
@@ -25,24 +24,18 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal,
       }),
-    socket: (sessionId, tabId) => {
-      const url = new URL(
-        `/api/tour/sessions/${encodeURIComponent(sessionId)}/events`,
-        location.href,
-      )
-      url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      url.searchParams.set('tabId', tabId)
-      return new WebSocket(url)
-    },
-    executor: (sessionId, onReceipt, onTakeover) => {
+    executor: ({ onArrival, onTakeover }) => {
       const readiness = new ViewReadiness()
-      let executing = false
-      const executor = new TourExecutor(engine.harness, {
-        sessionId,
+      const executor = new GuideExecutor(engine.harness, {
         now: () => Date.now(),
-        onReceipt,
+        onArrival,
         onTakeover,
         active: () => engine.harness.observatory.target !== null,
+        lens: () => engine.framingLens(),
+        aspect: () =>
+          window.innerHeight > 0
+            ? window.innerWidth / window.innerHeight
+            : 16 / 9,
         ready: () => {
           const renderer = engine.gl?.renderer
           const scene = engine.scene()
@@ -73,31 +66,27 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
           })
         },
       })
-      const unsubscribe = subscribe(CAMERA_LENS, () => {
-        if (!executing) onTakeover()
-      })
+      // A lens change is the visitor's, and it reframes everything on screen
+      // without touching the observatory's revision.
+      const unsubscribe = subscribe(CAMERA_LENS, () => onTakeover())
       return {
-        get searchStatus() {
-          return executor.searchStatus
-        },
         get viewRevision() {
           return executor.viewRevision
         },
-        context: (query) => executor.context(query),
-        execute: (request) => {
-          executing = true
-          try {
-            return executor.execute(request)
-          } finally {
-            executing = false
-          }
+        get pending() {
+          return executor.pending
         },
+        get pendingSubject() {
+          return executor.pendingSubject
+        },
+        get searching() {
+          return executor.searching
+        },
+        view: () => executor.view(),
+        facts: () => executor.facts(),
+        execute: (call) => executor.execute(call),
         poll: () => executor.poll(),
-        supersede: (revision) => executor.supersede(revision),
-        queueMotion: (kind, seconds) => executor.queueMotion(kind, seconds),
-        startMotion: (kind, seconds) => executor.startMotion(kind, seconds),
-        stopMotion: () => executor.stopMotion(),
-        cancel: (reason) => executor.cancel(reason),
+        cancel: () => executor.cancel(),
         dispose: () => {
           unsubscribe()
           executor.dispose()
@@ -105,7 +94,6 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
       }
     },
     live: (event, failure) => new LiveConnection(undefined, event, failure),
-    playback: () => new ControlledPlayback(),
     poll: (run) => {
       const timer = setInterval(run, 100)
       return () => clearInterval(timer)
@@ -114,6 +102,10 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
       const visibility = () => changed(document.visibilityState === 'visible')
       document.addEventListener('visibilitychange', visibility)
       return () => document.removeEventListener('visibilitychange', visibility)
+    },
+    leaving: (handler) => {
+      window.addEventListener('pagehide', handler)
+      return () => window.removeEventListener('pagehide', handler)
     },
   })
 }

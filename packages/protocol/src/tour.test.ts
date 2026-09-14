@@ -2,115 +2,82 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { decode } from './codec.ts'
 import {
-  decodeToolRequest,
-  decodeTourClientMessage,
-  decodeTourPlan,
+  decodeSubjectBrief,
+  decodeTourFact,
   TOUR_PROTOCOL_VERSION,
+  tourMessageBytes,
+  withinTourBytes,
 } from './tour.ts'
 
-const request = {
-  sessionId: 'session-1',
-  requestRevision: 1,
-  operationId: 'op-1',
-  expectedViewRevision: 0,
-  expiresAt: 12345,
-  action: { tool: 'show_subject', subjectId: 'subject-1' },
+const fact = {
+  id: 'subject-1.radius',
+  label: 'Equatorial radius',
+  quantity: 60_268_000,
+  unit: 'm',
+  display: '60268000 m',
+  speech: "Saturn's equatorial radius is about sixty thousand kilometers.",
+  reason: null,
+  provenance: 'observed',
+  sourceIds: ['record-subject-1'],
 }
 
-describe('tour wire boundary', () => {
-  it('carries bounded narration and a named camera motion in an automatic plan', () => {
-    const plan = {
-      id: 'solar-family',
-      goal: 'Five minutes around the Solar System',
-      durationSeconds: 300,
-      automatic: true,
-      rationale: 'A relaxed tour with time to look.',
-      stops: [
-        {
-          id: 'saturn',
-          subjectId: 'subject-1',
-          framingId: 'portrait',
-          siteId: null,
-          objective: 'The rings that puzzled Galileo',
-          factIds: [],
-          minimumViewSeconds: 38,
-          narration: 'Saturn gave early telescope observers quite a puzzle.',
-          motion: 'reveal',
-          sources: [],
-        },
-      ],
-    }
-    expect(decode(decodeTourPlan, plan)).toEqual({ ok: true, value: plan })
+describe('the guide record boundary', () => {
+  it('names the current protocol', () => {
+    expect(TOUR_PROTOCOL_VERSION).toBe(3)
+  })
+  it('requires a reason for a missing fact and wording for a quantity', () => {
+    expect(decode(decodeTourFact, fact)).toEqual({ ok: true, value: fact })
     expect(
-      decode(decodeTourPlan, {
-        ...plan,
-        stops: [{ ...plan.stops[0], motion: 'execute-javascript' }],
+      decode(decodeTourFact, {
+        ...fact,
+        quantity: null,
+        unit: null,
+        display: null,
+        speech: null,
+        reason: null,
       }).ok,
     ).toBe(false)
-    expect(
-      decode(decodeTourPlan, {
-        ...plan,
-        stops: [{ ...plan.stops[0], narration: 'x'.repeat(2001) }],
-      }).ok,
-    ).toBe(false)
+    expect(decode(decodeTourFact, { ...fact, unit: null }).ok).toBe(false)
   })
-  it('decodes the current protocol and bounded scene operation', () => {
-    expect(TOUR_PROTOCOL_VERSION).toBe(2)
-    expect(decode(decodeToolRequest, request)).toEqual({
-      ok: true,
-      value: request,
-    })
-  })
-  it('rejects extra fields at every operation boundary', () => {
-    expect(decode(decodeToolRequest, { ...request, arbitrary: true }).ok).toBe(
+  it('rejects extra fields on a record', () => {
+    expect(decode(decodeTourFact, { ...fact, address: 's:SOL/b:5' }).ok).toBe(
       false,
     )
     expect(
-      decode(decodeToolRequest, {
-        ...request,
-        action: { ...request.action, address: 's:SOL/b:5' },
+      decode(decodeSubjectBrief, {
+        subjectId: 'subject-1',
+        address: 's:SOL/b:5',
+        name: 'Saturn',
+        provenance: 'observed',
+        classification: 'Gas giant',
+        summary: 'Ringed.',
+        facts: [fact],
+        sources: [
+          {
+            id: 'record-subject-1',
+            title: 'Saturn: application observed record',
+            url: null,
+            origin: 'application',
+          },
+        ],
+        observer: {
+          pictureTime: 0,
+          altitudeMeters: null,
+          fill: null,
+          arrived: false,
+        },
       }).ok,
-    ).toBe(false)
+    ).toBe(true)
   })
-  it('rejects nonfinite and outside photographic instants', () => {
-    for (const value of [NaN, Infinity, -Infinity, 3.15576e12 + 1]) {
-      expect(
-        decode(decodeToolRequest, {
-          ...request,
-          action: { tool: 'set_picture_time', mode: 'set', value },
-        }).ok,
-      ).toBe(false)
-    }
-  })
-  it('never accepts arbitrary tool names', () => {
+  it('counts UTF-8 bytes rather than code units', () => {
     fc.assert(
-      fc.property(fc.string(), (tool) => {
-        if (tool === 'show_subject') return
-        expect(
-          decode(decodeToolRequest, {
-            ...request,
-            action: { tool, subjectId: 'subject-1' },
-          }).ok,
-        ).toBe(false)
+      fc.property(fc.string({ unit: 'grapheme' }), (text) => {
+        // A percent-escape is one UTF-8 byte; anything unescaped is ASCII.
+        expect(tourMessageBytes(text)).toBe(
+          encodeURIComponent(text).replace(/%[0-9A-F]{2}/g, 'x').length,
+        )
       }),
     )
-  })
-  it('bounds requests and requires every plan stop', () => {
-    expect(
-      decode(decodeTourClientMessage, {
-        type: 'ask',
-        text: 'x'.repeat(4001),
-        requestRevision: 1,
-        viewRevision: 0,
-      }).ok,
-    ).toBe(false)
-    expect(
-      decode(decodeTourPlan, {
-        id: 'p',
-        goal: 'Saturn',
-        durationSeconds: 120,
-        stops: [],
-      }).ok,
-    ).toBe(false)
+    expect(withinTourBytes({ text: 'x'.repeat(70_000) }).ok).toBe(false)
   })
 })

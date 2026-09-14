@@ -4,17 +4,40 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-20",
   "secrets": { "required": ["OPENAI_API_KEY", "TOUR_GUIDE_PASSWORD"] },
-  "vars": { "TOUR_GUIDE_ENABLED": "true", "TOUR_GUIDE_TRACE": "false" },
-  "durable_objects": {
-    "bindings": [
-      { "name": "TOUR_SESSIONS", "class_name": "TourSession" },
-      { "name": "TOUR_ADMISSION", "class_name": "TourAdmission" },
-    ],
-  },
+  "vars": { "TOUR_GUIDE_ENABLED": "true" },
+
+  /*
+   * The Worker implements no Durable Object class, and that is load-bearing
+   * twice over. The guide (docs/hosting.md) is two stateless routes — sign in,
+   * and create a voice session from the browser's SDP offer — because the
+   * browser owns its session through its own peer connection and executes
+   * every tool itself; a server-side object would hold a second copy of state
+   * it cannot see. And Cloudflare does not issue version preview URLs for a
+   * Worker that implements a Durable Object, so removing the two classes is
+   * what makes `wrangler versions upload` produce a URL again. The `tour-v2`
+   * migration deletes the classes the `tour-v1` deployment created.
+   */
   "migrations": [
     {
       "tag": "tour-v1",
       "new_sqlite_classes": ["TourSession", "TourAdmission"],
+    },
+    { "tag": "tour-v2", "deleted_classes": ["TourSession", "TourAdmission"] },
+  ],
+
+  /*
+   * The one piece of state the guide keeps, and it is not the Worker's: a
+   * counter the platform holds per key. Sign-in is a shared alpha password
+   * behind a constant-time compare, and without a bound on attempts that is a
+   * password an offline guess list would eventually walk. Ten a minute per
+   * source is generous to a person and useless to a script. `namespace_id` is
+   * any integer unique within the account.
+   */
+  "ratelimits": [
+    {
+      "name": "TOUR_LOGIN_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 },
     },
   ],
 

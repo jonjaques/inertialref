@@ -1,21 +1,11 @@
+import { GUIDE_VOICES, isGuideVoice } from '@inertialref/protocol'
 import {
-  decodeTourContext,
-  decodeTourManifest,
-  TOUR_PROTOCOL_VERSION,
-  versionDrift,
-  type TourContext,
-  type TourManifest,
-} from '@inertialref/protocol'
-import { GENERATION_VERSIONS } from '@inertialref/universe'
-import catalogManifest from '../../../../data/catalog/manifest.json' with { type: 'json' }
-import {
-  authenticate,
   allowedOrigin,
+  authenticate,
   digest,
   loginCookie,
   passwordMatches,
 } from './auth.ts'
-import { sameManifest } from './coordinator.ts'
 import {
   boundedString,
   readJson,
@@ -23,81 +13,31 @@ import {
   TourHttpError,
   tourJson,
 } from './http.ts'
-import { LIVE_VOICES, type LiveVoice } from './openaiLive.ts'
-import { createTourTrace } from './trace.ts'
+import { createLiveSession, GuideProviderError } from './openaiLive.ts'
 
-export interface TourCreation {
-  readonly protocolVersion: number
-  readonly manifest: TourManifest
-  readonly context: TourContext
-  readonly transport: 'text' | 'live'
-  readonly voice: LiveVoice
-  readonly sdp: string | null
-  readonly idempotencyKey: string
-  readonly tabId: string
-}
+/*
+ * The guide's Worker: two stateless routes and a capability report.
+ *
+ * The Worker holds the alpha password and the provider key, and nothing else.
+ * It does not see the conversation, the scene, a tool call, or a usage event:
+ * the browser owns the session through its own peer connection, executes
+ * every tool against the observatory it already has, and reads the provider's
+ * usage off the data channel. Without a sideband the Worker cannot meter a
+ * session, so there is no per-user ledger — a browser's report of its own
+ * spend would be advisory. The spending bound is the OpenAI project's limit
+ * and the duration bound is the provider's own session expiry.
+ *
+ * What a tampered browser can abuse is therefore two things, and both are
+ * enforced here: only a request carrying the signed cookie can create a
+ * session, and the session's configuration — prompts, tools, model, the
+ * data-channel allow list — is authored at creation and cannot be changed
+ * afterward.
+ */
 
-export function decodeCreation(value: unknown): TourCreation {
-  const data = record(value, [
-    'protocolVersion',
-    'manifest',
-    'context',
-    'transport',
-    'voice',
-    'sdp',
-    'idempotencyKey',
-    'tabId',
-  ])
-  const context = decodeTourContext(data.context, 'context')
-  const manifest = decodeTourManifest(data.manifest, 'manifest')
-  if (
-    !context.ok ||
-    !manifest.ok ||
-    data.protocolVersion !== TOUR_PROTOCOL_VERSION ||
-    !sameManifest(context.value.manifest, manifest.value)
-  )
-    throw new TourHttpError('The guide and scene versions do not agree.', 409)
-  const drift = versionDrift(
-    { generation: GENERATION_VERSIONS, catalog: catalogManifest.version },
-    {
-      generation: manifest.value.generation,
-      catalog: manifest.value.catalogVersion,
-    },
-  )
-  if (drift.length)
-    throw new TourHttpError('Reload to use the current universe catalog.', 409)
-  if (data.transport !== 'text' && data.transport !== 'live')
-    throw new TourHttpError('Unknown tour transport.')
-  if (!LIVE_VOICES.some((voice) => voice === data.voice))
-    throw new TourHttpError('Choose an available voice.')
-  const sdp = data.sdp === null ? null : boundedString(data.sdp, 65_536)
-  if ((data.transport === 'live') !== (sdp !== null))
-    throw new TourHttpError('The transport and audio offer do not agree.')
-  return {
-    protocolVersion: TOUR_PROTOCOL_VERSION,
-    manifest: manifest.value,
-    context: context.value,
-    transport: data.transport,
-    voice: data.voice as LiveVoice,
-    sdp,
-    idempotencyKey: boundedString(data.idempotencyKey, 128, 8),
-    tabId: boundedString(data.tabId, 128, 8),
-  }
-}
+/** Sign-in attempts per source per minute, when the binding is present. */
+const LOGIN_LIMIT_KEY = 'tour-login'
 
 export async function serveTour(request: Request, env: Env): Promise<Response> {
-  const trace = createTourTrace(env, () => ({
-    path: new URL(request.url).pathname,
-    method: request.method,
-  }))
-  trace({
-    event: 'http.request',
-    model: 'application',
-    data: {
-      origin: request.headers.get('origin'),
-      upgrade: request.headers.get('upgrade'),
-    },
-  })
   try {
     const path = new URL(request.url).pathname
     const configured = Boolean(
@@ -110,38 +50,23 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
       env.TOUR_GUIDE_PASSWORD ?? '',
       Date.now(),
     )
-    if (path === '/api/tour/capabilities' && request.method === 'GET') {
-      const features =
-        configured && user
-          ? await env.TOUR_ADMISSION.getByName('private-alpha').availability()
-          : { text: configured, live: configured, controlledSpeech: configured }
-      const available = configured && features.text
+    if (path === '/api/tour/capabilities' && request.method === 'GET')
       return tourJson({
-        available,
+        available: configured,
         authenticated: user !== null,
-        voices: LIVE_VOICES,
-        durationSeconds: 600,
-        features: {
-          text: features.text,
-          live: features.live,
-          controlledSpeech: features.controlledSpeech,
-          images: false,
-        },
-        reason: available
-          ? null
-          : 'Cloud guide is unavailable. Local tours remain available.',
+        voices: GUIDE_VOICES,
+        reason: configured ? null : 'The guide is unavailable.',
       })
-    }
     if (!allowedOrigin(request))
       throw new TourHttpError('Use the guide from this site.', 403)
-    if (!configured) throw new TourHttpError('Cloud guide is unavailable.', 503)
-    const admission = env.TOUR_ADMISSION.getByName('private-alpha')
+    if (!configured) throw new TourHttpError('The guide is unavailable.', 503)
     if (path === '/api/tour/login' && request.method === 'POST') {
       const input = record(await readJson(request, 2048), ['password'])
-      const identity = await digest(
-        `${env.TOUR_GUIDE_PASSWORD}:${request.headers.get('cf-connecting-ip') ?? 'development'}`,
+      const source = await digest(
+        `${LOGIN_LIMIT_KEY}:${request.headers.get('cf-connecting-ip') ?? 'development'}`,
       )
-      if (!(await admission.loginAttempt(identity)))
+      const limit = await env.TOUR_LOGIN_LIMIT?.limit({ key: source })
+      if (limit !== undefined && !limit.success)
         throw new TourHttpError(
           'Too many sign-in attempts. Try again later.',
           429,
@@ -151,19 +76,8 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
           boundedString(input.password, 1024),
           env.TOUR_GUIDE_PASSWORD,
         ))
-      ) {
-        trace({
-          event: 'auth.result',
-          model: 'application',
-          data: { authenticated: false },
-        })
+      )
         throw new TourHttpError('The guide password is incorrect.', 401)
-      }
-      trace({
-        event: 'auth.result',
-        model: 'application',
-        data: { authenticated: true },
-      })
       return tourJson({ authenticated: true }, 200, {
         'set-cookie': await loginCookie(
           env.TOUR_GUIDE_PASSWORD,
@@ -173,45 +87,32 @@ export async function serveTour(request: Request, env: Env): Promise<Response> {
       })
     }
     if (!user) throw new TourHttpError('Enter the guide password first.', 401)
-    if (path === '/api/tour/usage' && request.method === 'GET')
-      return tourJson(await admission.report(user))
     if (path === '/api/tour/sessions' && request.method === 'POST') {
-      const creation = decodeCreation(await readJson(request, 140_000))
-      const reserved = await admission.reserve(
-        user,
-        creation.idempotencyKey,
-        creation.tabId,
-      )
-      if (!reserved.ok)
-        throw new TourHttpError(
-          reserved.reason === 'concurrency'
-            ? 'A guide is already open. End it before starting another.'
-            : 'The guide allowance is unavailable. Use local tours or try again later.',
-          429,
-        )
-      const fingerprint = await digest(JSON.stringify(creation))
-      return await env.TOUR_SESSIONS.getByName(
-        reserved.reservation.sessionId,
-      ).begin(
-        JSON.parse(JSON.stringify(creation)),
-        user,
-        reserved.reservation.sessionId,
-        fingerprint,
-      )
+      const input = record(await readJson(request, 80_000), [
+        'voice',
+        'sdp',
+        'scene',
+      ])
+      if (!isGuideVoice(input.voice))
+        throw new TourHttpError('Choose an available voice.')
+      const created = await createLiveSession({
+        apiKey: env.OPENAI_API_KEY,
+        sdp: boundedString(input.sdp, 65_536),
+        voice: input.voice,
+        scene: boundedString(input.scene, 1500),
+      })
+      return tourJson({
+        sessionId: created.id,
+        expiresAt: created.expiresAt,
+        sdp: created.sdp,
+      })
     }
-    const match =
-      /^\/api\/tour\/sessions\/([a-f0-9-]{36})\/(events|close|speech|status)$/.exec(
-        path,
-      )
-    if (!match) throw new TourHttpError('No such guide endpoint.', 404)
-    const session = env.TOUR_SESSIONS.getByName(match[1]!)
-    const headers = new Headers(request.headers)
-    headers.set('x-tour-owner', user)
-    return await session.fetch(new Request(request, { headers }))
+    throw new TourHttpError('No such guide endpoint.', 404)
   } catch (error) {
-    trace({ event: 'http.error', model: 'application', data: error })
     if (error instanceof TourHttpError)
       return tourJson({ error: error.message }, error.status)
+    if (error instanceof GuideProviderError)
+      return tourJson({ error: 'The guide could not start a session.' }, 503)
     return tourJson(
       { error: 'The guide could not complete this request.' },
       503,

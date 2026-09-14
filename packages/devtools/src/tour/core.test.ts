@@ -3,14 +3,11 @@ import fc from 'fast-check'
 import {
   decode,
   decodeTourContext,
-  decodeTourClientMessage,
-  decodeTourMessage,
-  validateTourPlan,
+  withinTourBytes,
 } from '@inertialref/protocol'
 import { openSession } from '../session.ts'
 import { createTourContext, subjectBrief } from './brief.ts'
-import { deterministicTour, groundedNarration } from './itinerary.ts'
-import { TourRunner } from './runner.ts'
+import { withNotes } from './notes.ts'
 
 describe('the guide reads a bounded universe', () => {
   it('keeps a full newest read while bounding a large retained search inventory', () => {
@@ -19,12 +16,7 @@ describe('the guide reads a bounded universe', () => {
       ...new Set(session.harness.searchEntries().map((item) => item.address)),
     ].slice(0, 16)
     const context = createTourContext(session.harness, '', addresses)
-    expect(
-      decodeTourMessage(
-        decodeTourClientMessage,
-        JSON.stringify({ type: 'context', context }),
-      ).ok,
-    ).toBe(true)
+    expect(withinTourBytes(context).ok).toBe(true)
     const newest = context.briefs.find(
       (brief) => brief.address === addresses[0],
     )!
@@ -59,12 +51,7 @@ describe('the guide reads a bounded universe', () => {
         context.briefs.find((brief) => brief.subjectId === candidate.id)?.facts,
       ).toEqual(subjectBrief(session.harness, candidate.address)?.facts)
     }
-    expect(
-      decodeTourMessage(
-        decodeTourClientMessage,
-        JSON.stringify({ type: 'context', context }),
-      ).ok,
-    ).toBe(true)
+    expect(withinTourBytes(context).ok).toBe(true)
     session.dispose()
   })
   it('provides numeric quantities, unknown reasons, and separate observer facts', () => {
@@ -86,166 +73,32 @@ describe('the guide reads a bounded universe', () => {
     expect(decode(decodeTourContext, createTourContext(ir)).ok).toBe(true)
     session.dispose()
   })
-  it('builds the Saturn, rings, Titan tour using only returned references', () => {
+  it('adds curated notes to an observed record and never to a projected one', () => {
     const session = openSession()
-    const context = createTourContext(session.harness, 'Saturn')
-    const canonical = session.world.stateHash()
-    const viewRevision = session.harness.observatory.mutationRevision
-    const saturn = context.candidates.find(
-      (subject) => subject.name === 'Saturn',
-    )!
-    const titan = context.candidates.find(
-      (subject) => subject.name === 'Titan',
-    )!
-    const plan = deterministicTour(context, 'saturn')!
-    expect(plan.stops).toHaveLength(3)
-    expect(
-      plan.stops.map(({ id, subjectId, framingId }) => ({
-        id,
-        subjectId,
-        framingId,
-      })),
-    ).toEqual([
-      { id: 'saturn-overview', subjectId: saturn.id, framingId: 'portrait' },
-      {
-        id: 'saturn-rings',
-        subjectId: saturn.id,
-        framingId: 'preset:the-rings',
-      },
-      { id: 'titan-weather', subjectId: titan.id, framingId: 'crescent' },
-    ])
-    expect(session.world.stateHash()).toBe(canonical)
-    expect(session.harness.observatory.mutationRevision).toBe(viewRevision)
-    expect(validateTourPlan(plan, context).ok).toBe(true)
-    expect(
-      context.candidates.find(
-        (subject) => subject.id === plan.stops[2]!.subjectId,
-      )?.name,
-    ).toBe('Titan')
-    expect(
-      validateTourPlan(
-        { ...plan, stops: [{ ...plan.stops[0]!, subjectId: 'invented' }] },
-        context,
-      ).ok,
-    ).toBe(false)
-    const narration = groundedNarration(
-      context,
-      {
-        ...plan.stops[0]!,
-        objective: 'An unverified teaching objective is never evidence.',
-        factIds: [],
-      },
-      0,
-      'narration',
+    const ir = session.harness
+    const saturn = withNotes(subjectBrief(ir, 's:SOL/b:5')!)
+    expect(saturn.facts.some((fact) => fact.id.includes(':note:'))).toBe(true)
+    expect(saturn.sources.some((source) => source.origin === 'curated')).toBe(
+      true,
     )
-    expect(narration.text).not.toContain('unverified teaching objective')
-    expect(narration.factIds).toEqual([])
-    const system = deterministicTour(context, 'system')!
-    expect(system.stops.map((stop) => stop.id)).toEqual(
-      system.stops.map((_stop, index) => `stop-${index + 1}`),
+    expect(withinTourBytes(saturn).ok).toBe(true)
+    const projected = withNotes({
+      ...subjectBrief(ir, 's:SOL/b:5')!,
+      provenance: 'projected',
+    })
+    expect(projected.facts.some((fact) => fact.id.includes(':note:'))).toBe(
+      false,
     )
     session.dispose()
   })
-  it('fits a focused Saturn context and its complete wire envelope', () => {
+  it('fits a focused Saturn context inside the record bound', () => {
     const session = openSession()
     session.harness.look('s:SOL/b:5')
     const context = createTourContext(session.harness, 'Saturn')
     expect(new Set(context.briefs.map((brief) => brief.subjectId)).size).toBe(
       context.briefs.length,
     )
-    expect(
-      decodeTourMessage(
-        decodeTourClientMessage,
-        JSON.stringify({ type: 'context', context }),
-      ).ok,
-    ).toBe(true)
-    expect(deterministicTour(context, 'saturn')?.stops).toHaveLength(3)
-    session.dispose()
-  })
-})
-
-describe('the guide runner waits for playback and the view independently', () => {
-  it('keeps the promised quiet look after real playback and freezes it while paused', () => {
-    const session = openSession()
-    const base = deterministicTour(
-      createTourContext(session.harness, 'Saturn'),
-      'saturn',
-    )!
-    const plan = {
-      ...base,
-      stops: base.stops.map((stop) => ({ ...stop, lookSeconds: 5 })),
-    }
-    let now = 0
-    const runner = new TourRunner({
-      now: () => now,
-      automatic: true,
-      onStop: () => {},
-    })
-    runner.start(plan)
-    runner.arrived(plan.stops[0]!.id, 1)
-    now = 60000
-    runner.narrationEnded(plan.stops[0]!.id, 1)
-    runner.tick()
-    expect(runner.status().index).toBe(0)
-    now += 2000
-    runner.command('pause')
-    now += 90000
-    expect(runner.status().elapsedSeconds).toBe(62)
-    runner.command('resume')
-    runner.tick()
-    expect(runner.status().index).toBe(0)
-    now += 3000
-    runner.tick()
-    expect(runner.status().index).toBe(1)
-    session.dispose()
-  })
-  it('does not infer playback completion from dwell or captions', () => {
-    const session = openSession()
-    const plan = deterministicTour(
-      createTourContext(session.harness, 'Saturn'),
-      'saturn',
-    )!
-    let now = 0
-    const stops: string[] = []
-    const runner = new TourRunner({
-      now: () => now,
-      automatic: true,
-      onStop: (stop) => stops.push(stop.id),
-    })
-    runner.start(plan)
-    const first = plan.stops[0]!
-    runner.arrived(first.id, 5)
-    now = 50000
-    runner.tick()
-    expect(stops).toHaveLength(1)
-    runner.narrationEnded(first.id, 4)
-    runner.tick()
-    expect(stops).toHaveLength(1)
-    runner.narrationEnded(first.id, 5)
-    runner.tick()
-    expect(stops).toHaveLength(2)
-    runner.command('pause')
-    runner.command('end')
-    runner.command('resume')
-    expect(runner.status().state).toBe('ended')
-    session.dispose()
-  })
-  it('requires explicit Next when automatic playback is unavailable', () => {
-    const session = openSession()
-    const plan = deterministicTour(
-      createTourContext(session.harness, 'Saturn'),
-      'saturn',
-    )!
-    let now = 0
-    const runner = new TourRunner({ now: () => now, onStop: () => {} })
-    runner.start(plan)
-    runner.arrived(plan.stops[0]!.id, 1)
-    runner.narrationEnded(plan.stops[0]!.id, 1)
-    now = 100000
-    runner.tick()
-    expect(runner.status().index).toBe(0)
-    runner.command('next')
-    expect(runner.status().index).toBe(1)
+    expect(withinTourBytes(context).ok).toBe(true)
     session.dispose()
   })
 })

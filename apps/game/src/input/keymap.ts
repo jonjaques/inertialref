@@ -391,10 +391,14 @@ export const ACTIONS: readonly ActionDefinition[] = [
     hint: 'look where the view aims again',
   }),
 
-  press('guide.pause', 'Pause or resume tour', 'Guide', 'planetarium', null),
-  press('guide.next', 'Next stop', 'Guide', 'planetarium', null),
-  press('guide.back', 'Previous stop', 'Guide', 'planetarium', null),
-  press('guide.end', 'End guide', 'Guide', 'planetarium', null),
+  press(
+    'guide.pause',
+    'Pause or resume the guide',
+    'Guide',
+    'planetarium',
+    null,
+  ),
+  press('guide.end', 'End the guide', 'Guide', 'planetarium', null),
 
   /* ---------------------------- planetarium ----------------------------- */
   press(

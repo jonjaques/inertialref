@@ -22,8 +22,6 @@ import catalogManifest from '../../../data/catalog/manifest.json' with { type: '
 import { routeFor } from './routes.ts'
 import { type MediaStores, serveMedia } from './serveMedia.ts'
 import { serveTour } from './tour/routes.ts'
-export { TourSession } from './tour/session.ts'
-export { TourAdmission } from './tour/admission.ts'
 
 /*
  * The Worker (docs/hosting.md).

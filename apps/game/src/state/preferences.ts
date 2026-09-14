@@ -1,4 +1,5 @@
 import { isPicture, MAX_PICTURES, type Picture } from '@inertialref/devtools'
+import { GUIDE_VOICES } from '@inertialref/protocol'
 import { useEffect, useRef, useState } from 'react'
 import { useHydrated } from './hydration.ts'
 import {
@@ -441,7 +442,7 @@ export const PLANETARIUM_GUIDE_VOICE = define<string>({
   group: 'planetarium',
   what: 'the guide voice for the next conversation',
   initial: 'marin',
-  accept: oneOf(['marin', 'gleam', 'meridian', 'vesper']),
+  accept: oneOf([...GUIDE_VOICES]),
 })
 
 export const PLANETARIUM_HINTED = define({

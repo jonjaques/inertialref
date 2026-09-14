@@ -199,45 +199,64 @@ export interface FrameStats {
 export interface GuideStatus {
   readonly available: boolean
   readonly loaded: boolean
+  /** One word the panel also shows: listening, speaking, moving, paused. */
   readonly state: string
-  readonly connection: 'offline' | 'connecting' | 'connected'
-  readonly planId: string | null
-  readonly stopIndex: number | null
-  readonly requestRevision: number
+  readonly connection: 'offline' | 'connecting' | 'connected' | 'closing'
+  readonly sessionId: string | null
   readonly viewRevision: number | null
   readonly microphone: 'off' | 'muted' | 'active'
-  readonly guideMuted: boolean
-  readonly automatic: boolean
+  readonly paused: boolean
+  /** Function calls received and not yet answered. */
+  readonly pendingCalls: number
+  /** Backend responses whose chain has not ended without a tool call. */
+  readonly inFlight: boolean
+  readonly usage: GuideUsage
+}
+
+/** What the session has cost so far, as the provider reports it. */
+export interface GuideUsage {
+  readonly voiceSeconds: number
+  readonly responses: number
+  readonly inputTokens: number
+  readonly cachedTokens: number
+  readonly outputTokens: number
 }
 
 export interface GuideHostPort {
   status(): GuideStatus
+  /** A typed request, queued as the visitor's own words. */
   ask(text: string): Promise<GuideStatus>
   trace?(enabled?: boolean): readonly GuideTraceEntry[]
 }
 
-/** Optional, in-memory application messages; never authentication traffic. */
+/** Optional, in-memory data-channel traffic; never authentication traffic. */
 export interface GuideTraceEntry {
   readonly sequence: number
   readonly at: number
-  readonly direction: 'send' | 'receive'
-  readonly message:
-    | import('@inertialref/protocol').TourClientMessage
-    | import('@inertialref/protocol').TourServerMessage
+  readonly direction: 'send' | 'receive' | 'note'
+  readonly message: Readonly<Record<string, unknown>>
 }
+
+export const NO_GUIDE_USAGE: GuideUsage = Object.freeze({
+  voiceSeconds: 0,
+  responses: 0,
+  inputTokens: 0,
+  cachedTokens: 0,
+  outputTokens: 0,
+})
 
 export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
   available: false,
   loaded: false,
   state: 'unavailable',
   connection: 'offline',
-  planId: null,
-  stopIndex: null,
-  requestRevision: 0,
+  sessionId: null,
   viewRevision: null,
   microphone: 'off',
-  guideMuted: false,
-  automatic: false,
+  paused: false,
+  pendingCalls: 0,
+  inFlight: false,
+  usage: NO_GUIDE_USAGE,
 })
 
 export interface RenderHost {

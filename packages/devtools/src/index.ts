@@ -20,8 +20,8 @@ export * from './terrainBaseline.ts'
 export * from './terrainZoo.ts'
 export * from './travel.ts'
 export * from './tour/brief.ts'
-export * from './tour/itinerary.ts'
-export * from './tour/runner.ts'
+export * from './tour/notes.ts'
+export * from './tour/view.ts'
 
 export * from './galaxy.ts'
 export {

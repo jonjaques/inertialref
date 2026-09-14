@@ -1,85 +1,22 @@
-export interface ClipHost {
-  audio(): HTMLAudioElement
-  url(blob: Blob): string
-  revoke(url: string): void
-}
+import { GUIDE_CLIENT_EVENTS } from '@inertialref/protocol'
 
-const clipHost: ClipHost = {
-  audio: () => new Audio(),
-  url: (blob) => URL.createObjectURL(blob),
-  revoke: (url) => URL.revokeObjectURL(url),
-}
+/*
+ * The voice connection: one peer connection, one data channel, one speaker.
+ *
+ * The browser owns the session. It captures the microphone, offers, applies
+ * the Worker's answer, plays the remote track, and sends every command the
+ * guide needs over the data channel. There is no relay: the events the
+ * provider sends arrive here and go straight to the loop, and the commands
+ * the loop sends go straight out. `send` refuses anything not on the
+ * data-channel allow list before the provider can, so a bug is a thrown
+ * error in a test rather than an `event_not_allowed` in a session.
+ *
+ * The remote track is also the clock. Output audio streams whether or not
+ * the guide is speaking, so `level()` reads an `AnalyserNode` on the track
+ * and the runtime's clock decides what counts as speech.
+ */
 
-/** Completion comes from the playing element, never a model acknowledgment. */
-export class ControlledPlayback {
-  #audio: HTMLAudioElement | null = null
-  #release: (() => void) | null = null
-  #muted = false
-  readonly #host: ClipHost
-  constructor(host: ClipHost = clipHost) {
-    this.#host = host
-  }
-
-  async play(
-    blob: Blob,
-    ended: () => void,
-    failed: () => void = () => {},
-  ): Promise<void> {
-    this.stop()
-    const audio = this.#host.audio()
-    const url = this.#host.url(blob)
-    this.#audio = audio
-    audio.src = url
-    audio.muted = this.#muted
-    const onEnd = () => {
-      if (this.#audio !== audio) return
-      this.stop()
-      ended()
-    }
-    const onError = () => {
-      if (this.#audio !== audio) return
-      this.stop()
-      failed()
-    }
-    audio.addEventListener('error', onError, { once: true })
-    audio.addEventListener('ended', onEnd, { once: true })
-    this.#release = () => {
-      audio.removeEventListener('ended', onEnd)
-      audio.removeEventListener('error', onError)
-      this.#host.revoke(url)
-    }
-    try {
-      await audio.play()
-    } catch (cause) {
-      if (this.#audio === audio) this.stop()
-      throw cause
-    }
-  }
-
-  mute(muted: boolean): void {
-    this.#muted = muted
-    if (this.#audio !== null) this.#audio.muted = muted
-  }
-
-  stop(): void {
-    this.#release?.()
-    this.#release = null
-    this.#audio?.pause()
-    this.#audio?.removeAttribute('src')
-    this.#audio?.load()
-    this.#audio = null
-  }
-}
-
-export interface LiveEvent {
-  readonly type: string
-  readonly event_id?: string
-  readonly delta?: string
-  readonly start_ms?: number
-  readonly end_ms?: number
-}
-
-interface LiveHost {
+export interface LiveHost {
   peer(): RTCPeerConnection
   capture(): Promise<MediaStream>
   audio(): HTMLAudioElement
@@ -93,8 +30,8 @@ interface SilentCarrier {
   stop(): void
 }
 
-/** A live source keeps input RTP moving; replaceTrack(null) stops sending.
- * It has no microphone input and is never connected to the speaker destination. */
+/** A live source keeps input RTP moving while the microphone is off.
+ * It has no microphone input and is never connected to the speaker. */
 function silentCarrier(context: AudioContext): SilentCarrier {
   const destination = context.createMediaStreamDestination()
   destination.channelCount = 1
@@ -135,32 +72,45 @@ const liveHost: LiveHost = {
       },
     }),
   audio: () => new Audio(),
+  context: () => new AudioContext({ sampleRate: 48000 }),
 }
 
-/** The data channel is receive-only. The coordinator owns all provider commands. */
+export type LiveServerEvent = Readonly<Record<string, unknown>> & {
+  readonly type: string
+}
+
 export class LiveConnection {
   #peer: RTCPeerConnection | null = null
+  #channel: RTCDataChannel | null = null
   #stream: MediaStream | null = null
   #audio: HTMLAudioElement | null = null
   #stopped = false
   #started = false
+  #closed = false
   #release: (() => void) | null = null
   #resolve: (() => void) | null = null
   #reject: ((cause: Error) => void) | null = null
+  #closing: ((closed: boolean) => void) | null = null
   #micMuted = false
   #captureRevision = 0
   #resuming: Promise<void> | null = null
   #silence: SilentCarrier | null = null
+  #meter: {
+    node: AnalyserNode
+    buffer: Float32Array<ArrayBuffer>
+    context: AudioContext
+  } | null = null
+  #sequence = 0
   readonly #senders: RTCRtpSender[] = []
   readonly #retired = new WeakSet<MediaStreamTrack>()
   #guideMuted = false
 
   readonly #host: LiveHost
-  readonly #onEvent: (event: LiveEvent) => void
+  readonly #onEvent: (event: LiveServerEvent) => void
   readonly #onFailure: (message: string) => void
   constructor(
     host: LiveHost = liveHost,
-    onEvent: (event: LiveEvent) => void = () => {},
+    onEvent: (event: LiveServerEvent) => void = () => {},
     onFailure: (message: string) => void = () => {},
   ) {
     this.#host = host
@@ -185,6 +135,7 @@ export class LiveConnection {
     audio.autoplay = true
     audio.muted = this.#guideMuted
     const channel = peer.createDataChannel('oai-events')
+    this.#channel = channel
     const message = (event: MessageEvent) => {
       if (
         this.#stopped ||
@@ -192,42 +143,43 @@ export class LiveConnection {
         event.data.length > 65536
       )
         return
-      let value: LiveEvent
+      let value: unknown
       try {
-        value = JSON.parse(event.data) as LiveEvent
+        value = JSON.parse(event.data)
       } catch {
         return
       }
       if (
         value === null ||
         typeof value !== 'object' ||
-        typeof value.type !== 'string'
+        typeof (value as { type?: unknown }).type !== 'string'
       )
         return
-      if (value.type === 'session.started') {
+      const parsed = value as LiveServerEvent
+      if (parsed.type === 'session.started') {
         this.#started = true
         this.#resolve?.()
       }
-      this.#onEvent(value)
+      if (parsed.type === 'session.closed') {
+        this.#closed = true
+        this.#closing?.(true)
+      }
+      this.#onEvent(parsed)
     }
     const track = (event: RTCTrackEvent) => {
-      audio.srcObject = event.streams[0] ?? new MediaStream([event.track])
+      const stream = event.streams[0] ?? new MediaStream([event.track])
+      audio.srcObject = stream
       void audio
         .play()
-        .catch(() =>
-          this.#onFailure(
-            'Audio playback is blocked. Captions remain available.',
-          ),
-        )
+        .catch(() => this.#onFailure('Audio playback is blocked.'))
+      this.#listen(stream)
     }
     const connection = () => {
       if (
         peer.connectionState === 'failed' ||
         peer.connectionState === 'disconnected'
       )
-        this.#onFailure(
-          'The voice connection was interrupted. Resume with text or start voice again.',
-        )
+        this.#onFailure('The voice connection was interrupted.')
     }
     channel.addEventListener('message', message)
     peer.addEventListener('track', track)
@@ -252,6 +204,7 @@ export class LiveConnection {
     return offer.sdp
   }
 
+  /** Apply the answer and resolve once the provider says the session started. */
   async accept(sdp: string): Promise<void> {
     if (this.#stopped || this.#peer === null)
       throw new Error('The guide has ended.')
@@ -276,6 +229,58 @@ export class LiveConnection {
         reject(cause)
       }
     })
+  }
+
+  /**
+   * Send one client event. Only the allow list, only while open.
+   *
+   * The event id is the browser's, so an acknowledgment can be matched to the
+   * append that asked for it.
+   */
+  send(event: Record<string, unknown>): string {
+    const type = event.type
+    if (
+      typeof type !== 'string' ||
+      !(GUIDE_CLIENT_EVENTS as readonly string[]).includes(type)
+    )
+      throw new Error(`The guide may not send ${String(type)}.`)
+    const channel = this.#channel
+    if (this.#stopped || channel === null || channel.readyState !== 'open')
+      throw new Error('The voice connection is not open.')
+    const id = `guide-${++this.#sequence}`
+    channel.send(JSON.stringify({ ...event, event_id: id }))
+    return id
+  }
+
+  /** RMS of the remote track's last window, 0 to 1. Zero without a track. */
+  level(): number {
+    const meter = this.#meter
+    if (meter === null) return 0
+    meter.node.getFloatTimeDomainData(meter.buffer)
+    let sum = 0
+    for (const value of meter.buffer) sum += value * value
+    return Math.sqrt(sum / meter.buffer.length)
+  }
+
+  #listen(stream: MediaStream): void {
+    const make = this.#host.context
+    if (make === undefined || this.#meter !== null) return
+    try {
+      const context = make()
+      const node = context.createAnalyser()
+      node.fftSize = 2048
+      context.createMediaStreamSource(stream).connect(node)
+      this.#meter = {
+        node,
+        buffer: new Float32Array(node.fftSize),
+        context,
+      }
+      void context.resume().catch(() => {})
+    } catch {
+      // Without an meter the clock reads silence and beats end on their
+      // start timeout; the conversation still works.
+      this.#meter = null
+    }
   }
 
   muteMicrophone(muted: boolean): Promise<void> {
@@ -355,9 +360,7 @@ export class LiveConnection {
     if (this.#stopped || this.#micMuted || revision !== this.#captureRevision) {
       this.#stopCapture(stream)
       if (!this.#stopped && !this.#micMuted)
-        throw new Error(
-          'Microphone capture was canceled. Unmute the microphone to try again.',
-        )
+        throw new Error('Microphone capture was canceled. Resume to try again.')
       return
     }
     this.#stream = stream
@@ -384,19 +387,57 @@ export class LiveConnection {
     if (this.#audio !== null) this.#audio.muted = muted
   }
 
+  /**
+   * End the session the documented way: `session.close`, wait for
+   * `session.closed` under a bound, then drop the peer connection.
+   */
+  async close(timeoutMs = 5000): Promise<{ closed: boolean }> {
+    if (this.#stopped) return { closed: this.#closed }
+    if (!this.#closed) {
+      let sent = false
+      try {
+        this.send({ type: 'session.close' })
+        sent = true
+      } catch {
+        sent = false
+      }
+      if (sent)
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            this.#closing = null
+            resolve()
+          }, timeoutMs)
+          this.#closing = () => {
+            clearTimeout(timer)
+            this.#closing = null
+            resolve()
+          }
+        })
+    }
+    const closed = this.#closed
+    this.stop()
+    return { closed }
+  }
+
   stop(): void {
     if (this.#stopped) return
     this.#stopped = true
     this.#captureRevision++
     this.#reject?.(new Error('The guide has ended.'))
+    this.#closing?.(false)
     this.#release?.()
     this.#release = null
     this.#stopCapture(this.#stream)
     this.#stream = null
     this.#stopSilence()
+    if (this.#meter !== null) {
+      void this.#meter.context.close().catch(() => {})
+      this.#meter = null
+    }
     this.#audio?.pause()
     if (this.#audio !== null) this.#audio.srcObject = null
     this.#audio = null
+    this.#channel = null
     this.#peer?.close()
     this.#peer = null
   }

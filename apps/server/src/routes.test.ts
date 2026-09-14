@@ -6,7 +6,7 @@ import { routeFor } from './routes.ts'
 describe('worker routing', () => {
   it('routes guide requests through the authenticated host adapter', () => {
     expect(routeFor('/api/tour/capabilities').kind).toBe('tour')
-    expect(routeFor('/api/tour/sessions/abc/events').kind).toBe('tour')
+    expect(routeFor('/api/tour/sessions').kind).toBe('tour')
     expect(routeFor('/api/tourish').kind).toBe('api-not-found')
   })
   it('sends the two live paths to the script', () => {

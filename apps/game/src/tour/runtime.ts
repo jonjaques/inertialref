@@ -1,175 +1,163 @@
-import {
-  decodeTourMessage,
-  decodeTourServerMessage,
-  decodeTourTranscript,
-  TOUR_PROTOCOL_VERSION,
-  validateTourPlan,
-  type NarrationBrief,
-  type ToolReceipt,
-  type ToolRequest,
-  type TourClientMessage,
-  type TourCommand,
-  type TourCameraMotion,
-  type TourContext,
-  type TourPlan,
-  type TourSource,
-  type TourStop,
-  type TourTranscript,
-} from '@inertialref/protocol'
-import {
-  deterministicTour,
-  TourRunner,
-  type GuideStatus,
-  type GuideTraceEntry,
+import type {
+  GuideStatus,
+  GuideTraceEntry,
+  GuideUsage,
+  ViewDescription,
 } from '@inertialref/devtools'
-import { ControlledPlayback, LiveConnection, type LiveEvent } from './media.ts'
+import { NO_GUIDE_USAGE } from '@inertialref/devtools'
+import type { GuideCall, GuideToolOutput } from '@inertialref/protocol'
+import { SpeechClock } from './clock.ts'
+import type { GuideArrival, SceneFacts } from './executor.ts'
+import { GuideLoop } from './loop.ts'
+import type { LiveServerEvent } from './media.ts'
+import {
+  arrivalBlock,
+  BEGIN_CONVERSATION,
+  GREETING_INSTRUCTION,
+  openingLine,
+  PAUSE_INSTRUCTION,
+  quietBlock,
+  RESUME_INSTRUCTION,
+  sceneBlock,
+  takeoverBlock,
+  takeoverContext,
+  uiContext,
+} from './scene.ts'
 
-export interface GuideExecutor {
-  readonly viewRevision: number
-  readonly searchStatus?: {
-    readonly systems: number
-    readonly progress: number
-    readonly total: number
-    readonly running: boolean
-  } | null
-  context(query?: string): TourContext
-  execute(request: ToolRequest): ToolReceipt
-  poll(): void
-  supersede(revision: number): void
-  cancel(reason?: string): void
-  dispose(): void
-  queueMotion(kind: TourCameraMotion, durationSeconds: number): void
-  startMotion(kind: TourCameraMotion, durationSeconds: number): number
-  stopMotion(): void
-}
+/*
+ * The guide runtime: connect, loop, pause, end, and the snapshot the panel
+ * reads.
+ *
+ * One conversation, three parties. Live listens and speaks; the backend
+ * thinks and calls tools; this object moves the camera through the executor
+ * and keeps the clock. It owns nothing the model could ask for directly: the
+ * executor validates every argument, the loop answers every call exactly
+ * once, and everything this file sends to either model is prose it wrote
+ * itself about the state of the application.
+ *
+ * The beat is a chain with the browser as metronome. An arrival is prompted
+ * to the backend only while no chain is in flight and the visitor is quiet;
+ * a `linger` the backend declares becomes a wait for the words to be spoken
+ * and then for the declared seconds, and only then a prompt to continue. A
+ * takeover, a pause, a new delegation or a new move ends the wait.
+ */
 
 export interface GuideCapabilities {
   readonly available: boolean
   readonly authenticated: boolean
   readonly voices: readonly string[]
-  readonly durationSeconds: number
-  readonly features: {
-    readonly text: boolean
-    readonly live: boolean
-    readonly controlledSpeech: boolean
-    readonly images: boolean
-  }
   readonly reason: string | null
-}
-
-export interface GuideHost {
-  now(): number
-  presentationNow(): number
-  id(): string
-  request(
-    path: string,
-    body?: unknown,
-    signal?: AbortSignal,
-    keepalive?: boolean,
-  ): Promise<Response>
-  socket(sessionId: string, tabId: string): WebSocket
-  executor(
-    sessionId: string,
-    receipt: (value: ToolReceipt) => void,
-    takeover: () => void,
-  ): GuideExecutor
-  live(
-    event: (value: LiveEvent) => void,
-    failure: (message: string) => void,
-  ): LiveConnection
-  playback(): ControlledPlayback
-  poll(run: () => void): () => void
-  visibility(changed: (visible: boolean) => void): () => void
 }
 
 export interface GuideSnapshot {
   readonly capabilities: GuideCapabilities | null
-  readonly connection: 'offline' | 'connecting' | 'connected'
-  readonly voice: boolean
-  readonly microphoneMuted: boolean
-  readonly guideMuted: boolean
-  readonly automatic: boolean
-  readonly state: string
-  readonly plan: TourPlan | null
-  readonly stopIndex: number
-  readonly planRevision: number
-  readonly planHistory: readonly {
-    revision: number
-    goal: string
-    reason: string
-    changes: readonly string[]
-  }[]
-  readonly subjectNames: Readonly<Record<string, string>>
-  readonly stopElapsedSeconds: number
-  readonly narrationState: 'idle' | 'loading' | 'speaking' | 'looking'
-  readonly narrationOrigin: 'records' | 'authored' | 'model'
-  readonly explanation: string | null
-  readonly sources: readonly TourSource[]
-  readonly transcripts: readonly TourTranscript[]
+  readonly connection: GuideStatus['connection']
+  readonly voice: string | null
+  readonly paused: boolean
+  /** One line under the controls: Listening, Speaking, Moving to Titan. */
+  readonly status: string
   readonly message: string | null
-  readonly search: GuideExecutor['searchStatus']
+  readonly usage: GuideUsage
+  readonly expiresAt: number | null
 }
 
-/** All asynchronous work carries both the request and the actual view revision. */
+/** What the runtime needs from the executor; `executor.ts` is the one implementation. */
+export interface GuideExecutorPort {
+  readonly viewRevision: number
+  readonly pending: GuideArrival['tool'] | null
+  readonly pendingSubject: string | null
+  readonly searching: boolean
+  view(): ViewDescription
+  facts(): SceneFacts
+  execute(call: GuideCall): Promise<GuideToolOutput>
+  poll(): void
+  cancel(): void
+  dispose(): void
+}
+
+/** What the runtime needs from the connection; `media.ts` is the one implementation. */
+export interface LiveConnectionPort {
+  prepare(): Promise<string>
+  accept(sdp: string): Promise<void>
+  send(event: Record<string, unknown>): string
+  level(): number
+  muteMicrophone(muted: boolean): Promise<void>
+  muteGuide(muted: boolean): void
+  close(timeoutMs?: number): Promise<{ closed: boolean }>
+  stop(): void
+}
+
+export interface GuideHost {
+  now(): number
+  request(path: string, body?: unknown, signal?: AbortSignal): Promise<Response>
+  executor(events: {
+    onArrival: (arrival: GuideArrival) => void
+    onTakeover: () => void
+  }): GuideExecutorPort
+  live(
+    onEvent: (event: LiveServerEvent) => void,
+    onFailure: (message: string) => void,
+  ): LiveConnectionPort
+  poll(run: () => void): () => void
+  visibility(changed: (visible: boolean) => void): () => void
+  /** The page is going away; a best-effort close. */
+  leaving?(handler: () => void): () => void
+  /** The visitor's clock, for the greeting. */
+  localTime(): string
+}
+
+/** Milliseconds a view must stay put before the scene block is queued. */
+const SCENE_DEBOUNCE_MS = 500
+/** A pause longer than this ends the session; the clock bills throughout. */
+const PAUSE_LIMIT_MS = 180_000
+/** How long the greeting waits for its acknowledgment before sending the cue. */
+const ACK_TIMEOUT_MS = 3000
+
+interface Linger {
+  readonly seconds: number
+  phase: 'chain' | 'speech' | 'quiet'
+  quietFrom: number
+}
+
 export class GuideRuntime {
   readonly #host: GuideHost
   readonly #listeners = new Set<() => void>()
+  readonly #clock: SpeechClock
   #snapshot: GuideSnapshot = {
     capabilities: null,
     connection: 'offline',
-    voice: false,
-    microphoneMuted: false,
-    guideMuted: false,
-    automatic: false,
-    state: 'idle',
-    plan: null,
-    stopIndex: 0,
-    planRevision: 0,
-    planHistory: [],
-    subjectNames: {},
-    stopElapsedSeconds: 0,
-    narrationState: 'idle',
-    narrationOrigin: 'records',
-    explanation: null,
-    sources: [],
-    transcripts: [],
+    voice: null,
+    paused: false,
+    status: '',
     message: null,
-    search: null,
+    usage: NO_GUIDE_USAGE,
+    expiresAt: null,
   }
-  #executor: GuideExecutor | null = null
-  #runner: TourRunner | null = null
-  #localId: string | null = null
+  #executor: GuideExecutorPort | null = null
+  #live: LiveConnectionPort | null = null
+  #loop: GuideLoop | null = null
   #sessionId: string | null = null
-  #tabId: string | null = null
-  #creationKey: string | null = null
-  #expiresAt = Infinity
-  #requestRevision = 0
-  #microphoneRevision = 0
   #generation = 0
-  #playbackRevision = 0
-  #lastQuestion = ''
-  #operation: { id: string; stop: TourStop } | null = null
-  #socket: WebSocket | null = null
-  #live: LiveConnection | null = null
-  #playback: ControlledPlayback | null = null
+  #inspect: Promise<void> | null = null
+  #pending = new Set<AbortController>()
   #pollRelease: (() => void) | null = null
   #visibilityRelease: (() => void) | null = null
-  #pending = new Set<AbortController>()
-  #inspect: Promise<void> | null = null
-  #connecting: Promise<void> | null = null
-  #startup: TourTranscript[] = []
-  #seenTranscripts = new Set<string>()
-  #readyResolve: (() => void) | null = null
-  #readyReject: ((error: Error) => void) | null = null
-  #mutating = false
-  #knownViewRevision = -1
+  #leavingRelease: (() => void) | null = null
+  #sceneRevision = -1
+  #sceneChangedAt: number | null = null
+  #sceneText = ''
+  #linger: Linger | null = null
+  #pausedAt: number | null = null
+  #ending = false
   #traceEnabled = false
   #traceSequence = 0
   #traceEntries: GuideTraceEntry[] = []
 
   constructor(host: GuideHost) {
     this.#host = host
+    this.#clock = new SpeechClock({ now: () => host.now() })
   }
+
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener)
     return () => {
@@ -177,13 +165,14 @@ export class GuideRuntime {
     }
   }
   getSnapshot = (): GuideSnapshot => this.#snapshot
+
   trace(enabled?: boolean): readonly GuideTraceEntry[] {
     if (enabled !== undefined) this.#traceEnabled = enabled
     return structuredClone(this.#traceEntries)
   }
   #record(
     direction: GuideTraceEntry['direction'],
-    message: GuideTraceEntry['message'],
+    message: Readonly<Record<string, unknown>>,
   ): void {
     if (!this.#traceEnabled) return
     const entry: GuideTraceEntry = {
@@ -194,28 +183,31 @@ export class GuideRuntime {
     }
     this.#traceEntries.push(entry)
     if (this.#traceEntries.length > 200) this.#traceEntries.shift()
-    console.debug('[tour browser]', structuredClone(entry))
+    console.debug('[guide]', structuredClone(entry))
   }
+
   diagnostics(): GuideStatus {
     const state = this.#snapshot
     return {
       available: true,
       loaded: true,
-      state: state.state,
+      state: state.status.toLowerCase() || 'idle',
       connection: state.connection,
-      planId: state.plan?.id ?? null,
-      stopIndex: state.plan === null ? null : state.stopIndex,
-      requestRevision: this.#requestRevision,
+      sessionId: this.#sessionId,
       viewRevision: this.#executor?.viewRevision ?? null,
-      microphone: state.voice
-        ? state.microphoneMuted
-          ? 'muted'
-          : 'active'
-        : 'off',
-      guideMuted: state.guideMuted,
-      automatic: state.automatic,
+      microphone:
+        state.connection === 'connected'
+          ? state.paused
+            ? 'muted'
+            : 'active'
+          : 'off',
+      paused: state.paused,
+      pendingCalls: this.#loop?.pendingCalls ?? 0,
+      inFlight: this.#loop?.inFlight ?? false,
+      usage: state.usage,
     }
   }
+
   #update(next: Partial<GuideSnapshot>): void {
     this.#snapshot = { ...this.#snapshot, ...next }
     for (const listener of this.#listeners) listener()
@@ -230,8 +222,7 @@ export class GuideRuntime {
           !value ||
           typeof value.available !== 'boolean' ||
           typeof value.authenticated !== 'boolean' ||
-          !Array.isArray(value.voices) ||
-          !value.features
+          !Array.isArray(value.voices)
         )
           throw new Error('Guide availability could not be read.')
         this.#update({ capabilities: value })
@@ -253,868 +244,452 @@ export class GuideRuntime {
     }
   }
 
-  async startVoice(voice: string): Promise<void> {
-    this.command('pause')
+  /** Request the microphone, post the offer, greet. */
+  async start(voice: string): Promise<void> {
+    if (this.#snapshot.connection !== 'offline') return
+    const generation = ++this.#generation
+    this.#ending = false
     try {
-      await this.#connect(true, voice)
-      this.#update({ automatic: false })
-    } catch (cause) {
-      this.#disconnect()
-      this.#update({ message: `${message(cause)} You can continue by typing.` })
-    }
-  }
-
-  async startTour(
-    kind: 'saturn' | 'system',
-    audio = false,
-    voice = 'marin',
-  ): Promise<void> {
-    try {
-      if (audio) {
-        await this.#connect(false, voice, true)
-        if (!this.#snapshot.capabilities?.features.controlledSpeech)
-          throw new Error('Spoken tours are unavailable.')
-        await this.ask(
-          kind === 'saturn'
-            ? 'Give us a tour of Saturn and its moons.'
-            : 'Give us a five minute tour of the Solar system.',
-        )
-        return
+      await this.inspect()
+      const capabilities = this.#snapshot.capabilities
+      if (!capabilities?.available)
+        throw new Error(capabilities?.reason ?? 'The guide is unavailable.')
+      if (!capabilities.authenticated)
+        throw new Error('Enter the private alpha password first.')
+      const chosen = capabilities.voices.includes(voice)
+        ? voice
+        : (capabilities.voices[0] ?? 'marin')
+      this.#update({
+        connection: 'connecting',
+        voice: chosen,
+        paused: false,
+        status: 'Connecting',
+        message: null,
+        usage: NO_GUIDE_USAGE,
+        expiresAt: null,
+      })
+      const live = this.#host.live(
+        (event) => this.#event(live, event),
+        (reason) => this.#failure(live, reason),
+      )
+      this.#live = live
+      const loop = new GuideLoop(
+        { send: (event) => this.#send(event) },
+        {
+          now: () => this.#host.now(),
+          execute: (call) => this.#execute(call),
+          onExecuted: (call, output) => this.#executed(call, output),
+          onDelegation: () => this.#cancelLinger(),
+          onError: (code, detail) => {
+            this.#record('note', { error: code, detail })
+            if (code === 'session_expired')
+              this.#update({ message: 'The guide session expired.' })
+          },
+          onChange: () => this.#refresh(),
+        },
+      )
+      this.#loop = loop
+      const sdp = await live.prepare()
+      this.#guard(generation)
+      const executor = this.#host.executor({
+        onArrival: (arrival) => this.#arrival(arrival),
+        onTakeover: () => this.#takeover(),
+      })
+      this.#executor = executor
+      const view = executor.view()
+      const facts = executor.facts()
+      const response = await this.#request('/api/tour/sessions', {
+        voice: chosen,
+        sdp,
+        scene: openingLine(view, facts, this.#host.localTime()),
+      })
+      const created = (await response.json()) as {
+        sessionId?: unknown
+        expiresAt?: unknown
+        sdp?: unknown
       }
-      const context = this.#context(kind === 'saturn' ? 'Saturn' : undefined)
-      const plan = deterministicTour(context, kind)
-      if (plan === null)
-        throw new Error('No tour subjects are available in this view.')
-      this.#startPlan(plan, audio && !this.#snapshot.voice)
+      if (
+        typeof created.sessionId !== 'string' ||
+        typeof created.sdp !== 'string' ||
+        typeof created.expiresAt !== 'number'
+      )
+        throw new Error('The guide session response was invalid.')
+      this.#guard(generation)
+      this.#sessionId = created.sessionId
+      this.#update({
+        expiresAt: created.expiresAt > 0 ? created.expiresAt : null,
+      })
+      await live.accept(created.sdp)
+      this.#guard(generation)
+      this.#sceneRevision = executor.viewRevision
+      this.#sceneChangedAt = null
+      this.#sceneText = sceneBlock(view, facts)
+      this.#update({ connection: 'connected', status: 'Listening' })
+      this.#pollRelease ??= this.#host.poll(() => this.#tick())
+      this.#visibilityRelease ??= this.#host.visibility((visible) => {
+        if (!visible) this.pause()
+      })
+      this.#leavingRelease ??=
+        this.#host.leaving?.(() => {
+          try {
+            this.#send({ type: 'session.close' })
+          } catch {
+            /* The peer connection closing is the fallback the provider honors. */
+          }
+          this.#live?.stop()
+        }) ?? null
+      // The documented recipe: the instruction alone greeted in one of two
+      // probe runs; with the commentary cue after it, every time.
+      const greeting = this.#send({
+        type: 'session.instructions.append',
+        delegation_id: null,
+        content: GREETING_INSTRUCTION,
+      })
+      await loop.waitForAck(greeting, ACK_TIMEOUT_MS)
+      if (generation !== this.#generation) return
+      this.#send({
+        type: 'session.commentary.append',
+        delegation_id: null,
+        content: BEGIN_CONVERSATION,
+      })
     } catch (cause) {
-      this.#update({ message: message(cause) })
+      if (generation !== this.#generation) return
+      this.#teardown()
+      this.#update({
+        connection: 'offline',
+        status: '',
+        message: message(cause),
+      })
     }
   }
 
+  pause(): void {
+    if (this.#snapshot.connection !== 'connected' || this.#snapshot.paused)
+      return
+    this.#pausedAt = this.#host.now()
+    this.#cancelLinger()
+    this.#executor?.cancel()
+    void this.#live?.muteMicrophone(true).catch(() => {})
+    this.#live?.muteGuide(true)
+    try {
+      this.#send({ type: 'session.input_audio.mute' })
+      this.#send({
+        type: 'session.instructions.append',
+        delegation_id: null,
+        content: PAUSE_INSTRUCTION,
+      })
+    } catch {
+      /* A connection that cannot carry the mute is one the failure handler is about to report. */
+    }
+    this.#update({ paused: true, status: 'Paused' })
+  }
+
+  resume(): void {
+    if (this.#snapshot.connection !== 'connected' || !this.#snapshot.paused)
+      return
+    this.#pausedAt = null
+    void this.#live?.muteMicrophone(false).catch((cause: unknown) => {
+      this.#update({ message: message(cause) })
+    })
+    this.#live?.muteGuide(false)
+    try {
+      this.#send({ type: 'session.input_audio.unmute' })
+      this.#send({
+        type: 'session.instructions.append',
+        delegation_id: null,
+        content: RESUME_INSTRUCTION,
+      })
+    } catch {
+      /* As above. */
+    }
+    this.#update({ paused: false, status: 'Listening', message: null })
+  }
+
+  /** Close the session, wait for its final usage, release everything. */
+  async end(): Promise<void> {
+    if (this.#snapshot.connection === 'offline' || this.#ending) return
+    this.#ending = true
+    this.#generation++
+    this.#cancelLinger()
+    this.#executor?.cancel()
+    this.#update({ connection: 'closing', status: 'Ending' })
+    const live = this.#live
+    if (live !== null) await live.close()
+    this.#teardown()
+    this.#update({
+      connection: 'offline',
+      paused: false,
+      status: '',
+      voice: null,
+      expiresAt: null,
+    })
+  }
+
+  /** A typed request, as the visitor's own words. */
   async ask(text: string): Promise<void> {
     const query = text.trim().slice(0, 4000)
-    if (!query) return
-    this.#lastQuestion = query
-    const command = exactCommand(query)
-    if (command !== null) {
-      this.command(command)
-      return
-    }
-    try {
-      const context = this.#context(query)
-      const choices = context.candidates.filter(
-        (candidate) =>
-          candidate.name.toLocaleLowerCase() === query.toLocaleLowerCase() ||
-          candidate.address === query,
-      )
-      if (choices.length === 1) {
-        const subject = choices[0]!
-        this.#startPlan(
-          {
-            id: this.#host.id(),
-            goal: `Look at ${subject.name}`,
-            durationSeconds: 30,
-            stops: [
-              {
-                id: this.#host.id(),
-                subjectId: subject.id,
-                framingId: null,
-                siteId: null,
-                objective: `Look at ${subject.name}`,
-                factIds: subject.factIds.slice(0, 4),
-                minimumViewSeconds: 5,
-              },
-            ],
-          },
-          false,
-        )
-        return
-      }
-      this.#invalidate()
-      this.#runner?.command('pause')
-      const generation = this.#generation
-      await this.#connect(false, 'marin', true)
-      if (generation !== this.#generation) return
-      const current = this.#context(query)
-      this.#requestRevision++
-      this.#executor!.supersede(this.#requestRevision)
-      this.#send({ type: 'context', context: current })
-      this.#send({
-        type: 'ask',
-        text: query,
-        requestRevision: this.#requestRevision,
-        viewRevision: current.viewRevision,
-      })
-      this.#update({ state: 'planning', message: null })
-    } catch (cause) {
-      this.#update({ message: message(cause) })
-    }
-  }
-
-  explain(): void {
-    const context = this.#context()
-    const brief = context.brief
-    if (brief === null) {
-      this.#update({ message: 'Choose an object to read its record.' })
-      return
-    }
-    if (this.#snapshot.connection === 'connected') {
-      void this.ask(`Tell me something interesting about ${brief.name}.`)
-      return
-    }
-    this.command('pause')
-    this.#update({
-      explanation: [
-        brief.summary,
-        ...brief.facts
-          .slice(0, 5)
-          .map((fact) => fact.speech ?? `${fact.label}: ${fact.reason}`),
-      ].join(' '),
-      sources: brief.sources,
-      message: null,
-    })
-  }
-
-  command(command: TourCommand): void {
-    if (command === 'end') {
-      this.end()
-      return
-    }
-    if (command === 'start') {
-      void this.startTour('system')
-      return
-    }
-    if (this.#executor === null && this.#snapshot.plan !== null)
-      this.#activate()
-    if (this.#executor === null) return
-    this.#invalidate()
-    this.#requestRevision++
-    this.#executor.supersede(this.#requestRevision)
-    this.#sendContext()
-    this.#send({
-      type: 'command',
-      command,
-      requestRevision: this.#requestRevision,
-      viewRevision: this.#executor.viewRevision,
-    })
-    this.#mutating = true
-    if (command === 'resume' && this.#runner !== null) {
-      let context = this.#context()
-      const status = this.#runner.status()
-      const stop = this.#snapshot.plan?.stops[status.index]
-      if (stop && context.subjectId !== stop.subjectId)
-        this.#runner.command('next')
-      else {
-        if (stop && status.arrived) {
-          this.#executor.startMotion?.(
-            stop.motion ?? 'hold',
-            motionSeconds(stop),
-          )
-          this.#knownViewRevision = this.#executor.viewRevision
-          context = this.#context()
-        }
-        this.#runner.resumeAt(context.viewRevision)
-        if (
-          stop &&
-          this.#runner.status().arrived &&
-          this.#snapshot.connection === 'connected'
-        ) {
-          this.#send({ type: 'context', context })
-          this.#send({
-            type: 'narration-ready',
-            stopId: stop.id,
-            requestRevision: this.#requestRevision,
-            viewRevision: context.viewRevision,
-          })
-        }
-      }
-    } else this.#runner?.command(command)
-    this.#mutating = false
-    if (command === 'pause') this.#live?.muteGuide(true)
-    if (command === 'resume') {
-      this.#live?.muteGuide(this.#snapshot.guideMuted)
-      void this.muteMicrophone(this.#snapshot.microphoneMuted)
-      this.#update({ message: null })
-    }
-    this.#refreshRunner()
-  }
-
-  async muteMicrophone(muted: boolean): Promise<void> {
-    const revision = ++this.#microphoneRevision
-    const live = this.#live
-    if (muted) this.#update({ microphoneMuted: true })
-    try {
-      await live?.muteMicrophone(muted)
-      if (live === this.#live && revision === this.#microphoneRevision)
-        this.#update({ microphoneMuted: muted })
-    } catch (cause) {
-      if (live === this.#live && revision === this.#microphoneRevision)
-        this.#update({
-          microphoneMuted: true,
-          message: `${message(cause)} Typed requests remain available.`,
-        })
-    }
-  }
-  muteGuide(muted: boolean): void {
-    this.#live?.muteGuide(
-      muted ||
-        (this.#snapshot.voice &&
-          ['loading', 'speaking', 'looking'].includes(
-            this.#snapshot.narrationState,
-          ) &&
-          this.#snapshot.automatic),
+    if (
+      !query ||
+      this.#loop === null ||
+      this.#snapshot.connection !== 'connected'
     )
-    this.#playback?.mute(muted)
-    this.#update({ guideMuted: muted })
+      return
+    this.#loop.ask(query)
   }
 
-  end(): void {
-    this.#creationKey = null
-    this.#invalidate()
-    this.#runner?.command('end')
-    this.#disconnect()
-    this.#executor?.dispose()
-    this.#executor = null
+  /* ---------------------------------------------------------------------- */
+  /* Events                                                                   */
+  /* ---------------------------------------------------------------------- */
+
+  #event(live: LiveConnectionPort, event: LiveServerEvent): void {
+    if (live !== this.#live) return
+    if (event.type !== 'session.output_transcript.delta')
+      this.#record('receive', event)
+    this.#loop?.receive(event)
+    if (event.type === 'session.closed' && !this.#ending) {
+      const reason = typeof event.reason === 'string' ? event.reason : 'closed'
+      this.#teardown()
+      this.#update({
+        connection: 'offline',
+        paused: false,
+        status: '',
+        voice: null,
+        message:
+          reason === 'expired'
+            ? 'The guide session reached its time limit.'
+            : 'The guide session ended.',
+      })
+    }
+  }
+
+  #failure(live: LiveConnectionPort, reason: string): void {
+    if (live !== this.#live || this.#ending) return
+    this.#teardown()
+    this.#update({
+      connection: 'offline',
+      paused: false,
+      status: '',
+      voice: null,
+      message: reason,
+    })
+  }
+
+  #send(event: Record<string, unknown>): string {
+    const live = this.#live
+    if (live === null) throw new Error('The voice connection is not open.')
+    const id = live.send(event)
+    this.#record('send', { ...event, event_id: id })
+    return id
+  }
+
+  async #execute(call: GuideCall): Promise<GuideToolOutput> {
+    const executor = this.#executor
+    if (executor === null) return { status: 'rejected', reason: 'No scene.' }
+    if (this.#snapshot.paused)
+      return { status: 'rejected', reason: 'The visitor has paused the guide.' }
+    const output = await executor.execute(call)
+    this.#record('note', { call: call.name, output })
+    return output
+  }
+
+  #executed(call: GuideCall, output: GuideToolOutput): void {
+    if (call.name === 'linger' && output.status === 'scheduled') {
+      this.#linger = { seconds: call.seconds, phase: 'chain', quietFrom: 0 }
+      return
+    }
+    if (
+      call.name === 'go_to' ||
+      call.name === 'frame_pair' ||
+      call.name === 'stand_at' ||
+      call.name === 'leave_surface' ||
+      call.name === 'hold_view'
+    )
+      this.#cancelLinger()
+    this.#refresh()
+  }
+
+  #arrival(arrival: GuideArrival): void {
+    const executor = this.#executor
+    const loop = this.#loop
+    if (executor === null || loop === null) return
+    const view = executor.view()
+    const facts = executor.facts()
+    this.#sceneText = sceneBlock(view, facts)
+    this.#sceneRevision = executor.viewRevision
+    this.#sceneChangedAt = null
+    const prompted = loop.prompt(arrivalBlock(arrival, view, facts))
+    this.#record('note', { arrival: arrival.subject, prompted })
+    this.#think(uiContext(view))
+    this.#refresh()
+  }
+
+  #takeover(): void {
+    const executor = this.#executor
+    const loop = this.#loop
+    this.#cancelLinger()
+    if (executor === null || loop === null) return
+    loop.cancelPending()
+    const view = executor.view()
+    const facts = executor.facts()
+    this.#sceneText = sceneBlock(view, facts)
+    this.#sceneRevision = executor.viewRevision
+    this.#sceneChangedAt = null
+    loop.queue(takeoverBlock(view, facts))
+    this.#think(takeoverContext(view))
+    this.#update({ status: 'You have the camera' })
+  }
+
+  #think(content: string): void {
+    try {
+      this.#send({
+        type: 'session.thinking.append',
+        delegation_id: null,
+        content,
+      })
+    } catch {
+      /* Reported by the failure handler if the connection is gone. */
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* The clock                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  #tick(): void {
+    if (this.#snapshot.connection !== 'connected') return
+    const executor = this.#executor
+    const loop = this.#loop
+    const live = this.#live
+    if (executor === null || loop === null || live === null) return
+    const now = this.#host.now()
+    executor.poll()
+    this.#clock.sample(live.level())
+    const revision = executor.viewRevision
+    if (revision !== this.#sceneRevision) {
+      this.#sceneRevision = revision
+      this.#sceneChangedAt = now
+    }
+    if (
+      this.#sceneChangedAt !== null &&
+      now - this.#sceneChangedAt >= SCENE_DEBOUNCE_MS &&
+      executor.pending === null
+    ) {
+      const view = executor.view()
+      if (
+        !view.traveling ||
+        now - this.#sceneChangedAt >= 10 * SCENE_DEBOUNCE_MS
+      ) {
+        this.#sceneChangedAt = null
+        const text = sceneBlock(view, executor.facts())
+        if (text !== this.#sceneText) {
+          this.#sceneText = text
+          loop.queue(text)
+          this.#think(uiContext(view))
+        }
+      }
+    }
+    const expiresAt = this.#snapshot.expiresAt
+    if (expiresAt !== null && now >= expiresAt) {
+      void this.end().then(() =>
+        this.#update({ message: 'The guide session reached its time limit.' }),
+      )
+      return
+    }
+    if (this.#pausedAt !== null && now - this.#pausedAt >= PAUSE_LIMIT_MS) {
+      void this.end().then(() =>
+        this.#update({
+          message: 'The guide ended after three minutes paused.',
+        }),
+      )
+      return
+    }
+    this.#tickLinger(now)
+    this.#refresh()
+  }
+
+  #tickLinger(now: number): void {
+    const linger = this.#linger
+    const loop = this.#loop
+    if (linger === null || loop === null) return
+    if (linger.phase === 'chain') {
+      if (loop.inFlight) return
+      linger.phase = 'speech'
+      void this.#clock.waitForBeat({ since: now }).then((outcome) => {
+        if (this.#linger !== linger || outcome === 'canceled') return
+        linger.phase = 'quiet'
+        linger.quietFrom = this.#host.now()
+        this.#record('note', { beat: outcome, quietSeconds: linger.seconds })
+      })
+      return
+    }
+    if (
+      linger.phase === 'quiet' &&
+      now - linger.quietFrom >= linger.seconds * 1000
+    ) {
+      this.#linger = null
+      loop.prompt(quietBlock(linger.seconds))
+    }
+  }
+
+  #cancelLinger(): void {
+    this.#linger = null
+    this.#clock.cancel()
+  }
+
+  #refresh(): void {
+    const snapshot = this.#snapshot
+    if (snapshot.connection !== 'connected') return
+    const loop = this.#loop
+    const executor = this.#executor
+    const usage = loop?.usage ?? snapshot.usage
+    const status = snapshot.paused
+      ? 'Paused'
+      : executor?.searching
+        ? 'Searching the sky'
+        : executor?.pending !== null && executor?.pendingSubject
+          ? `Moving to ${executor.pendingSubject}`
+          : this.#clock.speaking
+            ? 'Speaking'
+            : loop?.inFlight
+              ? 'Thinking'
+              : snapshot.status === 'You have the camera'
+                ? snapshot.status
+                : 'Listening'
+    if (status !== snapshot.status || usage !== snapshot.usage)
+      this.#update({ status, usage })
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Lifecycle                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  #guard(generation: number): void {
+    if (generation !== this.#generation)
+      throw new Error('The guide request was canceled.')
+  }
+
+  #teardown(): void {
+    this.#cancelLinger()
     this.#pollRelease?.()
     this.#pollRelease = null
     this.#visibilityRelease?.()
     this.#visibilityRelease = null
-    this.#update({ state: 'ended', message: null, voice: false })
-  }
-
-  #activate(): GuideExecutor {
-    if (this.#executor === null) {
-      this.#localId ??= this.#host.id()
-      this.#executor = this.#host.executor(
-        this.#sessionId ?? this.#localId,
-        (receipt) => this.#receipt(receipt),
-        () => this.#takeover(),
-      )
-      this.#executor.supersede(this.#requestRevision)
-      this.#knownViewRevision = this.#executor.viewRevision
-    }
-    this.#pollRelease ??= this.#host.poll(() => {
-      if (this.#host.now() >= this.#expiresAt) {
-        this.command('pause')
-        this.#disconnect()
-        this.#update({
-          message:
-            'The guide session has ended. The itinerary remains available.',
-        })
-        return
-      }
-      this.#executor?.poll()
-      if (
-        this.#executor &&
-        this.#executor.viewRevision !== this.#knownViewRevision
-      )
-        this.#takeover()
-      const search = this.#executor?.searchStatus
-      if (JSON.stringify(search) !== JSON.stringify(this.#snapshot.search))
-        this.#update({ search })
-      this.#runner?.tick()
-      this.#refreshRunner()
-    })
-    this.#visibilityRelease ??= this.#host.visibility((visible) => {
-      if (!visible) {
-        this.command('pause')
-        void this.muteMicrophone(true)
-        this.#update({
-          message:
-            'Tour paused while this tab is hidden. Resume when you are ready.',
-        })
-      }
-    })
-    return this.#executor
-  }
-
-  #context(query?: string): TourContext {
-    const context = this.#activate().context(query)
-    return context
-  }
-  #sendContext(): TourContext {
-    const context = this.#context()
-    this.#send({ type: 'context', context })
-    return context
-  }
-  #invalidate(cancel = true): void {
-    this.#generation++
-    this.#operation = null
-    this.#playback?.stop()
-    this.#update({ narrationState: 'idle' })
-    for (const controller of this.#pending) controller.abort()
-    this.#pending.clear()
-    if (cancel) this.#executor?.cancel('The visitor changed the request.')
-  }
-  #takeover(): void {
-    if (this.#executor === null) return
-    this.#knownViewRevision = this.#executor.viewRevision
-    this.command('pause')
-    this.#update({
-      message: 'You have the camera. Resume to continue from this view.',
-    })
-  }
-
-  #startPlan(plan: TourPlan, automatic: boolean): void {
-    const context = this.#context()
-    const checked = validateTourPlan(plan, context)
-    if (!checked.ok) throw new Error(checked.error)
-    this.#invalidate(!this.#mutating)
-    this.#runner?.command('end')
-    const subjectNames = {
-      ...this.#snapshot.subjectNames,
-      ...Object.fromEntries(
-        context.candidates.map((candidate) => [candidate.id, candidate.name]),
-      ),
-    }
-    const planRevision = this.#snapshot.planRevision + 1
-    const changes = planChanges(this.#snapshot.plan, plan, subjectNames)
-    this.#update({
-      plan,
-      automatic,
-      planRevision,
-      subjectNames,
-      planHistory: [
-        ...this.#snapshot.planHistory,
-        {
-          revision: planRevision,
-          goal: plan.goal,
-          reason:
-            plan.rationale ?? (this.#lastQuestion || 'Started this tour.'),
-          changes,
-        },
-      ].slice(-6),
-      narrationState: 'idle',
-      stopElapsedSeconds: 0,
-      explanation: null,
-      sources: [],
-      message: null,
-    })
-    const automaticEnabled = () => this.#snapshot.automatic
-    this.#runner = new TourRunner({
-      now: this.#host.presentationNow,
-      get automatic() {
-        return automaticEnabled()
-      },
-      onStop: (stop: TourStop) => this.#move(stop),
-      onChange: () => this.#refreshRunner(),
-    })
-    this.#runner.start(plan)
-    this.#refreshRunner()
-  }
-  #refreshRunner(): void {
-    const status = this.#runner?.status()
-    if (status === undefined) return
-    if (
-      status.state !== this.#snapshot.state ||
-      status.index !== this.#snapshot.stopIndex ||
-      Math.floor(status.elapsedSeconds) !== this.#snapshot.stopElapsedSeconds
-    )
-      this.#update({
-        state: status.state,
-        stopIndex: status.index,
-        stopElapsedSeconds: Math.floor(status.elapsedSeconds),
-      })
-    if (status.state === 'ended') {
-      this.#executor?.stopMotion?.()
-      this.#live?.muteGuide(this.#snapshot.guideMuted)
-      if (this.#snapshot.narrationState !== 'idle')
-        this.#update({ narrationState: 'idle' })
-    }
-  }
-  #move(stop: TourStop): void {
-    this.#activate()
-    if (!this.#mutating) {
-      this.#invalidate()
-      this.#requestRevision++
-      this.#executor!.supersede(this.#requestRevision)
-      this.#sendContext()
-      this.#send({
-        type: 'command',
-        command: 'next',
-        requestRevision: this.#requestRevision,
-        viewRevision: this.#executor!.viewRevision,
-      })
-    }
-    this.#executor!.queueMotion?.(stop.motion ?? 'hold', motionSeconds(stop))
-    const operationId = this.#host.id()
-    this.#operation = { id: operationId, stop }
-    const request: ToolRequest = {
-      sessionId: this.#sessionId ?? this.#localId!,
-      requestRevision: this.#requestRevision,
-      operationId,
-      expectedViewRevision: this.#executor!.viewRevision,
-      expiresAt: this.#host.now() + 20000,
-      action:
-        stop.siteId !== null
-          ? {
-              tool: 'stand_at_site',
-              subjectId: stop.subjectId,
-              siteId: stop.siteId,
-            }
-          : stop.framingId !== null
-            ? {
-                tool: 'compose_view',
-                subjectId: stop.subjectId,
-                framingId: stop.framingId,
-              }
-            : { tool: 'show_subject', subjectId: stop.subjectId },
-    }
-    this.#executor!.execute(request)
-    this.#knownViewRevision = this.#executor!.viewRevision
-  }
-  #receipt(receipt: ToolReceipt): void {
-    if (receipt.requestRevision !== this.#requestRevision) return
-    this.#knownViewRevision = receipt.viewRevision
-    if (receipt.status === 'arrived') this.#sendContext()
-    this.#send({ type: 'receipt', receipt })
-    const operation = this.#operation
-    if (receipt.status === 'accepted') return
-    if (operation === null || receipt.operationId !== operation.id) {
-      if (receipt.status === 'arrived') this.#sendContext()
-      return
-    }
-    if (receipt.status !== 'arrived') {
-      this.#runner?.fail(receipt.reason ?? 'The view could not be reached.')
-      this.#update({ message: receipt.reason })
-      return
-    }
-    const context = this.#sendContext()
-    this.#runner?.arrived(operation.stop.id, receipt.viewRevision)
-    if (
-      this.#snapshot.connection === 'connected' &&
-      this.#runner?.status().state !== 'paused'
-    ) {
-      this.#send({
-        type: 'narration-ready',
-        stopId: operation.stop.id,
-        requestRevision: this.#requestRevision,
-        viewRevision: receipt.viewRevision,
-      })
-    } else if (context.brief !== null) {
-      this.#update({
-        explanation: context.brief.summary,
-        sources: context.brief.sources,
-      })
-    }
-  }
-
-  async #connect(
-    voice: boolean,
-    selectedVoice: string,
-    preserveVoice = false,
-  ): Promise<void> {
-    if (
-      this.#snapshot.connection === 'connected' &&
-      (preserveVoice || this.#snapshot.voice === voice)
-    )
-      return
-    if (this.#connecting !== null) return this.#connecting
-    const pending = this.#open(voice, selectedVoice)
-    this.#connecting = pending
-    try {
-      await pending
-    } finally {
-      if (this.#connecting === pending) this.#connecting = null
-    }
-  }
-  async #open(voice: boolean, selectedVoice: string): Promise<void> {
-    const generation = this.#generation
-    await this.inspect()
-    if (generation !== this.#generation)
-      throw new Error('The guide request was canceled.')
-    const capabilities = this.#snapshot.capabilities
-    if (!capabilities?.available)
-      throw new Error(
-        capabilities?.reason ??
-          'The online guide is unavailable. Local tours still work.',
-      )
-    if (!capabilities.authenticated)
-      throw new Error(
-        'Enter the private alpha password to ask the online guide.',
-      )
-    if (voice && !capabilities.features.live)
-      throw new Error('Live voice is unavailable.')
-    this.#disconnect()
-    this.#update({ connection: 'connecting', message: null })
-    this.#activate()
-    let sdp: string | null = null
-    if (voice) {
-      const live = this.#host.live(
-        (event) => this.#liveEvent(event),
-        (reason) => {
-          this.command('pause')
-          this.#disconnect()
-          this.#update({ message: reason })
-        },
-      )
-      this.#live = live
-      await live.muteMicrophone(this.#snapshot.microphoneMuted)
-      live.muteGuide(this.#snapshot.guideMuted)
-      sdp = await live.prepare()
-    }
-    if (generation !== this.#generation)
-      throw new Error('The guide request was canceled.')
-    if (voice) this.#update({ voice: true })
-    this.#creationKey ??= this.#host.id()
-    this.#tabId ??= this.#host.id()
-    const context = this.#context()
-    let sessionId: string | null = null
-    try {
-      const response = await this.#request('/api/tour/sessions', {
-        protocolVersion: TOUR_PROTOCOL_VERSION,
-        manifest: context.manifest,
-        context,
-        transport: voice ? 'live' : 'text',
-        voice: capabilities.voices.includes(selectedVoice)
-          ? selectedVoice
-          : (capabilities.voices[0] ?? 'marin'),
-        sdp,
-        idempotencyKey: this.#creationKey,
-        tabId: this.#tabId,
-      })
-      const created = (await response.json()) as {
-        sessionId: string
-        expiresAt: number
-        sdp: string | null
-      }
-      if (
-        typeof created.sessionId !== 'string' ||
-        !Number.isFinite(created.expiresAt)
-      )
-        throw new Error('The guide session response was invalid.')
-      sessionId = created.sessionId
-      if (generation !== this.#generation) {
-        void this.#host
-          .request(
-            `/api/tour/sessions/${encodeURIComponent(sessionId)}/close`,
-            {},
-            undefined,
-            true,
-          )
-          .catch(() => {})
-        throw new Error('The guide request was canceled.')
-      }
-      this.#creationKey = null
-      this.#sessionId = sessionId
-      this.#expiresAt = created.expiresAt
-      this.#executor?.dispose()
-      this.#executor = null
-      this.#activate()
-      const socket = this.#host.socket(sessionId, this.#tabId)
-      this.#socket = socket
-      socket.addEventListener('message', (event) => {
-        if (this.#socket !== socket || typeof event.data !== 'string') return
-        const decoded = decodeTourMessage(decodeTourServerMessage, event.data)
-        if (decoded.ok) this.#receive(decoded.value)
-      })
-      const lost = () => {
-        if (this.#socket !== socket) return
-        this.#readyReject?.(new Error('The guide connection was interrupted.'))
-        this.command('pause')
-        this.#disconnect()
-        this.#update({
-          message:
-            'The guide connection was interrupted. Your itinerary is still available.',
-        })
-      }
-      socket.addEventListener('close', lost)
-      socket.addEventListener('error', lost)
-      const coordinator = new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(
-          () =>
-            this.#readyReject?.(new Error('The guide did not become ready.')),
-          15000,
-        )
-        this.#readyResolve = () => {
-          clearTimeout(timer)
-          this.#readyResolve = null
-          this.#readyReject = null
-          resolve()
-        }
-        this.#readyReject = (error) => {
-          clearTimeout(timer)
-          this.#readyResolve = null
-          this.#readyReject = null
-          reject(error)
-        }
-      })
-      await Promise.all([
-        coordinator,
-        voice && created.sdp !== null
-          ? this.#live!.accept(created.sdp)
-          : Promise.resolve(),
-      ])
-      if (generation !== this.#generation)
-        throw new Error('The guide request was canceled.')
-      this.#update({
-        connection: 'connected',
-        voice,
-        state: this.#runner?.status().state ?? 'idle',
-      })
-      this.#sendContext()
-      if (this.#startup.length > 0)
-        this.#send({ type: 'live-startup', events: this.#startup })
-      this.#startup = []
-    } catch (cause) {
-      if (sessionId !== null && this.#sessionId === null)
-        void this.#host
-          .request(
-            `/api/tour/sessions/${encodeURIComponent(sessionId)}/close`,
-            {},
-            undefined,
-            true,
-          )
-          .catch(() => {})
-      this.#disconnect()
-      throw cause
-    }
-  }
-
-  #receive(event: import('@inertialref/protocol').TourServerMessage): void {
-    this.#record('receive', event)
-    switch (event.type) {
-      case 'ready':
-        if (event.sessionId !== this.#sessionId) return
-        if (event.requestRevision < this.#requestRevision) {
-          this.#readyResolve?.()
-          return
-        }
-        this.#requestRevision = event.requestRevision
-        this.#executor?.supersede(this.#requestRevision)
-        this.#readyResolve?.()
-        return
-      case 'control':
-        if (event.requestRevision === this.#requestRevision)
-          this.command(event.command)
-        return
-      case 'plan':
-        if (event.requestRevision !== this.#requestRevision) return
-        try {
-          this.#mutating = true
-          this.#startPlan(
-            event.plan,
-            (event.plan.automatic ?? this.#snapshot.automatic) &&
-              Boolean(this.#snapshot.capabilities?.features.controlledSpeech),
-          )
-        } catch (cause) {
-          this.#update({ message: message(cause) })
-        } finally {
-          this.#mutating = false
-        }
-        return
-      case 'tool':
-        if (
-          this.#snapshot.connection !== 'connected' ||
-          event.request.requestRevision !== this.#requestRevision
-        )
-          return
-        this.#executor?.execute(event.request)
-        this.#knownViewRevision = this.#executor?.viewRevision ?? -1
-        return
-      case 'narration':
-        void this.#narrate(event.brief)
-        return
-      case 'transcript':
-        this.#transcript(event)
-        return
-      case 'closed':
-        this.command('pause')
-        this.#disconnect()
-        this.#update({ message: event.reason })
-        return
-      case 'error':
-        this.#runner?.fail(event.message)
-        this.#update({ message: event.message })
-        return
-      case 'status':
-        if (event.state === 'paused') {
-          // Speech can interrupt a clip without withdrawing the director's
-          // current request. Only a new revision or visitor command does that.
-          this.#playbackRevision++
-          this.#playback?.stop()
-          this.#runner?.command('pause')
-          this.#executor?.stopMotion?.()
-          this.#knownViewRevision = this.#executor?.viewRevision ?? -1
-          this.#update({ narrationState: 'idle' })
-          // Live manages conversational interruption and the following reply.
-          // Pausing itinerary progress must not mute that reply.
-          this.#live?.muteGuide(this.#snapshot.guideMuted)
-          this.#update({ state: 'paused' })
-        } else {
-          const runner = this.#runner?.status()
-          const itineraryActive =
-            runner !== undefined &&
-            runner.state !== 'idle' &&
-            runner.state !== 'ended'
-          this.#update({
-            state: itineraryActive ? runner.state : event.state,
-          })
-        }
-        this.#update({ message: event.message || null })
-    }
-  }
-  #liveEvent(event: LiveEvent): void {
-    if (
-      event.type !== 'session.input_transcript.delta' &&
-      event.type !== 'session.output_transcript.delta'
-    )
-      return
-    const decoded = decodeTourTranscript(
-      {
-        eventId: event.event_id,
-        text: event.delta,
-        speaker:
-          event.type === 'session.input_transcript.delta' ? 'visitor' : 'guide',
-        startMs: event.start_ms,
-        endMs: event.end_ms,
-      },
-      '',
-    )
-    if (!decoded.ok) return
-    if (this.#snapshot.connection !== 'connected') {
-      if (this.#startup.length < 64) this.#startup.push(decoded.value)
-    }
-    this.#transcript(decoded.value)
-  }
-  #transcript(event: TourTranscript): void {
-    if (this.#seenTranscripts.has(event.eventId)) return
-    this.#seenTranscripts.add(event.eventId)
-    if (this.#seenTranscripts.size > 1024)
-      this.#seenTranscripts.delete(this.#seenTranscripts.values().next().value!)
-    this.#update({
-      transcripts: [...this.#snapshot.transcripts, event].slice(-200),
-    })
-  }
-  async #narrate(brief: NarrationBrief): Promise<void> {
-    if (
-      brief.requestRevision !== this.#requestRevision ||
-      brief.viewRevision !== this.#executor?.viewRevision
-    )
-      return
-    const generation = this.#generation
-    const playbackRevision = this.#playbackRevision
-    const sources = brief.sources
-    this.#update({
-      explanation: brief.text,
-      sources,
-      narrationOrigin: brief.origin ?? 'records',
-    })
-    const controlledStop = brief.stopId !== null && this.#snapshot.automatic
-    if (this.#snapshot.voice && !controlledStop) {
-      this.#live?.muteGuide(this.#snapshot.guideMuted)
-      return
-    }
-    if (!this.#snapshot.automatic || this.#sessionId === null) return
-    if (this.#snapshot.voice) this.#live?.muteGuide(true)
-    this.#update({ narrationState: 'loading' })
-    try {
-      const response = await this.#request(
-        `/api/tour/sessions/${encodeURIComponent(this.#sessionId)}/speech`,
-        { narrationId: brief.id },
-      )
-      const blob = await response.blob()
-      if (
-        generation !== this.#generation ||
-        playbackRevision !== this.#playbackRevision ||
-        brief.viewRevision !== this.#executor?.viewRevision
-      )
-        return
-      this.#playback ??= this.#host.playback()
-      this.#playback.mute(this.#snapshot.guideMuted)
-      this.#update({ narrationState: 'speaking' })
-      await this.#playback.play(
-        blob,
-        () => {
-          if (
-            generation !== this.#generation ||
-            playbackRevision !== this.#playbackRevision ||
-            brief.stopId === null ||
-            brief.viewRevision !== this.#executor?.viewRevision
-          )
-            return
-          this.#runner?.narrationEnded(brief.stopId, brief.viewRevision)
-          this.#update({ narrationState: 'looking' })
-          this.#send({
-            type: 'narration-ended',
-            stopId: brief.stopId,
-            requestRevision: brief.requestRevision,
-            viewRevision: brief.viewRevision,
-          })
-        },
-        () => {
-          if (
-            generation !== this.#generation ||
-            playbackRevision !== this.#playbackRevision
-          )
-            return
-          this.#executor?.stopMotion?.()
-          this.#update({ narrationState: 'idle' })
-          this.#runner?.fail('Audio playback stopped.')
-          this.#update({
-            message:
-              'Audio playback stopped. Use Next to continue, or resume to retry this stop.',
-          })
-        },
-      )
-      if (
-        generation === this.#generation &&
-        playbackRevision === this.#playbackRevision
-      )
-        this.#transcript({
-          eventId: `clip:${brief.id}`,
-          text: brief.text,
-          speaker: 'guide',
-          startMs: this.#host.presentationNow(),
-          endMs: this.#host.presentationNow(),
-        })
-    } catch (cause) {
-      if (
-        generation !== this.#generation ||
-        playbackRevision !== this.#playbackRevision
-      )
-        return
-      this.#executor?.stopMotion?.()
-      this.#update({ narrationState: 'idle' })
-      this.#runner?.fail('Audio playback could not start.')
-      this.#update({
-        message: `${message(cause)} Use Next to continue, or resume to retry this stop.`,
-      })
-    }
-  }
-  #send(event: TourClientMessage): void {
-    if (this.#socket?.readyState === 1) {
-      this.#record('send', event)
-      this.#socket.send(JSON.stringify(event))
-    }
-  }
-  #disconnect(): void {
-    this.#readyReject?.(new Error('The guide connection closed.'))
+    this.#leavingRelease?.()
+    this.#leavingRelease = null
+    this.#loop?.stop()
+    this.#loop = null
     this.#live?.stop()
     this.#live = null
-    this.#playback?.stop()
-    const socket = this.#socket
-    this.#socket = null
-    socket?.close()
-    const sessionId = this.#sessionId
+    this.#executor?.dispose()
+    this.#executor = null
     this.#sessionId = null
-    if (sessionId !== null) {
-      this.#executor?.dispose()
-      this.#executor = null
-    }
-    this.#expiresAt = Infinity
-    this.#startup = []
-    if (sessionId !== null)
-      void this.#host
-        .request(
-          `/api/tour/sessions/${encodeURIComponent(sessionId)}/close`,
-          {},
-          undefined,
-          true,
-        )
-        .catch(() => {})
-    this.#update({ connection: 'offline', voice: false })
+    this.#pausedAt = null
+    this.#sceneChangedAt = null
+    this.#ending = false
+    for (const controller of this.#pending) controller.abort()
+    this.#pending.clear()
   }
+
   async #request(path: string, body?: unknown): Promise<Response> {
     const controller = new AbortController()
     this.#pending.add(controller)
@@ -1124,17 +699,11 @@ export class GuideRuntime {
       if (!response.ok) {
         let detail = 'The guide request could not be completed.'
         try {
-          const error = (await response.json()) as {
-            message?: string
-            error?: string
-          }
-          detail = error.message ?? error.error ?? detail
+          const error = (await response.json()) as { error?: string }
+          detail = error.error ?? detail
         } catch {
           /* A proxy failure can return an HTML error page. */
         }
-        if (response.status === 409 && path === '/api/tour/sessions')
-          detail =
-            'An earlier connection may still be closing. Wait up to 30 seconds, then choose End before starting again.'
         throw new Error(detail)
       }
       return response
@@ -1149,57 +718,4 @@ function message(cause: unknown): string {
   return cause instanceof Error && cause.name !== 'AbortError'
     ? cause.message
     : 'The guide request was canceled.'
-}
-function exactCommand(text: string): TourCommand | null {
-  const commands: Readonly<Record<string, TourCommand>> = {
-    next: 'next',
-    back: 'back',
-    pause: 'pause',
-    'pause tour': 'pause',
-    resume: 'resume',
-    end: 'end',
-    'end tour': 'end',
-    stop: 'pause',
-    'start tour': 'start',
-  }
-  return commands[text.toLowerCase()] ?? null
-}
-
-function motionSeconds(stop: TourStop): number {
-  return Math.min(
-    90,
-    Math.max(
-      12,
-      (stop.narration?.split(/\s+/).length ?? 50) / 2.4 +
-        (stop.lookSeconds ?? 0),
-    ),
-  )
-}
-
-function planChanges(
-  previous: TourPlan | null,
-  next: TourPlan,
-  names: Readonly<Record<string, string>>,
-): string[] {
-  if (!previous) return [`${next.stops.length} stops planned`]
-  const label = (id: string) => names[id] ?? 'Object'
-  const before = previous.stops.map((stop) => stop.subjectId)
-  const after = next.stops.map((stop) => stop.subjectId)
-  const changes = [
-    ...[...new Set(after.filter((id) => !before.includes(id)))].map(
-      (id) => `Added ${label(id)}`,
-    ),
-    ...[...new Set(before.filter((id) => !after.includes(id)))].map(
-      (id) => `Removed ${label(id)}`,
-    ),
-  ]
-  if (changes.length === 0 && before.join('/') !== after.join('/'))
-    changes.push('Changed the order of stops')
-  if (previous.durationSeconds !== next.durationSeconds)
-    changes.push(
-      `Timing changed to about ${Math.round(next.durationSeconds / 60)} minutes`,
-    )
-  if (changes.length === 0)
-    changes.push('Updated the stories and camera direction')
-  return changes
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { openSession } from '../session.ts'
-import type { GuideStatus } from '../harness.ts'
+import { NO_GUIDE_USAGE, type GuideStatus } from '../harness.ts'
 
 describe('the optional guide host', () => {
   it('is unavailable headlessly and never constructs a conversation', async () => {
@@ -18,13 +18,13 @@ describe('the optional guide host', () => {
       loaded: false,
       state: 'idle',
       connection: 'offline',
-      planId: null,
-      stopIndex: null,
-      requestRevision: 0,
+      sessionId: null,
       viewRevision: null,
       microphone: 'off',
-      guideMuted: false,
-      automatic: false,
+      paused: false,
+      pendingCalls: 0,
+      inFlight: false,
+      usage: NO_GUIDE_USAGE,
     }
     const ask = vi.fn(async () => status)
     const trace = vi.fn(() => [])
