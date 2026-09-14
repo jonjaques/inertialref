@@ -149,7 +149,7 @@ describe('the guide Worker', () => {
       }
       expect(delegation.type).toBe('responses')
       expect(delegation.responses.model).toBe('gpt-6-astra')
-      expect(delegation.responses.parallel_tool_calls).toBe(false)
+      expect(delegation.responses.parallel_tool_calls).toBe(true)
       expect(delegation.responses.tools).toEqual(GUIDE_TOOLS)
       const client = sent.session.client as {
         data_channel: {

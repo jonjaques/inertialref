@@ -231,7 +231,9 @@ describe('the guide runtime', () => {
       'local time is 21:04',
     )
     expect(f.live.accept).toHaveBeenCalledWith('answer')
-    expect(f.appends('instructions')[0]).toMatch(/^Greet the visitor/)
+    expect(f.appends('instructions')[0]).toMatch(
+      /^Introduce yourself as Cedar, the guide here/,
+    )
     expect(f.appends('commentary')[0]).toMatch(/^Begin the conversation now/)
     expect(
       f.sent.findIndex((e) => e.type === 'session.commentary.append'),
@@ -424,9 +426,11 @@ describe('the guide runtime', () => {
     f.speak(0)
     f.advance(2600, 26)
     await f.settle()
-    f.advance(4000, 40)
+    // The declared quiet counts from the last word, not from the moment the
+    // clock was sure the words had ended.
+    f.advance(2000, 20)
     expect(f.creates()).toHaveLength(before)
-    f.advance(1200, 12)
+    f.advance(700, 7)
     expect(f.developer().at(-1)).toMatch(
       /^The visitor has looked quietly for 5 seconds/,
     )

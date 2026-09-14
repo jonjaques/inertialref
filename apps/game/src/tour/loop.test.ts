@@ -94,9 +94,12 @@ describe('the tool loop over the data channel', () => {
     expect(
       JSON.parse((f.outputs()[0]!.item as { output: string }).output),
     ).toEqual({ status: 'moving', subject: 'Saturn' })
-    expect(f.creates()).toHaveLength(1)
+    // The continuation waits for the response to finish emitting: another
+    // call may still be on its way.
+    expect(f.creates()).toHaveLength(0)
     expect(f.loop.inFlight).toBe(true)
     f.completed('resp_1')
+    expect(f.creates()).toHaveLength(1)
     expect(f.loop.inFlight).toBe(true)
     f.created('resp_2')
     f.completed('resp_2')
@@ -141,6 +144,50 @@ describe('the tool loop over the data channel', () => {
         (event.item as { role?: string }).role === 'developer',
     )
     expect(developer).toHaveLength(4)
+  })
+
+  it('runs the queries of one response together, one move at most, and continues once all are answered', async () => {
+    const f = rig()
+    let release: (() => void) | null = null
+    f.execute.mockImplementation(async (call: GuideCall) => {
+      f.executed.push(call)
+      if (call.name === 'read_subject')
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+      return { status: 'moving', subject: 'Saturn' }
+    })
+    f.created('resp_1')
+    f.call('call_a', 'read_subject', '{"subject":"Titan","fields":null}')
+    f.call('call_b', 'describe_view', '{}')
+    f.call('call_c', 'go_to')
+    f.call(
+      'call_d',
+      'go_to',
+      '{"subject":"Titan","framing":null,"motion":null}',
+    )
+    await f.settle()
+    // The second query ran without waiting for the first; the second move
+    // was refused without running.
+    expect(f.executed.map((call) => call.name)).toEqual([
+      'read_subject',
+      'describe_view',
+      'go_to',
+    ])
+    const ids = () =>
+      f.outputs().map((o) => (o.item as { call_id: string }).call_id)
+    expect(ids()).toEqual(['call_d', 'call_b', 'call_c'])
+    expect(
+      JSON.parse((f.outputs()[0]!.item as { output: string }).output),
+    ).toMatchObject({ status: 'rejected' })
+    expect(f.creates()).toHaveLength(0)
+    f.completed('resp_1')
+    expect(f.creates()).toHaveLength(0)
+    release!()
+    await f.settle()
+    expect(ids()).toEqual(['call_d', 'call_b', 'call_c', 'call_a'])
+    expect(f.creates()).toHaveLength(1)
+    expect(f.loop.inFlight).toBe(true)
   })
 
   it('starts a response on queued state only once the chain has closed', async () => {

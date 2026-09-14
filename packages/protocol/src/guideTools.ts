@@ -40,6 +40,25 @@ export const GUIDE_TOOL_NAMES = [
 ] as const
 export type GuideToolName = (typeof GUIDE_TOOL_NAMES)[number]
 
+/**
+ * The tools that move the camera or the picture time. The loop runs these one
+ * at a time and executes at most one per response, because two moves in one
+ * turn is a camera that thrashes; every other tool is a query and may run
+ * beside any number of others.
+ */
+export const GUIDE_CAMERA_TOOLS = [
+  'go_to',
+  'adjust_view',
+  'frame_pair',
+  'stand_at',
+  'look_around',
+  'leave_surface',
+  'set_time',
+  'hold_view',
+] as const
+export const isGuideCameraTool = (name: string): boolean =>
+  (GUIDE_CAMERA_TOOLS as readonly string[]).includes(name)
+
 export const GUIDE_LIMITS = {
   /** Quiet seconds a beat may declare. */
   lingerSeconds: { min: 3, max: 45 },
@@ -281,7 +300,7 @@ export const GUIDE_TOOLS = [
     'Declare the quiet look that follows this tour stop. Call it before writing the words for a stop that the tour continues after; the developer prompts you again once the words are spoken and the seconds have passed. Do not call it on the final stop.',
     {
       seconds: number(
-        'Quiet seconds after the words, 3 to 45.',
+        'Quiet seconds after the words, 3 to 45. Three or four for an ordinary stop; longer only for a view worth a long look.',
         GUIDE_LIMITS.lingerSeconds.min,
         GUIDE_LIMITS.lingerSeconds.max,
       ),

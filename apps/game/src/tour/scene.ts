@@ -204,8 +204,15 @@ export function openingLine(
   return `${what} The visitor's local time is ${localTime}.`
 }
 
-export const GREETING_INSTRUCTION =
-  'Greet the visitor in one short, specific sentence about what is on screen, then listen. Speak first.'
+/**
+ * The opening: who is speaking, what they can do, what is on screen. The
+ * voice knows its own name only because the browser tells it; the provider's
+ * voice id is not in the session's instructions.
+ */
+export function greetingInstruction(voice: string): string {
+  const name = voice.charAt(0).toUpperCase() + voice.slice(1)
+  return `Introduce yourself as ${name}, the guide here, in one sentence. In one more, say that the visitor can ask to go anywhere, land on a world, take a tour, or ask what they are looking at. Then one short, specific sentence about what is on screen, and listen. Speak first.`
+}
 export const BEGIN_CONVERSATION =
   'Begin the conversation now, following the instructions provided.'
 export const PAUSE_INSTRUCTION =

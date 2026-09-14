@@ -101,9 +101,11 @@ export function liveSessionConfiguration(options: {
         instructions: BACKEND_PROMPT,
         tools: GUIDE_TOOLS,
         tool_choice: 'auto',
-        // Two camera operations cannot be in flight at once, and the loop
-        // serializes calls besides; this keeps the model from trying.
-        parallel_tool_calls: false,
+        // Queries run beside each other in the browser; the loop runs camera
+        // tools one at a time and executes only the first move of a response,
+        // so the model may ask for several records at once without a chain of
+        // round trips, and cannot thrash the camera by asking for two moves.
+        parallel_tool_calls: true,
         reasoning: { effort: 'low' },
         service_tier: 'priority',
         text: { verbosity: 'low' },

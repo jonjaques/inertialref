@@ -1,6 +1,7 @@
 import type { GuideUsage } from '@inertialref/devtools'
 import {
   decodeGuideCall,
+  isGuideCameraTool,
   type GuideCall,
   type GuideToolOutput,
 } from '@inertialref/protocol'
@@ -13,7 +14,9 @@ import {
  * collects those from the item events — lifecycle snapshots such as
  * `response.completed` carry `output: []` on purpose — executes each call
  * once, answers with a `function_call_output`, and continues the response
- * with `response.create`, because appending a result does not continue it.
+ * with `response.create` once every call the response made has its output,
+ * because appending a result does not continue it and a continuation with
+ * an output missing is refused.
  *
  * Two facts about the provider shape everything else here. Live voices only
  * the terminal response of a delegation, so a chain is "in flight" until a
@@ -22,10 +25,13 @@ import {
  * while a chain is open or the visitor is speaking: `prompt` queues the
  * message as state and lets the next response read it instead.
  *
- * Calls are executed one at a time whatever `parallel_tool_calls` says, and
- * a call id seen twice executes once: the probe saw the provider redeliver
- * an item event, and a camera moved twice is a camera that arrived at the
- * wrong place.
+ * The backend may call several tools in one response. Queries run beside
+ * each other; the camera tools run one at a time, and only the first camera
+ * call of a response is executed — the second is answered as rejected,
+ * because a move that replaces a move still starting is a camera that
+ * thrashes. A call id seen twice executes once: the probe saw the provider
+ * redeliver an item event, and a camera moved twice is a camera that arrived
+ * at the wrong place.
  */
 
 export interface GuideChannel {
@@ -50,7 +56,10 @@ interface OpenResponse {
   readonly id: string
   readonly delegationId: string | null
   completed: boolean
-  calls: number
+  /** Every call this response made, answered or not. */
+  readonly callIds: string[]
+  /** The continuation has been sent; a late redelivery must not send another. */
+  continued: boolean
   text: string
 }
 
@@ -58,6 +67,9 @@ interface PendingCall {
   readonly callId: string
   readonly name: string
   readonly arguments: string
+  /** The response that made the call, when the item could be matched to one. */
+  readonly responseId: string | null
+  readonly camera: boolean
   answered: boolean
 }
 
@@ -274,7 +286,8 @@ export class GuideLoop {
             id,
             delegationId,
             completed: false,
-            calls: 0,
+            callIds: [],
+            continued: false,
             text: '',
           })
         this.#options.onChange?.()
@@ -288,19 +301,35 @@ export class GuideLoop {
           const name = item.name
           if (typeof callId !== 'string' || typeof name !== 'string') return
           if (this.#calls.has(callId)) return
+          const open = this.#open(delegationId)
+          const camera = isGuideCameraTool(name)
           const call: PendingCall = {
             callId,
             name,
             arguments:
               typeof item.arguments === 'string' ? item.arguments : '{}',
+            responseId: open?.id ?? null,
+            camera,
             answered: false,
           }
           this.#calls.set(callId, call)
           if (this.#calls.size > 512)
             this.#calls.delete(this.#calls.keys().next().value!)
-          const open = this.#open(delegationId)
-          if (open !== undefined) open.calls += 1
-          this.#queue = this.#queue.then(() => this.#run(call))
+          const secondMove =
+            camera &&
+            open !== undefined &&
+            open.callIds.some((id) => this.#calls.get(id)?.camera === true)
+          if (open !== undefined) open.callIds.push(callId)
+          if (secondMove) {
+            call.answered = true
+            this.#output(callId, {
+              status: 'rejected',
+              reason:
+                'One camera move per turn. This call was not executed; move again after the arrival.',
+            })
+          } else if (camera)
+            this.#queue = this.#queue.then(() => this.#run(call))
+          else void this.#run(call)
           this.#options.onChange?.()
         } else if (item.type === 'message') {
           const text = (Array.isArray(item.content) ? item.content : [])
@@ -340,6 +369,7 @@ export class GuideLoop {
           for (const [key, row] of this.#responses)
             if (row.completed && this.#responses.size > 32)
               this.#responses.delete(key)
+        this.#continueIfAnswered(id)
         this.#options.onChange?.()
         return
       }
@@ -382,6 +412,26 @@ export class GuideLoop {
       call_id: callId,
       output: JSON.stringify(output),
     })
+    const responseId = this.#calls.get(callId)?.responseId ?? null
+    if (responseId === null) this.#create()
+    else this.#continueIfAnswered(responseId)
+  }
+
+  /**
+   * Continue a response once it has finished emitting and every call it made
+   * has its output. Before `response.completed` more calls may still arrive;
+   * after it, the last output is what continues the chain.
+   */
+  #continueIfAnswered(responseId: string): void {
+    const open = this.#responses.get(responseId)
+    if (open === undefined) {
+      this.#create()
+      return
+    }
+    if (open.continued || !open.completed || open.callIds.length === 0) return
+    if (!open.callIds.every((id) => this.#calls.get(id)?.answered === true))
+      return
+    open.continued = true
     this.#create()
   }
 

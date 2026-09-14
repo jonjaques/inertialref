@@ -13,7 +13,7 @@ import type { LiveServerEvent } from './media.ts'
 import {
   arrivalBlock,
   BEGIN_CONVERSATION,
-  GREETING_INSTRUCTION,
+  greetingInstruction,
   openingLine,
   PAUSE_INSTRUCTION,
   quietBlock,
@@ -350,7 +350,7 @@ export class GuideRuntime {
       const greeting = this.#send({
         type: 'session.instructions.append',
         delegation_id: null,
-        content: GREETING_INSTRUCTION,
+        content: greetingInstruction(chosen),
       })
       await loop.waitForAck(greeting, ACK_TIMEOUT_MS)
       if (generation !== this.#generation) return
@@ -651,7 +651,11 @@ export class GuideRuntime {
       void this.#clock.waitForBeat({ since: now }).then((outcome) => {
         if (this.#linger !== linger || outcome === 'canceled') return
         linger.phase = 'quiet'
-        linger.quietFrom = this.#host.now()
+        // The quiet began at the last word, not when the clock was sure of
+        // it: the 2.5 s it takes to be sure is already looking time, and
+        // counting it twice made every gap between stops that much longer.
+        linger.quietFrom =
+          outcome === 'spoken' ? this.#clock.lastLoudAt : this.#host.now()
         this.#record('note', { beat: outcome, quietSeconds: linger.seconds })
       })
       return
