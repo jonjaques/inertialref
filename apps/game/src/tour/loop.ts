@@ -159,6 +159,18 @@ export class GuideLoop {
    */
   prompt(text: string): boolean {
     this.queue(text)
+    return this.start()
+  }
+
+  /**
+   * Run the backend on the state already queued, under the same rule. A
+   * prompt refused while a chain was open is not read by that chain's
+   * continuation as an instruction: the recorded sessions show a move that
+   * arrives before its chain ends — a stand, a hold, a reframe — answered
+   * with the travel line and never narrated. The runtime calls this once the
+   * chain has closed.
+   */
+  start(): boolean {
     if (this.inFlight || this.visitorSpeaking) return false
     this.#create()
     return true

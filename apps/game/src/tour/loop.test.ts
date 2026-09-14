@@ -143,6 +143,23 @@ describe('the tool loop over the data channel', () => {
     expect(developer).toHaveLength(4)
   })
 
+  it('starts a response on queued state only once the chain has closed', async () => {
+    const f = rig()
+    f.created('resp_1')
+    expect(f.loop.prompt('Arrived: Europa, standing at the pole.')).toBe(false)
+    expect(f.loop.start()).toBe(false)
+    expect(f.creates()).toHaveLength(0)
+    f.completed('resp_1')
+    expect(f.loop.start()).toBe(true)
+    expect(f.creates()).toHaveLength(1)
+    const developer = f.sent.filter(
+      (event) =>
+        event.type === 'response.item.create' &&
+        (event.item as { role?: string }).role === 'developer',
+    )
+    expect(developer).toHaveLength(1)
+  })
+
   it('counts usage once per response and reads voice seconds from the session', () => {
     const f = rig()
     f.created('resp_1')

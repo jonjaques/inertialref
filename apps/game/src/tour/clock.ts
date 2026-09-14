@@ -13,15 +13,25 @@
  * and then stayed below the floor for `quietMs`. The order matters: Live
  * fills the wait for backend work with an acknowledgment ("Mmm, good
  * question! I'm double checking."), and a clock that measured silence from
- * the end of that filler fired inside the beat it was meant to follow. The
- * numbers are the probe's, tuned against recorded conversations in phase 3.
+ * the end of that filler fired inside the beat it was meant to follow.
+ *
+ * The numbers come from four recorded conversations, ten minutes of guide
+ * speech sampled the way this clock samples it. Silence on the remote track
+ * decodes to exact zero: 1,792 quiet samples with a 99th percentile of
+ * 0.00001, so the floor is a small positive number and not a threshold that
+ * has to separate quiet from soft speech. Speech reads 0.005 to 0.2, with
+ * half the samples inside one utterance below 0.01 at consonants and
+ * sentence ends. The quiet interval is set by the longest gap the voice
+ * leaves inside one utterance: 2.3 s between the sentences of a narration,
+ * and 3.2 s where it says "there it is" only after the camera arrives. A
+ * beat is therefore quiet after 2.5 s, and the arrival gap is not a beat.
  */
 
 export interface SpeechClockOptions {
   readonly now: () => number
-  /** RMS above which a frame counts as speech. The probe measured silence near 0.001 and speech from 0.02. */
+  /** RMS above which a frame counts as speech. Silence decodes to zero; speech begins near 0.005. */
   readonly floor?: number
-  /** Quiet after speech that ends a beat. */
+  /** Quiet after speech that ends a beat. The voice pauses up to 2.3 s between sentences. */
   readonly quietMs?: number
 }
 
@@ -45,10 +55,10 @@ export class SpeechClock {
   }
 
   get floor(): number {
-    return this.#options.floor ?? 0.01
+    return this.#options.floor ?? 0.003
   }
   get quietMs(): number {
-    return this.#options.quietMs ?? 1500
+    return this.#options.quietMs ?? 2500
   }
   get speaking(): boolean {
     return this.#options.now() - this.#lastLoudAt < this.quietMs

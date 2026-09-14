@@ -147,6 +147,10 @@ export class GuideRuntime {
   #sceneChangedAt: number | null = null
   #sceneText = ''
   #linger: Linger | null = null
+  /** The view revision of an arrival queued while a chain was open, until it is prompted. */
+  #deferredArrival: number | null = null
+  /** A drag reports a takeover on every frame; the models hear about it once per gesture. */
+  #takenOver = false
   #pausedAt: number | null = null
   #ending = false
   #traceEnabled = false
@@ -279,7 +283,10 @@ export class GuideRuntime {
           now: () => this.#host.now(),
           execute: (call) => this.#execute(call),
           onExecuted: (call, output) => this.#executed(call, output),
-          onDelegation: () => this.#cancelLinger(),
+          onDelegation: () => {
+            this.#cancelLinger()
+            this.#takenOver = false
+          },
           onError: (code, detail) => {
             this.#record('note', { error: code, detail })
             if (code === 'session_expired')
@@ -368,6 +375,7 @@ export class GuideRuntime {
       return
     this.#pausedAt = this.#host.now()
     this.#cancelLinger()
+    this.#deferredArrival = null
     this.#executor?.cancel()
     void this.#live?.muteMicrophone(true).catch(() => {})
     this.#live?.muteGuide(true)
@@ -493,6 +501,7 @@ export class GuideRuntime {
   }
 
   #executed(call: GuideCall, output: GuideToolOutput): void {
+    this.#takenOver = false
     if (call.name === 'linger' && output.status === 'scheduled') {
       this.#linger = { seconds: call.seconds, phase: 'chain', quietFrom: 0 }
       return
@@ -503,8 +512,11 @@ export class GuideRuntime {
       call.name === 'stand_at' ||
       call.name === 'leave_surface' ||
       call.name === 'hold_view'
-    )
+    ) {
       this.#cancelLinger()
+      // A new move supersedes any arrival still waiting to be narrated.
+      this.#deferredArrival = null
+    }
     this.#refresh()
   }
 
@@ -518,6 +530,11 @@ export class GuideRuntime {
     this.#sceneRevision = executor.viewRevision
     this.#sceneChangedAt = null
     const prompted = loop.prompt(arrivalBlock(arrival, view, facts))
+    // Not prompted means a chain is open or the visitor is talking. The
+    // message is queued as state either way; the tick starts the response
+    // once the chain closes, at this view, or drops it if the view moves on.
+    this.#deferredArrival = prompted ? null : arrival.viewRevision
+    this.#takenOver = false
     this.#record('note', { arrival: arrival.subject, prompted })
     this.#think(uiContext(view))
     this.#refresh()
@@ -527,8 +544,16 @@ export class GuideRuntime {
     const executor = this.#executor
     const loop = this.#loop
     this.#cancelLinger()
+    this.#deferredArrival = null
     if (executor === null || loop === null) return
     loop.cancelPending()
+    // The observatory advances its revision on every frame of a drag, and a
+    // three-second drag queued twenty-five takeover messages to the backend
+    // and as many thinking appends to the voice. One per gesture: the flag
+    // clears when the guide next acts or the visitor next speaks, and the
+    // settled view reaches the backend through the scene block regardless.
+    if (this.#takenOver) return
+    this.#takenOver = true
     const view = executor.view()
     const facts = executor.facts()
     this.#sceneText = sceneBlock(view, facts)
@@ -604,6 +629,15 @@ export class GuideRuntime {
       return
     }
     this.#tickLinger(now)
+    const deferred = this.#deferredArrival
+    if (deferred !== null) {
+      if (deferred !== executor.viewRevision || executor.pending !== null)
+        this.#deferredArrival = null
+      else if (loop.start()) {
+        this.#deferredArrival = null
+        this.#record('note', { arrival: 'deferred', prompted: true })
+      }
+    }
     this.#refresh()
   }
 

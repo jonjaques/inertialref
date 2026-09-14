@@ -309,6 +309,55 @@ describe('the guide runtime', () => {
     await f.dispose()
   })
 
+  it('prompts an arrival that landed inside an open chain once the chain closes and the visitor is quiet', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.delegated('stand_at', { subject: 'Earth', site: 'summit' })
+    await f.settle()
+    const before = f.creates().length
+    // The stand completes before the backend has written its travel line.
+    f.arrive()
+    const arrivals = f.developer().filter((text) => text.startsWith('Arrived:'))
+    expect(arrivals).toHaveLength(1)
+    expect(f.creates()).toHaveLength(before)
+    f.terminal('Down to the summit.')
+    f.receive({ type: 'session.input_transcript.delta', delta: 'wait' })
+    f.tick()
+    expect(f.creates()).toHaveLength(before)
+    f.advance(1100, 2)
+    expect(f.creates()).toHaveLength(before + 1)
+    expect(
+      f.developer().filter((text) => text.startsWith('Arrived:')),
+    ).toHaveLength(1)
+    f.advance(1000, 5)
+    expect(f.creates()).toHaveLength(before + 1)
+    await f.dispose()
+  })
+
+  it('tells the models about a drag once per gesture, not once per frame', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.delegated('go_to', { subject: 'Titan', framing: null, motion: null })
+    await f.settle()
+    f.terminal('Heading to Titan.')
+    const takeovers = () =>
+      f.developer().filter((text) => text.startsWith('The visitor has taken'))
+    for (let frame = 0; frame < 30; frame++) {
+      f.session.harness.observatory.zoom(1.02)
+      f.advance(16)
+    }
+    expect(takeovers()).toHaveLength(1)
+    expect(
+      f.appends('thinking').filter((text) => /taken the camera/.test(text)),
+    ).toHaveLength(1)
+    f.delegated('describe_view', {})
+    await f.settle()
+    f.session.harness.observatory.zoom(1.5)
+    f.tick()
+    expect(takeovers()).toHaveLength(2)
+    await f.dispose()
+  })
+
   it('executes a redelivered function call once', async () => {
     const f = rig()
     await f.runtime.start('marin')
@@ -373,7 +422,7 @@ describe('the guide runtime', () => {
     f.speak(0.05)
     f.advance(2000, 20)
     f.speak(0)
-    f.advance(1600, 16)
+    f.advance(2600, 26)
     await f.settle()
     f.advance(4000, 40)
     expect(f.creates()).toHaveLength(before)

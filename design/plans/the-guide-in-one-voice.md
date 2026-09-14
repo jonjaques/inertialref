@@ -376,15 +376,26 @@ two backend responses are 4 s and Live's own filler covers the rest.
 
 **The clock** is the remote audio track. The browser attaches an
 `AnalyserNode` to the track Live sends and treats the guide as speaking while
-its level is above a floor; the guide is quiet after 1.5 s below it. Output
+its level is above a floor; the guide is quiet after 2.5 s below it. Output
 audio is a continuous stream whether or not the guide is talking, so the
 presence of audio is no signal and the level is the only one. The clock waits
 for speech to begin after the terminal response before it measures silence:
 Live fills the wait for backend work with an acknowledgment ("Mmm, good
 question! I'm double checking."), and a clock that starts at the end of that
 filler fires inside the beat it was meant to follow. Output transcript deltas
-on the data channel are the second witness for the trace. The interval is
-tuned against recorded conversations in phase 3.
+on the data channel are the second witness for the trace. The numbers are
+from the phase-3 recordings: silence on the track decodes to exact zero and
+speech reads 0.005 to 0.2, so the floor is 0.003; the voice pauses up to
+2.3 s between the sentences of one narration, so a beat is quiet after 2.5 s.
+
+**An arrival inside an open chain is prompted when the chain closes.** A
+stand, a hold, or a reframe arrives before the backend has written its travel
+line, and a message queued while the chain is open is read by the
+continuation as state, not as an instruction: five such stops in the
+recordings were answered with the travel line and never narrated. The
+runtime keeps the arrival's view revision and starts a response at the first
+tick with no chain in flight and the visitor quiet, or drops it once the view
+has moved on.
 
 **A correction while moving.** Live queues a new delegation behind one that is
 still in flight, and a delegation is in flight until its chain ends without a
@@ -408,7 +419,11 @@ outcome, and the rule keeps it from being needed.
 mutation revision. The executor cancels pending work and stops its gesture,
 the browser returns a canceled output for any pending call, `linger` returns
 `taken-over`, and Live receives the thinking append. The guide's next sentence
-is about the view the visitor chose.
+is about the view the visitor chose. The revision advances on every frame of
+a drag, so the models hear about a takeover once per gesture: the runtime
+reports the first frame and holds its tongue until the guide next acts or
+the visitor next speaks, and the settled view reaches the backend through
+the ordinary scene block.
 
 **Pause.** Pause mutes the microphone locally, sends
 `session.input_audio.mute`, mutes the guide's output element, holds the camera,
@@ -724,14 +739,49 @@ session cost 59 voice seconds and 11 backend responses (44,546 input tokens
 of which 39,342 cached, 377 output), about fifteen cents at the recorded
 rates. Phase 3 tunes the clock against traces like it.
 
-### Phase 3. Pacing and the first real tour, one to two days
+### Phase 3. Pacing and the first real tour: done, 14 September 2026
 
-`linger`, the remote-track clock, pause and end semantics, and the
-drive-script acceptance: a synthetic "give me a short tour of Saturn" produces
-at least three camera moves with speech between them and quiet intervals the
-trace can measure; "actually, Enceladus" during a move produces no stale
-movement; Pause silences within 150 ms; End receives `session.closed` with
-its final usage and leaves no open peer connection or microphone track.
+Four conversations with a real microphone in the drive rig's Chrome, ten
+minutes and 601 billable voice seconds, recorded in the page: every
+data-channel message in both directions, the remote-track level exactly as
+the clock samples it, and the runtime's notes, under `.scratch/guide-live/`
+with no credentials. Two tours ran the beat as designed, Mars, Jupiter, Io,
+Europa and Saturn, Titan, Enceladus: `go_to` returning `moving`, the arrival
+prompted, `linger` for seven or eight seconds, the narration measured as a
+spoken beat, the quiet, the next stop. Arrival message to the stop's words:
+3.5 s across the two backend responses, and the voice, still finishing its
+travel line, spoke them within 0.1 s more. The acceptance items, measured:
+
+- The clock. Silence on the track decodes to exact zero (1,792 quiet
+  samples, 99th percentile 0.00001, one outlier at 0.026); speech reads
+  0.005 to 0.2, with half the samples inside one utterance below 0.01. The
+  longest gap inside one utterance is 2.3 s between sentences, and 3.2 s
+  where the voice says "there it is" only after the camera arrives. None of
+  the six recorded beats ended before its transcript at the earlier 1.5 s,
+  but six of twenty-four utterances carried a gap it would not have
+  survived; the floor is 0.003 and the quiet interval 2.5 s.
+- The correction. "No, wait, Io" 200 ms after the Enceladus `go_to`; Live
+  delegated 1.4 s after the last fragment, Astra called `go_to` (Io) 2.5 s
+  after it, no Enceladus arrival was ever reported, and Live skipped the
+  Enceladus line it had been handed.
+- Pause. The output element mutes synchronously on the click; the input
+  mute was acknowledged in 59 and 107 ms; the guide generated about 1.3 s
+  more speech into the muted element. Resume produced "Go ahead, I'm here"
+  7 s after the instruction.
+- End. Four of four sessions received `session.closed` with final usage
+  0.6 to 0.7 s after `session.close`. The microphone and peer release are
+  the media layer's tests, not a browser measurement.
+
+Two defects the record found. Five stops arrived inside an open chain — a
+stand, two holds, two reframes — and were never narrated; § 7 now prompts a
+queued arrival when the chain closes. A three-second drag queued
+twenty-five takeover messages and as many thinking appends; § 7 now
+reports one per gesture. A verification session against the fix: `stand_at`
+at 17.6 s, arrival queued unprompted at 17.8 s, travel line at 19.8 s,
+deferred prompt at 20.0 s, "You're standing at Europa's north pole" at
+23.4 s; a thirty-frame drag produced one developer message, one thinking
+append, and one scene block; End closed in 616 ms. Fifteen voice seconds
+and three backend responses.
 
 ### Phase 4. Listening and the record, one day
 
@@ -739,7 +789,13 @@ Headphone listening across four voices with the same requests; the ADR that
 supersedes the split and the relay; the context-log entry; the plan and report
 status; the hosting guide's note that the Worker implements no Durable Object
 and preview URLs apply to it. The evaluation script becomes a conversation
-replay rather than a director grader.
+replay rather than a director grader. Two things the phase-3 record says
+about the voice prompt belong here: Live composes ahead of the arrival,
+narrating Mars from its own knowledge while the camera is still traveling and
+adding "there it is" when it lands, so the "speak them and then stop" rule
+needs to cover the travel line too; and when the visitor speaks during the
+quiet prompt, "continue the tour" stays queued as state that the visitor's
+delegation reads.
 
 ## 13. Cost
 
