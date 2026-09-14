@@ -703,8 +703,11 @@ provider refuses a tool schema that carries a fractional bound ("Invalid AVAS
 session_data: Type is not JSON serializable: decimal.Decimal"), so the schema
 states bounds in words and the decoders enforce them; `guideTools.test.ts`
 guards it. And a version upload refuses a Worker with a pending Durable Object
-migration (error 10211), so the preview URL needs one ordinary
-`pnpm run deploy:worker` to apply `tour-v2` first; that deployment is pending.
+migration (error 10211), so the preview URL needed one ordinary
+`pnpm run deploy:worker` to apply `tour-v2` first; after that deployment on
+14 September, `wrangler versions upload` produces a preview URL under the
+account's `jaquers.workers.dev` subdomain, and the origin rule names that
+subdomain so a preview can sign in.
 
 ### Phase 2. Tools, the view, and the panel: done, 14 September 2026
 
