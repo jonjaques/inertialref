@@ -77,6 +77,29 @@ and [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) describe
 the selected provider contracts. Account access and a passing fixture suite do
 not establish listening quality or deployed transport behavior.
 
+## Live probes
+
+`scripts/tour/live-probe/` holds the Phase 0 checks for
+[the guide in one voice](../../design/plans/the-guide-in-one-voice.md): real
+GPT Live sessions with Responses delegation to Astra and fake tools, run only
+with `--allow-spend`.
+
+```
+node scripts/tour/live-probe/beats.mjs --allow-spend
+node scripts/tour/live-probe/webrtc.mjs --allow-spend
+```
+
+`beats.mjs` opens a primary WebSocket session, streams synthetic visitor
+clips, and measures the beat shape: a non-blocking move, an arrival nudge, the
+quiet clock, a continue nudge, and a spoken correction during travel.
+`webrtc.mjs` serves a page to a headless Chrome that owns a WebRTC session
+under the data-channel allow list, runs the tool loop from the browser,
+confirms `session.update` is refused, drops the peer connection without
+closing, and attaches a sideband to see whether the session survived. Both
+write a JSONL trace and a summary under `.scratch/live-probe/` with audio
+payloads dropped and no credentials; visitor clips are cached there so a rerun
+pays for Live and Astra only. A run is a few minutes and under a dollar.
+
 ## Verbose message tracing
 
 Set `TOUR_GUIDE_TRACE=true` in the root `.env.local` and restart `pnpm dev`
