@@ -281,3 +281,89 @@ describe('every guide tool runs through the harness without touching the world',
     f.session.dispose()
   })
 })
+
+describe('a refused camera tool leaves the camera where the visitor left it', () => {
+  it('refuses a pair from a surface without moving or raising the revision', async () => {
+    const f = rig()
+    // Standing is itself a camera mutation, so the poll absorbs it first: what
+    // this test is about is the refusal that follows adding nothing.
+    f.eye.stand('s:SOL/b:3')
+    f.settle()
+    f.executor.poll()
+    const takeoversBefore = f.takeovers()
+    const before = f.eye.mutationRevision
+    const held = f.eye.target?.address
+    // The subject is deliberately not the body being stood on: the commit this
+    // is about is `eye.focus(subject)`, which a pair already targeting its
+    // subject never reaches, so a test framing Mars from Mars proves nothing.
+    const output = await f.executor.execute({
+      name: 'frame_pair',
+      subject: 'Saturn',
+      companion: 'Titan',
+    })
+    expect(output.status).toBe('rejected')
+    // The revision is the takeover signal: `track` raises it and *then* throws,
+    // so a refusal that reaches it is indistinguishable from a drag, and the
+    // next poll tells the visitor they took a camera they never touched.
+    expect(f.eye.mutationRevision).toBe(before)
+    expect(f.eye.target?.address).toBe(held)
+    expect(f.eye.status().surface).not.toBeNull()
+    f.executor.poll()
+    expect(f.takeovers()).toBe(takeoversBefore)
+    f.dispose()
+  })
+
+  it('still frames a pair that shares a system, star and moon included', async () => {
+    // The other half of the same guard. It compares `dossier().system.id`, and
+    // a star, a planet and a moon of one system have to agree on it or the
+    // guard refuses the pairs it exists to allow.
+    const f = rig()
+    const pair = await f.executor.execute({
+      name: 'frame_pair',
+      subject: 'Mars',
+      companion: 'Phobos',
+    })
+    expect(pair.status).toBe('moving')
+    const withStar = await f.executor.execute({
+      name: 'frame_pair',
+      subject: 'Saturn',
+      companion: 'Sol',
+    })
+    expect(withStar.status).toBe('moving')
+    f.dispose()
+  })
+
+  it('answers a camera tool canceled in the turn its own poll sees the takeover', async () => {
+    const f = rig()
+    await f.executor.execute(goTo('Titan'))
+    f.settle()
+    const held = f.eye.target?.address
+    f.eye.zoom(2)
+    const after = f.eye.mutationRevision
+    // The poll inside `execute` is what notices the gesture. Running the move
+    // anyway takes the camera back and publishes an arrival for a call the
+    // loop was told never ran.
+    const output = await f.executor.execute(goTo('Saturn'))
+    expect(output.status).toBe('canceled')
+    expect(f.takeovers()).toBe(1)
+    expect(f.executor.pending).toBeNull()
+    expect(f.eye.target?.address).toBe(held)
+    expect(f.eye.mutationRevision).toBe(after)
+    f.settle()
+    expect(f.arrivals.filter((a) => a.subject === 'Saturn')).toHaveLength(0)
+    f.dispose()
+  })
+
+  it('still answers a query in that turn, because reading takes nothing', async () => {
+    const f = rig()
+    await f.executor.execute(goTo('Titan'))
+    f.settle()
+    f.eye.zoom(2)
+    const output = await f.executor.execute({
+      name: 'resolve_name',
+      query: 'the moon',
+    })
+    expect(output.status).toBe('ok')
+    f.dispose()
+  })
+})
