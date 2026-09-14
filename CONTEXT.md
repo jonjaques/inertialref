@@ -9928,6 +9928,49 @@ and wait for the arrival words.
 [ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md) records the one-voice
 decision; the recording rig is `.scratch/guide-live/` and is not committed.
 
+## A refusal that has already moved the camera reads as a takeover (14 Sep 2026)
+
+The observatory's mutation revision is how the guide tells "the visitor grabbed
+the camera" from "the camera is where I left it", and a guard that runs after
+the commit raises it on the way to refusing. `Observatory.track` does exactly
+that: it raises the revision and then throws, for a companion outside the
+subject's system or for any companion at all from a surface. By then
+`eye.focus(subject)` has started a fly-to that no arrival is ever published
+for, so `frame_pair` returns rejected, the loop is told nothing happened, and
+the next poll — within 100 ms — cancels the pending calls, tells the backend
+the visitor has taken the camera and puts "You have the camera" on screen with
+nobody having touched anything. One request reaches it, because the resolver
+searches the whole index: "Saturn and Proxima b together". `Observatory.stand`
+carries the same scar in its docstring. Every refusal in `frame_pair` now
+precedes the focus.
+
+The regression test for it has a trap of its own. A pair whose subject is
+already the camera's target never reaches `focus`, so framing Mars from the
+Martian surface passes with the guard in the wrong place and proves nothing;
+the test stands on Mars and asks for Saturn. With the guard below the commit
+the failure is not a stray revision but a wrong answer — `focus('Saturn')`
+leaves the surface, so the surface check then finds none and the pair
+proceeds.
+
+Two more from the same review. A takeover noticed by `execute`'s own poll
+cancelled the call and then ran it, so the loop heard the move never happened
+while the camera went and published an arrival; a camera tool in that turn is
+now answered canceled, and queries still answer because reading takes nothing.
+And `active` read `observatory.target !== null`, which any Milky Way view
+clears — after one click every tool answered "the guide is not active in this
+mode", including the `go_to` that would have ended the empty sky. It reads
+`engine.guide`, which `mountGuide` maintains.
+
+`maxWorkers: Math.min(4, availableParallelism())` raises parallelism on a small
+host rather than lowering it. Vitest's default outside watch mode is
+`availableParallelism() - 1`, so the ceiling only bites above five cores: on
+the four-core `ubuntu-latest` runner it takes three workers to four, and the
+first CI run of the guide branch killed `galaxy.test.ts > makes repeatable CPU
+plates` at the 20 s timeout — one failure in 2,475 tests, on a test that takes
+3.2 s in isolation here and 8.2 s for its whole file. The bound subtracts a
+core, which leaves four on this ten-core machine and gives back the three
+vitest would have chosen on the runner.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
