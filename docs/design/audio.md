@@ -73,17 +73,36 @@ continuously present, which is the opposite decision.
 
 ## Voice
 
-**None.** No voice acting anywhere in the game.
+**Flight and Survey correspondence have no performed narrator.** The
+Planetarium's optional Guide is an explicit exception.
 
 This is a scope decision and a tonal one, and they agree. All
 [correspondence](world.md#voice) is text. The Survey communicates by message, not
 by radio, which is both cheaper and more consistent with a setting where the
 nearest other person is usually several light-years away.
 
-**Resolved: yes, synthesized, twelve fixed strings.**
+The [Planetarium guide](planetarium.md#the-optional-guide) performs an
+explanation when the visitor asks for one or starts a tour. Its delivery can
+vary in rhythm and emphasis, and its silence gives the view time to register.
+Voice starts with a deliberate action and an AI voice disclosure. Muting the
+guide preserves readable explanations; muting the microphone and pausing the
+tour remain separate controls.
 
-This does not break the no-voice-acting rule — nobody is performing, an instrument
-is annunciating, and it is synthesized precisely so it sounds like a machine.
+The guide speaks in one voice: GPT Live listens and talks, and delegates the
+thinking to a backend model, so a tour and a conversation are the same voice
+with no clip to hand off to
+([ADR-0042](../adr/0042-the-guide-speaks-in-one-voice.md)). Speaking interrupts
+the guide, and the microphone remains available. Because there is no separate
+speech source, the only honest signal that a stop has been heard is the voice
+the visitor is already hearing: the browser reads the level of the remote audio
+track and treats a stop as spoken once the words have played and gone quiet.
+Provider access, pronunciation, device behavior, and listening quality remain
+measured acceptance work, not properties established by a model name.
+
+**The ship's annunciator has twelve fixed synthesized strings.**
+
+The annunciator is an instrument and sounds like a machine. Its fixed delivery
+is independent of the Planetarium guide's performance.
 Real aircraft do this for the same reason it is wanted here: under load, when you
 cannot look at a gauge, a spoken word is the fastest channel there is.
 

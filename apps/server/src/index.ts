@@ -21,6 +21,7 @@ import { GENERATION_VERSIONS } from '@inertialref/universe'
 import catalogManifest from '../../../data/catalog/manifest.json' with { type: 'json' }
 import { routeFor } from './routes.ts'
 import { type MediaStores, serveMedia } from './serveMedia.ts'
+import { serveTour } from './tour/routes.ts'
 
 /*
  * The Worker (docs/hosting.md).
@@ -61,6 +62,8 @@ export default {
     const route = routeFor(new URL(request.url).pathname)
 
     switch (route.kind) {
+      case 'tour':
+        return serveTour(request, env)
       case 'health': {
         if (request.method !== 'GET' && request.method !== 'HEAD') {
           return api({ error: 'health is a GET' }, 405)

@@ -85,6 +85,7 @@ import {
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import {
   describeDrift,
+  TOUR_LIMITS,
   encodeUniverseVector,
   type VersionDrift,
 } from '@inertialref/protocol'
@@ -194,7 +195,73 @@ export interface FrameStats {
  * not a set of `?.` calls, a test can supply the two members it is about and
  * no reader ever asks whether a member is there.
  */
+/** Conversation diagnostics exclude transcript and provider credentials. */
+export interface GuideStatus {
+  readonly available: boolean
+  readonly loaded: boolean
+  /** One word the panel also shows: listening, speaking, moving, paused. */
+  readonly state: string
+  readonly connection: 'offline' | 'connecting' | 'connected' | 'closing'
+  readonly sessionId: string | null
+  readonly viewRevision: number | null
+  readonly microphone: 'off' | 'muted' | 'active'
+  readonly paused: boolean
+  /** Function calls received and not yet answered. */
+  readonly pendingCalls: number
+  /** Backend responses whose chain has not ended without a tool call. */
+  readonly inFlight: boolean
+  readonly usage: GuideUsage
+}
+
+/** What the session has cost so far, as the provider reports it. */
+export interface GuideUsage {
+  readonly voiceSeconds: number
+  readonly responses: number
+  readonly inputTokens: number
+  readonly cachedTokens: number
+  readonly outputTokens: number
+}
+
+export interface GuideHostPort {
+  status(): GuideStatus
+  /** A typed request, queued as the visitor's own words. */
+  ask(text: string): Promise<GuideStatus>
+  trace?(enabled?: boolean): readonly GuideTraceEntry[]
+}
+
+/** Optional, in-memory data-channel traffic; never authentication traffic. */
+export interface GuideTraceEntry {
+  readonly sequence: number
+  readonly at: number
+  readonly direction: 'send' | 'receive' | 'note'
+  readonly message: Readonly<Record<string, unknown>>
+}
+
+export const NO_GUIDE_USAGE: GuideUsage = Object.freeze({
+  voiceSeconds: 0,
+  responses: 0,
+  inputTokens: 0,
+  cachedTokens: 0,
+  outputTokens: 0,
+})
+
+export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
+  available: false,
+  loaded: false,
+  state: 'unavailable',
+  connection: 'offline',
+  sessionId: null,
+  viewRevision: null,
+  microphone: 'off',
+  paused: false,
+  pendingCalls: 0,
+  inFlight: false,
+  usage: NO_GUIDE_USAGE,
+})
+
 export interface RenderHost {
+  /** The active mode supplies this lazy adapter; a headless host need not. */
+  guide?(): GuideHostPort | null
   scene(): RenderScene | null
   frameStats(): FrameStats | null
   /**
@@ -311,6 +378,7 @@ export interface RenderHost {
 export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
   let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
   return {
+    guide: overrides.guide ?? (() => null),
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
     galaxyRender: overrides.galaxyRender ?? (() => null),
@@ -2217,6 +2285,29 @@ export class GameHarness {
     return this.#observatory.sample(dt)
   }
 
+  /** Read the existing guide without importing it or opening a connection. */
+  guideStatus(): GuideStatus {
+    return this.#host.render.guide?.()?.status() ?? UNAVAILABLE_GUIDE
+  }
+
+  /** Read recent messages, or explicitly toggle console tracing for this mode. */
+  guideTrace(enabled?: boolean): readonly GuideTraceEntry[] {
+    return this.#host.render.guide?.()?.trace?.(enabled) ?? []
+  }
+
+  /** An explicit console request uses the same active guide as its dock panel. */
+  async guideAsk(text: string): Promise<GuideStatus> {
+    if (
+      typeof text !== 'string' ||
+      !text.trim() ||
+      text.length > TOUR_LIMITS.requestCharacters
+    )
+      throw new Error(
+        `A guide request needs 1 to ${TOUR_LIMITS.requestCharacters} characters.`,
+      )
+    return this.#host.render.guide?.()?.ask(text.trim()) ?? UNAVAILABLE_GUIDE
+  }
+
   /** Text help, so the console is discoverable without reading this file. */
   help(): string {
     return [
@@ -2253,6 +2344,9 @@ export class GameHarness {
       '  ir.moveStructure(record)      replace an existing anchor atomically',
       '  ir.visitStructure(id, height?) surface anchors; angles in degrees, heights in meters',
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
+      '  ir.guideStatus()              inspect the active Planetarium guide without starting it',
+      '  ir.guideTrace(enabled?)        recent 200 messages; true logs to console, false stops',
+      '  await ir.guideAsk(text)        ask the active guide through its bounded runtime',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',
       '  ir.compose(id)                a named composition, camera only',

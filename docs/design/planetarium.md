@@ -24,13 +24,70 @@ which is therefore worth examining rather than merely flying through.
 Space Engine is the reference, and the debt is worth stating plainly. What is
 different here is that the planetarium and the flight simulation are the **same
 running world**: you can leave a ship in orbit of Mars, spend ten minutes on
-Saturn's rings, and come back to find the ship exactly where it was with the
-same state hash. There is no "load a different mode".
+Saturn's rings, and come back to the ship where the running simulation puts it.
+Equal canonical inputs produce the same state hash with or without that camera
+visit. There is no "load a different mode".
 
 ✅ **Built.** Camera — in orbit and standing on the ground — catalog with folds
 and class filters, orbit traces, labels, the body record, composed shots,
 dockable panels, touch. What is not built is listed at the bottom, along with the
 astronomy nothing has measured yet.
+
+## The optional guide
+
+The Guide is a closed-by-default workspace panel: a voice picker and three
+controls, Start, Pause, and End. Opening the panel loads the guide; ordinary
+Planetarium use creates no cloud session. The ordinary scene and its controls
+remain available when the cloud guide is disabled.
+
+The guide is a friendly astronomy nerd: congenial, curious, and happy to share
+a historical surprise. It speaks in one voice. GPT Live listens and speaks, and
+delegates the thinking to GPT-6 Astra, which sees the current view, holds the
+tool inventory, composes a tour on the spot, and paces it with the browser's
+clock ([ADR-0042](../adr/0042-the-guide-speaks-in-one-voice.md)). It introduces
+itself by voice name and says what the visitor can ask for. There is no
+backstage director, no separate speech model, no authored itinerary, and no
+plan panel. The visitor chooses when to enable voice and sees an AI voice
+disclosure; microphone mute and pause are separate controls.
+
+A tour is a series of beats, and the browser is the metronome. The backend
+names where it is heading, the observatory travels, and when the arrival
+receipt comes the backend narrates what is actually on screen and declares how
+long to linger; the browser waits for the words to be spoken, reading the
+remote audio track, and then for the quiet look, and then prompts the next
+stop. When the visitor asks about several things that can be shown — a planet's
+moons, a system's planets — the guide visits each in turn and keeps its words
+about the object on screen.
+
+A question holds the current view. A changed destination supersedes pending
+work, and a correction spoken during a non-blocking move is delegated at once.
+Manual camera input takes the camera, and a late model result cannot replace
+the view the visitor chose. The observatory executes every movement through its
+existing camera controls and photographic clock; the backend may ask for
+several records at once but for only one move per turn, so the camera cannot
+thrash. Gentle finite orbits, approaches, pullbacks, and reveals continue
+during narration and stop when the visitor takes over or interrupts. The
+simulation continues according to its own inputs.
+
+Application records supply measurements and scene truth. For observed Solar
+System objects, the models use their own established astronomy and historical
+knowledge to explain why a place is interesting. Ordinary model context is the
+current view, nearby subjects, available actions, and requested raw
+measurements; a fact reaches the backend as a raw quantity and unit, not as a
+cooked blurb. Projected worlds are identified as projections; missing
+measurements keep their reasons. The guide separates an object's properties
+from what this camera can currently see. It sends no screenshots or continuous
+video. Image-based questions and requested composition help remain deferred.
+
+This is an explicit Planetarium exception to the game's
+[voice direction](audio.md#voice). It explains the record without telling the
+visitor what to feel. The cloud service is a password-gated private alpha;
+provider access, listening quality, and deployed acceptance require their own
+verification. [ADR-0041](../adr/0041-the-guide-requests-the-view.md) records the
+execution boundary — the bounded inventory, the receipts, the revisions —
+and [ADR-0042](../adr/0042-the-guide-speaks-in-one-voice.md) the one-voice
+shape; [hosting](../hosting.md#the-private-planetarium-guide) describes
+admission and operation.
 
 ---
 

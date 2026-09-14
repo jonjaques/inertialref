@@ -1,4 +1,5 @@
 import { isPicture, MAX_PICTURES, type Picture } from '@inertialref/devtools'
+import { GUIDE_VOICES } from '@inertialref/protocol'
 import { useEffect, useRef, useState } from 'react'
 import { useHydrated } from './hydration.ts'
 import {
@@ -444,6 +445,14 @@ export const PLANETARIUM_HINTED = define({
   accept: isBoolean,
 })
 
+export const PLANETARIUM_GUIDE_VOICE = define<string>({
+  key: 'planetarium.guide.voice',
+  group: 'planetarium',
+  what: 'the guide voice for the next conversation',
+  initial: 'marin',
+  accept: oneOf([...GUIDE_VOICES]),
+})
+
 export const NAVIGATOR_RADIUS = define<string>({
   key: 'planetarium.catalog.radius',
   group: 'planetarium',
@@ -573,6 +582,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   PLANETARIUM_SHIP,
   PLANETARIUM_FLARE,
   PLANETARIUM_HINTED,
+  PLANETARIUM_GUIDE_VOICE,
   NAVIGATOR_RADIUS,
   NAVIGATOR_CLASSES,
   NAVIGATOR_FILTERING,

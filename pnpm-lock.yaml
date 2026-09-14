@@ -172,6 +172,9 @@ importers:
       wawoff2:
         specifier: ^2.0.1
         version: 2.0.1
+      ws:
+        specifier: 8.21.0
+        version: 8.21.0
 
   apps/game:
     dependencies:

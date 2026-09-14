@@ -1,4 +1,6 @@
-import { Aperture, Eye, Image, Sun } from 'lucide-react'
+import { Suspense } from 'react'
+import { LazyGuidePanel as GuidePanel } from '../tour/LazyGuidePanel.tsx'
+import { Aperture, Eye, Image, Sun, AudioLines } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import { Neighborhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
@@ -27,6 +29,21 @@ export function planetariumPanels(
   context: PlanetariumContext,
 ): readonly DockPanelDefinition[] {
   return [
+    {
+      id: 'guide',
+      title: 'Guide',
+      icon: AudioLines,
+      zone: 'right',
+      defaultOpen: false,
+      hint: 'A tour, a question, and time to look',
+      render: () => (
+        <Suspense
+          fallback={<p className="type-ui text-slate-400">Opening guide…</p>}
+        >
+          <GuidePanel {...context} />
+        </Suspense>
+      ),
+    },
     {
       id: 'catalog',
       title: 'Navigator',

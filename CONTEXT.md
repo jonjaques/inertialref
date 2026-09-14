@@ -39,12 +39,12 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
 | `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames                                                                                                 |
 | `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
-| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                                                                        |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas, bounded guide contracts                                                                                                                               |
 | `workers`       | 5     | done — typed tasks, ports, pool, seven shared tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                            |
 | `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                                                                            |
 | `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                                                                             |
 | `rendering`     | 5     | done — camera and lens math, LOD, depth compression, terrain meshing, galaxy presentation                                                                                                                   |
-| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                                                                         |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`, guide briefs and runner                                                                                                                |
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, every frame drawn through the sensor chain (ADR-0029), the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
 | `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                                                               |
 
@@ -9748,7 +9748,248 @@ The clipping and smoothing regressions fail with the defects reintroduced.
 Saturn's ring/atmosphere compositing stays unchanged: ordering the whole shell
 last also paints over foreground rings, while splitting the rings adds work.
 
+## The guide cannot speak a canceled arrival (13 Sep 2026)
+
+A guide action needs two receipts. Accepting a focus only starts the camera;
+arrival is read from the observatory after easing. An operation ID replays its
+last receipt, and canceling a request revokes even an operation the browser has
+not received yet. Removing that revocation guard made the focused regression
+accept the late operation. Restoring it rejects the operation before movement.
+
+The observatory's explicit mutation revision separates visitor takeover from
+render advancement. A pose hold cancels remaining presentation motion without
+moving a ship. Headless checks preserve identical canonical hashes for paused
+worlds and for running worlds given equal tick inputs. The runner independently
+requires arrival, minimum viewing time, and controlled audio completion.
+[ADR-0041](docs/adr/0041-the-guide-requests-the-view.md) records the cloud and
+narration boundary.
+
+The first sixteen-subject Saturn context exceeded the application's 64 KiB
+WebSocket envelope. The context now trims late candidates with their matching
+briefs using serialized UTF-8 size, preserving the selected subject and the
+Saturn/Titan template. The focused Sol-only headless fixture contains eleven
+candidates and its complete context message is 58,754 bytes. A count limit alone
+does not bound variable-length source notes and reasons for missing facts.
+
+Live's transcript is not playback completion, so its tour uses explicit Next.
+Automatic narration uses controlled mini-TTS clips. The alpha password identifies
+one shared quota principal; a new cookie cannot replenish its allowance.
+Provider adapters and deterministic tests do not establish a listening result
+or a deployed acceptance result. The provider and browser gates remain explicit.
+
+## The voice clock kept moving, and the trace named its model (13 Sep 2026)
+
+A Live sideband accepted with HTTP 101 was still carrying the twelve-second
+abort signal used for its handshake. The signal later closed the healthy
+WebSocket. Clearing a dedicated handshake timer after acceptance preserves
+the connection. A synthetic spoken request then exposed a second boundary:
+Live can put the last word's start at the delegation offset. Comparing strictly
+before that offset dropped "Titan" from "Please show me Titan." Partitioning
+fragments by start time, after the previous offset and through the current one,
+keeps that word exactly once. Both defects have focused regressions.
+
+The local Chromium test now follows a synthetic request through Live, Astra's
+subject selection, the observatory's accepted and arrived receipts, and actual
+spoken output. The same session accepts a typed follow-up and closes cleanly
+with 29 confirmed billable seconds, no retained reservation, and stopped input
+tracks. The synthetic input needs a continuous silent carrier: an exhausted
+WebAudio source stalls the provider's audio clock even while WebRTC stays
+connected. An open connection alone did not establish usable conversation.
+
+Microphone mute therefore replaces the sender with a silent synthetic track
+after stopping real capture. Unmute and End dispose its WebAudio resources.
+The final typed Titan question plays its methane-weather answer while the
+captured track remains ended and Saturn remains in view. Provider closure
+confirms 24 seconds with no remaining reservation. The earlier answer started
+with the current view's name, "Saturn. Titan.", and Live spoke about Saturn;
+the narration now introduces its selected evidence subject instead.
+
+The controlled Saturn overview, rings, and Titan tour completes in 137.881
+seconds. Its clips last 31.968, 35.568, and 39.168 seconds, and every automatic
+advance follows an actual audio-ended event. A separate pause/resume run
+reaches the last stop before the driver's two-minute evaluation timeout fires.
+The complete run starts an asynchronous page task and reads its result after
+bounded waits within one driver connection. Increasing the tour's speed would
+have hidden the test driver's timeout rather than verified the actual clips.
+
+The first Saturn script repeated the same five facts at both views, then read
+mass and density as long numbers. The visitor called the result dull and
+robotic. Stable authored stop IDs now select separate overview, rings, and
+Titan stories. The short scripts carry a sourced surprise, such as Titan's
+methane rain, while the voice instructions ask for the warmth and varied
+cadence of a friendly astronomy nerd. General visits prefer one curated story;
+explicit questions still select their requested facts. The new copy is an
+audition, not an established listening score.
+
+Opt-in Worker tracing records each model request, response, transcript,
+application message, and budget transition with its session and model. It
+redacts credentials and omits SDP and audio bytes. Browser tracing retains the
+latest 200 application messages. Production tracing remains off by default;
+enabling it deliberately includes conversation text. The measured director
+results, fixture corrections, and remaining evaluations live in the
+[evaluation report](design/reports/the-agentic-tour-guide.md).
+
+## The route needs room for a story (13 Sep 2026)
+
+The visitor wants history, curiosity, and congenial delivery, not a recital of
+physical measurements. Ordinary model context now carries the current view,
+nearby names, and supported actions. Requested measurements cross as raw
+records; the server no longer injects cooked astronomy notes. Observed Solar
+System objects can receive model-written historical narration. Projected worlds
+still have no invented mission biography or measurements.
+
+Freshly authored Solar System, Saturn, and developer-demo scripts remain
+explicit presets with their own sources. The Solar route visits Sol, Venus,
+Luna, Mars, Jupiter, Saturn, Neptune, and Earth; the developer demo opens
+Saturn's rings, approaches Titan, and uses a returned lunar surface site.
+The application preserves these subjects by compacting nearby records instead
+of dropping itinerary destinations. A record read expands the requested body
+without changing the camera.
+
+Automatic clips can play while Live listens. Actual clip completion starts
+any promised quiet look; a pause freezes that interval. Finite camera gestures
+run inside the observatory's existing sample loop. Stopping their future frames
+must not increment the explicit view revision: doing so would invalidate the
+question that just interrupted the tour. The panel reads the runtime's ordered
+plan, progress, camera intent, and bounded revision history.
+
+A real Astra follow-up exposed a context-envelope failure. With the narrative
+schema and the current three-stop plan, an 8 KB envelope retained only Saturn.
+The compact input now prioritizes requested and existing route subjects; a
+12 KB envelope retains eight candidates in the 9,710-byte regression example.
+The worst-case reservation grows with the envelope. A second call reached the
+12-second deadline; narrative requests share a bounded 25-second deadline.
+The corrected call returns Saturn, Jupiter, and Luna, preserves the surface
+stop, and writes stories about their explorers using 1,988 input and 586 output
+tokens. The reply's three narratives have empty fact selections and no invented
+citations. These are one-call acceptance findings, not a replacement for the
+older multi-model evaluation or a human listening score.
+
+The exact developer introduction exposed a Live routing failure: the model
+listed capabilities instead of starting a demo. Prompt version 6 delegates
+demonstrations and tours first. The repeated synthetic-input run completes
+Saturn, Titan, and Luna in 116 seconds, with three real audio-ended events and
+camera gestures during speech. End closes the provider and synthetic track
+with no retained reservation. An accelerated local fixture completes all eight
+Solar System stops; its silent one-second clips do not measure five-minute
+listening quality. A separate fixture displays the real Astra revision with
+Jupiter added and Titan removed.
+
+The Stop hook then exposed CPU contention in the expanded regular suite:
+default nine-worker runs twice timed out in unchanged galaxy-plate and
+world-query tests, while each passed in about eight seconds in isolation.
+The pre-change suite passed in a separate checkout; this is not recorded as a
+proven failing baseline. The same expanded suite passes with four workers and
+the original 20-second timeout. Its default concurrency is now capped at four
+available cores so the ordinary command and Stop hook share that bound.
+
+## The guide learned to pace itself against real conversations (14 Sep 2026)
+
+Four conversations with a real microphone in the drive rig's Chrome, ten
+minutes and 601 billable voice seconds, recorded in the page — every
+data-channel message both directions, the remote-track level exactly as the
+clock samples it, and the runtime's notes — set the numbers the phase-0 probe
+had only guessed. Silence on the track decodes to exact zero (1,792 quiet
+samples, 99th percentile 0.00001); speech reads 0.005 to 0.2, half of it below
+0.01 at consonants and sentence ends. So the speech floor is a small positive
+number, 0.003, not a threshold separating quiet from soft speech. The voice
+pauses up to 2.3 s between the sentences of one narration and 3.2 s where it
+says "there it is" only after the camera lands, so a beat is quiet after 2.5 s,
+not 1.5 s; the 1.5 s beat survived the six recorded beats by luck and would
+have ended six of twenty-four utterances mid-sentence.
+
+The recordings found two defects and one pacing waste. A stop that arrives
+inside an open backend chain — a stand, a hold, a reframe — was answered with
+the travel line and never narrated, because a developer message queued into an
+open chain is read by the continuation as state, not an instruction. The
+runtime now keeps a deferred arrival's view revision and prompts it at the
+first tick with no chain in flight and the visitor quiet, dropping it if the
+view moves on. A three-second camera drag queued twenty-five takeover messages
+and as many thinking appends, because the observatory advances its mutation
+revision on every frame; the runtime now reports one takeover per gesture. And
+the linger countdown began when the clock was _sure_ the words had ended, 2.5 s
+after the last word — counting the settle time as looking time twice — so it
+now counts from the last loud sample.
+
+Then the first conversations asked for four things (Jon, 14 Sep). Concurrent
+tool calls: `parallel_tool_calls` is on, and the loop runs a response's query
+tools together while serializing the camera tools and executing only the first
+move of a response — a second move is answered rejected, because a move
+replacing a move still starting is a camera that thrashes. A response continues
+only once every call it made has its output, since a continuation with one
+missing is refused. "Tell me about the moons" narrated four moons over one
+orbiting view; the backend prompt now treats a question about several showable
+things as a tour with one stop each, and a verification session visited Io,
+Europa, Ganymede, and Callisto in turn. The guide introduces itself by voice
+name — the provider's voice id is not in the session's instructions, so the
+browser tells it. And Live was narrating a destination from memory while the
+camera still traveled, so the prompt now tells it to name where it is heading
+and wait for the arrival words.
+[ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md) records the one-voice
+decision; the recording rig is `.scratch/guide-live/` and is not committed.
+
+## A refusal that has already moved the camera reads as a takeover (14 Sep 2026)
+
+The observatory's mutation revision is how the guide tells "the visitor grabbed
+the camera" from "the camera is where I left it", and a guard that runs after
+the commit raises it on the way to refusing. `Observatory.track` does exactly
+that: it raises the revision and then throws, for a companion outside the
+subject's system or for any companion at all from a surface. By then
+`eye.focus(subject)` has started a fly-to that no arrival is ever published
+for, so `frame_pair` returns rejected, the loop is told nothing happened, and
+the next poll — within 100 ms — cancels the pending calls, tells the backend
+the visitor has taken the camera and puts "You have the camera" on screen with
+nobody having touched anything. One request reaches it, because the resolver
+searches the whole index: "Saturn and Proxima b together". `Observatory.stand`
+carries the same scar in its docstring. Every refusal in `frame_pair` now
+precedes the focus.
+
+The regression test for it has a trap of its own. A pair whose subject is
+already the camera's target never reaches `focus`, so framing Mars from the
+Martian surface passes with the guard in the wrong place and proves nothing;
+the test stands on Mars and asks for Saturn. With the guard below the commit
+the failure is not a stray revision but a wrong answer — `focus('Saturn')`
+leaves the surface, so the surface check then finds none and the pair
+proceeds.
+
+Two more from the same review. A takeover noticed by `execute`'s own poll
+cancelled the call and then ran it, so the loop heard the move never happened
+while the camera went and published an arrival; a camera tool in that turn is
+now answered canceled, and queries still answer because reading takes nothing.
+And `active` read `observatory.target !== null`, which any Milky Way view
+clears — after one click every tool answered "the guide is not active in this
+mode", including the `go_to` that would have ended the empty sky. It reads
+`engine.guide`, which `mountGuide` maintains.
+
+`maxWorkers: Math.min(4, availableParallelism())` raises parallelism on a small
+host rather than lowering it. Vitest's default outside watch mode is
+`availableParallelism() - 1`, so the ceiling only bites above five cores: on
+the four-core `ubuntu-latest` runner it takes three workers to four, and the
+first CI run of the guide branch killed `galaxy.test.ts > makes repeatable CPU
+plates` at the 20 s timeout — one failure in 2,475 tests, on a test that takes
+3.2 s in isolation here and 8.2 s for its whole file. The bound subtracts a
+core, which leaves four on this ten-core machine and gives back the three
+vitest would have chosen on the runner.
+
 ## Known gaps
+
+- **The cloud guide still needs a human on headphones.** Spoken delivery across
+  voices, the introduction's wording aloud, pronunciation, and whether a
+  cheaper backend than Astra paces a routine beat well are judged by listening,
+  not by a test or a model name. The functional beat, correction, pause, end,
+  concurrent-query, and one-move-per-turn behavior are verified against the
+  provider; the off-screen drive rig produces no audio pipeline, so a rig
+  session reads every beat as silent and falls back to the clock's start
+  timeout. Measure pacing with the window on screen.
+- **The cloud guide still needs deployed acceptance.** Browser and device
+  coverage, and a small Astra-versus-cheaper-backend comparison for routine
+  beats, require measured runs. Local Chromium has exercised the beat, spoken
+  replies, camera arrival, and Live closure against the provider. The Worker
+  implements no Durable Object now
+  ([ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md)), so Cloudflare
+  generates a version preview URL for it and deployed verification uses an
+  ordinary preview rather than a separate staging Worker. Optional image
+  questions and composition assistance are not implemented.
 
 - **Navigator body distances ignore held photographic time.** Observer-centered
   survey and fuzzy-search rows need the eye and body sampled at the same instant.

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Cloudflare Worker: serves the client bundle, answers /api, and will route /ws to a partition authority.",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "node ../../scripts/tour/dev.mjs",
     "deploy": "wrangler deploy",
     "versions:upload": "wrangler versions upload",
     "types": "wrangler types"

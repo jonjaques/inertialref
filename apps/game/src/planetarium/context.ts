@@ -1,3 +1,5 @@
+import type { GuideLifetime } from '../tour/lifetime.ts'
+import type { GuideRuntime } from '../tour/runtime.ts'
 import type { Picture } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
@@ -15,6 +17,7 @@ import type { LabelDensity } from './layers.ts'
 
 /** What the panels are handed. One object, because they all read most of it. */
 export interface PlanetariumContext {
+  readonly guide: GuideLifetime<GuideRuntime>
   readonly engine: GameEngine
   /** The address the observatory is on, refreshed by the mode at panel rate. */
   readonly target: string | null

@@ -1,4 +1,6 @@
 'use no memo'
+import { useGuideActions } from '../tour/useGuideActions.ts'
+import { createGuide, mountGuide } from '../tour/guide.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Outlet, useNavigate } from 'react-router'
 import {
@@ -64,6 +66,9 @@ export function PlanetariumMode({
   engine: GameEngine
   dev: DevWorkspace
 }) {
+  const [guide] = useState(() => createGuide(engine))
+  useEffect(() => mountGuide(engine, guide), [engine, guide])
+  useGuideActions(guide)
   const [params, setParams] = useSearchParams()
   const requested = params.get(QUERY.at)
   const document = pictureQueryKey(params)
@@ -249,6 +254,7 @@ export function PlanetariumMode({
   }
 
   const panels = planetariumPanels({
+    guide,
     engine,
     target,
     focus,

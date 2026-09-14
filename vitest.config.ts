@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
 
@@ -72,18 +73,26 @@ export default defineConfig({
      * of hundred milliseconds. Several things now legitimately take a second or
      * more of pure CPU — 128-body Solar Systems stepped for thousands of ticks,
      * fast-check properties over a quarter of a million noise samples, a
-     * uniformity test over an Rng's whole output distribution — and the runner
-     * puts sixty-four files across every core at once. Measured under that
-     * contention: tests that finish in 1.1 s standalone were being killed at 5,
-     * and the ones that failed were mostly *not* the new ones. Nothing was
-     * wrong with them; the timeout had stopped measuring the code and started
-     * measuring how busy the machine was.
+     * uniformity test over an Rng's whole output distribution. With the default
+     * nine fork workers on a ten-core host, the expanded suite twice killed
+     * unchanged galaxy and world-query tests at 20 s; those tests each took
+     * about 8 s in isolation. Four workers passed the same 2,571 tests without
+     * extending their timeouts. Bound parallel files so simultaneous CPU work
+     * leaves room for each test to finish, including in the Stop hook.
      *
-     * A timeout is a guard against a hang, and 20 s is still an order of
-     * magnitude below any of these. Individual tests that need more say so at
-     * the call site with their own reason.
+     * The bound subtracts a core rather than naming four, because a bare
+     * `min(4, n)` is a ceiling and vitest's own default — `availableParallelism
+     * () - 1` outside watch mode — already sits below it on any host with five
+     * cores or fewer. On the four-core `ubuntu-latest` runner that spelling
+     * raises the workers from three to four, and the galaxy CPU-plate test it
+     * is written to protect died at 20 s in CI while passing in 3.2 s here.
+     *
+     * A timeout remains a guard against a hang. Individual tests that need
+     * more say so at the call site with their own reason. Vitest's CLI and
+     * VITEST_MAX_WORKERS override remain available for controlled comparisons.
      */
     testTimeout: 20_000,
+    maxWorkers: Math.max(1, Math.min(4, availableParallelism() - 1)),
     reporters: ['dot'],
     /*
      * `pnpm test:coverage`. Off unless asked for — the v8 provider costs about

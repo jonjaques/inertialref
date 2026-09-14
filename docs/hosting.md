@@ -3,15 +3,16 @@
 How InertialRef gets from a `dist/` directory to a URL, and what has to exist
 behind that URL before the persistent universe is possible.
 
-> **Static hosting, the local authority port, metadata and reference media are
-> implemented. The API is partial; remote authority and persistent mutations
-> remain planned.** The client is live at
-> <https://inertialref.app>, the canonical Cloudflare custom domain, and the
-> retained `inertialref.jonjaques.com` origin. It is served by `apps/server`: one Worker, the
-> static bundle, `/api/health`, and `/ws` reserved behind a deliberate 501. `packages/net` holds the authority port and the local
-> implementation of it that every solo player runs. There is no Durable Object,
-> no D1 and no socket yet, and the sections below still describe those in the
-> future tense.
+> **Static hosting, the local authority port, metadata, reference media, and
+> the optional Planetarium guide are implemented. Remote simulation authority
+> and persistent mutations remain planned.** The client is live at
+> <https://inertialref.app> and the retained `inertialref.jonjaques.com` origin.
+> `apps/server` serves the static bundle, `/api/health`, and the authenticated
+> `/api/tour` service that signs in and creates a GPT Live session. The Worker
+> implements no Durable Object; the browser holds the guide conversation over
+> WebRTC ([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)). The
+> multiplayer `/ws` path still returns a deliberate 501; partition authorities
+> and D1 are planned, and are where the first Durable Object will land.
 >
 > [ADR-0008](adr/0008-multiplayer-partitions.md) is the decision it implements,
 > [modes](design/modes.md) is what each tier owes the player, and
@@ -21,19 +22,94 @@ behind that URL before the persistent universe is possible.
 
 ---
 
+## The private Planetarium guide
+
+The Guide is an optional cloud service within the Planetarium. Missing secrets
+or `TOUR_GUIDE_ENABLED=false` make cloud capabilities unavailable; the ordinary
+scene and local tour controls do not require provider credentials. See
+[ADR-0041](adr/0041-the-guide-requests-the-view.md) for the execution boundary.
+
+Local `pnpm dev` starts the server through `scripts/tour/dev.mjs`. That adapter
+passes the repository's gitignored `.env.local` to Wrangler alone. Use
+`OPENAI_API_KEY` and `TOUR_GUIDE_PASSWORD` without a `VITE_` prefix. The client
+bundle, preference store, and public build variables never receive them.
+
+Production uses Worker secrets, entered through Wrangler's secret prompt:
+
+```bash
+pnpm --filter @inertialref/server exec wrangler secret put OPENAI_API_KEY
+pnpm --filter @inertialref/server exec wrangler secret put TOUR_GUIDE_PASSWORD
+```
+
+The Worker implements no Durable Object. [ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)
+moved the conversation into the browser, and the `tour-v2` migration deletes
+the `TourSession` and `TourAdmission` classes the earlier design bound.
+Regenerate host declarations with `pnpm --filter @inertialref/server types`
+when bindings change. Deployment applies the class-deletion migration; it does
+not require a simulation or D1 migration.
+
+| Endpoint                     | Purpose                                                                          |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `GET /api/tour/capabilities` | Availability, admission, and the voices the panel offers; images are disabled    |
+| `POST /api/tour/login`       | Password admission with a signed cookie and login throttling                     |
+| `POST /api/tour/sessions`    | Creates one GPT Live session: writes the configuration, exchanges the WebRTC SDP |
+
+The browser holds the session over its own WebRTC peer connection and data
+channel; there is no application socket, no `/speech`, `/close`, `/status`, or
+`/usage` route, and no controlling tab. Tour responses are uncached, and the
+mutating routes validate the origin and the session cookie. The cookie lasts
+24 hours, is HttpOnly and SameSite Strict, and is Secure on HTTPS. Every holder
+of the shared password uses the same alpha principal; clearing cookies does not
+create a fresh one.
+
+The Worker keeps no session ledger and no session timer. The spending bound is
+the OpenAI project's own limit and the duration bound is the provider's session
+expiry, two hours out; a browser that vanishes ends its session within three
+seconds without the Worker's help, so there is nothing to time. These are
+configured bounds on an experiment, not a measured cost per tour.
+
+The Worker has no diagnostic mode and no conversation log, because it holds no
+conversation: it never sees a prompt, a response, a transcript fragment or a
+tool call. The message log lives where the messages do. `ir.guideTrace(true)`
+enables the browser's application-message log and `ir.guideTrace()` returns its
+last 200 entries; it carries no credentials, cookies, SDP or audio. The
+[conversation replay](../scripts/tour/README.md#the-conversation-replay) reads a
+recorded one back.
+
+Live audio uses browser WebRTC. The server writes the Live configuration —
+one voice, Astra as the delegated backend, and a data-channel allow list that
+omits `session.update` — and the browser runs the tool loop over that channel.
+There is one voice and no controlled clips; the browser's own clock, reading
+the remote audio track, decides when a stop has been heard.
+
+Guide admission and operation are separate from public hosting. Do not claim a
+provider gate from a successful page build or a `session.started` event. Real
+spoken replies, delegation, closure, and repeated listening need explicit
+verification. Because the Worker implements no Durable Object, Cloudflare
+generates a version preview URL for it, and deployed guide verification uses an
+ordinary `pnpm --filter @inertialref/server run versions:upload` preview under
+the account's `workers.dev` subdomain — the origin rule admits that subdomain
+so a preview can sign in.
+
+---
+
 ## The one idea
 
 > **The server's job is small, and the architecture's job is to keep it small.**
 
 Because the universe is a pure function of `(seed, catalog version, address)`,
-a server never has to store, serve or simulate the galaxy. It holds exactly what
-a client cannot derive — **other entities and persistent mutations** — which is
+the simulation server never has to store, serve or simulate the galaxy. Its
+authority holds what a client cannot derive — **other entities and persistent mutations** — which is
 the same set the save format represents. That is
 [ADR-0007](adr/0007-persistence.md) and [ADR-0008](adr/0008-multiplayer-partitions.md)
 agreeing with each other, and it is the reason a non-commercial project can
 credibly promise a persistent universe at all.
 
-Every hosting decision below is downstream of that. Where a choice would let the
+The guide adds session ordering, provider calls, and a spending ledger outside
+that simulation contract. It sends bounded object records for an admitted
+request and has no authority to create a discovery or mutate a ship.
+
+Every simulation hosting decision below is downstream of that. Where a choice would let the
 server grow a responsibility the client could have discharged itself, the choice
 is wrong even when it is convenient.
 
@@ -57,8 +133,9 @@ flowchart TB
 ## The topology
 
 One Worker is the whole front door. It serves the client's static assets, it
-answers `/api/*`, and it routes `/ws` to a Durable Object chosen by partition
-key.
+answers `/api/*`, and upgrades the guide socket under `/api/tour`. The
+multiplayer topology below remains planned: `/ws` will select a Durable Object
+by partition key.
 
 ```mermaid
 flowchart TB
@@ -102,16 +179,16 @@ have sidestepped one real problem for free.
 
 ## What each Cloudflare primitive is for
 
-| Primitive              | Holds                                                                         | Why this one and not another                                                                                                                                                                                |
-| ---------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workers**            | The client bundle, the API, WebSocket upgrade routing                         | Static asset requests are free and never reach the script. One deploy, one origin, one artifact.                                                                                                            |
-| **Durable Objects**    | One authority per partition: connected players, live entity states, mutations | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics.                                                           |
-| **DO SQLite**          | Per-partition durable state, co-located with the authority                    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                  |
-| **D1**                 | Account-scoped and globally-unique data                                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                     |
-| **R2** ✅              | What the repository will not carry; biome material sets later                 | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant. |
-| **Workers KV**         | ⛔ nothing                                                                    | The catalog is 366 KB brotli across two files and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                   |
-| **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                 |
-| **Cloudflare Pages**   | ⛔ nothing                                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                  |
+| Primitive              | Holds                                                         | Why this one and not another                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Workers**            | The client bundle, the API, WebSocket upgrade routing         | Static asset requests are free and never reach the script. One deploy, one origin, one artifact.                                                                                                                   |
+| **Durable Objects**    | ⛔ nothing today; partition authorities are planned           | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics — the guide needed none, so the first one lands with multiplayer. |
+| **DO SQLite**          | Per-partition durable state, co-located with the authority    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                         |
+| **D1**                 | Account-scoped and globally-unique data                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                            |
+| **R2** ✅              | What the repository will not carry; biome material sets later | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant.        |
+| **Workers KV**         | ⛔ nothing                                                    | The catalog is 366 KB brotli across two files and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                          |
+| **Queues / Workflows** | ⛔ nothing yet                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                        |
+| **Cloudflare Pages**   | ⛔ nothing                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                         |
 
 ### Numbers, with their source
 
@@ -197,11 +274,13 @@ addresses still return 404. TypeDoc validation runs in both builds.
 branch. See the [development guide](guides/development.md#toolchain) and
 [ADR-0039](adr/0039-the-shell-before-the-scene.md).
 
-The Durable Object and D1 bindings are **not** in the deployed config; they
-arrive with the milestone that uses them, so nothing is bound that nothing
-reads. When the DO does land, `new_sqlite_classes` — not `new_classes` — is
-what makes the object SQLite-backed rather than key-value backed; the key-value
-backend is not available on the Free plan and has no reason to be used here.
+The checked-in configuration binds no Durable Object. The guide's original
+`TourSession` and `TourAdmission` classes were created by the `tour-v1`
+migration and deleted by `tour-v2` once the browser took over the conversation
+([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)); the deleted-class
+migration must stay in the list so a deploy from a version that had them
+applies the deletion. Multiplayer partition objects and D1 bindings are the
+next `new_sqlite_classes` migration, and are future milestones.
 
 `version_metadata` was not in the original sketch and earns its place: the
 health record reports the deployment's version id, so "am I talking to the
@@ -684,7 +763,7 @@ handoff and both domain bindings.
 > are a permanent cost, and this is a three-line one. Recorded here so the
 > trade-off is visible rather than implied.
 
-### `Date.now()` is doubly forbidden
+### Wall clock does not drive simulation ticks
 
 It is already banned in canonical code by
 [ADR-0006](adr/0006-simulation-clock.md) — generation derives from seeds and
@@ -695,6 +774,10 @@ _"the time value returned is not the current time. `Date.now()` returns the time
 of the last I/O. It does not advance during code execution."_ That is a Spectre
 mitigation, not a bug — a Worker is deliberately denied the ability to time its
 own execution. Two reads with no `await` between them return the same value.
+
+The guide uses wall clock in its host adapter for admission, operation expiry,
+and session leases. Those are application deadlines evaluated across I/O, not
+simulation time or a benchmark of CPU execution.
 
 So a server-side authority cannot drive a tick from wall clock even if the rules
 allowed it. It advances the same way the client does — from a fixed cadence — and
@@ -896,50 +979,37 @@ regression is reproducible in CI without a browser.
 
 ## Environments, deployment and secrets
 
-**Workers Builds** — Cloudflare's own repo-connected CI — is what deploys.
-`main` is production; every other branch produces a **review app**, a preview
-version at its own URL. That removes the API token from GitHub entirely, which
+**Workers Builds** is the repo-connected deployment path. `main` is production;
+other branches upload versions. The guide's Durable Objects prevent automatic
+version preview URLs, so an upload is not a deployed review app. That removes the API token from GitHub entirely, which
 is why it won out over a deploy workflow in Actions.
 
 | Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                             |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workers_dev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                   |
-| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                                |
+| Review apps     | Branch uploads preserve a Worker version. Durable Object classes prevent automatic preview URLs; deployed guide review needs a separately configured staging Worker.                                                                                                                                                                                                                                                 |
 | The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                           |
 | Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
 | Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                       |
 | Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                     |
-| Migrations      | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                                                                                                                                                                                                                                                       |
+| Migrations      | The `tour-v1` Durable Object migration creates `TourSession` and `TourAdmission` on deployment. D1 migrations remain future multiplayer work.                                                                                                                                                                                                                                                                        |
 | Secrets         | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.                                                                                                                                                                                                                              |
 | Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.          |
 | Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                                        |
 | Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                    |
 | Observability   | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                                                                                                                                                                                                                                                       |
 
-### Review apps stop at H4, and that is worth knowing now
+### Durable Objects require a different review environment
 
-Cloudflare's documentation states plainly that **preview URLs are not generated
-for Workers that implement Durable Objects**. Every milestone up to and
-including H3 is therefore reviewable at a URL; the moment `PartitionAuthority`
-is declared in `wrangler.jsonc`, the review-app model this repository is being
-set up for stops producing them — at exactly the milestone whose whole
-demonstration is _two clients on a URL seeing each other_.
+Cloudflare's [preview URL documentation](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/)
+states that Workers implementing Durable Objects do not receive version preview
+URLs. The guide introduces those classes before multiplayer H4. `preview_urls`
+remaining enabled in Wrangler does not remove that platform limitation.
 
-Three ways out, none of them free, none of them decided:
-
-- **A dedicated staging Worker.** A second Wrangler environment with its own DO
-  namespace, deployed from a long-lived branch. Costs a second deploy target,
-  which [H-1](#h-1--one-worker-serves-the-client-and-the-api) argued against for
-  the _client_ — but a staging environment is a different argument from a second
-  origin per request.
-- **Split the socket out.** Keeps preview URLs for the front door and loses the
-  single-origin property that made [H-1](#h-1--one-worker-serves-the-client-and-the-api)
-  worth choosing. Probably wrong.
-- **Accept it**, and review H4 locally with `wrangler dev`, which runs real
-  workerd and real Durable Objects.
-
-Verify the constraint before designing around it — it is the kind of limitation
-Cloudflare removes without announcing. Re-read it when H4 starts.
+Local review uses `wrangler dev`, which runs workerd and the guide's Durable
+Objects. A deployed provider test needs a separately configured staging Worker
+and its own namespaces and secrets. That environment is an operational setup
+step; the source configuration and a versions upload do not prove it exists.
 
 ---
 

@@ -216,6 +216,16 @@ export const SHIPPED_TEXTURE_COUNT = entries.length
 export const hasTextures = (key: string | null): boolean =>
   key !== null && entries.some((entry) => entry.body === key)
 
+/** Inspect the existing cache without starting a fetch or accepting a placeholder. */
+export function textureSetReady(key: string | null): boolean {
+  return (
+    key === null ||
+    entries
+      .filter((entry) => entry.body === key)
+      .every((entry) => loaded.has(entry.file) && !pending.has(entry.file))
+  )
+}
+
 /**
  * Start every map in the manifest and resolve when the last byte is decoded.
  *

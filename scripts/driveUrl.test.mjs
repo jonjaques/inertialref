@@ -5,6 +5,31 @@ import { readPictureLink } from '../apps/game/src/planetarium/presetUrl.ts'
 import { driveUrl } from './driveUrl.mjs'
 
 describe('driver view URLs', () => {
+  it('documents explicit gesture activation for script steps', () => {
+    const output = execFileSync(
+      process.execPath,
+      [new URL('./drive.mjs', import.meta.url).pathname, '--help'],
+      { encoding: 'utf8' },
+    )
+    expect(output).toContain('--user-gesture')
+    expect(output).toContain('only --js/--file evaluations')
+  })
+  it('rejects gesture activation without a script step before starting a browser', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        new URL('./drive.mjs', import.meta.url).pathname,
+        '--user-gesture',
+        '--wait',
+        '0',
+      ],
+      { encoding: 'utf8' },
+    )
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(
+      '--user-gesture needs a --js or --file step',
+    )
+  })
   it.each(['sample', 'cast'])(
     'rejects --%s without scripts before starting a browser',
     (step) => {

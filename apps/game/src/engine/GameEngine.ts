@@ -1,4 +1,8 @@
-import type { GalaxyRenderReport, ObserverPose } from '@inertialref/devtools'
+import type {
+  GalaxyRenderReport,
+  ObserverPose,
+  GuideHostPort,
+} from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
@@ -269,6 +273,8 @@ export interface GameEngineOptions {
 export class GameEngine {
   readonly session: Session
   readonly harness: GameHarness
+  /** Supplied only while the Planetarium owns its lazy guide. */
+  guide: GuideHostPort | null = null
   /**
    * Watching a cutscene, as one object.
    *
@@ -876,6 +882,7 @@ export class GameEngine {
       store: options.store ?? new IndexedDbSaveStore(),
       // The one production adapter of the render side, whole.
       render: {
+        guide: () => this.guide,
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
