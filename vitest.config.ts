@@ -80,12 +80,19 @@ export default defineConfig({
      * extending their timeouts. Bound parallel files so simultaneous CPU work
      * leaves room for each test to finish, including in the Stop hook.
      *
+     * The bound subtracts a core rather than naming four, because a bare
+     * `min(4, n)` is a ceiling and vitest's own default — `availableParallelism
+     * () - 1` outside watch mode — already sits below it on any host with five
+     * cores or fewer. On the four-core `ubuntu-latest` runner that spelling
+     * raises the workers from three to four, and the galaxy CPU-plate test it
+     * is written to protect died at 20 s in CI while passing in 3.2 s here.
+     *
      * A timeout remains a guard against a hang. Individual tests that need
      * more say so at the call site with their own reason. Vitest's CLI and
      * VITEST_MAX_WORKERS override remain available for controlled comparisons.
      */
     testTimeout: 20_000,
-    maxWorkers: Math.min(4, availableParallelism()),
+    maxWorkers: Math.max(1, Math.min(4, availableParallelism() - 1)),
     reporters: ['dot'],
     /*
      * `pnpm test:coverage`. Off unless asked for — the v8 provider costs about
