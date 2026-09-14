@@ -68,15 +68,13 @@ expiry, two hours out; a browser that vanishes ends its session within three
 seconds without the Worker's help, so there is nothing to time. These are
 configured bounds on an experiment, not a measured cost per tour.
 
-`TOUR_GUIDE_TRACE=true` enables verbose structured Worker logs with session IDs,
-model IDs, prompts, responses, transcript fragments, receipts, timing, and usage.
-It is disabled in the committed deployment configuration. The local adapter
-reads the switch from `.env.local`; restart it after changing the value.
-This explicit diagnostic mode retains conversation text in the chosen log sink.
-Credentials, cookies, SDP, and binary audio are omitted or redacted.
-`ir.guideTrace(true)` separately enables the browser's application-message log;
-`ir.guideTrace()` returns its last 200 entries. See the
-[evaluation scripts](../scripts/tour/README.md#verbose-message-tracing).
+The Worker has no diagnostic mode and no conversation log, because it holds no
+conversation: it never sees a prompt, a response, a transcript fragment or a
+tool call. The message log lives where the messages do. `ir.guideTrace(true)`
+enables the browser's application-message log and `ir.guideTrace()` returns its
+last 200 entries; it carries no credentials, cookies, SDP or audio. The
+[conversation replay](../scripts/tour/README.md#the-conversation-replay) reads a
+recorded one back.
 
 Live audio uses browser WebRTC. The server writes the Live configuration —
 one voice, Astra as the delegated backend, and a data-channel allow list that

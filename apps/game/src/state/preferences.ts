@@ -437,20 +437,20 @@ export const PLANETARIUM_FLARE = define({
  * that it goes away and stays gone: one that came back on the next reload would
  * be an advertisement rather than an introduction.
  */
-export const PLANETARIUM_GUIDE_VOICE = define<string>({
-  key: 'planetarium.guide.voice',
-  group: 'planetarium',
-  what: 'the guide voice for the next conversation',
-  initial: 'marin',
-  accept: oneOf([...GUIDE_VOICES]),
-})
-
 export const PLANETARIUM_HINTED = define({
   key: 'planetarium.hinted',
   group: 'planetarium',
   what: 'whether the first-visit gesture hint has been seen',
   initial: false,
   accept: isBoolean,
+})
+
+export const PLANETARIUM_GUIDE_VOICE = define<string>({
+  key: 'planetarium.guide.voice',
+  group: 'planetarium',
+  what: 'the guide voice for the next conversation',
+  initial: 'marin',
+  accept: oneOf([...GUIDE_VOICES]),
 })
 
 export const NAVIGATOR_RADIUS = define<string>({
