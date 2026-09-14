@@ -59,6 +59,24 @@ describe('private guide gate', () => {
     expect(
       allowedOrigin(new Request('https://inertialref.app/api/tour/sessions')),
     ).toBe(false)
+    // A version preview lives under the account's own workers.dev subdomain.
+    const preview = 'https://a67318ec-inertialrefd.jaquers.workers.dev'
+    expect(
+      allowedOrigin(
+        new Request(`${preview}/api/tour/login`, {
+          method: 'POST',
+          headers: { origin: preview },
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      allowedOrigin(
+        new Request(`${preview}/api/tour/login`, {
+          method: 'POST',
+          headers: { origin: 'https://inertialref.app' },
+        }),
+      ),
+    ).toBe(false)
   })
 
   it('compares password digests and refuses absent credentials', async () => {

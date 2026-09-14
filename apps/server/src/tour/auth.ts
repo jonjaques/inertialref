@@ -30,9 +30,11 @@ export function allowedOrigin(request: Request): boolean {
   if (HOSTS.has(target)) return origin === target
   if (DEVELOPMENT.has(target)) return DEVELOPMENT.has(origin)
   // Version preview origins are exact: the request cannot choose another host.
+  // The account's workers.dev subdomain is `jaquers`, whatever the custom
+  // domains say; a preview URL reads `<version>-inertialrefd.jaquers.workers.dev`.
   return (
     new URL(request.url).hostname.endsWith(
-      '-inertialrefd.jonjaques.workers.dev',
+      '-inertialrefd.jaquers.workers.dev',
     ) &&
     origin === target &&
     target.startsWith('https://')
