@@ -42,7 +42,31 @@ import {
  * than a change of model.
  */
 
-export const SAVE_SCHEMA_VERSION = 2
+export const SAVE_SCHEMA_VERSION = 3
+
+/**
+ * A maneuvering entity's drive, as the save carries it.
+ *
+ * Structurally the physics package's `ThrusterProfile`, declared here rather
+ * than imported for the reason `WireRailsEpoch` is: the wire form is its own
+ * declaration, and persistence holds the two to each other where it can see
+ * both. Carried whole because the profile decides the next tick — v2 reduced
+ * it to `hasThrusters` and the restore put the debug ship's numbers back, so
+ * a save of any other ship restored a different ship.
+ */
+export interface SaveThrusterProfile {
+  readonly mainThrust: number
+  readonly rcsThrust: number
+  readonly torque: number
+}
+
+const thrust = refine(
+  decodeNumber,
+  (value): value is number => Number.isFinite(value) && value >= 0,
+  'a finite, nonnegative thrust',
+)
+export const decodeSaveThrusterProfile: Decoder<SaveThrusterProfile> =
+  decodeObject({ mainThrust: thrust, rcsThrust: thrust, torque: thrust })
 
 /** Portable authored placement; protocol and simulation meet in persistence. */
 export interface SaveSurfacePlacement {
@@ -94,7 +118,8 @@ export interface SaveEntity {
   readonly state: WireFrameState
   readonly mass: number
   readonly landed: boolean
-  readonly hasThrusters: boolean
+  /** Null for anything that cannot maneuver. */
+  readonly thrusters: SaveThrusterProfile | null
   readonly ballisticCoefficient: number
   /**
    * Current control input. Part of canonical state, not a UI detail: saving
@@ -164,7 +189,8 @@ export const decodeSaveEntity: Decoder<SaveEntity> = decodeObject({
   state: decodeWireFrameState,
   mass: decodeNumber,
   landed: decodeBoolean,
-  hasThrusters: decodeBoolean,
+  thrusters: (value, path) =>
+    value === null ? ok(null) : decodeSaveThrusterProfile(value, path),
   ballisticCoefficient: decodeNumber,
   // Added after the first v1 saves existed; defaulted rather than versioned,
   // because a missing control input has an unambiguous meaning: hands off.

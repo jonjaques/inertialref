@@ -70,8 +70,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
 - **Axes are right-handed, +Y up**, reference plane XZ, forward −Z. Textbook orbital
   mechanics is +Z up; `physics/frameConvention.ts` converts once, at that boundary and
   nowhere else. Units are SI — meters, seconds, kilograms, radians.
-- **If you add a field to canonical state, add it to `world.stateHash()`.** The fields it
-  omitted were exactly the ones a shipped bug lived in.
+- **If you add a field to canonical state, add it to `CanonicalEntity`** in
+  `simulation/entityState.ts`. The hash line is written from it, the save is held to its
+  keys at compile time, and a field-coverage test refuses a key the line does not move.
+  The fields the hash once omitted, and the one the save reduced to a boolean, were
+  exactly where shipped bugs lived.
 - **A lattice decision is never taken in a float.** The crater ladder's `'exact'` slab test
   in `craters.ts` and the per-tile frame in `terrainKernel.ts` are integers so the CPU and
   the GPU walk the same cells — `rendering.md` carries the invariant, ADR-0023 the reason.
