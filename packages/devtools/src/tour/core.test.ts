@@ -6,7 +6,8 @@ import {
   withinTourBytes,
 } from '@inertialref/protocol'
 import { openSession } from '../session.ts'
-import { createTourContext, subjectBrief } from './brief.ts'
+import { subjectBrief } from './brief.ts'
+import { createTourContext } from './inventory.ts'
 import { withNotes } from './notes.ts'
 
 describe('the guide reads a bounded universe', () => {

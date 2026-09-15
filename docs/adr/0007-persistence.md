@@ -79,6 +79,12 @@ use an in-memory store.
 - Control input is part of the save. It is canonical state, not a UI detail — a
   save taken mid-burn that resumed coasting is a different universe, and the
   round-trip determinism test caught exactly that.
+- Which fields are canonical is one list, `CanonicalEntity` in the simulation
+  package, and the hash, the save and the restore all read it. The save's wire
+  record is held to its keys at compile time. Schema v3 exists because v2 chose
+  its own fields: it reduced the thrust profile to a boolean, the loader put the
+  debug ship's profile back, and a ship with any other drive restored as a
+  different ship while hashing identically to itself.
 - Changing a generation algorithm changes what an old save loads into. The
   version manifest makes that detectable; deciding what to _do_ about it
   (regenerate, pin the old version, migrate content) is future work.

@@ -12,13 +12,15 @@ import {
   SAVE_SCHEMA_VERSION,
   type SaveEntity,
   type SaveSurfacePlacement,
+  type SaveThrusterProfile as WireThrusterProfileShape,
   type SaveGame,
   type VersionDrift,
   versionDrift,
 } from '@inertialref/protocol'
 import { type FrameId, vec3 } from '@inertialref/spatial'
 import {
-  DEBUG_SHIP_THRUSTERS,
+  type CanonicalEntity,
+  canonicalEntityInit,
   type EntityKind,
   type RailsEpoch as SimulationRailsEpoch,
   type SurfacePlacement,
@@ -72,6 +74,27 @@ const _placementsAgree: [
 ] = [true, true, true]
 void _placementsAgree
 
+type ThrusterProfile = NonNullable<CanonicalEntity['thrusters']>
+const _thrustersAgree: [
+  SameKeys<ThrusterProfile, WireThrusterProfileShape>,
+  ThrusterProfile extends WireThrusterProfileShape ? true : never,
+  WireThrusterProfileShape extends ThrusterProfile ? true : never,
+] = [true, true, true]
+void _thrustersAgree
+
+/*
+ * The save entity, held to the canonical one — by key, since the wire form
+ * encodes vectors as arrays and the fields cannot be assignable.
+ *
+ * This is the check the thrust profile fell through. `CanonicalEntity` is the
+ * list of fields that decide an entity's next tick, and the hash is written
+ * from it; a wire record with a key fewer is a save that restores a different
+ * future, and a key more is a field the hash does not count. Either fails to
+ * compile here rather than passing a round-trip test on a default ship.
+ */
+const _entitiesAgree: SameKeys<CanonicalEntity, SaveEntity> = true
+void _entitiesAgree
+
 /*
  * Turning a world into a save and back.
  *
@@ -94,15 +117,16 @@ export function captureSave(
   playerEntity: EntityId | null,
   options: SaveOptions = {},
 ): SaveGame {
-  const landed = new Set(world.landedEntities())
-  const entities: SaveEntity[] = world.entities.ordered().map((entity) => ({
+  // From the canonical projection, not from `Entity`: the world decides which
+  // fields decide the next tick, and this adapter only changes their spelling.
+  const entities: SaveEntity[] = world.canonicalEntities().map((entity) => ({
     id: entity.id,
     kind: entity.kind,
     name: entity.name,
     state: encodeFrameState(entity.state),
     mass: entity.mass,
-    landed: landed.has(entity.id),
-    hasThrusters: entity.thrusters !== null,
+    landed: entity.landed,
+    thrusters: entity.thrusters === null ? null : { ...entity.thrusters },
     ballisticCoefficient: entity.ballisticCoefficient,
     control: {
       translation: encodeVec3(entity.control.translation),
@@ -229,19 +253,19 @@ export function restoreSave(
         `entity ${entity.id} refers to frame ${state.value.frame}, which does not exist`,
       )
     }
-    // Whole at birth — control, assist and epoch included — because a write
-    // after the spawn would go through a verb, and the verbs drop the epoch on
-    // a non-neutral input. A restored coaster has a neutral one by ADR-0025,
-    // so the verb would leave it alone, but "would" is a reading of two rules
-    // where a spawn argument is one.
-    world.spawn({
+    // The wire record back into the canonical one, and the canonical one into
+    // a spawn — whole at birth, control, assist and epoch included, because a
+    // write after the spawn would go through a verb, and the verbs drop the
+    // epoch on a non-neutral input. A restored coaster has a neutral one by
+    // ADR-0025, so the verb would leave it alone, but "would" is a reading of
+    // two rules where a spawn argument is one.
+    const canonical: CanonicalEntity = {
       id: entity.id as EntityId,
       kind: entity.kind as EntityKind,
       name: entity.name,
       state: state.value,
       mass: entity.mass,
-      thrusters: entity.hasThrusters ? DEBUG_SHIP_THRUSTERS : null,
-      ballisticCoefficient: entity.ballisticCoefficient,
+      thrusters: entity.thrusters === null ? null : { ...entity.thrusters },
       control: {
         translation: vec3(
           entity.control.translation[0],
@@ -256,9 +280,12 @@ export function restoreSave(
         throttle: entity.control.throttle,
       },
       flightAssist: entity.flightAssist,
+      ballisticCoefficient: entity.ballisticCoefficient,
+      landed: entity.landed,
       rails: rails.value,
-    })
-    if (entity.landed) landed.push(entity.id as EntityId)
+    }
+    world.spawn(canonicalEntityInit(canonical))
+    if (canonical.landed) landed.push(canonical.id)
   }
 
   world.restoreDynamicIdCounter(save.dynamicIdCounter)

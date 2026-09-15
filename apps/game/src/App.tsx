@@ -41,18 +41,16 @@ import {
 import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
 import { warmScene, watchSystemAtmospheres } from './render/preload.ts'
 import { createFirstLight } from './render/firstLight.ts'
+import { createRendererLifetime } from './render/rendererLifetime.ts'
 import {
   createTileProducer,
   producerPreference,
-  type TileProducer,
 } from './render/terrainProducer.ts'
 import { warmAtMount } from './render/warmup.ts'
 import {
-  type CanvasProps,
   commitToneCurve,
   createRenderer,
   releaseRenderer,
-  type RendererHandle,
 } from './render/createRenderer.ts'
 import {
   aaAntialias,
@@ -245,14 +243,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     () => new ConnectionMonitor({ catalog: catalog.version }),
   )
   const [connection, setConnection] = useState<Connection>(DISCONNECTED)
-  // The renderer itself, for the one thing that has to happen to it after R3F
-  // has finished configuring it. Not state: nothing renders differently for it.
-  const renderer = useRef<RendererHandle | null>(null)
-  /**
-   * The GPU tile producer, which follows the renderer: one per build, gone
-   * when the build is. A ref rather than state for the reason `renderer` is.
-   */
-  const producer = useRef<TileProducer | null>(null)
   /** Guards save and load against each other. See `commands.save`. */
   const storageBusy = useRef(false)
   /*
@@ -276,6 +266,46 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // double-invoked under StrictMode and a factory with side effects in it leaks
   // one of every two. It returns its own teardown.
   useEffect(() => firstLight.start(), [firstLight])
+
+  /*
+   * The renderer, the ground producer that rides on its device, and the
+   * order the two are made and retired in.
+   *
+   * `render/rendererLifetime.ts` owns the sequence — retire the producer
+   * ahead of a build whose first act destroys the device, register its
+   * compile only once the warm-up has opened the census, install nothing
+   * from a compile that resolves after a rebuild, release the device last —
+   * and its header says what each step costs when it runs out of order. What
+   * is left here is what only this component can answer: which mechanisms to
+   * use, and what to do with a handle, a warm scene, or a failure. Not state:
+   * nothing renders differently for the handle; `output` is the part that
+   * does, and `onReady` publishes it.
+   */
+  const [lifetime] = useState(() =>
+    createRendererLifetime({
+      build: (preference, antialias, onReady) =>
+        createRenderer(preference, antialias, onReady),
+      release: releaseRenderer,
+      warm: (handle) => warmScene(handle, engine, firstLight.progress),
+      register: warmAtMount,
+      // A WebGPU build gets the GPU producer unless the page asked for the
+      // pool; a WebGL build never sees it.
+      produce: (handle) =>
+        handle.description.backend !== 'webgpu' ||
+        producerPreference(window.location.search) === 'cpu'
+          ? null
+          : createTileProducer(handle.renderer),
+      install: (producer) => engine.setHeightfieldSource(producer),
+      onReady: (handle) => {
+        engine.gl = handle
+        setOutput(handle.description)
+        // The measurement replay that follows a renderer build is
+        // `firstLight.watch`'s, fired from the effect that reads `output`.
+      },
+      onWarmed: firstLight.warmed,
+      onWarmFailure: (cause) => runtimeFailure.report('graphics', cause),
+    }),
+  )
 
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
@@ -316,58 +346,17 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // The watchdog epoch joins it so the last recovery rung can rebuild.
   const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}:${canvasEpoch}`
 
-  /*
-   * The GPU tile producer for this renderer build.
-   *
-   * Retired from the `gl` factory, ahead of the build it starts, because the
-   * build's first act is to release the previous renderer — which destroys
-   * its device — and the producer holds buffers on that device with, as
-   * often as not, a readback in flight. Retired there, the engine is back on
-   * the pool before the device goes and the batch in flight rejects quietly;
-   * retired from `onReady` it would outlive its device by the whole build,
-   * one to six seconds, and the first readback to fail would log that the
-   * producer stopped. R3F re-invokes the factory while a build is pending,
-   * and a retirement then is of nothing.
-   *
-   * Made from the effect that begins the warm-up, not from that callback,
-   * because the session it registers with does not exist yet there:
-   * `warmScene` is what calls `beginWarmup`, and it runs from the effect on
-   * `output`, which the callback sets *after* it returns. A registration
-   * made before the session runs detached — `warmAtMount` starts it on its
-   * own, the census never counts it, and the cover can lift before the
-   * kernel's pipeline exists. Registered once the session is open, the
-   * compile is one census unit behind the cover, and the producer reaches
-   * the engine only once its pipeline has proven it builds — `warm` is a
-   * dispatch of nothing inside a validation scope.
-   *
-   * That effect runs twice under StrictMode and again on every renderer
-   * build, and a producer already in hand is what makes a second run do
-   * nothing: the retirement empties the ref ahead of every build, so "one
-   * exists" is exactly "this build has one" — the owner of the state, not a
-   * latch beside it. The check against `producer.current` inside the
-   * warm-up keeps a late resolution from installing a producer that was
-   * already retired.
-   */
-  const retireProducer = (): void => {
-    producer.current?.dispose()
-    producer.current = null
-    engine.setHeightfieldSource(null)
-  }
-
   useEffect(
     () => () => {
       // StrictMode's ordinary replay keeps the device; a terminal failure retires it.
       if (runtimeFailure.getSnapshot() === null) return
-      producer.current?.dispose()
-      producer.current = null
-      engine.setHeightfieldSource(null)
+      lifetime.dispose()
       engine.gl = null
       engine.view = null
-      releaseRenderer()
       engine.dispose()
       singleton = null
     },
-    [engine],
+    [engine, lifetime],
   )
 
   /*
@@ -401,54 +390,25 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   useEffect(() => {
     if (output === null) return
-    const canvas = renderer.current?.renderer.domElement
+    const canvas = lifetime.handle?.renderer.domElement
     if (canvas === undefined) return
     firstLight.watch(canvas, output.backend)
-  }, [output, canvasEpoch, firstLight])
+  }, [output, canvasEpoch, firstLight, lifetime])
 
   /*
    * Warm everything a first encounter would otherwise pay for, behind the
    * boot overlay. Keyed on `output` rather than run once: an HDR or MSAA
    * change rebuilds the renderer, whose pipeline and texture caches die with
    * it, and a re-warm against the new handle is what keeps the first frame
-   * after the rebuild from paying the whole bill again. `warmScene` itself
-   * de-duplicates per handle, which also absorbs StrictMode's double effect.
+   * after the rebuild from paying the whole bill again. The lifetime warms
+   * each build once, which also absorbs StrictMode's double effect.
    */
   useEffect(() => {
     if (output === null) return
-    const handle = renderer.current
+    const handle = lifetime.handle
     if (handle === null) return
-    void warmScene(handle, engine, firstLight.progress).then(
-      firstLight.warmed,
-      (cause: unknown) => runtimeFailure.report('graphics', cause),
-    )
-    // After `warmScene`, which is what opens the session this registers with.
-    // See the note at `retireProducer`.
-    if (producer.current !== null) return
-    if (
-      handle.description.backend !== 'webgpu' ||
-      producerPreference(window.location.search) === 'cpu'
-    ) {
-      return
-    }
-    const next = createTileProducer(handle.renderer)
-    producer.current = next
-    warmAtMount({
-      label: 'compiling the ground producer',
-      units: 1,
-      run: async (done) => {
-        const ready = await next.warm()
-        done()
-        if (producer.current !== next) return
-        if (ready) {
-          engine.setHeightfieldSource(next)
-          return
-        }
-        next.dispose()
-        producer.current = null
-      },
-    })
-  }, [output, engine, firstLight])
+    lifetime.warm(handle)
+  }, [output, lifetime])
 
   // Bake atmosphere tables for systems that load mid-session, off the frame
   // loop, so a jump's first look costs a cache hit. See `render/preload.ts`.
@@ -713,18 +673,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // what the browser can output, builds a `WebGPURenderer` around the
         // answer and awaits `init()`; R3F awaits the promise, so nothing draws
         // against a half-built backend. See `render/createRenderer.ts`.
-        gl={(props: CanvasProps) => {
-          // Ahead of the build, whose first act releases the previous
-          // renderer; see `retireProducer`.
-          retireProducer()
-          return createRenderer(hdr, aaAntialias(aa), (handle) => {
-            renderer.current = handle
-            engine.gl = handle
-            setOutput(handle.description)
-            // The measurement replay that follows a renderer build is
-            // `firstLight.watch`'s, fired from the effect that reads `output`.
-          })(props)
-        }}
+        gl={lifetime.factory(hdr, aaAntialias(aa))}
         // A logarithmic depth buffer makes this range workable; a linear one
         // would have no usable precision anywhere in it. The flag itself moved
         // into the factory, because it is a constructor parameter there.
@@ -739,7 +688,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // R3F configures the renderer *after* the factory resolves and sets its
         // own tone mapping while doing so. This is where ours goes back.
         onCreated={(state) => {
-          if (renderer.current !== null) commitToneCurve(renderer.current)
+          if (lifetime.handle !== null) commitToneCurve(lifetime.handle)
           // The perf overlay's GPU measurement submits its own frames, and this
           // is the only place R3F offers the scene and camera to submit them with.
           engine.view = { scene: state.scene, camera: state.camera }

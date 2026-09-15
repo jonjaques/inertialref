@@ -1,10 +1,12 @@
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { expect as unwrap } from '@inertialref/shared'
 import { SAVE_SCHEMA_VERSION } from '@inertialref/protocol'
-import { UV, Vec, vec3 } from '@inertialref/spatial'
+import { restState, UV, Vec, vec3 } from '@inertialref/spatial'
 import { World } from '@inertialref/simulation'
 import {
   bodyFrameId,
+  type EntityId,
   systemFrameId,
   systemId,
   walkBodies,
@@ -234,10 +236,26 @@ describe('migrations', () => {
     expect(save.entities).toHaveLength(1)
     expect(save.playerEntity).toBe('#0')
     expect(save.meta['migratedFrom']).toBe('v0')
-    // And it actually loads.
+    // And it actually loads — with the drive a v2 ship flew with, which is
+    // the only profile "has thrusters" could have meant.
     const restored = unwrap(restoreSave(save), 'restore')
     expect(restored.world.clock.tick).toBe(42)
     expect(restored.world.entities.size).toBe(1)
+    expect(restored.world.entities.require('#0' as EntityId).thrusters).toEqual(
+      { mainThrust: 30, rcsThrust: 8, torque: 1.2 },
+    )
+  })
+
+  it('refuses a v2 entity list that is not a list rather than emptying it', () => {
+    // A migration that substituted `[]` for an unreadable list would hand the
+    // validator a save it accepts and the player a universe with no ship.
+    const broken = {
+      ...captureSave(new World({ seed: 'inertialref' }), null),
+      schemaVersion: 2,
+      entities: null,
+    }
+    const parsed = parseSave(JSON.stringify(broken))
+    expect(parsed.ok).toBe(false)
   })
 
   it('refuses a save from a newer build rather than dropping its state', () => {
@@ -443,5 +461,67 @@ describe('velocity survives the trip', () => {
     expect(after.frame).toBe(before.frame)
     expect(restored.world.loadedSystems().map((s) => s.id)).toContain(SOL)
     expect(systemFrameId(SOL)).toBeTruthy()
+  })
+})
+
+describe('the fields that decide the next tick survive the trip', () => {
+  it('restores a custom thrust profile rather than the debug ship', () => {
+    /*
+     * The save once reduced the profile to `hasThrusters` and the restore put
+     * `DEBUG_SHIP_THRUSTERS` back, while the hash left thrust out altogether —
+     * so a ship with 90 kN of main drive came back with 30, hashed identically
+     * to itself, and parted from the original on the first tick under
+     * throttle. The equality check the whole persistence model rests on
+     * passed, and the motion was wrong. A property rather than one profile,
+     * because the defect was in which fields were chosen, not in one value.
+     */
+    const thrust = fc.double({ min: 0.5, max: 200, noNaN: true })
+    fc.assert(
+      fc.property(
+        fc.record({ mainThrust: thrust, rcsThrust: thrust, torque: thrust }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.boolean(),
+        fc.double({ min: 50, max: 2_000, noNaN: true }),
+        (thrusters, throttle, assist, ballisticCoefficient) => {
+          const world = new World({ seed: 'inertialref' })
+          const system = world.loadSystem(SOL)
+          const planet = [...walkBodies(system)].find(
+            (b) => b.kind === 'rocky' && b.radius > 1e6,
+          )
+          if (planet === undefined) throw new Error('no planet')
+          const frame = bodyFrameId(planet.address)
+          const ship = world.spawn({
+            id: '#custom' as EntityId,
+            kind: 'ship',
+            name: 'custom',
+            state: {
+              ...restState(frame),
+              position: vec3(planet.radius * 3, 0, 0),
+              velocity: vec3(0, 0, -3_000),
+            },
+            mass: 40_000,
+            thrusters,
+            ballisticCoefficient,
+          })
+          world.setThrottle(ship.id, throttle)
+          world.setControl(ship.id, vec3(0, 0.2, 0), vec3(0.1, 0, 0))
+          world.setFlightAssist(ship.id, assist)
+          world.runTicks(20)
+
+          const restored = unwrap(
+            restoreSave(captureSave(world, ship.id)),
+            'restore',
+          )
+          expect(restored.world.entities.require(ship.id).thrusters).toEqual(
+            thrusters,
+          )
+          expect(restored.world.stateHash()).toBe(world.stateHash())
+          world.runTicks(40)
+          restored.world.runTicks(40)
+          expect(restored.world.stateHash()).toBe(world.stateHash())
+        },
+      ),
+      { numRuns: 12 },
+    )
   })
 })

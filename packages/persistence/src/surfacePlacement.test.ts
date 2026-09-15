@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { expect as unwrap } from '@inertialref/shared'
+import { SAVE_SCHEMA_VERSION } from '@inertialref/protocol'
 import { World, type SurfacePlacement } from '@inertialref/simulation'
 import { reframe, restState, vec3 } from '@inertialref/spatial'
 import {
@@ -85,7 +86,7 @@ describe('saved surface structures', () => {
     const saved = captureSave(new World({ seed: 'inertialref' }), null)
     const old = { ...saved, schemaVersion: 1, structures: undefined }
     const parsed = unwrap(parseSave(JSON.stringify(old)), 'parse')
-    expect(parsed.schemaVersion).toBe(2)
+    expect(parsed.schemaVersion).toBe(SAVE_SCHEMA_VERSION)
     expect(parsed.structures).toEqual([MARS_PAD])
     const restored = unwrap(restoreSave(parsed), 'restore').world
     expect(restored.structures).toEqual([MARS_PAD])

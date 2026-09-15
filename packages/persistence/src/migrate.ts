@@ -81,7 +81,45 @@ const v1ToV2: Migration = {
   }),
 }
 
-export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2]
+/**
+ * v2 → v3.
+ *
+ * A v2 entity says whether it has thrusters and not what they are, and the
+ * loader answered "what" with the debug ship's profile — which is the only
+ * profile a v2 save could have meant, since every ship the game spawned had
+ * it. The numbers are written out rather than read from `DEBUG_SHIP_THRUSTERS`
+ * because a migration describes the data it reads, and the constant is free
+ * to change under it: a v2 ship flew with 30 / 8 / 1.2, whatever the debug
+ * ship flies with next year.
+ */
+const v2ToV3: Migration = {
+  from: 2,
+  to: 3,
+  describe: 'carry the thrust profile rather than whether there is one',
+  migrate: (raw) => ({
+    ...raw,
+    schemaVersion: 3,
+    // Anything that is not a list passes through untouched, for the validator
+    // to refuse. Substituting `[]` here would turn a save the decoder rejects
+    // into one that loads with every entity silently gone — the opposite of
+    // "refuses rather than dropping its state" (ADR-0007).
+    entities: Array.isArray(raw['entities'])
+      ? raw['entities'].map((entity: unknown) => {
+          if (typeof entity !== 'object' || entity === null) return entity
+          const { hasThrusters, ...rest } = entity as Record<string, unknown>
+          return {
+            ...rest,
+            thrusters:
+              hasThrusters === true
+                ? { mainThrust: 30, rcsThrust: 8, torque: 1.2 }
+                : null,
+          }
+        })
+      : raw['entities'],
+  }),
+}
+
+export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2, v2ToV3]
 
 export function migrateSave(
   raw: unknown,

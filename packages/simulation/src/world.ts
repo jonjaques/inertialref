@@ -72,6 +72,11 @@ import {
   type RailsEpoch,
 } from './entity.ts'
 import {
+  type CanonicalEntity,
+  canonicalEntity,
+  canonicalEntityLine,
+} from './entityState.ts'
+import {
   coastState,
   considerFrameChange,
   type FlightWorld,
@@ -1202,34 +1207,35 @@ export class World implements FlightWorld {
    * The rails epoch is in it for the same reason: two worlds that agree on a
    * coasting entity's state and disagree on its epoch diverge on the next tick,
    * in the low bits, and a hash that ignored the epoch would call them equal.
+   *
+   * Which fields, exactly, is `entityState.ts`'s decision and not this
+   * method's: the line is written from `CanonicalEntity`, the same record the
+   * save carries, so the hash cannot count a field the save drops or the
+   * other way round. The thrust profile was that field — omitted here,
+   * reduced to a boolean there — and two worlds with different drives hashed
+   * equal until the first tick under throttle.
    */
   stateHash(): string {
     const parts: string[] = [`t=${this.clock.tick}`, `seed=${this.seedText}`]
     for (const structure of this.structures)
       parts.push(`structure:${JSON.stringify(structure)}`)
-    for (const entity of this.#entities.ordered()) {
-      const s = entity.state
-      const c = entity.control
-      const r = entity.rails
-      parts.push(
-        `${entity.id}|${s.frame}|${s.position.x},${s.position.y},${s.position.z}` +
-          `|${s.velocity.x},${s.velocity.y},${s.velocity.z}` +
-          `|${s.orientation.x},${s.orientation.y},${s.orientation.z},${s.orientation.w}` +
-          `|${s.angularVelocity.x},${s.angularVelocity.y},${s.angularVelocity.z}` +
-          `|${c.translation.x},${c.translation.y},${c.translation.z}` +
-          `|${c.rotation.x},${c.rotation.y},${c.rotation.z}` +
-          `|${c.throttle}` +
-          `|${entity.flightAssist ? 'assist' : 'manual'}` +
-          `|${this.#landed.has(entity.id) ? 'landed' : 'free'}` +
-          (r === null
-            ? '|integrated'
-            : `|rails:${r.time}:${r.position.x},${r.position.y},${r.position.z}` +
-              `:${r.velocity.x},${r.velocity.y},${r.velocity.z}` +
-              `:${r.orientation.x},${r.orientation.y},${r.orientation.z},${r.orientation.w}` +
-              `:${r.angularVelocity.x},${r.angularVelocity.y},${r.angularVelocity.z}`),
-      )
-    }
+    for (const entity of this.canonicalEntities())
+      parts.push(canonicalEntityLine(entity))
     return hashString(parts.join('\n')).toString(16).padStart(8, '0')
+  }
+
+  /**
+   * Every entity as the facts that decide its next tick, in id order.
+   *
+   * What a save captures and what the hash reads — one projection for both,
+   * which is the whole reason `CanonicalEntity` exists. `landed` is in it
+   * because it is the world's bookkeeping rather than the entity's, and the
+   * entity alone cannot say.
+   */
+  canonicalEntities(): readonly CanonicalEntity[] {
+    return this.#entities
+      .ordered()
+      .map((entity) => canonicalEntity(entity, this.#landed.has(entity.id)))
   }
 
   /** Restore internal bookkeeping after a load. */
