@@ -10029,6 +10029,18 @@ retire every visual and leave the ticket alone, because StrictMode's remount
 holds the same ticket by label and a `finish` on the first mount's teardown
 lifts the cover onto bodies nothing has compiled.
 
+**And the migration written for that save repaired a list it could not read.**
+The v2 to v3 step read the entity list as
+`Array.isArray(raw['entities']) ? … : []`, so a save whose list is `null`,
+missing or an object — a truncated file, a hand-edit, a write that did not
+finish — arrived at the validator as a well-formed empty list. It parsed,
+`restoreSave` returned ok, and the player got their universe back with no ship
+in it and nothing anywhere saying why. The decoder already refuses that save;
+the substitution is what took the refusal away. A migration works on raw data
+and the validator stays strict — `v1ToV2` spreads `...raw` and replaces only
+`structures` — so the unreadable value now passes through untouched. Review
+found it, not a test: every migration test fed it a list.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
