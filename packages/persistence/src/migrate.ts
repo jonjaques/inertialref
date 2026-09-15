@@ -99,6 +99,10 @@ const v2ToV3: Migration = {
   migrate: (raw) => ({
     ...raw,
     schemaVersion: 3,
+    // Anything that is not a list passes through untouched, for the validator
+    // to refuse. Substituting `[]` here would turn a save the decoder rejects
+    // into one that loads with every entity silently gone — the opposite of
+    // "refuses rather than dropping its state" (ADR-0007).
     entities: Array.isArray(raw['entities'])
       ? raw['entities'].map((entity: unknown) => {
           if (typeof entity !== 'object' || entity === null) return entity
@@ -111,7 +115,7 @@ const v2ToV3: Migration = {
                 : null,
           }
         })
-      : [],
+      : raw['entities'],
   }),
 }
 

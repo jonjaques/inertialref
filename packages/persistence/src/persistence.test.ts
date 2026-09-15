@@ -246,6 +246,18 @@ describe('migrations', () => {
     )
   })
 
+  it('refuses a v2 entity list that is not a list rather than emptying it', () => {
+    // A migration that substituted `[]` for an unreadable list would hand the
+    // validator a save it accepts and the player a universe with no ship.
+    const broken = {
+      ...captureSave(new World({ seed: 'inertialref' }), null),
+      schemaVersion: 2,
+      entities: null,
+    }
+    const parsed = parseSave(JSON.stringify(broken))
+    expect(parsed.ok).toBe(false)
+  })
+
   it('refuses a save from a newer build rather than dropping its state', () => {
     const future = migrateSave({ schemaVersion: SAVE_SCHEMA_VERSION + 5 })
     expect(future.ok).toBe(false)
