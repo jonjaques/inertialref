@@ -22,7 +22,7 @@ import { normalizeSubjectName } from './subject.ts'
  * one-subject lookup — the name rule is `normalizeSubjectName`'s, shared
  * rather than repeated — and the lookup reads the record builders. A named
  * request does not come through here; `subject.ts` says what it costs when
- * it did.
+ * it did, and that a named request was the only caller this ever had.
  */
 export function createTourContext(
   harness: GameHarness,

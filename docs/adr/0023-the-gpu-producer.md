@@ -68,7 +68,8 @@ adapter.**
    `apps/game/src/render/terrainProducer.ts` is the GPU one, made and installed
    by the renderer lifetime (`apps/game/src/render/rendererLifetime.ts`) for
    each renderer build, once `warm()` has compiled the pipeline behind the boot
-   cover; `App` hands the lifetime its mechanisms and answers its callbacks. One batch in flight, one body a batch, uploads keyed on the surface
+   cover; `App` hands the lifetime its mechanisms and answers its callbacks.
+   One batch in flight, one body a batch, uploads keyed on the surface
    object's identity and the seabed flag — the identity `surfaceKernel`
    memoizes its packed record on, handed through the seam rather than rebuilt
    behind it. `?producer=cpu` refuses it. A producer failure sets

@@ -17,10 +17,12 @@ import { subjectBrief, tourCandidate } from './brief.ts'
  * model's opening picture — assembles sixteen candidates and sixteen briefs,
  * compacts them under the message bound, and then searches the result for
  * the one name asked for: 253 dossier reads and a 43,900-byte record to find
- * Saturn from Earth. The inventory is what a *collection* request wants;
- * `createTourContext` still builds it, and a named request no longer goes
- * through it. The lookup rules — the article, the two aliases — live here
- * once, and the inventory builder reads them from here.
+ * Saturn from Earth. The inventory is what a *collection* request wants, and
+ * resolving a name was the only thing that ever asked for it — so
+ * `createTourContext` in `inventory.ts` has no caller in the game today, and
+ * stands on its own tests until a collection request needs it. The lookup
+ * rules — the article, the two aliases — live here once, and the inventory
+ * builder reads them from here.
  */
 
 /** A subject as the tools use it: identity and framings, and the record. */
