@@ -26,8 +26,12 @@ got the cores, so a wall clock quoted without it is not a measurement.
 One file is most of the cost, and it is in the other suite. The two figures are
 **`pnpm test` at 16.8 s** over 203 files and 2,312 tests, at 796% CPU, and
 **`pnpm test:slow` at 108.6 s** over 4 files and 8 tests, at 149%. `pnpm check`
-pays both, so testing alone is a little over two minutes there before its
-typecheck and build; the Stop gate runs only the first.
+pays both, so testing alone is a little over two minutes there, between its
+typecheck and its build; the Stop gate runs only the first. The root suite
+grows with the tree: at `82d228c2` on 18 September 2026 it is 230 files and
+2,505 tests, and a run that read 24.0 s did so at 479% CPU — a machine that had
+not settled, by the rule above, so that wall clock is not the 16.8 s
+re-measured. The counts are.
 
 `apps/game/src/engine/gameEngine.descent.slow.test.ts` alone is **108.3 s at
 100% CPU** — one core, start to finish — and its four tests take **1 ms**
@@ -100,9 +104,10 @@ operating point ("< 5%" for a 64-entry LRU on a tracked descent), and for the
 same reason, which is that the working set is hundreds. A second run against a
 warm disk serves all 35,883 without generating any.
 
-This is not a change to the test alone. It wants a `HeightfieldSource` port the
-inline worker can be handed, which is a seam `packages/workers` already has the
-shape of, and a directory under `.data/` the way the drive rig has. It would
+This is not a change to the test alone. It wants a `HeightfieldSource` — the
+port `packages/workers/src/tasks.ts` declares and `GameEngine.setHeightfieldSource`
+accepts, which the GPU tile producer already implements — backed by a directory
+under `.data/` the way the drive rig has. It would
 also make `pnpm sim --terrain-baseline` and the descent scenarios
 warm-startable.
 
@@ -138,5 +143,5 @@ own `browserWorker.ts` has already defined once for the browser.
 ## Related
 
 - [Testing](../../docs/guides/testing.md) — the patterns, and why the timeout is 20 s
-- [Headless WebGPU](headless-webgpu.md) — the second vitest project this borrows the shape of
+- [Testing § "Shader behavior runs on the real GPU, from Node"](../../docs/guides/testing.md#shader-behavior-runs-on-the-real-gpu-from-node) — the GPU project, the second vitest project this borrows the shape of
 - [Performance](perf.md) — the runtime figures, which these are not

@@ -1,4 +1,4 @@
-// The beat shape from design/plans/the-guide-in-one-voice.md § 7, against the
+// The beat shape from ADR-0042 (docs/adr/0042-the-guide-speaks-in-one-voice.md), against the
 // real provider: a spoken tour request, a non-blocking move that returns
 // "moving", an arrival reported by a developer nudge, a quiet clock that waits
 // for speech to begin before it measures silence, a continue nudge, and a

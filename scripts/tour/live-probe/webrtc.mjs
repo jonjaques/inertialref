@@ -1,4 +1,4 @@
-// The browser-direct shape from design/plans/the-guide-in-one-voice.md § 4,
+// The browser-direct shape from ADR-0042 (docs/adr/0042-the-guide-speaks-in-one-voice.md),
 // against the real provider: a local server holds the key and creates a
 // WebRTC session with the data-channel allow list; a headless Chrome page owns
 // the session and runs the tool loop over its data channel; the server then

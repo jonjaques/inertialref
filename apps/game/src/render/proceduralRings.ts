@@ -555,7 +555,7 @@ function coverage(band: Band, at: number): number {
  * the record behaves as the main ring's depth rather than as an average over
  * thousands of kilometers of gap. The profile therefore peaks at one and the
  * quoted depth lands on the densest band, which is the reading the data
- * supports. [The rings plan](../../../../design/plans/rings.md) has the
+ * supports. [ADR-0027](../../../../docs/adr/0027-the-rings.md) has the
  * measurement and the decline.
  *
  * Mipmapped, the way `planetTextures.ts` loads a photographed strip, because

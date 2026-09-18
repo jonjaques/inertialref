@@ -240,5 +240,5 @@ does show is the worker pool, on any run that dispatches jobs.
 - [Determinism](../concepts/determinism.md) — the rule the `void` return preserves
 - [ADR-0006](0006-simulation-clock.md) — the one call wall clock enters at
 - [Workers](../concepts/workers.md) — the pool this instruments on both sides
-- [The Timeline](../../design/plans/the-timeline.md) — the two things the
+- [Roadmap](../roadmap.md#what-the-timeline-cannot-see) — the two things the
   instrument still cannot see

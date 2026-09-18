@@ -119,8 +119,9 @@ Two smaller things:
   test beside them. That is honest and it is not reusable; a second scene would
   fit its lines by hand again.
 - **The fits are against the ~25 authored beats, not the per-frame track.**
-  `data/reference/tng-subject-track.json` carries hundreds of tracked boxes and
-  nothing reads it yet. Weighting each by its width confidence is what would
+  `data/reference/tng-subject-track.json` carries a box for 1639 of the 2742
+  frames; `hud/referenceTrack.ts` draws it as the track overlay, and no fit
+  reads it. Weighting each by its width confidence is what would
   turn the descent's 0.09-of-the-frame residual at f1920–1960 into a statement
   about the reference rather than about which beats were hand-read.
 
@@ -140,9 +141,10 @@ the arrow is baseline → now.
 under it.** Three pull requests land on 8 September: #72 reveals faint sky
 beside bright worlds, #73 holds resolved stars and the diffuse sky continuous
 across scales, and #74 carries the camera's light from orbit to the ground. #72
-and #74 each rewrite all fourteen committed preset renders — several to twice
-their file size at the same JPEG quality — so the luminance a given scene puts
-on the sensor is not the luminance this table scored, and #74 adds
+and #74 each rewrite all thirteen committed preset renders in
+`apps/game/public/presets/` — several to twice their file size at the same
+JPEG quality — so the luminance a given scene puts on the sensor is not the
+luminance this table scored, and #72 adds
 `apps/game/src/render/cameraSensor.gpu.test.ts` to hold the response it changed.
 
 `exposure` is mean luminance, so that column is stale by construction. `dw` is

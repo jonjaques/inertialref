@@ -20,9 +20,10 @@ universe streamable without storing generated systems — and it means the only 
 whether a star has a world with a sea is to build the system and look. There is
 nothing to index, because there is nothing there.
 
-`design/plans/the-companion.md` designed this query as the deterministic half
-of a natural-language companion. Nothing of that plan is built; the finder is
-useful on its own and is what this record is about.
+This query is the deterministic half of a natural-language companion: the
+guide of [ADR-0042](0042-the-guide-speaks-in-one-voice.md) reaches the sky
+through it, and the finder is useful on its own, which is what this record is
+about.
 
 ## Decision
 
@@ -160,4 +161,4 @@ no bodies at all.
 - [ADR-0026](0026-the-liquid.md) — what a sea is, and why it is not water
 - [ADR-0033](0033-presets-hold-a-photographic-instant.md) — the child-route dialog this follows
 - [Planetarium](../design/planetarium.md) · [Galaxy](../design/galaxy.md)
-- `design/plans/the-companion.md` — the plan this is the deterministic half of
+- [ADR-0042](0042-the-guide-speaks-in-one-voice.md) — the guide this is the deterministic half of

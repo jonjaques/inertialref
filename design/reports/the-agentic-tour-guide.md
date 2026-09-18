@@ -6,9 +6,9 @@
 > model that no longer plans. It is kept for the measured denominator and the
 > record of what the director-era evaluation could and could not establish.
 > The current evaluation is the conversation replay
-> (`scripts/tour/replay.mjs`) and a person on headphones; the
-> [one-voice plan](../plans/the-guide-in-one-voice.md) § 12 records its
-> results.
+> (`scripts/tour/replay.mjs`) and a person on headphones;
+> [ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) § Consequences
+> records what that listen still owes.
 
 Recorded 13 September 2026. The Astra baseline completes all 180 requested
 decisions. Its original task grade is 167/180; correcting nine fixture
@@ -18,8 +18,8 @@ The separate comparison completes six representative requests for each of
 Astra, Sol, and Terra. These runs evaluate director decisions and prepared
 evidence; they execute no camera operations.
 
-The [implementation plan](../plans/the-agentic-tour-guide.md) defines the
-release gates. This report preserves the measured denominator and the limits
+[ADR-0041](../../docs/adr/0041-the-guide-requests-the-view.md) is the
+execution boundary the release gates were written against. This report preserves the measured denominator and the limits
 of the evidence rather than treating a fixture score as release approval.
 
 ## Setup and versions

@@ -37,7 +37,9 @@ coordinates record has been naming as complementary since
 
 Not built: the reversed-Z depth buffer, the picture record, the spatial path,
 the temporal path, the reactive mask, the cut declaration, the URL knob, the
-harness verb, the per-pass timings, the guides seam.
+harness verb, the per-pass timings, the guides seam. The library itself is not
+a dependency: `@pmndrs/upscaler` is in no `package.json` and not in
+`pnpm-lock.yaml`, and phase 3 is where it arrives.
 
 ---
 
@@ -120,8 +122,10 @@ closed set of legal combinations: the temporal path _is_ an anti-aliaser and
 refuses a multisampled input; the spatial path composes with MSAA; a
 supersampled buffer and a reduced render resolution are opposite requests. A
 record with a guard that rejects the illegal pair is the shape
-`render/quality.ts` already gives the surface — "a partial record is the
-failure mode a per-field guard cannot see".
+`render/quality.ts` already gives the surface (`SurfaceQuality`,
+`isSurfaceQuality`), for the reason `state/preferences.ts` states at
+`RENDER_SURFACE` — "a partial record is the failure mode a per-field guard
+cannot see".
 
 **The frame stays the sensor's.** The library's `UpscalerNode` is keyed on
 three's frame counter, reads the wall clock for its delta, and takes the scene
@@ -453,10 +457,10 @@ The budget assumes the scene scales with its pixels, which the atmosphere's
 shells and the ground do and the terrain's vertex work does not; it is why the
 figure is a budget. At DPR 2 the upscaler's own line is four times larger and
 so is the saving, and the handheld — where `dprCeiling` already trades pixels
-for frames — is the case the option exists for. The three lines
+for frames — is the case the option exists for. The two lines
 [technical](../../docs/design/technical.md#frame-budget--166-ms) gives the
-GPU add up to 8 ms; the summit at Quality fits under them where native does
-not.
+GPU — 5.0 ms geometry, 3.0 ms atmosphere and post — add up to 8 ms; the
+summit at Quality fits under them where native does not.
 
 **The terrain lever, declined as a default.** Scaling `cellPixels` by the ratio
 would cut the patch count with the render size — at Quality, about half the
@@ -644,7 +648,7 @@ pnpm vitest run --config apps/game/vitest.gpu.config.ts upscale.gpu
 - [art](../../docs/design/art.md#also-required) — the row that has been
   asking for reversed-Z
 - [technical](../../docs/design/technical.md#frame-budget--166-ms) — the
-  three GPU lines
+  two GPU lines
 - [`@pmndrs/upscaler`](https://github.com/pmndrs/upscaler) — the library;
   `PARITY.md` for what it measures against FSR 3.1.5, `TEMPORAL-GUIDES-SPEC.md`
   for the guides contract, the [demos](https://pmndrs.github.io/upscaler/)

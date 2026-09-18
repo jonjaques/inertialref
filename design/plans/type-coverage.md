@@ -59,10 +59,11 @@ Plex subsets, it downloads only when a dossier prints one.
 `fontTools` is not installed on this machine; `uv` is, so `uvx --from
 'fonttools[woff]' pyftsubset` runs it without a global install.
 
-Landing it means amending ADR-0024's consequences, the recipe block, the
+Landing it means amending ADR-0024's consequences, its recipe block, the
 `index.css` header, `DESIGN.md` § "Symbol coverage" and
-`docs/guides/development.md` — all five currently say the sigils are covered
-except for the sentence this plan is cited from.
+`docs/guides/development.md`. Each names `☉` and `⊕` as the two the set does
+not reach and cites this plan for the cut; each loses that sentence, and the
+recipe block gains the third `pyftsubset` command beside the Plex ones.
 
 ## The mono has no Greek
 

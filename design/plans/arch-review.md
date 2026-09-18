@@ -14,6 +14,10 @@ the tree, each carrying its reasoning in its own file:
 | The entity store hands out its read half                     | `EntityView` in [`packages/simulation/src/entity.ts`](../../packages/simulation/src/entity.ts), `spawnShip`     |
 | The heightfield request carries the surface                  | `HeightfieldSource.submit(surface, request)` and `WireSurface` in `packages/workers/src/tasks.ts`, ADR-0023 § 3 |
 
+The residency half of § 3 is in the tree as well —
+[`apps/game/src/scene/bodyResidency.ts`](../../apps/game/src/scene/bodyResidency.ts)
+and its test; § 3 says what it holds and what is left.
+
 The vocabulary is the design skill's: a **module** has an interface and an
 implementation; it is **deep** when a small interface hides a lot of behavior;
 a **seam** is where the interface lives, an **adapter** is what satisfies it
@@ -33,20 +37,21 @@ deliberately left, and what is settled.
 
 **Files.** `packages/devtools/src/harness.ts` (`orbit`, `#toStar`,
 `#trackOrbit`, `#orbitStar`, `shot`, `land`, `goTo`, `#arriveAt`,
-`goToSystem`, `face`, `burnToward`, `#lookAt` — about 375 lines),
+`goToSystem`, `face`, `burnToward`, `#currentBodyAddress`, `#bodyPosition`,
+`#lookAt` — about 400 lines),
 `packages/devtools/src/shots.ts` (`placeShot`'s geometry alone),
 `packages/devtools/src/inspect.ts` (`EntityInspection`: pose, speed, altitude,
 landed, coasting, partition — no heading, no phase),
 `packages/devtools/src/devtools.test.ts` § "going places".
 
-**The friction.** Of the harness's sixty-one methods, about twenty-five are
-one-line forwards and ten are unit-and-address adapters; the flying group is
-the behavior — two-body speed, sunward placement, orbit-rate spin, the
-sphere-of-influence clamp, nose-on-target — inline in a class whose other
-fourteen hundred lines forward. Its tests drive through the interface and
+**The friction.** Of the harness's hundred and three methods, thirty-six are
+one-line forwards and about ten are unit-and-address adapters; the flying
+group is the behavior — two-body speed, sunward placement, orbit-rate spin,
+the sphere-of-influence clamp, nose-on-target — inline in a class whose other
+sixteen hundred lines forward. Its tests drive through the interface and
 verify through the world, reading `entities.require(player).state.orientation`
 and recomputing phase from `frames.pose`, because the interface cannot answer
-what the verbs promise. `goToSystem` and `burnToward` have no test at all.
+what the verbs promise. `burnToward` and `face` have no test at all.
 
 **The shape.** A module — `packages/devtools/src/maneuvers.ts` — whose
 interface is the verbs over a `World` and a player, each returning what it
@@ -64,8 +69,9 @@ the epoch — is answered in the module's header: every bookmark is a
 or a phase from `frames.pose`; every "going places" assertion is on
 `ManeuverResult` or on `ir.status().player.heading` / `.phase`, and "arrives
 looking at it" is `dot(player.heading, normalize(negate(player.local))) ≈ 1`.
-`goToSystem`, `burnToward` and `face` go from zero cases to their own — the
-test rewrite is the deliverable, not a follow-up. `shots.ts` keeps its
+`burnToward` and `face` go from zero cases to their own, and `goToSystem`'s
+case stops reading the world — the test rewrite is the deliverable, not a
+follow-up. `shots.ts` keeps its
 placement property tests unchanged and green. `ir.land(...).player.landed` and
 `ir.shot`'s lens-carrying status still answer, because
 [`docs/guides/harness.md`](../../docs/guides/harness.md) documents them and the
@@ -118,24 +124,25 @@ written:
   `session.world.entities.require(player).state.orientation` and recomputes a
   dot or a phase becomes an assertion on `ir.status().player.heading` /
   `.phase`, or on the module's `ManeuverResult`. "Arrives looking at it" is
-  `dot(player.heading, normalize(negate(player.local))) ≈ 1`. `goToSystem`,
-  `burnToward` and `face` — untested today — get cases in the same shape.
+  `dot(player.heading, normalize(negate(player.local))) ≈ 1`. `burnToward`
+  and `face` — untested today — get cases in the same shape.
 
 ---
 
 ## 2. The engine's derived state keys on one generation
 
 **Files.** `apps/game/src/engine/GameEngine.ts` — the starfield survey
-(`#survey`, `#starFieldWorld`, the sweep), the orbit-trace cache, and
-`#invalidateDerived`, which lists eleven caches by hand;
+(`#maybeSurveyStars`, `#starFieldWorld`, the sweep), the orbit-trace cache
+(`#maybeTraceOrbits`), and `#invalidateDerived`, which lists thirteen caches
+by hand and bumps the counter beside them;
 `apps/game/src/scene/Starfield.tsx` and `OrbitTraces.tsx`, one consumer each;
 `packages/rendering/src/scene.ts` (`buildScene` requires an entity).
 
 **The friction.** One class holds the frame loop, the three camera arms, a
 survey and an orbit cache with one consumer apiece, and invalidates its
-derived state through a list a maintainer keeps by hand — the build log
-records that splitting the list across `replaceWorld` and `load` is how the
-starfield came to survive a jump of four light years. The orbit cache keys on
+derived state through a list a maintainer keeps by hand — `onWorldReplaced`
+in `packages/devtools/src/session.ts` records that spreading the list across
+three methods is how the starfield came to survive a jump of four light years. The orbit cache keys on
 a counter named for the starfield. And `buildScene` requires a camera entity
 though the arms only need an eye, so `#step` returns before the scene when
 there is no player and a playerless observatory draws a stale one.
@@ -147,32 +154,31 @@ keyed on the generation and the scope. The engine names the world generation
 once — one counter, bumped where the world is replaced — and hands it to
 both; `#invalidateDerived` becomes that bump and two `reset()` calls. The
 scene takes the eye the arms resolved, with the entity optional, so the
-no-player frame draws. Zero-caller members go: `loadedSystemIds()`, and
-`player()` / `pool()` as public methods the session already answers.
+no-player frame draws. `player()`, a public method with no caller outside the
+engine that the session already answers, goes; `pool()` stays until
+`scene/Bodies.tsx` and `render/preload.ts` read the session for it.
 
 **Gate.** `gameEngine.test.ts` gains a playerless observatory frame that
 produces a scene; the survey and the cache get unit tests over a fake pool and
 a fake world generation, which they cannot have as private methods of a
 1,500-line class. The counter is held by a test that replaces the world and
-asserts every derived cache is cold — all eleven the hand-kept list names,
+asserts every derived cache is cold — all thirteen the hand-kept list names,
 counted, so the count is the gate — and by the jump of four light years the
-build log records the starfield surviving. `loadedSystemIds()`, `player()` and
-`pool()` are gone and `pnpm knip` reports no unused export in their place.
+session's `onWorldReplaced` records the starfield surviving. `player()` is
+gone and `pnpm knip` reports no unused export in its place.
 
 ---
 
 ## 3. Bodies: the mapping from a body to its uniforms becomes pure
 
 **Files.** `apps/game/src/scene/Bodies.tsx` — the frame closure runs
-`:408–979`, seven concerns: visual lifecycle and eviction, tessellation tiers,
-tuning and adaptation, the orbital bake, per-frame uniforms for four
-materials, the star as a body, the build-ahead queue and the boot census.
+`:375–927`, the concerns residency does not own: the visual's materials and
+their compile, tessellation tiers, tuning, the orbital bake, per-frame
+uniforms for four materials, and the star as a body.
 
-**The friction.** None of it is reachable from Node; `materials.gpu.test.ts`
-covers the materials and not the mapping into them. The eviction at
-`MAX_BODIES`, the requeue-at-cap fix and the census `finish()` are all
-"must not come back" items with no test that can reach them. And the
-flattening ADR-0013 says is spent once, on the mesh, is applied again to the
+**The friction.** None of the mapping is reachable from Node;
+`materials.gpu.test.ts` covers the materials and not the mapping into them.
+And the flattening ADR-0013 says is spent once, on the mesh, is applied again to the
 cloud shell and the atmosphere shell outside the branch — whether any figured
 body carries clouds or haze today is unverified; the rule is what is not
 literally true.
@@ -188,10 +194,10 @@ materials, the compile and the retirement, and asks residency whether a body
 gets a visual.
 
 **What is left.** `render/bodyUniforms.ts`: a pure mapping from a
-`RenderBody` and the frame's context — sun, eye, adaptation — to the uniform
+`RenderBody` and the frame's context — sun, eye, sunlight — to the uniform
 records of the planet, the clouds, the rings and the atmosphere, with
-`tuningFor` and `adaptationFor` exported and the figure branch taken once, the
-shells on its side. The frame closure applies the records, comparing before it
+`tuningFor` exported rather than module-local and the figure branch taken
+once, the shells on its side. The frame closure applies the records, comparing before it
 writes.
 
 **Gate.** `bodyUniforms.test.ts` in Node: a figured body yields shells with no
@@ -219,12 +225,13 @@ own. The phase each rides in is named at the end of its line.
 - **The director is reached through three seams of the same eight verbs.**
   Eight harness forwards, eight `CutsceneHost` closures, and the playhead's
   `mine` guard defending against the console it sits on; the script registry
-  is `[TNG_INTRO]` in the harness constructor. Expose the director as
+  is `CUTSCENES`, a module constant of three scripts the harness constructor
+  hands to `new CutsceneDirector(host, CUTSCENES)`. Expose the director as
   `ir.cutscene` the way `ir.observatory` is exposed, let `CutsceneHost` take
   it, and make the scripts a session option. ADR-0010 supports the director
   itself. Gate: a cutscene test drives a fake script through a session option,
-  which it cannot do while the registry is a constructor literal; `tngIntro`
-  still plays to the same beats. **Phase 2.**
+  which it cannot do while the registry is a constant the constructor imports;
+  `tngIntro` still plays to the same beats. **Phase 2.**
 - **The driver holds two app facts as strings the harness could answer.**
   Readiness is `window.engine.gl` and the boot cover is the selector
   `.hud-bleed.z-50.bg-black`; a rename costs twelve silent seconds a cold
@@ -235,12 +242,13 @@ own. The phase each rides in is named at the end of its line.
   **Phase 2.**
 - **Radians at `ir.land` and `ir.observatory.*`, degrees everywhere else.**
   One console object, two conventions, and `Radians` a bare number — the
-  2,578° defect. A branded `Degrees` at the harness seam; `ir.land` takes
-  what every other verb takes; `simulateDescent` takes what `ir.sites`
-  prints. `ir.land` is one of the verbs moving into `maneuvers.ts`, so the
+  2,578° defect. `Degrees` is already a brand in `packages/shared/src/units.ts`,
+  and the harness casts to it at the structure seam and nowhere else; the
+  brand reaches the verb signatures: `ir.land` takes what every other verb
+  takes, and `DescentOptions` takes what `ir.sites` prints. `ir.land` is one of the verbs moving into `maneuvers.ts`, so the
   brand lands on the same signature the move rewrites. **Phase 1.**
-- **Six scene consumers re-derive "whose frame is this" from
-  `engine.cinematic === null`.** A `frameOwner` the engine resolves once per
+- **Six consumers — four in `scene/`, the engine store and the cutscene
+  overlay — re-derive "whose frame is this" from `engine.cinematic === null`.** A `frameOwner` the engine resolves once per
   frame in `#step` — cutscene, observatory, ship — and the consumers switch
   on it. ADR-0010 chose the null check; this names the same fact once. Gate:
   `cinematic === null` appears only inside `GameEngine.ts`. **Phase 4** — with
@@ -256,12 +264,12 @@ it comes from. Nothing here is a rewrite in flight: every phase is a module
 lifted out behind an interface the callers already use, so the tree compiles
 between any two of them.
 
-| Phase | Lands                                                                                                                                                                           | Done when                                                                                                                                                                                                                                       |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | § 1 — `packages/devtools/src/maneuvers.ts`, `ManeuverResult`, `headingOf` and `orbitalPhase` on `EntityInspection`, the harness verbs as two-line forwards; the `Degrees` brand | § 1's gate: no going-places case reads the world; `goToSystem`, `burnToward` and `face` go from zero cases to their own; `shots.ts` property tests unchanged; `pnpm graph` reports no cycle; `pnpm typecheck` holds the brand                   |
-| 2     | `ir.cutscene` as a sub-object, `CutsceneHost` taking it, the scripts as a session option; `ir.status().booted` from the presentation host, read by the driver                   | A cutscene test drives a fake script through a session option; `tngIntro` plays to the same beats; neither `window.engine.gl` nor `.hud-bleed.z-50.bg-black` appears in `scripts/drive.mjs`; a cold `--status` boot is no slower                |
-| 3     | § 3 — `apps/game/src/render/bodyUniforms.ts` and `scene/visualSet.ts`, the frame closure in `Bodies.tsx` reduced to applying records                                            | § 3's gate: `bodyUniforms.test.ts` and `visualSet.test.ts` in Node reach the cap, the requeue and the census `finish()`; `pnpm test:gpu` still compiles the materials; plates either side at a figured body, a mapped one, the star             |
-| 4     | § 2 — `engine/starSurvey.ts`, `engine/orbitTraces.ts`, one world generation, `buildScene` taking an eye; plus `frameOwner` and `TimePanel` through `HudCommands`                | § 2's gate: the playerless observatory frame produces a scene; the eleven caches are cold on a world replacement and the starfield does not survive four light years; `cinematic === null` is confined to `GameEngine.ts`; `pnpm knip` is clean |
+| Phase | Lands                                                                                                                                                                           | Done when                                                                                                                                                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | § 1 — `packages/devtools/src/maneuvers.ts`, `ManeuverResult`, `headingOf` and `orbitalPhase` on `EntityInspection`, the harness verbs as two-line forwards; the `Degrees` brand | § 1's gate: no going-places case reads the world; `burnToward` and `face` go from zero cases to their own; `shots.ts` property tests unchanged; `pnpm graph` reports no cycle; `pnpm typecheck` holds the brand                                   |
+| 2     | `ir.cutscene` as a sub-object, `CutsceneHost` taking it, the scripts as a session option; `ir.status().booted` from the presentation host, read by the driver                   | A cutscene test drives a fake script through a session option; `tngIntro` plays to the same beats; neither `window.engine.gl` nor `.hud-bleed.z-50.bg-black` appears in `scripts/drive.mjs`; a cold `--status` boot is no slower                  |
+| 3     | § 3 — `apps/game/src/render/bodyUniforms.ts`, the frame closure in `Bodies.tsx` reduced to applying records                                                                     | § 3's gate: `bodyUniforms.test.ts` in Node holds the figured shells, the mapped tuning and the star; `pnpm test:gpu` still compiles the materials; plates either side at a figured body, a mapped one, the star                                   |
+| 4     | § 2 — `engine/starSurvey.ts`, `engine/orbitTraces.ts`, one world generation, `buildScene` taking an eye; plus `frameOwner` and `TimePanel` through `HudCommands`                | § 2's gate: the playerless observatory frame produces a scene; the thirteen caches are cold on a world replacement and the starfield does not survive four light years; `cinematic === null` is confined to `GameEngine.ts`; `pnpm knip` is clean |
 
 ---
 
@@ -280,8 +288,8 @@ The one seam between lanes is a single line. `frameOwner` reaches
 expression, not a design dependency. Whichever lands second takes it.
 
 1. **Phase 1 first.** It is the only phase whose deliverable includes tests
-   that do not exist: `goToSystem`, `burnToward` and `face` have no case at
-   all, and the module is what makes them assertable, because the interface
+   that do not exist: `burnToward` and `face` have no case at all, and the
+   module is what makes them assertable, because the interface
    they are tested through is the one that cannot answer what they promise
    today. Every headless verification in this repository crosses the harness,
    so the interest compounds here and nowhere else.
@@ -290,12 +298,12 @@ expression, not a design dependency. Whichever lands second takes it.
    has just made for `Maneuvers`, and `ir.observatory` is the precedent both
    follow.
 3. **Phase 3 is the smallest surface and can start immediately.** One pure
-   mapping, one small module, two new Node test files, and no interface anyone
-   outside `apps/game/src/scene` reads. It is also the only phase that makes a
-   "must not come back" item reachable from Node, which is the thing the
-   eviction, the requeue-at-cap and the census have been missing.
+   mapping, one new Node test file, and no interface anyone outside
+   `apps/game/src/scene` reads. The residency half is already in the tree with
+   the three "must not come back" items under test; what is left is the
+   mapping the frame draws through.
 4. **Phase 4 carries the risk, and the go/no-go is inside it.** The generation
-   counter has to cover all eleven caches the hand-kept list names; if one of
+   counter has to cover all thirteen caches the hand-kept list names; if one of
    them keys on something the counter cannot see, the list stays and the two
    extracted modules have nothing to key on, and the phase is the `buildScene`
    change alone. It is also the phase that touches an interface another package
@@ -304,9 +312,13 @@ expression, not a design dependency. Whichever lands second takes it.
    the argument for last is collision, and the argument for first is that it is
    the only phase that can fail on its premise.
 
-Phase 4 is where the engine's half of a `Host.onWorldReplaced` subscription
-goes, per [What the landed six left](#what-the-landed-six-left-deliberately).
-That design is not in this plan; the counter is what it would be built on.
+The session already carries the engine's half of a world-replaced
+subscription — `onWorldReplaced` in `packages/devtools/src/session.ts`, which
+the engine answers with `#invalidateDerived`. Phase 4 turns that answer into
+the counter's bump, and the counter is what a director or observatory
+subscription would be built on, per
+[What the landed six left](#what-the-landed-six-left-deliberately). That
+design is not in this plan.
 
 ---
 
@@ -319,13 +331,16 @@ That design is not in this plan; the counter is what it would be built on.
 - **The world-replaced rule is still six checks.** The director's identity
   checks, the observatory's guards and the engine's generation counter each
   answer a different consequence of the same event, and each is correct
-  locally. A `Host.onWorldReplaced` subscription would let the director and
-  the observatory register instead of check; it is a separate design, and
-  candidate 2 above is where the engine's half of it goes.
+  locally. The session's `onWorldReplaced` option is the engine's
+  subscription; letting the director and the observatory register on it
+  instead of check is a separate design, and candidate 2 above is where the
+  counter it would hand them is named.
 - **`RENDER_HDR` and `RENDER_AA` stay in `App`.** Both are facts about the
   renderer it builds — a constructor argument and the drawing buffer's
   ratio — and the canvas key reads them. The knobs the frame loop reads are
-  the ones the registry binds.
+  the ones the registry binds, and `RENDER_AA` is on both lists: the registry
+  binds it too, for the supersample factor the terrain predicate divides
+  back out.
 - **The streamer still caches the palette for the renderer.** `TerrainState`
   carries `palette`, `datumRadius`, `orientation`, `center` and `lens` so the
   renderer has them in the frame the drawn set is empty; the streamer holds
@@ -344,13 +359,15 @@ That design is not in this plan; the counter is what it would be built on.
 Named here so a later review does not relitigate them; each has a home that
 carries the argument.
 
-- **Per-route Open Graph through HTMLRewriter** — declined in
-  [`docs/hosting.md`](../../docs/hosting.md), which also names the trigger that
-  would reopen it. `run_worker_first` bills every asset request.
-- **Generating `index.html`** — a generator fights `pnpm format`;
-  `scripts/brand/checkHead.mjs` is a gate instead
-  ([`scripts/brand/build.mjs`](../../scripts/brand/build.mjs) carries the
-  reasoning).
+- **Per-route Open Graph at request time** — settled by prerendering: Astro
+  renders every public route's head at build time through
+  `src/documentHead.ts`, and [`docs/hosting.md`](../../docs/hosting.md) names
+  request-time rendering as an adapter choice nothing has configured.
+- **Generating the document** — there is no `index.html` to generate:
+  `src/documentHead.ts` renders the head and `scripts/brand/checkHead.mjs`
+  gates it without a build. The brand assets are the one generated set, and
+  [`scripts/brand/build.mjs`](../../scripts/brand/build.mjs) carries the
+  reasoning.
 - **Anything multiplayer** —
   [ADR-0008](../../docs/adr/0008-multiplayer-partitions.md) is
   design-only, and the single `AuthorityPort` adapter cannot rot because no

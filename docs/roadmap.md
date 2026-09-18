@@ -219,6 +219,39 @@ far half.
 
 ---
 
+## Rings
+
+The ring phase landed under [ADR-0027](adr/0027-the-rings.md); cite the ADR
+for the decision. Two things it left open.
+
+**The record carries one number for a thing that has many.** `RingSystem` is
+one annulus and one mean normal optical depth, while the strip draws plateaus,
+divisions, shepherded ringlets, hairlines and a dust haze. The object panel
+therefore describes less than the picture, and [ADR-0014](adr/0014-the-record-with-holes-in-it.md)'s
+standard is met only by putting the profile's peak at the quoted depth. That
+is also why the strip cannot be normalized: alpha is a byte in [0, 1], so a
+profile whose peaks exceed one clamps rather than scales, and a true
+normalization has to divide in the material on a uniform the generator
+computes. The change takes the shape of a per-ring profile on the record — an
+inner and outer radius, an optical depth, and whether the edge is sharp, a few
+times over — which the generator already has when it writes the strip. Until
+then there is nothing for a normalized strip to mean, and
+[planetarium](design/planetarium.md)'s row on ring divisions describes the
+data model rather than the picture.
+
+**A floor under the lit face near equinox.** A sheet whose star is within a
+few degrees of the ring plane is drawn dark, because a flat slab lit at
+grazing incidence intercepts almost nothing. Cassini's 2009 equinox pictures
+sit at a few percent, not a few thousandths, because a real ring has thickness
+and multiple scattering. A μ₀-independent term would buy it and is not
+written, because it is a number nobody here has measured and inventing one is
+how a photometric model stops being evidence. It wants a measurement of the
+multiple-scattering contribution at grazing incidence against a published
+Cassini figure first, so the term has a bound to be held to the way the
+lit/backlit crossover does in `rings.gpu.test.ts`.
+
+---
+
 ## The galaxy beyond the disk
 
 The journey from Earth orbit to 30 kpc above the plane is built, and one
@@ -266,6 +299,22 @@ its own evidence, and none of them gates the default image.
 [The upscaler](../design/plans/the-upscaler.md) is a separate performance
 proposal. Whole-scene temporal reconstruction, reversed-Z conversion and new
 reactive buffers are not prerequisites for any row here.
+
+---
+
+## The guide
+
+The guide is one voice — [ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)
+owns the design and [ADR-0041](adr/0041-the-guide-requests-the-view.md) the
+execution boundary it keeps. The code is complete; what is open is judged by
+a person or was declined as a core requirement.
+
+| Item                   | What it needs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A person on headphones | Spoken delivery across the voices, the introduction aloud, and pronunciation are a listen, not a test. Measure with the window on screen: the off-screen drive rig has no audio pipeline, so a rig session reads every beat as silent and falls back to the clock's start timeout, which proves the loop but not the pacing                                                                                                                                                                                   |
+| A cheaper backend      | Whether Sol or Terra paces a routine beat as well as Astra. The browser's usage display decides, not an estimate: extrapolated from the probe, a ten-minute conversation with thirty backend responses costs under $0.30 of backend plus $0.50 of voice at the recorded Astra rates                                                                                                                                                                                                                           |
+| Visual questions       | "What is that bright point beside Saturn?" needs a real frame in front of the backend. That is an in-product capture at the sensor boundary — a faithful SDR copy of the displayed frame that advances no sensor temporal history and renders no second simulation frame — because the driver's `canvas.toDataURL()` returns transparent black once the WebGPU swap-chain image expires. Only an explicit question may capture; a tour, an arrival, silence and timers produce zero captures and zero uploads |
+| Composition help       | Builds on visual questions: an observe, propose, execute, observe-again loop that only an explicit request such as "frame Saturn and Titan together" starts, bounded in steps, preserving the accepted view on failure and stopping when the visitor takes over. Kept only where an image beats the metadata the tools already return                                                                                                                                                                         |
 
 ---
 
@@ -388,6 +437,28 @@ and a reliable performance-regression gate on controlled hardware. A fixed
 wall-time threshold in ordinary CI would measure the runner as much as the code.
 Physical GPU correctness tests and preset plates already exist; comparing
 rendered images automatically on stable CI hardware remains separate work.
+
+### What the timeline cannot see
+
+[ADR-0022](adr/0022-the-timeline.md) puts every phase of a frame, a boot and a
+worker job on the browser's performance timeline. Two things are still dark.
+
+- **The `requestAnimationFrame` loops outside R3F's.** `useTimedFrame` gives
+  one `Render` entry per `useFrame` consumer and `FrameMetrics` measures the
+  same loop; the other callers in `apps/game/src` run main-thread work no
+  instrument sees. The three boot-time ones — `render/firstLight.ts`,
+  `render/createRenderer.ts` and `render/warmup.ts` — come first, because boot
+  is the one window the performance panel structurally cannot look at and the
+  `Boot` track already exists.
+- **`ir.timing.drain()` is the page's thread only.** A `performance.mark` lands
+  in the timeline of the scope that wrote it, so the worker pool's `Tasks`
+  entries never reach `drain()` or `ir.profile`; a page-side profile carries
+  only the pool's `queue` and `run`. A Chrome trace carries every thread, so
+  `pnpm timing --threads` over a `--trace` recording is the reading that
+  includes the worker side. Closing the gap for `drain` means collecting each
+  worker's entries over `postMessage` on every drain, which is worth doing
+  only if a `full`-level report is wanted somewhere a trace cannot be
+  recorded.
 
 Historical measurements retain their conditions: the 27 Aug 2026 entry chunk
 was 747.0 KB gzip, the early M5 atmosphere raymarch cost 7.27 ms at 1080p, and
@@ -565,13 +636,14 @@ destinations and the population is the scenery between them.
 
 ## Automation gaps
 
-| Gap                            | Note                                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| ~~No CI configuration~~ ✅     | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                              |
-| ~~No formatter~~ ✅            | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review |
-| No stored save fixture         | Compatibility testing currently synthesizes old saves in-test rather than loading a real one from disk                          |
-| No controlled performance gate | Physical GPU correctness tests exist; timing regression needs stable hardware, see above                                        |
-| No automated image comparison  | Preset plates and scripted camera frames supply reproducible fixtures; automated visual comparison still needs stable GPU CI    |
+| Gap                            | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ~~No CI configuration~~ ✅     | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ~~No formatter~~ ✅            | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| No stored save fixture         | Compatibility testing currently synthesizes old saves in-test rather than loading a real one from disk                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| No controlled performance gate | Physical GPU correctness tests exist; timing regression needs stable hardware, see above                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| No automated image comparison  | Preset plates and scripted camera frames supply reproducible fixtures; automated visual comparison still needs stable GPU CI                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| No shader tests in CI          | `pnpm test:gpu` needs a physical adapter. Whether a hosted macOS runner gives Dawn a plain `MTLDevice` is unmeasured — Apple's Virtualization framework enables GPU acceleration but not Metal Performance Shaders, which says nothing about a bare device ([runner-images #7085](https://github.com/actions/runner-images/issues/7085) carries the limitation), and one workflow run settles it. Linux runners are the wrong fallback: Dawn takes SwiftShader there, and a graph that compiles on a software adapter and not on Metal is the class of failure the suite exists to catch |
 
 ---
 

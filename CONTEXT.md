@@ -6018,8 +6018,7 @@ built-ins has.
 
 ## The six instruments get the axis they were missing (30 Aug 2026)
 
-[ADR-0022](docs/adr/0022-the-timeline.md) and
-[the plan](design/plans/the-timeline.md) carry the decisions. What belongs here is
+[ADR-0022](docs/adr/0022-the-timeline.md) carries the decisions. What belongs here is
 the measurements, and the three things the instrument found on the days it was
 built.
 
@@ -6263,7 +6262,7 @@ a fine shift away and adding it after the difference does not.
 
 ## The shaders run in the Node suite, and the first thing they found was every mapless body's ground (30 Aug 2026)
 
-[The plan](design/plans/headless-webgpu.md) is executed as written: `webgpu@0.6.0`
+[The suite](docs/guides/testing.md#shader-behavior-runs-on-the-real-gpu-from-node) is built as planned: `webgpu@0.6.0`
 is Dawn as a Node addon, `render/gpuSetup.ts` installs the three globals
 `three/webgpu` reads at import time, `render/gpuHarness.ts` hands a test a
 `WebGPURenderer` on the physical `apple` / `metal-3` adapter with five verbs
@@ -7192,8 +7191,9 @@ it describes:
   cases the doc had merged into one.
 
 **Rings landed with no ADR and a plan that outlived it.** ADR-0027 now carries
-the decision and `design/plans/rings.md` is reduced to the record's missing
-per-ring profile and the unmeasured multiple-scattering term. ADR-0023's patch
+the decision, and the two remainders — the record's missing per-ring profile
+and the unmeasured multiple-scattering term — are
+[roadmap rows](docs/roadmap.md#rings). ADR-0023's patch
 cost is amended rather than overwritten: it is the evidence the GPU producer was
 decided on, and the current 23.8–69.4 ms is a different measurement, not a
 correction of that one.
@@ -10041,6 +10041,52 @@ and the validator stays strict — `v1ToV2` spreads `...raw` and replaces only
 `structures` — so the unreadable value now passes through untouched. Review
 found it, not a test: every migration test fed it a list.
 
+## Seven plans had landed, and a plan that has landed is a record (18 Sep 2026)
+
+The rule from the 12 September sweep holds: history has three homes and none
+of them is `design/plans/`. Seven of the sixteen pages were finished or
+superseded, and between them they were most of what a reader had to walk past
+to reach the nine that still promise something. What existed in only one place
+moved rather than went; the rest is in the ADR each page already told its
+reader to cite instead.
+
+- **The guide's three generations** — the local companion, the two-model
+  director, and the one-voice plan — were one lineage, each superseding the
+  last, and only the third had landed. ADR-0042 carries every decision the
+  one-voice plan made: the browser-direct shape, the beat as a chain, the
+  remote-track clock and its measured floor, what the application enforces,
+  and the listen it still owes. The prompts are versioned in
+  `apps/server/src/tour/prompts.ts`. What none of that carried went to the
+  roadmap under a new `## The guide`: the person on headphones, the cheaper
+  backend question with the probe's cost extrapolation (under $0.30 of backend
+  plus $0.50 of voice for a ten-minute, thirty-response conversation at Astra
+  rates), and the director plan's two declined phases — visual questions, which
+  need a capture at the sensor boundary because `canvas.toDataURL()` returns
+  transparent black once the WebGPU swap-chain image expires, and composition
+  help on top of it. The companion plan's own ideas survive only where the
+  guide reused them; ADR-0035 now names the guide, not the companion, as what
+  the volume finder is the deterministic half of.
+- **Rings, the timeline, and headless WebGPU** were each a landed phase with
+  one or two open items on a page whose first sentence said to cite the ADR.
+  The per-ring profile the record lacks and the unmeasured equinox floor are
+  `## Rings` on the roadmap; the two dark spots of the timeline instrument —
+  the `requestAnimationFrame` loops outside R3F's and the worker-side `Tasks`
+  entries `drain()` cannot see — are `### What the timeline cannot see` under
+  performance work; the unmeasured hosted-Metal-adapter question is a row in
+  the automation gaps, and the suite's two travel limits went to the testing
+  guide beside the suite. The timeline plan's list of eight rAF callers had
+  already drifted — `HomePage.tsx` no longer has one, `NavBall.tsx` and
+  `DropHandle.tsx` do — so the roadmap names only the three boot-time ones.
+- **The spelling plan** was a page saying the migration is implemented, under
+  a filename that still said British.
+
+Two code comments were citing the rings plan for "the measurement and the
+decline" that had moved to ADR-0027 in the 12 September pass; they cite the
+ADR now. `docs:build` still does not validate a link from `docs/` into
+`design/`, so the inbound links were swept with `rg` by path and again by
+bare filename — the plan-to-plan links are relative without the directory,
+and the first sweep misses them.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
@@ -10075,7 +10121,7 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   unfinished — the simulation depends on the integer tick and wall clock enters
   at one call — but it means a bare `--ticks` loop has nothing to decompose and
   the headless half of the profile story is thinner than
-  [the plan](design/plans/the-timeline.md) hoped. The seam for changing that is
+  [ADR-0022](docs/adr/0022-the-timeline.md) hoped. The seam for changing that is
   ADR-0022's `void` return, which is what would keep a tick span from becoming a
   canonical read.
 - **A worker's entries are invisible to `ir.timing.drain()`.** They live on the

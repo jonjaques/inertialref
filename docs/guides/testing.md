@@ -344,8 +344,13 @@ Suite size and wall time change as coverage grows, and cost depends on the
 adapter and selected tests. The early eight-file, 41-test suite took about
 18 seconds on an M5; that is a historical measurement, not the current suite's
 budget. The config explains why the physical-GPU suite sits outside
-`pnpm check`; [the headless WebGPU plan](../../design/plans/headless-webgpu.md)
-records the remaining hosted-adapter and portability questions.
+`pnpm check`; [the roadmap](../roadmap.md#automation-gaps) carries the open
+hosted-adapter question. Two limits travel with every answer the suite gives:
+Dawn tracks its own release while Chrome ships its own, so a graph that
+compiles under one and not the other is possible, which is why the browser
+rig stays the arbiter; and `navigator.gpu` is `undefined` on `about:blank` and
+`data:` URLs because `isSecureContext` is false there, so a browser-side probe
+has to be served from `localhost` or a real origin to mean anything.
 
 It is a separate command rather than part of `pnpm test` because it makes a
 different portability claim: the rest of the suite runs on any Node, and this
@@ -432,12 +437,12 @@ otherwise assert in prose.
 
 ## What is not covered yet
 
-| Gap                                                                                                                              | Roadmap                                                  |
-| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal)   | [roadmap](../roadmap.md#persistent-mutations)            |
-| Recorded input replay                                                                                                            | [roadmap](../roadmap.md#replay-and-reconciliation)       |
-| Performance regression benchmarks                                                                                                | [roadmap](../roadmap.md#performance-work)                |
-| Shader behavior in CI — `pnpm test:gpu` needs a physical adapter, and whether a hosted macOS runner gives Dawn one is unmeasured | [headless WebGPU](../../design/plans/headless-webgpu.md) |
+| Gap                                                                                                                              | Roadmap                                            |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal)   | [roadmap](../roadmap.md#persistent-mutations)      |
+| Recorded input replay                                                                                                            | [roadmap](../roadmap.md#replay-and-reconciliation) |
+| Performance regression benchmarks                                                                                                | [roadmap](../roadmap.md#performance-work)          |
+| Shader behavior in CI — `pnpm test:gpu` needs a physical adapter, and whether a hosted macOS runner gives Dawn one is unmeasured | [roadmap](../roadmap.md#automation-gaps)           |
 
 ---
 

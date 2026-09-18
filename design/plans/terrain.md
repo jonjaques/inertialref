@@ -5,16 +5,16 @@ to standing at the foot of a mountain. Most of it is landed, and each landed
 piece has an ADR that owns its decisions. This page is the remainder: the work
 still open, the constraints that bind it, and the risks that are still live.
 
-| Landed                                                        | The record                                                 |
-| ------------------------------------------------------------- | ---------------------------------------------------------- |
-| The quadtree — whole-disk selection, borders, the CDLOD morph | [ADR-0015](../../docs/adr/0015-terrain-level-of-detail.md) |
-| The lens the refinement predicate reads                       | [ADR-0017](../../docs/adr/0017-the-lens.md)                |
-| The instrument the lens is operated from                      | [ADR-0018](../../docs/adr/0018-the-instrument.md)          |
-| The geology — grammar, sketch, band stack, crater field       | [ADR-0019](../../docs/adr/0019-the-geology.md)             |
-| The face — cover field, palette, one material                 | [ADR-0020](../../docs/adr/0020-the-face.md)                |
-| The ground — meter-scale relief and rock scatter              | [ADR-0021](../../docs/adr/0021-the-ground.md)              |
-| The GPU producer — heightfield tiles as a TSL compute kernel  | [ADR-0023](../../docs/adr/0023-the-gpu-producer.md)        |
-| The liquid — valleys, the coast, the sea sheet, the families  | [ADR-0026](../../docs/adr/0026-the-liquid.md)              |
+| Landed                                                                                       | The record                                                 |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| The quadtree — whole-disk selection, borders, the CDLOD morph                                | [ADR-0015](../../docs/adr/0015-terrain-level-of-detail.md) |
+| The lens the refinement predicate reads                                                      | [ADR-0017](../../docs/adr/0017-the-lens.md)                |
+| The instrument the lens is operated from                                                     | [ADR-0018](../../docs/adr/0018-the-instrument.md)          |
+| The geology — grammar, sketch, band stack, crater field                                      | [ADR-0019](../../docs/adr/0019-the-geology.md)             |
+| The face — cover field, palette, one material                                                | [ADR-0020](../../docs/adr/0020-the-face.md)                |
+| The ground — meter-scale relief and rock scatter                                             | [ADR-0021](../../docs/adr/0021-the-ground.md)              |
+| The GPU producer — heightfield tiles as a TSL compute kernel                                 | [ADR-0023](../../docs/adr/0023-the-gpu-producer.md)        |
+| The liquid — valleys, the coast, the sea sheet, the families, and the sphere's relief record | [ADR-0026](../../docs/adr/0026-the-liquid.md)              |
 
 The rig every phase is judged through — the observatory's surface arm, the
 derived survey sites, the terrain zoo, `ir.descend`, `ir.terrain` and
@@ -26,8 +26,8 @@ derived survey sites, the terrain zoo, `ir.descend`, `ir.terrain` and
 ## 1. Scope
 
 **In:** solid bodies — rocky and icy — whose ground is generated from
-`SurfaceParameters`. That is every body in the game: terrain has always been
-seeded on all of them, mapped ones included.
+`SurfaceParameters`. That is every body in the game: terrain is seeded on all
+of them, mapped ones included.
 
 The carve-out is **appearance**, and it is mechanical rather than a list.
 `isMappedSurface` reads `BodyAppearance.texture`, and a body with a vendored map
@@ -57,9 +57,9 @@ record ([ADR-0005](../../docs/adr/0005-procedural-seeds.md) § versioning).
 
 **The orbital bake's hitch.** The bake is a hitch of a few tens of
 milliseconds in the frame its tiles arrive, once per body, and spreading the
-ninety-six builds across frames is the plain fix if it is felt. It now takes
-two pictures rather than one — the reflectance and the relief record — for
-the same ninety-six tiles and one more set of six draws.
+ninety-six builds across frames is the plain fix if it is felt. It takes two
+pictures — the reflectance at 512 a face and the relief record at 256 — from
+the same ninety-six tiles, in twelve draws.
 
 **The plate review.** "Reads as a Moon, not as noise" is a taste judgment and
 the acceptance test for it is a set of before/after plates of the zoo's survey
@@ -67,11 +67,12 @@ sites, captured through the browser. What exists instead is the arithmetic:
 crater density ordered Mercury > Luna > Mars > Earth > Venus, the
 simple-to-complex transition holding `D·g = 29,000`, and Earth's hypsometry
 bimodal at 0.583 against 0.36–0.40 for four stagnant lids. The mechanism the
-review will use is `ir.preset` and `Shift+H` — seven pictures of particular
-places, each with a vendored plate — but the zoo is a set of _sites_ rather than
-pictures, so its own fixture is still `ir.visit` plus the drive rig. One
-question for it is already on the table: now that a mapless sphere wears its
-relief, Enceladus's tiger stripes read from orbit as four hairlines from pole to
+review will use is `ir.preset` and `Shift+H` — thirteen pictures of particular
+places, each with a vendored plate under `apps/game/public/presets/` — but the
+zoo is a set of _sites_ rather than pictures, so its own fixture is `ir.visit`
+plus the drive rig. One question for it is already on the table: because a
+mapless sphere wears its relief,
+Enceladus's tiger stripes read from orbit as four hairlines from pole to
 pole, because `StripeAxis` is a whole great circle. The published fractures are
 a south-polar family about 130 km long, so the stripe wants an extent, or the
 sphere's exaggeration wants to leave a trough of a few hundred meters alone.
@@ -107,7 +108,7 @@ sheet, because a sheet per valley is a mesh per valley.
 
 **The frame is fragment-bound at retina sizes, and the levers are named.**
 Measured at 1920×1200 over a device pixel ratio of 2, standing two meters over
-the sea with 1,227 patches: 9.5 fps before this phase, 12.2 with the octaves
+the sea with 1,227 patches: 9.5 fps before the liquid, 12.2 with the octaves
 branched on their fades, 16.3 with every octave a fetch of a baked texture
 that carries its own gradient, and 18.0 with every octave off — which is the
 base cost of the two surfaces, and the next thing to instrument.
@@ -139,8 +140,8 @@ mesh cracks.
 491 K that drew a datum keeps the draw and loses the ocean — and with it the
 lithospheric weakening that gave it plates. Proxima Centauri II was the
 generated plate world every tectonic test named, at twenty plates; it is a
-stagnant lid now, and `geology.test.ts` finds the most-plated solid body in the
-fixture instead. The claim did not move; the example did.
+stagnant lid, and `geology.test.ts` finds the most-plated solid body in the
+fixture instead.
 
 **The zoo has no generated `icy-active` body.** No generated system within 25 ly
 of Sol contains one: generated moons come out on orbits too circular for the

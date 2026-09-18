@@ -26,7 +26,7 @@ import { proceduralRingStrip } from './proceduralRings.ts'
  * system's architecture from its seed rather than from the host's class, and
  * the point of that change is a spread — measured here as the range of mean
  * brightness over twelve seeds, which was a single repeated value before.
- * [The rings plan](../../../../design/plans/rings.md) carries the numbers and
+ * [ADR-0027](../../../../docs/adr/0027-the-rings.md) carries the numbers and
  * what was declined.
  */
 

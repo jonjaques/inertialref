@@ -60,7 +60,7 @@ time** — of which 51 ms is incremental marking, 19 ms major pauses and 17 ms
 scavenges. The thread is 25% busy at that stance. Marking dominating means a
 major cycle is always in progress, which is the allocation rate keeping the
 old generation moving rather than any one pause; the producers named in the
-memory section above are where the rate comes from. That is the open half: the rate is down by
+memory section below are where the rate comes from. That is the open half: the rate is down by
 construction and nobody has recorded the collector's share since. One trace with
 attribution before believing any individual span's max. If scavenges still land
 inside frames, the next candidates are the selection's per-walk node objects and
@@ -162,7 +162,7 @@ a patch and the four gate answers are constant over a body, so they lift out of
 the sample loop into the job. That changes the sample signature, not the table —
 the one description survives it, which is the property that matters.
 
-**Where it would show.** Item 4 of the order below — one worker's first patch
+**Where it would show.** Item 3 of the order below — one worker's first patch
 against its tenth on the same body — already walks this path with allocation
 attribution on. The answer comes out of that trace rather than a new one.
 
@@ -191,7 +191,7 @@ bakes. Worth doing only if the boot line below is ever worked, because it is a
 tenth of it.
 
 The prefetch's two branches do not pace alike, and only one of them was
-reasoned about. `prefetchScattering` in
+reasoned about. `watchSystemAtmospheres` in
 [`preload.ts`](../../apps/game/src/render/preload.ts) drains its no-pool queue
 one bake per macrotask, deliberately; the pool branch submits every haze of
 every newly-loaded system in one `for` loop into the same FIFO the terrain
@@ -398,12 +398,15 @@ frames in the 2.2-second window. Repeating the movement with the volume
 disabled restores 16.67 ms per frame. At 960×540 the same rotation averages
 18.37 ms, so the smaller rig hides most of the defect.
 
-Natural's default daylight calibration does not display the diffuse sky.
-`GameEngine.galaxyPose` omits that work when the current lens and range resolve
-to daylight or darker. It preserves brighter Natural settings, metered
-responses, Direct and staged galaxy instruments. The eligibility test reads
-the current settings rather than the previous frame's exposure, so a setting
-change reveals the volume immediately. Physical-GPU comparisons retain a lit
+Natural's default daylight calibration does not display the diffuse sky, and
+the figures in this section were taken with the volume omitted for that
+reason. Nothing omits it today: `GameEngine.galaxyPose` answers whenever the
+mode's presentation layer asks for the diffuse sky — `diffuseGalaxy` in
+[`presentation.ts`](../../apps/game/src/engine/presentation.ts), pushed by
+the home page, the planetarium and flight — or the galaxy instrument is up,
+and no lens or exposure predicate sits in front of it, because
+[ADR-0037](../../docs/adr/0037-the-enhanced-camera.md) says eligibility cannot
+follow the Natural daylight response. Physical-GPU comparisons retain a lit
 foreground, fixed noise and the sensor PSF; the tested daylight differences
 remain below one display code with and without dust, while the long-exposure
 control differs visibly. This does not reduce the cost of a visible integral.

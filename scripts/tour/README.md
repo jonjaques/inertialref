@@ -3,9 +3,7 @@
 The guide is one voice: GPT Live listens and speaks, GPT-6 Astra thinks
 through Responses delegation, and the browser executes every tool over the
 WebRTC data channel. The design is
-[the guide in one voice](../../design/plans/the-guide-in-one-voice.md); the
-one-voice decision is
-[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) and the
+[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md), and the
 execution boundary it keeps is
 [ADR-0041](../../docs/adr/0041-the-guide-requests-the-view.md).
 

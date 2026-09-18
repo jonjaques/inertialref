@@ -5,7 +5,7 @@
  * them. Both follow the documented Live template: a short voice prompt with
  * the three delegation labels, and a backend prompt that carries every rule
  * about the scene. Every sentence here earned its place in a probe session;
- * the plan (`design/plans/the-guide-in-one-voice.md` § 8) records which.
+ * ADR-0042 § Consequences records the two the recordings settled.
  *
  * The voice prompt ends the beat: without the sentence about tour stops, Live
  * appended "And if you'd like, I can center Saturn and let that spin sink in"

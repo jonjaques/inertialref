@@ -16,7 +16,7 @@ import { defineConfig } from 'vitest/config'
  * graph compiled to a Metal pipeline, its WGSL read back, and its pixels
  * asserted against arithmetic — in milliseconds, from a test file. How to write
  * a bound that survives that pipeline is `docs/guides/testing.md`; what is still
- * unanswered about running it in CI is `design/plans/headless-webgpu.md`.
+ * unanswered about running it in CI is `docs/roadmap.md` § Automation gaps.
  */
 export default defineConfig({
   // The same `define` and alias the root config carries, and for the same
