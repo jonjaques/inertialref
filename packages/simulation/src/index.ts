@@ -1,6 +1,7 @@
 export * from './binding.ts'
 export * from './clock.ts'
 export * from './entity.ts'
+export * from './entityState.ts'
 export * from './flight.ts'
 export * from './snapshot.ts'
 export * from './surfacePlacement.ts'

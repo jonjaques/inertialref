@@ -177,21 +177,28 @@ cloud shell and the atmosphere shell outside the branch — whether any figured
 body carries clouds or haze today is unverified; the rule is what is not
 literally true.
 
-**The shape.** `render/bodyUniforms.ts`: a pure mapping from a `RenderBody`
-and the frame's context — sun, eye, adaptation — to the uniform records of
-the planet, the clouds, the rings and the atmosphere, with `tuningFor` and
-`adaptationFor` exported and the figure branch taken once, the shells on its
-side. The frame closure applies the records, comparing before it writes. The
-eviction and the requeue-at-cap move into a small `scene/visualSet.ts` with
-its own test.
+**What has landed.** The residency half: `scene/bodyResidency.ts` owns the
+resident map, the cap and its eviction, the build-ahead queue, the
+requeue-at-cap and the census ticket, generic over the visual so the policy
+runs in Node. `bodyResidency.test.ts` holds the three "must not come back"
+items — the cap, the task put back rather than dropped, and the `finish()`
+that decides whether the cover lifts — plus disposal while boot waits, which
+must leave the ticket to the StrictMode remount. The frame callback keeps the
+materials, the compile and the retirement, and asks residency whether a body
+gets a visual.
+
+**What is left.** `render/bodyUniforms.ts`: a pure mapping from a
+`RenderBody` and the frame's context — sun, eye, adaptation — to the uniform
+records of the planet, the clouds, the rings and the atmosphere, with
+`tuningFor` and `adaptationFor` exported and the figure branch taken once, the
+shells on its side. The frame closure applies the records, comparing before it
+writes.
 
 **Gate.** `bodyUniforms.test.ts` in Node: a figured body yields shells with no
-flattening; a mapped body's tuning; the star as a body. `visualSet.test.ts`:
-the cap at `MAX_BODIES`, the requeue-at-cap, and the census `finish()` — the
-three "must not come back" items, reachable from Node for the first time, which
-is the whole point of the split. `pnpm test:gpu` keeps compiling the materials.
-The frame is unchanged: a plate either side at a figured body and at a mapped
-one, and a third with the star in frame, since the mapping is what draws.
+flattening; a mapped body's tuning; the star as a body. `pnpm test:gpu` keeps
+compiling the materials. The frame is unchanged: a plate either side at a
+figured body and at a mapped one, and a third with the star in frame, since
+the mapping is what draws.
 
 ---
 

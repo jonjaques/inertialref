@@ -61,7 +61,7 @@ const sampleSave: SaveGame = {
       }),
       mass: 40_000,
       landed: false,
-      hasThrusters: true,
+      thrusters: { mainThrust: 30, rcsThrust: 8, torque: 1.2 },
       ballisticCoefficient: 320,
       control: { translation: [0, 0, 1], rotation: [0, 0, 0], throttle: 0.5 },
       flightAssist: true,

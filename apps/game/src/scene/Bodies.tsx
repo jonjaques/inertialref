@@ -42,18 +42,19 @@ import { scatteringFor, scatteringVia } from '../render/atmosphereLuts.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
+import { createBodyResidency } from './bodyResidency.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
- * How many body visuals may be resident at once. See `evictStale`.
+ * How many body visuals may be resident at once. `bodyResidency.ts` evicts.
  *
- * 160 rather than 64 because the Solar System grew. This caps `visuals.size`,
- * which stars enter under a `star:` key alongside the bodies — so it was 29
- * (eight planets, twenty moons and the Sun) and it is 130 now that the dwarf
- * planets, the asteroids, the comets and the forty-two moons that are rocks or
- * go round one are in it. At 64 the arrivals past the cap silently stopped
- * rendering, which is the failure `evictStale` exists to make graceful and is
- * not one to leave a system permanently over.
+ * 160 rather than 64 because the Solar System grew. This caps the resident
+ * map, which stars enter under a `star:` key alongside the bodies — so it was
+ * 29 (eight planets, twenty moons and the Sun) and it is 130 now that the
+ * dwarf planets, the asteroids, the comets and the forty-two moons that are
+ * rocks or go round one are in it. At 64 the arrivals past the cap silently
+ * stopped rendering, which is the failure eviction exists to make graceful
+ * and is not one to leave a system permanently over.
  */
 const MAX_BODIES = 160
 
@@ -284,26 +285,39 @@ export function Bodies({
   terrain: TerrainMaterial
 }) {
   const group = useRef<Group>(null)
-  const visuals = useMemo(() => new Map<string, BodyVisual>(), [])
+  /*
+   * Which visuals exist, the cap, the build-ahead queue and boot's ticket —
+   * `bodyResidency.ts`, whose header says which shipped bugs each of those
+   * had. Boot's half of the queue is reported rather than driven: the drain
+   * is one body a frame and boot cannot await a loop over it, the frames are
+   * what boot is waiting for. So it joins the census, and after boot has
+   * lifted this is a no-op ticket and the same code is the mid-session
+   * trickle it always was. A state initializer rather than a memo so the
+   * instance survives a render; `trackAtMount` is idempotent by label, so
+   * StrictMode's second initializer holds the same ticket.
+   */
+  const [residency] = useState(() =>
+    createBodyResidency<BodyVisual, WarmTask>({
+      cap: MAX_BODIES,
+      ticket: trackAtMount('building bodies'),
+      onScreen: (visual) => visual.mesh.visible,
+      hide: (visual) => {
+        visual.mesh.visible = false
+        visual.atmosphere.visible = false
+        if (visual.clouds !== null) visual.clouds.visible = false
+        if (visual.rings !== null) visual.rings.visible = false
+      },
+      retire,
+    }),
+  )
   const anisotropy = useThree(
     (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
   )
   const gl = useThree((state) => state.gl)
   const defaultCamera = useThree((state) => state.camera)
   const rootScene = useThree((state) => state.scene)
-  /** Bodies whose visuals should exist before anything looks at them. */
-  const warmQueue = useRef<WarmTask[]>([])
+  /** The loaded systems the build-ahead queue was planned for. */
   const warmedSystems = useRef('')
-  /*
-   * Boot's half of that queue, reported rather than driven.
-   *
-   * The drain is one body a frame and boot cannot await a loop over it — the
-   * frames are what boot is waiting for. So it joins the census instead: the
-   * units count toward the progress total and `finish()` releases the cover.
-   * After boot has lifted this is a no-op ticket and the same code is the
-   * mid-session trickle it always was.
-   */
-  const [ticket] = useState(() => trackAtMount('building bodies'))
   const spheres = useMemo(
     () =>
       SPHERE_TIERS.map((tier) => ({
@@ -351,12 +365,11 @@ export function Bodies({
    */
   useEffect(
     () => () => {
-      for (const visual of visuals.values()) retire(visual)
-      visuals.clear()
+      residency.dispose()
       for (const tier of spheres) tier.geometry.dispose()
       rings.dispose()
     },
-    [visuals, spheres, rings],
+    [residency, spheres, rings],
   )
 
   useTimedFrame('bodies', () => {
@@ -364,6 +377,7 @@ export function Bodies({
     const container = group.current
     const visibility = engine.visibilityProcessing
     if (scene === null || container === null) return
+    residency.begin()
 
     // Render-space position of the key light. `stars[0]` is documented as
     // brightest-apparent-first, which is the same star `CameraRig` lights the
@@ -377,28 +391,8 @@ export function Bodies({
         spheres[spheres.length - 1]!
       ).geometry
 
-    const seen = new Set<string>()
-
-    /*
-     * At the cap, retire a visual this frame did not draw before refusing to
-     * create one. The map deliberately only grows — a body flickering across
-     * the cull threshold must not rebuild its pipelines — but without
-     * eviction every visited system leaves its meshes resident (Sol alone is
-     * 29) and after a couple of systems new arrivals silently stop rendering.
-     * Materials only: the sphere and ring geometries are shared tiers.
-     */
-    const evictStale = (): boolean => {
-      for (const [key, visual] of visuals) {
-        if (seen.has(key) || visual.mesh.visible) continue
-        retire(visual)
-        visuals.delete(key)
-        return true
-      }
-      return false
-    }
-
+    /** The meshes and materials for one body; residency decides when. */
     const materialize = (
-      key: string,
       star: boolean,
       clouded: boolean,
       ringed: boolean,
@@ -436,7 +430,7 @@ export function Bodies({
         container.add(ringMesh)
       }
 
-      const visual: BodyVisual = {
+      return {
         mesh,
         planet,
         atmosphere,
@@ -447,8 +441,6 @@ export function Bodies({
         ringMaterial,
         star: starMaterial,
       }
-      visuals.set(key, visual)
-      return visual
     }
 
     const draw = (
@@ -456,18 +448,15 @@ export function Bodies({
       body: RenderBody,
       star: { r: number; g: number; b: number } | null,
     ): void => {
-      seen.add(key)
       const appearance = body.appearance
-      let visual = visuals.get(key)
-      if (visual === undefined) {
-        if (visuals.size >= MAX_BODIES && !evictStale()) return
-        visual = materialize(
-          key,
+      const visual = residency.draw(key, () =>
+        materialize(
           star !== null,
           appearance.clouds !== null,
           body.rings !== null,
-        )
-      }
+        ),
+      )
+      if (visual === null) return
 
       const { placement, orientation } = body
       const quaternion = visual.mesh.quaternion.set(
@@ -857,13 +846,7 @@ export function Bodies({
       )
     }
 
-    for (const [key, visual] of visuals) {
-      if (seen.has(key)) continue
-      visual.mesh.visible = false
-      visual.atmosphere.visible = false
-      if (visual.clouds !== null) visual.clouds.visible = false
-      if (visual.rings !== null) visual.rings.visible = false
-    }
+    residency.end()
 
     /*
      * Build ahead of need: one body visual per frame, for every body the
@@ -908,48 +891,20 @@ export function Bodies({
             })
           }
         }
-        warmQueue.current = queue
-        // The census. Boot's progress total used to exclude this queue
-        // entirely, so the status line said "compiling the sky…" while the
-        // work measured at 88 ms had not started. Re-declared rather than
-        // added to: a mid-session jump replaces the queue, and by then the
-        // ticket is the idle one and this is a no-op.
-        ticket.expect(queue.length)
+        // The census hears the queue's length here: boot's progress total
+        // once excluded this queue entirely, so the status line said
+        // "compiling the sky…" while the work measured at 88 ms had not
+        // started.
+        residency.plan(queue)
       }
 
-      let task = warmQueue.current.shift()
-      while (task !== undefined && visuals.has(task.key))
-        task = warmQueue.current.shift()
-      /*
-       * At the cap, retire something — and if nothing can be retired, put the
-       * task back rather than dropping it.
-       *
-       * It was shifted off and then silently discarded when `visuals.size`
-       * reached the cap: not materialized, not requeued, and `ticket.done()`
-       * never called, while `ticket.finish()` below credited the shortfall so
-       * the boot bar still read 100%. The queue is only rebuilt on a system
-       * change, so the build-ahead for every body past the cap was gone until
-       * the next jump and each paid its ~5 ms of pipeline generation live, on
-       * first sight. Sol is 129 bodies against a cap of 160, so a second loaded
-       * system reaches this in ordinary flight.
-       */
-      if (task !== undefined && visuals.size >= MAX_BODIES && !evictStale()) {
-        warmQueue.current.unshift(task)
-        task = undefined
-        // The queue cannot drain while nothing is evictable, and boot waits on
-        // it draining. `finish` is already called every frame once the queue
-        // empties, so saying it here too is idempotent — and it is the
-        // difference between "no build-ahead until something frees up" and a
-        // cover that never lifts.
-        ticket.finish()
-      }
-      if (task !== undefined && visuals.size < MAX_BODIES) {
-        const visual = materialize(
-          task.key,
-          task.star,
-          task.clouded,
-          task.ringed,
-        )
+      // Residency decides whether there is room, requeues at a cap nothing
+      // can be evicted from, and credits the ticket; what it built is
+      // compiled here, the moment it exists.
+      const visual = residency.buildAhead((task) =>
+        materialize(task.star, task.clouded, task.ringed),
+      )
+      if (visual !== null) {
         const renderer = warmRenderer(gl)
         for (const part of [
           visual.mesh,
@@ -967,11 +922,7 @@ export function Bodies({
             scene: rootScene as Scene,
           })
         }
-        ticket.done()
       }
-      // Every body the loaded systems could put on screen now has a visual.
-      // Boot is waiting on exactly this, so it has to be told.
-      if (warmQueue.current.length === 0) ticket.finish()
     }
   })
 

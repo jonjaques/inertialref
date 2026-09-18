@@ -1,11 +1,11 @@
 import {
-  createTourContext,
   describeView,
-  subjectBrief,
-  tourCandidate,
+  resolveSubject,
+  subjectAt,
   withNotes,
   type GameHarness,
   type ObserverMotionRecipe,
+  type ResolvedSubject,
   type ViewDescription,
 } from '@inertialref/devtools'
 import {
@@ -13,10 +13,7 @@ import {
   isGuideCameraTool,
   type GuideCall,
   type GuideToolOutput,
-  type SubjectBrief,
-  type TourCandidate,
   type TourCameraMotion,
-  type TourContext,
 } from '@inertialref/protocol'
 import type { Lens } from '@inertialref/rendering'
 import type { WorldQuery } from '@inertialref/universe'
@@ -141,8 +138,6 @@ export class GuideExecutor {
   #motionOwned = false
   #disposed = false
   #search: { cancel: () => void } | null = null
-  #context: { revision: number; query: string; value: TourContext } | null =
-    null
 
   constructor(harness: GameHarness, options: GuideExecutorOptions) {
     this.#harness = harness
@@ -194,9 +189,7 @@ export class GuideExecutor {
     const page = this.#harness.dossier(target.address)
     const system =
       page === null ? null : this.#harness.world.system(page.system.id)
-    const brief = subjectBrief(this.#harness, target.address)
-    const candidate =
-      brief === null ? null : tourCandidate(this.#harness, brief)
+    const candidate = subjectAt(this.#harness, target.address)?.candidate
     return {
       framing: this.#framing,
       system: page?.system.name ?? null,
@@ -345,56 +338,26 @@ export class GuideExecutor {
   /* Names                                                                    */
   /* ---------------------------------------------------------------------- */
 
-  #contextFor(query: string): TourContext {
-    const cached = this.#context
-    if (
-      cached !== null &&
-      cached.revision === this.viewRevision &&
-      cached.query === query
-    )
-      return cached.value
-    const value = createTourContext(this.#harness, query)
-    this.#context = { revision: this.viewRevision, query, value }
-    return value
-  }
-
-  #resolve(name: string):
-    | {
-        readonly ok: true
-        readonly candidate: TourCandidate
-        readonly brief: SubjectBrief
-      }
+  /**
+   * The subject a name means, or the refusal to hand the model.
+   *
+   * A lookup, not an inventory: `resolveSubject` reads the index and the one
+   * record, and says in its own header what building the whole context to
+   * find one name cost.
+   */
+  #resolve(
+    name: string,
+  ):
+    | ({ readonly ok: true } & ResolvedSubject)
     | { readonly ok: false; readonly output: GuideToolOutput } {
-    const query = normalizeName(name)
-    const context = this.#contextFor(query)
-    const direct = context.candidates.find(
-      (candidate) => candidate.name.toLowerCase() === query,
-    )
-    if (direct !== undefined) {
-      const brief =
-        context.briefs.find((item) => item.subjectId === direct.id) ??
-        subjectBrief(this.#harness, direct.address)
-      if (brief !== null) return { ok: true, candidate: direct, brief }
-    }
-    const matches = this.#harness
-      .search(query, { origin: 'observer' })
-      .slice(0, 8)
-    const exact = matches.find((match) => match.name.toLowerCase() === query)
-    if (exact !== undefined) {
-      const brief = subjectBrief(this.#harness, exact.address)
-      if (brief !== null)
-        return {
-          ok: true,
-          candidate: tourCandidate(this.#harness, brief),
-          brief,
-        }
-    }
+    const found = resolveSubject(this.#harness, name)
+    if (found.ok) return { ok: true, ...found.subject }
     return {
       ok: false,
       output: {
         status: 'unknown',
         reason: `No object named "${name.trim()}" is in reach.`,
-        candidates: matches.slice(0, 5).map((match) => ({
+        candidates: found.nearest.slice(0, 5).map((match) => ({
           name: match.name,
           kind: match.kind === 'system' ? 'star system' : match.detail,
           system: match.system,
@@ -857,17 +820,6 @@ function reject(
   extra: Record<string, unknown> = {},
 ): GuideToolOutput {
   return { status: 'rejected', reason, ...extra }
-}
-
-/** What a visitor says versus what the index stores. */
-function normalizeName(name: string): string {
-  const query = name
-    .trim()
-    .toLowerCase()
-    .replace(/^the\s+/, '')
-  if (query === 'moon') return 'luna'
-  if (query === 'sun') return 'sol'
-  return query
 }
 
 interface Site {

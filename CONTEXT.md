@@ -553,6 +553,13 @@ again in a neighboring system.
   off the horizon's up, which is the level up only at zero pitch; the error
   is the cosine of the pitch and a round-trip property found it by failing
   at its own tolerance boundary. The level triad is built about the nose.
+- **A save round trip can pass the hash and still restore a different
+  ship.** The save reduced the thrust profile to a boolean, the restore put
+  the debug ship's profile back, and the hash did not count the profile at
+  all — so the equality check passed at the tick of the restore and the two
+  worlds parted on the first tick under throttle. Every field that decides
+  the next tick is one list, `CanonicalEntity`; the hash, the save and the
+  restore read it, and the round-trip property varies the profile.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -9970,6 +9977,69 @@ plates` at the 20 s timeout — one failure in 2,475 tests, on a test that takes
 3.2 s in isolation here and 8.2 s for its whole file. The bound subtracts a
 core, which leaves four on this ten-core machine and gives back the three
 vitest would have chosen on the runner.
+
+## Four modules took back what their callers were coordinating (14 Sep 2026)
+
+An architecture review of `main` at 65914e1d named four places where a
+caller owned a sequence its module should have, and all four landed on one
+branch. Each is a commit; this is what was found and measured on the way.
+
+**A save restored a different ship, and the hash agreed with it.** Entity
+state, the save, the restore and `stateHash` each chose their own fields.
+The save reduced `thrusters` to `hasThrusters`, the restore substituted
+`DEBUG_SHIP_THRUSTERS`, and the hash left the profile out — so a ship
+spawned with a 90 / 16 / 2.4 profile restored as 30 / 8 / 1.2, both worlds
+hashed `da786e65`, and one tick under throttle later they hashed `1b399185`
+and `0735eefe`. Every persistence test spawned the default ship, which is
+the one profile the defect could not show on. The fix is one list:
+`CanonicalEntity` in `simulation/entityState.ts` is the facts that decide
+the next tick, the hash writes its line from it, and persistence holds the
+wire record to its keys at compile time. The determinism rule that said "add
+it to `stateHash`" now says "add it to `CanonicalEntity`", because the
+hash was the half that was maintained and the save the half that was not.
+Save schema v3; the v2 → v3 migration writes the debug ship's numbers as
+literals, since a v2 save could have meant no other profile.
+
+**Resolving one guide subject built the whole inventory.** Every named tool
+went through `createTourContext` to find its subject: sixteen candidates and
+sixteen briefs, compacted under the message bound, then searched for one
+name. On a fresh headless executor viewing Earth, Saturn cost 253 dossier
+reads, 11 site reads and a 43,900-byte record. `tour/subject.ts` reads the
+index and the one record, and a spy on the harness holds it to the subject's
+own dossier; the inventory moved to `tour/inventory.ts` so the two can share
+the name rule without a cycle.
+
+**The renderer's device had a sequence nobody owned.** The GPU tile producer
+holds buffers on the device, so it is retired before a rebuild's first act
+destroys that device and registered only after the warm-up has opened the
+census; a compile resolving after a rebuild installs nothing; a terminal
+failure retires and then releases. `App` carried all of it across a canvas
+factory and three effects. `render/rendererLifetime.ts` orders the existing
+mechanisms through injected adapters, and its test holds every step with
+promises the test keeps open. One trap on the way: a lifetime made in a
+state initializer captures the first render's HDR preference, so the factory
+takes the live preferences at the call.
+
+**Body residency was policy inside a frame callback.** The cap, its
+eviction, the requeue-at-cap and the census `finish()` were three "must not
+come back" items no test could reach. `scene/bodyResidency.ts` is the
+policy, generic over the visual, and its test reaches all three from Node
+plus the one that was not written down: disposal while boot waits must
+retire every visual and leave the ticket alone, because StrictMode's remount
+holds the same ticket by label and a `finish` on the first mount's teardown
+lifts the cover onto bodies nothing has compiled.
+
+**And the migration written for that save repaired a list it could not read.**
+The v2 to v3 step read the entity list as
+`Array.isArray(raw['entities']) ? … : []`, so a save whose list is `null`,
+missing or an object — a truncated file, a hand-edit, a write that did not
+finish — arrived at the validator as a well-formed empty list. It parsed,
+`restoreSave` returned ok, and the player got their universe back with no ship
+in it and nothing anywhere saying why. The decoder already refuses that save;
+the substitution is what took the refusal away. A migration works on raw data
+and the validator stays strict — `v1ToV2` spreads `...raw` and replaces only
+`structures` — so the unreadable value now passes through untouched. Review
+found it, not a test: every migration test fed it a list.
 
 ## Known gaps
 

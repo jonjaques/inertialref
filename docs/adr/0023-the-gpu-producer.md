@@ -65,9 +65,11 @@ adapter.**
    orbital baker. `poolHeightfieldSource`
    wraps the pool and is where the seed becomes a string for the wire;
    `createTileProducer(renderer)` in
-   `apps/game/src/render/terrainProducer.ts` is the GPU one, installed by `App`
-   at renderer ready once `warm()` has compiled the pipeline behind the boot
-   cover. One batch in flight, one body a batch, uploads keyed on the surface
+   `apps/game/src/render/terrainProducer.ts` is the GPU one, made and installed
+   by the renderer lifetime (`apps/game/src/render/rendererLifetime.ts`) for
+   each renderer build, once `warm()` has compiled the pipeline behind the boot
+   cover; `App` hands the lifetime its mechanisms and answers its callbacks.
+   One batch in flight, one body a batch, uploads keyed on the surface
    object's identity and the seabed flag — the identity `surfaceKernel`
    memoizes its packed record on, handed through the seam rather than rebuilt
    behind it. `?producer=cpu` refuses it. A producer failure sets
@@ -139,10 +141,13 @@ adapter.**
   unsupported resolution and border shapes out of the GPU queue. The drawn
   floor is well below the level limit in any case.
 - The producer's `warm()` is a pipeline compile registered as one census unit
-  behind the boot cover — registered from the effect that opens the warm-up
-  session, because a registration from the renderer's `onReady` precedes the
-  session and runs detached, uncounted. A device lost mid-session is a
-  fallback to the pool, not a rebuild.
+  behind the boot cover — registered by the renderer lifetime after the
+  warm-up has opened the session, because a registration from the renderer's
+  `onReady` precedes the session and runs detached, uncounted. The same
+  lifetime retires the producer ahead of a rebuild, whose first act destroys
+  its device, and installs nothing from a compile that resolves after one;
+  `rendererLifetime.test.ts` holds that ordering in Node. A device lost
+  mid-session is a fallback to the pool, not a rebuild.
 - Known and unexplained: the kernel's level-0 offset term, which is the
   `halfWidth · 2⁻²¹` in the bound; and at 1920×1200 on a 2× ratio both
   producers converge at level 7 and 954 patches, identically, which is a
