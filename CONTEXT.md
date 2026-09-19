@@ -10175,7 +10175,18 @@ field reads the ocean's level off. `riverSites` read "is `lake[n]` a number"
 and got 19,908 of Earth's nodes against 75 real lake ones, so the largest
 lake was the ocean: the site stood at the mean of every ocean direction and
 read _"standing 356 m above the datum"_, which is `seaDatumElevation`
-printed back. A real lake is at 782 m.
+printed back. A real lake is at 782 m, over a bed at 606 m, and the camera
+stands on the water.
+
+Measured again on a generated world, because Earth is one seed: Struve
+2398 A b, 11.6 ly out, has its sea 41.7 m under the datum, and the defect
+put its largest lake at _"41.8 m below the datum"_ — the sea again. The
+lake is at 502.7 m, and the standing surface reads 502.7 m at nine of
+twelve samples over 634 km of arc, the other three being land above it. One
+sheet at one level over a cratered plain, which is what tells a lake from
+the flooded-crater field the graph exists to end. The site the defect chose
+is dark ocean at every hour of the body's rotation — a mean luminance of
+12.8 against the lake's 147.
 
 **A cell's area is not its edge squared.** The lattice is six squares on a
 sphere: a cell covers `4πR²/nodes`, which is `8/3π` of `cellMeters²` —
