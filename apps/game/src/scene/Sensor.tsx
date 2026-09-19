@@ -1,6 +1,7 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
+import type { Picture } from '../render/picture.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -22,13 +23,22 @@ import { warmAtMount } from '../render/warmup.ts'
  * documents. An effect's cleanup disposes what its setup built, so the doubled
  * mount costs one target that is freed, not one that is lost.
  */
-export function Sensor({ engine }: { engine: GameEngine }) {
+export function Sensor({
+  engine,
+  picture,
+  diagnostic,
+}: {
+  engine: GameEngine
+  picture: Picture
+  diagnostic?: 'bilinear'
+}) {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const camera = useThree((state) => state.camera)
   const chain = useRef<SensorChain | null>(null)
 
   useEffect(() => {
+    engine.declareCut()
     // The one cast, for the reason `warmRenderer` gives: R3F types `gl` as
     // its own renderer union, and the web `<Canvas>` here is always handed a
     // `WebGPURenderer` by `createRenderer`.
@@ -38,6 +48,8 @@ export function Sensor({ engine }: { engine: GameEngine }) {
       camera,
       () => ({
         lens: engine.lens,
+        pictureEpoch: engine.pictureEpoch,
+        pictureDebug: engine.pictureDebug,
         settings: engine.sensorSettings,
         time: engine.snapshot?.renderTime ?? 0,
         adaptationTime: engine.presentationTime,
@@ -58,6 +70,8 @@ export function Sensor({ engine }: { engine: GameEngine }) {
           engine.cinematic?.frame ?? (engine.snapshot?.renderTime ?? 0) * 60,
         ),
       }),
+      picture,
+      diagnostic,
     )
     chain.current = built
     // The producer is registered once per label, so under StrictMode's
@@ -85,12 +99,12 @@ export function Sensor({ engine }: { engine: GameEngine }) {
       chain.current = null
       built.dispose()
     }
-  }, [gl, scene, camera, engine])
+  }, [gl, scene, camera, engine, picture, diagnostic])
 
   useTimedFrame(
     'sensor',
-    () => {
-      chain.current?.render()
+    (_state, delta) => {
+      chain.current?.render(undefined, delta)
       engine.exposure = chain.current?.exposure ?? null
       engine.sensorDiagnostics = chain.current?.diagnostics ?? null
     },

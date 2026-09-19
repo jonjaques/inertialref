@@ -40,10 +40,14 @@ import { isLabelDensity, isOrbitScope } from '../planetarium/layers.ts'
 import { ALL_CLASSES, RADII } from '../planetarium/kinds.ts'
 import {
   AA_LEVELS,
-  type AaLevel,
   type OutputPreference,
   OUTPUT_PREFERENCES,
 } from '../render/output.ts'
+import {
+  DEFAULT_PICTURE,
+  isPicture as isRenderPicture,
+  type Picture as RenderPicture,
+} from '../render/picture.ts'
 import { type TimingLevel, TIMING_LEVELS } from '../engine/browserTiming.ts'
 import { DEFAULT_SHIP, SHIP_IDS } from '../render/ships.ts'
 import {
@@ -248,12 +252,23 @@ export const RENDER_SENSOR = define({
   migrateValue: parseSensorSettings,
 })
 
-export const RENDER_AA = define<AaLevel>({
-  key: 'render.aa',
+export const RENDER_PICTURE = define<RenderPicture>({
+  key: 'render.picture',
   group: 'display',
-  what: 'supersampling',
-  initial: '2x',
-  accept: oneOf(AA_LEVELS),
+  what: 'anti-aliasing, render scale and reconstruction sharpness',
+  initial: DEFAULT_PICTURE,
+  accept: isRenderPicture,
+  migrate: () => {
+    const held = readObsolete('render.aa', oneOf(AA_LEVELS))
+    if (held === null) return null
+    const picture: RenderPicture = {
+      ...DEFAULT_PICTURE,
+      aa: held === '4x' ? 'supersample' : held === '2x' ? 'msaa' : 'off',
+    }
+    // Retire the source only after storage accepts the complete record.
+    if (writeRaw('render.picture', picture)) removeRaw('render.aa')
+    return picture
+  },
 })
 
 export const RENDER_LENS_FLARE = define({
@@ -566,7 +581,7 @@ export const DOCK_PANES = family<PaneState>({
 export const REGISTRY: readonly AnyPreference[] = [
   RENDER_HDR,
   RENDER_SENSOR,
-  RENDER_AA,
+  RENDER_PICTURE,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
   RENDER_SHIP,
@@ -1061,10 +1076,11 @@ export function importPreferences(data: unknown): ImportPlan {
 
 /** Forget everything, and put every mounted hook back to its default. */
 export function resetPreferences(): void {
-  for (const key of storedKeys()) {
-    removeRaw(key)
-    announce(key, believe(key))
-  }
+  const keys = storedKeys()
+  // Clear obsolete keys before resolving defaults, or a migration restores
+  // the preference while reset is still removing its source.
+  for (const key of keys) removeRaw(key)
+  for (const key of keys) announce(key, believe(key))
 }
 
 /** The value a hook should hold for a key, given what storage now says. */

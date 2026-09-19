@@ -17,6 +17,7 @@ import {
   planImport,
   PREFERENCE_GROUPS,
   read,
+  RENDER_PICTURE,
   RENDER_SENSOR,
   RENDER_THRUSTER_VARIATION,
   REGISTRY,
@@ -45,6 +46,57 @@ const stamp = '2026-08-28T00:00:00.000Z'
 
 beforeEach(() => {
   resetPreferences()
+})
+
+describe('picture preference migration', () => {
+  it('leaves an unchosen picture absent from storage', () => {
+    expect(read(RENDER_PICTURE)).toEqual({
+      aa: 'msaa',
+      scale: 'native',
+      sharpness: 'standard',
+    })
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.picture',
+    )
+  })
+
+  for (const [legacy, aa] of [
+    ['off', 'off'],
+    ['2x', 'msaa'],
+    ['4x', 'supersample'],
+  ]) {
+    it(`migrates ${legacy} once and exports the complete picture`, () => {
+      const obsolete = {
+        ...RENDER_PICTURE,
+        key: 'render.aa',
+        accept: (_value: unknown): _value is unknown => true,
+      }
+      write(obsolete, legacy)
+      const expected = { aa, scale: 'native', sharpness: 'standard' }
+      expect(read(RENDER_PICTURE)).toEqual(expected)
+      expect(exportPreferences(stamp).preferences).toEqual({
+        'render.picture': expected,
+      })
+      write(obsolete, 'off')
+      expect(read(RENDER_PICTURE)).toEqual(expected)
+    })
+  }
+
+  it('rejects conflicting imported choices without replacing the current picture', () => {
+    const picture = { aa: 'temporal', scale: 'quality', sharpness: 'crisp' }
+    write(RENDER_PICTURE, picture)
+    const file = exportPreferences(stamp)
+    expect(
+      importPreferences({
+        ...file,
+        preferences: { 'render.picture': { ...picture, aa: 'supersample' } },
+      }).applied,
+    ).toBe(0)
+    expect(read(RENDER_PICTURE)).toEqual(picture)
+    resetPreferences()
+    expect(importPreferences(file).applied).toBe(1)
+    expect(read(RENDER_PICTURE)).toEqual(picture)
+  })
 })
 
 describe('thruster variation', () => {

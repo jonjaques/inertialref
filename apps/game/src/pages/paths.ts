@@ -300,6 +300,8 @@ export const QUERY = {
    * rung already does, minus the four samples, two nudges and the remount.
    */
   presentation: 'presentation',
+  /** Page-lifetime reconstruction choice, such as temporal:quality or native. */
+  picture: 'picture',
   /**
    * How many terrain workers to spawn, overriding what the machine suggests.
    *

@@ -1,13 +1,13 @@
 import { Slider } from '@/components/ui/slider'
 import { Mountain, Sparkles } from 'lucide-react'
-import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
+import { OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
   GROUND_DETAILS,
   SEA_DETAILS,
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
 import {
-  RENDER_AA,
+  RENDER_PICTURE,
   RENDER_LENS_FLARE,
   RENDER_SHIP,
   RENDER_SURFACE,
@@ -15,6 +15,15 @@ import {
   RENDER_THRUSTER_VARIATION,
   usePersistentState,
 } from '../state/preferences.ts'
+import {
+  PICTURE_AA,
+  PICTURE_SCALES,
+  PICTURE_SHARPNESS,
+  PICTURE_LABELS,
+  pictureDimensions,
+  resolvePicture,
+} from '../render/picture.ts'
+import { PictureRow } from './PictureRow.tsx'
 import { SHIP_IDS, SHIP_LABELS } from '../render/ships.ts'
 import type { HudRenderState } from './controls.ts'
 import { OptionGroup } from './OptionGroup.tsx'
@@ -56,7 +65,24 @@ export function GraphicsPanel({
   onNotice: (message: string) => void
 }) {
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
-  const [aa, setAa] = usePersistentState(RENDER_AA)
+  const [storedPicture, setPicture] = usePersistentState(RENDER_PICTURE)
+  const picture = render.pictureOverride ?? storedPicture
+  const pageOverride = render.pictureOverride != null
+  const webgl = render.output?.backend === 'webgl'
+  const resolvedPicture = resolvePicture(picture, webgl ? 'webgl' : 'webgpu')
+  const dimensions =
+    render.displaySize == null
+      ? null
+      : pictureDimensions(
+          resolvedPicture,
+          render.displaySize.width,
+          render.displaySize.height,
+        )
+  const scaleDetail =
+    dimensions === null
+      ? 'Render size appears when the display is ready.'
+      : `${dimensions.render.width}×${dimensions.render.height} of ${dimensions.display.width}×${dimensions.display.height}`
+  const rebuilding = (): void => onNotice('rebuilding the sensor')
   const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
   const [sensor, setSensor] = usePersistentState(RENDER_SENSOR)
   const [ship, setShip] = usePersistentState(RENDER_SHIP)
@@ -116,28 +142,82 @@ export function GraphicsPanel({
           on={lensFlare}
           onChange={setLensFlare}
         />
-        {/* The same two-line shape `SwitchRow` uses, for the same reason: on
-            one line the explanation was the half that truncated, and what a
-            reader saw was "anti-aliasing  2× is ha…". */}
-        <div className="mt-1 flex min-h-9 items-center justify-between gap-2.5 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1.5">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="type-ui text-slate-300">Anti-aliasing</span>
-            <span className="type-ui text-pretty text-slate-400">
-              2× is hardware MSAA; 4× adds a 2×2 supersampled buffer
-            </span>
-          </span>
-          <OptionGroup
-            label="Anti-aliasing"
-            value={aa}
-            values={AA_LEVELS}
-            onChange={(level) => {
-              // Crossing the MSAA boundary rebuilds the renderer, so say so —
-              // the stall would otherwise read as a hang.
-              setAa(level)
-              onNotice(`anti-aliasing ${level}`)
-            }}
-          />
-        </div>
+      </Section>
+
+      <Section id="graphics.picture" title="Picture">
+        {pageOverride && (
+          <p className="type-ui text-slate-400">
+            The page link sets this picture for this visit.
+          </p>
+        )}
+        <PictureRow
+          label="Anti-aliasing"
+          detail={
+            webgl
+              ? 'Temporal needs WebGPU.'
+              : 'Temporal reconstructs edges across frames. Supersampling draws twice the display width and height.'
+          }
+          value={picture.aa}
+          values={PICTURE_AA}
+          labels={PICTURE_LABELS.aa}
+          disabled={(aa) =>
+            pageOverride
+              ? 'Set by the page link'
+              : webgl && aa === 'temporal'
+                ? 'Needs WebGPU'
+                : undefined
+          }
+          onChange={(aa) => {
+            setPicture((held) => ({
+              ...held,
+              aa,
+              scale: aa === 'supersample' ? 'native' : held.scale,
+            }))
+            rebuilding()
+          }}
+        />
+        <PictureRow
+          label="Render scale"
+          detail={`${scaleDetail}${webgl ? ' · Reduced scales need WebGPU.' : picture.aa === 'supersample' ? ' · Supersampling uses native scale.' : ''}`}
+          value={picture.scale}
+          values={PICTURE_SCALES}
+          labels={PICTURE_LABELS.scale}
+          disabled={(scale) =>
+            pageOverride
+              ? 'Set by the page link'
+              : scale !== 'native' && webgl
+                ? 'Needs WebGPU'
+                : scale !== 'native' && picture.aa === 'supersample'
+                  ? 'Supersampling uses native scale'
+                  : undefined
+          }
+          onChange={(scale) => {
+            setPicture((held) => ({
+              ...held,
+              scale: held.aa === 'supersample' ? 'native' : scale,
+            }))
+            rebuilding()
+          }}
+        />
+        <PictureRow
+          label="Sharpness"
+          detail="Sharpens reconstructed edges. Applies to temporal anti-aliasing and reduced render scales."
+          value={picture.sharpness}
+          values={PICTURE_SHARPNESS}
+          labels={PICTURE_LABELS.sharpness}
+          disabled={() =>
+            pageOverride
+              ? 'Set by the page link'
+              : resolvedPicture.aa !== 'temporal' &&
+                  resolvedPicture.scale === 'native'
+                ? 'Choose temporal anti-aliasing or a reduced render scale'
+                : undefined
+          }
+          onChange={(sharpness) => {
+            setPicture((held) => ({ ...held, sharpness }))
+            rebuilding()
+          }}
+        />
       </Section>
 
       {/*

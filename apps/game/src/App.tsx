@@ -22,7 +22,7 @@ import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
 import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
   DEBUG_ON,
-  RENDER_AA,
+  RENDER_PICTURE,
   RENDER_HDR,
   RENDER_SENSOR,
   read,
@@ -53,16 +53,16 @@ import {
   releaseRenderer,
 } from './render/createRenderer.ts'
 import {
-  aaAntialias,
-  aaDprFactor,
   dprCeiling,
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
+import { parsePictureQuery, pictureDprFactor } from './render/picture.ts'
 import { preloadMode } from './pages/modeLoader.ts'
 import {
   KEYS,
   MODES,
+  QUERY,
   modeForPath,
   overlayState,
   resolvedLocation,
@@ -214,15 +214,20 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * "until the next reload".
    */
   const [hdr, setHdr] = usePersistentState(RENDER_HDR)
-  /*
-   * The anti-aliasing level, held here because it is a fact about the
-   * renderer this component builds: MSAA is a constructor argument and joins
-   * the canvas key, and the supersample step is the drawing buffer's `dpr`.
-   * The other knobs the frame loop reads — the lens, the flare, the surface —
-   * never pass through here; `state/engineKnobs.ts` binds them to the engine
-   * and the panels read the definitions themselves.
-   */
-  const [aa] = usePersistentState(RENDER_AA)
+  const [storedPicture] = usePersistentState(RENDER_PICTURE)
+  const [pictureQuery] = useState(() =>
+    new URLSearchParams(window.location.search).get(QUERY.picture),
+  )
+  const [pictureOverride] = useState(() => parsePictureQuery(pictureQuery))
+  const picture = pictureOverride ?? storedPicture
+  const pictureDiagnostic =
+    pictureOverride !== null && pictureQuery?.startsWith('bilinear:')
+      ? ('bilinear' as const)
+      : undefined
+  const [displaySize, setDisplaySize] = useState<{
+    width: number
+    height: number
+  } | null>(null)
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
@@ -283,8 +288,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   const [lifetime] = useState(() =>
     createRendererLifetime({
-      build: (preference, antialias, onReady) =>
-        createRenderer(preference, antialias, onReady),
+      build: (preference, initialPicture, onReady) =>
+        createRenderer(preference, initialPicture, onReady),
       release: releaseRenderer,
       warm: (handle) => warmScene(handle, engine, firstLight.progress),
       register: warmAtMount,
@@ -325,7 +330,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * child-first: binding here in that phase overwrote the restored lens and
    * camera mode with the stored preferences immediately after the URL applied.
    */
-  useLayoutEffect(() => bindEngineKnobs(engine), [engine])
+  useLayoutEffect(
+    () => bindEngineKnobs(engine, pictureOverride),
+    [engine, pictureOverride],
+  )
 
   useEffect(() => {
     const unsubscribe = monitor.subscribe(setConnection)
@@ -341,10 +349,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * healthy device alive for the surviving mount. Only terminal failure
    * permits the unmount cleanup to release the device and engine workers.
    */
-  // MSAA joins the key because it is a constructor fact; the `2x`↔`4x` step
-  // only changes the drawing-buffer scale, which R3F applies live via `dpr`.
-  // The watchdog epoch joins it so the last recovery rung can rebuild.
-  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}:${canvasEpoch}`
+  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${canvasEpoch}`
 
   useEffect(
     () => () => {
@@ -380,6 +385,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     engine.displayRatio = displayRatio
   }, [engine, displayRatio])
 
+  useEffect(() => {
+    if (output === null) return
+    const canvas = lifetime.handle?.renderer.domElement
+    if (canvas === undefined) return
+    const measure = (): void => {
+      const bounds = canvas.getBoundingClientRect()
+      const width = Math.max(1, Math.floor(bounds.width * displayRatio))
+      const height = Math.max(1, Math.floor(bounds.height * displayRatio))
+      setDisplaySize((held) =>
+        held?.width === width && held.height === height
+          ? held
+          : { width, height },
+      )
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(canvas)
+    measure()
+    return () => observer.disconnect()
+  }, [output, displayRatio, lifetime])
+
   /*
    * Verify that boot actually put pixels on screen.
    *
@@ -397,7 +422,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
   /*
    * Warm everything a first encounter would otherwise pay for, behind the
-   * boot overlay. Keyed on `output` rather than run once: an HDR or MSAA
+   * boot overlay. Keyed on `output` rather than run once: an HDR
    * change rebuilds the renderer, whose pipeline and texture caches die with
    * it, and a re-warm against the new handle is what keeps the first frame
    * after the rebuild from paying the whole bill again. The lifetime warms
@@ -516,6 +541,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const renderState: HudRenderState = {
     preference: hdr,
     output,
+    displaySize,
+    pictureOverride,
     onPreference: (next: OutputPreference) => {
       if (next === hdr) return
       // The renderer is rebuilt for this, so say what happened — otherwise the
@@ -673,18 +700,16 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // what the browser can output, builds a `WebGPURenderer` around the
         // answer and awaits `init()`; R3F awaits the promise, so nothing draws
         // against a half-built backend. See `render/createRenderer.ts`.
-        gl={lifetime.factory(hdr, aaAntialias(aa))}
-        // A logarithmic depth buffer makes this range workable; a linear one
-        // would have no usable precision anywhere in it. The flag itself moved
-        // into the factory, because it is a constructor parameter there.
+        gl={lifetime.factory(hdr, picture)}
+        // The factory chooses a depth convention that preserves this range.
         camera={{ fov: DEFAULT_FOV_DEG, near: 0.05, far: 1e10 }}
         // The device ratio capped by what kind of machine this is, times the
-        // supersampling factor. A number rather than a range because `4x` must
+        // supersampling factor. A number rather than a range because it must
         // *raise* the buffer above the device ratio, which a clamp can only
         // lower. `dprCeiling` is where the handheld figure and its argument
         // live; the short version is that this scene is fragment-bound close to
         // a planet and a phone is shading the whole display three times over.
-        dpr={displayRatio * aaDprFactor(aa)}
+        dpr={displayRatio * pictureDprFactor(picture)}
         // R3F configures the renderer *after* the factory resolves and sets its
         // own tone mapping while doing so. This is where ours goes back.
         onCreated={(state) => {
@@ -694,7 +719,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           engine.view = { scene: state.scene, camera: state.camera }
         }}
       >
-        <SceneView engine={engine} />
+        <SceneView
+          engine={engine}
+          picture={picture}
+          pictureDiagnostic={pictureDiagnostic}
+        />
       </Canvas>
 
       {/* Shared z bands with PageShell preserve cutscene and dialog ordering.

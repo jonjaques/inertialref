@@ -5,13 +5,13 @@ import {
   LENS_PRESETS,
   lensForFov,
 } from '@inertialref/rendering'
-import { aaDprFactor } from '../render/output.ts'
+import { DEFAULT_PICTURE, PICTURE_SCALES } from '../render/picture.ts'
 import { DEFAULT_SURFACE_QUALITY } from '../render/quality.ts'
 import { bindEngineKnobs, type EngineKnobs } from './engineKnobs.ts'
 import {
   CAMERA_LENS,
   read,
-  RENDER_AA,
+  RENDER_PICTURE,
   RENDER_SENSOR,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
@@ -31,7 +31,7 @@ const KNOBS = [
   CAMERA_LENS,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
-  RENDER_AA,
+  RENDER_PICTURE,
   RENDER_SENSOR,
 ]
 
@@ -70,11 +70,11 @@ describe('the engine knobs', () => {
 
   it('applies what is stored on the way in', () => {
     write(RENDER_LENS_FLARE, false)
-    write(RENDER_AA, '4x')
+    write(RENDER_PICTURE, { ...DEFAULT_PICTURE, aa: 'supersample' })
     const bound = engine()
     const release = bindEngineKnobs(bound)
     expect(bound.lensFlare).toBe(false)
-    expect(bound.supersample).toBe(aaDprFactor('4x'))
+    expect(bound.supersample).toBe(2)
     expect(bound.flightLens).toEqual(read(CAMERA_LENS))
     release()
   })
@@ -87,8 +87,8 @@ describe('the engine knobs', () => {
     expect(bound.flightLens).toEqual(wide)
     // The Saturn case: an unrelated toggle must leave the lens where a verb
     // put it. The anti-aliasing listener writes the supersample factor alone.
-    write(RENDER_AA, '4x')
-    expect(bound.supersample).toBe(aaDprFactor('4x'))
+    write(RENDER_PICTURE, { ...DEFAULT_PICTURE, aa: 'supersample' })
+    expect(bound.supersample).toBe(2)
     expect(bound.flightLens).toEqual(wide)
     release()
   })
@@ -139,6 +139,32 @@ describe('the engine knobs', () => {
     } finally {
       unbind()
     }
+  })
+
+  it('keeps display LOD independent of reconstruction scale', () => {
+    const bound = engine()
+    const release = bindEngineKnobs(bound)
+    for (const scale of PICTURE_SCALES) {
+      write(RENDER_PICTURE, { ...DEFAULT_PICTURE, scale })
+      expect(bound.supersample).toBe(1)
+    }
+    release()
+  })
+
+  it('holds a page override across stored preference changes without writing it', () => {
+    write(RENDER_PICTURE, { ...DEFAULT_PICTURE, aa: 'supersample' })
+    const bound = engine()
+    const override = {
+      ...DEFAULT_PICTURE,
+      aa: 'temporal' as const,
+      scale: 'quality' as const,
+    }
+    const release = bindEngineKnobs(bound, override)
+    expect(bound.supersample).toBe(1)
+    write(RENDER_PICTURE, { ...DEFAULT_PICTURE, aa: 'supersample' })
+    expect(bound.supersample).toBe(1)
+    expect(read(RENDER_PICTURE).aa).toBe('supersample')
+    release()
   })
 
   it('stops following once released', () => {

@@ -6,6 +6,7 @@ import {
   lensForFov,
   verticalFovDegrees,
 } from '@inertialref/rendering'
+import type { Picture } from '../render/picture.ts'
 import type { OutputPreference, RendererDescription } from '../render/output.ts'
 
 /*
@@ -310,6 +311,11 @@ export interface CameraState {
 export interface HudRenderState {
   readonly preference: OutputPreference
   readonly output: RendererDescription | null
+  readonly displaySize?: {
+    readonly width: number
+    readonly height: number
+  } | null
+  readonly pictureOverride?: Picture | null
   /**
    * Ask for a specific state, not the next one.
    *
