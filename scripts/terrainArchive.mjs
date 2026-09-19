@@ -21,20 +21,23 @@
  * is a path segment on the runner and a query field on the way to the API.
  */
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { fileURLToPath } from 'node:url'
 import { HEIGHTFIELD_CACHE_VERSION } from '../packages/workers/src/heightfieldCache.ts'
 import { DEFAULT_HEIGHTFIELD_DIRECTORY } from '../apps/headless/src/heightfieldStore.ts'
 
 const version = HEIGHTFIELD_CACHE_VERSION.replaceAll(':', '-')
 
 function tally() {
-  const file = fileURLToPath(
-    new URL('tiles.sqlite', `file://${DEFAULT_HEIGHTFIELD_DIRECTORY}`),
-  )
+  // The store's own spelling of its file, so the two cannot name different ones.
+  const file = join(DEFAULT_HEIGHTFIELD_DIRECTORY, 'tiles.sqlite')
   if (!existsSync(file)) return { entries: 0, bytes: 0 }
-  const db = new DatabaseSync(file, { readOnly: true })
+  let db = null
   try {
+    // Opening is inside the guard as well: a file SQLite refuses to open is
+    // no more an archive than one with the wrong schema, and a CI step that
+    // throws here fails the job before the check has run.
+    db = new DatabaseSync(file, { readOnly: true })
     const row = db.prepare('SELECT entries, bytes FROM tally WHERE id=1').get()
     return row === undefined
       ? { entries: 0, bytes: 0 }
@@ -43,7 +46,7 @@ function tally() {
     // A file that is not the store's schema is not an archive: nothing to save.
     return { entries: 0, bytes: 0 }
   } finally {
-    db.close()
+    db?.close()
   }
 }
 
