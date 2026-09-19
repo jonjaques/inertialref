@@ -40,8 +40,8 @@
         "latitude": 0.02532186198,
         "longitude": -1.577667591,
         "height": 109456.2,
-        "groundElevation": -2861.420465,
-        "radius": 1843994.78
+        "groundElevation": -2861,
+        "radius": 1843995
       },
       "terrain": {
         "patches": 90,
@@ -297,8 +297,8 @@
         "latitude": 0.4238033389,
         "longitude": -0.836599388,
         "height": 313352.1116,
-        "groundElevation": -262.1800575,
-        "radius": 8146892.722
+        "groundElevation": -262,
+        "radius": 8146893
       },
       "terrain": {
         "patches": 38,
@@ -344,8 +344,8 @@
         "latitude": -0.01728890429,
         "longitude": 1.628923627,
         "height": 60000,
-        "groundElevation": -305.8359225,
-        "radius": 525041.666
+        "groundElevation": -306,
+        "radius": 525042
       },
       "terrain": {
         "patches": 44,
@@ -391,8 +391,8 @@
         "latitude": -0.005076365432,
         "longitude": 1.062960426,
         "height": 70000,
-        "groundElevation": 129.7100007,
-        "radius": 220477.4429
+        "groundElevation": 130,
+        "radius": 220477
       },
       "terrain": {
         "patches": 11,
@@ -438,8 +438,8 @@
         "latitude": 0.2536578006,
         "longitude": 0.5979225244,
         "height": 80,
-        "groundElevation": -211.0906068,
-        "radius": 3979372.613
+        "groundElevation": -211,
+        "radius": 3979373
       },
       "terrain": {
         "patches": 720,
@@ -485,8 +485,8 @@
         "latitude": -0.7463223205,
         "longitude": -0.9929848321,
         "height": 120,
-        "groundElevation": 1660.079879,
-        "radius": 7519559.746
+        "groundElevation": 1660,
+        "radius": 7519560
       },
       "terrain": {
         "patches": 876,

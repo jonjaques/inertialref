@@ -220,8 +220,17 @@ describe('the shipped photographs', () => {
                   latitude: figure(status.surface.stance.latitude),
                   longitude: figure(status.surface.stance.longitude),
                   height: figure(status.surface.stance.height),
-                  groundElevation: figure(status.surface.groundElevation),
-                  radius: figure(status.surface.radius),
+                  /*
+                   * To the meter, not ten digits. Both are terrain samples,
+                   * and the field's noise runs through transcendental
+                   * arithmetic that two V8 builds round differently: the
+                   * Linux runner read Alpha Centauri II's ground 0.1 mm from this
+                   * machine's and its eye 1 mm further out. A real move is
+                   * meters; the meter is three digits above the platform
+                   * noise and three below anything the plate can show.
+                   */
+                  groundElevation: Math.round(status.surface.groundElevation),
+                  radius: Math.round(status.surface.radius),
                 },
           terrain,
         })
