@@ -139,6 +139,8 @@ export class UpscaleNode extends TempNode<'vec4'> {
     this.#standIn.minFilter = LinearFilter
     this.#standIn.magFilter = LinearFilter
     this.#standIn.needsUpdate = true
+    this.#pre.name = 'sensor-pre-exposure'
+    this.#pre.needsUpdate = true
     if (options.path === 'temporal')
       velocity.setProjectionMatrix(this.#kernel.unjitteredProjectionMatrix)
   }
@@ -148,6 +150,16 @@ export class UpscaleNode extends TempNode<'vec4'> {
     if (!this.#initialized) {
       const start = performance.now()
       this.#kernel.init()
+      // compileAsync executes update-before dependencies too. The host input
+      // must be backed before warming can dispatch the temporal kernel.
+      this.#renderer.initTexture(this.#pre)
+      this.#camera.coordinateSystem = this.#renderer.coordinateSystem
+      ;(this.#camera as unknown as { _reversedDepth: boolean })._reversedDepth =
+        this.#renderer.reversedDepthBuffer
+      this.#camera.updateProjectionMatrix()
+      this.#kernel.unjitteredProjectionMatrix.copy(
+        this.#camera.projectionMatrix,
+      )
       this.#initMs = performance.now() - start
       this.#initialized = true
     }
@@ -303,7 +315,7 @@ export class UpscaleNode extends TempNode<'vec4'> {
     if (this.#initialized) this.#kernel.dispose()
     this.#pre.dispose()
     this.#standIn.dispose()
-    if (this.#path === 'temporal') velocity.setProjectionMatrix(null!)
+    if (this.#path === 'temporal') velocity.setProjectionMatrix(null)
     super.dispose()
   }
 }

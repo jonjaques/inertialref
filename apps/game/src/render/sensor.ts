@@ -68,10 +68,9 @@ import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
  * What the scene pass draws into, described once so a warm-up can build a
  * target of the same shape before the sensor exists.
  *
- * Half-float, the renderer's own output buffer type, so nothing above 1 is
- * lost before the curve; a `DepthTexture` at the class default, which the
- * backend allocates as `depth24plus` — the same format the renderer gives its
- * internal framebuffer — so the depth half of the pipeline key matches too.
+ * Radiance stays half-float above white. WebGPU uses reversed depth with a
+ * float attachment; the WebGL fallback retains its logarithmic depth. Every
+ * optional attachment is part of the warm pipeline key.
  */
 export interface SceneTargetShape {
   /** 4 or 0. WebGPU has no other count. */
@@ -90,7 +89,7 @@ interface SceneTargetRecord {
 /*
  * Keyed on the renderer object because that is what every caller holds: the
  * factory has the handle, the scene components have R3F's `gl`, and both are
- * the same object. A rebuild is a new renderer and therefore a new record.
+ * the same object. A picture change replaces the layout on the same renderer.
  */
 const targets = new WeakMap<object, SceneTargetRecord>()
 
@@ -180,7 +179,8 @@ export interface SensorDiagnostics {
 }
 
 export interface Sensor {
-  warm(): Promise<void>
+  warm(target?: RenderTarget | null): Promise<void>
+  warmUpscale(): void
   readonly exposure: Exposure | null
   readonly diagnostics: SensorDiagnostics
   /**
@@ -414,10 +414,11 @@ export function createSensor(
   buildOutput()
 
   return {
-    warm: async () => {
+    warmUpscale: () => upscale?.prepare(),
+    warm: async (target = null) => {
       upscale?.prepare()
       if (upscale !== null) radiance.value = upscale.outputTexture.value
-      await warmPipeline(post)
+      await warmPipeline(post, target)
       for (const optical of [defocus, motion, psf]) {
         await optical?.warm(renderer)
       }
@@ -578,6 +579,14 @@ export function createSensor(
       const toneMapping = renderer.toneMapping
       const outputColorSpace = renderer.outputColorSpace
       const xrEnabled = renderer.xr.enabled
+      const mrt = renderer.getMRT()
+      const autoClear = renderer.autoClear
+      const transparent = renderer.transparent
+      const opaque = renderer.opaque
+      const contextNode = renderer.contextNode
+      const layers = camera.layers.mask
+      const overrideMaterial = scene.overrideMaterial
+      const sceneName = scene.name
       try {
         const reading = exposure.reading
         const pictureKey = [
@@ -643,6 +652,15 @@ export function createSensor(
         renderer.toneMapping = toneMapping
         renderer.outputColorSpace = outputColorSpace
         renderer.xr.enabled = xrEnabled
+        renderer.setMRT(mrt)
+        renderer.setRenderTarget(target)
+        renderer.autoClear = autoClear
+        renderer.transparent = transparent
+        renderer.opaque = opaque
+        renderer.contextNode = contextNode
+        camera.layers.mask = layers
+        scene.overrideMaterial = overrideMaterial
+        scene.name = sceneName
       }
     },
     dispose() {

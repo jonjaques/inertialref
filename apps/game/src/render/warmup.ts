@@ -533,17 +533,19 @@ export function warmAtMount(producer: WarmProducer): void {
 }
 
 /** r185 exposes no pipeline compile method; prepare its actual quad, at its actual output. */
-export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
+export function warmPipeline(
+  pipeline: RenderPipeline,
+  output: RenderTarget | null = null,
+): Promise<void> {
   const internal = pipeline as unknown as {
     _update(): void
     _quadMesh: QuadMesh
   }
   internal._update()
   const renderer = pipeline.renderer
-  const target = renderer.getRenderTarget()
+  const unbind = bindWarmTarget(renderer, output)
   const tone = renderer.toneMapping
   const color = renderer.outputColorSpace
-  renderer.setRenderTarget(null)
   renderer.toneMapping = NoToneMapping
   renderer.outputColorSpace = ColorManagement.workingColorSpace
   try {
@@ -553,7 +555,7 @@ export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
       scene: null,
     })
   } finally {
-    renderer.setRenderTarget(target)
+    unbind()
     renderer.toneMapping = tone
     renderer.outputColorSpace = color
   }

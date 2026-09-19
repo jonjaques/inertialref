@@ -92,14 +92,12 @@ it.each([SRGBColorSpace, DISPLAY_P3, LINEAR_P3])(
         'vec2<f32>': 8,
         'vec3<f32>': 12,
         'vec4<f32>': 16,
-        OutputStruct: 32,
+        OutputStruct: 16,
       }
       const output = fragmentShader.match(
         /struct OutputStruct\s*\{([^}]+)\}/,
       )?.[1]
-      expect(output?.replace(/@\w+\([^)]*\)|\s/g, '')).toBe(
-        'color:vec4<f32>,depth:f32',
-      )
+      expect(output?.replace(/@\w+\([^)]*\)|\s/g, '')).toBe('color:vec4<f32>')
       let bytes = 0
       for (const [, type] of declarations) {
         const size = sizes[type!.trim()]

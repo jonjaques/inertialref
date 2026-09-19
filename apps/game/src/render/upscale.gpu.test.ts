@@ -124,6 +124,10 @@ describe('the upscaler on the physical GPU', () => {
       expect(seenJitter).toBe(true)
       expect(f.camera.view?.enabled).toBe(false)
       expect(gpu.renderer.toneMapping).toBe(NoToneMapping)
+      expect(gpu.renderer.getMRT()).toBe(null)
+      expect(gpu.renderer.getRenderTarget()).toBe(f.target)
+      expect(gpu.renderer.getMRT()).toBe(null)
+      expect(gpu.renderer.getRenderTarget()).toBe(f.target)
       f.slab.onBeforeRender = () => {}
       f.sensor.render(f.target)
       expect((await gpu.read(f.target)).at(32, 32)[1]).toBeGreaterThan(0.4)
@@ -173,7 +177,7 @@ describe('the upscaler on the physical GPU', () => {
         camera: f.camera,
         scene: f.scene,
       })
-      await f.sensor.warm()
+      await f.sensor.warm(f.target)
       const before = gpu.pipelinesBuilt()
       f.sensor.render(f.target)
       await gpu.read(f.target)

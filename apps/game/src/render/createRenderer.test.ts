@@ -16,13 +16,21 @@ vi.mock('three/webgpu', () => ({
   FloatType: 1015,
   WebGPURenderer: class {
     initialized = false
+    reversedDepthBuffer: boolean
+    logarithmicDepthBuffer = false
+    constructor(options: { reversedDepthBuffer: boolean }) {
+      this.reversedDepthBuffer = options.reversedDepthBuffer
+    }
+    _getFallback = () => this.backend
     async init() {
       await mock.init()
+      this._getFallback()
       this.initialized = true
     }
     dispose = mock.dispose
     backend = {
       isWebGLBackend: true,
+      parameters: { reversedDepthBuffer: true },
       dispose: mock.backendDispose,
       getContext: () => ({ getExtension: () => (mock.floating ? {} : null) }),
     }
@@ -122,6 +130,14 @@ it('uses a capable WebGL fallback in standard output', async () => {
     backend: 'webgl',
     mode: 'standard',
   })
+  expect(mock.ready.mock.calls[0]?.[0].renderer.reversedDepthBuffer).toBe(false)
+  expect(mock.ready.mock.calls[0]?.[0].renderer.logarithmicDepthBuffer).toBe(
+    true,
+  )
+  expect(
+    mock.ready.mock.calls[0]?.[0].renderer.backend.parameters
+      .reversedDepthBuffer,
+  ).toBe(false)
   expect(mock.failure).not.toHaveBeenCalled()
 })
 
