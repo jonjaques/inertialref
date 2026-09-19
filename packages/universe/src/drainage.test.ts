@@ -9,6 +9,7 @@ import {
   type DrainageGraph,
   drainageGraph,
   drainageLookup,
+  SEGMENT_STRIDE,
 } from './drainage.ts'
 import { terrainSketch } from './sketch.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
@@ -275,6 +276,68 @@ describe('the drainage graph', () => {
     const luna = find('Luna')
     expect(drainageGraph(luna.surface)).toBeNull()
     expect(surfaceKernel(luna.surface).drainage).toBeNull()
+  })
+
+  it('lists a segment in a cell only where the segment reaches the cell', () => {
+    /*
+     * The rasterizer's whole promise, and the one thing its two passes can
+     * break without anything else noticing: the count pass and the fill pass
+     * walk the same nodes in the same order over one `stamp`, so a mark
+     * either pass can reproduce is a mark the other reads as its own. A cell
+     * dropped from the second pass after the first counted it keeps its slot
+     * at the `Uint32Array` zero, and the cell lists segment 0 — a chord
+     * chosen by array initialization, which on Earth stood 12,509 km away.
+     *
+     * The bound is the reach plus the two rings the gather walks, which is
+     * every cell the rasterizer is entitled to touch. A stray slot misses it
+     * by thousands of kilometers, not by a margin, so nothing here is tuned.
+     */
+    for (const body of [earth, generated]) {
+      const graph = graphOf(body)
+      const radius = body.surface.grammar.meanRadius
+      const bound = graph.reach + (2 * graph.cellMeters) / radius
+      let listings = 0
+      let stray = 0
+      for (let cell = 0; cell < graph.nodes; cell += 1) {
+        const node = vec3(
+          graph.positions[cell * 3] as number,
+          graph.positions[cell * 3 + 1] as number,
+          graph.positions[cell * 3 + 2] as number,
+        )
+        const end = graph.cellStart[cell + 1] as number
+        for (let k = graph.cellStart[cell] as number; k < end; k += 1) {
+          listings += 1
+          const at = (graph.cellSegments[k] as number) * SEGMENT_STRIDE
+          const from = vec3(
+            graph.segments[at] as number,
+            graph.segments[at + 1] as number,
+            graph.segments[at + 2] as number,
+          )
+          const along = Vec.sub(
+            vec3(
+              graph.segments[at + 4] as number,
+              graph.segments[at + 5] as number,
+              graph.segments[at + 6] as number,
+            ),
+            from,
+          )
+          const offset = Vec.sub(node, from)
+          const length = Vec.dot(along, along)
+          const t =
+            length > 0
+              ? Math.min(1, Math.max(0, Vec.dot(offset, along) / length))
+              : 0
+          if (Vec.length(Vec.sub(offset, Vec.scale(along, t))) > bound) {
+            stray += 1
+          }
+        }
+      }
+      // The count goes into the assertion so a failure names the body and
+      // says how much of its list is wrong rather than only that it is.
+      expect(`${body.name}: ${stray} of ${listings} out of reach`).toBe(
+        `${body.name}: 0 of ${listings} out of reach`,
+      )
+    }
   })
 })
 
