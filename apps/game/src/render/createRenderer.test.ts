@@ -36,6 +36,8 @@ vi.mock('three/webgpu', () => ({
     }
     info = { autoReset: true }
     setClearColor = vi.fn()
+    setOpaqueSort = vi.fn()
+    setTransparentSort = vi.fn()
     onDeviceLost = vi.fn()
     onError = vi.fn()
   },
@@ -138,6 +140,14 @@ it('uses a capable WebGL fallback in standard output', async () => {
     mock.ready.mock.calls[0]?.[0].renderer.backend.parameters
       .reversedDepthBuffer,
   ).toBe(false)
+  const renderer = mock.ready.mock.calls[0]?.[0].renderer
+  expect(renderer.setOpaqueSort).toHaveBeenCalledExactlyOnceWith(
+    expect.any(Function),
+  )
+  expect(renderer.setTransparentSort).toHaveBeenCalledExactlyOnceWith(
+    expect.any(Function),
+  )
+  expect(renderer.backend.trackTimestamp).toBe(false)
   expect(mock.failure).not.toHaveBeenCalled()
 })
 
