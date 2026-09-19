@@ -1,7 +1,7 @@
 import { createInlineWorker } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
 import { createGameTaskRegistry } from '../workers/registry.ts'
-import { GameEngine } from './GameEngine.ts'
+import { GameEngine, type GameEngineOptions } from './GameEngine.ts'
 
 /**
  * The client, under Node — the one recipe both engine suites build from.
@@ -19,10 +19,13 @@ import { GameEngine } from './GameEngine.ts'
  * The registry is the game's own rather than the shared one, so the inline
  * pool a test drives serves exactly the names the browser's workers do.
  */
-export function headlessEngine(): GameEngine {
+export function headlessEngine(
+  options: Pick<GameEngineOptions, 'catalog' | 'heightfieldStore'> = {},
+): GameEngine {
   const registry = createGameTaskRegistry()
   let clock = 0
   return new GameEngine({
+    ...options,
     seed: 'inertialref',
     workers: () => createInlineWorker(registry),
     store: new MemorySaveStore(),

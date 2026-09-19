@@ -172,6 +172,14 @@ export const WINGS = [
             'The guide in one voice',
           ],
           ['docs/adr/0043-the-rivers-drain.md', 'The rivers drain'],
+          [
+            'docs/adr/0044-the-sensor-reconstructs-the-display.md',
+            'The reconstructed display',
+          ],
+          [
+            'docs/adr/0045-generated-terrain-is-a-disposable-cache.md',
+            'The disposable terrain cache',
+          ],
         ],
       },
     ],

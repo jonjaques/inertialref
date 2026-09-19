@@ -155,7 +155,7 @@ describe('the game engine, headless', () => {
 
   it('measures the picture in display pixels, not in the drawing buffer', () => {
     /*
-     * `App` multiplies the device ratio by `aaDprFactor`, so a 4x AA buffer is
+     * `App` multiplies the device ratio by `pictureDprFactor`, so a supersampled buffer is
      * twice the display in each axis. Supersampling raises the sample count,
      * not the detail a viewer can resolve — and the terrain predicate goes as
      * the square of the pixels-per-radian, so feeding the raw buffer in asks

@@ -197,7 +197,7 @@ it. Racking the zoom out on top of that is the one corner where the floor is
 reached and the square bites again — a telephoto held on a subject wants an order
 of magnitude past any cap, so the disk goes a level coarse on every step and says
 so. The viewport is
-in **display** pixels with any supersampling divided back out: 4× AA raises the
+in **display** pixels with any supersampling divided back out: supersampling raises the
 sample count, not the
 detail a viewer can resolve, and feeding the raw buffer in asks for 6.5× the
 patches to draw geometry the resolve filter averages away.
@@ -349,6 +349,35 @@ so a frame that under-asks is a frame the next level waits for, and with the
 detail floor twelve to nineteen levels down that is most of a landing. More
 would queue rather than work — the requests go to a pool, and a queue is what a
 camera turn has to throw away.
+
+### Persistent heightfields
+
+`CachedHeightfieldSource` wraps the pool and GPU producer through the same
+`HeightfieldStore` port. Browser sessions retain tiles in IndexedDB; opted-in
+headless runs use SQLite under `.data/heightfields/`. These stores are separate
+from saves and from the streamer's in-memory geometry and heightfield caches.
+A floating-origin move changes none of their inputs.
+
+Cache identity includes the complete surface and request, including `seabed`,
+plus terrain, task and cache revisions. CPU and GPU tiles have separate producer
+namespaces. The stored full key, array shapes, bounds and payload checksum must
+validate before a hit can satisfy a request. A missing, stale or corrupt record
+regenerates through the original source. Storage failures follow the same path;
+they do not change source availability or canonical terrain.
+
+Both host stores evict least-recently-used entries under byte and entry limits.
+The browser defaults to 256 MiB and 8,192 entries; Node defaults to 4 GiB and
+65,536 entries. Those are retention limits, independent of the streamer's live
+working-set caps. A completed field reaches the caller before its background
+write finishes. Cache clearing invalidates in-flight writes as well as stored
+rows.
+
+Bump `HEIGHTFIELD_CACHE_REVISION` for a drawn-field or payload change that does
+not already change the terrain or task version. Producer implementation changes
+also require the appropriate namespace revision. Otherwise a warm run can
+legitimately find an entry whose key still describes a different implementation.
+[ADR-0045](../adr/0045-generated-terrain-is-a-disposable-cache.md) records the
+validation, storage and versioning contract.
 
 ### The rocks stream too, and not through the quadtree
 

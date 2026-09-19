@@ -148,6 +148,36 @@ of Sol contains one: generated moons come out on orbits too circular for the
 eccentricity tide to register. The archetype is covered by a Sol body instead,
 so the zoo is a set of bodies rather than one system.
 
+**The disk archive takes a write lock to read, on a rollback journal.**
+`DiskHeightfieldStore` runs every operation through `BEGIN IMMEDIATE` and sets
+`busy_timeout` to 100 ms, and nothing sets `journal_mode=WAL`. Two processes
+sharing the default `.data/heightfields/tiles.sqlite` therefore contend for an
+exclusive lock on a read: vitest runs suites in parallel workers, and
+`apps/game`'s slow descent suite and `pnpm sim --terrain-cache*` both default
+to that path, so the second reader takes SQLITE_BUSY,
+`CachedHeightfieldSource` counts a `readError` and the run degrades silently to
+full regeneration rather than failing. WAL plus a read-only transaction for the
+read path is the fix; the class comment already claims the atomicity it does
+not have.
+
+**The slow descent suite closes the archive without flushing it.**
+`CachedHeightfieldSource` queues its writes detached and exposes `flush()`,
+which the headless runner awaits before `close()` and
+`gameEngine.descent.slow.test.ts`'s `afterAll` does not. `DiskHeightfieldStore.write`
+reopens the connection when `#db` is null, so a write landing after teardown
+opens a fresh handle outside the test's lifetime — an unclosed file and a write
+nothing is waiting on.
+
+**That suite also reaches across an app boundary that no check walks.** It
+imports `apps/headless/src/heightfieldStore.ts` by relative path, so
+`apps/game`'s test graph transitively requires `node:sqlite`, `node:v8`,
+`node:fs` and `node:crypto` through a dependency `apps/game/package.json` does
+not declare. `scripts/check-graph.mjs` walks `packages/*` only, which is why
+nothing catches it; moving or renaming that file breaks a suite in another app
+with no manifest edge to warn anyone. The store belongs under `packages/*`, or
+the dependency belongs in the manifest and the graph check belongs over
+`apps/*` as well.
+
 ---
 
 ## 3. Constraints that still bind

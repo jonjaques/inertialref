@@ -234,42 +234,37 @@ keeps the full gate and every assertion while limiting concurrency. A green
 focused rerun supports a contention diagnosis; it does not replace the full
 run. Keep performance measurements separate from a contended gate.
 
-**A test that needs more says so at the call site, with the same reasoning one
-order of magnitude up.** `gameEngine.descent.slow.test.ts` streams a landing — a whole-disk
-selection's worth of heightfields through an _inline_ worker, which is to say
-serially on the test's own thread — and takes about a hundred seconds for it. Its
-timeout is five minutes, not two: two is barely over the idle cost, and this
-descent has already run past 120 s under full-suite contention and been killed
-for it, so the tighter budget goes red on a green run. The descent is paid once
-in a shared `beforeAll` and four assertions read a reading taken there, because
-four landings is nearly seven minutes where one is a hundred — and because an
-`it` that drives a shared engine is an `it` whose result depends on which one ran
-before it. What brings the number down is the GPU tile producer or a pool with
-real worker threads in it, not a shorter landing.
+**A test that needs more says so at the call site.**
+`gameEngine.descent.slow.test.ts` streams a landing on Proxima Centauri b
+through the CPU source. Its disk archive can skip repeated heightfield
+generation, but a cold run still pays the field serially through an inline
+worker. The five-minute timeout guards the cold path under contention; a warm
+run does not justify lowering it. A shared `beforeAll` performs the descent,
+and four assertions inspect its terrain, geometry and contact behavior.
 
 **The descent and galaxy count use the slow suite.** `*.slow.test.ts` is a second vitest
 project — `apps/game/vitest.slow.config.ts`, behind `pnpm test:slow` — selected
 by suffix the way the GPU suite is and excluded from the root config for the
-opposite reason: it makes the same plain-Node claim the root suite does, and it
-costs a hundred seconds in one `beforeAll` against ten for everything else. The
-Stop gate runs the root suite after every turn, so it proves the rest of the
-engine in ten seconds; `pnpm check` and CI run both, which is where "the ship
+opposite reason: it makes the same plain-Node claim the root suite does, while
+cold terrain generation can dominate that suite's wall time. The Stop gate
+runs the root suite after every turn; `pnpm check` and CI run both, which is
+where "the ship
 lands on the ground it drew" has to be proved before a merge. Anything else
 that streams a landing takes the suffix. A change under
 `engine/terrainStreamer.ts` or the terrain path is therefore proved by `/ship`
 rather than by the gate, and `pnpm test:slow` by hand is how to prove it
-sooner. [Test speed](../../design/plans/test-speed.md) carries the
-measurements and what would make the landing itself cheaper.
+sooner. [Test speed](../../design/plans/test-speed.md) carries the dated
+measurements and remaining cold-run work.
 
 `galaxy/field.slow.test.ts` also takes the suffix. Its count-convergence check
 samples 9,953,280 positions across two quadratures: 8.4 s in isolation locally,
 but beyond the regular suite’s 20 s timeout on CI. It keeps both grids and
 all count assertions, with a two-minute timeout at the call site.
 
-**The figure moves with the field, which is why it is not a budget.** A bordered
-65×65 patch costs 24 to 69 ms across the zoo, and every level the detail floor
-gains is another ring of them paid here at full serial cost; the browser has a
-pool of up to eight and this has one thread.
+**The figure moves with the field and cache state.** Every level the detail
+floor gains requests another ring of heightfields. A cold CPU descent pays
+their generation serially; a warm descent validates and reads retained records.
+Report which path the measured run took.
 
 ### Check a distribution when the claim is about one
 
@@ -418,6 +413,57 @@ alternative — the fast one answers whether a graph is valid and correct, the
 browser answers whether a frame is right.
 
 ---
+
+## Reconstruction and persistent terrain
+
+The reconstruction policy and preference migration run in Node. Actual shader
+behavior belongs to the physical-GPU gate:
+
+```bash
+pnpm vitest run apps/game/src/render/picture.test.ts apps/game/src/state/preferences.test.ts apps/game/src/hud/hud.test.ts
+pnpm vitest run --config apps/game/vitest.gpu.config.ts upscale.gpu radianceReactivity.gpu
+```
+
+The GPU fixtures exercise constant HDR preservation, repeated dispatch,
+attachment warm-up, resize, jitter cleanup after a throw, reactive coverage,
+rigid motion across an origin rebase and distant reversed depth. They do not
+prove compositor behavior or the appearance of a moving camera. Browser
+acceptance uses generated worlds outside Sol, with native, spatial, bilinear and
+temporal pictures at DPR 1 and 2. Hold the camera, photographic instant, surface
+settings and display size fixed. Let temporal history converge and record its
+phase; compare two boots of the same build before interpreting a plate's error.
+Also verify that changing anti-aliasing rebuilds the sensor without announcing
+a new renderer.
+
+Persistent terrain tests cover complete key separation, corrupt payloads,
+cancellation, storage failures, bounded eviction and reopen. The external-world
+replay test reopens a real SQLite store, serves the same Proxima Centauri b
+requests without another generator call, and holds the world's state hash
+unchanged.
+
+```bash
+pnpm vitest run packages/workers/src/heightfieldCache.test.ts apps/headless/src/heightfieldStore.test.ts apps/headless/src/terrainCacheBaseline.test.ts apps/game/src/engine/terrainStore.test.ts
+pnpm sim --ticks 0 --terrain-cache-clear --terrain-cache-descent 'g:milky-way/s:HIP70890/b:0'
+pnpm sim --ticks 0 --terrain-cache-descent 'g:milky-way/s:HIP70890/b:0'
+pnpm sim --ticks 0 --terrain-cache --terrain-baseline
+IR_TERRAIN_CACHE_REPORT=1 pnpm vitest run --config apps/game/vitest.slow.config.ts gameEngine.descent.slow
+```
+
+The first two simulation commands are a cold/warm pair over the same requested
+regions; the third measures the zoo through the source. The disk store is
+`.data/heightfields/tiles.sqlite`. Cache hits avoid field generation, so retain
+direct generator tests and bump `HEIGHTFIELD_CACHE_REVISION` when drawn-only
+arithmetic changes. A warm descent cannot prove a generator implementation it
+did not execute.
+
+Browser retention needs a real IndexedDB check as well. After a generated-world
+visit, inspect `await engine.terrainCache()`, reload through the driver with
+`--keep-storage`, revisit the same stance and compare hits and pending writes.
+`await engine.clearTerrainCache()` clears the archive independently of saves.
+Run storage-denied and quota-failure fixtures to prove regeneration still
+completes. Measure cold and warm runs separately, with the browser closed during
+CPU benchmarks. [ADR-0045](../adr/0045-generated-terrain-is-a-disposable-cache.md)
+states the invalidation contract.
 
 ## The capability checks
 

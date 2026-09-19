@@ -1,8 +1,10 @@
 # Test speed
 
-Where the root suite's time goes, and what would move it. Findings only: each
-change below is a policy decision about what the Stop gate and `pnpm check`
-promise, and that is not a decision a measurement makes on its own.
+The persistent heightfield cache is implemented in
+[ADR-0045](../../docs/adr/0045-generated-terrain-is-a-disposable-cache.md).
+This page retains the measured motivation and the remaining performance work.
+A Proxima Centauri b cold/warm landing is measured in that record. This page
+keeps the broader test-runner opportunities separate from that fixture result.
 
 Measured 12 September 2026 at `91ca32f`, on an Apple M5 (4 performance and 6
 efficiency cores), macOS 26.6.2, Node 26.5.0, vitest 4.1.10, with
@@ -54,12 +56,10 @@ so the per-turn gate pays sixteen seconds of test rather than two minutes, and
 the landing is still proved once per pull request. That moves the payment, not
 the price; what follows is what would move the price.
 
-The GPU producer does not move any of this. The descent is a CPU descent because
-the canonical field is the CPU one, so the producer moves the browser's cost,
-not the suite's. `gameEngine.descent.slow.test.ts`'s own `STREAMING_TIMEOUT`
-comment names the GPU tile producer as one of the two things that would bring
-the descent down, which is the opposite claim; one of the two is wrong and a
-measurement has not been put to it.
+The GPU producer does not accelerate the CPU descent test. That test keeps the
+CPU generation path; its persistent archive skips repeated work after a cold
+run. The [testing guide](../../docs/guides/testing.md#reconstruction-and-persistent-terrain)
+has the cache replay and slow-suite commands.
 
 `.claude/hooks/gate.mjs` carries the gate's own chain in its header — graph
 0.04 s, lint 0.10 s, typecheck 18.4 s warm, test 16.8 s, so about thirty-five
@@ -73,51 +73,35 @@ first run after a rebase rebuilds and reads 26.7 s.
 
 In the order they are worth doing.
 
-### 1. The descent gets cheaper: a heightfield cache for tests
+### 1. The persistent archive has a measured external-world replay
 
-Generation is a pure function of its two arguments — that is the determinism the
-whole core is built on — so a content-addressed cache of `generateHeightfield`
-results on disk is safe by construction: a stale entry is impossible unless the
-key is wrong. A test that replays a landing against a warm cache pays the
-streamer and the contact test and nothing for the field.
+The content key, checksummed payload, bounded SQLite and IndexedDB stores,
+source wrapper and external-world replay are implemented. The slow landing
+fixture runs on Proxima Centauri b and uses the disk archive. The headless
+runner exposes a cold/warm descent pair and a source-backed zoo baseline.
 
-**The key is the hard part, and it is wider than a seed.**
-`generateHeightfield(surface, request)` takes a whole `SurfaceParameters` —
-`seed`, `maxElevation`, `roughness`, `seaLevel` and the band grammar, the last
-derived from the body's own facts and never persisted — and a
-`HeightfieldRequest` of `region`, `resolution`, `border` and **`seabed`**.
-`seabed` is the one most easily left out and the most expensive to leave out: it
-selects `drawnGroundElevation` with the datum clamp off, so the same region at
-the same resolution has two correct answers, and a key that cannot tell them
-apart hands a landing the trench under its sea. The algorithm version belongs in
-the key beside them: `generateHeightfieldTask` is at version 6 and its comment
-records every bump and what each would have returned silently — version 5 is the
-one that added `seabed` to the request, and version 6 is the one that made the
-surface travel as a record rather than as a seed beside the grammar. Both are
-the same lesson the key has to learn. The golden vectors guard the version;
-nothing guards a key that forgets a field.
+The verified Proxima Centauri b fixture takes 92.37 s cold and 3.19 s warm;
+the warm repeat serves 1,246 hits with no misses or storage errors. All four
+terrain and contact assertions pass. The retained serialized payload is
+88,486,528 bytes. These are test-runner elapsed times for one cold/warm pair,
+not browser frame times; [ADR-0045](../../docs/adr/0045-generated-terrain-is-a-disposable-cache.md#measured-cpu-descent)
+holds the result and its limits.
 
-The win is across runs, not within one. The baseline descent on Gliese 1061 d
-makes 37,854 requests of which 35,883 are unique, so an unbounded in-run cache
-saves 5.2% — near the bounded figure `CONTEXT.md` records for a different
-operating point ("< 5%" for a 64-entry LRU on a tracked descent), and for the
-same reason, which is that the working set is hundreds. A second run against a
-warm disk serves all 35,883 without generating any.
-
-This is not a change to the test alone. It wants a `HeightfieldSource` — the
-port `packages/workers/src/tasks.ts` declares and `GameEngine.setHeightfieldSource`
-accepts, which the GPU tile producer already implements — backed by a directory
-under `.data/` the way the drive rig has. It would
-also make `pnpm sim --terrain-baseline` and the descent scenarios
-warm-startable.
+Further performance comparisons use the same validation and invalidation policy. Keep the same body, requests, lens, display dimensions and worker
+path; report hits, misses, generation calls, retained bytes and CPU percentage
+beside wall time. A warm run must retain the contact and geometry assertions. A separate
+replay of identical cache requests must leave the canonical state hash unchanged;
+different streaming convergence times can advance the descent by different ticks. Corruption, producer separation and unavailable
+storage must regenerate correctly before timing is interpreted as a benefit.
 
 ### 2. A real worker pool in the test
 
 The inline worker runs the real host loop serially on the test's thread, and the
 descent file's 100% CPU over 108.3 s is that claim measured: one core, for the
 whole run, on a ten-core machine. A `worker_threads` port would put the same
-generation on the other nine, which is a five-to-eight-fold cut on the 108.3 s
-without touching what is tested.
+generation on the other nine, which is a hypothesis for reducing the cold-run cost without changing the
+field being tested. Measure the scheduling and transfer cost before assigning
+a speedup.
 The reason it does not exist is the one
 [testing](../../docs/guides/testing.md) gives for the inline one: it is not a
 mock, and a value that is not structured-cloneable still fails. A threads port

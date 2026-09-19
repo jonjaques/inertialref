@@ -1,10 +1,11 @@
+import { pictureSamples, resolvePicture, type Picture } from './picture.ts'
 import { getLogger } from '@inertialref/shared'
 import { runtimeFailure } from '../runtimeFailure.ts'
 import {
   watchRendererErrors,
   watchRendererValidation,
 } from './rendererErrors.ts'
-import { HalfFloatType, WebGPURenderer } from 'three/webgpu'
+import { FloatType, HalfFloatType, WebGPURenderer } from 'three/webgpu'
 import { probeOutputCapability } from './capability.ts'
 import {
   headroomFor,
@@ -14,6 +15,8 @@ import {
   resolveOutputMode,
 } from './output.ts'
 import { declareSceneTarget } from './sensor.ts'
+import { installSceneOrder } from './sceneOrder.ts'
+import { installGpuTiming } from './gpuTiming.ts'
 import { createCanvasGamut, type CanvasGamut } from './gamut.ts'
 import {
   installToneCurve,
@@ -105,7 +108,6 @@ let stopLiveErrors: (() => void) | null = null
 interface PendingBuild {
   readonly canvas: EventTarget
   readonly preference: OutputPreference
-  readonly antialias: boolean
   readonly promise: Promise<WebGPURenderer>
 }
 
@@ -114,7 +116,7 @@ let current: PendingBuild | null = null
 
 export function createRenderer(
   preference: OutputPreference,
-  antialias: boolean,
+  picture: Picture,
   onReady: (handle: RendererHandle) => void,
   onFailure: (cause: unknown) => void = (cause) =>
     runtimeFailure.report('unsupported', cause),
@@ -123,8 +125,7 @@ export function createRenderer(
     if (
       current !== null &&
       current.canvas === canvas &&
-      current.preference === preference &&
-      current.antialias === antialias
+      current.preference === preference
     ) {
       // The StrictMode re-invocation. Same renderer — but this mount's
       // `onReady` still has to fire, because it closes over this render's
@@ -137,7 +138,7 @@ export function createRenderer(
     }
 
     const build = building.then(() =>
-      buildRenderer(canvas, preference, antialias, onReady),
+      buildRenderer(canvas, preference, picture, onReady),
     )
     // Failures propagate to R3F through `build`; neither the queue nor the
     // memo may hold one, or every later attempt inherits a stale rejection.
@@ -148,7 +149,6 @@ export function createRenderer(
     const entry: PendingBuild = {
       canvas,
       preference,
-      antialias,
       promise: build,
     }
     current = entry
@@ -163,7 +163,7 @@ export function createRenderer(
 async function buildRenderer(
   canvas: CanvasProps['canvas'],
   preference: OutputPreference,
-  antialias: boolean,
+  picture: Picture,
   onReady: (handle: RendererHandle) => void,
 ): Promise<WebGPURenderer> {
   // Before anything else. Two renderers on one canvas is a killed tab.
@@ -179,21 +179,10 @@ async function buildRenderer(
 
   const renderer = new WebGPURenderer({
     canvas: surface,
-    // Never multisampled here. MSAA is a constructor fact on WebGPU — samples
-    // 4 or nothing, the spec allows no 2× — and it belongs to the scene pass,
-    // not the canvas: `scene/Sensor.tsx` owns the frame, the scene is drawn
-    // into the sensor's pass target, and the canvas receives one full-screen
-    // quad with no edge in it. A renderer built with `antialias` would give
-    // that quad a four-sample color buffer and a resolve, every frame, for
-    // nothing — `render/sensor.ts` has the mechanism. The preference reaches
-    // the pass through `declareSceneTarget` below, and changing it still
-    // remounts the canvas through the same `<Canvas key>` the HDR preference
-    // uses, because the pass is built once per renderer.
+    // Multisampling belongs to the sensor target, not the output triangle.
     antialias: false,
-    // Twenty orders of magnitude of depth in one scene. A linear buffer
-    // z-fights everywhere in that range and this costs one fragment shader
-    // instruction. Reversed-Z is complementary and is a separate change.
-    logarithmicDepthBuffer: true,
+    reversedDepthBuffer: true,
+    trackTimestamp: false,
     powerPreference: 'high-performance',
     // The single switch. `outputType: HalfFloatType` sets *both* the canvas
     // format (`rgba16float`) and `context.configure({ toneMapping: { mode:
@@ -203,17 +192,39 @@ async function buildRenderer(
     ...(requested === 'extended' ? { outputType: HalfFloatType } : {}),
   })
 
+  // The fallback callback runs before WebGL initializes its clip control.
+  // Depth conventions must be chosen then, before either backend compiles.
+  const fallback = renderer as unknown as {
+    _getFallback: (error: unknown) => {
+      parameters: { reversedDepthBuffer: boolean }
+    }
+    reversedDepthBuffer: boolean
+    logarithmicDepthBuffer: boolean
+  }
+  const getFallback = fallback._getFallback
+  fallback._getFallback = (error) => {
+    const backend = getFallback(error)
+    backend.parameters.reversedDepthBuffer = false
+    fallback.reversedDepthBuffer = false
+    fallback.logarithmicDepthBuffer = true
+    return backend
+  }
+
   const report = (cause: Error): void => {
     runtimeFailure.report('graphics', cause)
   }
   const stopErrors = watchRendererErrors(renderer, report)
   let stopValidation = (): void => {}
+  let stopTiming = (): void => {}
   const stopWatching = (): void => {
+    stopTiming()
     stopValidation()
     stopErrors()
   }
   try {
     await renderer.init()
+    installSceneOrder(renderer)
+    stopTiming = installGpuTiming(renderer)
     if (runtimeFailure.getSnapshot() !== null) {
       throw new Error('Graphics startup was canceled.')
     }
@@ -228,7 +239,16 @@ async function buildRenderer(
       }
     }
     stopValidation = watchRendererValidation(renderer, report)
-    declareSceneTarget(renderer, { samples: antialias ? 4 : 0, optics: true })
+    const resolvedPicture = resolvePicture(
+      picture,
+      'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl',
+    )
+    declareSceneTarget(renderer, {
+      samples: pictureSamples(resolvedPicture),
+      temporal: resolvedPicture.aa === 'temporal',
+      optics: true,
+      ...(renderer.reversedDepthBuffer ? { depthType: FloatType } : {}),
+    })
 
     /*
      * Clear to *opaque* black. The default clear alpha is 0, and on the
@@ -282,7 +302,7 @@ async function buildRenderer(
       output: mode,
       headroom,
       preference,
-      antialias,
+      picture: resolvedPicture,
       dynamicRangeHigh: capability.dynamicRangeHigh,
       extendedCanvas: capability.extendedCanvas,
     })

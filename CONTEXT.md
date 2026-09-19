@@ -17,6 +17,14 @@ is in [`docs/roadmap.md`](docs/roadmap.md); foundational decisions are in
 
 ## Current state
 
+Picture settings now select native rendering, spatial FSR or temporal FSR on
+WebGPU without rebuilding the renderer; WebGL retains native rendering and
+the saved preference. Disposable terrain tiles survive browser reloads in a
+bounded IndexedDB cache and headless runs in SQLite. The five shipped
+extrasolar photographic presets are the acceptance fixtures
+([ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md),
+[ADR-0045](docs/adr/0045-generated-terrain-is-a-disposable-cache.md)).
+
 Milestone 1 — the vertical architectural proof — is **complete**: 12/12 capability checks pass in Node and in Chrome. Multiplayer is
 deferred to a later phase; only the seams exist (ADR-0008).
 
@@ -560,6 +568,25 @@ again in a neighboring system.
   worlds parted on the first tick under throttle. Every field that decides
   the next tick is one list, `CanonicalEntity`; the hash, the save and the
   restore read it, and the round-trip property varies the profile.
+- **`JSON.stringify` writes `null` for NaN and for both infinities.** A cache
+  key built through it collapsed four distinct sea levels to one, in the
+  function whose docstring promises every field travels into the key — so a
+  lookup could be answered with a tile generated from different arithmetic.
+  Non-finite numbers are spelled out. `heightfieldCache.test.ts` asks for four
+  keys from four sea levels.
+- **A memoized promise memoizes its rejection.** The browser terrain archive's
+  open carried a one-second budget, which is a guess about a busy machine and
+  not a verdict on the host; holding the rejected promise retired IndexedDB for
+  the rest of the visit and every later landing regenerated ground already on
+  disk. A rejection clears the memo. `terrainStore.test.ts` times the first
+  open out and requires the store to reach the second.
+- **A loop whose exit and whose progress come from two places.** The disk
+  archive's eviction read the triggers' running tally and made progress by
+  deleting rows: an empty table makes the subquery NULL, the delete match
+  nothing and the tally still say over budget — a synchronous spin inside an
+  open `BEGIN IMMEDIATE`, which no test timeout can interrupt, so the test for
+  it runs in a child process under a deadline and the defect reports ETIMEDOUT
+  rather than hanging the job.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -10213,6 +10240,149 @@ that as a defect.
 The review's remaining findings are ranked in
 [the erosion plan](design/plans/erosion.md) § 3 and § 4 — the eight-buffer
 ceiling that blocks phases 4 and 5 above all.
+
+## The ground remembers, and the picture has to earn its pixels (19 Sep 2026)
+
+The FSR and terrain-cache work is based on the merged terrain branch. Its
+acceptance scenes are the shipped extrasolar presets, with flight at Tau
+Ceti Dusk's exact surface coordinates. The preset angles are radians;
+`ir.land` takes radians too. A saved flight restored the same canonical hash
+immediately and after another second with the clock paused. Cache clearing
+also left the canonical hash unchanged. The caches are disposable derived
+data beside the save system, with separate CPU and GPU producer namespaces;
+they never become an authority for the surface.
+
+**A reduced picture is not necessarily a cheaper frame.** On an M5 MacBook
+Air, Chrome 153, the development server and a 1600 × 900 CSS viewport at
+DPR 2, The Far Shore took 22.558 ms per complete native MSAA frame, 13.163 ms
+with Spatial Performance and 15.043 ms with Temporal Performance. Tau Ceti
+Dusk took 11.252 ms native and 11.630 ms with Temporal Quality. These are
+medians of five 60-frame batches after warm-up, with timing instrumentation
+off. Both presets were measured at DPR 1 and 2; all 24 settings preserved
+the renderer, world hash and display-referred terrain selection. The full
+matrix, image differences, memory accounting and limitations are in
+[ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md). Temporal remains an
+explicit choice, not the default.
+
+**Reversing depth also reversed the sky's place in the draw list.** Three
+r185 reverses the sorted opaque and transparent lists under reversed depth,
+including `renderOrder`. The galaxy backdrop consequently drew after the
+ground, and its old far-depth value of one made it cover the scene. The
+renderer now preserves authored group and render order while retaining the
+backend's depth ordering, and custom depth outputs use the active backend's
+convention. A foreground pixel through the complete sensor caught what a
+depth-formula unit test could not.
+
+**Maximum reactivity remembers what an opaque object hid.** A full-screen
+sky marked reactive one left every ground pixel at one when the separate
+attachment used maximum blending. Temporal reconstruction then rejected all
+ground history. Coverage composition replaces hidden background coverage
+under an opaque foreground and combines translucent coverage. The mask is
+RGBA8 because source-alpha GPU blending cannot obtain opacity from a scalar
+R8 output. A physical-GPU test first read one behind opaque zero; it now
+reads zero, and two translucent layers combine to the expected 0.7.
+
+The odd-size resize also mattered: the raw upscaler's view offset replaced
+the camera aspect with the rounded internal dimensions. Keeping the display
+aspect restored the 937 × 613 CSS view at DPR 2 while rendering Quality at
+1249 × 817. Eight changes through native, supersampled, spatial and temporal
+settings created 58 tracked upscaler textures and destroyed all 58 when
+returning to native. Full timing is opt-in and drained in bounded batches;
+otherwise Three's timestamp pool and the raw kernel's sample list grow or
+overflow during sustained rendering.
+
+**A timeout must start when a transaction is admitted.** A cold Far Shore
+visit initially produced hundreds of storage errors because every cache
+operation entered IndexedDB's write queue with a one-second timer already
+running. Misses now use read-only transactions, at most eight operations are
+admitted together, and the five-second transaction timer starts after
+admission. The cold Tau Ceti Dusk visit then stored 1,390 tiles with no
+errors; reloading recorded 1,390 hits, no misses and no writes. Retention
+stayed under 256 MiB while moving among presets. The Proxima b headless
+descent took 92.37 s cold and 3.19 s warm, with all 1,246 warm requests served
+from SQLite and the same four terrain/contact assertions passing. The
+protocol and exact cache boundaries are in
+[ADR-0045](docs/adr/0045-generated-terrain-is-a-disposable-cache.md).
+
+## A readout took the frame down, and the archive forgot it had one (19 Sep 2026)
+
+A review of the reconstruction and cache branch found fifteen defects. Ten are
+fixed here; the rest are open work, named below and carried in the plans.
+
+**Two of them were instruments that could stop the scene, which is now
+[rule 65](AGENTS.md).** The upscaler's byte census wraps the device's own
+`createTexture` to total what `renderer.info` cannot see, and threw on a format
+outside its four-entry table — inside `configure()`, which then abandoned the
+kernel half-allocated, and `prepare()` re-entered every frame to throw again.
+A number nobody reads retired the renderer. It over-counts an unknown format at
+eight bytes a pixel and warns. The sensor's `diagnostics` getter read the
+drawing buffer into `size`, the closure-scoped vector that is the submitted
+frame's viewport and the reference the defocus circle, the signature and the
+meter's readback were measured against; `Sensor.tsx` reads that getter after
+every frame and `ir.picture()` reads it from the console, so on a resize frame
+a property read moved what an asynchronous readback would be interpreted
+against. The report has its own vector. Reading the private `_timer` the
+timestamp opt-out needs is optional for the same reason.
+
+**A non-finite exposure scalar is permanent, where a non-finite delta is
+not.** `delta` was already guarded. FSR divides pre-exposure back out of an
+accumulation buffer that is invertible against it, so one NaN frame
+reconstructs every later frame from NaN and the image does not return without
+a declared cut — and `Math.min(65504, NaN)` is NaN, while `NaN !== NaN`
+re-uploaded the 1×1 texture every frame besides. Both scalars fall back to 1.
+
+**Four ways the archive lost ground it had already generated.** The browser
+store memoized the open promise including its rejection, so one open past the
+one-second budget retired IndexedDB for the rest of the visit and every
+landing regenerated tiles that were on disk; the rejection now clears the memo.
+`clearTerrainCache` reached the store directly whenever the CPU wrapper was
+absent — which is every session without a worker pool, and precisely the case
+where the producer's own wrapper is installed over the same store — skipping
+the generation guard, so a GPU lookup already past its read could write its
+tile back into a cache the caller had just emptied. The disk store's eviction
+loop took its exit from the triggers' running total and its progress from
+deleting rows: an empty table makes the subquery NULL, the delete match
+nothing and the tally still say over budget, which is a synchronous spin
+inside an open `BEGIN IMMEDIATE` that no vitest timeout can interrupt. And
+`stable()` delegated numbers to `JSON.stringify`, which writes `null` for NaN
+and for either infinity — four distinct values sharing one cache key, in the
+function whose docstring promises that cannot happen.
+
+**The temporal velocity attachment has no overlay mask, and the obvious fix
+does not build.** `motion` masks its overlays with `motionOverlay.oneMinus()`
+and blends `SrcAlpha`/`OneMinusSrcAlpha` so a transparent quad leaves the
+attachment to what it covers; `velocity` is fed by the same node and gets
+neither, so a plume, a flare, a warp streak, an entry trace or a cinematic
+overlay hands FSR its own vectors over its whole footprint, and reprojection,
+dilation and neighbor locking run on them for pixels the overlay never
+covered. Reactivity does not repair it — it suppresses history only where the
+overlay drew. Mirroring `motion` exactly fails at pipeline creation: Dawn
+refuses `Color blending srcFactor (BlendFactor::SrcAlpha) … is reading alpha
+but it is missing from fragment output`, because the attachment is `RGFormat`
+and three emits a two-component fragment output for it. That is the same
+constraint that made `reactive` RGBA8. Two candidates, each of which moves the
+configuration [ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md)
+measured: widening the attachment to RGBA16F costs 4 B/px over a
+full-resolution target, and reading the already-masked `motion.rg` when optics
+are on costs nothing and removes an attachment but leaves the optics-off
+temporal path without an answer. Carried in
+[the upscaler plan](design/plans/the-upscaler.md).
+
+A GPU probe states the defect exactly: a temporal sensor, a 40 × 40 surface at
+z = −4 through `sensorRadiance`, a 0.5 × 0.5 overlay at z = −2 that travels
+with the eye, and a 0.25-unit camera pan. The bare edge reads −0.108 of clip
+space and the covered center reads 0.
+
+Smaller: `OptionGroup` invoked the caller's `disabled` predicate twice per
+option, once for the boolean and once for the title, so the two reads could
+disagree and leave a button disabled with nothing to explain it — twelve calls
+a render for the Picture section's six answers. `parsePictureQuery` split its
+value twice. The heightfield checksum walks every byte of every tile on both
+paths with `for…of`, where the iterator protocol is the dominant term at a
+hundred thousand bytes a tile; it is indexed now, and the record and its
+validation take their byte estimate from one helper rather than two copies of
+the same arithmetic. The redundant validation walk itself stays: it is a
+guard, and removing it is a decision about the guard, not a cleanup.
 
 ## Known gaps
 

@@ -53,6 +53,7 @@ import {
   encodeSurface,
   Heightfields,
   type JobHandle,
+  type HeightfieldSource,
   poolHeightfieldSource,
   surfaceDetailFloorTask,
   type WorkerPool,
@@ -711,10 +712,14 @@ export class TerrainStreamer {
    */
   cellPixels: number = DEFAULT_CELL_PIXELS
 
-  constructor(pool: WorkerPool | null) {
+  constructor(pool: WorkerPool | null, source?: HeightfieldSource | null) {
     this.#pool = pool
     this.heightfields = new Heightfields(
-      pool === null ? null : poolHeightfieldSource(pool),
+      source === undefined
+        ? pool === null
+          ? null
+          : poolHeightfieldSource(pool)
+        : source,
     )
   }
 

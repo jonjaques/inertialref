@@ -1,3 +1,4 @@
+import { DEFAULT_PICTURE } from './picture.ts'
 import { describe, expect, it } from 'vitest'
 import type { WebGPURenderer } from 'three/webgpu'
 import type { CanvasProps, RendererHandle } from './createRenderer.ts'
@@ -50,7 +51,7 @@ function rig(options: { produce?: boolean } = {}) {
   const producers: ReturnType<typeof producer>[] = []
   let warmResolve!: () => void
   const lifetime = createRendererLifetime({
-    build: (_preference, _antialias, onReady) => async () => {
+    build: (_preference, _picture, onReady) => async () => {
       log.push('build')
       onReady(handle(`build-${log.filter((one) => one === 'build').length}`))
       return {} as WebGPURenderer
@@ -99,7 +100,7 @@ function rig(options: { produce?: boolean } = {}) {
 describe('the renderer lifetime', () => {
   it('registers the producer only after the warm-up has opened the census', async () => {
     const f = rig()
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     f.lifetime.warm(f.lifetime.handle!)
     expect(f.log).toEqual([
       'install:null',
@@ -119,7 +120,7 @@ describe('the renderer lifetime', () => {
     // StrictMode runs the effect twice; a second producer on the same device
     // would be a second compile and a producer nothing retires.
     const f = rig()
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     const ready = f.lifetime.handle!
     f.lifetime.warm(ready)
     f.lifetime.warm(ready)
@@ -137,13 +138,13 @@ describe('the renderer lifetime', () => {
      * new build exists — it must not install a producer of a dead device.
      */
     const f = rig()
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     f.lifetime.warm(f.lifetime.handle!)
     const first = f.producers[0]!
     const compile = f.drain()
     f.log.length = 0
 
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     expect(first.disposed()).toBe(true)
     expect(f.log.slice(0, 2)).toEqual(['install:null', 'build'])
     expect(f.lifetime.producer).toBeNull()
@@ -160,7 +161,7 @@ describe('the renderer lifetime', () => {
 
   it('gives a producer back when its kernel does not build', async () => {
     const f = rig()
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     f.lifetime.warm(f.lifetime.handle!)
     const compile = f.drain()
     f.producers[0]!.finish(false)
@@ -172,7 +173,7 @@ describe('the renderer lifetime', () => {
 
   it('skips the producer on a build that does not get one', async () => {
     const f = rig({ produce: false })
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     f.lifetime.warm(f.lifetime.handle!)
     expect(f.log).not.toContain(`register:${PRODUCER_WARM_LABEL}`)
     expect(f.lifetime.producer).toBeNull()
@@ -180,7 +181,7 @@ describe('the renderer lifetime', () => {
 
   it('reports the warm-up outcome without touching the device', async () => {
     const f = rig({ produce: false })
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     f.lifetime.warm(f.lifetime.handle!)
     f.warmed()
     await Promise.resolve()
@@ -190,7 +191,7 @@ describe('the renderer lifetime', () => {
 
   it('retires the producer before releasing the device on a terminal failure', async () => {
     const f = rig()
-    await f.lifetime.factory('standard', false)(f.props)
+    await f.lifetime.factory('standard', DEFAULT_PICTURE)(f.props)
     f.lifetime.warm(f.lifetime.handle!)
     f.log.length = 0
     f.lifetime.dispose()

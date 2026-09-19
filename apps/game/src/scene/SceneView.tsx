@@ -1,3 +1,4 @@
+import type { Picture } from '../render/picture.ts'
 import { GalaxyVolume } from './GalaxyVolume.tsx'
 import { useMemo } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -48,7 +49,15 @@ import { WaterPatches } from './WaterPatches.tsx'
  * list, because moving one JSX line is not a thing anyone expects to break the
  * simulation.
  */
-export function SceneView({ engine }: { engine: GameEngine }) {
+export function SceneView({
+  engine,
+  picture,
+  pictureDiagnostic,
+}: {
+  engine: GameEngine
+  picture: Picture
+  pictureDiagnostic?: 'bilinear'
+}) {
   /*
    * One ground material for the session, shared by the patches and the rocks
    * standing on them.
@@ -89,7 +98,11 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       {/* Last, and at priority 1: the sensor takes the frame away from R3F
           once every priority-0 consumer above has written its uniforms, and
           presents it through `render/sensor.ts`. */}
-      <Sensor engine={engine} />
+      <Sensor
+        engine={engine}
+        picture={picture}
+        diagnostic={pictureDiagnostic}
+      />
     </>
   )
 }

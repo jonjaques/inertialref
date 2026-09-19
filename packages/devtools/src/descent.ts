@@ -616,3 +616,35 @@ export function summarizeDescent(report: DescentReport): string {
     ...lines,
   ].join('\n')
 }
+
+/** Measures actual source delivery, including lookup, generation and transfer. */
+export async function measureHeightfieldSource(
+  body: Body,
+  regions: readonly RegionAddress[],
+  now: () => number,
+  source: import('@inertialref/workers').HeightfieldSource,
+  resolution = HEIGHTFIELD_RESOLUTION,
+): Promise<GenerationCost> {
+  const started = now()
+  for (const region of regions) {
+    const request = { region, resolution, border: HEIGHTFIELD_BORDER }
+    if (
+      !source.available ||
+      region.level > (source.maxLevel ?? Infinity) ||
+      source.supports?.(request) === false
+    )
+      throw new Error('Heightfield source does not support this baseline')
+    await source.submit(body.surface, request).result
+  }
+  const totalMs = now() - started
+  const stride = resolution + 2 * HEIGHTFIELD_BORDER
+  const samples = regions.length * stride * stride
+  return {
+    patches: regions.length,
+    resolution,
+    samples,
+    totalMs,
+    msPerPatch: regions.length === 0 ? 0 : totalMs / regions.length,
+    samplesPerSecond: totalMs <= 0 ? 0 : (samples / totalMs) * 1000,
+  }
+}

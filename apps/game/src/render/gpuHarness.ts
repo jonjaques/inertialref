@@ -16,6 +16,7 @@ import {
   WebGPURenderer,
 } from 'three/webgpu'
 import { breathe } from './warmup.ts'
+import { installSceneOrder } from './sceneOrder.ts'
 
 /*
  * A `WebGPURenderer` on the real GPU, in Node — `pnpm test:gpu`.
@@ -337,20 +338,11 @@ export async function openGpu(
   const renderer = new WebGPURenderer({
     antialias: false,
     canvas: canvasStub(width, height),
-    /*
-     * The game's renderer sets this (`createRenderer.ts`), and it is not a
-     * property of the frame: `NodeMaterial.setupDepth` writes
-     * `viewZToLogarithmicDepth` into the fragment stage of every material
-     * that declares no `depthNode`, so a harness without it compiles a
-     * program with no `frag_depth` where the game compiles one with it.
-     * Measured: `createStarMaterial`'s fragment shader carries `frag_depth`
-     * only with this set. A suite that says "every production material
-     * compiles" has to compile the production program.
-     */
-    logarithmicDepthBuffer: true,
+    reversedDepthBuffer: true,
   })
   renderer.setSize(width, height, false)
   await renderer.init()
+  installSceneOrder(renderer)
   // Opaque black, the way `createRenderer` clears — see the file comment.
   renderer.setClearColor(0x000000, 1)
   const backend = renderer.backend as {

@@ -105,6 +105,7 @@ interface ActiveCutscene {
   /** A seek issued before the next sample; applied when it arrives. */
   pendingSeekFrame: number | null
   lastRenderTime: number | null
+  lastShot: string | null
 }
 
 /**
@@ -236,9 +237,11 @@ export class CutsceneDirector {
       epoch: null,
       pendingSeekFrame: null,
       lastRenderTime: null,
+      lastShot: null,
     }
     // A scene that is playing has not left yet.
     this.#last = null
+    this.#host.render.declareCut()
     log.info('cutscene started', { id, frames: script.durationFrames })
     return this.status() as CutsceneStatus
   }
@@ -252,6 +255,7 @@ export class CutsceneDirector {
     const active = this.#active
     if (active === null) return
     this.#active = null
+    this.#host.render.declareCut()
     this.#last = {
       id: active.script.id,
       ending,
@@ -304,6 +308,8 @@ export class CutsceneDirector {
       })
       return this.status() as CutsceneStatus
     }
+    this.#host.render.declareCut()
+    active.lastShot = null
     const clamped = Math.max(
       0,
       Math.min(frame, active.script.durationFrames - 1),
@@ -370,7 +376,16 @@ export class CutsceneDirector {
       this.#finish('ended')
       return null
     }
-    return active.prepared.sample(Math.max(0, frame))
+    return this.#sampleShot(active, Math.max(0, frame))
+  }
+
+  #sampleShot(active: ActiveCutscene, frame: number): CinematicSample {
+    const sample = active.prepared.sample(frame)
+    const shot = sample.shot ?? active.script.id
+    if (active.lastShot !== null && active.lastShot !== shot)
+      this.#host.render.declareCut()
+    active.lastShot = shot
+    return sample
   }
 
   /**
@@ -419,7 +434,7 @@ export class CutsceneDirector {
         id: active.script.id,
       })
     }
-    return active.prepared.sample(last)
+    return this.#sampleShot(active, last)
   }
 
   /**

@@ -200,7 +200,12 @@ export function createWaterMaterial(
   const waterDepth = varying(float(), 'waterDeep')
   const noise = noiseSampler(noiseTexture())
 
-  const material = sensorRadiance(new MeshBasicNodeMaterial())
+  const material = sensorRadiance(
+    new MeshBasicNodeMaterial(),
+    false,
+    false,
+    0.3,
+  )
   material.transparent = true
   material.depthWrite = true
 

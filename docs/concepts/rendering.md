@@ -736,15 +736,12 @@ terrain graph reads morph attributes a rock has no coarser version to morph to.
 
 ## Depth buffer settings
 
-```
-logarithmicDepthBuffer: true
-near: 0.05 m
-far:  1e10 m
-```
-
-A linear depth buffer over that range has no usable precision anywhere in it.
-The logarithmic buffer costs a fragment shader instruction and makes the range
-workable. Reversed-Z is complementary and can be added later.
+The camera spans 0.05 m to 10¹⁰ m. WebGPU uses reversed depth with a
+`FloatType` scene attachment, so distant separation keeps floating-point
+relative precision and temporal reconstruction can linearize it correctly.
+WebGL selects the logarithmic buffer before backend initialization. It does not
+run FSR. [ADR-0044](../adr/0044-the-sensor-reconstructs-the-display.md) records
+the depth and reconstruction contract.
 
 ---
 
@@ -847,6 +844,39 @@ GPU measurement — are forty frames and not one frame and thirty-nine quads. An
 because `RenderPipeline.render` swaps both around the quad with no `finally` of
 its own, and one throw from the scene inside that swap left every later frame
 one sRGB transfer too dark.
+
+### The picture record and reconstruction
+
+`render.picture` owns anti-aliasing, render scale and reconstruction sharpness.
+Its default is native MSAA. Raw and MSAA pictures can use spatial FSR at a
+reduced scale; temporal FSR uses single-sampled input at any scale, including
+native anti-aliasing. Supersampling doubles each drawing-buffer axis and permits
+only native scale. Quality, Balanced, Performance and Ultra performance divide
+each scene-target axis by 1.5, 1.7, 2 and 3 respectively, rounded down to whole
+pixels.
+
+The scene pass renders at that smaller size. `render/upscale.ts` dispatches the
+library kernels once per render call and returns display-size radiance before
+defocus, shutter motion, glare, noise and output encoding. Temporal input adds
+unjittered velocity and a reactive attachment. The sensor clears projection
+jitter in `finally`; resize, declared camera cuts and incompatible processing
+changes discard history. Its existing exposure owner supplies FSR's
+conditioning, with unity for Enhanced's composed visibility domain.
+
+The picture is a presentation preference. Its changes rebuild the sensor in
+place; they do not remount the renderer. WebGL resolves temporal to MSAA and
+reduced scales to native without overwriting the stored choice. The graphics
+panel shows the actual integer render dimensions and disables unsupported
+choices. A `?picture=temporal:quality` page override leaves storage unchanged;
+`?picture=native` selects the default baseline and `?picture=bilinear:quality`
+is the diagnostic comparison path.
+
+Terrain selection and lens angles continue to use display pixels. Reducing the
+scene resolution does not reduce patch demand. The optical passes keep their
+surface motion and reciprocal-depth attachment, whose overlay semantics differ
+from FSR's temporal guides. `ir.picture()` reports reconstruction dimensions,
+history and costs; [the harness guide](../guides/harness.md#measuring-the-picture)
+defines those readings.
 
 ### Three passes that stayed separable
 

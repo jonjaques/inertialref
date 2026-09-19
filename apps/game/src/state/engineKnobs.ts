@@ -1,11 +1,11 @@
 import type { Lens, SensorSettings } from '@inertialref/rendering'
-import { aaDprFactor } from '../render/output.ts'
+import { pictureDprFactor, type Picture } from '../render/picture.ts'
 import type { SurfaceQuality } from '../render/quality.ts'
 import {
   CAMERA_LENS,
   type Preference,
   read,
-  RENDER_AA,
+  RENDER_PICTURE,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
   RENDER_SENSOR,
@@ -77,9 +77,6 @@ const KNOBS: readonly ((engine: EngineKnobs) => () => void)[] = [
   // What the drawing buffer is multiplied by, so the terrain predicate can
   // divide it back out: supersampling raises the sample count, not the detail
   // a viewer can resolve. See `GameEngine.supersample`.
-  knob(RENDER_AA, (engine, level) => {
-    engine.supersample = aaDprFactor(level)
-  }),
 ]
 
 /**
@@ -88,8 +85,16 @@ const KNOBS: readonly ((engine: EngineKnobs) => () => void)[] = [
  * Applies every stored value on the way in, so an engine bound after boot
  * carries the preferences rather than its defaults.
  */
-export function bindEngineKnobs(engine: EngineKnobs): () => void {
+export function bindEngineKnobs(
+  engine: EngineKnobs,
+  pictureOverride: Picture | null = null,
+): () => void {
   const releases = KNOBS.map((bind) => bind(engine))
+  releases.push(
+    knob(RENDER_PICTURE, (bound, picture) => {
+      bound.supersample = pictureDprFactor(pictureOverride ?? picture)
+    })(engine),
+  )
   /*
    * The lens sink declines what the owner would refuse, at the owner's
    * boundary. The field's guard (`isUsableLens`) is wider than the

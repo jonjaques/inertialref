@@ -1,3 +1,16 @@
+import {
+  createUpscale,
+  type PictureDebug,
+  type UpscaleDiagnostics,
+} from './upscale.ts'
+import {
+  DEFAULT_PICTURE,
+  pictureRatio,
+  pictureSamples,
+  pictureSharpness,
+  resolvePicture,
+  type Picture,
+} from './picture.ts'
 import { PsfNode } from './psf.ts'
 import type { RenderOrigin } from '@inertialref/spatial'
 import { sensorMrt } from './sensorMrt.ts'
@@ -10,6 +23,10 @@ import {
   type Node,
   DepthTexture,
   HalfFloatType,
+  FloatType,
+  RGFormat,
+  RGBAFormat,
+  type TextureDataType,
   NodeUpdateType,
   RenderPipeline,
   RenderTarget,
@@ -36,6 +53,7 @@ import { toneCurveFor } from './tonemap.ts'
 import { warmPipeline } from './warmup.ts'
 import { SensorHistory } from './sensorHistory.ts'
 import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
+import { beginGpuTiming, endGpuTiming } from './gpuTiming.ts'
 
 /* The sensor owns the only scene draw, then applies lens-side optics,
  * detector response and the canvas encode. MSAA belongs to the scene target;
@@ -52,15 +70,16 @@ import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
  * What the scene pass draws into, described once so a warm-up can build a
  * target of the same shape before the sensor exists.
  *
- * Half-float, the renderer's own output buffer type, so nothing above 1 is
- * lost before the curve; a `DepthTexture` at the class default, which the
- * backend allocates as `depth24plus` — the same format the renderer gives its
- * internal framebuffer — so the depth half of the pipeline key matches too.
+ * Radiance stays half-float above white. WebGPU uses reversed depth with a
+ * float attachment; the WebGL fallback retains its logarithmic depth. Every
+ * optional attachment is part of the warm pipeline key.
  */
 export interface SceneTargetShape {
   /** 4 or 0. WebGPU has no other count. */
   readonly samples: number
   readonly optics?: boolean
+  readonly temporal?: boolean
+  readonly depthType?: TextureDataType
 }
 
 /** The per-renderer record of the shape, and the stand-in built to it. */
@@ -72,7 +91,7 @@ interface SceneTargetRecord {
 /*
  * Keyed on the renderer object because that is what every caller holds: the
  * factory has the handle, the scene components have R3F's `gl`, and both are
- * the same object. A rebuild is a new renderer and therefore a new record.
+ * the same object. A picture change replaces the layout on the same renderer.
  */
 const targets = new WeakMap<object, SceneTargetRecord>()
 
@@ -122,13 +141,14 @@ function sceneTarget(
   height: number,
   shape: SceneTargetShape,
 ): RenderTarget {
-  const depthTexture = new DepthTexture(width, height)
+  const depthTexture = new DepthTexture(width, height, shape.depthType)
   depthTexture.isRenderTargetTexture = true
   const target = new RenderTarget(width, height, {
     type: HalfFloatType,
     samples: shape.samples,
     depthTexture,
-    count: shape.optics === true ? 3 : 1,
+    count:
+      1 + (shape.optics === true ? 2 : 0) + (shape.temporal === true ? 2 : 0),
   })
   target.textures[0]!.name = 'output'
   if (shape.optics === true) {
@@ -137,10 +157,19 @@ function sceneTarget(
     target.textures[2]!.format = RedFormat
     target.textures[2]!.type = UnsignedByteType
   }
+  if (shape.temporal === true) {
+    const offset = shape.optics === true ? 3 : 1
+    target.textures[offset]!.name = 'velocity'
+    target.textures[offset]!.format = RGFormat
+    target.textures[offset + 1]!.name = 'reactive'
+    target.textures[offset + 1]!.format = RGBAFormat
+    target.textures[offset + 1]!.type = UnsignedByteType
+  }
   return target
 }
 
 export interface SensorDiagnostics {
+  readonly picture: UpscaleDiagnostics
   readonly automaticAvailable: boolean
   readonly enhancedSkyGain: number
   readonly enhancedSkyCeiling: number
@@ -152,7 +181,8 @@ export interface SensorDiagnostics {
 }
 
 export interface Sensor {
-  warm(): Promise<void>
+  warm(target?: RenderTarget | null): Promise<void>
+  warmUpscale(): void
   readonly exposure: Exposure | null
   readonly diagnostics: SensorDiagnostics
   /**
@@ -168,13 +198,15 @@ export interface Sensor {
    * the canvas stays black. A test that reads the frame back passes its own
    * target here instead.
    */
-  render(target?: RenderTarget | null): void
+  render(target?: RenderTarget | null, delta?: number): void
   /** What the scene pass draws into — the radiance before the curve. */
   readonly sceneTarget: RenderTarget
   dispose(): void
 }
 
 export interface SensorFrame {
+  readonly pictureEpoch?: number
+  readonly pictureDebug?: PictureDebug
   readonly lens: Lens
   readonly settings: SensorSettings
   readonly time: number
@@ -208,15 +240,37 @@ export function createSensor(
   scene: Scene,
   camera: Camera,
   frame?: () => SensorFrame,
+  preference?: Picture,
+  diagnostic?: 'bilinear',
 ): Sensor {
   const exposure = new ExposureMeter()
   const history = new SensorHistory()
   const automaticAvailable = 'isWebGPUBackend' in renderer.backend
   let requestedMode: SensorSettings['mode'] | undefined
-  const shape = sceneTargetShape(renderer)
+  const picture = resolvePicture(
+    preference ?? DEFAULT_PICTURE,
+    automaticAvailable ? 'webgpu' : 'webgl',
+  )
+  const existingShape = sceneTargetShape(renderer)
+  const shape: SceneTargetShape = {
+    ...existingShape,
+    // Explicitly declared test fixtures retain their sample count unless a
+    // picture preference is supplied by the scene adapter.
+    samples:
+      preference === undefined
+        ? existingShape.samples
+        : pictureSamples(picture),
+    temporal: picture.aa === 'temporal',
+    ...(renderer.reversedDepthBuffer ? { depthType: FloatType } : {}),
+  }
+  declareSceneTarget(renderer, shape)
   const scenePass = pass(scene, camera, { samples: shape.samples })
+  scenePass.renderTarget.depthTexture!.type =
+    shape.depthType ?? scenePass.renderTarget.depthTexture!.type
+  scenePass.setResolutionScale(1 / pictureRatio(picture))
+  if (shape.optics === true || shape.temporal === true)
+    scenePass.setMRT(sensorMrt(shape.temporal, shape.optics === true))
   if (shape.optics === true) {
-    scenePass.setMRT(sensorMrt())
     scenePass.getTextureNode('motion')
     const mask = scenePass.getTextureNode('meterMask').value
     mask.format = RedFormat
@@ -240,7 +294,39 @@ export function createSensor(
    * on. Keyed on the render call, the pass runs exactly when `render()` does
    * — once per presented frame in the app, once per call everywhere else.
    */
+  if (shape.temporal === true) {
+    scenePass.getTextureNode('velocity').value.format = RGFormat
+    const reactive = scenePass.getTextureNode('reactive').value
+    reactive.format = RGBAFormat
+    reactive.type = UnsignedByteType
+  }
   scenePass.updateBeforeType = NodeUpdateType.RENDER
+  const upscale =
+    automaticAvailable &&
+    (shape.temporal === true || picture.scale !== 'native')
+      ? createUpscale(
+          renderer,
+          {
+            color: scenePass.getTextureNode('output'),
+            depth: scenePass.getTextureNode('depth'),
+            velocity:
+              shape.temporal === true
+                ? scenePass.getTextureNode('velocity')
+                : null,
+            reactive:
+              shape.temporal === true
+                ? scenePass.getTextureNode('reactive')
+                : null,
+          },
+          camera,
+          {
+            path:
+              diagnostic ?? (shape.temporal === true ? 'temporal' : 'spatial'),
+            ratio: pictureRatio(picture),
+            sharpness: pictureSharpness(picture),
+          },
+        )
+      : null
   const motionTexture =
     shape.optics === true ? scenePass.getTextureNode('motion') : null
   const meter =
@@ -258,7 +344,9 @@ export function createSensor(
   // Pin the encode before RenderPipeline temporarily swaps the renderer to
   // linear output. The scene alpha is not the canvas alpha: present opaque.
   post.outputColorTransform = false
-  const radiance = texture(scenePass.renderTarget.texture)
+  const radiance = texture(
+    upscale?.outputTexture.value ?? scenePass.renderTarget.texture,
+  )
   const defocus =
     motionTexture === null || frame === undefined
       ? null
@@ -274,10 +362,16 @@ export function createSensor(
   const signature =
     psf === null ? null : sensorSignature(texture(psf.outputTexture.value))
   const sceneColor =
-    signature?.linear ?? vec4(scenePass.getTextureNode('output').rgb, 1)
+    signature?.linear ??
+    vec4((upscale?.outputTexture ?? scenePass.getTextureNode('output')).rgb, 1)
   const size = new Vector2()
+  // The report reads the drawing buffer too, and it is read between frames.
+  // `size` is the submitted frame's viewport — the key the defocus circle and
+  // the signature were measured at — so a getter must not move it.
+  const reportSize = new Vector2()
   let previousTime: number | null = null
   let previousGeneration = 0
+  let previousPictureKey: string | null = null
   const keyFor = (state: SensorFrame): string =>
     [
       state.settings.mode,
@@ -314,6 +408,8 @@ export function createSensor(
         scenePass.getTextureNode().rgb.min(65_504).mul(0),
         0,
       )
+      if (upscale !== null)
+        dependencies = dependencies.add(nodeObject(upscale).min(65_504).mul(0))
       if (defocus !== null)
         dependencies = dependencies.add(nodeObject(defocus).min(65_504).mul(0))
       if (motion !== null)
@@ -326,8 +422,11 @@ export function createSensor(
   buildOutput()
 
   return {
-    warm: async () => {
-      await warmPipeline(post)
+    warmUpscale: () => upscale?.prepare(),
+    warm: async (target = null) => {
+      upscale?.prepare()
+      if (upscale !== null) radiance.value = upscale.outputTexture.value
+      await warmPipeline(post, target)
       for (const optical of [defocus, motion, psf]) {
         await optical?.warm(renderer)
       }
@@ -342,7 +441,23 @@ export function createSensor(
           }
     },
     get diagnostics() {
+      renderer.getDrawingBufferSize(reportSize)
       return {
+        picture: upscale?.diagnostics ?? {
+          path: 'native',
+          renderWidth: scenePass.renderTarget.width,
+          renderHeight: scenePass.renderTarget.height,
+          displayWidth: reportSize.x,
+          displayHeight: reportSize.y,
+          phase: 0,
+          phaseCount: 1,
+          frames: 0,
+          resets: 0,
+          workingTextureBytes: 0,
+          initMs: 0,
+          gpuTimings: {},
+          debug: 'none',
+        },
         automaticAvailable,
         enhancedSkyGain:
           exposure.reading?.processing === 'enhanced' ? ENHANCED_SKY_GAIN : 1,
@@ -360,7 +475,7 @@ export function createSensor(
       }
     },
     sceneTarget: scenePass.renderTarget,
-    render(target: RenderTarget | null = null) {
+    render(target: RenderTarget | null = null, delta = 1 / 60) {
       const state = frame?.()
       let generation = 0
       if (state !== undefined) {
@@ -472,7 +587,40 @@ export function createSensor(
       const toneMapping = renderer.toneMapping
       const outputColorSpace = renderer.outputColorSpace
       const xrEnabled = renderer.xr.enabled
+      const mrt = renderer.getMRT()
+      const autoClear = renderer.autoClear
+      const transparent = renderer.transparent
+      const opaque = renderer.opaque
+      const contextNode = renderer.contextNode
+      const layers = camera.layers.mask
+      const overrideMaterial = scene.overrideMaterial
+      const sceneName = scene.name
+      beginGpuTiming(renderer)
       try {
+        const reading = exposure.reading
+        const pictureKey = [
+          state?.pictureEpoch ?? 0,
+          state?.settings.mode ?? '',
+          state?.stagingLook ?? false,
+          reading?.processing ?? '',
+          state?.historyKey ?? '',
+          state?.pinned ?? '',
+        ].join(':')
+        if (pictureKey !== previousPictureKey) {
+          upscale?.resetHistory()
+          previousPictureKey = pictureKey
+        }
+        // Enhanced is already a composed visibility domain. Its sky has a
+        // separate gain, so no scalar physical pre-exposure describes it.
+        // Photographic radiance has one pre-exposure, tracked by FSR to keep
+        // history in the current frame's storage domain as exposure adapts.
+        upscale?.beginFrame(
+          delta,
+          reading?.processing === 'photographic' ? reading.pre : 1,
+          reading?.processing === 'photographic' ? reading.residual : 1,
+          state?.pictureDebug ?? 'none',
+        )
+        if (upscale !== null) radiance.value = upscale.outputTexture.value
         post.render()
         if (state !== undefined) {
           const pre = exposure.reading!.pre
@@ -508,10 +656,21 @@ export function createSensor(
           )
         }
       } finally {
+        endGpuTiming(renderer)
+        upscale?.endFrame()
         setSceneExposure(renderer, null)
         renderer.toneMapping = toneMapping
         renderer.outputColorSpace = outputColorSpace
         renderer.xr.enabled = xrEnabled
+        renderer.setMRT(mrt)
+        renderer.setRenderTarget(target)
+        renderer.autoClear = autoClear
+        renderer.transparent = transparent
+        renderer.opaque = opaque
+        renderer.contextNode = contextNode
+        camera.layers.mask = layers
+        scene.overrideMaterial = overrideMaterial
+        scene.name = sceneName
       }
     },
     dispose() {
@@ -522,6 +681,7 @@ export function createSensor(
       psf?.dispose()
       defocus?.dispose()
       motion?.dispose()
+      upscale?.dispose()
     },
   }
 }
