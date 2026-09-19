@@ -24,6 +24,7 @@ import {
   type RegionAddress,
   regionChildren,
   regionParent,
+  standingWaterIsSampled,
   surfaceDetailFloor,
 } from '@inertialref/universe'
 import {
@@ -1489,8 +1490,12 @@ export class TerrainStreamer {
           water: field.water,
           bodyRadius: body.radius,
           // The sheet's datum, where one is drawn at all — the same answer
-          // the palette gives the material, from the same function.
-          seaLevel: seaSheetDatum(body),
+          // the palette gives the material, from the same function — unless
+          // the field sampled the water itself, in which case the sea is in
+          // `water` where the sea reaches and nowhere else.
+          seaLevel: standingWaterIsSampled(body.surface)
+            ? null
+            : seaSheetDatum(body),
         }),
       )
       built += 1

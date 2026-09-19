@@ -261,7 +261,9 @@ export const decodeTourCandidate: Decoder<TourCandidate> = strict({
   ),
   parentId: nullable(id),
   framings: list(id, 32),
-  sites: list(strict({ id, name: text(160), detail: text(512) }), 8),
+  // Six the survey searches for, and the four the drainage graph names on
+  // a world that drains: the headwater, the confluence, the mouth, the lake.
+  sites: list(strict({ id, name: text(160), detail: text(512) }), 12),
   factIds: list(id, TOUR_LIMITS.facts),
 })
 export const decodeTourContext: Decoder<TourContext> = strict({

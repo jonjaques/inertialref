@@ -5,11 +5,12 @@ import { vec3 } from '@inertialref/spatial'
 import {
   beltBand,
   type Body,
+  carveDrainage,
   coastRemap,
   coastWidth,
   craterField,
-  drainageCarve,
-  drainageDatum,
+  drainageGraph,
+  drainageLookup,
   findBody,
   GRIT_OCTAVES,
   gritCycles,
@@ -37,14 +38,16 @@ import {
   stageOn,
   surfaceKernel,
   terrainSketch,
-  tributaryValley,
-  trunkValley,
   volcanicBand,
   walkBodies,
   writeTileFrame,
 } from '@inertialref/universe'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
-import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
+import {
+  createTerrainKernel,
+  type TerrainKernel,
+  uploadSurface,
+} from './terrainKernel.ts'
 
 /*
  * The band stack, one band at a time.
@@ -157,10 +160,7 @@ function isolate(body: Body, band: Band): void {
   if (band !== 'tail') zero(SCALAR.MICRO_CEILING)
   if (band !== 'grit') zero(SCALAR.GRIT_RELIEF)
   zero(SCALAR.SEA_CLAMP)
-  ;(kernel.records.array as Float32Array).set(records)
-  ;(kernel.words.array as Uint32Array).set(words)
-  kernel.records.needsUpdate = true
-  kernel.words.needsUpdate = true
+  uploadSurface(kernel, { ...packed, records, words })
 }
 
 async function gpuTile(
@@ -293,16 +293,13 @@ function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
           bands.hypsometry * budget,
         ) *
         budget
-      return (
-        landform +
-        drainageCarve(
-          grammar,
-          trunkValley(sketch, direction),
-          tributaryValley(sketch, direction),
-          landform - drainageDatum(surface),
-          budget,
-        )
-      )
+      const graph = drainageGraph(surface)
+      if (graph === null) return landform
+      return carveDrainage(
+        graph,
+        drainageLookup(graph, sketch, direction),
+        landform,
+      ).ground
     }
     case 'coast': {
       const landform =
@@ -394,13 +391,18 @@ function bound(band: Band, body: Body, level: number): number {
       return 0.01 + 8 * offset
     case 'grit':
       return 0.005 + 2 * offset
-    // The hypsometry's own bound, plus the carve and the remap on top of
-    // it. The carve is the worse: a warped three-octave fBm sharpened by
-    // 2.6 and raised to the sixth power, so a float32 step in the warp is
-    // amplified before it is capped — measured at 9.8 × 10⁻⁶ of the budget
-    // on Earth at level 0, and 2.5 × 10⁻⁵ is that with room.
+    /*
+     * The hypsometry's own bound, plus the carve on top of it. The carve is
+     * a walk over the graph's segments at a float32 direction, and its
+     * worst term is the channel's bank: a notch of meters over a bank of
+     * tens of meters, so a position off by `6e-8 · R` — 0.4 m on Earth —
+     * is a tenth of a meter of ground. The floors themselves are float32
+     * on both sides, so they contribute an ulp of a kilometer. Half a meter
+     * plus the hypsometry's share is the bound; the measurement is in the
+     * test's own table.
+     */
     case 'drainage':
-      return 2.5e-5 * budget
+      return 2.5e-5 * budget + 0.5
     case 'coast':
       return 4e-6 * budget
   }

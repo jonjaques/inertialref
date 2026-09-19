@@ -118,6 +118,13 @@ export const DRAINAGE_SHAPE = {
   precipitation: 3.2e-8,
   /** The floodplain's half-width, in channel widths: the meander belt. */
   floodplain: 9,
+  /**
+   * How much of the landform's relief the floodplain keeps, past the bank.
+   * A plain cut to the floor exactly is a plane thirty kilometers wide, and
+   * a great river's plain read as a canal across a desert; a few percent is
+   * the terraces and the old channels a plain actually has.
+   */
+  plainRelief: 0.06,
   /** Where the bank starts, as a fraction of the channel half-width. */
   bank: 0.6,
   /**
@@ -136,17 +143,37 @@ export const DRAINAGE_SHAPE = {
   /** How far a lake node's level reaches, in cells. */
   lakeReach: 1.2,
   /**
-   * A warp under the lookup, so a segment between two nodes is a meander
-   * rather than a chord: cycles per cell and amplitude in cells. Small
-   * enough that the map stays one to one, which is what keeps a monotone
-   * floor monotone along the warped channel.
+   * The fewest nodes a fill may span and be a lake. A crater under one
+   * node fills to its spill like any pit, and a level read over a cell
+   * around one node paints every hollow within reach at that level — which
+   * is the flooded-crater field the graph exists to end. A lake is a basin
+   * the lattice can see: three nodes at one level, adjacent.
    */
-  warpCycles: 3,
-  warpAmount: 0.12,
+  lakeNodes: 3,
+  /**
+   * A warp under the lookup, so a segment between two nodes is a meander
+   * rather than a chord: cycles per cell and amplitude in cells.
+   *
+   * The product is what matters. A gradient noise at `c` cycles moves at
+   * up to about three times `c` per unit, so the warp's own slope is near
+   * `3 · cycles · amount` — under one, the map is one to one and a
+   * monotone floor stays monotone along the warped channel; over one it
+   * folds, a channel is drawn twice and a bed runs uphill between the two
+   * copies. Three cycles at 0.12 cells was 2.3, and folded.
+   */
+  warpCycles: 2,
+  warpAmount: 0.08,
 } as const
 
-/** Floats per segment record: `[ax ay az fA] [bx by bz fB] [wA wB hA hB]`. */
-export const SEGMENT_STRIDE = 12
+/**
+ * Floats per segment record:
+ * `[ax ay az fA] [bx by bz fB] [wA wB hA hB] [standing · · ·]`, where
+ * `standing` is the level of the lake or sea the reach is drowned by, or
+ * `NO_STANDING` where the bed is above every water it drains to.
+ */
+export const SEGMENT_STRIDE = 16
+/** The `standing` lane of a reach nothing drowns: below any ground. */
+export const NO_STANDING = -1e30
 
 /** The graph, as the arrays the field and the tests read. */
 export interface DrainageGraph {
@@ -170,12 +197,21 @@ export interface DrainageGraph {
   readonly order: Uint8Array
   /** The channel floor at the node, meters. */
   readonly floor: Float64Array
-  /** The lake level where the node is under standing water, else NaN. */
+  /**
+   * The standing water over the node — a lake's spill level, or the sea's
+   * datum on a node the sea reaches — else NaN.
+   */
   readonly lake: Float64Array
   /** Whether the node is under the sea. */
   readonly sea: Uint8Array
   /** The nodes in flood order, downstream first: a topological order. */
   readonly popOrder: Int32Array
+  /**
+   * Eight neighbor indices per node, −1 where a cube corner has seven. The
+   * lattice's own table, shared by every body of this size; on the graph so
+   * the kernel packer and the lake lookup read one.
+   */
+  readonly neighbors: Int32Array
   /** Mean cell size on the ground, meters. */
   readonly cellMeters: Meters
   /** The valley half-width every segment carves over, radians. */
@@ -276,16 +312,25 @@ const MARKS = CORNERS.length
 /**
  * The macro landform at a lattice node: every stage of the stack before the
  * drainage, read at the lattice's own wavelength floor, plus the crater
- * rungs coarse enough to hold a lake.
+ * rungs coarse enough to hold a lake, plus the mean of the rest.
  *
- * The same expression `evaluate` sums and in the same order, with two
+ * The same expression `evaluate` sums and in the same order, with three
  * differences a lattice node earns. An octave finer than a cell is relief
  * the flow routing cannot see and would pay for at every node, so each band
- * stops at the cell size. And the crater ladder is walked only over the
+ * stops at the cell size — which costs nothing in the mean, because a
+ * normalized noise has none. The crater ladder is walked only over the
  * rungs whose craters span two cells or more: those are the basins that
  * flood — a below-datum floor a thousand kilometers inland is a lake at its
  * own spill and not at the sea's — and the finer rungs are a hundred cell
- * tests a node for craters no node can resolve.
+ * tests a node for craters no node can resolve. And the finer rungs are
+ * not nothing: a crater is one-signed, so a ladder saturated at its fine
+ * end depresses the whole surface by a near constant — on Earth the coarse
+ * rung alone folds to −76 m through the soft limit and the whole ladder to
+ * −610 — and a lattice that left it out held every floor half a kilometer
+ * over the ground the field actually has. `fineMean` is that constant: the
+ * mean, once per body, of what the whole ladder folds to less what the
+ * coarse rungs fold to, added after the limit — the limit is a `tanh`, and
+ * the fold of a mean is not the mean of the folds.
  */
 function latticeLandform(
   surface: SurfaceParameters,
@@ -294,6 +339,7 @@ function latticeLandform(
   direction: Vec3,
   floor: Meters,
   coarseRungs: number,
+  fineMean: Meters,
 ): Meters {
   const grammar = surface.grammar
   const budget = surface.maxElevation
@@ -341,20 +387,73 @@ function latticeLandform(
       bands.ice * iceBand(sketch, grammar, direction, bands.ice * budget, floor)
   }
   let elevation = height * budget
-  if (coarseRungs > 0) {
-    elevation += softLimit(
-      ladderField(
-        sketch.latticeSeed,
-        sketch.craterLevels.slice(0, coarseRungs),
-        0,
-        grammar,
-        direction,
-        0,
-      ),
-      bands.craters * budget,
-    )
+  if (stageOn('craters', stack)) {
+    const coarse =
+      coarseRungs > 0
+        ? ladderField(
+            sketch.latticeSeed,
+            sketch.craterLevels.slice(0, coarseRungs),
+            0,
+            grammar,
+            direction,
+            0,
+          )
+        : 0
+    elevation += softLimit(coarse, bands.craters * budget) + fineMean
   }
   return elevation
+}
+
+/** Directions the fine rungs' mean is taken over: golden-angle, so nothing clusters. */
+const FINE_MEAN_SAMPLES = 256
+
+/**
+ * What the crater ladder below the lattice's coarse rungs adds to the
+ * ground in the mean, meters: the whole ladder through the soft limit less
+ * the coarse rungs through it, averaged over a spread of directions. A few
+ * hundred walks of the ladder once per body, against the tens of thousands
+ * of nodes the mean is then applied to.
+ */
+function fineRungMean(
+  sketch: TerrainSketch,
+  surface: SurfaceParameters,
+  coarseRungs: number,
+): Meters {
+  if (sketch.craterLevels.length <= coarseRungs) return 0
+  const limit = surface.grammar.bands.craters * surface.maxElevation
+  const coarse = sketch.craterLevels.slice(0, coarseRungs)
+  let total = 0
+  for (let i = 0; i < FINE_MEAN_SAMPLES; i += 1) {
+    const z = 1 - (2 * i + 1) / FINE_MEAN_SAMPLES
+    const around = i * Math.PI * (3 - Math.sqrt(5))
+    const ring = Math.sqrt(Math.max(0, 1 - z * z))
+    const direction = {
+      x: Math.cos(around) * ring,
+      y: z,
+      z: Math.sin(around) * ring,
+    }
+    const whole = ladderField(
+      sketch.latticeSeed,
+      sketch.craterLevels,
+      0,
+      surface.grammar,
+      direction,
+      0,
+    )
+    const part =
+      coarseRungs > 0
+        ? ladderField(
+            sketch.latticeSeed,
+            coarse,
+            0,
+            surface.grammar,
+            direction,
+            0,
+          )
+        : 0
+    total += softLimit(whole, limit) - softLimit(part, limit)
+  }
+  return total / FINE_MEAN_SAMPLES
 }
 
 /*
@@ -487,6 +586,9 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
       coarseRungs += 1
     }
   }
+  const fineMean = stageOn('craters', stack)
+    ? fineRungMean(sketch, surface, coarseRungs)
+    : 0
   for (let face = 0; face < 6; face += 1) {
     for (let i = 0; i < cells; i += 1) {
       for (let j = 0; j < cells; j += 1) {
@@ -511,6 +613,7 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
           direction,
           cellMeters,
           coarseRungs,
+          fineMean,
         )
       }
     }
@@ -666,6 +769,69 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
   const slopeZero = (DRAINAGE_SHAPE.slopeGain * budget) / radius
   const ria = DRAINAGE_SHAPE.ria * coastWidth(surface)
   const lakeFloor = Math.max(1, DRAINAGE_SHAPE.lakeFloor * budget)
+  /*
+   * The sea is a lake at the datum on the nodes it reaches, and on no
+   * other. The field reads standing water off these levels — the sea
+   * where a sea node is within reach, a lake's spill where a lake node is
+   * — so a crater floor a thousand kilometers inland that happens to sit
+   * under the datum is dry ground rather than a sea the ocean never
+   * reached, and a basin the flood filled stands at its own spill.
+   */
+  for (let n = 0; n < nodes; n += 1) {
+    if (isSea[n] === 1) {
+      lake[n] = sea as number
+      continue
+    }
+    if ((filled[n] as number) - (elevation[n] as number) > lakeFloor) {
+      lake[n] = filled[n] as number
+    }
+  }
+  /*
+   * A fill spanning fewer than `lakeNodes` adjacent nodes at one level is
+   * a flat, not a lake: the river crosses it at the spill and the field
+   * reads no level over it.
+   */
+  const component = new Int32Array(nodes).fill(-1)
+  const pending: number[] = []
+  for (let n = 0; n < nodes; n += 1) {
+    if (isSea[n] === 1 || Number.isNaN(lake[n] as number)) continue
+    if (component[n] !== -1) continue
+    const level = lake[n] as number
+    const members: number[] = []
+    component[n] = n
+    pending.push(n)
+    while (pending.length > 0) {
+      const m = pending.pop() as number
+      members.push(m)
+      for (let k = 0; k < 8; k += 1) {
+        const o = neighbors[m * 8 + k] as number
+        if (o < 0 || component[o] !== -1) continue
+        if (isSea[o] === 1 || (lake[o] as number) !== level) continue
+        component[o] = n
+        pending.push(o)
+      }
+    }
+    if (members.length < DRAINAGE_SHAPE.lakeNodes) {
+      for (const m of members) lake[m] = Number.NaN
+    }
+  }
+  /*
+   * A lake's outlet keeps the lake. The rim node a lake spills over sits at
+   * the lake's level exactly — the flood reached the lake through it — and
+   * a cut below that would drain the lake into its own outlet: the level
+   * read over the rim's cell stood two hundred meters over a channel cut
+   * two hundred meters under it. So the floor of any node a lake drains
+   * into directly is held at the lake's level, and the profile climbs from
+   * there downstream as it would from any floor.
+   */
+  const outlet = new Float64Array(nodes).fill(Number.NEGATIVE_INFINITY)
+  for (let n = 0; n < nodes; n += 1) {
+    const level = lake[n] as number
+    if (Number.isNaN(level) || isSea[n] === 1) continue
+    const r = receiver[n] as number
+    if (r < 0 || isSea[r] === 1 || !Number.isNaN(lake[r] as number)) continue
+    if (level > (outlet[r] as number)) outlet[r] = level
+  }
   for (let p = 0; p < nodes; p += 1) {
     const n = popOrder[p] as number
     const z = elevation[n] as number
@@ -675,8 +841,7 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
       base[n] = sea as number
       continue
     }
-    if (spill - z > lakeFloor) {
-      lake[n] = spill
+    if (!Number.isNaN(lake[n] as number)) {
       floor[n] = z
       base[n] = spill
       continue
@@ -704,7 +869,29 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
       deepest *
       gain *
       (1 - Math.exp((-DRAINAGE_SHAPE.headGain * above) / deepest))
-    floor[n] = Math.min(spill - cut, climb)
+    /*
+     * Clamped to what it climbs from, which the cap alone cannot promise
+     * once an outlet has been raised: a node just above a rim wants a cut
+     * that reaches under the rim's floor, and the river there is the lake's
+     * backwater at the lake's level instead.
+     */
+    floor[n] = Math.max(Math.min(spill - cut, climb), from, outlet[n] as number)
+  }
+  /*
+   * The drowned reach. A river meets a lake or the sea at the ria depth
+   * below its level, so the last of the bed lies under that water and the
+   * water's surface there is the lake's, not the floor's: the level a
+   * channel node stands under is its receiver's standing water where the
+   * floor is below it, carried up the tree until the bed climbs out.
+   */
+  const drowned = new Float64Array(nodes).fill(NO_STANDING)
+  for (let p = 0; p < nodes; p += 1) {
+    const n = popOrder[p] as number
+    const r = receiver[n] as number
+    if (r < 0 || isSea[n] === 1 || !Number.isNaN(lake[n] as number)) continue
+    const below = isSea[r] === 1 ? (sea as number) : (lake[r] as number)
+    const standing = Number.isNaN(below) ? (drowned[r] as number) : below
+    if ((floor[n] as number) < standing) drowned[n] = standing
   }
 
   /* --- segments in cells --------------------------------------------------- */
@@ -762,6 +949,7 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
     segments[at + 9] = halfWidth[r] as number
     segments[at + 10] = depth[n] as number
     segments[at + 11] = depth[r] as number
+    segments[at + 12] = drowned[n] as number
   }
 
   /*
@@ -899,6 +1087,7 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
     lake,
     sea: isSea,
     popOrder,
+    neighbors,
     cellMeters,
     reach,
     segments,
@@ -962,8 +1151,7 @@ export interface DrainageCarve {
   /**
    * The level of standing or running water over the sample, meters, or NaN
    * where there is none: a river's surface inside its channel, a lake's
-   * spill level over its floor. The sea is not in it — the sea is one datum
-   * per body and the sheet draws it everywhere the ground is under it.
+   * spill level over its floor, the sea's datum where the sea reaches.
    */
   readonly water: Meters
   /** How much of the sample is channel bed, 0..1. */
@@ -1033,14 +1221,22 @@ export function drainageLookup(
 }
 
 /**
- * The valley's cross-section: one over the floodplain, falling to zero at
- * the reach. `d` is the distance to the channel, `plain` the floodplain's
- * half-width and `reach` the valley's, all in the same units.
+ * The valley's cross-section: one over the bed, a few percent under one
+ * across the floodplain, falling to zero at the reach. `d` is the distance
+ * to the channel, `halfWidth` the channel's, `plain` the floodplain's and
+ * `reach` the valley's, all in the same units.
  */
-export function valleyShape(d: number, plain: number, reach: number): number {
-  if (d <= plain) return 1
+export function valleyShape(
+  d: number,
+  halfWidth: number,
+  plain: number,
+  reach: number,
+): number {
   if (d >= reach) return 0
-  return 1 - smoothstep(0, 1, (d - plain) / (reach - plain))
+  const top =
+    1 - DRAINAGE_SHAPE.plainRelief * smoothstep(halfWidth, 2 * halfWidth, d)
+  if (d <= plain) return top
+  return top * (1 - smoothstep(0, 1, (d - plain) / (reach - plain)))
 }
 
 /** The channel's own notch: one over the bed, zero past the bank. */
@@ -1058,24 +1254,35 @@ export function bedShape(d: number, halfWidth: number): number {
  *   ground = landform − max cut + max fill − max notch
  *
  * where a segment's cut is the landform's height above the floor over the
- * valley's cross-section, its fill is the floor's height above the landform
- * over the bed alone, and its notch is the channel's depth over the bed. On
- * the bed of any one segment that is the floor less the depth, whichever
- * branch applied, so the bed follows the floor and the floor never rises
- * downstream. Off the bed a fill is nothing, a cut fades to nothing at the
- * reach, and every term is a maximum of continuous terms that are zero for
- * a segment out of reach — so the set of segments a sample sees can change
- * without the ground noticing.
+ * valley's cross-section, its fill the floor's height above the landform
+ * over the same cross-section, and its notch the channel's depth over the
+ * bed. One segment alone gives `mix(landform, floor, shape) − depth · bed`:
+ * the bed at the floor less the channel's depth whichever way the landform
+ * went, the floodplain at the floor, the walls blending out to the landform
+ * at the reach. Every term is a maximum of continuous terms that are zero
+ * for a segment out of reach, so the set of segments a sample sees can
+ * change without the ground noticing.
  *
  * The fill is the term the plan's `min(landform, floor + profile)` does not
- * have, and it is what makes the bed monotone: the relief and the craters
- * are not on the lattice, so along a channel the landform dips below the
- * floor wherever a hollow of theirs falls on it, and a `min` alone would
- * leave a pond there. Alluvium is the honest name for the fill.
+ * have, and it is alluvium. The relief and the craters are not on the
+ * lattice, so along a channel the landform dips under the floor wherever a
+ * hollow of theirs falls on it, and a cut alone leaves the hollow — either
+ * a pool in the bed or, with the water held at the floor, a channel of
+ * water standing over the land beside it. The fill spans the valley's
+ * cross-section rather than the bed alone, because a fill the bed's width
+ * is a causeway with a cliff for a bank: a crater a cell wide dips hundreds
+ * of meters under a floor, and that height over a bank of tens of meters
+ * put the kernel four meters off the CPU at a float32 position. Over the
+ * whole cross-section the same height is a fan a valley wide.
  *
- * The water is the floor over the bed — the bed sits a channel depth under
- * it — and a lake's spill level over its floor, read as a kernel-weighted
- * mean over the lake nodes within reach so one lake is one level exactly.
+ * Where two valleys overlap the deeper cut and the taller fill each win,
+ * which at a confluence lays the tributary's floodplain over the trunk's as
+ * a cone that thins downstream faster than the trunk's floor drops.
+ *
+ * The water is the floor over the bed, or the lake or sea that drowns the
+ * reach where that stands higher, and a lake's spill level over its floor,
+ * read as a kernel-weighted mean over the lake nodes within reach so one
+ * lake is one level exactly.
  */
 export function carveDrainage(
   graph: DrainageGraph,
@@ -1126,15 +1333,16 @@ export function carveDrainage(
     const hA = segments[at + 10] as number
     const hB = segments[at + 11] as number
     const depth = hA + (hB - hA) * t
+    const standing = segments[at + 12] as number
     const plain = Math.min(DRAINAGE_SHAPE.floodplain * halfWidth, 0.8 * reach)
-    const shape = valleyShape(d, plain, reach)
+    const shape = valleyShape(d, halfWidth, plain, reach)
     const bed = bedShape(d, halfWidth)
     const valley = landform - floor
     if (valley >= 0) {
       const here = valley * shape
       if (here > cut) cut = here
     } else {
-      const here = -valley * bed
+      const here = -valley * shape
       if (here > fill) fill = here
     }
     const here = depth * bed
@@ -1142,7 +1350,12 @@ export function carveDrainage(
     if (bed > channel) channel = bed
     const margin = 1 - smoothstep(plain, Math.min(reach, plain * 2), d)
     if (margin > corridor) corridor = margin
-    if (bed > 0 && !(floor <= river)) river = floor
+    if (bed > 0) {
+      // The water over the bed: the floor, or the lake or sea that drowns
+      // this reach where that stands higher.
+      const level = standing > floor ? standing : floor
+      if (!(level <= river)) river = level
+    }
   }
   const lake = lakeLevelAt(graph, cell, lookup)
   let water = river
@@ -1155,7 +1368,7 @@ export function carveDrainage(
  * lake nodes within `lakeReach` of it, the cell's own and its ring.
  */
 function lakeLevelAt(graph: DrainageGraph, cell: number, lookup: Vec3): number {
-  const { neighbors } = topology(graph.cells)
+  const neighbors = graph.neighbors
   const reach = (DRAINAGE_SHAPE.lakeReach * Math.PI) / 2 / graph.cells
   let total = 0
   let weight = 0

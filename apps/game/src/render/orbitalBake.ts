@@ -22,6 +22,7 @@ import {
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
   regionAddress,
+  standingWaterIsSampled,
 } from '@inertialref/universe'
 import {
   buildPatch,
@@ -299,7 +300,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
         cover: field.cover,
         water: field.water,
         bodyRadius: body.radius,
-        seaLevel: sheet,
+        seaLevel: standingWaterIsSampled(body.surface) ? null : sheet,
       }),
     )
     render(body, patches, bake)

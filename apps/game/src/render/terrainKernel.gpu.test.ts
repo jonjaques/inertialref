@@ -19,9 +19,14 @@ import {
   walkBodies,
   writeTileFrame,
   seaDatumElevation,
+  NO_KERNEL_WATER,
 } from '@inertialref/universe'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
-import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
+import {
+  createTerrainKernel,
+  type TerrainKernel,
+  uploadSurface,
+} from './terrainKernel.ts'
 
 /*
  * The tolerance test `docs/adr/0023-the-gpu-producer.md` promises: a GPU tile
@@ -74,6 +79,8 @@ function solBody(name: string): Body {
 interface GpuTile {
   readonly elevations: Float32Array
   readonly cover: Uint8Array
+  /** As the kernel writes it: `NO_KERNEL_WATER` where the field has NaN. */
+  readonly water: Float32Array
 }
 
 /** Run one batch of tiles of one body through the kernel and split them out. */
@@ -85,10 +92,7 @@ async function gpuTiles(
   if (regions.length > MAX_TILES)
     throw new Error('too many tiles for one batch')
   const packed = surfaceKernel(body.surface, seabed)
-  ;(kernel.records.array as Float32Array).set(packed.records)
-  ;(kernel.words.array as Uint32Array).set(packed.words)
-  kernel.records.needsUpdate = true
-  kernel.words.needsUpdate = true
+  uploadSurface(kernel, packed)
   const frames = kernel.tiles.array as Float32Array
   regions.forEach((region, i) =>
     writeTileFrame(packed, region, frames, i * TILE_STRIDE * 4),
@@ -98,12 +102,14 @@ async function gpuTiles(
   await gpu.compute(kernel.compute)
   const elevations = new Float32Array(await gpu.readBuffer(kernel.elevations))
   const cover = new Uint8Array(await gpu.readBuffer(kernel.cover))
+  const water = new Float32Array(await gpu.readBuffer(kernel.water))
   return regions.map((_, i) => ({
     elevations: elevations.slice(i * kernel.samples, (i + 1) * kernel.samples),
     cover: cover.slice(
       i * kernel.interior * COVER_CHANNELS,
       (i + 1) * kernel.interior * COVER_CHANNELS,
     ),
+    water: water.slice(i * kernel.interior, (i + 1) * kernel.interior),
   }))
 }
 
@@ -120,6 +126,12 @@ function regionsAt(level: number): RegionAddress[] {
 interface Gap {
   readonly elevation: number
   readonly cover: number
+  /**
+   * The worst water level, over vertices where both sides have one; a
+   * vertex wet on one side and dry on the other counts the level's height
+   * above the ground there, which is what the sheet would show.
+   */
+  readonly water: number
   readonly reliefAtLevel: number
 }
 
@@ -150,9 +162,30 @@ function compare(
       Math.abs((got.cover[i] as number) - (field.cover[i] as number)),
     )
   }
+  let water = 0
+  const stride = HEIGHTFIELD_RESOLUTION + 2 * HEIGHTFIELD_BORDER
+  for (let row = 0; row < HEIGHTFIELD_RESOLUTION; row += 1) {
+    for (let col = 0; col < HEIGHTFIELD_RESOLUTION; col += 1) {
+      const vertex = row * HEIGHTFIELD_RESOLUTION + col
+      const ground = field.elevations[
+        (row + HEIGHTFIELD_BORDER) * stride + col + HEIGHTFIELD_BORDER
+      ] as number
+      const expected = field.water[vertex] as number
+      const actual = got.water[vertex] as number
+      const expectedWet = !Number.isNaN(expected)
+      const actualWet = actual > NO_KERNEL_WATER / 2
+      if (expectedWet && actualWet) {
+        water = Math.max(water, Math.abs(actual - expected))
+      } else if (expectedWet !== actualWet) {
+        const level = expectedWet ? expected : actual
+        water = Math.max(water, Math.max(0, level - ground))
+      }
+    }
+  }
   return {
     elevation,
     cover,
+    water,
     reliefAtLevel: field.maxElevation - field.minElevation,
   }
 }
@@ -217,20 +250,27 @@ describe('the kernel against generateHeightfield', () => {
         const tiles = await gpuTiles(body, regions)
         let elevation = 0
         let cover = 0
+        let water = 0
         let relief = 0
         regions.forEach((region, i) => {
           const gap = compare(body, region, tiles[i] as GpuTile)
           elevation = Math.max(elevation, gap.elevation)
           cover = Math.max(cover, gap.cover)
+          water = Math.max(water, gap.water)
           relief = Math.max(relief, gap.reliefAtLevel)
         })
         const limit = bound(body, level)
         rows.push(
-          `${body.name.padEnd(16)} L${String(level).padStart(2)}  elevation ${elevation.toExponential(2).padStart(9)} m of ${limit.toExponential(2)}  cover ${String(cover).padStart(2)}  (relief in tile ${relief.toFixed(1)} m)`,
+          `${body.name.padEnd(16)} L${String(level).padStart(2)}  elevation ${elevation.toExponential(2).padStart(9)} m of ${limit.toExponential(2)}  water ${water.toExponential(2).padStart(9)}  cover ${String(cover).padStart(2)}  (relief in tile ${relief.toFixed(1)} m)`,
         )
         if (elevation >= limit) {
           failures.push(
             `${body.name} L${level}: ${elevation} m against ${limit}`,
+          )
+        }
+        if (water >= limit) {
+          failures.push(
+            `${body.name} L${level}: water ${water} m against ${limit}`,
           )
         }
         if (cover > COVER_BOUND) {

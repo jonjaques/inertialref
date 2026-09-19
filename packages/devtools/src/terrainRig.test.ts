@@ -661,14 +661,15 @@ describe('the terrain verbs on a body with no ground', () => {
     /*
      * `surveySites` derives from `body.surface`, which every body carries —
      * Saturn included. Without the predicate at this boundary the Ground section
-     * draws six clickable cards for ground `visit` refuses, and the panel's own
+     * draws ten clickable cards for ground `visit` refuses, and the panel's own
      * "pick a solid body" empty state is unreachable for the bodies it is for.
      */
     const session = live()
     const { harness } = session
     expect(harness.sites('s:SOL/b:5')).toEqual([])
     expect(() => harness.descend('s:SOL/b:5')).toThrow(/no surface/)
-    expect(harness.sites('s:SOL/b:2')).toHaveLength(6)
+    // Six searched, and the four the drainage graph names on a wet world.
+    expect(harness.sites('s:SOL/b:2')).toHaveLength(10)
   })
 
   it('take the same addresses every other verb takes', () => {

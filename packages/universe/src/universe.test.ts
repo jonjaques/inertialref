@@ -78,6 +78,7 @@ import {
   regionParent,
   regionSize,
   seaDatumElevation,
+  waterLevelAt,
   surfaceDetailFloor,
 } from './terrain.ts'
 
@@ -1123,9 +1124,17 @@ describe('the ground has one owner', () => {
       for (let col = 0; col < HEIGHTFIELD_RESOLUTION; col += 1) {
         const seabed = heightfieldSample(field, row, col)
         const surface = heightfieldSample(clamped, row, col)
+        // The water the field sampled over this vertex: the sea where the
+        // sea reaches, a river's surface or a lake's spill where one stands
+        // — the clamp is to that, so a river above the datum is stood on as
+        // the sea is, and the seabed shows through nowhere.
+        const water = clamped.water[
+          row * HEIGHTFIELD_RESOLUTION + col
+        ] as number
         expect(surface).toBeGreaterThanOrEqual(datum - 1e-3)
         if (seabed < datum) submarine += 1
-        else expect(surface).toBeCloseTo(seabed, 1)
+        else if (Number.isNaN(water)) expect(surface).toBeCloseTo(seabed, 1)
+        else expect(surface).toBeCloseTo(Math.max(seabed, water), 1)
       }
     }
     expect(submarine).toBeGreaterThan(0)
@@ -1135,11 +1144,12 @@ describe('the ground has one owner', () => {
      * bound above an assertion rather than a tautology.
      *
      * Asked on **dry** ground rather than on the patch, and that is the finding
-     * rather than a convenience: the sea clamp is a `max` applied to both
-     * fields, so every submarine sample has drawn and canonical equal by
-     * construction — and the patch this test picks is entirely under water, so
-     * a difference counted there is always zero and the assertion could never
-     * fail.
+     * rather than a convenience: the water clamp is a `max` applied to both
+     * fields, so every sample under the sea, a lake or a river has drawn and
+     * canonical equal by construction — and the patch this test picks is
+     * entirely under water, so a difference counted there is always zero and
+     * the assertion could never fail. Dry means no water stands over the
+     * ground: neither the sea's datum nor the level the drainage stage wrote.
      */
     const sea = seaDatumElevation(body.surface) as number
     let dry = 0
@@ -1155,7 +1165,10 @@ describe('the ground has one owner', () => {
         z,
         Math.sin(around) * ring,
       )
-      if (groundElevation(body.surface, direction) <= sea + 1) continue
+      const ground = groundElevation(body.surface, direction)
+      const water = waterLevelAt(body.surface, direction)
+      if (ground <= sea + 1) continue
+      if (!Number.isNaN(water) && ground <= water + 1) continue
       dry += 1
       const gap = Math.abs(
         drawnElevation(body.surface, direction) -

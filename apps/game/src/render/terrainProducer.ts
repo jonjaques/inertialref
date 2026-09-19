@@ -9,6 +9,7 @@ import {
   heightfieldStride,
   type KernelSurface,
   MAX_TILE_LEVEL,
+  NO_KERNEL_WATER,
   type SurfaceParameters,
   surfaceKernel,
   TILE_STRIDE,
@@ -21,7 +22,11 @@ import {
 } from '@inertialref/workers'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { QUERY } from '../pages/paths.ts'
-import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
+import {
+  createTerrainKernel,
+  type TerrainKernel,
+  uploadSurface,
+} from './terrainKernel.ts'
 
 /*
  * The GPU tile producer: `HeightfieldSource` over `terrainKernel.ts`.
@@ -226,10 +231,7 @@ export function createTileProducer(
     try {
       const packed = surfaceKernel(head.surface, head.request.seabed)
       if (packed !== uploaded) {
-        ;(kernel.records.array as Float32Array).set(packed.records)
-        ;(kernel.words.array as Uint32Array).set(packed.words)
-        kernel.records.needsUpdate = true
-        kernel.words.needsUpdate = true
+        uploadSurface(kernel, packed)
         uploaded = packed
       }
       const frames = kernel.tiles.array as Float32Array
@@ -329,6 +331,11 @@ export function createTileProducer(
         if (elevation < min) min = elevation
         if (elevation > max) max = elevation
       }
+    }
+    // The kernel's "no water" is a sentinel below any ground; the field's is
+    // NaN, which WGSL cannot write as a constant. One convention past here.
+    for (let i = 0; i < water.length; i += 1) {
+      if ((water[i] as number) <= NO_KERNEL_WATER / 2) water[i] = Number.NaN
     }
     return {
       region: request.region,

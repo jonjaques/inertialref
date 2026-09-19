@@ -331,6 +331,8 @@ function evaluate(
   const budget = surface.maxElevation
   if (bareGround(surface)) {
     if (out !== null) packCover(BARE_COVER, out, at)
+    sampledLevel = Number.NaN
+    if (water !== null) water[waterAt] = Number.NaN
     return 0
   }
   const bands = grammar.bands
@@ -421,6 +423,7 @@ function evaluate(
     elevation = coastRemap(elevation, stack.sea, width)
     if (!Number.isNaN(level)) level = coastRemap(level, stack.sea, width)
   }
+  sampledLevel = level
   if (water !== null) water[waterAt] = level
   if (out !== null) {
     packCover(
@@ -500,7 +503,42 @@ export function groundCoverAt(
     sea,
     seabed,
   })
-  return clamp && sea !== null ? Math.max(elevation, sea) : elevation
+  if (!clamp || sea === null) return elevation
+  return Math.max(elevation, waterSurface(surface, sea))
+}
+
+/**
+ * The level the drainage stage wrote for the last sample `evaluate` took,
+ * in float64, NaN where there is none.
+ *
+ * A module-level channel rather than a return, because `evaluate` returns
+ * the elevation to every caller and the level is read by two, both
+ * synchronous and both in this file, right after the call. The heightfield
+ * gets the same number through its `Float32Array`; the clamp reads this
+ * one, because a datum rounded to float32 is a datum the ocean's own test
+ * can tell from the one `seaDatumElevation` states.
+ */
+let sampledLevel = Number.NaN
+
+/**
+ * The water a sample's ground is clamped up to: the sea's datum on a body
+ * with no drainage graph, and the sample's own level where there is one —
+ * which is the sea where the sea reaches, and dry ground under an inland
+ * basin the sea never reached.
+ */
+function waterSurface(surface: SurfaceParameters, sea: Meters): Meters {
+  if (drainageGraph(surface) === null) return sea
+  return Number.isNaN(sampledLevel) ? Number.NEGATIVE_INFINITY : sampledLevel
+}
+
+/**
+ * Whether a body's standing water is sampled into `Heightfield.water` — a
+ * drainage graph exists — rather than being the one datum a body with a sea
+ * and no graph has. The mesh builder is handed a datum only in the second
+ * case.
+ */
+export function standingWaterIsSampled(surface: SurfaceParameters): boolean {
+  return drainageGraph(surface) !== null
 }
 
 /**
@@ -622,8 +660,19 @@ export function groundElevation(
   direction: Vec3,
 ): Meters {
   const sea = seaDatumElevation(surface)
-  const elevation = elevationAt(surface, direction)
-  return sea === null ? elevation : Math.max(elevation, sea)
+  if (sea === null) return elevationAt(surface, direction)
+  // The level the drainage stage wrote, read beside the elevation: on a
+  // body with a graph the clamp is to the water that stands *here*, which
+  // is the sea only where the sea reaches.
+  const elevation = evaluate(
+    surface,
+    Vec.normalize(direction),
+    null,
+    0,
+    null,
+    0,
+  )
+  return Math.max(elevation, waterSurface(surface, sea))
 }
 
 /**
@@ -976,12 +1025,12 @@ export interface Heightfield {
    */
   readonly cover: Uint8Array
   /**
-   * The level of any lake or river over each vertex, meters relative to the
-   * datum, NaN where there is none; `resolution²` of them, unbordered as the
-   * cover is and for the same reason. The sea is not in it — one datum per
-   * body, which the mesh builder is handed beside this — so a vertex under a
-   * lake carries the lake's spill level here and the sea's from the datum,
-   * and the sheet stands at whichever is higher.
+   * The level of any water over each vertex, meters relative to the datum,
+   * NaN where there is none; `resolution²` of them, unbordered as the cover
+   * is and for the same reason. On a body with a drainage graph it is the
+   * whole of the sheet — the sea where the sea reaches, a lake's spill, a
+   * river's surface — and the mesh builder is handed no datum beside it; on
+   * a body without one the sea is the datum the builder is handed.
    */
   readonly water: Float32Array
   /** Over the patch itself. The border is generated but not summarized. */

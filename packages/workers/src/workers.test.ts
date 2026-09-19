@@ -296,9 +296,10 @@ describe('terrain task', () => {
     // 33² rather than the elevations' 37². See `cover.ts`.
     expect(result.cover).toBeInstanceOf(Uint8Array)
     expect(result.cover.length).toBe(33 * 33 * COVER_CHANNELS)
-    // Both declared transferable, which is what keeps a planet's worth of
-    // patches from being copied twice per frame.
-    expect(generateHeightfieldTask.transfers?.(result)).toHaveLength(2)
+    // All three declared transferable, which is what keeps a planet's worth
+    // of patches from being copied twice per frame.
+    expect(result.water.length).toBe(33 * 33)
+    expect(generateHeightfieldTask.transfers?.(result)).toHaveLength(3)
 
     const again = await p.run(generateHeightfieldTask, payload)
     expect(Array.from(again.elevations)).toEqual(Array.from(result.elevations))
