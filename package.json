@@ -47,7 +47,8 @@
     "shapes:build": "node apps/ingest/src/main.ts shapes",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
     "check": "node scripts/check.mjs",
-    "check:gate": "node scripts/check.mjs --only gate"
+    "check:gate": "node scripts/check.mjs --only gate",
+    "presets:ledger": "vitest run apps/headless/src/pictureLedger.test.ts --update"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",

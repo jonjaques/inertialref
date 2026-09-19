@@ -356,6 +356,9 @@ importers:
       '@inertialref/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@inertialref/rendering':
+        specifier: workspace:*
+        version: link:../../packages/rendering
       '@inertialref/shared':
         specifier: workspace:*
         version: link:../../packages/shared

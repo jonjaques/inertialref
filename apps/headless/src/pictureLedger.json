@@ -1,0 +1,470 @@
+{
+  "viewport": {
+    "width": 480,
+    "height": 320
+  },
+  "pictures": [
+    {
+      "id": "earthrise",
+      "address": "g:milky-way/s:SOL/b:2.0",
+      "body": "e7f37f13c0a7de78",
+      "framing": "rise",
+      "time": 0,
+      "fovDeg": 20,
+      "lens": {
+        "focalLength": 68.05538184,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 5660364.256
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 109456.2,
+      "fill": 1,
+      "tracking": null,
+      "surface": {
+        "latitude": 0.02532186198,
+        "longitude": -1.577667591,
+        "height": 109456.2,
+        "groundElevation": -2861.420465,
+        "radius": 1843994.78
+      },
+      "terrain": {
+        "patches": 90,
+        "deepest": 5,
+        "shallowest": 3,
+        "visited": 154,
+        "culled": 27
+      }
+    },
+    {
+      "id": "blue-marble",
+      "address": "g:milky-way/s:SOL/b:2",
+      "body": "0faea8125ed0376a",
+      "framing": "compose",
+      "time": 0,
+      "fovDeg": 65,
+      "lens": {
+        "focalLength": 18.83622693,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 66545849.27
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 60167712.27,
+      "fill": 0.1692307692,
+      "tracking": null,
+      "surface": null,
+      "terrain": null
+    },
+    {
+      "id": "night-side",
+      "address": "g:milky-way/s:SOL/b:2",
+      "body": "0faea8125ed0376a",
+      "framing": "compose",
+      "time": 0,
+      "fovDeg": 65,
+      "lens": {
+        "focalLength": 18.83622693,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 20779658.51
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 14401521.51,
+      "fill": 0.55,
+      "tracking": null,
+      "surface": null,
+      "terrain": null
+    },
+    {
+      "id": "the-rings",
+      "address": "g:milky-way/s:SOL/b:5",
+      "body": "b8aa9efc0314573a",
+      "framing": "compose",
+      "time": 0,
+      "fovDeg": 80,
+      "lens": {
+        "focalLength": 14.30104311,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 196350197.4
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 136082197.4,
+      "fill": 0.446875,
+      "tracking": null,
+      "surface": null,
+      "terrain": null
+    },
+    {
+      "id": "titans-haze",
+      "address": "g:milky-way/s:SOL/b:5.5",
+      "body": "7e4544ec19f1f318",
+      "framing": "compose",
+      "time": 0,
+      "fovDeg": 65,
+      "lens": {
+        "focalLength": 18.83622693,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 6873077.103
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 4298377.103,
+      "fill": 0.6769230769,
+      "tracking": null,
+      "surface": null,
+      "terrain": null
+    },
+    {
+      "id": "raking-mars",
+      "address": "g:milky-way/s:SOL/b:3",
+      "body": "227930ef7c186809",
+      "framing": "compose",
+      "time": 0,
+      "fovDeg": 65,
+      "lens": {
+        "focalLength": 18.83622693,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 11064653.55
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 7668453.555,
+      "fill": 0.55,
+      "tracking": null,
+      "surface": null,
+      "terrain": null
+    },
+    {
+      "id": "jupiter-and-company",
+      "address": "g:milky-way/s:SOL/b:4",
+      "body": "1d916eecf65118d9",
+      "framing": "compose",
+      "time": 0,
+      "fovDeg": 65,
+      "lens": {
+        "focalLength": 18.83622693,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 232917440.7
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 161425440.7,
+      "fill": 0.55,
+      "tracking": null,
+      "surface": null,
+      "terrain": null
+    },
+    {
+      "id": "centauri-daybreak",
+      "address": "g:milky-way/s:HIP71683/b:1",
+      "body": "3e65ba80e2d42c2f",
+      "framing": "camera",
+      "time": 0,
+      "fovDeg": 55,
+      "lens": {
+        "focalLength": 23.05178552,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 30023111.05
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 313352.1116,
+      "fill": 1,
+      "tracking": null,
+      "surface": {
+        "latitude": 0.4238033389,
+        "longitude": -0.836599388,
+        "height": 313352.1116,
+        "groundElevation": -262.1800575,
+        "radius": 8146892.722
+      },
+      "terrain": {
+        "patches": 38,
+        "deepest": 4,
+        "shallowest": 3,
+        "visited": 94,
+        "culled": 34
+      }
+    },
+    {
+      "id": "tau-ceti-moonrise",
+      "address": "g:milky-way/s:HIP8102/b:2.1",
+      "body": "be0476d08a0fb26d",
+      "framing": "camera",
+      "time": 0,
+      "fovDeg": 42,
+      "lens": {
+        "focalLength": 31.26106878,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 1783447.976
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 60000,
+      "fill": 1,
+      "tracking": null,
+      "surface": {
+        "latitude": -0.01728890429,
+        "longitude": 1.628923627,
+        "height": 60000,
+        "groundElevation": -305.8359225,
+        "radius": 525041.666
+      },
+      "terrain": {
+        "patches": 44,
+        "deepest": 3,
+        "shallowest": 2,
+        "visited": 90,
+        "culled": 25
+      }
+    },
+    {
+      "id": "far-ringrise",
+      "address": "g:milky-way/s:P222_0_0_6/b:7.2",
+      "body": "856a1046647ed79c",
+      "framing": "camera",
+      "time": 0,
+      "fovDeg": 45,
+      "lens": {
+        "focalLength": 28.97056275,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 597445.8581
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 70000,
+      "fill": 1,
+      "tracking": null,
+      "surface": {
+        "latitude": -0.005076365432,
+        "longitude": 1.062960426,
+        "height": 70000,
+        "groundElevation": 129.7100007,
+        "radius": 220477.4429
+      },
+      "terrain": {
+        "patches": 11,
+        "deepest": 1,
+        "shallowest": 0,
+        "visited": 14,
+        "culled": 1
+      }
+    },
+    {
+      "id": "far-shore",
+      "address": "g:milky-way/s:P222_1_0_9/b:4",
+      "body": "de22d3e8c7482680",
+      "framing": "camera",
+      "time": 100331.95,
+      "fovDeg": 60,
+      "lens": {
+        "focalLength": 20.78460969,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 14011579.93
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 80,
+      "fill": 1,
+      "tracking": null,
+      "surface": {
+        "latitude": 0.2536578006,
+        "longitude": 0.5979225244,
+        "height": 80,
+        "groundElevation": -211.0906068,
+        "radius": 3979372.613
+      },
+      "terrain": {
+        "patches": 720,
+        "deepest": 16,
+        "shallowest": 5,
+        "visited": 1050,
+        "culled": 69
+      }
+    },
+    {
+      "id": "tau-ceti-dusk",
+      "address": "g:milky-way/s:HIP8102/b:1",
+      "body": "28b2c5d9855053d0",
+      "framing": "camera",
+      "time": 120049.6227,
+      "fovDeg": 60,
+      "lens": {
+        "focalLength": 20.78460969,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": 0.6,
+        "elevation": 0.25,
+        "distance": 26469624.99
+      },
+      "look": {
+        "yaw": 0,
+        "pitch": 0
+      },
+      "altitude": 120,
+      "fill": 1,
+      "tracking": null,
+      "surface": {
+        "latitude": -0.7463223205,
+        "longitude": -0.9929848321,
+        "height": 120,
+        "groundElevation": 1660.079879,
+        "radius": 7519559.746
+      },
+      "terrain": {
+        "patches": 876,
+        "deepest": 18,
+        "shallowest": 5,
+        "visited": 1258,
+        "culled": 69
+      }
+    },
+    {
+      "id": "solar-crescent",
+      "address": "g:milky-way/s:SOL/b:2.0",
+      "body": "e7f37f13c0a7de78",
+      "framing": "camera",
+      "time": 0,
+      "fovDeg": 2.525289077,
+      "lens": {
+        "focalLength": 68.05538184,
+        "gauge": 24,
+        "zoom": 8,
+        "fStop": 2.8,
+        "shutter": 0.01666666667,
+        "iso": 100
+      },
+      "state": {
+        "azimuth": -2.679104696,
+        "elevation": -0.00008542698856,
+        "distance": 391192170.6
+      },
+      "look": {
+        "yaw": 0.009,
+        "pitch": 0.004
+      },
+      "altitude": 389454770.6,
+      "fill": 0.2015359926,
+      "tracking": null,
+      "surface": null,
+      "terrain": null
+    }
+  ]
+}
