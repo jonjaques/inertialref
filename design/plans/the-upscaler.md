@@ -1,70 +1,91 @@
-# The upscaler: remaining acceptance
+# The upscaler: implementation and reproduction
 
-The picture record, reversed WebGPU depth, spatial and temporal reconstruction,
-URL overrides, cut declarations and diagnostics are implemented.
+The implementation and preset acceptance are complete.
 [ADR-0044](../../docs/adr/0044-the-sensor-reconstructs-the-display.md) records
-the architecture; [rendering](../../docs/concepts/rendering.md#the-picture-record-and-reconstruction)
+the architecture, complete-frame measurements, image comparisons, resource
+lifetime and fallback evidence. [Rendering](../../docs/concepts/rendering.md#the-picture-record-and-reconstruction)
 and [the harness](../../docs/guides/harness.md#measuring-the-picture) describe
-the implemented behavior. This plan holds the measurements and image acceptance
-that are still open. Library performance figures are not application results.
+the controls and diagnostics. This file retains the reproduction procedure.
 
-## Compare the complete frame outside Sol
+## Restore the shipped external-system presets
 
-Use generated-world summits on Proxima Centauri b and Gliese 1061 d, plus an
-orbit and a moving hull over generated terrain. Record each exact body address,
-seed, stance, lens, photographic instant and surface record. Hold CSS size at
-1600×900 and run DPR 1 and 2 separately; display-referred terrain selection makes
-them different workloads.
+Use the committed presets without substituting generated summit sites:
 
-For each point, compare native MSAA, spatial Quality and Performance, temporal
-Quality and Performance, temporal native, and the bilinear diagnostic. Record
-actual render/display dimensions, converged patch counts and the median of
-repeated `ir.gpu()` samples after an excluded warm-up. Detailed timing supplies
-per-pass reconstruction readings; report them separately from the complete
-chain. Name the machine, browser, build and concurrent load. A faster compute
-pass does not establish a faster presented frame.
+| ID                  | Shipped label           |
+| ------------------- | ----------------------- |
+| `tau-ceti-dusk`     | Tau Ceti Dusk           |
+| `far-shore`         | The Far Shore           |
+| `far-ringrise`      | Rings Beyond the Center |
+| `centauri-daybreak` | Centauri Daybreak       |
+| `tau-ceti-moonrise` | Under Tau Ceti III      |
 
-Measure cold initialization through `ir.picture().initMs` and record
-`workingTextureBytes` at both display ratios. That count covers raw upscaler
-textures only, not total device VRAM. A resize and repeated picture changes
-must release the previous working textures.
+Restore with `ir.preset(id)` and record `ir.capturePicture(id, label)` so the
+address, seed, generation versions, stance, held time, lens and processing
+travel with the result. Wait for `ir.terrain().pending` to reach zero and record
+patch count, render/display dimensions, browser, machine and build. The
+quantitative matrix uses Tau Ceti Dusk and The Far Shore; all five presets
+receive runtime image checks. Keep CSS size at 1600 × 900 and run DPR 1 and 2
+separately, since the display-referred terrain selection changes their workloads.
 
-## Inspect the reconstructed image and motion
+## Measure the complete presented frame
 
-Capture native and spatial plates at the same stance, inspect edges and fine
-ground detail, and report image error beside the pictures. For temporal plates,
-allow at least `phaseCount` presented frames after every cut and compare at a
-recorded phase. Two boots of the same build define the plate's variation before
-any native-versus-temporal error is judged.
+Pause the world, hide chrome and instrument layers, and select standard
+sharpness. At each preset and DPR, compare native MSAA, spatial Quality and
+Performance with MSAA, and temporal Native, Quality and Performance. Change
+the picture through the preference or settings panel while retaining the
+renderer. Record its identity and `ir.world.stateHash()` before and after.
 
-Inspect a moving hull silhouette, atmosphere, water, rings, flares and plumes on
-generated worlds. The `motion`, `disocclusion`, `age` and `reactivity` views must
-agree with the moving surface and reveal no retained trail through a cut.
-Exercise orbit-to-surface movement, a forced origin rebase, a resize, a preset,
-a load and a shot boundary. Include held photographic time with presentation
-frames still running, and a horizon at the near plane.
+Set `ir.timing('off')`, allow the rebuilt sensor to settle, discard one
+`await ir.gpu(60)` warm-up batch, then take five further 60-frame batches.
+Report the median milliseconds per complete presented frame. Enable
+`ir.timing('full')` afterward to collect per-pass GPU samples through
+`ir.picture()`, then turn it off again. Those samples are separate from the
+complete-frame measurements and require timestamp-query support.
 
-Depth acceptance includes near-ground layering and water over its bed outside
-Sol. Secondary small-body fixtures can probe close geometry and extreme ranges.
-The fallback must retain logarithmic depth and native rendering on WebGL while
-keeping the user's stored WebGPU preference.
+Record `initMs` and `workingTextureBytes` at both display ratios. The first
+times kernel initialization before working-texture configuration and scene
+warm-up. The second counts raw upscaler textures, excluding scene and optical
+targets, allocation padding and driver overhead; it is not total device VRAM.
+The URL `?picture=bilinear:quality` supplies a spatial diagnostic comparison
+without changing the saved preference.
 
-## Verify controls and lifecycle
+## Hold and compare the picture
 
-Confirm that off, MSAA, supersampling and temporal changes retain the renderer
-and rebuild the sensor. Compare native edge modes to their corresponding
-baseline pictures. Check the pixel detail line while resizing and switching
-display ratio, and verify that URL overrides remain absent from saved settings.
-The complete temporal target layout must warm before its first visible frame.
+Capture native, Spatial Quality and Temporal Quality at the same preset and
+display ratio. For temporal stills, let at least two `phaseCount` cycles present
+after the cut and capture at phase zero. Hold presentation through the frame
+hold helper while taking the screenshot so capture timing cannot change phase.
+Compare two boots of the same temporal setting before interpreting differences
+against native.
 
-The existing optical passes keep their separate motion/depth contract. FSR's
-dilated temporal guides do not replace the undilated surface motion and
-reciprocal depth that exclude additive overlays. Guide reuse requires a new
-compatibility measurement and is not required to complete this implementation.
+The recorded RGB8 RMSE uses a 1600 × 870 crop from DPR 1 captures, excluding the
+bottom 30 pixels of UI. State the encoding and crop with any image error;
+screenshot differences do not measure motion stability. Inspect native and
+reconstructed terrain edges, water, atmosphere, ring layers and bright effects
+across the five presets. A camera pan adds a bounded motion observation; name
+its frame count and rate rather than extending it to every flight path.
 
-## Scope
+## Check transitions and fallback
 
-Dynamic resolution, generated frames and a WebGL FSR path are outside this
-work. Terrain detail stays display-referred; a reduced render scale does not
-silently choose fewer patches. Exposure, glare and camera response remain
-[ADR-0037](../../docs/adr/0037-the-enhanced-camera.md)'s.
+Exercise off, MSAA, supersampling, Spatial Balanced and Ultra, and Temporal
+Balanced, Ultra and Native, then return to native MSAA. Track raw working
+texture creation and destruction, renderer identity, canonical hash and the
+display terrain viewport. Resize to an odd CSS size and verify rounded input
+dimensions while the camera retains the display aspect. The recorded resize
+uses 937 × 613 CSS pixels at DPR 2: 1874 × 1226 display and 1249 × 817 Quality.
+
+Restore a preset, change pose at the same body and time, and restore it again.
+Check a successful and failed save load, observatory release, a cinematic seek
+and an actual authored shot boundary. Camera discontinuities must declare cuts;
+continuous framing and repeated idle release remain quiet. For a gameplay
+save/load, compare the hash immediately and after one paused second.
+
+Force adapter acquisition to return null in an isolated Chrome document, then
+warm and render through the production renderer factory and sensor. Verify
+`WebGLBackend`, logarithmic depth, native resolution, zero FSR textures and the
+unchanged stored temporal preference. The recorded fallback probe is a
+64 × 64 scene; it does not claim full-preset WebGL image acceptance.
+
+The optical passes retain their separate undilated surface motion and
+reciprocal depth. FSR's dilated guides do not replace that contract. Dynamic
+resolution, generated frames and a WebGL FSR path remain outside this work.

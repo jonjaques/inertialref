@@ -43,9 +43,13 @@ reclaims them; they cannot match a request from the new version.
 
 The browser uses IndexedDB database `inertialref-terrain`, separate from saves.
 It defaults to 8,192 entries and 256 MiB of estimated record bytes. Tile writes,
-recency metadata and eviction share one transaction. Opening a blocked database
-or a stalled transaction fails after a bounded wait. Private-mode denial,
-quota exhaustion and transaction errors cost regeneration, not a missing tile.
+recency metadata and eviction share one transaction. At most eight storage
+transactions run at once. Opening is bounded to one second; an admitted
+transaction has five seconds, and time in the admission queue does not consume
+that timeout. Misses use read-only transactions; hits finish their recency
+update before returning. A failed open leaves that store unavailable until it
+is recreated or the page reloads. Private-mode denial, quota exhaustion and
+transaction errors cost regeneration, not a missing tile.
 
 Node uses built-in SQLite in `.data/heightfields/tiles.sqlite`, with defaults
 of 65,536 entries and 4 GiB of serialized payload bytes. Transactions make tile
@@ -104,3 +108,13 @@ A separate real-database replay verifies identical requests without another
 generator call and with the same canonical state hash. The landing runs can
 advance different numbers of simulation ticks while their streaming converges,
 so their final hashes are not compared to one another.
+
+### Measured browser reuse
+
+On the [preset measurement rig](0044-the-sensor-reconstructs-the-display.md#measured-preset-frames), a cold Tau Ceti Dusk visit recorded 1,390 misses and
+1,390 stored tiles with no storage errors. Reloading the same preset recorded
+1,390 hits, zero misses, zero writes and zero storage errors, while the visible
+terrain remained at 906 patches. After several presets, one storage sample
+held 3,727 entries and 268,401,832 accounted bytes under the 268,435,456-byte
+limit. This demonstrates reuse across a browser reload and bounded retention;
+it does not measure a browser frame-time improvement.
