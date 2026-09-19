@@ -19,6 +19,8 @@ import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { reactiveCoverage } from './sensorMrt.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 import type { Picture } from './picture.ts'
+import { installGpuTiming } from './gpuTiming.ts'
+import { setTimingLevel } from '../engine/browserTiming.ts'
 
 let gpu: GpuSession
 const SIZE = 64
@@ -71,6 +73,41 @@ const spatial: Picture = { aa: 'off', scale: 'performance', sharpness: 'off' }
 const temporal: Picture = { aa: 'temporal', scale: 'quality', sharpness: 'off' }
 
 describe('the upscaler on the physical GPU', () => {
+  it('samples GPU passes only on request and drains renderer query pools', async () => {
+    const stop = installGpuTiming(gpu.renderer)
+    const f = rig(temporal)
+    try {
+      setTimingLevel('off')
+      f.sensor.render(f.target)
+      await gpu.read(f.target)
+      expect(f.sensor.diagnostics.picture.gpuTimings).toEqual({})
+      setTimingLevel('full')
+      for (let i = 0; i < 4; i += 1) {
+        f.sensor.render(f.target)
+        await gpu.read(f.target)
+      }
+      const timings = f.sensor.diagnostics.picture.gpuTimings
+      expect(Object.keys(timings)).toContain('reconstruct')
+      expect(Object.values(timings).some((value) => value > 0)).toBe(true)
+      expect(gpu.renderer.info.render.timestamp).toBeGreaterThan(0)
+      for (let i = 0; i < 1100; i += 1) f.sensor.render(f.target)
+      await gpu.read(f.target)
+      expect(
+        gpu
+          .warnings()
+          .some((entry) => entry.message.includes('Maximum number of queries')),
+      ).toBe(false)
+      setTimingLevel('off')
+      f.sensor.render(f.target)
+      await gpu.read(f.target)
+      expect(f.sensor.diagnostics.picture.gpuTimings).toEqual({})
+    } finally {
+      setTimingLevel('off')
+      stop()
+      f.dispose()
+    }
+  })
+
   it('reconstructs a constant HDR field at display size and runs every call', async () => {
     const f = rig(spatial)
     try {

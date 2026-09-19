@@ -16,6 +16,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { passTexture, velocity } from 'three/tsl'
+import { onTimingLevel } from '../engine/browserTiming.ts'
 
 export type PictureDebug =
   | 'none'
@@ -75,6 +76,13 @@ interface RawBackend {
   get(texture: Texture): { texture?: GPUTexture }
 }
 
+/** Verified against pinned 0.2.0: the public API exposes results but no opt-in. */
+interface RawTimer {
+  enabled: boolean
+  takeSamples(): unknown[]
+  reset(): void
+}
+
 /**
  * The sensor schedules the library's raw kernels once per render call. Keeping
  * jitter outside the graph lets the sensor restore the camera after a throw.
@@ -112,6 +120,8 @@ export class UpscaleNode extends TempNode<'vec4'> {
   #bytes = 0
   #initMs = 0
   #debug: PictureDebug = 'none'
+  #timer: RawTimer | null = null
+  #stopTiming: (() => void) | null = null
 
   constructor(
     renderer: WebGPURenderer,
@@ -150,6 +160,13 @@ export class UpscaleNode extends TempNode<'vec4'> {
     if (!this.#initialized) {
       const start = performance.now()
       this.#kernel.init()
+      const timer = (this.#kernel as unknown as { _timer: RawTimer })._timer
+      this.#timer = timer
+      const supported = timer.enabled
+      this.#stopTiming = onTimingLevel((level) => {
+        timer.enabled = supported && level === 'full'
+        if (!timer.enabled) timer.reset()
+      })
       // compileAsync executes update-before dependencies too. The host input
       // must be backed before warming can dispatch the temporal kernel.
       this.#renderer.initTexture(this.#pre)
@@ -275,6 +292,10 @@ export class UpscaleNode extends TempNode<'vec4'> {
 
   override updateBefore(): undefined {
     if (this.#disposed) return
+    // The library retains a fresh-sample queue separately from its latest
+    // timings map. The interactive readout needs only the latter; drain the
+    // former each submission so a long flight cannot grow it indefinitely.
+    this.#timer?.takeSamples()
     this.#kernel.dispatch(
       {
         color: this.#inputs.color.value,
@@ -319,6 +340,7 @@ export class UpscaleNode extends TempNode<'vec4'> {
   override dispose(): void {
     if (this.#disposed) return
     this.#disposed = true
+    this.#stopTiming?.()
     if (this.#initialized) this.#kernel.dispose()
     this.#pre.dispose()
     this.#standIn.dispose()

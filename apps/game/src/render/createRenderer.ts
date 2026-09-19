@@ -1,6 +1,5 @@
 import { pictureSamples, resolvePicture, type Picture } from './picture.ts'
 import { getLogger } from '@inertialref/shared'
-import { timingDetailed } from '../engine/browserTiming.ts'
 import { runtimeFailure } from '../runtimeFailure.ts'
 import {
   watchRendererErrors,
@@ -17,6 +16,7 @@ import {
 } from './output.ts'
 import { declareSceneTarget } from './sensor.ts'
 import { installSceneOrder } from './sceneOrder.ts'
+import { installGpuTiming } from './gpuTiming.ts'
 import { createCanvasGamut, type CanvasGamut } from './gamut.ts'
 import {
   installToneCurve,
@@ -182,7 +182,7 @@ async function buildRenderer(
     // Multisampling belongs to the sensor target, not the output triangle.
     antialias: false,
     reversedDepthBuffer: true,
-    trackTimestamp: timingDetailed(),
+    trackTimestamp: false,
     powerPreference: 'high-performance',
     // The single switch. `outputType: HalfFloatType` sets *both* the canvas
     // format (`rgba16float`) and `context.configure({ toneMapping: { mode:
@@ -215,13 +215,16 @@ async function buildRenderer(
   }
   const stopErrors = watchRendererErrors(renderer, report)
   let stopValidation = (): void => {}
+  let stopTiming = (): void => {}
   const stopWatching = (): void => {
+    stopTiming()
     stopValidation()
     stopErrors()
   }
   try {
     await renderer.init()
     installSceneOrder(renderer)
+    stopTiming = installGpuTiming(renderer)
     if (runtimeFailure.getSnapshot() !== null) {
       throw new Error('Graphics startup was canceled.')
     }
