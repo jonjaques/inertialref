@@ -257,7 +257,7 @@ ir.preset('earthrise') // a PICTURE: address + framing + lens, the same frame ev
 ir.presets() // the seven, with what each one is
 ir.rise() // stand with the parent over the horizon; returns the fov it solved
 ir.aim(yawDeg, pitchDeg) // turn the head without moving the camera. (0,0) recenters
-ir.sites(address) // the named places on a body: summit basin shore rough corner pole
+ir.sites(address) // the named places: summit basin shore rough corner pole, and headwater confluence mouth lake where it drains
 ir.visit(address, { site: 'summit', height: 2 }) // stand there; moves only a CAMERA
 ir.ascend() // back to the framing the visit left
 ir.terrain() // what the live streamer holds this frame

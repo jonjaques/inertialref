@@ -1,20 +1,24 @@
-# Erosion — the rivers, and what the liquid owes
+# Erosion — what the rivers still owe
 
-The liquid phase ([ADR-0026](../../docs/adr/0026-the-liquid.md)) put a sea on
-the ground, valleys in it and a coast between them, and bought the frame back
-at a retina size. What it did not do is make a river. This page is the plan
-for the phase after it: **erosion**, which is the concept the rivers are
-missing; the **tradeoffs** that phase made for the frame, each with what it
-cost and when to revisit it; and the **defects** it left, ranked.
+[ADR-0043](../../docs/adr/0043-the-rivers-drain.md) made the rivers drain: a
+per-body graph on a jittered cube-sphere lattice, flooded from the sea, with
+a floor that never rises downstream, segments in cells the field cuts the
+ground to, standing water as a level per vertex, and the sea a lake at the
+datum on the nodes it reaches. That record holds the decision, the numbers
+and the plates. This page is what the erosion phase still owes: the
+**tradeoffs** the liquid made for the frame, each with what it cost and when
+to revisit it; the **defects** that remain, ranked; and the **phases** not
+yet landed, with what each one is done when.
 
 It is a plan, so it promises. When a phase lands, its decision moves into an
 ADR and the section here goes; cite the ADR, not this page.
 
 | Reads with                                                | For                                                |
 | --------------------------------------------------------- | -------------------------------------------------- |
+| [ADR-0043](../../docs/adr/0043-the-rivers-drain.md)       | The graph, the carve and the water, as landed      |
 | [Terrain — what is left](terrain.md)                      | The milestone this is a phase of, and its § 5 seam |
 | [Perf](perf.md)                                           | The frame's figures outside the two surfaces       |
-| [ADR-0019](../../docs/adr/0019-the-geology.md)            | The band stack the graph would sit in              |
+| [ADR-0019](../../docs/adr/0019-the-geology.md)            | The band stack the graph sits in                   |
 | [ADR-0023](../../docs/adr/0023-the-gpu-producer.md)       | The kernel every canonical band is ported to       |
 | [Content § terrain](../../docs/design/content.md#terrain) | What the bible asks a river to be                  |
 
@@ -27,182 +31,51 @@ second; a figure taken beside a test run is a figure about the test run.
 
 ---
 
-## 1. What is wrong with the rivers
+## 1. What the graph does not do yet
 
-The valleys are the zero-level strip of a noise. `valleyField` in
-`packages/universe/src/bands.ts` takes a three-octave fBm at 24 cycles round
-the body, bends it by a warp, and returns `1 − |n| · 2.6`; the tributaries are
-two octaves of the same construction at 3.1 times that — 74 cycles — on their
-own seed, unwarped, cutting 0.45 as deep. That gives a
-network of curves that branch, meander and never end on a plain — which is
-what a river looks like from orbit and why the phase took it. Everything it
-gets wrong follows from the one thing the strip does not know: **which way is
-downhill.**
+The graph is 6 × 64² nodes — a cell of 156 km on Earth, 43 km on Luna — and
+below its own cell the network is the lattice's chord bent by a warp of a
+twelfth of a cell. Everything below is a consequence of that scale or of
+what the phase deliberately left for the next one.
 
-- **A channel's floor is the landform minus a cap.** `drainageCarve` cuts
-  `0.13 · budget` at most, shallowed by `1 − e^(−0.85 · aboveDatum / deepest)`
-  toward the datum. The floor therefore follows whatever the plates and the
-  swell put there: along its own length a river runs uphill, downhill and
-  uphill again, and at ground level it reads as a chain of ponds in a trench.
-  A river's floor is a datum _along the channel_, monotone to the sea, and
-  the ground is cut to it; the cap has it the other way round.
-- **Two noises do not make a tree.** The tributary field is independent of the
-  trunk field, so a tributary crosses a trunk at any angle, crosses a divide
-  as readily as a valley, and is the same width at its head as at its mouth.
-  Discharge grows downstream and every hydraulic width grows with it —
-  `w ∝ Q^0.5` is the oldest figure in fluvial geomorphology — and nothing in
-  a strip carries a discharge.
-- **The mouth is a remap.** `coastRemap` flattens the landform toward the sea
-  datum inside a band of `0.1` of the hypsometry share, whichever way the
-  ground came in. A valley meeting the sea is a delta where the river carries
-  sediment and a ria where the sea rose into it; both are shapes, and the remap
-  has one shape, a shelf.
-- **A lake is wherever the ground is under the sea datum.** The sheet is drawn
-  at one level per body, so a crater floor below datum three thousand
-  kilometers inland holds water at sea level — the flooded craters in the
-  plates are that, and they are right by accident. A basin's water stands at
-  its own spill level, which is a graph property, not a datum.
-- **Wet is a strip, not a flow.** `channelWetness` is the top 0.9% of the strip
-  field — a smoothstep from 0.991 to 0.998 — so every channel is the same
-  thread of `wet` cover, painted on its bed at one color. The material has no flow direction to advect a wave
-  along, no width to draw a sheet across, and the `biota` band does not know
-  a river is there — a riparian corridor is the most visible thing a river
-  does from orbit and there is none.
-- **The slopes are noise.** Between the valleys the ground is fBm: no gullies
-  on a hillside, no talus at the foot of a scarp, ridges rounded the way a
-  noise crest is rounded rather than sharpened the way running water leaves
-  them. The "erosion look" is a per-pixel matter and the phase spent its
-  per-pixel budget on the gradient fetch.
-
-The common cause is that erosion is a process with a direction and the field
-is a function with none. The plan is not to run the process on the planet; it
-is to run it once, coarsely and deterministically, per body, and let the field
-_read_ the result the way it already reads the plates and the crater ladder.
+- **A stream a walker stands beside is not on the lattice.** The finest
+  channel is one cell's catchment: 140 m wide on Earth, a kilometer of
+  floodplain. Below it the ground is the relief band's noise, with no
+  gully and no tributary. The plan for it is Dendry's construction — at
+  each level a grid twice as fine, a jittered key point per cell joined to
+  the nearest existing segment, cached per (body, cell, level) as segments
+  so a sample pays a distance to a bounded list — and its cost is the
+  construction per cell, not the evaluation, measured at how many a descent
+  to level 17 asks for.
+- **The mouth is a ria and nothing else.** A river reaches the sea half a
+  coast width below its datum and the sea floods the last of the valley,
+  which is a drowned mouth on every river whatever its discharge. A delta
+  where the upstream area at the coast exceeds a threshold — the last two
+  segments split into three to five distributaries over a fan raising the
+  seabed — is the downstream rule Génevaux's upstream grammar lacks.
+- **The river is painted, and its waves do not flow.** The sheet stands at
+  the floor over the bed and the material draws it as it draws the sea, with
+  the swell's phase and no flow direction; a flow uniform the waves advect
+  along wants the segment's own direction in the sample, which the walk has
+  and does not return.
+- **A lake is a kernel over its nodes.** The level a sample reads is a
+  kernel-weighted mean over the lake nodes within 1.2 cells, so a lake's
+  edge is wherever the ground rises through that level inside the shore
+  cell, and a hollow within a cell of a lake's shore that sits under its
+  level floods with it. Right where the hollow is the lake's own basin and
+  wrong across a ridge the lattice did not sample.
+- **The confluence lays a cone.** Where two valleys overlap the taller fill
+  wins, so a tributary's floodplain is laid over the trunk's near the
+  junction and thins downstream faster than the trunk's floor drops. It
+  reads as a fan and it is not one.
+- **Between the channels the slopes are still noise.** No gullies on a
+  hillside, no talus at the foot of a scarp, ridges rounded the way a noise
+  crest is rounded rather than sharpened the way running water leaves them.
+  The erosion look is a per-pixel matter and it lives in the material.
 
 ---
 
-## 2. The shape of the answer
-
-Three tiers, each bounded, each a function of the seed.
-
-### 2.1 The drainage graph is a generation product
-
-A body's rivers are a **graph**: nodes on a coarse sphere lattice, each with
-an elevation, a receiver (the neighbor it drains to), an upstream area, a
-Strahler order and a spill level; segments between them carrying a floor
-elevation at each end that never rises downstream. It is built once per body
-from the macro landform — the plate, swell and hypsometry bands are cheap at
-lattice spacing — and the sea datum, and it lives in the `TerrainSketch`
-beside the plate set and the crater ladder, because that is what it is: a
-derived, regenerable, per-body structure the field samples.
-
-The build is a fixed sequence, and every step of it is on the CPU in float64,
-because the canonical ground has to be computable wherever the contact test
-runs and a GPU's atomics do not order themselves:
-
-1. **Lattice.** The cube-sphere at `6 × 128²` — 98,304 nodes, a cell of about
-   78 km on Earth and 8 km on a Luna-sized body — sampled from the macro bands
-   only. The lattice is the same face-and-cell frame the crater ladder uses,
-   so the kernel already knows how to find its cell in integers.
-2. **Depressions.** Priority-flood from the sea (Barnes 2014) assigns every
-   node a spill level and a receiver; a node under its spill level is a lake
-   floor and the spill level is the lake's datum. On a dry world the flood
-   starts from the lowest cells and every basin is endorheic, which is what
-   Mars looks like. This step is not optional: every stream-power scheme in
-   the literature that skips breaching traps its water in pits and erodes only
-   at the first cliff (§ 8).
-3. **Accumulation.** Upstream area `A` by one pass down the receiver tree;
-   Strahler order and discharge `Q = p·A` from it. Hack's law and the Horton
-   ratios fall out and are the test.
-4. **Incision.** The steady-state stream-power profile, in closed form rather
-   than time-stepped: up every river path from its mouth,
-   `z(x) = z(0) + ∫₀ˣ u(s) / a(s) ds` with
-   `a(s) = k·A(s)^m + (k_h / C)·A(s)^(−h)` — Tzathas et al. 2024, the fluvial
-   term and the hillslope term folded in through Hack's law. One pass up the
-   tree, order-independent given the tree, tens of thousands of nodes with a
-   budget of a millisecond — a budget, not a measurement. The uplift `u` is
-   the geology's own: the orogens and the hotspots are where the ground rises, so the belt and volcanism bands _are_
-   the uplift field. The erodibility `k` reads the crust — a hardness field
-   from the same sketch, which is also what keeps the network from looking
-   self-similar at every scale. Where a body wants a landform still moving
-   rather than at equilibrium, a fixed count of Braun–Willett implicit steps
-   from that profile is the bounded, deterministic extension; it is not the
-   default.
-5. **Refinement is Dendry.** A trunk at 78 km spacing is the Mississippi; a
-   stream a walker stands beside is not on that lattice. Below the lattice the
-   network is Gaillard et al.'s construction: at each level a grid twice as
-   fine, a jittered key point per cell, level 0 joining each key point to the
-   neighbor that minimizes the **control function** — which is the incised
-   lattice's own elevation, the case the paper's Figure 15 demonstrates from a
-   16×16 downsample — and each finer level joining its key points to the
-   nearest existing segment. A segment's slope is Flint's law, its junction
-   angle Howard's `cos α = S_m / S_n`. The construction for a cell depends on
-   the cell's seed, its ring and its ancestors, never on a sibling: that is the
-   quadtree's own order-independence argument. It is cached per
-   (body, cell, level) the way tiles are, and what is cached is **segments**,
-   so a sample pays a distance to a bounded list rather than the paper's
-   per-point tree walk — 40–250 µs a point on a CPU, which is why Dendry as
-   written is not a per-sample band and as cached is the crater walk's shape.
-
-The output the field reads is **segments in cells**: for every lattice cell at
-every graph level, the bounded list of segments crossing it or its ring, each
-with two endpoints, two floor elevations, an order, an upstream area, a
-channel width and a valley half-width.
-
-### 2.2 The field reads the graph, and the carve is a floor
-
-`elevationAt` keeps its shape — a pure function of a direction — and the
-drainage band changes from a strip to a lookup: the sample's cell at each
-graph level from the trunk down to the level its spacing supports, the
-segments those cells hold, and for each the distance to the segment, the
-floor elevation interpolated along it, and a **profile** of that distance in
-the segment's own width. The ground becomes
-
-```
-ground = min(landform, floor(s) + profile(d, w, A))   over every segment s in reach
-```
-
-which is the change that makes a river run downhill: the floor is the graph's,
-and the landform is cut to it rather than lowered by a fraction. The profile
-is the valley's cross-section, and its numbers are the hydraulic geometry's:
-channel width `w = a·Q^0.5` and depth `h = c·Q^0.4` (Leopold–Maddock, with
-`Q = p·A`), a V of Flint's slope at low order, a flat floodplain once the
-valley is wider than the meander belt at fifteen to twenty channel widths, a
-terrace where a second, lower incision re-cut a floodplain. The profile
-reaches zero before the reach bound, so a segment leaving the set is not a
-step. That is the crater rule restated, and the plate rule beside it: **never
-read a value off the nearest segment**; take the `min`, which is continuous,
-over every segment inside the reach.
-
-The lattice and the reach make the per-sample cost a walk of the same shape as
-the crater walk — a cell and its ring at a handful of levels, a bounded list
-each — and that is what the kernel already does in integers. The port is the
-crater ladder's port: a storage buffer of segments per body, a cell-to-range
-table, and `terrainBands.gpu.test.ts` holding the band alone to a bound.
-
-Lakes come free. A node under its spill level puts a **water level** into the
-sample beside the elevation — the sheet's datum at that vertex — and
-`RenderPatch.water` stops being one datum per patch and becomes a field: the
-sea where the level is the sea's, the lake's spill where it is not, and the
-sheet a `max(seabed, level)` surface the mesh builder already knows how to
-make. The coarse macro band itself takes the incised lattice — bicubic on the
-same cells — so the divides sharpen and the long profiles concave between the
-segments, not only at them.
-
-**What the field does not do is erode per tile.** The literature's GPU
-stencil — Schott et al. 2024's flow routing, clamped stream power, thermal
-and deposition passes over a tile with a halo — is fast and is the wrong
-shape here twice over. A grid pass on a patch's own samples is a different
-function at every level, and CDLOD's handover requires a morphed child to be
-the parent's function at the parent's spacing; and the canonical field has to
-be reproducible on the CPU inside a patch budget of tens of milliseconds,
-where a 97² tile at three hundred iterations is a hundred by the arithmetic
-alone, unmeasured. A stencil pass is
-admissible at **one fixed lattice per body**, as a finer incision of step 4,
-and the lattice's size is set by what the CPU can build once per body — the
-phase 3 measurement, at 128² and 256² a face.
-
-### 2.3 The look is presentational, and it is per pixel
+## 2. The look is presentational, and it is per pixel
 
 Under the graph's finest level the field is still noise, and that is where
 the erosion look lives, in the drawn tail and the material rather than the
@@ -219,28 +92,23 @@ and a handful of noise taps:
   keeps them off the ridges; aligned to the graph's flow where a segment is
   in reach and to the landform's own gradient where none is. A slope clamp at
   the angle of repose lays the fan at the foot of a scarp.
-- **The riparian corridor** in `biota` and `wet`: the cover reads the nearest
-  segment's width and area, so a river is a green line from orbit and a
-  floodplain is a wider one. The two spare cover bytes are the channel.
-- **The river as a sheet.** Segments in reach of a tile become flow-aligned
-  strips in the mesh builder, drawn with `render/water.ts` and a flow uniform
-  the waves advect along; one mesh per tile, never one per valley. Below
-  hydraulic width at the lens's pixel angle the sheet gives way to the painted
-  bed, which stays.
+- **The river as a sheet with a flow.** The sheet is drawn; what it lacks is
+  a flow uniform the waves advect along, which is the segment's direction at
+  the sample. Below hydraulic width at the lens's pixel angle the sheet gives
+  way to the painted bed, which stays.
 - **The mouth.** A delta where the upstream area at the coast exceeds a
   threshold: the last two segments split into three to five distributaries
-  below the delta slope — the downstream rule Génevaux's upstream grammar
-  lacks — over a fan of deposition raising the seabed. A ria costs one scalar:
-  the graph is built against a base level a drowning depth _below_ the sea,
-  drawn per body, and the sea then floods the valley the graph cut.
+  below the delta slope over a fan of deposition raising the seabed.
 
 ---
 
 ## 3. The performance tradeoffs the liquid made
 
 Each is a measured cost against a measured loss, and each names the condition
-under which it is worth revisiting. The frame is the ADR's table: 9.5 fps
-before, 18.0 with every octave off.
+under which it is worth revisiting. The frame is ADR-0026's table: 9.5 fps
+before, 18.0 with every octave off. The drainage walk is not in it: the
+frame at the shore has not been re-measured since the graph landed, and that
+measurement is phase 6.
 
 | Tradeoff                                                    | Bought                                       | Cost                                                                                                                    | Revisit when                                                                                                                                                         |
 | ----------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -254,6 +122,7 @@ before, 18.0 with every octave off.
 | Rocks with `frustumCulled` off                              | No per-frame bounds                          | ~12 ms of the 82 ms frame at 3 m over the shore, drawn whether in view or not                                           | Per-patch instance ranges, or a GPU cull; the `rocks` lever is blunt until then                                                                                      |
 | 1,227 patches at level 17 at a 3 m stance                   | The refinement the lens asks for             | ~18 ms of extra patches behind and below the horizon                                                                    | A horizon and a back-facing test in the predicate; `terrain: coarse` is the lever now                                                                                |
 | The deposit stack, the veil, the sky shell and MSAA at 9 MP | The look                                     | 18.0 fps with every octave off — the base cost, and unattributed                                                        | First: a timestamp query per pass. `render/measure.ts` is wall clock over a drained queue, whole-frame; the per-pass instrument does not exist                       |
+| The drainage graph at 6 × 64²                               | Rivers that drain, lakes at spill            | 50–110 ms a body on the CPU, once per worker; a walk of two to nine segments a sample                                   | The lattice at 128² is four times both, and the plan's phase 3 measures it beside the refinement                                                                     |
 
 Two tradeoffs are not in the table because they are not performance. The
 canonical field is untouched by any of them — every lever is presentational,
@@ -264,46 +133,46 @@ reference: the WebGPU frame is the one the target applies to.
 
 ## 4. The defects, ranked
 
-1. **The rivers do not drain.** § 1 and § 2. Everything else on this list is
-   smaller than a river that runs uphill.
-2. **Inland lakes stand at sea level.** The spill level is the graph's; until
-   then a below-datum crater floor is a lake wherever it is.
-3. **The base cost is unattributed.** 18 fps with every lever off, and no pass
+1. **The base cost is unattributed.** 18 fps with every lever off, and no pass
    has a number. The timestamp query is the first thing to build because every
-   row of § 3 is measured against it.
-4. **A hot world's sea takes its plates with it.** `makeSurface` reads the sea
+   row of § 3 is measured against it, and the drainage walk's own cost in the
+   frame is unknown until it exists.
+2. **A hot world's sea takes its plates with it.** `makeSurface` reads the sea
    against the ground temperature, and the lithospheric weakening reads the
    sea. Proxima Centauri II lost twenty plates. The weakening wants its own
    draw — a world that _had_ a sea — rather than the drawn sea's presence.
-5. **The coast has one shape.** Shelf and plain from a remap, with no cliff
-   where the landform is steep, no delta, no ria. The graph gives the mouth a
-   discharge and a floor; the remap becomes the default and not the rule.
-6. **The cover's two spare bytes.** Slope and seat from the canonical field,
+3. **The coast has one shape, and the mouth has one.** Shelf and plain from a
+   remap, a ria at every river. The graph gives the mouth a discharge and a
+   floor; the delta is § 2's last item.
+4. **The cover's two spare bytes.** Slope and seat from the canonical field,
    which ends the 4% deposit step at a level boundary and the rock seat's
-   0.70 m tail — and the channel the riparian corridor needs.
-7. **Biota is a global noise.** 46-cycle patchiness with a 0.35 floor, and no
-   relation to water. Once `wet` carries a width, `biota` reads it.
-8. **The foam is static and the shore does not break.** A wave band that moves
+   0.70 m tail.
+5. **The network's sources.** Eight-neighbor steepest descent on a smooth
+   landform leaves seven nodes in ten as sources, so `N₁/N₂` sits near seven
+   where a mapped network reads four; the tests hold Horton's ratio at 3–9
+   and Hack's exponent at 0.45–0.75 for it. The refinement is what fills the
+   headwaters in, and the statistic is re-measured when it lands.
+6. **The foam is static and the shore does not break.** A wave band that moves
    with the swell's phase is the cheap half; a breaker is a phase.
-9. **Plate worlds carry the liquid with less shoreline variety.** The fixture
+7. **Plate worlds carry the liquid with less shoreline variety.** The fixture
    lost its plate world, and the shore was judged on a stagnant lid. Measure
    at the most-plated body before believing the coast.
-10. **The macro band tiles.** Every detail octave is one baked texture, and
-    the macro band is fetched from it with the others: it repeats every
-    `NOISE_CELLS` — 32 — cells, about 20 km of ground, at full strength for
-    any footprint under a kilometer a pixel — sixteen identical tiles across
-    a frame at 200 m/px — and the bake evaluates it unfaded at 20 km a texel.
-    Beside it, the "four kilometers" `MACRO_METERS` names is 637 m a cell in
-    practice: `macroFrequency` is `2π · R / MACRO_METERS` applied to a unit
-    direction, a 2π the period arithmetic never divides out. Either that one
-    band goes to an aperiodic evaluation, or the period is fixed at a real
-    4 km cell and the bake's detail bands are set flat; both change the look,
-    so a plate decides.
-11. **A lava sea glows on the ground and not on the sphere.** The sheet emits
-    the liquid's glow and the sphere takes only the liquid's color
-    (`planet.oceanColor`), so a magma world is red at the gate and dark from
-    orbit at night. One uniform, and the boot warm-up graph with it.
-12. **The bake's ninety-six tiles queue ahead of the streamer.** On the pool
+8. **The macro band tiles.** Every detail octave is one baked texture, and
+   the macro band is fetched from it with the others: it repeats every
+   `NOISE_CELLS` — 32 — cells, about 20 km of ground, at full strength for
+   any footprint under a kilometer a pixel — sixteen identical tiles across
+   a frame at 200 m/px — and the bake evaluates it unfaded at 20 km a texel.
+   Beside it, the "four kilometers" `MACRO_METERS` names is 637 m a cell in
+   practice: `macroFrequency` is `2π · R / MACRO_METERS` applied to a unit
+   direction, a 2π the period arithmetic never divides out. Either that one
+   band goes to an aperiodic evaluation, or the period is fixed at a real
+   4 km cell and the bake's detail bands are set flat; both change the look,
+   so a plate decides.
+9. **A lava sea glows on the ground and not on the sphere.** The sheet emits
+   the liquid's glow and the sphere takes only the liquid's color
+   (`planet.oceanColor`), so a magma world is red at the gate and dark from
+   orbit at night. One uniform, and the boot warm-up graph with it.
+10. **The bake's ninety-six tiles queue ahead of the streamer.** On the pool
     path the source is a FIFO the two share, so a bake starting on a descent
     delays the ground the descent is about to need. A priority lane in the
     producer and the pool is the fix; residency stops the thrash, not the
@@ -315,38 +184,24 @@ reference: the WebGPU frame is the one the target applies to.
 
 - **Order-independence is the design, not a check.** The graph depends on the
   body's seed and the macro bands; a refinement depends on its cell's seed,
-  its ring and its ancestors. Nothing depends on what was evaluated first. The
-  analytic profile is a pass up a tree the seed fixes.
+  its ring and its ancestors. Nothing depends on what was evaluated first.
 - **Every canonical structure is built on the CPU, in float64, once per
   body, in bounded time.** The GPU samples what the CPU built and never
   produces it: a droplet or pipe-model erosion accumulates through unordered
   atomics and its result is a schedule, and a per-tile stencil is a function
   of the tile. The lattice's size is the CPU's budget.
-- **A lattice decision is never taken in a float, and the field never reads
-  the nearest.** The cell is found in the kernel's integer tile frame; the
-  carve is a `min` over every segment in reach, and every profile reaches zero
-  before the reach bound. The plate rule and the crater rule, both.
-- **The kernel is a port held to a bound.** The band lands on the CPU first and
-  in the kernel second, with `terrainBands.gpu.test.ts` holding it alone. A
-  segment buffer per body and a cell-to-range table are the storage shape the
-  crater ladder's constants already have.
-- **It is a version bump.** The drainage band moves the canonical ground on
-  every wet world; `TERRAIN_ALGORITHM` goes to 5 — the crater ladder spent 4 —
-  and the loader's version record says so. Whether `SYSTEM_ALGORITHM` moves is
-  not answered by the draw order: a draw that keeps its place in the stream and
-  returns a different number is still a version
-  ([determinism](../../docs/concepts/determinism.md)). It moves if any generated
-  value does — the tilt tail spent 4 on exactly that reading — so this phase
-  spends 5 if the drainage reaches anything `system.ts` generates, and nothing
-  if it stays inside the terrain field.
-- **The sketch grows, and workers get it by value.** The budget is a few
-  megabytes per body, built once, cloned to each worker as typed arrays. The
-  GPU producer uploads it once per body; the WebGL 2 path pays the CPU band and nothing else.
+- **A lattice decision is never taken in a float where the two processors
+  could disagree, and the field never reads the nearest.** The cell a sample
+  names is a float decision the rasterizer makes safe: both cells at a
+  boundary list every segment within reach of it, and every profile reaches
+  zero before the reach bound. The plate rule and the crater rule, both.
+- **The kernel is a port held to a bound.** A band lands on the CPU first and
+  in the kernel second, with `terrainBands.gpu.test.ts` holding it alone.
 - **A term bounded by the detail tolerance cannot move the mesh.** Gullies,
   talus and the slope-damped grain are presentational and live below
-  `CANONICAL_AMPLITUDE_FLOOR`; the segment carve and the incised lattice are
-  canonical and live above it. Which side of the floor each new term sits is
-  decided before it is written.
+  `CANONICAL_AMPLITUDE_FLOOR`; the segment carve and any refinement of it
+  are canonical and live above it, and spend a version. Which side of the
+  floor each new term sits is decided before it is written.
 - **Read the papers' code; do not vendor it.** Dendry's reference is GPL-3.0
   and Johansen's filter is MPL-2.0. The constructions are the citation; the
   implementation is this repository's.
@@ -357,21 +212,17 @@ reference: the WebGPU frame is the one the target applies to.
 
 ## 6. Phases
 
-Each phase lands green, on its own, with a plate.
+Each phase lands green, on its own, with a plate. Phases 1 and 2 are
+[ADR-0043](../../docs/adr/0043-the-rivers-drain.md), with the four survey
+sites of phase 0 and the cover's channel and corridor of phase 4.
 
-| Phase | Lands                                                                                                         | Done when                                                                                                                                                                |
-| ----- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0     | The timestamp query per pass in the drive rig; four survey sites — a headwater, a confluence, a mouth, a lake | Every row of § 3 has a per-pass number at 3 m and at 2 km; `ir.preset` reaches the four sites in daylight                                                                |
-| 1     | The drainage graph in the sketch: lattice, flood, accumulation, incision                                      | Every node reaches the datum or a spill; Horton bifurcation ratio in 3–5; Hack's exponent 0.5–0.6; the build is under 50 ms across the zoo                               |
-| 2     | The field reads the graph: the floor carve, the spill levels, `TERRAIN_ALGORITHM = 5`; the kernel port        | `terrainBands.gpu.test.ts` holds the band to a named bound; a walk along any channel never gains height; the flooded craters are lakes at spill                          |
-| 3     | Dendry refinement per cell, and the incised lattice at the size the CPU affords                               | A stream at level 17 is on the graph; the divides sharpen; the per-sample cost is within 20% of the crater walk's; the lattice build is measured at 128² and 256² a face |
-| 4     | The cover reads the graph: width into `wet`, the corridor into `biota`, slope and seat in the spare bytes     | The green line from orbit; the deposit step and the seat tail gone                                                                                                       |
-| 5     | The look: gullies, talus, the derivative-damped grain; river sheets and lake sheets; the mouth                | Plates at the four sites, either side; the frame at the shore within two fps of the ADR's 16.3                                                                           |
-| 6     | The tradeoffs revisited against phase 0's numbers                                                             | § 3 rows either closed or carried with a fresh figure                                                                                                                    |
-
-Phase 1 changes nothing anyone sees and is the one that decides the rest. If
-the graph cannot be built under the budget, or the refinement is not
-order-independent, the plan stops there and the strip stays.
+| Phase | Lands                                                                                       | Done when                                                                                                                                           |
+| ----- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | The timestamp query per pass in the drive rig                                               | Every row of § 3 has a per-pass number at 3 m and at 2 km                                                                                           |
+| 3     | Dendry refinement per cell, and the lattice at the size the CPU affords                     | A stream at level 17 is on the graph; the per-sample cost is within 20% of the crater walk's; the lattice build is measured at 128² and 256² a face |
+| 4     | Slope and seat in the cover's spare bytes                                                   | The deposit step and the seat tail gone                                                                                                             |
+| 5     | The look: gullies, talus, the derivative-damped grain; a flow on the river sheet; the mouth | Plates at the four sites, either side; the frame at the shore within two fps of the ADR's 16.3                                                      |
+| 6     | The tradeoffs revisited against phase 0's numbers                                           | § 3 rows either closed or carried with a fresh figure                                                                                               |
 
 ---
 
@@ -384,7 +235,8 @@ order-independent, the plan stops there and the strip stays.
 - **A segment set that steps.** The reach bound is the rule; a profile that
   does not reach zero, or a refinement whose boundary segments disagree with
   the parent's by more than the floor, is a crease at a cell edge that no
-  unit test on a single cell sees. The test is a walk across cells.
+  unit test on a single cell sees. The test is a walk across cells, and
+  `drainage.test.ts` makes it.
 - **Dendry's construction is the cost, not its evaluation.** The paper's
   figure is 47 s for 512² on one core, and that is the per-point tree walk
   the cache removes; what remains is a construction per cell per level, and
@@ -392,14 +244,11 @@ order-independent, the plan stops there and the strip stays.
   what each costs in a worker. If it is the patch budget again, the level cap
   per body class is the lever.
 - **The cost lands on the CPU producer.** The WebGL 2 path and the worker
-  fallback pay the band per sample; the crater walk is most of a patch now and
+  fallback pay the walk per sample; the crater walk is most of a patch now and
   this is another walk. The measurement is per job across the zoo.
 - **Taste.** Hydraulically correct rivers on a noise landform can read as
-  drawn on. The incised lattice is what makes the landform agree with its
-  rivers, and it is phase 3, not phase 2 — so phase 2's plate is judged with
-  that known.
-- **The version bump moves every landed ship on a wet world.** Stated in the
-  loader's record; the same shape as v3's.
+  drawn on. The fill is what makes the valley agree with its river, and the
+  refinement is what makes the hillside agree with the valley.
 
 ---
 
@@ -420,7 +269,7 @@ terrain is then a blend of primitives with the rivers carved by a replace
 operator. 0.1–5 s for the graph over ~3,000 km²; the finished tree is
 per-point and order-independent, the growth is global. _Verdict: the right
 model for the per-body artifact — a compact vector graph the field closes
-over — and it cannot make a delta, which is why § 2.3 adds a downstream
+over — and it cannot make a delta, which is why § 2 adds a downstream
 rule._ The readable open implementation is
 [dandrino/terrain-erosion-3-ways](https://github.com/dandrino/terrain-erosion-3-ways).
 
@@ -444,8 +293,8 @@ erodibility `k(1 − ρ)` over a fractal hardness field, thermal
 `h += k_γ(α − β)` counting neighbors over a noisy critical slope, and a
 deposition pass `d = min(t, k_d·φ)`; 0.06 ms an iteration at 128² on a 3080,
 5 ms at 4096², hundreds to thousands of iterations. _Verdict: the local
-stencil is admissible at one fixed lattice per body and nowhere per tile
-(§ 2.2); the drainage area it needs is global and comes from the graph._
+stencil is admissible at one fixed lattice per body and nowhere per tile;
+the drainage area it needs is global and comes from the graph._
 
 **The analytic profile.** Tzathas, Gailleton, Steer & Cordonnier 2024,
 _Physically-based analytical erosion for fast terrain generation_, CGF 43(2)
@@ -457,8 +306,8 @@ folded in by Hack's law as `a = k·Aᵐ + (k_h/C)·A^(−h)`, `C ∈ [1.4, 2]`,
 `h = 0.6`, `m = 0.4` — at 1.8 s for 512² on a CPU against 555 s for the
 simulation it replaces. It needs a stream ordering, so it is global, and it
 documents that a GPU scheme without breaching traps its water in pits.
-_Verdict: § 2.1 step 4. Order-independent given the tree, bit-exact on the
-CPU, and it is what "steady state" means._
+_Verdict: the shape of ADR-0043's floor — a Flint climb from the receiver,
+capped — bit-exact on the CPU, and it is what "steady state" means._
 
 **Particles and pipes.** Beyer 2015 (SPH against a level set), Lague's
 droplet ([MIT](https://github.com/SebLague/Hydraulic-Erosion)), Mei,
@@ -485,7 +334,7 @@ window. Slope by Flint's law `S = ρ(2μ − 1)^(−0.6)`, junction angle by How
 heightfield** — Figure 15 amplifies a 16×16 downsample of the Alps sixteen
 times, at 0.8% depression surface against 24.5% for ridged noise. 40–250 µs a
 point on one core, embarrassingly parallel, a function of seed and position
-only. _Verdict: the strongest fit in the survey — § 2.1 step 5 — provided the
+only. _Verdict: the strongest fit in the survey — phase 3 — provided the
 tree is cached per cell as segments and the sample pays a distance, not the
 construction._ The reference is
 [mgaillard/Noise](https://github.com/mgaillard/Noise), GPL-3.0: read, do not
@@ -505,7 +354,7 @@ phasor-noise ravines aligned to the low-resolution gradient. Guérin et al.
 2022, _Gradient Terrain Authoring_
 ([code](https://github.com/eric-guerin/gradient-terrains)), models in the
 gradient domain and recovers height by a Poisson solve, which is global.
-_Verdict: the first three are § 2.3; the fourth is an authoring tool._
+_Verdict: the first three are § 2; the fourth is an authoring tool._
 
 **Planets.** Cortial, Peytavie, Galin & Guérin 2020, _Real-time
 hyper-amplification of planets_, The Visual Computer
@@ -537,17 +386,9 @@ from:
 | Steady-state relief                         | `h_max = 2.244 u/k`                   | Cordonnier 2016, the calibration for `u` and `k` |
 | Floodplain onset                            | valley width > 15–20 channel widths   | the meander belt                                 |
 
-**The ranked combination**, which § 2 is: the analytic stream-power profile
-on a seeded cube-sphere lattice per body, depression-free by priority-flood;
-Dendry's construction below it, cached as segments per cell with the lattice
-as its control function; the incised lattice as the macro band; hydraulic
-geometry from the graph's area for every width and depth; and the per-pixel
-filters for the look. Skipped, each for a named reason: droplets and pipes,
-gradient-domain authoring, a per-tile stencil in the canonical field, and any
-planet-wide meter grid.
-
 ## Related
 
+- [ADR-0043](../../docs/adr/0043-the-rivers-drain.md) — the graph as landed
 - [Terrain — what is left](terrain.md) § 2 and § 5 — the seam this fills
 - [Perf](perf.md) — the rest of the frame
 - [Streaming](../../docs/concepts/streaming.md) — the two fields and the tiles

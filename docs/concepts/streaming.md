@@ -145,11 +145,14 @@ advance at all. The consequence for anyone reading the counters: `visited`,
 ### Two fields, and which one each reader gets
 
 The detail floor and the observatory's standing camera read `drawnElevation`;
-the mesh reads `drawnGroundElevation`, which is the same field with the sea
-clamp left off — the seabed, over which the sea is drawn as a sheet of its own.
-The request says which (`seabed`), and the streamer sets it exactly where it
-hands `buildPatch` a sheet datum: a mapped body gets no sheet, its photograph
-is its sea, and its mesh keeps the clamp.
+the mesh reads `drawnGroundElevation`, which is the same field with the water
+clamp left off — the bed, over which the water is drawn as a sheet of its own.
+The request says which (`seabed`), and the streamer sets it exactly where a
+sheet is drawn: a mapped body gets no sheet, its photograph is its sea, and
+its mesh keeps the clamp. The sheet's level is the heightfield's own `water`
+on a body with a drainage graph — the sea where it reaches, a lake, a river
+— and the sea's datum handed to `buildPatch` on a body without one
+([ADR-0043](../adr/0043-the-rivers-drain.md)).
 The contact test, the saves and the survey sites read `groundElevation`. The
 drawn fields are the canonical one plus a presentational tail, and
 `drawnDivergence` publishes how far apart they may get: **1.25 m**.
