@@ -568,6 +568,25 @@ again in a neighboring system.
   worlds parted on the first tick under throttle. Every field that decides
   the next tick is one list, `CanonicalEntity`; the hash, the save and the
   restore read it, and the round-trip property varies the profile.
+- **`JSON.stringify` writes `null` for NaN and for both infinities.** A cache
+  key built through it collapsed four distinct sea levels to one, in the
+  function whose docstring promises every field travels into the key — so a
+  lookup could be answered with a tile generated from different arithmetic.
+  Non-finite numbers are spelled out. `heightfieldCache.test.ts` asks for four
+  keys from four sea levels.
+- **A memoized promise memoizes its rejection.** The browser terrain archive's
+  open carried a one-second budget, which is a guess about a busy machine and
+  not a verdict on the host; holding the rejected promise retired IndexedDB for
+  the rest of the visit and every later landing regenerated ground already on
+  disk. A rejection clears the memo. `terrainStore.test.ts` times the first
+  open out and requires the store to reach the second.
+- **A loop whose exit and whose progress come from two places.** The disk
+  archive's eviction read the triggers' running tally and made progress by
+  deleting rows: an empty table makes the subquery NULL, the delete match
+  nothing and the tally still say over budget — a synchronous spin inside an
+  open `BEGIN IMMEDIATE`, which no test timeout can interrupt, so the test for
+  it runs in a child process under a deadline and the defect reports ETIMEDOUT
+  rather than hanging the job.
 
 ## The five spikes, measured (19 Aug 2026)
 
