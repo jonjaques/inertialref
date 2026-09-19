@@ -1,3 +1,8 @@
+import {
+  isPictureDebug,
+  PICTURE_DEBUG_VIEWS,
+  type PictureDebug,
+} from '../render/upscale.ts'
 import type {
   GalaxyRenderReport,
   ObserverPose,
@@ -600,6 +605,7 @@ export class GameEngine {
   sensorDiagnostics: SensorDiagnostics | null = null
   /** Temporal image history is presentation state, outside the world hash. */
   pictureEpoch = 0
+  pictureDebug: PictureDebug = 'none'
 
   declareCut(): void {
     this.pictureEpoch += 1
@@ -896,6 +902,16 @@ export class GameEngine {
       // The one production adapter of the render side, whole.
       render: {
         declareCut: () => this.declareCut(),
+        picture: (debug) => {
+          if (debug !== undefined) {
+            if (!isPictureDebug(debug))
+              throw new Error(
+                `Unknown picture diagnostic. Choose ${PICTURE_DEBUG_VIEWS.join(', ')}.`,
+              )
+            this.pictureDebug = debug
+          }
+          return this.sensorDiagnostics?.picture ?? null
+        },
         guide: () => this.guide,
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),

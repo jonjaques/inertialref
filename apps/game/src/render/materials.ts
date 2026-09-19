@@ -160,7 +160,7 @@ export function createStarMaterial(): StarMaterial {
     pow(oneMinus(mu), 3).mul(0.55),
   )
 
-  const material = sensorRadiance(new MeshBasicNodeMaterial())
+  const material = sensorRadiance(new MeshBasicNodeMaterial(), false, false, 1)
   material.colorNode = color
     .mul(limb)
     .mul(granulation.add(mottling))
@@ -437,7 +437,12 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     return vec4(radiance, extinguished)
   })()
 
-  const material = sensorRadiance(new MeshBasicNodeMaterial())
+  const material = sensorRadiance(
+    new MeshBasicNodeMaterial(),
+    false,
+    false,
+    'alpha',
+  )
   material.colorNode = sky.rgb
   material.opacityNode = sky.a
   material.transparent = true
