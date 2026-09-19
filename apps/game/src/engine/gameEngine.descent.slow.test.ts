@@ -7,6 +7,8 @@ import {
   type PlacedPatch,
 } from './terrainStreamer.ts'
 import { headlessEngine } from './headlessEngine.ts'
+import { loadStarCatalog } from '../../../headless/src/catalog.ts'
+import { DiskHeightfieldStore } from '../../../headless/src/heightfieldStore.ts'
 
 /*
  * The ground, over one descent — the slow suite.
@@ -43,9 +45,9 @@ import { headlessEngine } from './headlessEngine.ts'
  * the same mistake `testTimeout`'s own note in `vitest.config.ts` describes one
  * order of magnitude down.
  *
- * The thing that would bring it back down is the GPU tile producer
- * ([roadmap § terrain](../../../../docs/roadmap.md#terrain)), or a test pool
- * with real worker threads in it.
+ * The disk archive reuses generated tiles across runs. A cold run still
+ * exercises canonical CPU generation; warm runs exercise the same streamed
+ * landing with verified tile records.
  */
 const STREAMING_TIMEOUT = 300_000
 
@@ -74,7 +76,11 @@ const STREAMING_TIMEOUT = 300_000
  * not fewer frames.
  */
 describe('the ground, over one descent', () => {
-  const game = headlessEngine()
+  const archive = new DiskHeightfieldStore()
+  const game = headlessEngine({
+    catalog: loadStarCatalog(),
+    heightfieldStore: archive,
+  })
 
   const settle = async (frames: number): Promise<void> => {
     for (let i = 0; i < frames; i += 1) {
@@ -96,9 +102,14 @@ describe('the ground, over one descent', () => {
   const drawn: number[] = []
 
   beforeAll(async () => {
+    game.harness.goToSystem('HIP70890')
     const target = game.harness
       .targets()
-      .find((candidate) => candidate.landable)
+      .find(
+        (candidate) =>
+          candidate.landable &&
+          candidate.address.startsWith('g:milky-way/s:HIP70890/'),
+      )
     if (target === undefined) throw new Error('nowhere to land')
 
     game.harness.orbit(target.address, 300)
@@ -248,6 +259,7 @@ describe('the ground, over one descent', () => {
 
   afterAll(() => {
     game.dispose()
+    archive.close()
   })
 
   it('keeps the ground under a landed ship, frame after frame', () => {

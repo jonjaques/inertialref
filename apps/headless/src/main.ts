@@ -28,8 +28,19 @@ import {
   DEFAULT_DROPPED_FRAME_MS,
   openSession,
   summarizeProfile,
+  summarizeBaseline,
+  terrainBaselineWithSource,
+  descentRegions,
+  measureHeightfieldSource,
 } from '@inertialref/devtools'
-import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import {
+  CachedHeightfieldSource,
+  createInlineWorker,
+  createTaskRegistry,
+  poolHeightfieldSource,
+} from '@inertialref/workers'
+import { findBody, parseAddress } from '@inertialref/universe'
+import { DiskHeightfieldStore } from './heightfieldStore.ts'
 import { loadStarCatalog } from './catalog.ts'
 import { captureSave, serializeSave } from '@inertialref/persistence'
 
@@ -54,6 +65,10 @@ const OPTIONS = {
    * takes — and every other flag here is cheap enough to leave on.
    */
   'terrain-baseline': { type: 'boolean', default: false },
+  'terrain-cache': { type: 'boolean', default: false },
+  /** Populate/replay a complete generated-world descent through the disk archive. */
+  'terrain-cache-descent': { type: 'string' },
+  'terrain-cache-clear': { type: 'boolean', default: false },
   /**
    * Report what this run put on the timeline, with no browser anywhere.
    *
@@ -132,6 +147,22 @@ const session = openSession({
 // Note `session.world` rather than a destructured `world`: loading a save
 // replaces it, and a captured reference is the exact bug the getter exists for.
 const { harness, system, target } = session
+const terrainArchive =
+  values['terrain-cache'] ||
+  values['terrain-cache-descent'] ||
+  values['terrain-cache-clear']
+    ? new DiskHeightfieldStore()
+    : null
+const terrainPool = session.pool()
+const terrainSource =
+  terrainArchive !== null && terrainPool !== null
+    ? new CachedHeightfieldSource(
+        poolHeightfieldSource(terrainPool),
+        terrainArchive,
+        'cpu',
+      )
+    : null
+if (values['terrain-cache-clear'] === true) await terrainSource?.clear()
 
 if (values['galaxy-calibration'] === true) {
   let passed = false
@@ -140,6 +171,7 @@ if (values['galaxy-calibration'] === true) {
     console.log(JSON.stringify(report, null, 2))
     passed = report.passed
   } finally {
+    terrainArchive?.close()
     session.dispose()
     releaseTiming?.()
   }
@@ -155,6 +187,7 @@ if (values['galaxy-plates'] !== undefined) {
       Number(values['galaxy-width']),
     )
   } finally {
+    terrainArchive?.close()
     session.dispose()
     releaseTiming?.()
   }
@@ -207,7 +240,36 @@ if (values['terrain-baseline'] === true) {
   // order, so the self-test loading Alpha Centauri first cannot change what the
   // baseline finds. It stays above the self-test only because a reader wants
   // the measurement before the twelve-line report, not because it has to.
-  console.log(harness.terrainBaseline().text)
+  console.log(
+    terrainSource === null
+      ? harness.terrainBaseline().text
+      : summarizeBaseline(
+          await terrainBaselineWithSource(
+            session.world,
+            () => performance.now(),
+            terrainSource,
+          ),
+        ),
+  )
+}
+
+if (values['terrain-cache-descent'] !== undefined && terrainSource !== null) {
+  const address = values['terrain-cache-descent']
+  const parsed = parseAddress(address)
+  if (parsed.kind !== 'body')
+    throw new Error('A terrain cache descent needs a body address')
+  const body = findBody(session.world.loadSystem(parsed.system), parsed.body)
+  if (body === undefined) throw new Error('Terrain descent body not found')
+  const descent = harness.descend(address)
+  console.log(descent.text)
+  console.log(
+    await measureHeightfieldSource(
+      body,
+      descentRegions(descent),
+      () => performance.now(),
+      terrainSource,
+    ),
+  )
 }
 
 if (values['self-test'] === true) {
@@ -244,4 +306,15 @@ if (values.profile === true) {
   )
 }
 
+if (terrainSource !== null) {
+  await terrainSource.flush()
+  let storage = null
+  try {
+    storage = (await terrainArchive?.stats()) ?? null
+  } catch {
+    /* Missing disk storage leaves generation available. */
+  }
+  console.log({ terrainCache: terrainSource.stats(), storage })
+}
+terrainArchive?.close()
 session.dispose()

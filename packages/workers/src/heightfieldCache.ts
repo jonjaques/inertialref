@@ -48,6 +48,8 @@ function stable(value: unknown): string {
     .join(',')}}`
 }
 
+const surfaceKeys = new WeakMap<SurfaceParameters, string>()
+
 /** Every field travels into the key; adding a surface/request member cannot silently omit it. */
 export function heightfieldCacheKey(
   surface: SurfaceParameters,
@@ -55,7 +57,12 @@ export function heightfieldCacheKey(
   producer: string,
   version = HEIGHTFIELD_CACHE_VERSION,
 ): string {
-  return stable({ version, producer, surface: encodeSurface(surface), request })
+  let encoded = surfaceKeys.get(surface)
+  if (encoded === undefined) {
+    encoded = stable(encodeSurface(surface))
+    surfaceKeys.set(surface, encoded)
+  }
+  return `${JSON.stringify(version)}:${JSON.stringify(producer)}:${encoded}:${stable(request)}`
 }
 
 function checksum(field: HeightfieldResponse): number {

@@ -34,6 +34,7 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
   readonly #maxBytes: number
   readonly #timeout: number
   #database: Promise<IDBDatabase> | null = null
+  readonly #digests = new Map<string, Promise<string>>()
   constructor(options: TerrainStoreOptions = {}) {
     this.#factory =
       options.factory === null
@@ -45,6 +46,21 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
       Math.floor(options.maxBytes ?? 256 * 1024 ** 2),
     )
     this.#timeout = options.timeoutMs ?? 1000
+  }
+  #key(signature: string): Promise<string> {
+    const known = this.#digests.get(signature)
+    if (known !== undefined) return known
+    const digest = crypto.subtle
+      .digest('SHA-256', new TextEncoder().encode(signature))
+      .then((bytes) =>
+        Array.from(new Uint8Array(bytes), (byte) =>
+          byte.toString(16).padStart(2, '0'),
+        ).join(''),
+      )
+    this.#digests.set(signature, digest)
+    if (this.#digests.size > 2048)
+      this.#digests.delete(this.#digests.keys().next().value!)
+    return digest
   }
   #open(): Promise<IDBDatabase> {
     if (this.#database !== null) return this.#database
@@ -137,7 +153,8 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
       }
     })
   }
-  async read(key: string): Promise<unknown> {
+  async read(signature: string): Promise<unknown> {
+    const key = await this.#key(signature)
     return this.#run<unknown>('readwrite', null, (transaction, result) => {
       const tiles = transaction.objectStore(TILES)
       const meta = transaction.objectStore(METADATA)
@@ -161,12 +178,13 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
     })
   }
   async write(record: HeightfieldCacheRecord): Promise<void> {
+    const key = await this.#key(record.key)
     if (record.bytes > this.#maxBytes || this.#maxEntries === 0) return
     await this.#run<void>('readwrite', undefined, (transaction) => {
       const tiles = transaction.objectStore(TILES)
       const meta = transaction.objectStore(METADATA)
       const tally = transaction.objectStore(TALLY)
-      const old = meta.get(record.key)
+      const old = meta.get(key)
       old.onsuccess = () => {
         const state = tally.get(0)
         state.onsuccess = () => {
@@ -175,9 +193,9 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
           next.entries += prior === undefined ? 1 : 0
           next.bytes += record.bytes - (prior?.bytes ?? 0)
           next.sequence++
-          tiles.put(record, record.key)
+          tiles.put(record, key)
           meta.put({
-            key: record.key,
+            key,
             bytes: record.bytes,
             used: next.sequence,
           })
@@ -206,7 +224,8 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
       }
     })
   }
-  async remove(key: string): Promise<void> {
+  async remove(signature: string): Promise<void> {
+    const key = await this.#key(signature)
     await this.#run<void>('readwrite', undefined, (transaction) => {
       const meta = transaction.objectStore(METADATA)
       const old = meta.get(key)
