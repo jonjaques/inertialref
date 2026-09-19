@@ -218,7 +218,7 @@ describe('the upscaler on the physical GPU', () => {
 
   it('keeps the full optical chain in the resolved linear exposure domain', async () => {
     const state: SensorFrame = {
-      lens: { ...LENS_PRESETS.flight, focusDistance: 10 },
+      lens: LENS_PRESETS.flight,
       settings: DEFAULT_SENSOR_SETTINGS,
       time: 1,
       pinned: 0,
@@ -264,7 +264,7 @@ describe('the upscaler on the physical GPU', () => {
     let epoch = 3
     let settings = DEFAULT_SENSOR_SETTINGS
     const f = rig(temporal, () => ({
-      lens: { ...LENS_PRESETS.flight, focusDistance: 10 },
+      lens: LENS_PRESETS.flight,
       settings,
       time: 1,
       pinned: null,
