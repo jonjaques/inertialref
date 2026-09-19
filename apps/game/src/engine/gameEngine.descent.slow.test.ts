@@ -257,7 +257,9 @@ describe('the ground, over one descent', () => {
     }
   }, STREAMING_TIMEOUT)
 
-  afterAll(() => {
+  afterAll(async () => {
+    if (process.env.IR_TERRAIN_CACHE_REPORT === '1')
+      console.info('terrain archive', await game.terrainCache())
     game.dispose()
     archive.close()
   })

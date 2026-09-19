@@ -43,7 +43,7 @@ function stable(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
   return `{${Object.entries(value)
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
     .join(',')}}`
 }
@@ -156,8 +156,13 @@ export function validateHeightfieldCacheRecord(
   for (const water of field.water)
     if (!Number.isFinite(water) && !Number.isNaN(water)) return null
   if (row.checksum !== checksum(field)) return null
-  const expected = heightfieldCacheRecord(key, field)
-  return row.bytes === expected.bytes ? (row as HeightfieldCacheRecord) : null
+  const bytes =
+    field.elevations.byteLength +
+    field.cover.byteLength +
+    field.water.byteLength +
+    key.length * 2 +
+    128
+  return row.bytes === bytes ? (row as HeightfieldCacheRecord) : null
 }
 
 export interface HeightfieldCacheStats {
@@ -291,14 +296,16 @@ export class CachedHeightfieldSource implements HeightfieldSource {
         if (generation === this.#state.generation) {
           const row = heightfieldCacheRecord(key, field)
           if (validateHeightfieldCacheRecord(row, key, request) !== null) {
-            const write = this.#store.write(row).then(
-              () => {
-                this.#counts.writes++
-              },
-              () => {
-                this.#counts.writeErrors++
-              },
-            )
+            const write = Promise.resolve()
+              .then(() => this.#store.write(row))
+              .then(
+                () => {
+                  this.#counts.writes++
+                },
+                () => {
+                  this.#counts.writeErrors++
+                },
+              )
             this.#writes.add(write)
             void write.then(() => this.#writes.delete(write))
           }

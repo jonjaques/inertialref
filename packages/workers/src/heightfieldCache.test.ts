@@ -189,3 +189,42 @@ describe('regenerable heightfield cache', () => {
     expect(f.cache.available).toBe(true)
   })
 })
+
+it('clearing a shared store prevents an older GPU request from repopulating it', async () => {
+  const f = fixture()
+  let resolve!: (field: ReturnType<typeof generateHeightfield>) => void
+  const gpu = new CachedHeightfieldSource(
+    {
+      kind: 'gpu',
+      available: true,
+      submit: () => ({
+        id: 2,
+        result: new Promise((done) => {
+          resolve = done
+        }),
+        cancel() {},
+      }),
+    },
+    f.store,
+    'gpu:terrain-tsl@1',
+  )
+  const job = gpu.submit(surface, request)
+  await Promise.resolve()
+  await f.cache.clear()
+  resolve(generateHeightfield(surface, request))
+  await job.result
+  await gpu.flush()
+  expect(f.rows.size).toBe(0)
+})
+
+it('a synchronous storage write failure still delivers the generated field', async () => {
+  const f = fixture()
+  vi.mocked(f.store.write).mockImplementation(() => {
+    throw new Error('storage closed')
+  })
+  await expect(f.cache.submit(surface, request).result).resolves.toHaveProperty(
+    'elevations',
+  )
+  await f.cache.flush()
+  expect(f.cache.stats().writeErrors).toBe(1)
+})
