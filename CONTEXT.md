@@ -10152,6 +10152,57 @@ seven nodes in ten as sources under eight-neighbor steepest descent. The
 plan's 50 ms and its 3–5 and 0.5–0.6 are not met, and the tests hold the
 measurement with the reason.
 
+## Two passes over one mark, and a sea that counted as a lake (19 Sep 2026)
+
+A review of the drainage branch. Two defects the 2,516 tests did not hold,
+and three things that were true and cost something.
+
+**A dedup mark that is a node index cannot survive a second pass.** The
+rasterizer counts the cells each segment reaches, then fills them, walking
+the same nodes in the same order over one `stamp` array. Marking a cell with
+the gathering segment's own node index means the first pass leaves exactly
+the value the second pass tests for: a cell whose only gatherer is `n` still
+read `n` when the fill reached `n`, was taken for "already seen in this
+gather" and was dropped — after the count had reserved its slot. The slot
+kept its zero, so the cell listed segment 0, a chord nowhere near it: 106 of
+Earth's 24,576 cells. The mark is a counter that never repeats. The rule is
+general — a mark shared by two passes has to be a token, not a datum either
+pass can reproduce.
+
+**The sea is a lake, so anything asking "is this a lake" has to say which.**
+`lake[n]` is the datum on every node the flood reached, which is what the
+field reads the ocean's level off. `riverSites` read "is `lake[n]` a number"
+and got 19,908 of Earth's nodes against 75 real lake ones, so the largest
+lake was the ocean: the site stood at the mean of every ocean direction and
+read _"standing 356 m above the datum"_, which is `seaDatumElevation`
+printed back. A real lake is at 782 m.
+
+**A cell's area is not its edge squared.** The lattice is six squares on a
+sphere: a cell covers `4πR²/nodes`, which is `8/3π` of `cellMeters²` —
+fifteen percent less. The survey multiplied the upstream count by the edge
+squared and reported a basin `√(3π/8)` too wide, 1,483 km across Earth's
+largest against 1,367. The build has always used the area; two hundred lines
+apart, they disagreed.
+
+**Asking whether a graph exists must not build one.** `standingWaterIsSampled`
+answered by calling `drainageGraph`, and `TerrainStreamer#build` asks it once
+a patch on the thread that draws — so the first patch of any wet body paid
+50–110 ms of lattice, priority flood and rasterizer for a boolean the grammar
+already determines. `drains(surface)` is that boolean and `build` gates on
+it, so the two cannot drift apart.
+
+**A zeroed `Float32Array` is not an empty one.** `water` is NaN where there
+is none, so a fixture filling it with zeros claims standing water at the
+datum over every vertex. Four did. It went unnoticed while a sea datum
+overrode them, and the moment water became sampled — `seaLevel` null, the
+gate asking `0 < 0` — the sheet stopped being built and every test stayed
+green. Nothing reads `RenderPatch.water` in a test at all; the plan carries
+that as a defect.
+
+The review's remaining findings are ranked in
+[the erosion plan](design/plans/erosion.md) § 3 and § 4 — the eight-buffer
+ceiling that blocks phases 4 and 5 above all.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
