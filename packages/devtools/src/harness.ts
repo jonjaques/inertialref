@@ -1,3 +1,4 @@
+import type { PictureReport } from './pictureReport.ts'
 import {
   GENERATION_VERSIONS,
   type WorldMatch,
@@ -262,6 +263,8 @@ export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
 export interface RenderHost {
   /** Discontinuous camera placement invalidates presentation history only. */
   declareCut(): void
+  /** Inspect reconstruction or select a diagnostic view without persisting it. */
+  picture(debugView?: string): PictureReport | null
   /** The active mode supplies this lazy adapter; a headless host need not. */
   guide?(): GuideHostPort | null
   scene(): RenderScene | null
@@ -381,6 +384,7 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
   let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
   return {
     declareCut: overrides.declareCut ?? (() => {}),
+    picture: overrides.picture ?? (() => null),
     guide: overrides.guide ?? (() => null),
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
@@ -563,6 +567,11 @@ export class GameHarness {
   lens(): LensReadout | null {
     const view = this.#host.render.lensView()
     return view === null ? null : lensReadout(view.lens, view.viewport)
+  }
+
+  /** Reconstruction dimensions, jitter phase, allocations and GPU timings. */
+  picture(debugView?: string): PictureReport | null {
+    return this.#host.render.picture(debugView)
   }
 
   /** Compact one-line summary, for a quick look from a console. */
