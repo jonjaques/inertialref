@@ -73,11 +73,16 @@ Most of `.claude/` runs without being asked.
   branch: that tree is already on one cut for a single change, and saying "you
   are not on main" to it is noise.
 - **The Stop hook runs the gate.** After a turn that touched a
-  `.ts` / `.tsx` / `.mjs` / `.json` file, `graph → lint → typecheck → test`
-  runs. A failure comes back as work to do, not a finished task. It blocks at
-  most three times per prompt, then reports and lets go. `pnpm build` is not
-  in it. The full `pnpm check` gates the push, which is what `/ship` runs, and
-  `pnpm sim --self-test` runs in CI. `IR_SKIP_GATE=1` disables it.
+  `.ts` / `.tsx` / `.mjs` / `.json` file, the `gate` group of
+  `scripts/check.mjs` runs — graph, lint, the six typecheck projects and the
+  root test suite, as a graph under the machine's core budget, about thirty
+  seconds and bounded by the suite. A failure comes back as work to do, not a
+  finished task. It blocks at most three times per prompt, then reports and
+  lets go. Every stage that passes is stamped by the content of the working
+  tree, so a `pnpm check` on the same tree reuses those stages and runs the
+  rest. `pnpm build` is not in the group; the full `pnpm check` is the same
+  graph with every stage, and CI runs it on every push. `IR_SKIP_GATE=1`
+  disables the hook.
 - **Edits are formatted for you — but only the ones the hook can see.**
   Prettier runs on `Edit`/`Write`/`MultiEdit`, so do not run `pnpm format` or
   `pnpm lint` by hand after those; you would re-read output the hooks suppress.
@@ -89,13 +94,13 @@ Most of `.claude/` runs without being asked.
   does **not** fire for subagents: an agent working in a worktree must run
   `pnpm install --frozen-lockfile --prefer-offline` itself, first.
 
-| Skill          | For                                                    |
-| -------------- | ------------------------------------------------------ |
-| `/drive`       | Driving the game: harness, headless runner, CDP driver |
-| `/ship`        | Rebase → check → verify → PR, ready. You invoke        |
-| `/parallel`    | Fanning work across worktrees. Never auto-invoked      |
-| `/adr`         | Writing an ADR in house style                          |
-| `/context-log` | Appending to `CONTEXT.md`                              |
+| Skill          | For                                                     |
+| -------------- | ------------------------------------------------------- |
+| `/drive`       | Driving the game: harness, headless runner, CDP driver  |
+| `/ship`        | Rebase → commit → push → PR, ready. No gate. You invoke |
+| `/parallel`    | Fanning work across worktrees. Never auto-invoked       |
+| `/adr`         | Writing an ADR in house style                           |
+| `/context-log` | Appending to `CONTEXT.md`                               |
 
 | Agent                  | For                                                           |
 | ---------------------- | ------------------------------------------------------------- |
@@ -145,9 +150,12 @@ import.
   The code is what the product does now; nothing describes the version it
   replaced. History has three homes — `CONTEXT.md`, an ADR, and the commit
   message of the change itself.
-- Commit each coherent piece as it goes green, without asking. Push and the
-  pull request are `/ship`, which rebases onto `origin/main` first — `main`
-  enforces linear history and takes squash merges only. Reviewing the result is
-  `/code-review`, which the user invokes; `/ship` never does.
+- Commit each coherent piece as it goes green, without asking. Verify as you
+  go — the Stop gate on every turn, `pnpm presets:compare` for anything
+  visible, `pnpm test:gpu` for a shader — because push and the pull request
+  are `/ship`, which runs no gate: it rebases onto `origin/main`, commits,
+  pushes and opens the PR ready, and CI runs `pnpm check` on what it pushed.
+  `main` enforces linear history and takes squash merges only. Reviewing the
+  result is `/code-review`, which the user invokes; `/ship` never does.
 - Report completion as: Implemented / Architecture decisions / Tests and
   verification / Known limitations / Recommended next step.
