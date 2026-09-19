@@ -116,6 +116,14 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
       }
     })
     this.#database = opening
+    // A one-second budget is a guess about a busy machine, not a verdict on
+    // the host: memoizing the rejection would retire the archive for the rest
+    // of the session on a single slow open, and every later visit would
+    // regenerate ground that is already on disk. Forget the failure so the
+    // next lookup may try again; the tile it wants is generated either way.
+    void opening.catch(() => {
+      if (this.#database === opening) this.#database = null
+    })
     return opening
   }
   async #admit(): Promise<void> {

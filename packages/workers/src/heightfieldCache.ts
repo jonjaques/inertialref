@@ -41,6 +41,10 @@ export interface HeightfieldStore {
 
 function stable(value: unknown): string {
   if (value === undefined) return 'undefined'
+  // `JSON.stringify` writes `null` for NaN and for either infinity, so three
+  // distinct numbers and an absent value would share one key — which is the
+  // one failure this key is built to make impossible. Spell them instead.
+  if (typeof value === 'number' && !Number.isFinite(value)) return String(value)
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
   return `{${Object.entries(value)
@@ -74,10 +78,26 @@ function checksum(field: HeightfieldResponse): number {
       array.byteOffset,
       array.byteLength,
     )
-    for (const byte of bytes) hash = Math.imul(hash ^ byte, 16777619)
+    // An indexed walk rather than `for…of`: this runs over every byte of
+    // every tile on both the write and the read path, and the iterator
+    // protocol is the dominant term at a hundred thousand bytes a tile.
+    for (let i = 0; i < bytes.length; i++)
+      hash = Math.imul(hash ^ bytes[i]!, 16777619)
   }
   return hash >>> 0
 }
+
+/** The portable estimate both the record and its validation must agree on. */
+function recordBytes(key: string, field: HeightfieldResponse): number {
+  return (
+    field.elevations.byteLength +
+    field.cover.byteLength +
+    field.water.byteLength +
+    key.length * 2 +
+    128
+  )
+}
+
 export function heightfieldCacheRecord(
   key: string,
   field: HeightfieldResponse,
@@ -86,12 +106,7 @@ export function heightfieldCacheRecord(
     key,
     field,
     checksum: checksum(field),
-    bytes:
-      field.elevations.byteLength +
-      field.cover.byteLength +
-      field.water.byteLength +
-      key.length * 2 +
-      128,
+    bytes: recordBytes(key, field),
   }
 }
 
@@ -157,13 +172,9 @@ export function validateHeightfieldCacheRecord(
   for (const water of field.water)
     if (!Number.isFinite(water) && !Number.isNaN(water)) return null
   if (row.checksum !== checksum(field)) return null
-  const bytes =
-    field.elevations.byteLength +
-    field.cover.byteLength +
-    field.water.byteLength +
-    key.length * 2 +
-    128
-  return row.bytes === bytes ? (row as HeightfieldCacheRecord) : null
+  return row.bytes === recordBytes(key, field)
+    ? (row as HeightfieldCacheRecord)
+    : null
 }
 
 export interface HeightfieldCacheStats {

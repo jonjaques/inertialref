@@ -316,6 +316,8 @@ export class GameEngine {
   readonly #terrain: TerrainStreamer
   readonly #terrainStore: HeightfieldStore | null
   readonly #terrainCache: CachedHeightfieldSource | null
+  /** The producer's own wrapper, when one is installed; see `#archive`. */
+  #preferredCache: CachedHeightfieldSource | null = null
   /** Rolling per-frame samples for the performance overlay. */
   readonly metrics = new FrameMetrics()
 
@@ -1074,14 +1076,28 @@ export class GameEngine {
    * `null` puts the pool back.
    */
   setHeightfieldSource(source: HeightfieldSource | null): void {
-    this.#terrain.heightfields.preferred =
+    const wrapped =
       source !== null && this.#terrainStore !== null
         ? new CachedHeightfieldSource(
             source,
             this.#terrainStore,
             `${source.kind}:terrain-tsl@1`,
           )
-        : source
+        : null
+    this.#preferredCache = wrapped
+    this.#terrain.heightfields.preferred = wrapped ?? source
+  }
+
+  /*
+   * Either wrapper answers for the archive: the counters and the in-flight
+   * write set are shared per store, so clearing through one retires the
+   * other's pending writes too. Reaching the store directly does not — it
+   * would empty the database while a producer's lookup is still in flight,
+   * and that lookup would write the tile back into a cache the caller had
+   * just discarded.
+   */
+  get #archive(): CachedHeightfieldSource | null {
+    return this.#terrainCache ?? this.#preferredCache
   }
 
   /** Shared CPU/GPU archive counters and the host's bounded storage usage. */
@@ -1093,11 +1109,12 @@ export class GameEngine {
     } catch {
       available = false
     }
-    return { available, activity: this.#terrainCache?.stats() ?? null, storage }
+    return { available, activity: this.#archive?.stats() ?? null, storage }
   }
 
   async clearTerrainCache(): Promise<void> {
-    if (this.#terrainCache !== null) await this.#terrainCache.clear()
+    const archive = this.#archive
+    if (archive !== null) await archive.clear()
     else await this.#terrainStore?.clear()
   }
 

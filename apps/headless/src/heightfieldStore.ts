@@ -103,9 +103,17 @@ export class DiskHeightfieldStore implements HeightfieldStore {
           Number(tally.bytes) <= this.#maxBytes
         )
           break
-        db.exec(
-          'DELETE FROM tiles WHERE key=(SELECT key FROM tiles ORDER BY used,key LIMIT 1)',
-        )
+        // The tally is the triggers' running total, not a count of rows, so
+        // the loop's exit condition and its progress come from two places. An
+        // empty table makes the subquery NULL, the delete match nothing and
+        // the tally still say it is over budget — a synchronous spin with no
+        // timeout above it. Stop on the delete that removes nothing instead.
+        const { changes } = db
+          .prepare(
+            'DELETE FROM tiles WHERE key=(SELECT key FROM tiles ORDER BY used,key LIMIT 1)',
+          )
+          .run()
+        if (Number(changes) === 0) break
       }
     })
     return true
