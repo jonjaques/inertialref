@@ -1130,21 +1130,27 @@ export class GameHarness {
     const target = address ?? this.observatory.target?.address
     if (target === undefined)
       throw new Error('Nothing to measure — pass an address')
-    const parsed = parseAddress(target)
-    if (parsed.kind !== 'body')
+    // Resolved the way every other verb resolves an address, so a relative
+    // `b:2.0` answers here as it does for `sites`: `parseAddress` alone
+    // refuses anything that does not start with its galaxy.
+    const resolved = resolveDestination(
+      target,
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+    if (resolved.kind !== 'body' || resolved.address.kind !== 'body')
       return { address: target, sun: null, phase: null, lit: true }
     const body = this.#requireBody(target)
-    const text = formatAddress(body.address)
+    const at = body.address
+    if (at.kind !== 'body')
+      return { address: target, sun: null, phase: null, lit: true }
+    const text = formatAddress(at)
     const time = this.observatory.time
     const status = this.observatory.status()
     const onIt = status.surface !== null && status.target?.address === text
     let sun: number | null = null
     if (onIt && status.surface !== null) {
-      const toStar = this.#starDirection(
-        parsed.system,
-        bodyFixedFrameId(body.address),
-        time,
-      )
+      const toStar = this.#starDirection(at.system, bodyFixedFrameId(at), time)
       const { latitude, longitude } = status.surface.stance
       sun =
         (Math.asin(
@@ -1170,11 +1176,11 @@ export class GameHarness {
      */
     let phase: number | null = null
     if (status.target !== null) {
-      const frame = bodyFrameId(body.address)
+      const frame = bodyFrameId(at)
       const bodyPose = this.world.frames.pose(frame, time)
       const center = this.world.frames.pose(status.target.frame, time).position
       const eye = observerPose(center, status.desired, status.look)
-      const toStar = this.#starDirection(parsed.system, frame, time)
+      const toStar = this.#starDirection(at.system, frame, time)
       const offset = UV.difference(eye.position, bodyPose.position)
       if (Vec.length(offset) > 1) {
         const toEye = Vec.normalize(
