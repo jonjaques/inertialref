@@ -1,3 +1,6 @@
+import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
+import { sensorRadiance } from './radiance.ts'
+import type { SensorFrame } from './sensor.ts'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   FloatType,
@@ -26,19 +29,24 @@ beforeAll(async () => {
 })
 afterAll(() => gpu.dispose())
 
-function rig(picture: Picture) {
+function rig(picture: Picture, frame?: () => SensorFrame) {
   gpu.renderer.setSize(SIZE, SIZE, false)
-  declareSceneTarget(gpu.renderer, { samples: 0, depthType: FloatType })
+  declareSceneTarget(gpu.renderer, {
+    samples: 0,
+    depthType: FloatType,
+    optics: frame !== undefined,
+  })
   const camera = new PerspectiveCamera(60, 1, 0.05, 1e10)
   const scene = new Scene()
   const material = new MeshBasicNodeMaterial()
   material.colorNode = vec3(0.25, 0.5, 2)
+  if (frame !== undefined) sensorRadiance(material)
   const slab = new Mesh(new PlaneGeometry(100, 100), material)
   slab.position.z = -10
   scene.add(slab)
   scene.updateMatrixWorld(true)
   camera.updateMatrixWorld(true)
-  const sensor = createSensor(gpu.renderer, scene, camera, undefined, picture)
+  const sensor = createSensor(gpu.renderer, scene, camera, frame, picture)
   const target = new RenderTarget(SIZE, SIZE, {
     type: FloatType,
     depthBuffer: false,
@@ -203,6 +211,85 @@ describe('the upscaler on the physical GPU', () => {
         float: true,
       })
       expect(mask.at(32, 32)[0]).toBeCloseTo(0.3, 2)
+    } finally {
+      f.dispose()
+    }
+  })
+
+  it('keeps the full optical chain in the resolved linear exposure domain', async () => {
+    const state: SensorFrame = {
+      lens: { ...LENS_PRESETS.flight, focusDistance: 10 },
+      settings: DEFAULT_SENSOR_SETTINGS,
+      time: 1,
+      pinned: 0,
+      headroom: 2,
+      noiseTick: 0,
+      pictureEpoch: 1,
+    }
+    const original = rig(
+      { aa: 'off', scale: 'native', sharpness: 'off' },
+      () => state,
+    )
+    let reference: readonly number[]
+    try {
+      for (let i = 0; i < 4; i++) original.sensor.render(original.target)
+      reference = (await gpu.read(original.target)).at(32, 32)
+    } finally {
+      original.dispose()
+    }
+    for (const picture of [
+      spatial,
+      { ...spatial, aa: 'msaa' as const },
+      temporal,
+    ]) {
+      const f = rig(picture, () => state)
+      try {
+        for (let i = 0; i < 20; i++) f.sensor.render(f.target)
+        const pixel = (await gpu.read(f.target)).at(32, 32)
+        for (let channel = 0; channel < 3; channel++)
+          expect(Math.abs(pixel[channel]! - reference[channel]!)).toBeLessThan(
+            0.015,
+          )
+        expect(pixel[3]).toBe(1)
+        expect(f.sensor.sceneTarget.textures).toHaveLength(
+          picture.aa === 'temporal' ? 5 : 3,
+        )
+      } finally {
+        f.dispose()
+      }
+    }
+  })
+
+  it('restarts temporal history on declared cuts and processing-domain changes', async () => {
+    let epoch = 3
+    let settings = DEFAULT_SENSOR_SETTINGS
+    const f = rig(temporal, () => ({
+      lens: { ...LENS_PRESETS.flight, focusDistance: 10 },
+      settings,
+      time: 1,
+      pinned: null,
+      headroom: 2,
+      pictureEpoch: epoch,
+    }))
+    try {
+      for (let i = 0; i < 5; i++) f.sensor.render(f.target)
+      await gpu.read(f.target)
+      const before = f.sensor.diagnostics.picture.resets
+      expect(f.sensor.diagnostics.picture.phase).toBe(5)
+      epoch++
+      f.sensor.render(f.target)
+      await gpu.read(f.target)
+      expect(f.sensor.diagnostics.picture).toMatchObject({
+        resets: before + 1,
+        phase: 1,
+      })
+      settings = { ...settings, mode: 'manual' }
+      f.sensor.render(f.target)
+      await gpu.read(f.target)
+      expect(f.sensor.diagnostics.picture).toMatchObject({
+        resets: before + 2,
+        phase: 1,
+      })
     } finally {
       f.dispose()
     }
