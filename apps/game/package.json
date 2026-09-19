@@ -31,6 +31,7 @@
     "@inertialref/universe": "workspace:*",
     "@inertialref/workers": "workspace:*",
     "@leeoniya/ufuzzy": "^1.0.19",
+    "@pmndrs/upscaler": "0.2.0",
     "@react-three/fiber": "^9.3.0",
     "@tanstack/react-virtual": "^3.14.10",
     "astro": "7.3.2",

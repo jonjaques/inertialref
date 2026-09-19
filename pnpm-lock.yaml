@@ -238,6 +238,9 @@ importers:
       '@leeoniya/ufuzzy':
         specifier: ^1.0.19
         version: 1.0.19
+      '@pmndrs/upscaler':
+        specifier: 0.2.0
+        version: 0.2.0(three@0.185.1)
       '@react-three/fiber':
         specifier: ^9.3.0
         version: 9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
@@ -1849,6 +1852,11 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
+
+  '@pmndrs/upscaler@0.2.0':
+    resolution: {integrity: sha512-nHHg6m769bml69dYwG9+Vef+TrU3rRdOm8nq/jsFFQA0eJd3QDwneEcI6XXZB9nH7s6E6IO5UKU/oSeUFfKflw==}
+    peerDependencies:
+      three: '>=0.184.0'
 
   '@poppinss/colors@4.1.6':
     resolution: {integrity: sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg==}
@@ -6089,6 +6097,10 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.78.0':
     optional: true
+
+  '@pmndrs/upscaler@0.2.0(three@0.185.1)':
+    dependencies:
+      three: 0.185.1
 
   '@poppinss/colors@4.1.6':
     dependencies:

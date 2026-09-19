@@ -32,21 +32,32 @@ import {
  */
 export const motionOverlay = property('float', 'MotionOverlay')
 export const meterOverlay = property('float', 'MeterOverlay')
+export const reactiveCoverage = property('float', 'ReactiveCoverage')
 
 /** Two half-float attachments: radiance and velocity.xy / reciprocal view meters. */
-export function sensorMrt() {
+export function sensorMrt(temporal = false, optics = true) {
   const node = mrt({
     output,
-    meterMask: vec4(meterOverlay, 0, 0, 1),
-    // The whole vector, not just the alpha, goes to zero for an overlay: in
-    // core mode the alpha blend below keeps the surface underneath, and in
-    // compatibility mode, where the material's own additive blend applies to
-    // every attachment, a zero adds nothing.
-    motion: vec4(
-      nodeObject(velocity) as unknown as Node<'vec2'>,
-      positionView.z.negate().max(1e-4).reciprocal(),
-      1,
-    ).mul(motionOverlay.oneMinus()),
+    ...(temporal
+      ? {
+          velocity: vec4(nodeObject(velocity) as unknown as Node<'vec2'>, 0, 1),
+          reactive: vec4(reactiveCoverage, 0, 0, 1),
+        }
+      : {}),
+    ...(optics
+      ? {
+          meterMask: vec4(meterOverlay, 0, 0, 1),
+          // The whole vector, not just the alpha, goes to zero for an overlay: in
+          // core mode the alpha blend below keeps the surface underneath, and in
+          // compatibility mode, where the material's own additive blend applies to
+          // every attachment, a zero adds nothing.
+          motion: vec4(
+            nodeObject(velocity) as unknown as Node<'vec2'>,
+            positionView.z.negate().max(1e-4).reciprocal(),
+            1,
+          ).mul(motionOverlay.oneMinus()),
+        }
+      : {}),
   })
   // An attachment three has no blend mode for gets none, so a transparent
   // overlay would replace the surface's velocity and depth over its whole
@@ -63,5 +74,8 @@ export function sensorMrt() {
   maskBlend.blendEquation = MaxEquation
   maskBlend.blendSrc = OneFactor
   maskBlend.blendDst = OneFactor
-  return node.setBlendMode('motion', blend).setBlendMode('meterMask', maskBlend)
+  if (optics)
+    node.setBlendMode('motion', blend).setBlendMode('meterMask', maskBlend)
+  if (temporal) node.setBlendMode('reactive', maskBlend)
+  return node
 }

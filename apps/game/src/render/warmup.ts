@@ -169,8 +169,9 @@ export const warmRenderer = (gl: object): WarmRenderer => {
     compileAsync(object, camera, scene) {
       const previousMrt = renderer.getMRT()
       const unbind = bindWarmTarget(renderer, warmTargetFor(renderer))
-      if (sceneTargetShape(renderer).optics === true)
-        renderer.setMRT(sensorMrt())
+      const shape = sceneTargetShape(renderer)
+      if (shape.optics === true || shape.temporal === true)
+        renderer.setMRT(sensorMrt(shape.temporal, shape.optics === true))
       const compiles: Promise<unknown>[] = []
       object.traverseVisible((node) => {
         if (isRenderable(node))

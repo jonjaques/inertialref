@@ -1,3 +1,4 @@
+import { DEFAULT_PICTURE } from './picture.ts'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const mock = vi.hoisted(() => ({
@@ -12,6 +13,7 @@ const mock = vi.hoisted(() => ({
 }))
 vi.mock('three/webgpu', () => ({
   HalfFloatType: 1016,
+  FloatType: 1015,
   WebGPURenderer: class {
     initialized = false
     async init() {
@@ -77,7 +79,7 @@ it('reports async initialization failure before handing a rejected factory to R3
   await expect(
     createRenderer(
       'standard',
-      false,
+      DEFAULT_PICTURE,
       mock.ready,
       mock.failure,
     )({
@@ -97,7 +99,7 @@ it('rejects a WebGL fallback without floating-point targets before mounting the 
   await expect(
     createRenderer(
       'standard',
-      false,
+      DEFAULT_PICTURE,
       mock.ready,
       mock.failure,
     )({
@@ -112,7 +114,7 @@ it('uses a capable WebGL fallback in standard output', async () => {
   const { createRenderer } = await import('./createRenderer.ts')
   await createRenderer(
     'auto',
-    false,
+    DEFAULT_PICTURE,
     mock.ready,
     mock.failure,
   )({ canvas: new EventTarget() })
@@ -125,7 +127,12 @@ it('uses a capable WebGL fallback in standard output', async () => {
 
 it('shares a pending replacement renderer through a duplicate factory call', async () => {
   const { createRenderer } = await import('./createRenderer.ts')
-  const factory = createRenderer('standard', false, mock.ready, mock.failure)
+  const factory = createRenderer(
+    'standard',
+    DEFAULT_PICTURE,
+    mock.ready,
+    mock.failure,
+  )
   await factory({ canvas: new EventTarget() })
   let resolve!: () => void
   let entered!: () => void
@@ -154,7 +161,7 @@ it('reports capability probe failures too', async () => {
   await expect(
     createRenderer(
       'auto',
-      false,
+      DEFAULT_PICTURE,
       mock.ready,
       mock.failure,
     )({ canvas: new EventTarget() }),
@@ -178,7 +185,7 @@ it('retires a pending renderer when the runtime fails before initialization fini
   })
   const pending = createRenderer(
     'auto',
-    false,
+    DEFAULT_PICTURE,
     mock.ready,
     mock.failure,
   )({ canvas: new EventTarget() })
