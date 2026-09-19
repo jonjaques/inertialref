@@ -328,7 +328,10 @@ function checkScript() {
   )
     throw new Error('--user-gesture needs a --js or --file step')
   for (const { step, arg } of script) {
-    if (!JAVASCRIPT && (step === 'sample' || step === 'cast'))
+    if (
+      !JAVASCRIPT &&
+      (step === 'sample' || step === 'cast' || step === 'settle')
+    )
       throw new Error(`--${step} needs page scripts; omit --no-javascript`)
     if (step === 'wait') count(arg, 'wait', 0)
     if (step === 'settle') count(arg, 'settle', 0)
