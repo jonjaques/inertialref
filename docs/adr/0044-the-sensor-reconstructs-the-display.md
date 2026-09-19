@@ -179,7 +179,7 @@ Runtime image checks also cover **Rings Beyond the Center** (`far-ringrise`),
 (`tau-ceti-moonrise`), completing the five shipped external-system presets.
 A 90-frame Far Shore camera pan measured 54.1 fps without isolated strobe
 frames. That bounded observation does not prove every motion path. A gameplay
-save/load at the exact Tau Ceti Dusk stance preserved its canonical hash
+save/load at Tau Ceti Dusk's exact surface coordinates preserved its canonical hash
 immediately and after one paused second; that run measured 0.4 ms kernel
 initialization.
 

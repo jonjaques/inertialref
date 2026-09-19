@@ -19,7 +19,15 @@ Use the committed presets without substituting generated summit sites:
 | `centauri-daybreak` | Centauri Daybreak       |
 | `tau-ceti-moonrise` | Under Tau Ceti III      |
 
-Restore with `ir.preset(id)` and record `ir.capturePicture(id, label)` so the
+For a browser fixture, use the public URL restore path through the driver:
+
+```bash
+node scripts/drive.mjs --url http://localhost:5173/planetarium \
+  --preset tau-ceti-dusk --width 1600 --height 900 --dpr 1 --wait 4000
+```
+
+In an existing planetarium session, `ir.preset(id)` restores the same record.
+Record `ir.capturePicture(id, label)` so the
 address, seed, generation versions, stance, held time, lens and processing
 travel with the result. Wait for `ir.terrain().pending` to reach zero and record
 patch count, render/display dimensions, browser, machine and build. The
