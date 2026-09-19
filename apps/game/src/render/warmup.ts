@@ -8,6 +8,7 @@ import {
   type Object3D,
   type QuadMesh,
   type RenderPipeline,
+  type Renderer,
   type RenderTarget,
   type WebGPURenderer,
 } from 'three/webgpu'
@@ -112,7 +113,7 @@ export interface WarmTarget {
  * own synchronous half.
  */
 function bindWarmTarget(
-  renderer: WebGPURenderer,
+  renderer: Renderer,
   target: RenderTarget | null,
 ): () => void {
   const previous = renderer.getRenderTarget()
@@ -169,8 +170,9 @@ export const warmRenderer = (gl: object): WarmRenderer => {
     compileAsync(object, camera, scene) {
       const previousMrt = renderer.getMRT()
       const unbind = bindWarmTarget(renderer, warmTargetFor(renderer))
-      if (sceneTargetShape(renderer).optics === true)
-        renderer.setMRT(sensorMrt())
+      const shape = sceneTargetShape(renderer)
+      if (shape.optics === true || shape.temporal === true)
+        renderer.setMRT(sensorMrt(shape.temporal, shape.optics === true))
       const compiles: Promise<unknown>[] = []
       object.traverseVisible((node) => {
         if (isRenderable(node))
@@ -532,17 +534,19 @@ export function warmAtMount(producer: WarmProducer): void {
 }
 
 /** r185 exposes no pipeline compile method; prepare its actual quad, at its actual output. */
-export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
+export function warmPipeline(
+  pipeline: RenderPipeline,
+  output: RenderTarget | null = null,
+): Promise<void> {
   const internal = pipeline as unknown as {
     _update(): void
     _quadMesh: QuadMesh
   }
   internal._update()
   const renderer = pipeline.renderer
-  const target = renderer.getRenderTarget()
+  const unbind = bindWarmTarget(renderer, output)
   const tone = renderer.toneMapping
   const color = renderer.outputColorSpace
-  renderer.setRenderTarget(null)
   renderer.toneMapping = NoToneMapping
   renderer.outputColorSpace = ColorManagement.workingColorSpace
   try {
@@ -552,7 +556,7 @@ export function warmPipeline(pipeline: RenderPipeline): Promise<void> {
       scene: null,
     })
   } finally {
-    renderer.setRenderTarget(target)
+    unbind()
     renderer.toneMapping = tone
     renderer.outputColorSpace = color
   }

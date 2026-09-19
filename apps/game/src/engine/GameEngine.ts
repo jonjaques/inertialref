@@ -1,3 +1,8 @@
+import {
+  isPictureDebug,
+  PICTURE_DEBUG_VIEWS,
+  type PictureDebug,
+} from '../render/upscale.ts'
 import type {
   GalaxyRenderReport,
   ObserverPose,
@@ -66,6 +71,9 @@ import {
 } from '@inertialref/rendering'
 import {
   type HeightfieldSource,
+  type HeightfieldStore,
+  CachedHeightfieldSource,
+  poolHeightfieldSource,
   type Heightfields,
   surveySkyTask,
   type WorkerFactory,
@@ -109,6 +117,7 @@ import {
 } from './frameTiming.ts'
 import { DROPPED_FRAME_MS, ENGINE_BUDGET_MS } from './perfBudgets.ts'
 import { IndexedDbSaveStore } from './indexedDbStore.ts'
+import { IndexedDbHeightfieldStore } from './terrainStore.ts'
 import {
   createCutsceneSession,
   type CutsceneSession,
@@ -252,6 +261,7 @@ export interface GameEngineOptions {
    * engine under Node.
    */
   readonly workers?: WorkerFactory | null
+  readonly heightfieldStore?: HeightfieldStore | null
   readonly store?: SaveStore
   readonly now?: () => number
 }
@@ -304,6 +314,8 @@ export class GameEngine {
    * carries `Float32Array`s and the harness returns JSON.
    */
   readonly #terrain: TerrainStreamer
+  readonly #terrainStore: HeightfieldStore | null
+  readonly #terrainCache: CachedHeightfieldSource | null
   /** Rolling per-frame samples for the performance overlay. */
   readonly metrics = new FrameMetrics()
 
@@ -591,6 +603,13 @@ export class GameEngine {
   rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
+  /** Temporal image history is presentation state, outside the world hash. */
+  pictureEpoch = 0
+  pictureDebug: PictureDebug = 'none'
+
+  declareCut(): void {
+    this.pictureEpoch += 1
+  }
   galaxyRenderer: (() => GalaxyRenderReport) | null = null
   #presentedPose: ObserverPose | null = null
 
@@ -882,10 +901,23 @@ export class GameEngine {
       store: options.store ?? new IndexedDbSaveStore(),
       // The one production adapter of the render side, whole.
       render: {
+        declareCut: () => this.declareCut(),
+        picture: (debug) => {
+          if (debug !== undefined) {
+            if (!isPictureDebug(debug))
+              throw new Error(
+                `Unknown picture diagnostic. Choose ${PICTURE_DEBUG_VIEWS.join(', ')}.`,
+              )
+            this.pictureDebug = debug
+          }
+          return this.sensorDiagnostics?.picture ?? null
+        },
         guide: () => this.guide,
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
+        terrainCache: () => this.terrainCache(),
+        clearTerrainCache: () => this.clearTerrainCache(),
         galaxyRender: () => this.galaxyRenderer?.() ?? null,
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
@@ -931,7 +963,10 @@ export class GameEngine {
         this.cinematic = null
       },
     })
+    let observerStance = false
     this.presentation = createPresentationStack((stance) => {
+      if (observerStance !== stance.observatory) this.declareCut()
+      observerStance = stance.observatory
       this.showShip = stance.showShip
       this.showOrbits = stance.showOrbits
       this.labels = stance.labels
@@ -944,7 +979,19 @@ export class GameEngine {
       if (!stance.observatory) this.harness.observatory.clear()
     })
     this.saves = this.session.store
-    this.#terrain = new TerrainStreamer(this.session.pool())
+    this.#terrainStore =
+      options.heightfieldStore === undefined
+        ? typeof indexedDB === 'undefined'
+          ? null
+          : new IndexedDbHeightfieldStore()
+        : options.heightfieldStore
+    const pool = this.session.pool()
+    const fallback = pool === null ? null : poolHeightfieldSource(pool)
+    this.#terrainCache =
+      fallback !== null && this.#terrainStore !== null
+        ? new CachedHeightfieldSource(fallback, this.#terrainStore, 'cpu')
+        : null
+    this.#terrain = new TerrainStreamer(pool, this.#terrainCache ?? fallback)
     /*
      * The level, forwarded across the worker boundary.
      *
@@ -1027,7 +1074,31 @@ export class GameEngine {
    * `null` puts the pool back.
    */
   setHeightfieldSource(source: HeightfieldSource | null): void {
-    this.#terrain.heightfields.preferred = source
+    this.#terrain.heightfields.preferred =
+      source !== null && this.#terrainStore !== null
+        ? new CachedHeightfieldSource(
+            source,
+            this.#terrainStore,
+            `${source.kind}:terrain-tsl@1`,
+          )
+        : source
+  }
+
+  /** Shared CPU/GPU archive counters and the host's bounded storage usage. */
+  async terrainCache() {
+    let storage = null
+    let available = this.#terrainStore !== null
+    try {
+      storage = (await this.#terrainStore?.stats()) ?? null
+    } catch {
+      available = false
+    }
+    return { available, activity: this.#terrainCache?.stats() ?? null, storage }
+  }
+
+  async clearTerrainCache(): Promise<void> {
+    if (this.#terrainCache !== null) await this.#terrainCache.clear()
+    else await this.#terrainStore?.clear()
   }
 
   get starField(): StarField {

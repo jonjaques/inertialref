@@ -46,6 +46,7 @@ export const ENTERPRISE_PORTRAITS: CutsceneScript = {
           portraits[Math.min(2, Math.max(0, Math.floor(frame / 240)))]!
         return {
           frame,
+          shot: String(Math.min(2, Math.max(0, Math.floor(frame / 240)))),
           camera: {
             position: UV.translate(anchor, shot.eye),
             orientation: lookAlong(Vec.sub(shot.aim, shot.eye), vec3(0, 1, 0)),

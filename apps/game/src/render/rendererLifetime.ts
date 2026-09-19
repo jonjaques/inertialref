@@ -1,3 +1,4 @@
+import type { Picture } from './picture.ts'
 import type { WebGPURenderer } from 'three/webgpu'
 import type { CanvasProps, RendererHandle } from './createRenderer.ts'
 import type { OutputPreference } from './output.ts'
@@ -30,7 +31,7 @@ export interface RendererLifetimeOptions {
   /** Build a renderer on a canvas: `createRenderer`, whose queue and StrictMode dedupe stay its own. */
   readonly build: (
     preference: OutputPreference,
-    antialias: boolean,
+    picture: Picture,
     onReady: (handle: RendererHandle) => void,
   ) => (props: CanvasProps) => Promise<WebGPURenderer>
   /** Release the device: `releaseRenderer`. */
@@ -62,7 +63,7 @@ export interface RendererLifetime {
    */
   factory(
     preference: OutputPreference,
-    antialias: boolean,
+    picture: Picture,
   ): (props: CanvasProps) => Promise<WebGPURenderer>
   /**
    * Warm a build that resolved, once per build. The producer is made and
@@ -105,12 +106,12 @@ export function createRendererLifetime(
       return producer
     },
 
-    factory(preference, antialias) {
+    factory(preference, picture) {
       // Read at the call, not captured at creation: the preferences are live
       // state and a factory made once would build every rebuild at the first.
       return (props) => {
         retire()
-        return options.build(preference, antialias, (ready) => {
+        return options.build(preference, picture, (ready) => {
           handle = ready
           options.onReady(ready)
         })(props)

@@ -28,6 +28,7 @@ export function OptionGroup<T extends string>({
   value,
   values,
   labels,
+  disabled,
   onChange,
   className = '',
 }: {
@@ -44,6 +45,8 @@ export function OptionGroup<T extends string>({
    * the value — a stored preference must not change when a label is reworded.
    */
   labels?: Readonly<Record<string, string>>
+  /** A disabled option explains the capability or conflicting choice that prevents it. */
+  disabled?: (value: T) => string | undefined
   onChange: (value: T) => void
   className?: string
 }) {
@@ -64,6 +67,8 @@ export function OptionGroup<T extends string>({
         <ToggleGroupItem
           key={option}
           value={option}
+          disabled={disabled?.(option) !== undefined}
+          title={disabled?.(option)}
           onClick={releaseFocus}
           // 24 px tall and 24 wide at the narrowest label (`4x`), which is
           // WCAG 2.2's target minimum. `size="sm"` alone is `h-8`, which is

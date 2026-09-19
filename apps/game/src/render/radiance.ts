@@ -1,7 +1,7 @@
 import { SURFACE_LUMINANCE } from '@inertialref/rendering'
 import type { NodeMaterial, Renderer } from 'three/webgpu'
 import { Fn, output, uniform, vec4 } from 'three/tsl'
-import { meterOverlay, motionOverlay } from './sensorMrt.ts'
+import { meterOverlay, motionOverlay, reactiveCoverage } from './sensorMrt.ts'
 
 /** Offscreen reflectance bakes remain reflectance; only the scene collects light. */
 const gains = new WeakMap<Renderer, number>()
@@ -48,18 +48,23 @@ export function setSceneExposure(
  * `overlay` marks a draw that is light without a surface — a flare quad, a
  * warp streak — so the sensor's motion attachment keeps the velocity and
  * depth of whatever it covers rather than the quad's own; see `sensorMrt`.
+ * Reactive coverage rejects history where a blended surface has no matching
+ * depth or displacement velocity. Independent coverage blending combines
+ * translucent shells while opaque surfaces replace the hidden background.
  */
 export function sensorRadiance<T extends NodeMaterial>(
   material: T,
   overlay = false,
   instrument = false,
+  reactive: number | 'alpha' = overlay || instrument ? 1 : 0,
 ): T {
   const radiance = vec4(output.rgb.mul(sceneRadianceGain).min(65_504), output.a)
   material.outputNode =
-    overlay || instrument
+    overlay || instrument || reactive !== 0
       ? Fn(() => {
           if (overlay) motionOverlay.assign(1)
           if (instrument) meterOverlay.assign(1)
+          reactiveCoverage.assign(reactive === 'alpha' ? output.a : reactive)
           return radiance
         })()
       : radiance

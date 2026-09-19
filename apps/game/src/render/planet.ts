@@ -693,7 +693,12 @@ export function createCloudMaterial(): CloudMaterial {
     smoothstep(float(0.3), float(0.0), incidence),
   )
 
-  const material = sensorRadiance(new MeshBasicNodeMaterial())
+  const material = sensorRadiance(
+    new MeshBasicNodeMaterial(),
+    false,
+    false,
+    'alpha',
+  )
   material.colorNode = cover.rgb
     .mul(baseColor)
     .mul(sunColor)
@@ -877,7 +882,12 @@ export function createRingMaterial(): RingMaterial {
   )
   const sunlit = oneMinus(eclipsed)
 
-  const material = sensorRadiance(new MeshBasicNodeMaterial())
+  const material = sensorRadiance(
+    new MeshBasicNodeMaterial(),
+    false,
+    false,
+    'alpha',
+  )
   material.colorNode = mix(transmitted, backscatter, sameSide)
     .mul(baseColor)
     .mul(sunColor)

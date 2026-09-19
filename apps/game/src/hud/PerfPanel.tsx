@@ -200,6 +200,36 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
         />
       </Section>
 
+      {engine.sensorDiagnostics?.picture !== undefined && (
+        <Section
+          id="perf.picture"
+          title="Picture"
+          trailing={engine.sensorDiagnostics.picture.path}
+        >
+          <Row
+            label="Scene / display"
+            value={`${engine.sensorDiagnostics.picture.renderWidth}×${engine.sensorDiagnostics.picture.renderHeight} / ${engine.sensorDiagnostics.picture.displayWidth}×${engine.sensorDiagnostics.picture.displayHeight}`}
+          />
+          <Row
+            label="History phase"
+            value={`${engine.sensorDiagnostics.picture.phase} / ${engine.sensorDiagnostics.picture.phaseCount}`}
+          />
+          <Row
+            label="FSR textures"
+            value={`${(engine.sensorDiagnostics.picture.workingTextureBytes / 1024 ** 2).toFixed(1)} MiB`}
+          />
+          <Row
+            label="FSR initialization"
+            value={`${engine.sensorDiagnostics.picture.initMs.toFixed(1)} ms`}
+          />
+          {Object.entries(engine.sensorDiagnostics.picture.gpuTimings).map(
+            ([name, ms]) => (
+              <Row key={name} label={name} value={`${ms.toFixed(3)} ms`} />
+            ),
+          )}
+        </Section>
+      )}
+
       <Section
         id="perf.workers"
         title="Workers"

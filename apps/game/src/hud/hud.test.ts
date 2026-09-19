@@ -6,9 +6,11 @@ import { engineStore } from '../state/engineStore.ts'
 import {
   CAMERA_LENS,
   RENDER_LENS_FLARE,
+  RENDER_PICTURE,
   RENDER_SENSOR,
   RENDER_THRUSTER_VARIATION,
   write,
+  read,
 } from '../state/preferences.ts'
 import { LensSection } from './LensSection.tsx'
 import type { DevContext } from './context.ts'
@@ -20,7 +22,13 @@ import { TargetRow } from './TargetRow.tsx'
 import { NavCluster } from './NavCluster.tsx'
 import { formatSpeed } from './navCluster.ts'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
-import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
+import { OUTPUT_PREFERENCES } from '../render/output.ts'
+import {
+  PICTURE_AA,
+  PICTURE_SCALES,
+  PICTURE_SHARPNESS,
+  PICTURE_LABELS,
+} from '../render/picture.ts'
 import { SHIP_IDS } from '../render/ships.ts'
 import {
   GROUND_DETAILS,
@@ -125,6 +133,7 @@ describe('the author’s instruments', () => {
   afterEach(() => {
     engineStore.setState({ status: null, exposure: null })
     write(RENDER_SENSOR, RENDER_SENSOR.initial)
+    write(RENDER_PICTURE, RENDER_PICTURE.initial)
   })
 
   it('renders the universe it is pointed at', () => {
@@ -288,19 +297,23 @@ describe('the author’s instruments', () => {
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
     // Ship, output and surface choices stay visible as radio groups.
-    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(6)
+    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(8)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
       SHIP_IDS.length +
-        AA_LEVELS.length +
+        PICTURE_AA.length +
+        PICTURE_SCALES.length +
+        PICTURE_SHARPNESS.length +
         OUTPUT_PREFERENCES.length +
         TERRAIN_DETAILS.length +
         GROUND_DETAILS.length +
         SEA_DETAILS.length,
     )
     // One checked per group.
-    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(6)
-    expect(graphics).toMatch(/aria-checked="true"[^>]*>2x</)
-    for (const level of AA_LEVELS) expect(graphics).toContain(`>${level}<`)
+    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(8)
+    expect(graphics).toMatch(/aria-checked="true"[^>]*>MSAA</)
+    for (const labels of Object.values(PICTURE_LABELS))
+      for (const label of Object.values(labels))
+        expect(graphics).toContain(`>${label}<`)
     // The extended-range override moved here from the transport strip. It is a
     // rendering preference and this is the rendering panel.
     for (const preference of OUTPUT_PREFERENCES)
@@ -342,6 +355,117 @@ describe('the author’s instruments', () => {
     expect(camera).toContain('aria-valuemax="1000"')
     expect(FOCAL_MIN).toBeCloseTo(8.4, 1)
     expect(FOCAL_MAX).toBeCloseTo(68.06, 1)
+  })
+
+  it('explains unavailable reconstruction choices on WebGL and prints actual pixels', () => {
+    write(RENDER_PICTURE, {
+      aa: 'temporal',
+      scale: 'quality',
+      sharpness: 'standard',
+    })
+    const graphics = renderToStaticMarkup(
+      createElement(GraphicsPanel, {
+        render: {
+          preference: 'standard',
+          output: {
+            backend: 'webgl',
+            mode: 'standard',
+            preference: 'standard',
+            headroom: 1,
+            capability: {
+              webgpu: false,
+              dynamicRangeHigh: false,
+              extendedCanvas: false,
+            },
+          },
+          displaySize: { width: 1600, height: 900 },
+          onPreference: () => {},
+        },
+        onNotice: () => {},
+      }),
+    )
+    expect(graphics).toContain('1600×900 of 1600×900')
+    expect(graphics).toContain('Temporal needs WebGPU.')
+    const temporal = graphics.match(
+      /<button[^>]*title="Needs WebGPU"[^>]*>Temporal<\/button>/,
+    )?.[0]
+    expect(temporal).toContain('disabled=""')
+    for (const label of [
+      'Quality',
+      'Balanced',
+      'Performance',
+      'Ultra performance',
+    ]) {
+      const button = graphics.match(
+        new RegExp(`<button[^>]*title="Needs WebGPU"[^>]*>${label}<\\/button>`),
+      )?.[0]
+      expect(button).toContain('disabled=""')
+    }
+    expect(read(RENDER_PICTURE)).toEqual({
+      aa: 'temporal',
+      scale: 'quality',
+      sharpness: 'standard',
+    })
+    write(RENDER_PICTURE, RENDER_PICTURE.initial)
+  })
+
+  it('shows the URL picture and its integer render size without storing it', () => {
+    const picture = {
+      aa: 'temporal',
+      scale: 'quality',
+      sharpness: 'crisp',
+    } as const
+    const graphics = renderToStaticMarkup(
+      createElement(GraphicsPanel, {
+        render: {
+          preference: 'standard',
+          output: null,
+          displaySize: { width: 1600, height: 900 },
+          pictureOverride: picture,
+          onPreference: () => {},
+        },
+        onNotice: () => {},
+      }),
+    )
+    expect(graphics).toContain('1066×600 of 1600×900')
+    expect(graphics).toContain(
+      'The page link sets this picture for this visit.',
+    )
+    const pictureButtons =
+      graphics.match(/<button[^>]*title="Set by the page link"[^>]*>/g) ?? []
+    expect(pictureButtons).toHaveLength(
+      PICTURE_AA.length + PICTURE_SCALES.length + PICTURE_SHARPNESS.length,
+    )
+    for (const button of pictureButtons) expect(button).toContain('disabled=""')
+    expect(read(RENDER_PICTURE)).toEqual(RENDER_PICTURE.initial)
+  })
+
+  it('refuses reduced scales and sharpening for supersampling', () => {
+    write(RENDER_PICTURE, { ...RENDER_PICTURE.initial, aa: 'supersample' })
+    const graphics = renderToStaticMarkup(
+      createElement(GraphicsPanel, {
+        render: {
+          preference: 'standard',
+          output: null,
+          displaySize: { width: 1600, height: 900 },
+          onPreference: () => {},
+        },
+        onNotice: () => {},
+      }),
+    )
+    expect(graphics).toContain('3200×1800 of 1600×900')
+    const reduced =
+      graphics.match(
+        /<button[^>]*title="Supersampling uses native scale"[^>]*>/g,
+      ) ?? []
+    expect(reduced).toHaveLength(PICTURE_SCALES.length - 1)
+    for (const button of reduced) expect(button).toContain('disabled=""')
+    const sharpening =
+      graphics.match(
+        /<button[^>]*title="Choose temporal anti-aliasing or a reduced render scale"[^>]*>/g,
+      ) ?? []
+    expect(sharpening).toHaveLength(PICTURE_SHARPNESS.length)
+    for (const button of sharpening) expect(button).toContain('disabled=""')
   })
 
   it.each(CAMERA_MODES)('shows the controls for the %s camera', (mode) => {

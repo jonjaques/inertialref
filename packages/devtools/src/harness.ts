@@ -1,3 +1,4 @@
+import type { PictureReport } from './pictureReport.ts'
 import {
   GENERATION_VERSIONS,
   type WorldMatch,
@@ -80,6 +81,8 @@ import {
   encodeStub,
   findWorldsTask,
   type PoolStats,
+  type HeightfieldCacheStats,
+  type HeightfieldStoreStats,
   type WorkerPool,
 } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
@@ -259,7 +262,19 @@ export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
   usage: NO_GUIDE_USAGE,
 })
 
+export interface TerrainCacheReport {
+  readonly available: boolean
+  readonly activity: HeightfieldCacheStats | null
+  readonly storage: HeightfieldStoreStats | null
+}
+
 export interface RenderHost {
+  /** Discontinuous camera placement invalidates presentation history only. */
+  declareCut(): void
+  /** Inspect reconstruction or select a diagnostic view without persisting it. */
+  picture(debugView?: string): PictureReport | null
+  terrainCache(): Promise<TerrainCacheReport>
+  clearTerrainCache(): Promise<void>
   /** The active mode supplies this lazy adapter; a headless host need not. */
   guide?(): GuideHostPort | null
   scene(): RenderScene | null
@@ -378,6 +393,12 @@ export interface RenderHost {
 export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
   let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
   return {
+    declareCut: overrides.declareCut ?? (() => {}),
+    picture: overrides.picture ?? (() => null),
+    terrainCache:
+      overrides.terrainCache ??
+      (async () => ({ available: false, activity: null, storage: null })),
+    clearTerrainCache: overrides.clearTerrainCache ?? (async () => {}),
     guide: overrides.guide ?? (() => null),
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
@@ -560,6 +581,11 @@ export class GameHarness {
   lens(): LensReadout | null {
     const view = this.#host.render.lensView()
     return view === null ? null : lensReadout(view.lens, view.viewport)
+  }
+
+  /** Reconstruction dimensions, jitter phase, allocations and GPU timings. */
+  picture(debugView?: string): PictureReport | null {
+    return this.#host.render.picture(debugView)
   }
 
   /** Compact one-line summary, for a quick look from a console. */
@@ -989,6 +1015,7 @@ export class GameHarness {
    * composition framed with the throttle open drifts out of its own picture.
    */
   #handsOff(player: EntityId): void {
+    this.#host.render.declareCut()
     this.world.setControl(player, Vec.ZERO, Vec.ZERO)
     this.world.setThrottle(player, 0)
   }
@@ -1386,6 +1413,7 @@ export class GameHarness {
     const restored = restoreSave(parsed.value, this.world.catalog)
     if (!restored.ok) return restored
     this.#host.replaceWorld(restored.value.world, restored.value.playerEntity)
+    this.#host.render.declareCut()
     if (restored.value.drift.length > 0) {
       log.warn('loaded a save from a different universe', {
         drift: describeDrift(restored.value.drift),
@@ -1680,6 +1708,7 @@ export class GameHarness {
    * eye beside it changes.
    */
   view(view?: FlightView): FlightCameraStatus {
+    this.#host.render.declareCut()
     return view === undefined
       ? this.#flightCamera.cycleView()
       : this.#flightCamera.setView(view)
@@ -2138,6 +2167,14 @@ export class GameHarness {
    * says what is actually held. Headlessly it is always null, and that is the
    * honest answer rather than a zero.
    */
+  terrainCache(): Promise<TerrainCacheReport> {
+    return this.#host.render.terrainCache()
+  }
+
+  clearTerrainCache(): Promise<void> {
+    return this.#host.render.clearTerrainCache()
+  }
+
   terrain(): TerrainReport | null {
     return this.#host.render.terrain()
   }
@@ -2365,6 +2402,9 @@ export class GameHarness {
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  the live streamer, and the rocks on it',
+      '  await ir.terrainCache()        persisted terrain hits, misses and storage',
+      '  await ir.clearTerrainCache()   discard regenerable terrain, retaining saves',
+      '  ir.picture(debug?)            reconstruction sizes, history and GPU passes',
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
       '  ir.galaxyJourney(p, seconds)  Earth orbit to 30 kpc above the disk, progress 0–1',

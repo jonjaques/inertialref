@@ -22,6 +22,7 @@ import {
   descentRegions,
   type GenerationCost,
   measurePatchGeneration,
+  measureHeightfieldSource,
   simulateDescent,
   summarizeDescent,
 } from './descent.ts'
@@ -102,6 +103,8 @@ export interface TerrainBaseline {
   readonly missing: readonly SurfaceArchetype[]
   /** False when the host supplied no clock, in which case the timings are zero. */
   readonly timed: boolean
+  /** Source delivery includes cache lookup and transfer; absence means CPU generation. */
+  readonly source?: string
 }
 
 /**
@@ -293,7 +296,7 @@ export function summarizeBaseline(baseline: TerrainBaseline): string {
         ? `  generation: not timed — the host supplied no clock`
         : g.patches === 0
           ? `  generation: not timed — the descent asked for too few patches`
-          : `  generation: ${g.msPerPatch.toFixed(2)} ms/patch over ${g.patches} patches ` +
+          : `  ${baseline.source === undefined ? 'generation' : `tile delivery (${baseline.source})`}: ${g.msPerPatch.toFixed(2)} ms/patch over ${g.patches} patches ` +
             `(${(g.samplesPerSecond / 1e6).toFixed(2)} M samples/s)`,
     )
     lines.push('  sites, dropped straight onto:')
@@ -318,3 +321,38 @@ export function summarizeBaseline(baseline: TerrainBaseline): string {
 export const baselineAddresses = (
   baseline: TerrainBaseline,
 ): readonly string[] => baseline.entries.map((entry) => entry.zoo.address)
+
+/** Reuses the same selections while measuring a host's asynchronous heightfield source. */
+export async function terrainBaselineWithSource(
+  world: World,
+  now: () => number,
+  source: import('@inertialref/workers').HeightfieldSource,
+  options: BaselineOptions = {},
+): Promise<TerrainBaseline> {
+  const baseline = terrainBaseline(world, null, options)
+  const entries: BaselineEntry[] = []
+  for (const entry of baseline.entries) {
+    const body = bodyFor(world, entry.zoo.address)
+    if (body === null) continue
+    const regions = descentRegions(entry.descent)
+    await measureHeightfieldSource(
+      body,
+      regions.slice(0, WARMUP_PATCHES),
+      now,
+      source,
+      baseline.resolution,
+    )
+    const generation = await measureHeightfieldSource(
+      body,
+      regions.slice(
+        WARMUP_PATCHES,
+        WARMUP_PATCHES + (options.timedPatches ?? TIMED_PATCHES),
+      ),
+      now,
+      source,
+      baseline.resolution,
+    )
+    entries.push({ ...entry, generation })
+  }
+  return { ...baseline, entries, source: source.kind, timed: true }
+}

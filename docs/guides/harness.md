@@ -43,6 +43,7 @@ pixels.
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
 | `ir.dossier(address)`  | one star or one body as a page of astronomy                       |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
+| `ir.picture(debug?)`   | reconstruction dimensions, history, allocations and GPU timings   |
 | `ir.lens()`            | the camera as an instrument — mm, f-stop, depth of field, EV      |
 | `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
 | `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                      |
@@ -526,6 +527,40 @@ pnpm timing --track Tasks --threads   # one row per worker
 
 ---
 
+## Measuring the picture
+
+```js
+ir.picture() // live reconstruction report; null without a renderer
+ir.picture('motion') // temporal velocity
+ir.picture('disocclusion') // rejected history
+ir.picture('reactivity') // blended regions that reduce history reuse
+ir.picture('none') // return to the image
+```
+
+The other temporal debug views are `depth`, `age`, `locks`, `exposure` and
+`shading`. The report states `path`, integer `renderWidth`/`renderHeight` and
+`displayWidth`/`displayHeight`, jitter `phase` and `phaseCount`, submitted
+`frames`, history `resets`, initialization `initMs` and `gpuTimings` by pass.
+Timestamp availability depends on the backend and detailed timing being enabled.
+`workingTextureBytes` counts raw upscaler textures, excluding the scene,
+optical targets and driver overhead. It is not total GPU memory.
+
+Select a repeatable picture through the URL: `?picture=native`,
+`?picture=msaa:quality`, `?picture=temporal:quality` or
+`?picture=bilinear:quality`. An optional third field selects sharpness, such as
+`temporal:quality:crisp`; the bilinear diagnostic takes only the scale. The
+page override does not change saved settings. Temporal native is available as
+`?picture=temporal:native`.
+
+Compare a fixed camera on a generated world outside Sol, at a held photographic
+instant and identical display dimensions. Allow at least `phaseCount` presented
+frames after a temporal cut, record the phase with the plate and compare two
+boots of the same build to establish its own variation. Use `ir.gpu()` for the
+complete chain and the report's per-pass readings for reconstruction alone.
+[Testing](testing.md#reconstruction-and-persistent-terrain) gives the focused gates.
+
+---
+
 ## Measuring terrain
 
 ```js
@@ -571,6 +606,19 @@ ground on screen came from, because a producer can stop mid
 session and the fields already held came from wherever they came from.
 `?producer=cpu` on the URL keeps the pool on a WebGPU page, which is the A/B
 every GPU figure was taken against.
+
+The browser's persistent archive is separate from those live streamer counts:
+
+```js
+await engine.terrainCache() // availability, activity counters and retained storage
+await engine.clearTerrainCache() // discard the archive without changing saves
+```
+
+`activity` distinguishes hits, misses, invalid records, successful writes,
+read/write errors, cancellation and pending writes. `storage` reports retained
+entries and bytes alongside their limits. An unavailable store reports
+`available: false`; generation continues. CPU and GPU producer records remain
+separate even though their storage and activity counters share the archive.
 
 **The first frame on a body reports zeros for a reason that is not the relief
 gate.** The subdivision floor is a worker answer, so a body the streamer has

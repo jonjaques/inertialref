@@ -35,3 +35,5 @@ export {
   MAX_FILE_PICTURES,
   MAX_PICTURE_BYTES,
 } from './pictureFormat.ts'
+
+export * from './pictureReport.ts'

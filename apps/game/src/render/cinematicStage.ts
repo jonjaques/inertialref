@@ -36,6 +36,7 @@ import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import { saturate } from '@inertialref/rendering'
 import type { CinematicView } from '../engine/GameEngine.ts'
 import { sensorRadiance } from './radiance.ts'
+import { sceneFarDepth } from './sceneDepth.ts'
 import type { LoadedShip } from './shipModels.ts'
 
 function effectMaterial(additive: boolean): MeshBasicNodeMaterial {
@@ -68,7 +69,7 @@ export function createLandingEffects() {
   skyMaterial.opacityNode = float(1)
   skyMaterial.depthTest = true
   skyMaterial.depthWrite = false
-  skyMaterial.depthNode = float(1)
+  skyMaterial.depthNode = sceneFarDepth
   skyMaterial.fog = false
   const elevation = positionLocal.normalize().y
   const aboveGround = smoothstep(0, 0.025, elevation)

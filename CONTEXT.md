@@ -17,6 +17,14 @@ is in [`docs/roadmap.md`](docs/roadmap.md); foundational decisions are in
 
 ## Current state
 
+Picture settings now select native rendering, spatial FSR or temporal FSR on
+WebGPU without rebuilding the renderer; WebGL retains native rendering and
+the saved preference. Disposable terrain tiles survive browser reloads in a
+bounded IndexedDB cache and headless runs in SQLite. The five shipped
+extrasolar photographic presets are the acceptance fixtures
+([ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md),
+[ADR-0045](docs/adr/0045-generated-terrain-is-a-disposable-cache.md)).
+
 Milestone 1 — the vertical architectural proof — is **complete**: 12/12 capability checks pass in Node and in Chrome. Multiplayer is
 deferred to a later phase; only the seams exist (ADR-0008).
 
@@ -10213,6 +10221,69 @@ that as a defect.
 The review's remaining findings are ranked in
 [the erosion plan](design/plans/erosion.md) § 3 and § 4 — the eight-buffer
 ceiling that blocks phases 4 and 5 above all.
+
+## The ground remembers, and the picture has to earn its pixels (19 Sep 2026)
+
+The FSR and terrain-cache work is based on the merged terrain branch. Its
+acceptance scenes are the shipped extrasolar presets, with flight at Tau
+Ceti Dusk's exact surface coordinates. The preset angles are radians;
+`ir.land` takes radians too. A saved flight restored the same canonical hash
+immediately and after another second with the clock paused. Cache clearing
+also left the canonical hash unchanged. The caches are disposable derived
+data beside the save system, with separate CPU and GPU producer namespaces;
+they never become an authority for the surface.
+
+**A reduced picture is not necessarily a cheaper frame.** On an M5 MacBook
+Air, Chrome 153, the development server and a 1600 × 900 CSS viewport at
+DPR 2, The Far Shore took 22.558 ms per complete native MSAA frame, 13.163 ms
+with Spatial Performance and 15.043 ms with Temporal Performance. Tau Ceti
+Dusk took 11.252 ms native and 11.630 ms with Temporal Quality. These are
+medians of five 60-frame batches after warm-up, with timing instrumentation
+off. Both presets were measured at DPR 1 and 2; all 24 settings preserved
+the renderer, world hash and display-referred terrain selection. The full
+matrix, image differences, memory accounting and limitations are in
+[ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md). Temporal remains an
+explicit choice, not the default.
+
+**Reversing depth also reversed the sky's place in the draw list.** Three
+r185 reverses the sorted opaque and transparent lists under reversed depth,
+including `renderOrder`. The galaxy backdrop consequently drew after the
+ground, and its old far-depth value of one made it cover the scene. The
+renderer now preserves authored group and render order while retaining the
+backend's depth ordering, and custom depth outputs use the active backend's
+convention. A foreground pixel through the complete sensor caught what a
+depth-formula unit test could not.
+
+**Maximum reactivity remembers what an opaque object hid.** A full-screen
+sky marked reactive one left every ground pixel at one when the separate
+attachment used maximum blending. Temporal reconstruction then rejected all
+ground history. Coverage composition replaces hidden background coverage
+under an opaque foreground and combines translucent coverage. The mask is
+RGBA8 because source-alpha GPU blending cannot obtain opacity from a scalar
+R8 output. A physical-GPU test first read one behind opaque zero; it now
+reads zero, and two translucent layers combine to the expected 0.7.
+
+The odd-size resize also mattered: the raw upscaler's view offset replaced
+the camera aspect with the rounded internal dimensions. Keeping the display
+aspect restored the 937 × 613 CSS view at DPR 2 while rendering Quality at
+1249 × 817. Eight changes through native, supersampled, spatial and temporal
+settings created 58 tracked upscaler textures and destroyed all 58 when
+returning to native. Full timing is opt-in and drained in bounded batches;
+otherwise Three's timestamp pool and the raw kernel's sample list grow or
+overflow during sustained rendering.
+
+**A timeout must start when a transaction is admitted.** A cold Far Shore
+visit initially produced hundreds of storage errors because every cache
+operation entered IndexedDB's write queue with a one-second timer already
+running. Misses now use read-only transactions, at most eight operations are
+admitted together, and the five-second transaction timer starts after
+admission. The cold Tau Ceti Dusk visit then stored 1,390 tiles with no
+errors; reloading recorded 1,390 hits, no misses and no writes. Retention
+stayed under 256 MiB while moving among presets. The Proxima b headless
+descent took 92.37 s cold and 3.19 s warm, with all 1,246 warm requests served
+from SQLite and the same four terrain/contact assertions passing. The
+protocol and exact cache boundaries are in
+[ADR-0045](docs/adr/0045-generated-terrain-is-a-disposable-cache.md).
 
 ## Known gaps
 
