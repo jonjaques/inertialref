@@ -200,6 +200,28 @@ describe('browser terrain archive', () => {
     await expect(store.write(record('b'))).rejects.toThrow('transaction failed')
     expect(db.stores.get('metadata')?.size).toBe(1)
   })
+  it('retries an open that timed out rather than retiring the archive', async () => {
+    // The budget is a guess about a busy machine, so memoizing the rejection
+    // would cost the whole visit: every later landing regenerates ground that
+    // is already on disk.
+    const db = database()
+    let opens = 0
+    const factory = {
+      open: (...args: unknown[]) => {
+        opens += 1
+        return opens === 1
+          ? {}
+          : (db.factory.open as unknown as (...a: unknown[]) => unknown)(
+              ...args,
+            )
+      },
+    } as unknown as IDBFactory
+    const store = new IndexedDbHeightfieldStore({ factory, timeoutMs: 2 })
+    await expect(store.read('a')).rejects.toThrow('open failed')
+    await store.write(record('a'))
+    expect(await store.read('a')).toEqual(record('a'))
+    expect(opens).toBe(2)
+  })
   it('refuses unavailable and blocked storage within a bounded wait', async () => {
     await expect(
       new IndexedDbHeightfieldStore({ factory: null }).read('a'),

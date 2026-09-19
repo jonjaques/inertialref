@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
@@ -103,4 +105,37 @@ it('reports a quota refusal without claiming a persisted tile', async () => {
     false,
   )
   expect((await store.stats()).entries).toBe(0)
+})
+
+it('stops evicting when the tally disagrees with the table', async () => {
+  // The exit condition reads the triggers' running total and the progress
+  // comes from deleting rows. A tally left over budget above an empty table
+  // makes the subquery NULL, the delete match nothing, and the loop spin —
+  // synchronously, inside an open transaction, where no test timeout can
+  // reach it. So the check runs in a child process that can be killed.
+  const { directory, store } = make(1)
+  await store.write(heightfieldCacheRecord('first', field))
+  store.close()
+  const file = join(directory, 'tiles.sqlite')
+  const db = new DatabaseSync(file)
+  db.exec('DELETE FROM tiles; UPDATE tally SET entries=99, bytes=999999')
+  db.close()
+  const script = join(directory, 'evict.mjs')
+  writeFileSync(
+    script,
+    `import { DiskHeightfieldStore } from ${JSON.stringify(
+      new URL('./heightfieldStore.ts', import.meta.url).href,
+    )}
+const store = new DiskHeightfieldStore({ directory: ${JSON.stringify(directory)}, maxEntries: 1 })
+await store.write({ key: 'second', bytes: 10, checksum: 0, field: {} })
+store.close()`,
+  )
+  expect(() =>
+    execFileSync(process.execPath, [script], { timeout: 20_000 }),
+  ).not.toThrow()
+  // The tally stays wrong — repairing it is a different question. What the
+  // loop owes is termination, having evicted everything it could.
+  const check = new DatabaseSync(file)
+  expect(check.prepare('SELECT count(*) AS n FROM tiles').get()!.n).toBe(0)
+  check.close()
 })

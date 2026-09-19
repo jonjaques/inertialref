@@ -115,6 +115,15 @@ describe('regenerable heightfield cache', () => {
     expect(heightfieldCacheKey(surface, request, 'gpu')).not.toBe(key)
     expect(heightfieldCacheKey(surface, request, 'cpu', 'future')).not.toBe(key)
   })
+  it('separates a non-finite number from null and from the other non-finites', () => {
+    // `JSON.stringify` writes `null` for NaN and for either infinity, so four
+    // distinct sea levels would have shared one key and the cache would have
+    // answered a lookup with a tile generated from different arithmetic.
+    const keys = [null, Number.NaN, Infinity, -Infinity].map((seaLevel) =>
+      heightfieldCacheKey({ ...surface, seaLevel }, request, 'cpu'),
+    )
+    expect(new Set(keys).size).toBe(4)
+  })
   it('restores every typed array exactly across source instances without generating', async () => {
     const f = fixture()
     const first = await f.cache.submit(surface, request).result
