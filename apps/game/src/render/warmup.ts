@@ -8,6 +8,7 @@ import {
   type Object3D,
   type QuadMesh,
   type RenderPipeline,
+  type Renderer,
   type RenderTarget,
   type WebGPURenderer,
 } from 'three/webgpu'
@@ -112,7 +113,7 @@ export interface WarmTarget {
  * own synchronous half.
  */
 function bindWarmTarget(
-  renderer: WebGPURenderer,
+  renderer: Renderer,
   target: RenderTarget | null,
 ): () => void {
   const previous = renderer.getRenderTarget()
