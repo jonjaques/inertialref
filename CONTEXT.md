@@ -10360,11 +10360,12 @@ overlay drew. Mirroring `motion` exactly fails at pipeline creation: Dawn
 refuses `Color blending srcFactor (BlendFactor::SrcAlpha) … is reading alpha
 but it is missing from fragment output`, because the attachment is `RGFormat`
 and three emits a two-component fragment output for it. That is the same
-constraint that made `reactive` RGBA8. The two candidates — widen the
-attachment to RGBA16F, or read the already-masked `motion.rg` when optics are
-on — both change what the measured frames of
-[ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md) were measured
-with, at 4 B/px over a full-resolution attachment. Carried in
+constraint that made `reactive` RGBA8. Two candidates, each of which moves the
+configuration [ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md)
+measured: widening the attachment to RGBA16F costs 4 B/px over a
+full-resolution target, and reading the already-masked `motion.rg` when optics
+are on costs nothing and removes an attachment but leaves the optics-off
+temporal path without an answer. Carried in
 [the upscaler plan](design/plans/the-upscaler.md).
 
 A GPU probe states the defect exactly: a temporal sensor, a 40 × 40 surface at
