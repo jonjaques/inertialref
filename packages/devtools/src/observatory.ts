@@ -1044,8 +1044,9 @@ export class Observatory {
     }
     if (options.ease === false || previous === null) {
       this.#state = this.#desired
-      this.#host.render.declareCut()
     }
+    if (options.ease === false || previous?.address !== target.address)
+      this.#host.render.declareCut()
 
     log.info('observatory focused', {
       address: target.address,

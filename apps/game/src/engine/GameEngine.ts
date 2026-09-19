@@ -900,6 +900,8 @@ export class GameEngine {
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
+        terrainCache: () => this.terrainCache(),
+        clearTerrainCache: () => this.clearTerrainCache(),
         galaxyRender: () => this.galaxyRenderer?.() ?? null,
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
