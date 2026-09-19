@@ -48,7 +48,8 @@
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
     "check": "node scripts/check.mjs",
     "check:gate": "node scripts/check.mjs --only gate",
-    "presets:ledger": "vitest run apps/headless/src/pictureLedger.test.ts --update"
+    "presets:ledger": "vitest run apps/headless/src/pictureLedger.test.ts --update",
+    "presets:compare": "node scripts/presets/compare.mjs"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
