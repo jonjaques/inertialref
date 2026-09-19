@@ -10384,6 +10384,88 @@ validation take their byte estimate from one helper rather than two copies of
 the same arithmetic. The redundant validation walk itself stays: it is a
 guard, and removing it is a decision about the guard, not a cleanup.
 
+## The check is a graph, and the pictures are the fixture (19 Sep 2026)
+
+The development workflow paid for the same checks three times a pull request
+and photographed nothing in particular. [ADR-0046](docs/adr/0046-the-check-is-a-graph-and-the-pictures-are-the-fixture.md)
+holds the decision; this is what was measured and what bit on the way.
+
+**The ten stages were independent and ran one at a time.** On the M5 at
+`2e314c52`, sequentially from a cold terrain archive: 244 s, of which the slow
+suite was 96 s, `build` 69 s — nineteen of them the six `tsc` projects run a
+second time, because `pnpm build` type-checks for the deploy path — `test`
+27 s and `spelling:check` 25 s on one core. `scripts/check.mjs` runs the same
+stages as a graph under a core budget: 80.5 s wall at 428 s of CPU for
+eighteen stages, warm and `--force`d, with `test` reading 47 s and
+`spelling` 43 s in company. The gate group — graph, lint, six type projects,
+the root suite — is 29.5 s wall, bounded by the suite alone. A stage that
+passes is stamped by the content of the working tree, so a `pnpm check`
+after the Stop hook reuses those and runs the rest. Rejected: skipping by
+which files changed, because a stage's inputs are not its file list.
+
+**CI paid the cold descent every run and forty megabytes of LFS bandwidth.**
+The archive is self-validating, so a restored one can only skip work; the
+workflow restores it under a key made of the archive's own version string,
+saves it only when the tile count grew, and runs on `main` so pull requests —
+which can only see caches from their own branch or the default one — inherit
+a warm one. The count comes from the store's tally, not the file's digest: a
+warm run rewrites every row's recency and the digest moves on every run.
+
+**The thirteen pictures are the visual fixture, in two halves.**
+`pictureLedger.json` snapshots what each camera decided — pose, lens, the
+sun over a stance or the phase from orbit, a digest of the body, the terrain
+a stance asks for at the plate's 480×320 — in one second of Node, and holds
+`world.stateHash()` across all thirteen. `pnpm presets:compare` photographs
+them through the renderer. Three things it had to learn:
+
+- **Load the URL; do not build the picture with verbs.** The first rig booted
+  the page, evaluated a file that cleared the chrome and took the preset,
+  waited 2.5 s and shot. Two shots of one boot two seconds apart differed by
+  7,939 px at 3% and 4,927 at 12% — the sky's cubes were still publishing —
+  and a fresh Vite reloads the page on its own four seconds into its first
+  visit, under the script. Now `--preset` expands the picture into its public
+  URL, `chrome=0`, `layers=0` and `output=standard` carry the plate's state,
+  and `--settle` polls `ir.settled()` until the sky cache and the streamer
+  report nothing in flight, twice in a row. After that, two shots of one boot
+  differ by zero pixels, and two captures of the tree differ by zero on all
+  seven lit pictures. Settling takes a quarter second on a Sol body and about
+  twelve on a generated stance while the ring streams.
+- **The dark pictures compare their noise.** Between two servers of one
+  commit at 2.5 s, the night side, Titan's crescent, the rings from high
+  above and Jupiter with its moons differed by 1,069 to 3,090 px while the
+  lit faces and stances differed by four or fewer: a star field jittering
+  under a black disk. The compare takes the lit pictures by default — a plate
+  a fifth lit at 12% gray, and the ledger's verdict (a sun over 3° up, a phase
+  under 100°) agreeing — and names the dark ones it skipped. `ir.light()` and
+  the `sun` column on `ir.sites()` are the same measure for any scenario an
+  agent is about to photograph.
+- **The strip at the bottom of every capture was Astro's dev toolbar**, not
+  the app's chrome: `ir.chrome(false)` had cleared everything the app draws,
+  and `document.elementsFromPoint` at the strip returned `ASTRO-DEV-TOOLBAR`.
+  The plates from 8 September predate the Astro shell. The capture's server
+  runs with `ASTRO_DEV_TOOLBAR=0`, which `astro.config.ts` reads.
+
+Two more that cost a run each: a `layers=0` stance pushed at engine creation
+loses to the planetarium's own stance, which writes `labels` and `showOrbits`
+from the preferences on mount, so the override is honored there; and the
+server answering on 5173 was another repository's Vite, so the scripts serve
+the tree themselves on 5183 and the baseline on 5184, and the driver is told
+never to start one.
+
+**Against the committed plates, every lit picture had moved** — earthrise by
+1,475 px, blue-marble 20,433, far-shore 58,900 at the 3% level — which is the
+rivers of [ADR-0043](docs/adr/0043-the-rivers-drain.md), the reconstruction of
+[ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md) and the sky
+work since 8 September, seen at once. The plates are recaptured through the
+rig in the same change, so the next compare is against frames the renderer
+produces now — and against those, a capture minutes later still differs by
+669 to 12,515 px at 3%, with a peak of 28 of 255: the plate is a JPEG at
+quality 88 and that is its encoding error on Earth's clouds. So the level
+depends on the reference — 3% against a PNG the rig captured, where the
+control is 0 px, and 8% against a committed plate, where the same seven read
+at most 25 px while the drained rivers still read 21,715 px on `far-shore` at
+12%. The floor is 200 px.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

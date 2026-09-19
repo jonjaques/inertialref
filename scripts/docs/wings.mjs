@@ -180,6 +180,10 @@ export const WINGS = [
             'docs/adr/0045-generated-terrain-is-a-disposable-cache.md',
             'The disposable terrain cache',
           ],
+          [
+            'docs/adr/0046-the-check-is-a-graph-and-the-pictures-are-the-fixture.md',
+            'The check is a graph',
+          ],
         ],
       },
     ],

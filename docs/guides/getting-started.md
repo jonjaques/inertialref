@@ -211,12 +211,12 @@ puts it under thrust, which is what an integrated tick costs.
 pnpm dev          # Astro on 5173 and wrangler on 8787, in one terminal
 pnpm preview      # build, then serve it through the real Worker on 8787
 pnpm test         # vitest, node environment only
-pnpm typecheck    # five tsconfig projects and Astro templates
+pnpm typecheck    # the six type projects, in parallel
 pnpm lint         # oxlint
 pnpm graph        # dependency layering + cycle check
 pnpm brand        # re-render the icons, the share card and the crawler files
 pnpm build
-pnpm check        # the gate — graph → brand → presets → format → lint → typecheck → test → test:slow → build
+pnpm check        # the gate — every stage as one graph; scripts/check.mjs --list names them
 
 pnpm sim --self-test          # headless run + capability checks
 pnpm sim --scenario surface --ticks 2526    # also: --seed, --system, --quiet
