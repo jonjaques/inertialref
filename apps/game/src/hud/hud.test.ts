@@ -133,6 +133,7 @@ describe('the author’s instruments', () => {
   afterEach(() => {
     engineStore.setState({ status: null, exposure: null })
     write(RENDER_SENSOR, RENDER_SENSOR.initial)
+    write(RENDER_PICTURE, RENDER_PICTURE.initial)
   })
 
   it('renders the universe it is pointed at', () => {
@@ -406,6 +407,65 @@ describe('the author’s instruments', () => {
       sharpness: 'standard',
     })
     write(RENDER_PICTURE, RENDER_PICTURE.initial)
+  })
+
+  it('shows the URL picture and its integer render size without storing it', () => {
+    const picture = {
+      aa: 'temporal',
+      scale: 'quality',
+      sharpness: 'crisp',
+    } as const
+    const graphics = renderToStaticMarkup(
+      createElement(GraphicsPanel, {
+        render: {
+          preference: 'standard',
+          output: null,
+          displaySize: { width: 1600, height: 900 },
+          pictureOverride: picture,
+          onPreference: () => {},
+        },
+        onNotice: () => {},
+      }),
+    )
+    expect(graphics).toContain('1066×600 of 1600×900')
+    expect(graphics).toContain(
+      'The page link sets this picture for this visit.',
+    )
+    const pictureButtons =
+      graphics.match(/<button[^>]*title="Set by the page link"[^>]*>/g) ?? []
+    expect(pictureButtons).toHaveLength(
+      PICTURE_AA.length + PICTURE_SCALES.length + PICTURE_SHARPNESS.length,
+    )
+    for (const button of pictureButtons) expect(button).toContain('disabled=""')
+    expect(read(RENDER_PICTURE)).toEqual(RENDER_PICTURE.initial)
+  })
+
+  it('refuses reduced scales and sharpening for supersampling', () => {
+    write(RENDER_PICTURE, { ...RENDER_PICTURE.initial, aa: 'supersample' })
+    const graphics = renderToStaticMarkup(
+      createElement(GraphicsPanel, {
+        render: {
+          preference: 'standard',
+          output: null,
+          displaySize: { width: 1600, height: 900 },
+          onPreference: () => {},
+        },
+        onNotice: () => {},
+      }),
+    )
+    expect(graphics).toContain('3200×1800 of 1600×900')
+    const reduced =
+      graphics.match(
+        /<button[^>]*title="Supersampling uses native scale"[^>]*>/g,
+      ) ?? []
+    expect(reduced).toHaveLength(PICTURE_SCALES.length - 1)
+    for (const button of reduced) expect(button).toContain('disabled=""')
+    const sharpening =
+      graphics.match(
+        /<button[^>]*title="Choose temporal anti-aliasing or a reduced render scale"[^>]*>/g,
+      ) ?? []
+    expect(sharpening).toHaveLength(PICTURE_SHARPNESS.length)
+    for (const button of sharpening) expect(button).toContain('disabled=""')
   })
 
   it.each(CAMERA_MODES)('shows the controls for the %s camera', (mode) => {

@@ -1,7 +1,7 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
-import type { Picture } from '../render/picture.ts'
+import { resolvePicture, type Picture } from '../render/picture.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -77,6 +77,20 @@ export function Sensor({
     // The producer is registered once per label, so under StrictMode's
     // mount–unmount–mount it belongs to the first chain, which is disposed by
     // the time boot runs it. Warm whichever chain is live instead.
+    const resolved = resolvePicture(
+      picture,
+      engine.gl?.description.backend ?? 'webgpu',
+    )
+    if (resolved.aa === 'temporal' || resolved.scale !== 'native') {
+      warmAtMount({
+        label: 'compiling the upscaler',
+        units: 1,
+        run: async (done) => {
+          chain.current?.warmUpscale()
+          done()
+        },
+      })
+    }
     warmAtMount({
       label: 'warming the sensor',
       units: 1,

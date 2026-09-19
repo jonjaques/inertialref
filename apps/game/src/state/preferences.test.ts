@@ -2,6 +2,12 @@ import fc from 'fast-check'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
 import { isBoolean, numberWithin, oneOf } from './accept.ts'
+import {
+  PICTURE_AA,
+  PICTURE_SCALES,
+  PICTURE_SHARPNESS,
+  isPicture,
+} from '../render/picture.ts'
 import * as preferences from './preferences.ts'
 import {
   CAMERA_LENS,
@@ -96,6 +102,45 @@ describe('picture preference migration', () => {
     resetPreferences()
     expect(importPreferences(file).applied).toBe(1)
     expect(read(RENDER_PICTURE)).toEqual(picture)
+  })
+
+  it('resets a chosen picture without remigrating an obsolete key', () => {
+    write(RENDER_PICTURE, {
+      aa: 'temporal',
+      scale: 'quality',
+      sharpness: 'crisp',
+    })
+    write(
+      {
+        ...RENDER_PICTURE,
+        key: 'render.aa',
+        accept: (_value): _value is unknown => true,
+      },
+      '4x',
+    )
+    resetPreferences()
+    expect(read(RENDER_PICTURE)).toEqual(RENDER_PICTURE.initial)
+    expect(exportPreferences(stamp).preferences).toEqual({})
+  })
+
+  it('round-trips every legal class of picture without changing its fields', () => {
+    const pictures = fc
+      .record({
+        aa: fc.constantFrom(...PICTURE_AA),
+        scale: fc.constantFrom(...PICTURE_SCALES),
+        sharpness: fc.constantFrom(...PICTURE_SHARPNESS),
+      })
+      .filter(isPicture)
+    fc.assert(
+      fc.property(pictures, (picture) => {
+        resetPreferences()
+        write(RENDER_PICTURE, picture)
+        const file = JSON.parse(JSON.stringify(exportPreferences(stamp)))
+        resetPreferences()
+        expect(importPreferences(file).applied).toBe(1)
+        expect(read(RENDER_PICTURE)).toEqual(picture)
+      }),
+    )
   })
 })
 
