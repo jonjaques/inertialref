@@ -365,6 +365,10 @@ export function createSensor(
     signature?.linear ??
     vec4((upscale?.outputTexture ?? scenePass.getTextureNode('output')).rgb, 1)
   const size = new Vector2()
+  // The report reads the drawing buffer too, and it is read between frames.
+  // `size` is the submitted frame's viewport — the key the defocus circle and
+  // the signature were measured at — so a getter must not move it.
+  const reportSize = new Vector2()
   let previousTime: number | null = null
   let previousGeneration = 0
   let previousPictureKey: string | null = null
@@ -437,14 +441,14 @@ export function createSensor(
           }
     },
     get diagnostics() {
-      renderer.getDrawingBufferSize(size)
+      renderer.getDrawingBufferSize(reportSize)
       return {
         picture: upscale?.diagnostics ?? {
           path: 'native',
           renderWidth: scenePass.renderTarget.width,
           renderHeight: scenePass.renderTarget.height,
-          displayWidth: size.x,
-          displayHeight: size.y,
+          displayWidth: reportSize.x,
+          displayHeight: reportSize.y,
           phase: 0,
           phaseCount: 1,
           frames: 0,

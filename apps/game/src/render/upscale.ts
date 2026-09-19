@@ -16,7 +16,10 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { passTexture, velocity } from 'three/tsl'
+import { getLogger } from '@inertialref/shared'
 import { onTimingLevel } from '../engine/browserTiming.ts'
+
+const log = getLogger('game.upscale')
 
 export type PictureDebug =
   | 'none'
@@ -160,10 +163,15 @@ export class UpscaleNode extends TempNode<'vec4'> {
     if (!this.#initialized) {
       const start = performance.now()
       this.#kernel.init()
-      const timer = (this.#kernel as unknown as { _timer: RawTimer })._timer
+      // The private sample queue is the only way to opt out of timestamps, so
+      // its absence in a future release costs the readout and nothing else:
+      // a throw here runs inside `setup`, which is a frame that never draws.
+      const timer =
+        (this.#kernel as unknown as { _timer?: RawTimer })._timer ?? null
       this.#timer = timer
-      const supported = timer.enabled
+      const supported = timer?.enabled === true
       this.#stopTiming = onTimingLevel((level) => {
+        if (timer === null) return
         timer.enabled = supported && level === 'full'
         if (!timer.enabled) timer.reset()
       })
@@ -193,7 +201,13 @@ export class UpscaleNode extends TempNode<'vec4'> {
     const device = (this.#renderer.backend as unknown as RawBackend).device
     const create = device.createTexture.bind(device)
     let bytes = 0
+    let unaccounted = 0
     // Count the library's raw allocations too; renderer.info cannot see them.
+    // A format the table does not know is over-counted at the widest format
+    // the library uses and reported, never thrown: this hook wraps the
+    // device's own `createTexture`, so a throw abandons `configure` with the
+    // kernel half-allocated and every later frame throws with it. Accounting
+    // is a readout, and a readout may not decide whether the scene draws.
     device.createTexture = (descriptor) => {
       const gpu = create(descriptor)
       const formats: Partial<Record<GPUTextureFormat, number>> = {
@@ -203,9 +217,9 @@ export class UpscaleNode extends TempNode<'vec4'> {
         r8unorm: 1,
       }
       const pixelBytes = formats[gpu.format]
-      if (pixelBytes === undefined)
-        throw new Error(`Unaccounted upscaler texture format: ${gpu.format}`)
-      bytes += gpu.width * gpu.height * gpu.depthOrArrayLayers * pixelBytes
+      if (pixelBytes === undefined) unaccounted += 1
+      bytes +=
+        gpu.width * gpu.height * gpu.depthOrArrayLayers * (pixelBytes ?? 8)
       return gpu
     }
     try {
@@ -220,6 +234,11 @@ export class UpscaleNode extends TempNode<'vec4'> {
     } finally {
       device.createTexture = create
     }
+    if (unaccounted > 0)
+      log.warn('upscaler textures in an unaccounted format', {
+        textures: unaccounted,
+        path: this.#path,
+      })
     this.#bytes = bytes
     this.outputTexture.value = this.#kernel.outputTexture
     this.#phase = 0
@@ -238,12 +257,16 @@ export class UpscaleNode extends TempNode<'vec4'> {
       : 1 / 60
     this.#debug = debug
     this.#kernel.settings.debugView = DEBUG_VALUES[debug]
-    this.#kernel.settings.exposure = Math.max(
-      1e-4,
-      Math.min(65504, conditioning),
-    )
-    if (this.#preData[0] !== Math.fround(preExposure)) {
-      this.#preData[0] = preExposure
+    // Both scalars come from the meter, and both divide back out of the
+    // output, so a non-finite one does not darken a frame — it writes NaN
+    // into the accumulation domain, where history carries it forward for
+    // good. Clamp them the way the delta above is clamped.
+    this.#kernel.settings.exposure = Number.isFinite(conditioning)
+      ? Math.max(1e-4, Math.min(65504, conditioning))
+      : 1
+    const pre = Number.isFinite(preExposure) ? preExposure : 1
+    if (this.#preData[0] !== Math.fround(pre)) {
+      this.#preData[0] = pre
       this.#pre.needsUpdate = true
     }
     this.#renderer.initTexture(this.#pre)
