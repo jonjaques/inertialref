@@ -116,6 +116,7 @@ any rule governing the files being changed.
 - **Never edit a file `pnpm brand` writes.** [Details](docs/agents/invariants.md#rule-62).
 - **Never change what the site says about itself in only one place.** [Details](docs/agents/invariants.md#rule-63).
 - **Never load a third-party tag from the document head.** [Details](docs/agents/invariants.md#rule-64).
+- **Never let a readout change the frame or stop it.** [Details](docs/agents/invariants.md#rule-65).
 
 ## Finish the work
 

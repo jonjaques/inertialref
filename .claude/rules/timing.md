@@ -61,6 +61,14 @@ Reasoning: [ADR-0022](../../docs/adr/0022-the-timeline.md).
   scope, so an interval measured on one thread and emitted on another lands wrong. The
   level crosses as a protocol message, never as a query on the worker's URL.
 
+- **A readout neither changes the frame nor stops it.** A census, a diagnostic getter
+  or a byte total is an instrument, and one that throws or writes is a way for the scene
+  to disappear over a number nobody is reading. The upscaler's census wraps the device's
+  own `createTexture`, so a throw there abandons `configure()` half-allocated and repeats
+  every frame; the sensor's `diagnostics` getter read the drawing buffer into the vector
+  that is the submitted frame's viewport. Reach for a library private with `?.`,
+  over-count what the table does not know, warn, and return what the caller can use.
+
 - **Read the performance plan before optimizing anything, and measure on a quiet
   machine.** [perf](../../design/plans/perf.md) carries every open figure, what
   was declined and why, and which numbers are stale — including the ones the rig

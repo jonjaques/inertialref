@@ -138,6 +138,24 @@ than 4.0.
 cutting it stalls the strictly serial refinement ladder below one rung
 (~90 patches).
 
+### Every cache hit awaits a second transaction to bump one row
+
+`IndexedDbHeightfieldStore.read` resolves the tile and then awaits a
+`readwrite` transaction over `[METADATA, TALLY]` to record the access before
+handing it back. IndexedDB serializes overlapping read-write scopes and every
+hit contends on the same `tally` key 0, so the warm Tau Ceti Dusk reload that
+[ADR-0045](../../docs/adr/0045-generated-terrain-is-a-disposable-cache.md)
+measures at 1,390 hits pays 1,390 fully serialized write transactions in the
+streaming path, each holding one of the eight admission slots for its whole
+duration. The bump is bookkeeping over a value already in hand and does not
+need to block the caller.
+
+Detaching it is not a one-line change: `terrainStore.test.ts`'s "evicts by
+recent reads" depends on the bump landing before the next write, so the
+ordering between a detached bump and a subsequent write has to be decided
+before the await comes out. Neither the cost nor the win is measured — the
+1,390 figure is the transaction count, not a millisecond total.
+
 ### The stack's gates allocate a context per sample, unmeasured
 
 `evaluate` builds a `StageContext` — `{surface, sketch, sea, seabed}` — on every

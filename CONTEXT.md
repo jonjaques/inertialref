@@ -10285,6 +10285,85 @@ from SQLite and the same four terrain/contact assertions passing. The
 protocol and exact cache boundaries are in
 [ADR-0045](docs/adr/0045-generated-terrain-is-a-disposable-cache.md).
 
+## A readout took the frame down, and the archive forgot it had one (19 Sep 2026)
+
+A review of the reconstruction and cache branch found fifteen defects. Ten are
+fixed here; the rest are open work, named below and carried in the plans.
+
+**Two of them were instruments that could stop the scene, which is now
+[rule 65](AGENTS.md).** The upscaler's byte census wraps the device's own
+`createTexture` to total what `renderer.info` cannot see, and threw on a format
+outside its four-entry table — inside `configure()`, which then abandoned the
+kernel half-allocated, and `prepare()` re-entered every frame to throw again.
+A number nobody reads retired the renderer. It over-counts an unknown format at
+eight bytes a pixel and warns. The sensor's `diagnostics` getter read the
+drawing buffer into `size`, the closure-scoped vector that is the submitted
+frame's viewport and the reference the defocus circle, the signature and the
+meter's readback were measured against; `Sensor.tsx` reads that getter after
+every frame and `ir.picture()` reads it from the console, so on a resize frame
+a property read moved what an asynchronous readback would be interpreted
+against. The report has its own vector. Reading the private `_timer` the
+timestamp opt-out needs is optional for the same reason.
+
+**A non-finite exposure scalar is permanent, where a non-finite delta is
+not.** `delta` was already guarded. FSR divides pre-exposure back out of an
+accumulation buffer that is invertible against it, so one NaN frame
+reconstructs every later frame from NaN and the image does not return without
+a declared cut — and `Math.min(65504, NaN)` is NaN, while `NaN !== NaN`
+re-uploaded the 1×1 texture every frame besides. Both scalars fall back to 1.
+
+**Four ways the archive lost ground it had already generated.** The browser
+store memoized the open promise including its rejection, so one open past the
+one-second budget retired IndexedDB for the rest of the visit and every
+landing regenerated tiles that were on disk; the rejection now clears the memo.
+`clearTerrainCache` reached the store directly whenever the CPU wrapper was
+absent — which is every session without a worker pool, and precisely the case
+where the producer's own wrapper is installed over the same store — skipping
+the generation guard, so a GPU lookup already past its read could write its
+tile back into a cache the caller had just emptied. The disk store's eviction
+loop took its exit from the triggers' running total and its progress from
+deleting rows: an empty table makes the subquery NULL, the delete match
+nothing and the tally still say over budget, which is a synchronous spin
+inside an open `BEGIN IMMEDIATE` that no vitest timeout can interrupt. And
+`stable()` delegated numbers to `JSON.stringify`, which writes `null` for NaN
+and for either infinity — four distinct values sharing one cache key, in the
+function whose docstring promises that cannot happen.
+
+**The temporal velocity attachment has no overlay mask, and the obvious fix
+does not build.** `motion` masks its overlays with `motionOverlay.oneMinus()`
+and blends `SrcAlpha`/`OneMinusSrcAlpha` so a transparent quad leaves the
+attachment to what it covers; `velocity` is fed by the same node and gets
+neither, so a plume, a flare, a warp streak, an entry trace or a cinematic
+overlay hands FSR its own vectors over its whole footprint, and reprojection,
+dilation and neighbor locking run on them for pixels the overlay never
+covered. Reactivity does not repair it — it suppresses history only where the
+overlay drew. Mirroring `motion` exactly fails at pipeline creation: Dawn
+refuses `Color blending srcFactor (BlendFactor::SrcAlpha) … is reading alpha
+but it is missing from fragment output`, because the attachment is `RGFormat`
+and three emits a two-component fragment output for it. That is the same
+constraint that made `reactive` RGBA8. The two candidates — widen the
+attachment to RGBA16F, or read the already-masked `motion.rg` when optics are
+on — both change what the measured frames of
+[ADR-0044](docs/adr/0044-the-sensor-reconstructs-the-display.md) were measured
+with, at 4 B/px over a full-resolution attachment. Carried in
+[the upscaler plan](design/plans/the-upscaler.md).
+
+A GPU probe states the defect exactly: a temporal sensor, a 40 × 40 surface at
+z = −4 through `sensorRadiance`, a 0.5 × 0.5 overlay at z = −2 that travels
+with the eye, and a 0.25-unit camera pan. The bare edge reads −0.108 of clip
+space and the covered center reads 0.
+
+Smaller: `OptionGroup` invoked the caller's `disabled` predicate twice per
+option, once for the boolean and once for the title, so the two reads could
+disagree and leave a button disabled with nothing to explain it — twelve calls
+a render for the Picture section's six answers. `parsePictureQuery` split its
+value twice. The heightfield checksum walks every byte of every tile on both
+paths with `for…of`, where the iterator protocol is the dominant term at a
+hundred thousand bytes a tile; it is indexed now, and the record and its
+validation take their byte estimate from one helper rather than two copies of
+the same arithmetic. The redundant validation walk itself stays: it is a
+guard, and removing it is a decision about the guard, not a cleanup.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

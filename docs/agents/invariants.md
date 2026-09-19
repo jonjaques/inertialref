@@ -82,6 +82,7 @@ table is one of those three, not drift.
 | Do not edit files `pnpm brand` writes                                                         | [Development](../guides/development.md)                                                                                |
 | Site metadata is duplicated on purpose                                                        | [Hosting](../hosting.md) · [Development](../guides/development.md)                                                     |
 | Third-party tags load through the analytics module                                            | [Hosting](../hosting.md)                                                                                               |
+| A readout neither changes the frame nor stops it                                              | [ADR-0022](../adr/0022-the-timeline.md) · [ADR-0044](../adr/0044-the-sensor-reconstructs-the-display.md)               |
 
 When a defect exposes a missing invariant, add the rule to `AGENTS.md`, a
 one-liner under `.claude/rules/`, a row here, and a regression test that can
@@ -697,3 +698,21 @@ shared head that scrapers read.
 
 **Never load a third-party tag from the document head.** `src/analytics.ts` is
 the gate: production build, canonical host, no Global Privacy Control.
+
+### Rule 65
+
+**Never let a readout change the frame or stop it.** A census, a diagnostic
+getter, a timestamp or a byte total is an instrument, and an instrument that
+can throw or can write is a way for the scene to disappear over a number
+nobody is reading. The upscaler's byte census wraps the device's own
+`createTexture`, so its throw on an unrecognized format abandoned `configure()`
+with the kernel half-allocated and then threw on every frame after; it
+over-counts an unknown format and warns. The sensor's `diagnostics` getter read
+the drawing buffer into the closure-scoped vector that is the submitted frame's
+viewport — the reference the defocus circle, the signature and the meter's
+readback are interpreted against — so a property read between submission and
+readback moved it on a resize frame; the report has its own vector. Reach for a
+library's private field with `?.`, count an unknown quantity generously, log,
+and hand back whatever the caller can still use.
+[ADR-0022](../adr/0022-the-timeline.md),
+[ADR-0044](../adr/0044-the-sensor-reconstructs-the-display.md).
