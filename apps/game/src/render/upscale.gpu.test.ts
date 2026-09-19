@@ -166,6 +166,27 @@ describe('the upscaler on the physical GPU', () => {
     }
   })
 
+  it('preserves the display lens when render dimensions round independently', async () => {
+    const f = rig(temporal)
+    try {
+      gpu.renderer.setSize(65, 49, false)
+      f.camera.aspect = 65 / 49
+      f.camera.updateProjectionMatrix()
+      await f.sensor.warm(f.target)
+      const projection = f.camera.projectionMatrix.clone()
+      f.sensor.render(f.target)
+      await gpu.read(f.target)
+      expect(f.sensor.diagnostics.picture).toMatchObject({
+        renderWidth: 43,
+        renderHeight: 32,
+      })
+      expect(f.camera.aspect).toBe(65 / 49)
+      expect(f.camera.projectionMatrix.elements).toEqual(projection.elements)
+    } finally {
+      f.dispose()
+    }
+  })
+
   it('warms the complete temporal attachment layout before the first frame', async () => {
     const f = rig(temporal)
     try {

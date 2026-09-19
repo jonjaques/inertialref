@@ -238,7 +238,7 @@ export function createSensor(
   scene: Scene,
   camera: Camera,
   frame?: () => SensorFrame,
-  preference: Picture = DEFAULT_PICTURE,
+  preference?: Picture,
   diagnostic?: 'bilinear',
 ): Sensor {
   const exposure = new ExposureMeter()
@@ -246,7 +246,7 @@ export function createSensor(
   const automaticAvailable = 'isWebGPUBackend' in renderer.backend
   let requestedMode: SensorSettings['mode'] | undefined
   const picture = resolvePicture(
-    preference,
+    preference ?? DEFAULT_PICTURE,
     automaticAvailable ? 'webgpu' : 'webgl',
   )
   const existingShape = sceneTargetShape(renderer)
@@ -255,7 +255,9 @@ export function createSensor(
     // Explicitly declared test fixtures retain their sample count unless a
     // picture preference is supplied by the scene adapter.
     samples:
-      arguments.length >= 5 ? pictureSamples(picture) : existingShape.samples,
+      preference === undefined
+        ? existingShape.samples
+        : pictureSamples(picture),
     temporal: picture.aa === 'temporal',
     ...(renderer.reversedDepthBuffer ? { depthType: FloatType } : {}),
   }

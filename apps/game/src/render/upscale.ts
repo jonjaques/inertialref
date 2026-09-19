@@ -235,7 +235,14 @@ export class UpscaleNode extends TempNode<'vec4'> {
     this.#camera.coordinateSystem = this.#renderer.coordinateSystem
     ;(this.#camera as unknown as { _reversedDepth: boolean })._reversedDepth =
       this.#renderer.reversedDepthBuffer
+    const aspect = this.#camera.aspect
     this.#kernel.beginFrame(this.#camera)
+    // setViewOffset assigns the render buffer's aspect. Independent integer
+    // rounding must not change the display lens or survive the jitter window.
+    if (this.#camera.isPerspectiveCamera && this.#camera.aspect !== aspect) {
+      this.#camera.aspect = aspect
+      this.#camera.updateProjectionMatrix()
+    }
     if (this.#path === 'temporal')
       this.#phase = (this.#phase + 1) % this.#kernel.jitterPhaseCount
   }
