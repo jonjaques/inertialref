@@ -32,7 +32,8 @@ export interface HeightfieldStoreStats {
 /** Host storage for regenerable tiles, separate from the save store. */
 export interface HeightfieldStore {
   read(key: string): Promise<unknown>
-  write(record: HeightfieldCacheRecord): Promise<void>
+  /** False means the tile exceeds the host quota and is deliberately not stored. */
+  write(record: HeightfieldCacheRecord): Promise<void | boolean>
   remove(key: string): Promise<void>
   clear(): Promise<void>
   stats(): Promise<HeightfieldStoreStats>
@@ -299,8 +300,8 @@ export class CachedHeightfieldSource implements HeightfieldSource {
             const write = Promise.resolve()
               .then(() => this.#store.write(row))
               .then(
-                () => {
-                  this.#counts.writes++
+                (stored) => {
+                  if (stored !== false) this.#counts.writes++
                 },
                 () => {
                   this.#counts.writeErrors++

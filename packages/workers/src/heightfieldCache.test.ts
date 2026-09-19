@@ -228,3 +228,13 @@ it('a synchronous storage write failure still delivers the generated field', asy
   await f.cache.flush()
   expect(f.cache.stats().writeErrors).toBe(1)
 })
+
+it('does not report a persisted write when the store refuses an oversized record', async () => {
+  const f = fixture()
+  vi.mocked(f.store.write).mockResolvedValue(false)
+  await expect(f.cache.submit(surface, request).result).resolves.toHaveProperty(
+    'elevations',
+  )
+  await f.cache.flush()
+  expect(f.cache.stats()).toMatchObject({ writes: 0, writeErrors: 0 })
+})

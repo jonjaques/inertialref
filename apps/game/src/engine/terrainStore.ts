@@ -9,6 +9,7 @@ const TILES = 'tiles'
 const METADATA = 'metadata'
 const TALLY = 'tally'
 const ALL_STORES = [TILES, METADATA, TALLY]
+const TRANSACTIONS_IN_FLIGHT = 8
 interface Tally {
   entries: number
   bytes: number
@@ -32,7 +33,10 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
   readonly #factory: IDBFactory | undefined
   readonly #maxEntries: number
   readonly #maxBytes: number
-  readonly #timeout: number
+  readonly #openTimeout: number
+  readonly #transactionTimeout: number
+  #active = 0
+  readonly #waiting: (() => void)[] = []
   #database: Promise<IDBDatabase> | null = null
   readonly #digests = new Map<string, Promise<string>>()
   constructor(options: TerrainStoreOptions = {}) {
@@ -45,7 +49,8 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
       0,
       Math.floor(options.maxBytes ?? 256 * 1024 ** 2),
     )
-    this.#timeout = options.timeoutMs ?? 1000
+    this.#openTimeout = options.timeoutMs ?? 1000
+    this.#transactionTimeout = options.timeoutMs ?? 5000
   }
   #key(signature: string): Promise<string> {
     const known = this.#digests.get(signature)
@@ -76,7 +81,7 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
         clearTimeout(timer)
         reject(new Error('Terrain cache open failed'))
       }
-      const timer = setTimeout(fail, this.#timeout)
+      const timer = setTimeout(fail, this.#openTimeout)
       request.onerror = fail
       request.onblocked = fail
       request.onupgradeneeded = () => {
@@ -111,58 +116,83 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
       }
     })
     this.#database = opening
-    void opening.catch(() => {
-      if (this.#database === opening) this.#database = null
-    })
     return opening
+  }
+  async #admit(): Promise<void> {
+    if (this.#active < TRANSACTIONS_IN_FLIGHT) {
+      this.#active++
+      return
+    }
+    await new Promise<void>((resolve) => this.#waiting.push(resolve))
+  }
+  #release(): void {
+    const next = this.#waiting.shift()
+    if (next === undefined) this.#active--
+    else next()
   }
   async #run<T>(
     mode: IDBTransactionMode,
     initial: T,
     operate: (transaction: IDBTransaction, result: (value: T) => void) => void,
+    stores = ALL_STORES,
   ): Promise<T> {
-    const db = await this.#open()
-    return new Promise<T>((resolve, reject) => {
-      const transaction = db.transaction(ALL_STORES, mode)
-      let value = initial
-      const fail = () => {
-        clearTimeout(timer)
-        reject(new Error('Terrain cache transaction failed'))
-      }
-      const timer = setTimeout(() => {
-        try {
-          transaction.abort()
-        } catch {
-          /* A completed transaction cannot abort. */
+    // A timeout measures an admitted operation. Hundreds of queued tile writes
+    // must not consume their timeout while another transaction owns the stores.
+    await this.#admit()
+    try {
+      const db = await this.#open()
+      return await new Promise<T>((resolve, reject) => {
+        const transaction = db.transaction(stores, mode)
+        let value = initial
+        const fail = () => {
+          clearTimeout(timer)
+          reject(new Error('Terrain cache transaction failed'))
         }
-        fail()
-      }, this.#timeout)
-      transaction.onerror = fail
-      transaction.onabort = fail
-      transaction.oncomplete = () => {
-        clearTimeout(timer)
-        resolve(value)
-      }
-      try {
-        operate(transaction, (next) => {
-          value = next
-        })
-      } catch {
-        transaction.abort()
-        fail()
-      }
-    })
+        const timer = setTimeout(() => {
+          try {
+            transaction.abort()
+          } catch {
+            /* A completed transaction cannot abort. */
+          }
+          fail()
+        }, this.#transactionTimeout)
+        transaction.onerror = fail
+        transaction.onabort = fail
+        transaction.oncomplete = () => {
+          clearTimeout(timer)
+          resolve(value)
+        }
+        try {
+          operate(transaction, (next) => {
+            value = next
+          })
+        } catch {
+          transaction.abort()
+          fail()
+        }
+      })
+    } finally {
+      this.#release()
+    }
   }
   async read(signature: string): Promise<unknown> {
     const key = await this.#key(signature)
-    return this.#run<unknown>('readwrite', null, (transaction, result) => {
-      const tiles = transaction.objectStore(TILES)
-      const meta = transaction.objectStore(METADATA)
-      const tally = transaction.objectStore(TALLY)
-      const read = tiles.get(key)
-      read.onsuccess = () => {
-        result(read.result ?? null)
-        if (read.result === undefined) return
+    const value = await this.#run<unknown>(
+      'readonly',
+      null,
+      (transaction, result) => {
+        const read = transaction.objectStore(TILES).get(key)
+        read.onsuccess = () => result(read.result ?? null)
+      },
+      [TILES],
+    )
+    if (value === null) return null
+    await this.#run<void>(
+      'readwrite',
+      undefined,
+      (transaction) => {
+        const meta = transaction.objectStore(METADATA)
+        const tally = transaction.objectStore(TALLY)
         const row = meta.get(key)
         row.onsuccess = () => {
           if (row.result === undefined) return
@@ -174,12 +204,14 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
             tally.put(next, 0)
           }
         }
-      }
-    })
+      },
+      [METADATA, TALLY],
+    )
+    return value
   }
-  async write(record: HeightfieldCacheRecord): Promise<void> {
+  async write(record: HeightfieldCacheRecord): Promise<boolean> {
     const key = await this.#key(record.key)
-    if (record.bytes > this.#maxBytes || this.#maxEntries === 0) return
+    if (record.bytes > this.#maxBytes || this.#maxEntries === 0) return false
     await this.#run<void>('readwrite', undefined, (transaction) => {
       const tiles = transaction.objectStore(TILES)
       const meta = transaction.objectStore(METADATA)
@@ -223,6 +255,7 @@ export class IndexedDbHeightfieldStore implements HeightfieldStore {
         }
       }
     })
+    return true
   }
   async remove(signature: string): Promise<void> {
     const key = await this.#key(signature)

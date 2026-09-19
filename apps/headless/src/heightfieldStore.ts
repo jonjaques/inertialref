@@ -85,10 +85,10 @@ export class DiskHeightfieldStore implements HeightfieldStore {
       }
     })
   }
-  async write(record: HeightfieldCacheRecord): Promise<void> {
+  async write(record: HeightfieldCacheRecord): Promise<boolean> {
     const data = serialize(record)
     // SQLite's payload is what occupies disk; the portable estimate is for IndexedDB.
-    if (data.byteLength > this.#maxBytes || this.#maxEntries === 0) return
+    if (data.byteLength > this.#maxBytes || this.#maxEntries === 0) return false
     this.#transaction((db) => {
       db.exec('UPDATE tally SET sequence=sequence+1 WHERE id=1')
       db.prepare(
@@ -108,6 +108,7 @@ export class DiskHeightfieldStore implements HeightfieldStore {
         )
       }
     })
+    return true
   }
   async remove(key: string): Promise<void> {
     this.#open().prepare('DELETE FROM tiles WHERE key=?').run(this.#key(key))

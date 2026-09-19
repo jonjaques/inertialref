@@ -96,3 +96,11 @@ it('storage absence is a generated tile, never a failed source', async () => {
   await source.flush()
   expect(source.stats()).toMatchObject({ readErrors: 1, writeErrors: 1 })
 })
+
+it('reports a quota refusal without claiming a persisted tile', async () => {
+  const { store } = make(0)
+  expect(await store.write(heightfieldCacheRecord('no-room', field))).toBe(
+    false,
+  )
+  expect((await store.stats()).entries).toBe(0)
+})

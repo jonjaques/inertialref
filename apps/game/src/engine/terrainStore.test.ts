@@ -8,13 +8,21 @@ import {
 function database() {
   const stores = new Map<string, Map<unknown, unknown>>()
   let quota = false
+  let held = false
+  let active = 0
+  let peak = 0
+  const commits: (() => void)[] = []
+  const modes: string[] = []
   const db = {
     close: vi.fn(),
     createObjectStore: (name: string) => {
       stores.set(name, new Map())
       return { createIndex() {} }
     },
-    transaction: () => {
+    transaction: (_stores: string[], mode: string) => {
+      modes.push(mode)
+      active++
+      peak = Math.max(peak, active)
       const values = new Map(
         [...stores].map(([name, rows]) => [name, new Map(rows)]),
       )
@@ -26,7 +34,9 @@ function database() {
         onerror: null as (() => void) | null,
         onabort: null as (() => void) | null,
         abort: () => {
+          if (aborted) return
           aborted = true
+          active--
           transaction.onabort?.()
         },
         objectStore: (name: string) => {
@@ -52,8 +62,14 @@ function database() {
                 transaction.abort()
                 return
               }
-              for (const [key, map] of values) stores.set(key, map)
-              transaction.oncomplete?.()
+              const commit = () => {
+                if (aborted) return
+                for (const [key, map] of values) stores.set(key, map)
+                active--
+                transaction.oncomplete?.()
+              }
+              if (held) commits.push(commit)
+              else commit()
             })
             return request
           }
@@ -122,6 +138,16 @@ function database() {
     quota: () => {
       quota = true
     },
+    modes,
+    pending: () => commits.length,
+    peak: () => peak,
+    hold: () => {
+      held = true
+    },
+    release: () => {
+      held = false
+      for (const commit of commits.splice(0)) commit()
+    },
   }
 }
 const record = (key: string, bytes = 100): HeightfieldCacheRecord => ({
@@ -158,7 +184,7 @@ describe('browser terrain archive', () => {
     await store.write(record('a', 100))
     await store.write(record('b', 100))
     expect(await store.read('a')).toBeNull()
-    await store.write(record('large', 200))
+    expect(await store.write(record('large', 200))).toBe(false)
     expect(await store.stats()).toMatchObject({ entries: 1, bytes: 100 })
     await store.remove('b')
     expect(await store.stats()).toMatchObject({ entries: 0, bytes: 0 })
@@ -183,4 +209,28 @@ describe('browser terrain archive', () => {
       new IndexedDbHeightfieldStore({ factory, timeoutMs: 2 }).read('a'),
     ).rejects.toThrow('open failed')
   })
+})
+
+it('admits only eight transactions while misses stay readonly', async () => {
+  const db = database()
+  const store = new IndexedDbHeightfieldStore({ factory: db.factory })
+  db.hold()
+  const reads = Array.from({ length: 40 }, (_, i) => store.read(`missing-${i}`))
+  await vi.waitFor(() => expect(db.pending()).toBe(8), { interval: 1 })
+  expect(db.peak()).toBe(8)
+  expect(db.modes.every((mode) => mode === 'readonly')).toBe(true)
+  db.release()
+  expect(await Promise.all(reads)).toEqual(Array(40).fill(null))
+  expect(db.peak()).toBe(8)
+})
+
+it('releases admission slots when storage transactions abort', async () => {
+  const db = database()
+  const store = new IndexedDbHeightfieldStore({ factory: db.factory })
+  db.quota()
+  const reads = await Promise.allSettled(
+    Array.from({ length: 40 }, (_, i) => store.read(`aborted-${i}`)),
+  )
+  expect(reads.every((read) => read.status === 'rejected')).toBe(true)
+  expect(db.peak()).toBeLessThanOrEqual(8)
 })
