@@ -135,7 +135,13 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
     cover: new Uint8Array(
       request.resolution * request.resolution * COVER_CHANNELS,
     ),
-    water: new Float32Array(request.resolution * request.resolution),
+    // Dry is NaN, not zero: a zeroed `water` says the contract's "standing
+    // water at the datum over every vertex", and on a body whose water is
+    // sampled the streamer is handed no sea datum to override it with — so a
+    // zeroed fixture silently stops the sheet being built at all.
+    water: new Float32Array(request.resolution * request.resolution).fill(
+      Number.NaN,
+    ),
     minElevation: 0,
     maxElevation: 0,
   }

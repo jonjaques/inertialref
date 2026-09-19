@@ -35,7 +35,9 @@ const field: HeightfieldResponse = {
   border: 0,
   elevations: new Float32Array(4),
   cover: new Uint8Array(32),
-  water: new Float32Array(4),
+  // Dry is NaN, not zero: a zeroed `water` is the contract's "standing water
+  // at the datum over every vertex", which is a fixture making a claim.
+  water: new Float32Array(4).fill(Number.NaN),
   minElevation: 0,
   maxElevation: 0,
 }
