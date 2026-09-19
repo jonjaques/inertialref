@@ -482,7 +482,8 @@ its noise, so a plate has to be a fifth lit and the ledger's verdict has to
 agree, and the dark ones are named as skipped (`--all` compares them).
 `--base <ref>` serves that commit from a worktree of its own and photographs
 it instead, for plates known to be behind or for a same-machine control;
-`--base HEAD` is the rig against itself. Each result has a
+`--twice` photographs the tree a second time and is the rig against itself.
+Each result has a
 `reference | tree | difference` pair under `.data/presets/compare/`, which is
 what a pull request attaches. A move is accepted with `pnpm presets:plates <id>`.
 

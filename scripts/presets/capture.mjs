@@ -77,6 +77,18 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * @returns {Promise<() => void>} stops the server
  */
 export async function serve(tree, port, log) {
+  /*
+   * Nothing may already answer on the port. The wait below takes the first
+   * listener as the server this started, and a stale astro from an earlier
+   * run — or the tree's own server, when the baseline's port is the one it
+   * moved to — would be photographed in place of the checkout asked for,
+   * with every plate reading `same` for a reason that has nothing to do with
+   * the change.
+   */
+  if (await listening(Number(port)))
+    throw new Error(
+      `something already answers on ${port}; stop it, or pass another port`,
+    )
   if (!existsSync(path.join(tree, 'apps/game/public/doc-content')))
     execFileSync('pnpm', ['docs:build'], { cwd: tree, stdio: 'ignore' })
   mkdirSync(path.dirname(log), { recursive: true })

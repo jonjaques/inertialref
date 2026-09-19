@@ -61,8 +61,8 @@ const run = promisify(execFile)
 /**
  * Pixels a plate may drift by before it is called moved.
  *
- * Measured on 19 September 2026 at `2e314c52` with the capture settled and
- * the seven lit pictures: two captures of the tree differ by 0 px at the 3%
+ * Measured at `2e314c52` with the capture settled, over the seven lit
+ * pictures: two captures of the tree differ by 0 px at the 3%
  * level on every one, and a capture against a plate written minutes earlier
  * differs by at most 25 px at the 8% level — the JPEG's own error, which
  * peaks at 28 of 255 on Earth's clouds. Two hundred is eight times that, so
@@ -85,7 +85,7 @@ const SAME = { png: '3%', jpg: '8%' }
  * How much of a plate has to be lit for it to be compared by default.
  *
  * The fraction of its pixels above 12% of full gray, measured on the
- * committed plates on 19 September 2026: a full-face Earth is 31%, Saturn
+ * committed plates at `2e314c52`: a full-face Earth is 31%, Saturn
  * from high over the rings 22%, raking light along Mars 32%, and Jupiter with
  * its moons strung out beside it 15% — a small lit disk in a frame of sky.
  * A frame that is mostly sky compares its star field, which differs between
