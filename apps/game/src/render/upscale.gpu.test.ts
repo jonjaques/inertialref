@@ -89,7 +89,12 @@ describe('the upscaler on the physical GPU', () => {
       const timings = f.sensor.diagnostics.picture.gpuTimings
       expect(Object.keys(timings)).toContain('reconstruct')
       expect(Object.values(timings).some((value) => value > 0)).toBe(true)
-      expect(gpu.renderer.info.render.timestamp).toBeGreaterThan(0)
+      // The pixel staging buffer and timestamp staging buffer map
+      // independently. Reading the frame does not settle the timing readback,
+      // especially while the complete GPU suite is submitting other work.
+      await expect
+        .poll(() => gpu.renderer.info.render.timestamp)
+        .toBeGreaterThan(0)
       for (let i = 0; i < 1100; i += 1) f.sensor.render(f.target)
       await gpu.read(f.target)
       expect(
