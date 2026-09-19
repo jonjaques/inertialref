@@ -441,7 +441,11 @@ Sites are derived from the body's own terrain rather than authored, so
 interesting place afterward. Four come from a beam search — `summit`, `basin`,
 `shore`, `rough` — and two are chosen outright for the renderer: `corner`, where
 three faces of the addressing cube meet, and `pole`, where the east/north basis
-is singular. On a body with no solid surface `ir.sites` returns an empty list:
+is singular. A world that drains names four more off its drainage graph
+([ADR-0043](../adr/0043-the-rivers-drain.md)) — `headwater`, `confluence`,
+`mouth` and `lake`: the source of the largest river, the junction of its
+largest tributary, where it meets the sea, and the largest lake — each stood
+on the water the field draws. On a body with no solid surface `ir.sites` returns an empty list:
 a giant's parameters run through the survey without complaint, but every row
 would be a place `ir.visit` refuses to stand.
 

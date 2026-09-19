@@ -59,6 +59,8 @@ function fixture() {
             border,
             elevations: new Float32Array(stride * stride),
             cover: new Uint8Array(request.resolution ** 2 * COVER_CHANNELS),
+            // Dry is NaN; a zeroed `water` is standing water at the datum.
+            water: new Float32Array(request.resolution ** 2).fill(Number.NaN),
             minElevation: 0,
             maxElevation: 0,
           })

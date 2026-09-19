@@ -291,6 +291,8 @@ export interface HeightfieldResponse {
   readonly elevations: Float32Array
   /** `COVER_CHANNELS` bytes of surface cover per vertex, unbordered. See `cover.ts`. */
   readonly cover: Uint8Array
+  /** The level of any lake or river over each vertex, NaN where none; unbordered. See `Heightfield.water`. */
+  readonly water: Float32Array
   readonly minElevation: number
   readonly maxElevation: number
 }
@@ -328,8 +330,14 @@ export const generateHeightfieldTask = defineTask<
    * `surfaceSeed` off a payload that has no such field and `parseSeed`
    * refuses `undefined` — loud, but named for a malformed seed rather than
    * for the mismatch, which is what the version is for.
+   *
+   * 7: the response carries the water level beside the cover — a lake's
+   * spill or a river's surface per vertex, for the sheet. A version 6
+   * worker's answer has no `water`, and `buildPatch` reads it where it is
+   * handed one, so the mismatch is a patch with no lakes rather than an
+   * error; the version makes it loud.
    */
-  version: 6,
+  version: 7,
   run(payload) {
     const { surface, region, ...request } = payload
     const field: Heightfield = generateHeightfield(decodeSurface(surface), {
@@ -344,6 +352,7 @@ export const generateHeightfieldTask = defineTask<
       border: field.border,
       elevations: field.elevations,
       cover: field.cover,
+      water: field.water,
       minElevation: field.minElevation,
       maxElevation: field.maxElevation,
     }
@@ -351,7 +360,11 @@ export const generateHeightfieldTask = defineTask<
   transfers(response) {
     // Transferred, not copied: the main thread hands this straight to a
     // BufferAttribute and the worker has no further use for it.
-    return [response.elevations.buffer, response.cover.buffer]
+    return [
+      response.elevations.buffer,
+      response.cover.buffer,
+      response.water.buffer,
+    ]
   },
 })
 

@@ -235,23 +235,32 @@ to main-thread output sample by sample, and would otherwise be capable of
 comparing two differently sized grids and calling them equal.
 
 The heightfield is `drawnGroundElevation`, not the bare `elevationAt`: the
-presentational tail below the canonical floor, and **no sea clamp** where a
-sheet is drawn — the mesh is the seabed, and the sea is a sheet drawn over it
-at the datum. The request carries the flag (`seabed`), and a body that gets no
-sheet — a mapped one, whose photograph is its sea — is built from the clamped
+presentational tail below the canonical floor, and **no water clamp** where a
+sheet is drawn — the mesh is the bed, and the water is a sheet drawn over it.
+The request carries the flag (`seabed`), and a body that gets no sheet — a
+mapped one, whose photograph is its sea — is built from the clamped
 `drawnElevation` instead, or its ocean floor is a trench under the photograph
-kilometers below the datum the ship lands on. The clamp
-still has exactly one owner, `groundElevation`, and `drawnElevation` keeps it
-for the two readers that stand on the water rather than look through it — the
-observatory's stance and the detail-floor search. The tail is the one term the
-mesh has that the contact test does not, it is bounded by `drawnDivergence` at
-1.25 m, and [streaming](streaming.md#two-fields-and-which-one-each-reader-gets)
-has why the two fields have to be two.
+kilometers below the datum the ship lands on. The clamp still has exactly one
+owner, `groundElevation`, and `drawnElevation` keeps it for the two readers
+that stand on the water rather than look through it — the observatory's
+stance and the detail-floor search. What it clamps to is the water that
+stands at the sample: the sea's datum on a body with no drainage graph, and
+on a body with one the level the drainage stage wrote — the sea where the
+sea reaches, a lake's spill, a river's surface — so a basin the sea never
+reached is dry ground ([ADR-0043](../adr/0043-the-rivers-drain.md)). The
+tail is the one term the mesh has that the contact test does not, it is
+bounded by `drawnDivergence` at 1.25 m, and
+[streaming](streaming.md#two-fields-and-which-one-each-reader-gets) has why
+the two fields have to be two.
 
-A patch the sea reaches carries a second grid, `RenderPatch.water`: the datum
-sphere on the patch's own vertices, anchor-relative, with the water depth over
-each and a morph target for both, so the sheet hands over to its parent where
-the seabed does. `render/water.ts` draws it, and
+A patch water reaches carries a second grid, `RenderPatch.water`: the
+patch's own vertices at each one's water level, anchor-relative, with the
+depth over each and a morph target for both, so the sheet hands over to its
+parent where the bed does. The level is the heightfield's `water` — a float a
+vertex beside the cover, NaN where nothing stands — and a body with no graph
+is handed the sea's datum instead, which is every vertex's level. A vertex
+under nothing sits a cell's width of ground under the ground, so the sheet
+hides rather than fights. `render/water.ts` draws it, and
 [ADR-0026](../adr/0026-the-liquid.md) says how.
 
 ```mermaid

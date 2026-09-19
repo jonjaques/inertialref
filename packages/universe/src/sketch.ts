@@ -114,9 +114,8 @@ export interface BandSeeds {
   readonly grit: Seed
   /** Which rocks are lying where. See `scatter.ts`. */
   readonly scatter: Seed
-  /** Where the valleys run, and the tributaries that feed them. See `drainageBand`. */
+  /** The warp under the drainage lookup. See `drainage.ts`. */
   readonly drainage: Seed
-  readonly tributary: Seed
   /** The rainfall a biosphere follows. See `cover.ts`. */
   readonly rain: Seed
 }
@@ -757,7 +756,6 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
       grit: deriveSeed(seed, 'grit'),
       scatter: deriveSeed(seed, 'scatter'),
       drainage: deriveSeed(seed, 'drainage'),
-      tributary: deriveSeed(seed, 'drainage:tributary'),
       rain: deriveSeed(seed, 'rain'),
     },
     latticeSeed: lattice,

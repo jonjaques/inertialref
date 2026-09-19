@@ -171,6 +171,7 @@ export const WINGS = [
             'docs/adr/0042-the-guide-speaks-in-one-voice.md',
             'The guide in one voice',
           ],
+          ['docs/adr/0043-the-rivers-drain.md', 'The rivers drain'],
         ],
       },
     ],

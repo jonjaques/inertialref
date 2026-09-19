@@ -50,7 +50,15 @@ import {
   COVER_SHAPE,
   COVER_WORDS,
   CRATER_SHAPE,
+  DRAINAGE_CELL_LISTS_AT,
+  DRAINAGE_CELL_START_AT,
+  DRAINAGE_NEIGHBORS_AT,
+  DRAINAGE_NODES_AT,
+  DRAINAGE_RECORDS,
+  DRAINAGE_SEGMENT_STRIDE,
+  DRAINAGE_SEGMENTS_AT,
   DRAINAGE_SHAPE,
+  DRAINAGE_WORDS,
   DUNE_SHAPE,
   EJECTA_REACH,
   FROST_POINT,
@@ -65,11 +73,13 @@ import {
   HYPSOMETRY_SHAPE,
   KERNEL_RECORDS,
   KERNEL_WORDS,
+  type KernelSurface,
   LEVEL_DRAW_AT,
   LEVEL_STRIDE,
   LEVELS_AT,
   MARE_CYCLES,
   MINERAL_CYCLES,
+  NO_KERNEL_WATER,
   packCover,
   PLATE_MARGIN,
   PLATE_STRIDE,
@@ -646,66 +656,55 @@ const plateWeightCode = wgslFn(
   uses(smoothstepCode),
 )
 
-const valleyFieldCode = wgslFn(
-  `
-  fn valleyField(seed: u32, d: vec3<f32>, cycles: f32, octaves: u32, warp: f32) -> f32 {
-    // bands.ts \`valleyField\`: the strip where a warped fBm crosses zero,
-    // sharpened. The three warp channels are one seed offset along x.
-    var p = d * cycles;
-    if (warp > 0.0) {
-      let wc = cycles * ${DRAINAGE_SHAPE.warpCycles};
-      let wx = noise3(seed, vec3<f32>(d.x * wc + 37.1, d.y * wc, d.z * wc));
-      let wy = noise3(seed, vec3<f32>(d.x * wc + 71.3, d.y * wc, d.z * wc));
-      let wz = noise3(seed, vec3<f32>(d.x * wc + 113.7, d.y * wc, d.z * wc));
-      p += vec3<f32>(wx, wy, wz) * warp;
+const drainageCellCode = wgslFn(`
+  fn drainageCell(d: vec3<f32>, cells: u32) -> u32 {
+    // terrain.ts \`regionForDirection\` at the lattice's level, as a node
+    // index: the dominant axis names the face, the projection the cell.
+    // A float decision, and \`drainage.ts\` says why that is allowed here.
+    let a = abs(d);
+    var face = 0u;
+    var u = 0.0;
+    var v = 0.0;
+    if (a.x >= a.y && a.x >= a.z) {
+      if (d.x > 0.0) { face = 0u; u = -d.z / a.x; v = d.y / a.x; }
+      else { face = 1u; u = d.z / a.x; v = d.y / a.x; }
+    } else if (a.y >= a.z) {
+      if (d.y > 0.0) { face = 2u; u = d.x / a.y; v = -d.z / a.y; }
+      else { face = 3u; u = d.x / a.y; v = d.z / a.y; }
+    } else {
+      if (d.z > 0.0) { face = 4u; u = d.x / a.z; v = d.y / a.z; }
+      else { face = 5u; u = -d.x / a.z; v = d.y / a.z; }
     }
-    let n = fbm3(seed, p, octaves);
-    return 1.0 - min(1.0, abs(n) * ${DRAINAGE_SHAPE.sharpness});
+    let n = f32(cells);
+    let i = u32(clamp(floor((u + 1.0) * 0.5 * n), 0.0, n - 1.0));
+    let j = u32(clamp(floor((v + 1.0) * 0.5 * n), 0.0, n - 1.0));
+    return (face * cells + i) * cells + j;
   }
-`,
-  uses(noise3Code, fbm3Code),
-)
+`)
 
-const valleyProfileCode = wgslFn(
+const valleyShapeCode = wgslFn(
   `
-  fn valleyProfile(valley: f32) -> f32 {
-    // bands.ts \`valleyProfile\`: a V in a floodplain, floored at the channel.
-    let v = pow(valley, ${DRAINAGE_SHAPE.valleyPower}.0);
-    let flood = ${DRAINAGE_SHAPE.floodGain} * pow(valley, ${DRAINAGE_SHAPE.floodPower});
-    let bed = smoothstepf(${DRAINAGE_SHAPE.channelStart}, ${DRAINAGE_SHAPE.channelFull}, valley);
-    return min(1.0, max(v + flood, bed));
+  fn valleyShape(d: f32, halfWidth: f32, plain: f32, reach: f32) -> f32 {
+    // drainage.ts \`valleyShape\`: one over the bed, a few percent under
+    // one across the floodplain, zero at the reach.
+    if (d >= reach) {
+      return 0.0;
+    }
+    let top = 1.0 - ${DRAINAGE_SHAPE.plainRelief} * smoothstepf(halfWidth, 2.0 * halfWidth, d);
+    if (d <= plain) {
+      return top;
+    }
+    return top * (1.0 - smoothstepf(0.0, 1.0, (d - plain) / (reach - plain)));
   }
 `,
   uses(smoothstepCode),
 )
 
-const drainageCarveCode = wgslFn(
+const bedShapeCode = wgslFn(
   `
-  fn drainageCarve(drainage: f32, valley: f32, tributary: f32, aboveDatum: f32, budget: f32) -> f32 {
-    // bands.ts \`drainageCarve\`: the cut, capped smoothly by the budget's
-    // share and by the ground's height above the datum.
-    if (aboveDatum <= 0.0 || drainage <= 0.0) {
-      return 0.0;
-    }
-    let deepest = ${DRAINAGE_SHAPE.depth} * budget * drainage;
-    if (deepest <= 0.0) {
-      return 0.0;
-    }
-    let cap = deepest * (1.0 - exp(-${DRAINAGE_SHAPE.headGain} * aboveDatum / deepest));
-    let shape = min(1.0, valleyProfile(valley) + ${DRAINAGE_SHAPE.tributaryGain} * valleyProfile(tributary));
-    return -cap * shape;
-  }
-`,
-  uses(valleyProfileCode),
-)
-
-const channelWetnessCode = wgslFn(
-  `
-  fn channelWetness(valley: f32, tributary: f32) -> f32 {
-    // bands.ts \`channelWetness\`.
-    let trunk = smoothstepf(${DRAINAGE_SHAPE.channelStart}, ${DRAINAGE_SHAPE.channelFull}, valley);
-    let branch = smoothstepf(${DRAINAGE_SHAPE.channelStart + DRAINAGE_SHAPE.tributaryOffset}, ${DRAINAGE_SHAPE.channelFull}, tributary);
-    return max(trunk, ${DRAINAGE_SHAPE.tributaryWeight} * branch);
+  fn bedShape(d: f32, halfWidth: f32) -> f32 {
+    // drainage.ts \`bedShape\`: one over the bed, zero past the bank.
+    return 1.0 - smoothstepf(${DRAINAGE_SHAPE.bank} * halfWidth, halfWidth, d);
   }
 `,
   uses(smoothstepCode),
@@ -860,9 +859,40 @@ export interface TerrainKernel {
   readonly elevations: StorageBufferAttribute
   /** `interior · COVER_WORDS` words per tile, four cover bytes each, little-endian. */
   readonly cover: StorageBufferAttribute
+  /**
+   * `interior` floats per tile: the lake or river level over each vertex,
+   * `NO_KERNEL_WATER` where there is none. `Heightfield.water`, before the
+   * producer turns the sentinel back into NaN.
+   */
+  readonly water: StorageBufferAttribute
+  /** The drainage graph's two buffers, `KernelDrainage` laid out per `terrainKernel.ts`. */
+  readonly drainageRecords: StorageBufferAttribute
+  readonly drainageWords: StorageBufferAttribute
   /** Invocations to run this dispatch: tiles times `samples`. */
   readonly total: { value: number }
   dispose(): void
+}
+
+/**
+ * Upload one packed body: the records, the words, and the drainage graph's
+ * buffers where it has one. One function, because three callers — the
+ * producer and the two tolerance tests — used to set two attributes each,
+ * and a third buffer added to the record is a buffer one of them forgets.
+ */
+export function uploadSurface(
+  kernel: TerrainKernel,
+  packed: KernelSurface,
+): void {
+  ;(kernel.records.array as Float32Array).set(packed.records)
+  ;(kernel.words.array as Uint32Array).set(packed.words)
+  kernel.records.needsUpdate = true
+  kernel.words.needsUpdate = true
+  const graph = packed.drainage
+  if (graph === null) return
+  ;(kernel.drainageRecords.array as Float32Array).set(graph.records)
+  ;(kernel.drainageWords.array as Uint32Array).set(graph.words)
+  kernel.drainageRecords.needsUpdate = true
+  kernel.drainageWords.needsUpdate = true
 }
 
 export function createTerrainKernel(
@@ -894,6 +924,18 @@ export function createTerrainKernel(
     new Uint32Array(maxTiles * interior * COVER_WORDS),
     1,
   )
+  const waterAttribute = new StorageBufferAttribute(
+    new Float32Array(maxTiles * interior),
+    1,
+  )
+  const drainageRecordsAttribute = new StorageBufferAttribute(
+    new Float32Array(DRAINAGE_RECORDS * 4),
+    4,
+  )
+  const drainageWordsAttribute = new StorageBufferAttribute(
+    new Uint32Array(DRAINAGE_WORDS),
+    1,
+  )
 
   const records = storage(recordsAttribute, 'vec4', KERNEL_RECORDS).toReadOnly()
   const words = storage(wordsAttribute, 'uvec4', KERNEL_WORDS / 4).toReadOnly()
@@ -908,6 +950,22 @@ export function createTerrainKernel(
     'uint',
     maxTiles * interior * COVER_WORDS,
   )
+  const water = storage(waterAttribute, 'float', maxTiles * interior)
+  const drainageRecords = storage(
+    drainageRecordsAttribute,
+    'vec4',
+    DRAINAGE_RECORDS,
+  ).toReadOnly()
+  const drainageWords = storage(
+    drainageWordsAttribute,
+    'uint',
+    DRAINAGE_WORDS,
+  ).toReadOnly()
+  const drainageNode = (n: U): V4 =>
+    asV4(drainageRecords.element(uint(DRAINAGE_NODES_AT).add(n)))
+  const drainageSegment = (slot: U): V4 =>
+    asV4(drainageRecords.element(uint(DRAINAGE_SEGMENTS_AT).add(slot)))
+  const drainageWord = (index: U): U => asU(drainageWords.element(index))
   // A float, compared against `float(instanceIndex)`: exact below 2²⁴, which
   // is 3,500 tiles of 4,761 samples.
   const total = uniform(0)
@@ -982,18 +1040,12 @@ export function createTerrainKernel(
     asF(plateWeightCode({ excess, width }))
   const softLimit = (value: F, limit: F): F =>
     asF(softLimitCode({ value, limit }))
-  const valleyField = (seed: U, p: V3, cycles: F, octaves: U, warp: F): F =>
-    asF(valleyFieldCode({ seed, d: p, cycles, octaves, warp }))
-  const drainageCarve = (
-    drainage: F,
-    valley: F,
-    tributary: F,
-    aboveDatum: F,
-    budget: F,
-  ): F =>
-    asF(drainageCarveCode({ drainage, valley, tributary, aboveDatum, budget }))
-  const channelWetness = (valley: F, tributary: F): F =>
-    asF(channelWetnessCode({ valley, tributary }))
+  const drainageCell = (p: V3, cells: U): U =>
+    asU(drainageCellCode({ d: p, cells }))
+  const valleyShape = (d: F, halfWidth: F, plain: F, reach: F): F =>
+    asF(valleyShapeCode({ d, halfWidth, plain, reach }))
+  const bedShape = (d: F, halfWidth: F): F =>
+    asF(bedShapeCode({ d, halfWidth }))
   const coastRemap = (elevation: F, sea: F, width: F): F =>
     asF(coastRemapCode({ elevation, sea, width }))
   const biotaWindow = (t: F): F => asF(biotaWindowCode({ t }))
@@ -1468,6 +1520,8 @@ export function createTerrainKernel(
       // The second word starts at zero, which is `BARE_COVER`'s second four
       // bytes: nothing wet and nothing growing.
       const coverWord2 = uint(0).toVar()
+      // No water, until the drainage stage says otherwise.
+      const level = float(NO_KERNEL_WATER).toVar()
       const budget = scalar(SCALAR.BUDGET)
 
       If(budget.lessThanEqual(0), () => {
@@ -1752,46 +1806,6 @@ export function createTerrainKernel(
           .add(shareIce.mul(ice))
         elevation.assign(height.mul(budget))
 
-        /* --- the valleys ----------------------------------------------------- */
-
-        // `evaluate`'s drainage block: the two valley fields kept for the
-        // cover, and the ground's height above the datum once cut.
-        const drainageAmount = scalar(SCALAR.DRAINAGE)
-        const valley = float(0).toVar()
-        const tributary = float(0).toVar()
-        const aboveDatum = float(0).toVar()
-        If(gate('drainage'), () => {
-          const datum = scalar(SCALAR.DRAINAGE_DATUM)
-          valley.assign(
-            valleyField(
-              word(WORD.SEED_DRAINAGE),
-              d,
-              float(DRAINAGE_SHAPE.cycles),
-              uint(DRAINAGE_SHAPE.octaves),
-              float(DRAINAGE_SHAPE.warpAmount),
-            ),
-          )
-          tributary.assign(
-            valleyField(
-              word(WORD.SEED_TRIBUTARY),
-              d,
-              float(DRAINAGE_SHAPE.cycles * DRAINAGE_SHAPE.tributaryCycles),
-              uint(DRAINAGE_SHAPE.tributaryOctaves),
-              float(0),
-            ),
-          )
-          elevation.addAssign(
-            drainageCarve(
-              drainageAmount,
-              valley,
-              tributary,
-              elevation.sub(datum),
-              budget,
-            ),
-          )
-          aboveDatum.assign(elevation.sub(datum))
-        })
-
         const craterLevels = word(WORD.CRATER_LEVELS)
         const craterLimit = scalar(SCALAR.CRATER_LIMIT)
         const craters = float(0).toVar()
@@ -1800,6 +1814,124 @@ export function createTerrainKernel(
             ladder(d, d0, delta, tile, uint(0), craterLevels, radius),
           )
           elevation.addAssign(softLimit(craters, craterLimit))
+        })
+
+        /* --- the valleys ----------------------------------------------------- */
+
+        /*
+         * `evaluate`'s drainage block: `carveDrainage` over the segments the
+         * sample's cell lists, after `drainageLookup`'s warp. The bed, the
+         * corridor and the height above the datum are kept for the cover and
+         * the water level for the sheet, as the CPU keeps them.
+         */
+        const channel = float(0).toVar()
+        const corridor = float(0).toVar()
+        const aboveDatum = float(0).toVar()
+        If(gate('drainage'), () => {
+          const cells = word(WORD.DRAINAGE_CELLS)
+          const warpCycles = float(cells).mul(
+            DRAINAGE_SHAPE.warpCycles * (2 / Math.PI) * 2,
+          )
+          const warpAmount = float(
+            (DRAINAGE_SHAPE.warpAmount * Math.PI) / 2,
+          ).div(float(cells))
+          const seed = word(WORD.SEED_DRAINAGE)
+          const warped = d.mul(warpCycles)
+          const wx = noise3(seed, warped.add(vec3(37.1, 0, 0)))
+          const wy = noise3(seed, warped.add(vec3(71.3, 0, 0)))
+          const wz = noise3(seed, warped.add(vec3(113.7, 0, 0)))
+          const lookup = normalize(d.add(vec3(wx, wy, wz).mul(warpAmount)))
+          const cell = drainageCell(lookup, cells)
+          const reach = scalar(SCALAR.DRAINAGE_REACH)
+          const cut = float(0).toVar()
+          const fill = float(0).toVar()
+          const notch = float(0).toVar()
+          const river = float(NO_KERNEL_WATER).toVar()
+          const first = drainageWord(uint(DRAINAGE_CELL_START_AT).add(cell))
+          const last = drainageWord(uint(DRAINAGE_CELL_START_AT + 1).add(cell))
+          loop(
+            'k',
+            { start: first, end: last, condition: '<' },
+            'uint',
+            (k) => {
+              const slot = drainageWord(
+                uint(DRAINAGE_CELL_LISTS_AT).add(asU(k)),
+              ).mul(uint(DRAINAGE_SEGMENT_STRIDE))
+              const a = drainageSegment(slot)
+              const b = drainageSegment(slot.add(uint(1)))
+              const c = drainageSegment(slot.add(uint(2)))
+              const standing = asF(drainageSegment(slot.add(uint(3))).x)
+              const ax = asV3(a.xyz)
+              const ab = asV3(b.xyz).sub(ax)
+              const p = lookup.sub(ax)
+              const along = dot(ab, ab)
+              const t = along
+                .greaterThan(0)
+                .select(saturate(dot(p, ab).div(along)), float(0))
+              const e = p.sub(ab.mul(t))
+              const dist = length(e)
+              If(dist.lessThan(reach), () => {
+                const floor = mixF(asF(a.w), asF(b.w), t)
+                const halfWidth = mixF(asF(c.x), asF(c.y), t)
+                const depth = mixF(asF(c.z), asF(c.w), t)
+                const plain = min(
+                  halfWidth.mul(DRAINAGE_SHAPE.floodplain),
+                  reach.mul(0.8),
+                )
+                const shape = valleyShape(dist, halfWidth, plain, reach)
+                const bed = bedShape(dist, halfWidth)
+                const valley = elevation.sub(floor)
+                If(valley.greaterThanEqual(0), () => {
+                  cut.assign(max(cut, valley.mul(shape)))
+                }).Else(() => {
+                  fill.assign(max(fill, valley.negate().mul(shape)))
+                })
+                notch.assign(max(notch, depth.mul(bed)))
+                channel.assign(max(channel, bed))
+                const margin = float(1).sub(
+                  smoothstepf(plain, min(reach, plain.mul(2)), dist),
+                )
+                corridor.assign(max(corridor, margin))
+                If(bed.greaterThan(0), () => {
+                  river.assign(max(river, max(floor, standing)))
+                })
+              })
+            },
+          )
+          /*
+           * `lakeLevelAt`: a kernel-weighted mean over the lake nodes within
+           * reach — the cell's own and its eight neighbors, read off the
+           * packed table where the CPU reads the lattice's.
+           */
+          const lakeReach = float((DRAINAGE_SHAPE.lakeReach * Math.PI) / 2).div(
+            float(cells),
+          )
+          const lakeTotal = float(0).toVar()
+          const lakeWeight = float(0).toVar()
+          const consider = (n: U): void => {
+            const node = drainageNode(n)
+            const lake = asF(node.w)
+            If(lake.greaterThan(NO_KERNEL_WATER / 2), () => {
+              const away = length(asV3(node.xyz).sub(lookup)).div(lakeReach)
+              If(away.lessThan(1), () => {
+                const weight = square(float(1).sub(square(away)))
+                lakeTotal.addAssign(weight.mul(lake))
+                lakeWeight.addAssign(weight)
+              })
+            })
+          }
+          consider(cell)
+          const ring = cell.mul(uint(8)).add(uint(DRAINAGE_NEIGHBORS_AT))
+          for (let k = 0; k < 8; k += 1) {
+            const m = drainageWord(ring.add(uint(k)))
+            If(m.notEqual(uint(0xffff_ffff)), () => consider(m))
+          }
+          const lake = lakeWeight
+            .greaterThan(0)
+            .select(lakeTotal.div(lakeWeight), float(NO_KERNEL_WATER))
+          elevation.assign(elevation.sub(cut).add(fill).sub(notch))
+          level.assign(max(river, lake))
+          aboveDatum.assign(elevation.sub(scalar(SCALAR.DRAINAGE_DATUM)))
         })
 
         /* --- the coast ------------------------------------------------------- */
@@ -1811,6 +1943,9 @@ export function createTerrainKernel(
           elevation.assign(
             coastRemap(elevation, scalar(SCALAR.SEA_DATUM), coast),
           )
+          If(level.greaterThan(NO_KERNEL_WATER / 2), () => {
+            level.assign(coastRemap(level, scalar(SCALAR.SEA_DATUM), coast))
+          })
         })
 
         /* --- the tail: sub-floor craters and the grit ----------------------- */
@@ -1876,7 +2011,13 @@ export function createTerrainKernel(
          * the photograph is the datum, not the trench.
          */
         If(gate('clamp'), () => {
-          elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
+          // `waterSurface`: the datum on a body with no graph, the sample's
+          // own level where there is one — the sea only where the sea reaches.
+          If(word(WORD.DRAINAGE_CELLS).greaterThan(uint(0)), () => {
+            elevation.assign(max(elevation, level))
+          }).Else(() => {
+            elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
+          })
         })
 
         /* --- the cover, for an interior sample ----------------------------- */
@@ -2063,7 +2204,7 @@ export function createTerrainKernel(
           const liquid = scalar(SCALAR.LIQUID)
           const wet = float(0).toVar()
           If(liquid.greaterThan(0).and(aboveDatum.greaterThan(0)), () => {
-            wet.assign(saturate(channelWetness(valley, tributary).mul(liquid)))
+            wet.assign(saturate(channel.mul(liquid)))
           })
 
           // `biotaCover`.
@@ -2101,11 +2242,7 @@ export function createTerrainKernel(
                 .add(0.5)
               const damp = min(
                 float(1),
-                rain.add(
-                  max(square(valley), square(tributary)).mul(
-                    COVER_SHAPE.dampReach,
-                  ),
-                ),
+                rain.add(corridor.mul(COVER_SHAPE.dampReach)),
               )
               const moisture = float(COVER_SHAPE.rainFloor).add(
                 damp.mul(1 - COVER_SHAPE.rainFloor),
@@ -2143,12 +2280,13 @@ export function createTerrainKernel(
 
       elevations.element(index).assign(elevation)
       If(isInterior, () => {
-        const at = tile
+        const vertex = tile
           .mul(uint(interior))
           .add(uint(row.mul(int(resolution)).add(col)))
-          .mul(uint(COVER_WORDS))
+        const at = vertex.mul(uint(COVER_WORDS))
         cover.element(at).assign(coverWord)
         cover.element(at.add(uint(1))).assign(coverWord2)
+        water.element(vertex).assign(level)
       })
     })
   })
@@ -2165,6 +2303,9 @@ export function createTerrainKernel(
     tiles: tilesAttribute,
     elevations: elevationsAttribute,
     cover: coverAttribute,
+    water: waterAttribute,
+    drainageRecords: drainageRecordsAttribute,
+    drainageWords: drainageWordsAttribute,
     total,
     dispose() {
       compute.dispose()

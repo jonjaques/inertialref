@@ -135,14 +135,21 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
     cover: new Uint8Array(
       request.resolution * request.resolution * COVER_CHANNELS,
     ),
+    // Dry is NaN, not zero: a zeroed `water` says the contract's "standing
+    // water at the datum over every vertex", and on a body whose water is
+    // sampled the streamer is handed no sea datum to override it with — so a
+    // zeroed fixture silently stops the sheet being built at all.
+    water: new Float32Array(request.resolution * request.resolution).fill(
+      Number.NaN,
+    ),
     minElevation: 0,
     maxElevation: 0,
   }
 }
 
 /** Land the ship and read the frame the engine would hand the streamer. */
-function groundView(session: Session): GroundView {
-  session.harness.land(EARTH, 0.7, -1.49)
+function groundView(session: Session, address = EARTH): GroundView {
+  session.harness.land(address, 0.7, -1.49)
   const shot = snapshot(session.world)
   const player = session.player()
   if (player === null) throw new Error('no player')
@@ -686,7 +693,16 @@ describe('the terrain streamer', () => {
 
   it('comes back down a rung the count alone would hold', () => {
     const session = openSession({ seed: 'inertialref', workers: null })
-    const view = groundView(session)
+    /*
+     * On Luna, because the premise below is a ratio of counts the site has
+     * to land in: the count at six pixels a cell must fit the cap while the
+     * same count coarsened by 3.375 and multiplied back by one rung must
+     * not. Earth's site reads 1,029 against 790 since its rivers drain to
+     * the graph, and 790 × 1.5 is under the cap; Luna's reads 1,187 against
+     * 924, and 924 × 1.5 is over it. The mechanism under test is the
+     * streamer's, and a dry world is where the ground stays put under it.
+     */
+    const view = groundView(session, 'g:milky-way/s:SOL/b:2.0')
     const viewport = { width: 1600, height: 900 }
     const streamer = new TerrainStreamer(null)
     streamer.lensView = { lens: DEFAULT_LENS, viewport }
@@ -713,7 +729,7 @@ describe('the terrain streamer', () => {
     /*
      * Six pixels a cell is balance-limited here: the graded tree's 2:1 rings
      * set the count, and loosening the tolerance from 1× to 3.375× takes it
-     * from 1,113 to 868 — both inside the cap, and the coarse one still too
+     * from 1,187 to 924 — both inside the cap, and the coarse one still too
      * many for the count to predict room one rung finer. A streamer that
      * arrives at six pixels settles at 1×; one that arrives at two and then
      * changes to six is held at the top of the ladder by its own prediction.

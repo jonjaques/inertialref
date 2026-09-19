@@ -24,6 +24,7 @@ import {
   type RegionAddress,
   regionChildren,
   regionParent,
+  standingWaterIsSampled,
   surfaceDetailFloor,
 } from '@inertialref/universe'
 import {
@@ -369,6 +370,8 @@ interface CachedField {
   readonly elevations: Float32Array
   /** Four bytes of surface cover per vertex, unbordered. See `cover.ts`. */
   readonly cover: Uint8Array
+  /** The lake or river level per vertex, unbordered. See `Heightfield.water`. */
+  readonly water: Float32Array
   readonly region: RegionAddress
   readonly border: number
 }
@@ -1484,10 +1487,15 @@ export class TerrainStreamer {
           border: field.border,
           elevations: field.elevations,
           cover: field.cover,
+          water: field.water,
           bodyRadius: body.radius,
           // The sheet's datum, where one is drawn at all — the same answer
-          // the palette gives the material, from the same function.
-          seaLevel: seaSheetDatum(body),
+          // the palette gives the material, from the same function — unless
+          // the field sampled the water itself, in which case the sea is in
+          // `water` where the sea reaches and nowhere else.
+          seaLevel: standingWaterIsSampled(body.surface)
+            ? null
+            : seaSheetDatum(body),
         }),
       )
       built += 1
@@ -1553,6 +1561,7 @@ export class TerrainStreamer {
           this.#fields.set(key, {
             elevations: result.elevations,
             cover: result.cover,
+            water: result.water,
             region,
             border: result.border,
           })

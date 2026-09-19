@@ -9,6 +9,7 @@ import {
   heightfieldStride,
   type KernelSurface,
   MAX_TILE_LEVEL,
+  NO_KERNEL_WATER,
   type SurfaceParameters,
   surfaceKernel,
   TILE_STRIDE,
@@ -21,7 +22,11 @@ import {
 } from '@inertialref/workers'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { QUERY } from '../pages/paths.ts'
-import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
+import {
+  createTerrainKernel,
+  type TerrainKernel,
+  uploadSurface,
+} from './terrainKernel.ts'
 
 /*
  * The GPU tile producer: `HeightfieldSource` over `terrainKernel.ts`.
@@ -226,10 +231,7 @@ export function createTileProducer(
     try {
       const packed = surfaceKernel(head.surface, head.request.seabed)
       if (packed !== uploaded) {
-        ;(kernel.records.array as Float32Array).set(packed.records)
-        ;(kernel.words.array as Uint32Array).set(packed.words)
-        kernel.records.needsUpdate = true
-        kernel.words.needsUpdate = true
+        uploadSurface(kernel, packed)
         uploaded = packed
       }
       const frames = kernel.tiles.array as Float32Array
@@ -244,12 +246,14 @@ export function createTileProducer(
       // share one fence, and issued in turn the cover's copy is not even
       // encoded until the elevations' map has resolved — two round trips
       // where one covers both.
-      const [elevationBytes, coverBytes] = await Promise.all([
+      const [elevationBytes, coverBytes, waterBytes] = await Promise.all([
         renderer.getArrayBufferAsync(kernel.elevations),
         renderer.getArrayBufferAsync(kernel.cover),
+        renderer.getArrayBufferAsync(kernel.water),
       ])
       const elevations = new Float32Array(elevationBytes)
       const cover = new Uint8Array(coverBytes)
+      const water = new Float32Array(waterBytes)
       const finished = performance.now()
       batches += 1
       tiles += taken.length
@@ -284,6 +288,7 @@ export function createTileProducer(
               i * kernel.interior * COVER_CHANNELS,
               (i + 1) * kernel.interior * COVER_CHANNELS,
             ),
+            water.slice(i * kernel.interior, (i + 1) * kernel.interior),
           ),
         )
       })
@@ -313,6 +318,7 @@ export function createTileProducer(
     request: HeightfieldRequest,
     elevations: Float32Array,
     cover: Uint8Array,
+    water: Float32Array,
   ): HeightfieldResponse {
     const { resolution, border } = kernel.layout
     const stride = heightfieldStride(kernel.layout)
@@ -326,12 +332,18 @@ export function createTileProducer(
         if (elevation > max) max = elevation
       }
     }
+    // The kernel's "no water" is a sentinel below any ground; the field's is
+    // NaN, which WGSL cannot write as a constant. One convention past here.
+    for (let i = 0; i < water.length; i += 1) {
+      if ((water[i] as number) <= NO_KERNEL_WATER / 2) water[i] = Number.NaN
+    }
     return {
       region: request.region,
       resolution,
       border,
       elevations,
       cover,
+      water,
       minElevation: min,
       maxElevation: max,
     }

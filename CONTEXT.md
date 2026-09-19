@@ -10087,6 +10087,133 @@ ADR now. `docs:build` still does not validate a link from `docs/` into
 bare filename — the plan-to-plan links are relative without the directory,
 and the first sweep misses them.
 
+## The rivers drain, and what the lattice could not see (18 Sep 2026)
+
+[ADR-0043](docs/adr/0043-the-rivers-drain.md) is the decision; this is what
+was found on the way and must not be found again.
+
+**The crater ladder's fine rungs are a DC offset, and a lattice that samples
+only the coarse ones is half a kilometer high.** A crater is one-signed, so
+fourteen rungs saturated at the fine end depress the whole surface: on Earth
+the coarse rung alone folds to −76 m through the soft limit and the whole
+ladder to −610. The first drainage lattice sampled the coarse rungs and held
+every floor over ground the field did not have — 97% of Earth's channel
+nodes stood in a pond a median of 592 m deep, and the sea's nodes were the
+lattice's, not the field's. The fix is the mean of the whole ladder less the
+coarse rungs, through the limit and added after it, at 256 walks a body:
+the fold of a mean is not the mean of the folds. The median pond is 2 m.
+
+**A warp that is not a contraction folds the map.** Three cycles a cell at
+0.12 cells has a slope near 2.3, so the lookup was many to one: a channel
+drawn twice and a bed running uphill between the copies, and the test's
+fixed-point inversion could not converge. Two cycles at 0.08 is under a
+half. The rule is the product: three times the cycles times the amount,
+under one.
+
+**A fill the bed's width is a causeway.** Pinning the bed to the floor by
+raising the ground over the bed alone put a wall of the hollow's whole
+depth on a bank tens of meters wide — hundreds of meters where a crater a
+cell wide sat under a floor — and the kernel landed four meters off the CPU
+at a float32 position on Earth at levels 6 and 9. Dropping the fill and
+holding the water at the floor instead was a channel of water standing
+above the land beside it with no bank. The fill is right and it is a
+valley wide: the same height over the whole cross-section is a fan.
+
+**A lake's outlet drains the lake.** The rim node a lake spills over sits
+at the lake's level, and a cut below it read, over the rim's cell, as the
+lake standing two hundred meters over a channel cut two hundred meters
+under it. The outlet's floor is held at the level, and a floor is clamped
+to what it climbs from, because once an outlet is raised the cap alone
+cannot promise the node above the rim stays above it.
+
+**One node's crater is not a lake.** Every pit fills to its spill, and a
+level read as a kernel over a cell around one node paints every hollow
+within reach at that level — the flooded-crater field the graph exists to
+end, at the plain's level instead of the sea's. A lake is three adjacent
+nodes at one level; fewer is a flat the river crosses at the spill.
+
+**The sea drawn wherever the ground is under the datum is the same
+defect.** The sea is now a lake at the datum on the nodes the flood reached
+and nowhere else, the canonical clamp reads the sample's own level, and the
+mesh builder is handed no datum on a body with a graph. A crater floor
+under the datum a thousand kilometers inland is dry.
+
+**Two test premises moved with the ground.** The streamer's "comes back
+down a rung" test needs a site whose count at six pixels a cell fits the
+cap while the same count coarsened by 3.375 and multiplied back by one rung
+does not; Earth's rivers moved its counts out of that window at every site
+tried, and the test lands on Luna, where the ground did not move. And the
+tour context's site list was bounded at eight; a wet world names ten.
+
+**Measured.** The build is 50–110 ms a body over Earth, Titan and eight
+generated worlds within 25 light years; Hack's exponent 0.48–0.74 over
+nodes of thirty-two cells; Horton's ratio 4.2–8.8 by geometric mean, with
+seven nodes in ten as sources under eight-neighbor steepest descent. The
+plan's 50 ms and its 3–5 and 0.5–0.6 are not met, and the tests hold the
+measurement with the reason.
+
+## Two passes over one mark, and a sea that counted as a lake (19 Sep 2026)
+
+A review of the drainage branch. Two defects the 2,516 tests did not hold,
+and three things that were true and cost something.
+
+**A dedup mark that is a node index cannot survive a second pass.** The
+rasterizer counts the cells each segment reaches, then fills them, walking
+the same nodes in the same order over one `stamp` array. Marking a cell with
+the gathering segment's own node index means the first pass leaves exactly
+the value the second pass tests for: a cell whose only gatherer is `n` still
+read `n` when the fill reached `n`, was taken for "already seen in this
+gather" and was dropped — after the count had reserved its slot. The slot
+kept its zero, so the cell listed segment 0, a chord nowhere near it: 106 of
+Earth's 24,576 cells. The mark is a counter that never repeats. The rule is
+general — a mark shared by two passes has to be a token, not a datum either
+pass can reproduce.
+
+**The sea is a lake, so anything asking "is this a lake" has to say which.**
+`lake[n]` is the datum on every node the flood reached, which is what the
+field reads the ocean's level off. `riverSites` read "is `lake[n]` a number"
+and got 19,908 of Earth's nodes against 75 real lake ones, so the largest
+lake was the ocean: the site stood at the mean of every ocean direction and
+read _"standing 356 m above the datum"_, which is `seaDatumElevation`
+printed back. A real lake is at 782 m, over a bed at 606 m, and the camera
+stands on the water.
+
+Measured again on a generated world, because Earth is one seed: Struve
+2398 A b, 11.6 ly out, has its sea 41.7 m under the datum, and the defect
+put its largest lake at _"41.8 m below the datum"_ — the sea again. The
+lake is at 502.7 m, and the standing surface reads 502.7 m at nine of
+twelve samples over 634 km of arc, the other three being land above it. One
+sheet at one level over a cratered plain, which is what tells a lake from
+the flooded-crater field the graph exists to end. The site the defect chose
+is dark ocean at every hour of the body's rotation — a mean luminance of
+12.8 against the lake's 147.
+
+**A cell's area is not its edge squared.** The lattice is six squares on a
+sphere: a cell covers `4πR²/nodes`, which is `8/3π` of `cellMeters²` —
+fifteen percent less. The survey multiplied the upstream count by the edge
+squared and reported a basin `√(3π/8)` too wide, 1,483 km across Earth's
+largest against 1,367. The build has always used the area; two hundred lines
+apart, they disagreed.
+
+**Asking whether a graph exists must not build one.** `standingWaterIsSampled`
+answered by calling `drainageGraph`, and `TerrainStreamer#build` asks it once
+a patch on the thread that draws — so the first patch of any wet body paid
+50–110 ms of lattice, priority flood and rasterizer for a boolean the grammar
+already determines. `drains(surface)` is that boolean and `build` gates on
+it, so the two cannot drift apart.
+
+**A zeroed `Float32Array` is not an empty one.** `water` is NaN where there
+is none, so a fixture filling it with zeros claims standing water at the
+datum over every vertex. Four did. It went unnoticed while a sea datum
+overrode them, and the moment water became sampled — `seaLevel` null, the
+gate asking `0 < 0` — the sheet stopped being built and every test stayed
+green. Nothing reads `RenderPatch.water` in a test at all; the plan carries
+that as a defect.
+
+The review's remaining findings are ranked in
+[the erosion plan](design/plans/erosion.md) § 3 and § 4 — the eight-buffer
+ceiling that blocks phases 4 and 5 above all.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
