@@ -103,14 +103,16 @@ function engineInstance(catalog: StarCatalog): GameEngine {
     catalog,
   })
   /*
-   * The address bar's chrome stance, pushed once the engine exists and before
-   * anything mounts. A capture rig loads a preset URL and photographs it, and
-   * the state a plate is defined in is otherwise a verb it has to evaluate in
-   * the page after boot. The layers are not pushed here: the planetarium
-   * writes `labels` and `showOrbits` into its own stance on mount, above
-   * anything pushed before it, so `layers=0` is honored there.
+   * The address bar's chrome and layer stances, pushed once the engine exists
+   * and before anything mounts. A capture rig loads a preset URL and
+   * photographs it, and the state a plate is defined in is otherwise a verb it
+   * has to evaluate in the page after boot. Every mode sees the layer stance
+   * pushed here except the planetarium, which writes `labels` and
+   * `showOrbits` into its own stance on mount, above this one — so it reads
+   * `layers=0` itself.
    */
   if (query.get(QUERY.chrome) === '0') singleton.setChrome(false)
+  if (query.get(QUERY.layers) === '0') singleton.setLayers(false)
   return singleton
 }
 
