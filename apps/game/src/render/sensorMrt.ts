@@ -41,7 +41,7 @@ export function sensorMrt(temporal = false, optics = true) {
     ...(temporal
       ? {
           velocity: vec4(nodeObject(velocity) as unknown as Node<'vec2'>, 0, 1),
-          reactive: vec4(reactiveCoverage, 0, 0, 1),
+          reactive: vec4(reactiveCoverage, 0, 0, output.a),
         }
       : {}),
     ...(optics
@@ -76,6 +76,14 @@ export function sensorMrt(temporal = false, optics = true) {
   maskBlend.blendDst = OneFactor
   if (optics)
     node.setBlendMode('motion', blend).setBlendMode('meterMask', maskBlend)
-  if (temporal) node.setBlendMode('reactive', maskBlend)
+  if (temporal) {
+    // Opaque geometry replaces the background's mask. Translucent coverage
+    // combines as a union; max blending would retain an occluded sky overlay
+    // and reject history on every foreground pixel indefinitely.
+    const reactiveBlend = new BlendMode(CustomBlending)
+    reactiveBlend.blendSrc = OneFactor
+    reactiveBlend.blendDst = OneMinusSrcAlphaFactor
+    node.setBlendMode('reactive', reactiveBlend)
+  }
   return node
 }

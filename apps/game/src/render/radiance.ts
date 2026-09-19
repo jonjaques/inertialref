@@ -49,8 +49,8 @@ export function setSceneExposure(
  * warp streak — so the sensor's motion attachment keeps the velocity and
  * depth of whatever it covers rather than the quad's own; see `sensorMrt`.
  * Reactive coverage rejects history where a blended surface has no matching
- * depth or displacement velocity. Its independent max blend preserves the
- * strongest rejection under overlapping shells.
+ * depth or displacement velocity. Independent coverage blending combines
+ * translucent shells while opaque surfaces replace the hidden background.
  */
 export function sensorRadiance<T extends NodeMaterial>(
   material: T,

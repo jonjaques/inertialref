@@ -56,8 +56,13 @@ because its separately composed sky and surfaces do not share one physical
 exposure scalar. FSR's own automatic meter is disabled. Reconstruction does
 not introduce another tone curve or change the opaque output guarantee.
 
-The scene's temporal layout adds velocity and an R8 reactive attachment with
-independent max blending. Opaque surfaces and starfield sprites write zero;
+The scene's temporal layout adds velocity and an RGBA8 reactive attachment.
+Red carries rejection coverage; alpha carries material opacity for independent
+coverage blending. Opaque surfaces replace the hidden background, and
+translucent coverage combines as a union. Max blending retained the galaxy
+background's rejection underneath solid terrain, preventing accumulation.
+WebGPU rejects source-alpha blending on an R8 fragment output, so correct
+occlusion spends three extra bytes per render pixel. Opaque surfaces and starfield sprites write zero;
 atmosphere, clouds and rings write their alpha; water writes 0.3. Star disks,
 additive overlays and instrument geometry write one, including flares, plumes,
 warp effects and traces. The shared `sensorRadiance` wrapper supplies the

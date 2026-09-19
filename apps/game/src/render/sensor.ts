@@ -25,6 +25,7 @@ import {
   HalfFloatType,
   FloatType,
   RGFormat,
+  RGBAFormat,
   type TextureDataType,
   NodeUpdateType,
   RenderPipeline,
@@ -160,7 +161,7 @@ function sceneTarget(
     target.textures[offset]!.name = 'velocity'
     target.textures[offset]!.format = RGFormat
     target.textures[offset + 1]!.name = 'reactive'
-    target.textures[offset + 1]!.format = RedFormat
+    target.textures[offset + 1]!.format = RGBAFormat
     target.textures[offset + 1]!.type = UnsignedByteType
   }
   return target
@@ -295,7 +296,7 @@ export function createSensor(
   if (shape.temporal === true) {
     scenePass.getTextureNode('velocity').value.format = RGFormat
     const reactive = scenePass.getTextureNode('reactive').value
-    reactive.format = RedFormat
+    reactive.format = RGBAFormat
     reactive.type = UnsignedByteType
   }
   scenePass.updateBeforeType = NodeUpdateType.RENDER
