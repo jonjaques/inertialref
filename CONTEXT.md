@@ -10481,6 +10481,16 @@ pnpm alone leaves vitest's forks holding the stage's stdout, so `close` never
 fires and the runner waits on a stage it has already reported killed; every
 stage is its own process group and the kill reaches the group.
 
+**A per-test bound at five times its cost is not a hang guard.** The second
+galaxy calibration test reads 23 s on one M5 core and carried two minutes,
+where the field test's two minutes are fourteen times its 8 s. On a four-core
+runner a quarter to a half slower on every stage than the one that ran the
+whole slow suite in 115 s, it crossed the bound under the graph's company —
+the descent, the docs build and a type project — and the run was red for a
+test that had not failed. It carries the descent's five minutes. The stage's
+own 900 s is the budget for the suite; a test's number below it says how far
+the slowest runner may fall behind the M5 before a pass reads as a hang.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

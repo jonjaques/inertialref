@@ -24,6 +24,13 @@ it('calibrates the actual default session galaxy seed', () => {
   }
 }, 120000)
 
+/*
+ * Five minutes, the descent's budget, and for the same reason: it guards a
+ * hang, not the cost. The test reads 23 s on one M5 core, and on a four-core
+ * runner sharing the graph with the descent, the docs build and a type
+ * project it crosses two minutes — on a runner a quarter to a half slower
+ * on every other stage than one where the whole slow suite took 115 s.
+ */
 it('checks local sky, external luminosity and population normalization together', () => {
   const field = createGalaxyField(rootSeed('inertialref'))
   const report = calibrateGalaxy(field)
@@ -64,4 +71,4 @@ it('checks local sky, external luminosity and population normalization together'
       ),
     ).toBeLessThan(0.3)
   }
-}, 120000)
+}, 300_000)
