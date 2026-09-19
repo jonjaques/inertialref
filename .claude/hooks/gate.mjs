@@ -5,30 +5,32 @@
 // The rule it enforces is the one already written down: a change is not finished
 // because the browser renders something, it is finished when the layering holds, the
 // types check and the tests pass. Enforcing it here rather than trusting a checklist
-// costs about half a minute:
+// costs about half a minute: the `gate` group of `scripts/check.mjs`, which is
 //
-//     graph 0.04s -> lint 0.10s -> typecheck 18.4s -> test 16.8s
+//     graph, lint, the six typecheck projects and the root test suite
 //
-// `pnpm test` is that cheap because the terrain descent lives in the slow suite —
-// `gameEngine.descent.slow.test.ts`, which `pnpm test:slow` runs from `pnpm check` and
-// CI and never from here. Running, it generates a landing's worth of ground through an
-// inline worker in 108.3s on one core, in one `beforeAll`: six times what the rest of
-// the gate costs. Every figure here moves whenever the field gets deeper, so treat them
-// as measured rather than fixed, and re-measure before tightening any budget below
-// rather than reading one off this comment — quoting the CPU percentage beside the wall
-// clock, because a suite started while the last run's workers are still exiting reads
-// 35.7s at 456% where a settled machine reads 16.8s at 796%. Quote typecheck warm: the
-// first run after a rebase rebuilds and reads 26.7s.
-// `design/plans/test-speed.md` has the accounting, the conditions these were taken
-// under, and what would make the landing itself cheaper.
+// run as a graph under the machine's core budget, so the six `tsc` projects cost what
+// the slowest one costs and the suite starts beside them. `pnpm test` is that cheap
+// because the terrain descent lives in the slow suite — `gameEngine.descent.slow.test.ts`,
+// which the full `pnpm check` and CI run and this never does: cold, it generates a
+// landing's worth of ground through an inline worker in 96 s on one core. Every figure
+// here moves whenever the field gets deeper; the runner prints the wall clock of each
+// stage, so re-measure by reading that rather than a number off this comment, and quote
+// the CPU percentage beside it, because a suite started while the last run's workers
+// are still exiting reads twice its settled cost. `design/plans/test-speed.md` has the
+// accounting.
 //
-// `pnpm build` is deliberately not in that list, and not for the reason it looks like:
-// its marginal cost is only the 1.7s of vite bundling, because `pnpm build` is
-// `typecheck && vite build` and the typecheck is already above. It is out because what
-// it adds is bundling, and a bundle proves nothing about the source that `typecheck`
-// has not — the failures it does catch alone are resolution and asset ones, which are
-// worth catching at the commit rather than on every turn. The full `pnpm check`
-// including build belongs there, which is what .claude/skills/ship runs.
+// The runner stamps every stage that passes with a key made of the working tree's
+// content, so a `/ship` minutes later on the same tree runs the rest of `pnpm check` and
+// reuses these four. That is the whole reason this hook runs the same runner rather
+// than its own list: the stamps are one file per stage in `.data/check/`, and two
+// callers spelling the same stage differently would never share one.
+//
+// `pnpm build` is deliberately not in the group, and not for the reason it looks like:
+// its marginal cost is the astro bundle, and a bundle proves nothing about the source
+// that `typecheck` has not — the failures it does catch alone are resolution and asset
+// ones, which are worth catching at the commit rather than on every turn. The full
+// `pnpm check` including it belongs there, which is what .claude/skills/ship runs.
 //
 // Three properties matter more than the checks themselves:
 //
@@ -41,13 +43,15 @@
 //     something the agent cannot fix, such as a red test that was already red. After the
 //     cap it reports and lets go.
 //   * It runs in the session's own cwd, which inside a worktree is not
-//     $CLAUDE_PROJECT_DIR. Running the gate against the main checkout while an agent
-//     edits a worktree would test the wrong tree and pass for the wrong reason.
+//     $CLAUDE_PROJECT_DIR — and it runs that checkout's own copy of the runner, which
+//     keys its stamps to that tree. Running the gate against the main checkout while
+//     an agent edits a worktree would test the wrong tree and pass for the wrong reason.
 //
-// The `timeout` on the Stop hook in .claude/settings.json has to stay above the sum of
-// every stage budget below — 840 s, hence 900. Whichever of the two fires first decides
-// what a stall looks like, and only one of them can say which stage stalled: a hook
-// killed by the harness reports nothing at all.
+// The `timeout` on the Stop hook in .claude/settings.json has to stay above the budget
+// below — 840 s, hence 900. Whichever of the two fires first decides what a stall looks
+// like, and only one of them can say which stage stalled: a hook killed by the harness
+// reports nothing at all. The runner's own per-stage timeouts fire first in practice
+// and name the stage.
 //
 // Escape hatch: IR_SKIP_GATE=1.
 
@@ -64,34 +68,8 @@ import { join } from 'node:path'
 
 const MAX_BLOCKS = 3
 const MAX_REPORT_CHARS = 6000
-
-/** graph and lint are near-free and catch the two failures that are structural rather
- *  than local, so they run first: a layering violation or a cycle makes every later
- *  stage's output noise.
- *
- *  Each carries its own `timeout`, because one budget for all four has to be sized for
- *  the slowest and is then no guard at all on the other three. A stage that reaches its
- *  timeout is *hung* — the numbers in the header are the honest cost and every budget
- *  here is a large multiple of one. `test` gets ten minutes, which is sized for the
- *  terrain descent rather than for the suite that currently skips it: that landing's
- *  runtime moves by a factor of two with how busy the machine is, and a budget merely
- *  comfortable on an idle machine turns every parallel build into a false red. */
-const STAGES = [
-  {
-    name: 'graph',
-    args: ['graph'],
-    why: 'layering or a cycle in packages/*',
-    timeout: 60_000,
-  },
-  { name: 'lint', args: ['lint'], why: 'oxlint', timeout: 60_000 },
-  {
-    name: 'typecheck',
-    args: ['typecheck'],
-    why: 'one of the five tsconfig projects',
-    timeout: 120_000,
-  },
-  { name: 'test', args: ['test'], why: 'vitest', timeout: 600_000 },
-]
+/** The whole group. The runner kills a single hung stage well before this. */
+const GATE_TIMEOUT = 840_000
 
 const stdin = readFileSync(0, 'utf8')
 let input = {}
@@ -166,7 +144,7 @@ if (cursorHook) {
 
 if (blocks >= MAX_BLOCKS) {
   process.stderr.write(
-    `pnpm ${failure.name} is still failing after ${MAX_BLOCKS} attempts. Not blocking again — ` +
+    `${failure.command} is still failing after ${MAX_BLOCKS} attempts. Not blocking again — ` +
       `say plainly in your reply that the gate is red and what is failing, rather than reporting the task complete.\n`,
   )
   finish()
@@ -178,13 +156,13 @@ if (!cursorHook) {
 }
 
 const report = failure.timedOut
-  ? `\`pnpm ${failure.name}\` did not finish: ${failure.why}, so the output below stops mid-run ` +
+  ? `\`${failure.command}\` did not finish: ${failure.why}, so the output below stops mid-run ` +
     `and names nothing.\n\n` +
     `${failure.output}\n\n` +
     `This is not a red stage. Either something hangs, or the stage has outgrown its budget in ` +
-    `.claude/hooks/gate.mjs — time \`pnpm ${failure.name}\` by hand before assuming which. ` +
+    `scripts/check.mjs — time \`${failure.command}\` by hand before assuming which. ` +
     `Set IR_SKIP_GATE=1 to suppress this gate.`
-  : `Definition of done not met: \`pnpm ${failure.name}\` failed (${failure.why}).\n\n` +
+  : `Definition of done not met: \`${failure.command}\` failed (${failure.why}).\n\n` +
     `${failure.output}\n\n` +
     `Fix this before finishing. If the failure predates your change, say so instead of working around it. ` +
     `Set IR_SKIP_GATE=1 to suppress this gate.`
@@ -198,48 +176,76 @@ process.exit(2)
 
 // --- helpers -------------------------------------------------------------------------
 
+/**
+ * The gate group through the runner, and the first red stage out of its report.
+ *
+ * `--json` puts one object on stdout whatever happened, and the runner exits 1 on a
+ * failure, so the object is read off the thrown error's `stdout` in that case. A stage's
+ * diagnostics are on stdout for tsc and vitest and on stderr for the node scripts; the
+ * runner merges both, and the tail is the part that names the file — a head-truncated
+ * tsc dump is the summary line and nothing actionable.
+ */
 function run() {
-  for (const stage of STAGES) {
-    try {
-      execFileSync('pnpm', stage.args, {
-        cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        encoding: 'utf8',
-        timeout: stage.timeout,
-      })
-    } catch (error) {
-      // A stage's diagnostics are on stdout for tsc and vitest and on stderr for the
-      // node scripts, and the tail is the part that names the file — a head-truncated
-      // tsc dump is the summary line and nothing actionable.
-      const raw = `${error.stdout ?? ''}${error.stderr ?? ''}`.trimEnd()
-      const output =
-        raw.length > MAX_REPORT_CHARS
-          ? `…truncated…\n${raw.slice(-MAX_REPORT_CHARS)}`
-          : raw || `(no output; exit ${error.status})`
-
-      /*
-       * A killed stage is not a failed one, and everything downstream reads it as one
-       * unless this says otherwise.
-       *
-       * `execFileSync` SIGTERMs at its `timeout` and throws the same shape a non-zero
-       * exit throws — `status` is null rather than a code, and `stdout` holds whatever
-       * had been written when the axe fell. Under the dot reporter that is a row of
-       * dots naming nothing, so the report read "`pnpm test` failed (vitest)" over a
-       * green suite that had simply not finished, and the only honest fix — a bigger
-       * budget — was the one thing the message gave no reason to reach for.
-       */
-      if (error.code === 'ETIMEDOUT') {
-        return {
-          ...stage,
-          timedOut: true,
-          why: `killed after ${stage.timeout / 1000}s`,
-          output,
-        }
+  const runner = join(cwd, 'scripts', 'check.mjs')
+  let raw = ''
+  let stderr = ''
+  try {
+    raw = execFileSync('node', [runner, '--only', 'gate', '--json'], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      timeout: GATE_TIMEOUT,
+      maxBuffer: 1 << 26,
+    })
+  } catch (error) {
+    raw = error.stdout ?? ''
+    stderr = error.stderr ?? ''
+    /*
+     * A killed run is not a failed one, and everything downstream reads it as one
+     * unless this says otherwise. `execFileSync` SIGTERMs at its `timeout` and throws
+     * the same shape a non-zero exit throws — `status` null rather than a code, and
+     * `stdout` holding whatever had been written when the axe fell.
+     */
+    if (error.code === 'ETIMEDOUT') {
+      return {
+        command: 'pnpm check --only gate',
+        why: `killed after ${GATE_TIMEOUT / 1000}s`,
+        timedOut: true,
+        output: tail(`${raw}${stderr}`),
       }
-      return { ...stage, output }
     }
   }
-  return null
+  let result
+  try {
+    result = JSON.parse(raw.trim().split('\n').pop())
+  } catch {
+    return {
+      command: 'pnpm check --only gate',
+      why: 'the runner itself did not report',
+      timedOut: false,
+      output: tail(`${raw}${stderr}`) || '(no output)',
+    }
+  }
+  if (result.ok) return null
+  const red = result.stages.find(
+    (stage) => stage.status === 'failed' || stage.status === 'timedOut',
+  )
+  return {
+    command: `pnpm check --only ${red.name}`,
+    why:
+      red.status === 'timedOut'
+        ? `killed after ${red.seconds.toFixed(0)}s`
+        : red.why,
+    timedOut: red.status === 'timedOut',
+    output: tail(red.output ?? '') || `(no output)`,
+  }
+}
+
+function tail(text) {
+  const trimmed = text.trimEnd()
+  return trimmed.length > MAX_REPORT_CHARS
+    ? `…truncated…\n${trimmed.slice(-MAX_REPORT_CHARS)}`
+    : trimmed
 }
 
 function finish(output = {}) {
