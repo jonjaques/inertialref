@@ -836,6 +836,7 @@ export class Observatory {
     if (!isGalaxyView(view)) throw new Error('Unknown galaxy view')
     this.clear()
     this.#galaxyView = view
+    this.#host.render.declareCut()
     return this.status()
   }
   #state: ObserverState = { azimuth: 0.6, elevation: 0.25, distance: 1e9 }
@@ -1065,6 +1066,10 @@ export class Observatory {
    */
   clear(): void {
     this.#changed()
+    // Releasing a held pose switches the camera back to its next producer.
+    // Idle presentation updates also clear, and must not reset every frame.
+    if (this.#target !== null || this.#galaxyView !== null)
+      this.#host.render.declareCut()
     this.#time = null
     this.#journey = null
     this.#galaxyView = null
