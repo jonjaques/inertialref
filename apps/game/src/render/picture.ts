@@ -107,9 +107,10 @@ export function pictureDimensions(
 export function parsePictureQuery(value: string | null): Picture | null {
   if (value === 'native') return DEFAULT_PICTURE
   if (value === null) return null
-  const [aa, scale, sharpness = 'standard', extra] = value.split(':')
+  const fields = value.split(':')
+  const [aa, scale, sharpness = 'standard', extra] = fields
   if (extra !== undefined) return null
-  if (aa === 'bilinear' && value.split(':').length !== 2) return null
+  if (aa === 'bilinear' && fields.length !== 2) return null
   const picture =
     aa === 'bilinear'
       ? { aa: 'off', scale, sharpness: 'off' }

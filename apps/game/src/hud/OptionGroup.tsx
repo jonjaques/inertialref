@@ -63,21 +63,27 @@ export function OptionGroup<T extends string>({
       }}
       className={`shrink-0 ${className}`}
     >
-      {values.map((option) => (
-        <ToggleGroupItem
-          key={option}
-          value={option}
-          disabled={disabled?.(option) !== undefined}
-          title={disabled?.(option)}
-          onClick={releaseFocus}
-          // 24 px tall and 24 wide at the narrowest label (`4x`), which is
-          // WCAG 2.2's target minimum. `size="sm"` alone is `h-8`, which is
-          // taller than every other control in these panels.
-          className={`type-label h-6 min-w-6 border-slate-700 px-2 data-[state=off]:text-slate-400 data-[state=on]:bg-sky-500/15 data-[state=on]:text-sky-200 ${FOCUS_RING}`}
-        >
-          {labels?.[option] ?? option}
-        </ToggleGroupItem>
-      ))}
+      {values.map((option) => {
+        // One call: the predicate is the caller's, and the two reads have to
+        // agree — a disabled button with no title is a dead control that
+        // explains nothing.
+        const refusal = disabled?.(option)
+        return (
+          <ToggleGroupItem
+            key={option}
+            value={option}
+            disabled={refusal !== undefined}
+            title={refusal}
+            onClick={releaseFocus}
+            // 24 px tall and 24 wide at the narrowest label (`4x`), which is
+            // WCAG 2.2's target minimum. `size="sm"` alone is `h-8`, which is
+            // taller than every other control in these panels.
+            className={`type-label h-6 min-w-6 border-slate-700 px-2 data-[state=off]:text-slate-400 data-[state=on]:bg-sky-500/15 data-[state=on]:text-sky-200 ${FOCUS_RING}`}
+          >
+            {labels?.[option] ?? option}
+          </ToggleGroupItem>
+        )
+      })}
     </ToggleGroup>
   )
 }
