@@ -198,8 +198,18 @@ the mouth from 60 km the trunk and its tributaries meander to one outlet
 and the flooded-crater field is gone except within a cell of the coast,
 where the sea reaches; at the confluence from 3 km a great river's bank
 curves through a plain that keeps its texture; at the headwater from 300 m
-a drowned reach stands at its lake's level. The frame was not re-measured
-against ADR-0026's table; that is the plan's phase six.
+a drowned reach stands at its lake's level.
+
+**The frame, at one point that is not ADR-0026's.** The drive rig at
+1920×1200 over a device pixel ratio of 2 on Gliese 908 IV at the liquid's
+latitude and longitude — 6.6°, −46.4° — two meters up, measures 23.5 fps:
+94 frames in four seconds at 42.5 ms each, 1,128 patches at level 16, the
+sensor 6.9 ms of each frame and the rest outside anything instrumented.
+ADR-0026's 16.3 was two meters over the sea with 1,227 patches at level 17,
+and the ground at that latitude and longitude now stands 117 m up, so the
+stance is over land and the picture is a different picture. The
+like-for-like figure, at the new shore, is the plan's phase six, and so is
+the instrument that would say where the other 35 ms go.
 
 **The GPU holds.** `terrainKernel.gpu.test.ts` passes on every body at every
 level with the water compared beside the elevation; `terrainBands.gpu.test.ts`

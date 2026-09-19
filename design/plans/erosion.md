@@ -72,6 +72,11 @@ what the phase deliberately left for the next one.
   hillside, no talus at the foot of a scarp, ridges rounded the way a noise
   crest is rounded rather than sharpened the way running water leaves them.
   The erosion look is a per-pixel matter and it lives in the material.
+- **Rocks stand in lakes.** The scatter's water test is the sea's datum, so
+  a rock seated on a lake bed or a riverbed shows through the sheet wherever
+  it is taller than the water. On Gliese 908 IV at two meters over a lake
+  the surface is dotted with them. The test wants the sample's own level,
+  which the heightfield now carries.
 
 ---
 
@@ -106,9 +111,11 @@ and a handful of noise taps:
 
 Each is a measured cost against a measured loss, and each names the condition
 under which it is worth revisiting. The frame is ADR-0026's table: 9.5 fps
-before, 18.0 with every octave off. The drainage walk is not in it: the
-frame at the shore has not been re-measured since the graph landed, and that
-measurement is phase 6.
+before, 18.0 with every octave off. The drainage walk is not in it: the one
+figure taken since the graph landed — 23.5 fps at ADR-0026's latitude and
+longitude, which now stands 117 m up over land with 1,128 patches at level
+16 — is a different picture, and the like-for-like figure at the new shore
+is phase 6.
 
 | Tradeoff                                                    | Bought                                       | Cost                                                                                                                    | Revisit when                                                                                                                                                         |
 | ----------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
