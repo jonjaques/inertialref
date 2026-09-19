@@ -16,6 +16,7 @@ import {
   WebGPURenderer,
 } from 'three/webgpu'
 import { breathe } from './warmup.ts'
+import { installSceneOrder } from './sceneOrder.ts'
 
 /*
  * A `WebGPURenderer` on the real GPU, in Node — `pnpm test:gpu`.
@@ -341,6 +342,7 @@ export async function openGpu(
   })
   renderer.setSize(width, height, false)
   await renderer.init()
+  installSceneOrder(renderer)
   // Opaque black, the way `createRenderer` clears — see the file comment.
   renderer.setClearColor(0x000000, 1)
   const backend = renderer.backend as {

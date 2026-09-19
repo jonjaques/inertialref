@@ -16,6 +16,7 @@ import {
   resolveOutputMode,
 } from './output.ts'
 import { declareSceneTarget } from './sensor.ts'
+import { installSceneOrder } from './sceneOrder.ts'
 import { createCanvasGamut, type CanvasGamut } from './gamut.ts'
 import {
   installToneCurve,
@@ -220,6 +221,7 @@ async function buildRenderer(
   }
   try {
     await renderer.init()
+    installSceneOrder(renderer)
     if (runtimeFailure.getSnapshot() !== null) {
       throw new Error('Graphics startup was canceled.')
     }

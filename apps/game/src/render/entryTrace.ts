@@ -3,15 +3,9 @@ import {
   LineBasicNodeMaterial,
   NormalBlending,
 } from 'three/webgpu'
-import {
-  cameraFar,
-  cameraNear,
-  cameraProjectionMatrixInverse,
-  clipSpace,
-  vec3,
-  viewZToLogarithmicDepth,
-} from 'three/tsl'
+import { vec3 } from 'three/tsl'
 import { integratedSkyGain, sensorRadiance } from './radiance.ts'
+import { expandedLineDepth } from './sceneDepth.ts'
 
 /** Pixel widths keep the landing promise legible over clouds and at retina density. */
 function ink(
@@ -27,9 +21,7 @@ function ink(
   // Line2 expands its instance endpoints in clip space, but its inherited
   // logarithmic depth uses the ribbon template at the object's origin. Read
   // the expanded vertex so foreground rope survives the body's depth test.
-  const viewPosition = cameraProjectionMatrixInverse.mul(clipSpace)
-  const viewZ = viewPosition.z.div(viewPosition.w)
-  line.depthNode = viewZToLogarithmicDepth(viewZ, cameraNear, cameraFar)
+  line.depthNode = expandedLineDepth
   // Line2's transparent path samples the opaque viewport, before sensor response.
   // Alpha coverage needs ordinary blending here, without that second scene read.
   line.blending = NormalBlending

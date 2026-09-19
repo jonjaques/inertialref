@@ -19,7 +19,6 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
-  float,
   nodeObject,
   passTexture,
   positionGeometry,
@@ -52,6 +51,7 @@ import {
   GALAXY_MAX_STEPS,
 } from './galaxyKernel.ts'
 import { sensorRadiance } from './radiance.ts'
+import { sceneFarDepth } from './sceneDepth.ts'
 import { composeSky } from './enhancedSky.ts'
 import { warmSensorPass } from './warmup.ts'
 import { GalaxySkyCache, GALAXY_RADIANCE_UNIT } from './galaxySkyCache.ts'
@@ -544,8 +544,8 @@ export function createGalaxyBackdrop(
 ): Mesh<PlaneGeometry, MeshBasicNodeMaterial> {
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
   material.name = 'Galaxy backdrop'
-  material.vertexNode = vec4(positionGeometry.xy, 1, 1)
-  material.depthNode = float(1)
+  material.vertexNode = vec4(positionGeometry.xy, sceneFarDepth, 1)
+  material.depthNode = sceneFarDepth
   material.depthWrite = false
   material.fog = false
   const rgb = nodeObject(volume).rgb
