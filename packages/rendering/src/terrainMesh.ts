@@ -230,6 +230,13 @@ export function buildPatch(input: PatchInput): RenderPatch {
     cover.length === resolution * resolution * COVER_CHANNELS,
     `Cover is ${cover.length} bytes, expected ${resolution * resolution * COVER_CHANNELS}`,
   )
+  // Absent is a patch with no lakes and is what an older worker answers; a
+  // *short* one is a grid read past its end, which reads as dry at every
+  // vertex past the end rather than as anything a caller would notice.
+  invariant(
+    water === null || water.length === resolution * resolution,
+    `Water is ${water?.length} levels, expected ${resolution * resolution}`,
+  )
 
   // The datum point at the middle of the patch. Subtracting it is what keeps
   // the vertices small enough for float32 to hold meter-scale relief.
@@ -277,7 +284,8 @@ export function buildPatch(input: PatchInput): RenderPatch {
    * cell rather than lying on it. A sea world never takes this branch: every
    * vertex there has the datum at least.
    */
-  const dryDrop = Math.max(1, regionSpacing(bodyRadius, region, resolution))
+  const spacing = regionSpacing(bodyRadius, region, resolution)
+  const dryDrop = Math.max(1, spacing)
   const step = resolution - 1
   for (let row = -border; row < resolution + border; row += 1) {
     const t = row / step
@@ -399,7 +407,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
       z: (lowZ + highZ) / 2,
     },
     boundsRadius: Math.hypot(highX - lowX, highY - lowY, highZ - lowZ) / 2 || 1,
-    spacing: regionSpacing(bodyRadius, region, resolution),
+    spacing,
     water:
       sheet !== null && levels !== null
         ? buildWater(sheet, levels, elevations, stride, border, resolution)

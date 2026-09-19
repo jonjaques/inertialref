@@ -35,7 +35,12 @@ import {
   surfaceCover,
   unpackCover,
 } from './cover.ts'
-import { carveDrainage, drainageGraph, drainageLookup } from './drainage.ts'
+import {
+  carveDrainage,
+  drainageGraph,
+  drainageLookup,
+  drains,
+} from './drainage.ts'
 import { microRelief, microReliefBound } from './micro.ts'
 import { CANONICAL_AMPLITUDE_FLOOR, terrainSketch } from './sketch.ts'
 import type { Body, SurfaceParameters } from './system.ts'
@@ -527,7 +532,7 @@ let sampledLevel = Number.NaN
  * basin the sea never reached.
  */
 function waterSurface(surface: SurfaceParameters, sea: Meters): Meters {
-  if (drainageGraph(surface) === null) return sea
+  if (!drains(surface)) return sea
   return Number.isNaN(sampledLevel) ? Number.NEGATIVE_INFINITY : sampledLevel
 }
 
@@ -536,9 +541,13 @@ function waterSurface(surface: SurfaceParameters, sea: Meters): Meters {
  * drainage graph exists — rather than being the one datum a body with a sea
  * and no graph has. The mesh builder is handed a datum only in the second
  * case.
+ *
+ * Through `drains` rather than `drainageGraph`: the streamer asks this once
+ * a patch on the thread that draws, and building the graph to learn whether
+ * there is one is fifty to a hundred milliseconds of stall.
  */
 export function standingWaterIsSampled(surface: SurfaceParameters): boolean {
-  return drainageGraph(surface) !== null
+  return drains(surface)
 }
 
 /**

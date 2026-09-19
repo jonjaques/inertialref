@@ -394,7 +394,12 @@ function derive(body: Body): readonly SurveySite[] {
 function riverSites(body: Body): readonly SurveySite[] {
   const graph = drainageGraph(body.surface)
   if (graph === null) return []
-  const isLake = (n: number): boolean => !Number.isNaN(graph.lake[n] as number)
+  // The sea is a lake at the datum on every node it reaches, which is what
+  // the field reads the ocean's own level off — so "is this a lake" has to
+  // exclude it, or the largest lake on a wet world is the ocean and the
+  // site stands in the middle of it at the sea datum.
+  const isLake = (n: number): boolean =>
+    graph.sea[n] === 0 && !Number.isNaN(graph.lake[n] as number)
   const isChannel = (n: number): boolean => graph.sea[n] === 0 && !isLake(n)
 
   // The mouth: the channel node of the largest area that drains into
@@ -466,14 +471,14 @@ function riverSites(body: Body): readonly SurveySite[] {
     let my = 0
     let mz = 0
     for (let n = 0; n < graph.nodes; n += 1) {
-      if ((graph.lake[n] as number) !== lakeLevel) continue
+      if (!isLake(n) || (graph.lake[n] as number) !== lakeLevel) continue
       mx += graph.positions[n * 3] as number
       my += graph.positions[n * 3 + 1] as number
       mz += graph.positions[n * 3 + 2] as number
     }
     let best = -Infinity
     for (let n = 0; n < graph.nodes; n += 1) {
-      if ((graph.lake[n] as number) !== lakeLevel) continue
+      if (!isLake(n) || (graph.lake[n] as number) !== lakeLevel) continue
       const dot =
         (graph.positions[n * 3] as number) * mx +
         (graph.positions[n * 3 + 1] as number) * my +
@@ -509,7 +514,17 @@ function riverSites(body: Body): readonly SurveySite[] {
       detail,
       centerOf(body, regionForDirection(at(n), SURVEY_LEVEL)),
     )
-  const mouthArea = (graph.area[mouth] as number) * graph.cellMeters ** 2
+  /*
+   * The cell's area, not its edge squared: the lattice is six squares on a
+   * sphere, so a cell covers `4πR²/nodes` — `8/3π` of `cellMeters²`, fifteen
+   * percent under what the edge alone gives. This is the figure the build
+   * accumulates the discharge against, and what sets `channelHalfWidth` and
+   * `channelDepth`; the edge squared makes a basin `√(3π/8)` too wide, which
+   * read Earth's largest as 1,483 km across against a true 1,367 km.
+   */
+  const radius = body.surface.grammar.meanRadius
+  const cellArea = (4 * Math.PI * radius * radius) / graph.nodes
+  const mouthArea = (graph.area[mouth] as number) * cellArea
   const sea = seaDatumElevation(body.surface)
   const sites: SurveySite[] = [
     on(

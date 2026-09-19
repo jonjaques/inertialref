@@ -559,9 +559,23 @@ export function channelDepth(areaMeters: number): Meters {
   )
 }
 
+/**
+ * Whether a surface has a drainage graph at all — the one thing about the
+ * graph that can be answered without building one.
+ *
+ * `build` is fifty to a hundred milliseconds, and the callers that only need
+ * "is there one" run on the thread that draws: the streamer asks once a
+ * patch whether the sheet comes from the field or from a datum. Asking
+ * `drainageGraph` there is a frame of stall the first time a wet body is
+ * streamed on a build that never otherwise needs the graph on this thread.
+ */
+export function drains(surface: SurfaceParameters): boolean {
+  return !bareGround(surface) && surface.grammar.drainage > 0
+}
+
 function build(surface: SurfaceParameters): DrainageGraph | null {
   const grammar = surface.grammar
-  if (bareGround(surface) || grammar.drainage <= 0) return null
+  if (!drains(surface)) return null
   const sketch = terrainSketch(surface)
   const cells = DRAINAGE_SHAPE.lattice
   const { level, neighbors, extent } = topology(cells)
@@ -960,15 +974,27 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
    * second, into two flat arrays, so the build allocates nothing per cell.
    */
   const stamp = new Int32Array(nodes).fill(-1)
+  /*
+   * The "seen in this gather" mark is a counter, not the segment's own node.
+   * The two passes walk the same nodes in the same order over one `stamp`,
+   * so a mark left by the *first* pass is a mark the second pass can mistake
+   * for its own: a cell whose only gatherer is `n` still reads `n` when the
+   * fill pass reaches `n`, and the cell is skipped. The count pass had
+   * already counted it, so the slot stays at its zero and the cell lists
+   * segment 0 instead of the one that reaches it — 106 cells of Earth's
+   * 24,576. A counter that never repeats cannot collide with a residue.
+   */
+  let token = 0
   const candidates = new Int32Array(64)
   const counts = new Uint32Array(nodes)
   const gather = (n: number, r: number): number => {
+    token += 1
     let count = 0
-    stamp[n] = n
+    stamp[n] = token
     candidates[count] = n
     count += 1
-    if (stamp[r] !== n) {
-      stamp[r] = n
+    if (stamp[r] !== token) {
+      stamp[r] = token
       candidates[count] = r
       count += 1
     }
@@ -977,8 +1003,8 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
       const c = candidates[k] as number
       for (let m = 0; m < 8; m += 1) {
         const o = neighbors[c * 8 + m] as number
-        if (o < 0 || stamp[o] === n) continue
-        stamp[o] = n
+        if (o < 0 || stamp[o] === token) continue
+        stamp[o] = token
         candidates[count] = o
         count += 1
       }
@@ -988,8 +1014,8 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
       const c = candidates[k] as number
       for (let m = 0; m < 8; m += 1) {
         const o = neighbors[c * 8 + m] as number
-        if (o < 0 || stamp[o] === n) continue
-        stamp[o] = n
+        if (o < 0 || stamp[o] === token) continue
+        stamp[o] = token
         candidates[count] = o
         count += 1
       }
