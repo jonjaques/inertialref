@@ -71,6 +71,7 @@ export function PlanetariumMode({
   useGuideActions(guide)
   const [params, setParams] = useSearchParams()
   const requested = params.get(QUERY.at)
+  const hideLayers = params.get(QUERY.layers) === '0'
   const document = pictureQueryKey(params)
   const saveRequested = params.get(QUERY.save) === '1'
   const navigate = useNavigate()
@@ -164,13 +165,17 @@ export function PlanetariumMode({
       motionBlur: false,
       diffuseGalaxy: true,
       showShip: ship,
-      showOrbits: orbits,
+      // `layers=0` in the address wins over both preferences: a plate is a
+      // picture of what the camera does, and the names and traces are the
+      // viewer's, drawn over it. Here rather than at engine creation because
+      // this update sits above any stance pushed before the mode mounted.
+      showOrbits: hideLayers ? false : orbits,
       orbitScope,
-      labels,
+      labels: hideLayers ? false : labels,
       flareArtifacts: flare,
       observatory: true,
     })
-  }, [engine, ship, orbits, orbitScope, labels, flare])
+  }, [engine, ship, orbits, orbitScope, labels, flare, hideLayers])
 
   const focus = useCallback(
     (address: string, options: { url?: boolean } = {}) => {

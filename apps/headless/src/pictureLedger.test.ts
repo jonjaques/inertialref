@@ -93,6 +93,12 @@ interface Entry {
   readonly altitude: number
   readonly fill: number
   readonly tracking: string | null
+  /**
+   * How lit the picture is: the sun's elevation over a stance, the phase
+   * angle from orbit, and the verdict — so a comparison rig can prefer the
+   * pictures where a difference is a difference rather than star noise.
+   */
+  readonly light: { sun: number | null; phase: number | null; lit: boolean }
   readonly surface: {
     latitude: number
     longitude: number
@@ -185,10 +191,12 @@ describe('the shipped photographs', () => {
               )
               .map(([key, value]) => [key, figure(value)]),
           ),
+          // The framing the camera arrives at: a composition eases over frames
+          // that never run here, so `state` is where the ease started.
           state: {
-            azimuth: figure(status.state.azimuth),
-            elevation: figure(status.state.elevation),
-            distance: figure(status.state.distance),
+            azimuth: figure(status.desired.azimuth),
+            elevation: figure(status.desired.elevation),
+            distance: figure(status.desired.distance),
           },
           look: {
             yaw: figure(status.look.yaw),
@@ -197,6 +205,14 @@ describe('the shipped photographs', () => {
           altitude: figure(status.altitude),
           fill: figure(status.fill),
           tracking: status.tracking?.address ?? null,
+          light: (() => {
+            const light = session.harness.light()
+            return {
+              sun: light.sun === null ? null : figure(light.sun),
+              phase: light.phase === null ? null : figure(light.phase),
+              lit: light.lit,
+            }
+          })(),
           surface:
             status.surface === null
               ? null

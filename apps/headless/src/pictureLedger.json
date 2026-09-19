@@ -31,6 +31,11 @@
       "altitude": 109456.2,
       "fill": 1,
       "tracking": null,
+      "light": {
+        "sun": 24.04988401,
+        "phase": 16.3037083,
+        "lit": true
+      },
       "surface": {
         "latitude": 0.02532186198,
         "longitude": -1.577667591,
@@ -62,9 +67,9 @@
         "iso": 100
       },
       "state": {
-        "azimuth": 0.6,
-        "elevation": 0.25,
-        "distance": 66545849.27
+        "azimuth": 0.2557423331,
+        "elevation": 0.03611087242,
+        "distance": 16059853.65
       },
       "look": {
         "yaw": 0,
@@ -73,6 +78,11 @@
       "altitude": 60167712.27,
       "fill": 0.1692307692,
       "tracking": null,
+      "light": {
+        "sun": null,
+        "phase": 12,
+        "lit": true
+      },
       "surface": null,
       "terrain": null
     },
@@ -92,9 +102,9 @@
         "iso": 100
       },
       "state": {
-        "azimuth": 0.6,
-        "elevation": 0.25,
-        "distance": 20779658.51
+        "azimuth": -2.540400595,
+        "elevation": 0.01213049956,
+        "distance": 19740950.94
       },
       "look": {
         "yaw": 0,
@@ -103,6 +113,11 @@
       "altitude": 14401521.51,
       "fill": 0.55,
       "tracking": null,
+      "light": {
+        "sun": null,
+        "phase": 172,
+        "lit": false
+      },
       "surface": null,
       "terrain": null
     },
@@ -122,9 +137,9 @@
         "iso": 100
       },
       "state": {
-        "azimuth": 0.6,
-        "elevation": 0.25,
-        "distance": 196350197.4
+        "azimuth": 1.478431878,
+        "elevation": 1.031702543,
+        "distance": 135544830.5
       },
       "look": {
         "yaw": 0,
@@ -133,6 +148,11 @@
       "altitude": 136082197.4,
       "fill": 0.446875,
       "tracking": null,
+      "light": {
+        "sun": null,
+        "phase": 62,
+        "lit": true
+      },
       "surface": null,
       "terrain": null
     },
@@ -152,9 +172,9 @@
         "iso": 100
       },
       "state": {
-        "azimuth": 0.6,
-        "elevation": 0.25,
-        "distance": 6873077.103
+        "azimuth": -0.5292420228,
+        "elevation": 0.01289419791,
+        "distance": 10298800
       },
       "look": {
         "yaw": 0,
@@ -163,6 +183,11 @@
       "altitude": 4298377.103,
       "fill": 0.6769230769,
       "tracking": null,
+      "light": {
+        "sun": null,
+        "phase": 147,
+        "lit": false
+      },
       "surface": null,
       "terrain": null
     },
@@ -182,9 +207,9 @@
         "iso": 100
       },
       "state": {
-        "azimuth": 0.6,
-        "elevation": 0.25,
-        "distance": 11064653.55
+        "azimuth": -1.609200546,
+        "elevation": 0.5237388007,
+        "distance": 7094751.966
       },
       "look": {
         "yaw": 0,
@@ -193,6 +218,11 @@
       "altitude": 7668453.555,
       "fill": 0.55,
       "tracking": null,
+      "light": {
+        "sun": null,
+        "phase": 88,
+        "lit": true
+      },
       "surface": null,
       "terrain": null
     },
@@ -212,9 +242,9 @@
         "iso": 100
       },
       "state": {
-        "azimuth": 0.6,
-        "elevation": 0.25,
-        "distance": 232917440.7
+        "azimuth": 1.224182536,
+        "elevation": 0.1010105147,
+        "distance": 701421454.2
       },
       "look": {
         "yaw": 0,
@@ -223,6 +253,11 @@
       "altitude": 161425440.7,
       "fill": 0.55,
       "tracking": null,
+      "light": {
+        "sun": null,
+        "phase": 25,
+        "lit": true
+      },
       "surface": null,
       "terrain": null
     },
@@ -253,6 +288,11 @@
       "altitude": 313352.1116,
       "fill": 1,
       "tracking": null,
+      "light": {
+        "sun": -13.99999967,
+        "phase": 120.9570806,
+        "lit": false
+      },
       "surface": {
         "latitude": 0.4238033389,
         "longitude": -0.836599388,
@@ -295,6 +335,11 @@
       "altitude": 60000,
       "fill": 1,
       "tracking": null,
+      "light": {
+        "sun": 51.14279338,
+        "phase": 159.1573095,
+        "lit": true
+      },
       "surface": {
         "latitude": -0.01728890429,
         "longitude": 1.628923627,
@@ -337,6 +382,11 @@
       "altitude": 70000,
       "fill": 1,
       "tracking": null,
+      "light": {
+        "sun": -6.922447823,
+        "phase": 44.59080726,
+        "lit": false
+      },
       "surface": {
         "latitude": -0.005076365432,
         "longitude": 1.062960426,
@@ -379,6 +429,11 @@
       "altitude": 80,
       "fill": 1,
       "tracking": null,
+      "light": {
+        "sun": 4.578709147,
+        "phase": 43.73473331,
+        "lit": true
+      },
       "surface": {
         "latitude": 0.2536578006,
         "longitude": 0.5979225244,
@@ -421,6 +476,11 @@
       "altitude": 120,
       "fill": 1,
       "tracking": null,
+      "light": {
+        "sun": 4.582966944,
+        "phase": 107.6432662,
+        "lit": true
+      },
       "surface": {
         "latitude": -0.7463223205,
         "longitude": -0.9929848321,
@@ -463,6 +523,11 @@
       "altitude": 389454770.6,
       "fill": 0.2015359926,
       "tracking": null,
+      "light": {
+        "sun": null,
+        "phase": 179.9999991,
+        "lit": false
+      },
       "surface": null,
       "terrain": null
     }
