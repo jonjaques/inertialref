@@ -91,9 +91,12 @@ describe('the upscaler on the physical GPU', () => {
       expect(Object.values(timings).some((value) => value > 0)).toBe(true)
       // The pixel staging buffer and timestamp staging buffer map
       // independently. Reading the frame does not settle the timing readback,
-      // especially while the complete GPU suite is submitting other work.
+      // especially while the complete GPU suite is submitting other work — and
+      // `poll`'s own second is not long enough for it: this failed on an M5
+      // both inside the full suite and alone on a machine that had just run
+      // one, and passed three times running once the machine was quiet.
       await expect
-        .poll(() => gpu.renderer.info.render.timestamp)
+        .poll(() => gpu.renderer.info.render.timestamp, { timeout: 15_000 })
         .toBeGreaterThan(0)
       for (let i = 0; i < 1100; i += 1) f.sensor.render(f.target)
       await gpu.read(f.target)
