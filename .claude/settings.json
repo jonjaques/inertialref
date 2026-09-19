@@ -1,6 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-
   "permissions": {
     "allow": [
       "Bash(pnpm install)",
@@ -20,7 +19,6 @@
       "Bash(pnpm drive:*)",
       "Bash(node apps/headless/src/main.ts:*)",
       "Bash(npx ctx7@latest:*)",
-
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -41,7 +39,6 @@
       "Bash(git rebase origin/main)",
       "Bash(git rebase --continue)",
       "Bash(git rebase --abort)",
-
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
       "Bash(gh pr diff:*)",
@@ -51,29 +48,27 @@
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(gh run watch:*)",
-
       "Bash(rg:*)",
       "Bash(fd:*)",
       "Bash(jq:*)",
-
       "Read(../tng-inertial/**)",
       "WebFetch(domain:code.claude.com)",
       "WebFetch(domain:developers.cloudflare.com)",
-      "WebFetch(domain:threejs.org)"
-    ],
-
-    "ask": [
+      "WebFetch(domain:threejs.org)",
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
       "Bash(gh pr edit:*)",
       "Bash(gh pr ready:*)",
-      "Bash(gh pr comment:*)",
+      "Bash(gh pr comment:*)"
+    ],
+    "ask": [
+      "Bash(gh pr merge:*)",
+      "mcp__github__merge_pull_request",
       "Bash(pnpm run deploy:worker)",
       "Bash(pnpm catalog:build:*)",
       "Bash(pnpm textures:build:*)",
       "Bash(wrangler:*)"
     ],
-
     "deny": [
       "Bash(git push -f:*)",
       "Bash(git push * main:*)",
@@ -83,14 +78,11 @@
       "Read(~/.config/gh/hosts.yml)",
       "Read(~/.config/context7/credentials.json)"
     ],
-
     "additionalDirectories": ["../tng-inertial"]
   },
-
   "worktree": {
     "baseRef": "head"
   },
-
   "hooks": {
     "SessionStart": [
       {
@@ -104,7 +96,6 @@
         ]
       }
     ],
-
     "PostToolUse": [
       {
         "matcher": "Edit|Write|NotebookEdit",
@@ -117,7 +108,6 @@
         ]
       }
     ],
-
     "Stop": [
       {
         "hooks": [
