@@ -38,11 +38,7 @@ import { parseChord } from '../input/chord.ts'
 import { isLens, reviveLens } from '../hud/controls.ts'
 import { isLabelDensity, isOrbitScope } from '../planetarium/layers.ts'
 import { ALL_CLASSES, RADII } from '../planetarium/kinds.ts'
-import {
-  AA_LEVELS,
-  type OutputPreference,
-  OUTPUT_PREFERENCES,
-} from '../render/output.ts'
+import { type OutputPreference, OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
   DEFAULT_PICTURE,
   isPicture as isRenderPicture,
@@ -259,7 +255,7 @@ export const RENDER_PICTURE = define<RenderPicture>({
   initial: DEFAULT_PICTURE,
   accept: isRenderPicture,
   migrate: () => {
-    const held = readObsolete('render.aa', oneOf(AA_LEVELS))
+    const held = readObsolete('render.aa', oneOf(['off', '2x', '4x'] as const))
     if (held === null) return null
     const picture: RenderPicture = {
       ...DEFAULT_PICTURE,
