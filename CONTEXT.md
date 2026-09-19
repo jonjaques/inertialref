@@ -10447,10 +10447,10 @@ them through the renderer. Three things it had to learn:
 
 Two more that cost a run each: a `layers=0` stance pushed at engine creation
 loses to the planetarium's own stance, which writes `labels` and `showOrbits`
-from the preferences on mount, so the override is honored there; and the
-server answering on 5173 was another repository's Vite, so the scripts serve
-the tree themselves on 5183 and the baseline on 5184, and the driver is told
-never to start one.
+from the preferences on mount, so the planetarium reads the override itself
+and the push at creation serves every other mode; and the server answering on
+5173 was another repository's Vite, so the scripts serve the tree themselves
+on 5183 and the baseline on 5184, and the driver is told never to start one.
 
 **Against the committed plates, every lit picture had moved** — earthrise by
 1,475 px, blue-marble 20,433, far-shore 58,900 at the 3% level — which is the
@@ -10465,6 +10465,21 @@ depends on the reference — 3% against a PNG the rig captured, where the
 control is 0 px, and 8% against a committed plate, where the same seven read
 at most 25 px while the drained rivers still read 21,715 px on `far-shore` at
 12%. The floor is 200 px.
+
+**A stamp is a pass, and the runner has to read it as one.** A stage reused
+from its stamp is recorded `reused`, and a dependent asking `passed()` for it
+was told no: `bundle` sat blocked behind a `docs` and a `media` that had not
+failed, and a run that blocks a stage without failing one printed
+`check passed` — on every `pnpm check` after a Stop hook that had stamped
+both. The review caught it; `passed()` counts a reuse. Two traps beside it,
+from the same review. The capture's `serve()` took the first listener on its
+port as the server it had started, so a stale astro from a crashed run — or
+the tree's own server, moved onto the baseline's 5184 after a collision — was
+photographed in place of the checkout asked for, and every plate read `same`;
+it refuses a port that already answers. And a timed-out stage killed at its
+pnpm alone leaves vitest's forks holding the stage's stdout, so `close` never
+fires and the runner waits on a stage it has already reported killed; every
+stage is its own process group and the kill reaches the group.
 
 ## Known gaps
 

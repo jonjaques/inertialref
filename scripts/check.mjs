@@ -286,6 +286,16 @@ for (;;) {
     .flatMap((s) => s.needs ?? [])
     .filter((need) => !selected.some((s) => s.name === need))
   if (missing.length === 0) break
+  // A need the caller skipped by name is not pulled back in behind their
+  // back; the stage that needs it has to be skipped as well, and this says so.
+  for (const need of missing)
+    if (skip.has(need))
+      throw new Error(
+        `--skip ${need} leaves ${selected
+          .filter((s) => (s.needs ?? []).includes(need))
+          .map((s) => s.name)
+          .join(', ')} without a stage it needs; skip that too`,
+      )
   selected = STAGES.filter(
     (s) => selected.includes(s) || missing.includes(s.name),
   )
@@ -432,13 +442,49 @@ const running = new Map()
 let failed = false
 const startedAt = performance.now()
 
+/**
+ * Stop a stage: its whole process group, not the pnpm at the top of it.
+ *
+ * Every stage is spawned as the leader of its own group — pnpm, the shell it
+ * runs the script in, vitest's forks under that. A `child.kill()` reaches pnpm
+ * alone, and a fork that outlives it keeps the stage's stdout open, so `close`
+ * never fires and the runner waits on a stage it has already reported as
+ * killed. The signal has to reach everything holding the pipe.
+ */
+function killStage(child) {
+  try {
+    process.kill(-child.pid, 'SIGTERM')
+  } catch {
+    /* already gone */
+  }
+}
+
+/*
+ * The children are their own groups, so a Ctrl-C at the terminal reaches this
+ * process alone; forward it, or vitest and its forks survive the runner.
+ */
+for (const signal of ['SIGINT', 'SIGTERM'])
+  process.once(signal, () => {
+    for (const entry of running.values()) killStage(entry.child)
+    process.exit(signal === 'SIGINT' ? 130 : 143)
+  })
+
 say(
   dim(
     `check · ${selected.length} stage${selected.length === 1 ? '' : 's'} on a budget of ${budget} core${budget === 1 ? '' : 's'}`,
   ),
 )
 
-const passed = (name) => results.get(name)?.status === 'passed'
+/*
+ * A reused stage counts as passed: the stamp is a pass on this exact tree.
+ * Otherwise a `pnpm check` after one that stamped `docs` and `media` never
+ * finds `bundle` ready, records it as blocked behind two stages that did not
+ * fail, and reports the check passed with the bundle never built.
+ */
+const passed = (name) => {
+  const status = results.get(name)?.status
+  return status === 'passed' || status === 'reused'
+}
 
 function ready() {
   return selected
@@ -501,11 +547,13 @@ function start(stage) {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: childEnv(),
+    // Its own process group, so `killStage` reaches the whole stage.
+    detached: true,
   })
   let timedOut = false
   const timer = setTimeout(() => {
     timedOut = true
-    child.kill('SIGTERM')
+    killStage(child)
   }, stage.timeout)
   child.stdout.on('data', (chunk) => chunks.push(chunk))
   child.stderr.on('data', (chunk) => chunks.push(chunk))
@@ -547,7 +595,7 @@ for (;;) {
   if (failed && !values['keep-going']) {
     for (const entry of running.values()) {
       entry.cancelled = true
-      entry.child.kill('SIGTERM')
+      killStage(entry.child)
     }
     await Promise.all([...running.values()].map((entry) => entry.done))
     for (const stage of selected)
