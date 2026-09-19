@@ -17,13 +17,10 @@ import {
   beltBand,
   COAST_SHAPE,
   coastRemap,
-  drainageCarve,
   hypsometryBand,
   iceBand,
   plateContext,
   reliefBand,
-  tributaryValley,
-  trunkValley,
   volcanicBand,
 } from './bands.ts'
 import { bareGround, type StageContext, stageOn } from './bandStack.ts'
@@ -38,6 +35,7 @@ import {
   surfaceCover,
   unpackCover,
 } from './cover.ts'
+import { carveDrainage, drainageGraph, drainageLookup } from './drainage.ts'
 import { microRelief, microReliefBound } from './micro.ts'
 import { CANONICAL_AMPLITUDE_FLOOR, terrainSketch } from './sketch.ts'
 import type { Body, SurfaceParameters } from './system.ts'
@@ -299,7 +297,7 @@ export function elevationAt(
   surface: SurfaceParameters,
   direction: Vec3,
 ): Meters {
-  return evaluate(surface, Vec.normalize(direction), null, 0)
+  return evaluate(surface, Vec.normalize(direction), null, 0, null, 0)
 }
 
 /**
@@ -315,12 +313,18 @@ export function elevationAt(
  * `out` is null on the path physics and the contact test take, which is the
  * overwhelming majority of the calls: `elevationAt` runs per contact test per
  * tick, and the ground under a ship has no material.
+ *
+ * `water` is the same shape for the level of any lake or river over the
+ * sample — the sheet's datum at that vertex, NaN where there is none — and
+ * it is null on every path that is not building a heightfield.
  */
 function evaluate(
   surface: SurfaceParameters,
   d: Vec3,
   out: Uint8Array | null,
   at: number,
+  water: Float32Array | null,
+  waterAt: number,
 ): Meters {
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
@@ -357,30 +361,6 @@ function evaluate(
     height += bands.ice * iceBand(sketch, grammar, d, bands.ice * budget)
   }
   let elevation = height * budget
-  /*
-   * The valleys, cut into the landform before the craters land on it.
-   *
-   * Running liquid works the ground the plates and the swell have made, so the
-   * carve reads the height *those* bands produced and takes a fraction of it;
-   * a crater dug afterward sits in the valley the way a young crater sits on
-   * any surface. The cover reads the same two fields, which is why they are
-   * kept rather than recomputed — each is three octaves of noise, and the
-   * riverbed is decided from the same number the floor was cut to.
-   */
-  let drainage: DrainageSample = NO_DRAINAGE
-  if (stageOn('drainage', stack)) {
-    const datum = drainageDatum(surface)
-    const valley = trunkValley(sketch, d)
-    const tributary = tributaryValley(sketch, d)
-    elevation += drainageCarve(
-      grammar,
-      valley,
-      tributary,
-      elevation - datum,
-      budget,
-    )
-    drainage = { valley, tributary, aboveDatum: elevation - datum }
-  }
   const craterLimit = bands.craters * budget
   /*
    * The **raw** sum is what the cover reads, and the difference is not a
@@ -397,15 +377,51 @@ function evaluate(
     elevation += softLimit(craters, craterLimit)
   }
   /*
+   * The valleys, cut to the drainage graph's floors.
+   *
+   * After the craters, because a river's bed is a datum along the channel
+   * and the ground is cut to it: a crater dug into a bed afterward would be
+   * a dam the walk along the channel climbs. Cut last, the river takes the
+   * rim down across its floodplain and fills the bowl to its bed, which is
+   * what a river does to an old crater. The level of any lake or river over
+   * the sample comes out of the same walk; the cover reads the bed and the
+   * corridor from it rather than evaluating the segments twice.
+   */
+  let drainage: DrainageSample = NO_DRAINAGE
+  let level = Number.NaN
+  if (stageOn('drainage', stack)) {
+    const graph = drainageGraph(surface)
+    if (graph !== null) {
+      const carve = carveDrainage(
+        graph,
+        drainageLookup(graph, sketch, d),
+        elevation,
+      )
+      elevation = carve.ground
+      level = carve.water
+      drainage = {
+        channel: carve.channel,
+        corridor: carve.corridor,
+        aboveDatum: elevation - drainageDatum(surface),
+      }
+    }
+  }
+  /*
    * The coast, last: a shelf under the water and a plain behind the beach,
    * remapped from whatever the stack put at the waterline. After the craters
    * so that a crater on the shore is a bay rather than a pit with a rim the
    * sea cannot reach, and before the tail, which is added by `groundCoverAt`
-   * and is a meter of grit the remap has no business flattening.
+   * and is a meter of grit the remap has no business flattening. The water
+   * level takes the same remap: a river reaching the shore below the datum
+   * is compressed toward it exactly as its bed is, so the sheet stays over
+   * the bed rather than under it.
    */
   if (stageOn('coast', stack) && stack.sea !== null) {
-    elevation = coastRemap(elevation, stack.sea, coastWidth(surface))
+    const width = coastWidth(surface)
+    elevation = coastRemap(elevation, stack.sea, width)
+    if (!Number.isNaN(level)) level = coastRemap(level, stack.sea, width)
   }
+  if (water !== null) water[waterAt] = level
   if (out !== null) {
     packCover(
       surfaceCover(sketch, grammar, d, plates, craters, craterLimit, drainage),
@@ -471,10 +487,13 @@ export function groundCoverAt(
   out: Uint8Array | null,
   at: number,
   seabed = false,
+  water: Float32Array | null = null,
+  waterAt = 0,
 ): Meters {
   const d = Vec.normalize(direction)
   const sea = seaDatumElevation(surface)
-  const elevation = evaluate(surface, d, out, at) + tail(surface, d)
+  const elevation =
+    evaluate(surface, d, out, at, water, waterAt) + tail(surface, d)
   const clamp = stageOn('clamp', {
     surface,
     sketch: terrainSketch(surface),
@@ -571,8 +590,21 @@ export function surfaceCoverAt(
   direction: Vec3,
 ): SurfaceCover {
   const bytes = new Uint8Array(COVER_CHANNELS)
-  evaluate(surface, Vec.normalize(direction), bytes, 0)
+  evaluate(surface, Vec.normalize(direction), bytes, 0, null, 0)
   return unpackCover(bytes, 0)
+}
+
+/**
+ * The level of any lake or river over a direction, meters, or NaN where
+ * there is none. The sea is not in it; `seaDatumElevation` is.
+ */
+export function waterLevelAt(
+  surface: SurfaceParameters,
+  direction: Vec3,
+): Meters {
+  const level = new Float32Array(1)
+  evaluate(surface, Vec.normalize(direction), null, 0, level, 0)
+  return level[0] as number
 }
 
 /**
@@ -943,6 +975,15 @@ export interface Heightfield {
    * See `cover.ts` for what the four are.
    */
   readonly cover: Uint8Array
+  /**
+   * The level of any lake or river over each vertex, meters relative to the
+   * datum, NaN where there is none; `resolution²` of them, unbordered as the
+   * cover is and for the same reason. The sea is not in it — one datum per
+   * body, which the mesh builder is handed beside this — so a vertex under a
+   * lake carries the lake's spill level here and the sea's from the datum,
+   * and the sheet stands at whichever is higher.
+   */
+  readonly water: Float32Array
   /** Over the patch itself. The border is generated but not summarized. */
   readonly minElevation: Meters
   readonly maxElevation: Meters
@@ -1006,6 +1047,7 @@ export function generateHeightfield(
   const stride = resolution + 2 * border
   const elevations = new Float32Array(stride * stride)
   const cover = new Uint8Array(resolution * resolution * COVER_CHANNELS)
+  const water = new Float32Array(resolution * resolution)
   const step = resolution - 1
   let min = Infinity
   let max = -Infinity
@@ -1031,6 +1073,8 @@ export function generateHeightfield(
         cover,
         (row * resolution + col) * COVER_CHANNELS,
         seabed,
+        water,
+        row * resolution + col,
       )
       // Read back rather than kept: the array is Float32 and the extremes have
       // to bound *it*, not the float64 the generator computed. A bounding
@@ -1047,6 +1091,7 @@ export function generateHeightfield(
     border,
     elevations,
     cover,
+    water,
     minElevation: min,
     maxElevation: max,
   }

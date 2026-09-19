@@ -70,6 +70,12 @@ export interface PatchInput {
    * it goes below the datum anywhere.
    */
   readonly seaLevel?: Meters | null
+  /**
+   * The level of any lake or river over each vertex, `resolution²` floats
+   * unbordered, NaN where there is none — `Heightfield.water`. Absent or
+   * null, the sheet is the sea alone.
+   */
+  readonly water?: Float32Array | null
 }
 
 /**
@@ -86,11 +92,16 @@ export interface PatchInput {
  * the rest so the shallows do not shimmer at the handover.
  */
 export interface WaterPatch {
-  /** xyz triples in body-fixed axes, relative to the patch's `anchor`, on the datum. */
+  /**
+   * xyz triples in body-fixed axes, relative to the patch's `anchor`, at
+   * each vertex's own water level: the sea's datum, a lake's spill or a
+   * river's surface, whichever stands highest there — and a step under the
+   * ground where nothing does, so the sheet hides rather than z-fights.
+   */
   readonly positions: Float32Array
   /** Where each vertex sits once fully morphed onto the parent's grid. */
   readonly morphPositions: Float32Array
-  /** Sea datum minus the ground, meters, never negative. Zero where the ground is dry. */
+  /** Water level minus the ground, meters, never negative. Zero where the ground is dry. */
   readonly depths: Float32Array
   readonly morphDepths: Float32Array
   /** Bounding sphere in the same anchor-relative axes the vertices are in. */
@@ -194,6 +205,7 @@ export function patchIndices(resolution: number): Uint32Array {
 export function buildPatch(input: PatchInput): RenderPatch {
   const { region, resolution, border, elevations, cover, bodyRadius } = input
   const seaLevel = input.seaLevel ?? null
+  const water = input.water ?? null
   invariant(
     border >= 2,
     `A patch needs two rings of border to morph; got ${border}`,
@@ -249,11 +261,23 @@ export function buildPatch(input: PatchInput): RenderPatch {
    * reaches — on an ocean world still most of the land — pays a scan of
    * 4,225 floats and allocates nothing.
    */
-  const wet =
-    seaLevel !== null &&
-    anyBelow(elevations, stride, border, resolution, seaLevel)
+  const wet = anyUnderWater(
+    elevations,
+    stride,
+    border,
+    resolution,
+    seaLevel,
+    water,
+  )
   const sheet = wet ? new Float64Array(resolution * resolution * 3) : null
-  const seaRadius = bodyRadius + (seaLevel ?? 0)
+  const levels = wet ? new Float64Array(resolution * resolution) : null
+  /*
+   * Where no water stands over a vertex the sheet drops under the ground by
+   * a cell's width of ground, so a lake's edge crosses the ground inside the
+   * cell rather than lying on it. A sea world never takes this branch: every
+   * vertex there has the datum at least.
+   */
+  const dryDrop = Math.max(1, regionSpacing(bodyRadius, region, resolution))
   const step = resolution - 1
   for (let row = -border; row < resolution + border; row += 1) {
     const t = row / step
@@ -270,15 +294,20 @@ export function buildPatch(input: PatchInput): RenderPatch {
       extended[sample * 3 + 2] = direction.z * radius - anchorZ
       if (
         sheet !== null &&
+        levels !== null &&
         row >= 0 &&
         col >= 0 &&
         row < resolution &&
         col < resolution
       ) {
-        const at = (row * resolution + col) * 3
-        sheet[at] = direction.x * seaRadius - anchorX
-        sheet[at + 1] = direction.y * seaRadius - anchorY
-        sheet[at + 2] = direction.z * seaRadius - anchorZ
+        const vertex = row * resolution + col
+        const level = waterLevel(seaLevel, water, vertex, elevation, dryDrop)
+        levels[vertex] = level
+        const waterRadius = bodyRadius + level
+        const at = vertex * 3
+        sheet[at] = direction.x * waterRadius - anchorX
+        sheet[at + 1] = direction.y * waterRadius - anchorY
+        sheet[at + 2] = direction.z * waterRadius - anchorZ
       }
     }
   }
@@ -372,31 +401,51 @@ export function buildPatch(input: PatchInput): RenderPatch {
     boundsRadius: Math.hypot(highX - lowX, highY - lowY, highZ - lowZ) / 2 || 1,
     spacing: regionSpacing(bodyRadius, region, resolution),
     water:
-      sheet !== null
-        ? buildWater(
-            sheet,
-            elevations,
-            stride,
-            border,
-            resolution,
-            seaLevel as number,
-          )
+      sheet !== null && levels !== null
+        ? buildWater(sheet, levels, elevations, stride, border, resolution)
         : null,
   }
 }
 
-/** Whether any interior sample of a bordered grid is under `datum`. */
-function anyBelow(
+/**
+ * The water level over one vertex: the sea's datum or the field's own level
+ * over that vertex, whichever is higher, and a step under the ground where
+ * neither stands.
+ */
+function waterLevel(
+  seaLevel: Meters | null,
+  water: Float32Array | null,
+  vertex: number,
+  ground: Meters,
+  dryDrop: Meters,
+): Meters {
+  let level = seaLevel ?? Number.NEGATIVE_INFINITY
+  if (water !== null) {
+    const own = water[vertex] as number
+    if (!Number.isNaN(own) && own > level) level = own
+  }
+  return Number.isFinite(level) ? level : ground - dryDrop
+}
+
+/** Whether any interior sample of a bordered grid is under the sea or a lake. */
+function anyUnderWater(
   elevations: Float32Array,
   stride: number,
   border: number,
   resolution: number,
-  datum: Meters,
+  seaLevel: Meters | null,
+  water: Float32Array | null,
 ): boolean {
+  if (seaLevel === null && water === null) return false
   for (let row = 0; row < resolution; row += 1) {
     const from = (row + border) * stride + border
-    for (let i = from; i < from + resolution; i += 1) {
-      if ((elevations[i] as number) < datum) return true
+    for (let col = 0; col < resolution; col += 1) {
+      const ground = elevations[from + col] as number
+      if (seaLevel !== null && ground < seaLevel) return true
+      if (water !== null) {
+        const own = water[row * resolution + col] as number
+        if (!Number.isNaN(own) && ground < own) return true
+      }
     }
   }
   return false
@@ -409,11 +458,11 @@ function anyBelow(
  */
 function buildWater(
   sheet: Float64Array,
+  levels: Float64Array,
   elevations: Float32Array,
   stride: number,
   border: number,
   resolution: number,
-  seaLevel: Meters,
 ): WaterPatch {
   const count = resolution * resolution
   const positions = new Float32Array(count * 3)
@@ -429,7 +478,8 @@ function buildWater(
   const depthAt = (row: number, col: number): number =>
     Math.max(
       0,
-      seaLevel - (elevations[(row + border) * stride + (col + border)] ?? 0),
+      (levels[row * resolution + col] as number) -
+        (elevations[(row + border) * stride + (col + border)] ?? 0),
     )
   for (let row = 0; row < resolution; row += 1) {
     for (let col = 0; col < resolution; col += 1) {

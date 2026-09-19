@@ -1,7 +1,7 @@
 import type { Meters } from '@inertialref/shared'
 import { clamp01, noise3, smoothstep } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
-import { channelWetness, type PlateContext } from './bands.ts'
+import type { PlateContext } from './bands.ts'
 import { rayBrightness } from './craters.ts'
 import { biotaWindow, type SurfaceGrammar } from './grammar.ts'
 import { PLATE_MARGIN, plateProperty, type TerrainSketch } from './sketch.ts'
@@ -200,36 +200,39 @@ export function surfaceCover(
 }
 
 /**
- * What the drainage band worked out about a sample, handed on to the cover
- * rather than evaluated twice: the two valley fields, and how far the landform
- * stands above the drainage datum once they have cut it.
+ * What the drainage stage worked out about a sample, handed on to the cover
+ * rather than evaluated twice: how much of it is channel bed, how much is
+ * the valley's floodplain and margin, and how far the ground stands above
+ * the drainage datum once the valley is cut.
  */
 export interface DrainageSample {
-  readonly valley: number
-  readonly tributary: number
+  /** Channel bed, 0..1. See `carveDrainage`. */
+  readonly channel: number
+  /** Floodplain and the valley's margin, 0..1 — the riparian corridor. */
+  readonly corridor: number
   /** Meters above `drainageDatum`, after the carve. Negative under the sea. */
   readonly aboveDatum: Meters
 }
 
 /** A sample on a body with no drainage: dry, and nowhere in particular. */
 export const NO_DRAINAGE: DrainageSample = {
-  valley: 0,
-  tributary: 0,
+  channel: 0,
+  corridor: 0,
   aboveDatum: 0,
 }
 
 /**
- * Liquid running in a channel, where the band has floored one and the
- * grammar says the liquid exists.
+ * Liquid running in a channel, where the graph has cut one and the grammar
+ * says the liquid exists. The bed is the graph's own width — a creek is a
+ * thread and a trunk is a kilometer — where the strip painted every channel
+ * the same.
  *
  * Gated on the ground standing above the datum: below it the sea is drawn
  * instead, and a riverbed under the sea is seabed.
  */
 function wetCover(grammar: SurfaceGrammar, drainage: DrainageSample): number {
   if (grammar.liquid <= 0 || drainage.aboveDatum <= 0) return 0
-  return clamp01(
-    channelWetness(drainage.valley, drainage.tributary) * grammar.liquid,
-  )
+  return clamp01(drainage.channel * grammar.liquid)
 }
 
 /**
@@ -281,12 +284,10 @@ function biotaCover(
     ) *
       0.5 +
     0.5
-  const damp = Math.min(
-    1,
-    rain +
-      COVER_SHAPE.dampReach *
-        Math.max(drainage.valley ** 2, drainage.tributary ** 2),
-  )
+  // The riparian corridor: the floodplain is damper than the divides, which
+  // is why the growth follows the rivers from orbit — a green line along
+  // every trunk, as wide as its meander belt.
+  const damp = Math.min(1, rain + COVER_SHAPE.dampReach * drainage.corridor)
   const moisture = COVER_SHAPE.rainFloor + (1 - COVER_SHAPE.rainFloor) * damp
   /*
    * And a patchiness at the scale of a province's weather, because a

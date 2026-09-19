@@ -116,19 +116,22 @@ export const BAND_STACK: readonly Stage[] = [
     packed: { scalar: 'SHARE_ICE', above: 0 },
   },
   {
-    // The valleys, cut into the landform before the craters land on it.
-    id: 'drainage',
-    kind: 'carve',
-    canonical: true,
-    on: ({ surface }) => surface.grammar.drainage > 0,
-    packed: { scalar: 'DRAINAGE', above: 0 },
-  },
-  {
     id: 'craters',
     kind: 'limited',
     canonical: true,
     on: ({ sketch }) => sketch.craterLevels.length > 0,
     packed: { word: 'CRATER_LEVELS' },
+  },
+  {
+    // The valleys, cut to the drainage graph's floors after the craters: a
+    // river's bed is a datum along the channel, and a crater dug into it
+    // afterward is a dam the bed climbs over. Cut last, the river takes the
+    // rim down across its floodplain and fills the bowl to its bed.
+    id: 'drainage',
+    kind: 'carve',
+    canonical: true,
+    on: ({ surface }) => surface.grammar.drainage > 0,
+    packed: { scalar: 'DRAINAGE', above: 0 },
   },
   {
     // After the craters, so a crater on the shore is a bay; before the tail,

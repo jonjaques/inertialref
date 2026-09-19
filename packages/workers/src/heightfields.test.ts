@@ -35,6 +35,7 @@ const field: HeightfieldResponse = {
   border: 0,
   elevations: new Float32Array(4),
   cover: new Uint8Array(32),
+  water: new Float32Array(4),
   minElevation: 0,
   maxElevation: 0,
 }

@@ -135,6 +135,7 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
     cover: new Uint8Array(
       request.resolution * request.resolution * COVER_CHANNELS,
     ),
+    water: new Float32Array(request.resolution * request.resolution),
     minElevation: 0,
     maxElevation: 0,
   }

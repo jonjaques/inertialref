@@ -59,6 +59,7 @@ function fixture() {
             border,
             elevations: new Float32Array(stride * stride),
             cover: new Uint8Array(request.resolution ** 2 * COVER_CHANNELS),
+            water: new Float32Array(request.resolution ** 2),
             minElevation: 0,
             maxElevation: 0,
           })

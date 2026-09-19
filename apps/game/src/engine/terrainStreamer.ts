@@ -369,6 +369,8 @@ interface CachedField {
   readonly elevations: Float32Array
   /** Four bytes of surface cover per vertex, unbordered. See `cover.ts`. */
   readonly cover: Uint8Array
+  /** The lake or river level per vertex, unbordered. See `Heightfield.water`. */
+  readonly water: Float32Array
   readonly region: RegionAddress
   readonly border: number
 }
@@ -1484,6 +1486,7 @@ export class TerrainStreamer {
           border: field.border,
           elevations: field.elevations,
           cover: field.cover,
+          water: field.water,
           bodyRadius: body.radius,
           // The sheet's datum, where one is drawn at all — the same answer
           // the palette gives the material, from the same function.
@@ -1553,6 +1556,7 @@ export class TerrainStreamer {
           this.#fields.set(key, {
             elevations: result.elevations,
             cover: result.cover,
+            water: result.water,
             region,
             border: result.border,
           })

@@ -169,7 +169,21 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  * two levels elsewhere, Earth's from 15 to 17. `MAX_CRATER_LEVELS` in
  * `sketch.ts` carries both figures and the bodies they were measured on.
  */
-export const TERRAIN_ALGORITHM = algorithm('terrain', 4)
+/*
+ * Bumped to 5 when the rivers learned which way is downhill.
+ *
+ * The drainage stage reads a per-body graph — a lattice flooded from the
+ * sea, a receiver tree, a channel floor that never rises downstream — where
+ * it read the zero strip of a noise, and it runs after the craters rather
+ * than before them. Every wet world's ground moved: the valleys are in
+ * different places, cut to a datum along the channel rather than by a
+ * fraction of the landform, and a below-datum basin a thousand kilometers
+ * inland holds water at its own spill rather than at the sea's. A dry body,
+ * and a wet body's seabed outside any channel's reach, are untouched to the
+ * last bit. `SYSTEM_ALGORITHM` stays: nothing `system.ts` generates reads
+ * the graph.
+ */
+export const TERRAIN_ALGORITHM = algorithm('terrain', 5)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 5)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.

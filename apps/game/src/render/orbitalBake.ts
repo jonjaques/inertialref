@@ -297,6 +297,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
         border: field.border,
         elevations: field.elevations,
         cover: field.cover,
+        water: field.water,
         bodyRadius: body.radius,
         seaLevel: sheet,
       }),

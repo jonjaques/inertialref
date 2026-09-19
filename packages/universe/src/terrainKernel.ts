@@ -201,8 +201,7 @@ export const WORD = {
   /** 1 where the relief and belt bands read the analytic-derivative form. */
   ERODED: 29,
   SEED_DRAINAGE: 30,
-  SEED_TRIBUTARY: 31,
-  SEED_RAIN: 32,
+  SEED_RAIN: 31,
 } as const
 
 /**
@@ -535,7 +534,6 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   words[WORD.SEED_FROST] = seeds.frost.a >>> 0
   words[WORD.SEED_GRIT] = seeds.grit.a >>> 0
   words[WORD.SEED_DRAINAGE] = seeds.drainage.a >>> 0
-  words[WORD.SEED_TRIBUTARY] = seeds.tributary.a >>> 0
   words[WORD.SEED_RAIN] = seeds.rain.a >>> 0
 
   /*

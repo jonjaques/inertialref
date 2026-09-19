@@ -244,12 +244,14 @@ export function createTileProducer(
       // share one fence, and issued in turn the cover's copy is not even
       // encoded until the elevations' map has resolved — two round trips
       // where one covers both.
-      const [elevationBytes, coverBytes] = await Promise.all([
+      const [elevationBytes, coverBytes, waterBytes] = await Promise.all([
         renderer.getArrayBufferAsync(kernel.elevations),
         renderer.getArrayBufferAsync(kernel.cover),
+        renderer.getArrayBufferAsync(kernel.water),
       ])
       const elevations = new Float32Array(elevationBytes)
       const cover = new Uint8Array(coverBytes)
+      const water = new Float32Array(waterBytes)
       const finished = performance.now()
       batches += 1
       tiles += taken.length
@@ -284,6 +286,7 @@ export function createTileProducer(
               i * kernel.interior * COVER_CHANNELS,
               (i + 1) * kernel.interior * COVER_CHANNELS,
             ),
+            water.slice(i * kernel.interior, (i + 1) * kernel.interior),
           ),
         )
       })
@@ -313,6 +316,7 @@ export function createTileProducer(
     request: HeightfieldRequest,
     elevations: Float32Array,
     cover: Uint8Array,
+    water: Float32Array,
   ): HeightfieldResponse {
     const { resolution, border } = kernel.layout
     const stride = heightfieldStride(kernel.layout)
@@ -332,6 +336,7 @@ export function createTileProducer(
       border,
       elevations,
       cover,
+      water,
       minElevation: min,
       maxElevation: max,
     }
