@@ -260,6 +260,8 @@ export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
 })
 
 export interface RenderHost {
+  /** Discontinuous camera placement invalidates presentation history only. */
+  declareCut(): void
   /** The active mode supplies this lazy adapter; a headless host need not. */
   guide?(): GuideHostPort | null
   scene(): RenderScene | null
@@ -378,6 +380,7 @@ export interface RenderHost {
 export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
   let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
   return {
+    declareCut: overrides.declareCut ?? (() => {}),
     guide: overrides.guide ?? (() => null),
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
@@ -989,6 +992,7 @@ export class GameHarness {
    * composition framed with the throttle open drifts out of its own picture.
    */
   #handsOff(player: EntityId): void {
+    this.#host.render.declareCut()
     this.world.setControl(player, Vec.ZERO, Vec.ZERO)
     this.world.setThrottle(player, 0)
   }
@@ -1386,6 +1390,7 @@ export class GameHarness {
     const restored = restoreSave(parsed.value, this.world.catalog)
     if (!restored.ok) return restored
     this.#host.replaceWorld(restored.value.world, restored.value.playerEntity)
+    this.#host.render.declareCut()
     if (restored.value.drift.length > 0) {
       log.warn('loaded a save from a different universe', {
         drift: describeDrift(restored.value.drift),
@@ -1680,6 +1685,7 @@ export class GameHarness {
    * eye beside it changes.
    */
   view(view?: FlightView): FlightCameraStatus {
+    this.#host.render.declareCut()
     return view === undefined
       ? this.#flightCamera.cycleView()
       : this.#flightCamera.setView(view)

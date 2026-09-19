@@ -1042,7 +1042,10 @@ export class Observatory {
       ...this.#state,
       distance: clampDistance(this.#state.distance, target.radius),
     }
-    if (options.ease === false || previous === null) this.#state = this.#desired
+    if (options.ease === false || previous === null) {
+      this.#state = this.#desired
+      this.#host.render.declareCut()
+    }
 
     log.info('observatory focused', {
       address: target.address,
@@ -1340,6 +1343,7 @@ export class Observatory {
       this.#descent = null
       this.#stance = null
       this.#site = null
+      this.#host.render.declareCut()
       this.setDistance(placement.distance)
       this.setAngles(
         placement.azimuth,
@@ -1604,6 +1608,7 @@ export class Observatory {
     // The stance carries its own heading and pitch, so the orbit arm's offset
     // would come back on the ascent aimed at something nobody chose.
     this.#look = NO_LOOK
+    this.#host.render.declareCut()
     log.info('observatory standing', {
       address: this.#target?.address,
       site: this.#site,
@@ -1614,6 +1619,8 @@ export class Observatory {
 
   /** Back to orbit, at whatever framing the camera had before the descent. */
   leaveSurface(): ObserverStatus {
+    if (this.#stance !== null || this.#descent !== null)
+      this.#host.render.declareCut()
     this.#changed()
     // A drop in flight is abandoned, not finished: the orbit state underneath
     // is the one the camera left, so this is also how a drop is canceled.

@@ -591,6 +591,12 @@ export class GameEngine {
   rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
+  /** Temporal image history is presentation state, outside the world hash. */
+  pictureEpoch = 0
+
+  declareCut(): void {
+    this.pictureEpoch += 1
+  }
   galaxyRenderer: (() => GalaxyRenderReport) | null = null
   #presentedPose: ObserverPose | null = null
 
@@ -882,6 +888,7 @@ export class GameEngine {
       store: options.store ?? new IndexedDbSaveStore(),
       // The one production adapter of the render side, whole.
       render: {
+        declareCut: () => this.declareCut(),
         guide: () => this.guide,
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
@@ -931,7 +938,10 @@ export class GameEngine {
         this.cinematic = null
       },
     })
+    let observerStance = false
     this.presentation = createPresentationStack((stance) => {
+      if (observerStance !== stance.observatory) this.declareCut()
+      observerStance = stance.observatory
       this.showShip = stance.showShip
       this.showOrbits = stance.showOrbits
       this.labels = stance.labels

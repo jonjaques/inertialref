@@ -101,6 +101,7 @@ export const MARS_LANDING: CutsceneScript = {
         const { entryHeat, throttle, landingDust } = marsLandingDrives(seconds)
         return {
           frame,
+          shot: 'descent',
           elapsedSeconds: seconds,
           presentationTime,
           camera: {

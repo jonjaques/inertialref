@@ -2967,6 +2967,7 @@ function sample(stage: Stage, frame: number): CinematicSample {
   return {
     frame,
     camera,
+    shot: shot.id,
     lens: LENS,
     ship: shipAt(shot, camera, staged, pose, frame),
     texts: textsAt(frame),

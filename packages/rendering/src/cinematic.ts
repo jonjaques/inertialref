@@ -153,6 +153,8 @@ export const NO_EFFECTS: CinematicEffects = Object.freeze({
 
 /** Everything a cutscene decides for one frame. */
 export interface CinematicSample {
+  /** Authored shot identity; a change is a camera cut, independent of distance. */
+  readonly shot?: string
   readonly frame: number
   /** Analytic body epoch held for a surface stage; the playhead keeps live time. */
   readonly presentationTime?: number
