@@ -42,10 +42,12 @@ import {
 } from '@inertialref/simulation'
 import {
   type Body,
+  bodyFixedFrameId,
   bodyFrameId,
   type EntityId,
   findBody,
   formatAddress,
+  geodeticDirection,
   hasSolidSurface,
   installSurfaceFrame,
   isLandable,
@@ -74,6 +76,7 @@ import {
   lensReadout,
   type LensView,
   MIN_STANCE_HEIGHT,
+  observerPose,
   type RenderScene,
   verticalFovDegrees,
 } from '@inertialref/rendering'
@@ -1081,7 +1084,18 @@ export class GameHarness {
    * in, and `sunset` chased Earth's azimuth instead of the sun's.
    */
   #toStar(system: SystemId, frame: FrameId): Vec3 {
-    const time = this.world.clock.time
+    return this.#starDirection(system, frame, this.world.clock.time)
+  }
+
+  /**
+   * The unit vector toward the star, in the given frame, at a given instant.
+   *
+   * The instant is a parameter because two callers disagree about it: a shot
+   * places the *ship* at the simulation's own time, while the observatory
+   * holds a photographic instant of its own — and the sun over a stance is a
+   * fact about the picture's time, not the clock's.
+   */
+  #starDirection(system: SystemId, frame: FrameId, time: number): Vec3 {
     const pose = this.world.frames.pose(frame, time)
     const star = this.world.frames.pose(systemFrameId(system), time).position
     const offset = UV.difference(star, pose.position)
@@ -1089,6 +1103,139 @@ export class GameHarness {
     // convention matches goToSystem's placement axis.
     if (Vec.length(offset) < 1) return vec3(1, 0, 0)
     return Vec.normalize(Q.rotateInverse(pose.orientation, offset))
+  }
+
+  /**
+   * The star's elevation over a place, degrees, from a body-fixed direction to
+   * it. Clamped because a unit dot product can land a rounding past ±1, and
+   * `asin` of that is NaN rather than ±90.
+   */
+  #sunElevation(toStar: Vec3, latitude: number, longitude: number): number {
+    const up = geodeticDirection(latitude, longitude)
+    return (
+      (Math.asin(Math.max(-1, Math.min(1, Vec.dot(toStar, up)))) * 180) /
+      Math.PI
+    )
+  }
+
+  /**
+   * How lit the view is, in degrees.
+   *
+   * The number a scenario is chosen by. A comparison taken in the dark is a
+   * comparison of noise — a star field jittering under a black disk — and the
+   * habit this exists to break is picking an address, standing somewhere on
+   * it, and photographing whatever the terminator happened to leave. On the
+   * ground `sun` is the star's elevation above the local horizon, negative
+   * after sunset; from orbit `phase` is the angle at the body between the eye
+   * and the star, zero for a full face and 180 for a silhouette. Both are at
+   * the observatory's held instant, which is the picture's. `lit` is the
+   * verdict: a sun more than three degrees up, or a phase under a hundred.
+   *
+   * A star is always lit, and the far side of the galaxy is a question for
+   * `ir.galaxy()`; both answer with nulls and `lit: true`.
+   */
+  light(address?: string): {
+    address: string
+    sun: number | null
+    phase: number | null
+    lit: boolean
+  } {
+    const target = address ?? this.observatory.target?.address
+    if (target === undefined)
+      throw new Error('Nothing to measure — pass an address')
+    // Resolved the way every other verb resolves an address, so a relative
+    // `b:2.0` answers here as it does for `sites`: `parseAddress` alone
+    // refuses anything that does not start with its galaxy.
+    const resolved = resolveDestination(
+      target,
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+    if (resolved.kind !== 'body' || resolved.address.kind !== 'body')
+      return { address: target, sun: null, phase: null, lit: true }
+    const body = this.#requireBody(target)
+    const at = body.address
+    if (at.kind !== 'body')
+      return { address: target, sun: null, phase: null, lit: true }
+    const text = formatAddress(at)
+    const time = this.observatory.time
+    const status = this.observatory.status()
+    const onIt = status.surface !== null && status.target?.address === text
+    let sun: number | null = null
+    if (onIt && status.surface !== null) {
+      const toStar = this.#starDirection(at.system, bodyFixedFrameId(at), time)
+      const { latitude, longitude } = status.surface.stance
+      sun = this.#sunElevation(toStar, latitude, longitude)
+    }
+    /*
+     * The eye at the framing the camera is *arriving at*, not where the ease
+     * has it this instant: a composition eases over half a second of frames,
+     * and headlessly no frame runs, so `pose()` would answer for the framing
+     * before the picture. `desired` equals `state` once it has arrived. Solved
+     * without a tracking basis, which a picture holding a companion in frame
+     * rotates the orbit controls by — a degree or two of phase, and the
+     * verdict is coarser than that.
+     */
+    let phase: number | null = null
+    if (status.target !== null) {
+      const frame = bodyFrameId(at)
+      const bodyPose = this.world.frames.pose(frame, time)
+      const center = this.world.frames.pose(status.target.frame, time).position
+      const eye = observerPose(center, status.desired, status.look)
+      const toStar = this.#starDirection(at.system, frame, time)
+      const offset = UV.difference(eye.position, bodyPose.position)
+      if (Vec.length(offset) > 1) {
+        const toEye = Vec.normalize(
+          Q.rotateInverse(bodyPose.orientation, offset),
+        )
+        phase =
+          (Math.acos(Math.max(-1, Math.min(1, Vec.dot(toEye, toStar)))) * 180) /
+          Math.PI
+      }
+    }
+    const lit = sun !== null ? sun > 3 : phase !== null ? phase < 100 : true
+    return { address: text, sun, phase, lit }
+  }
+
+  /**
+   * Whether the picture has stopped changing on its own.
+   *
+   * What a capture waits for, instead of a number of milliseconds guessed at
+   * once. The sky's physical cubes publish tile by tile and the terrain
+   * streamer fills in from a worker pool, and a still taken while either is
+   * in flight differs from the next by thousands of pixels with the camera
+   * never moving. `ok` is every readout quiet; the rest says which one was
+   * not. Headlessly there is nothing to converge and the answer is yes.
+   */
+  settled(): {
+    ok: boolean
+    galaxy: { pending: boolean; tiles: string; survey: boolean } | null
+    terrain: { pending: number; patches: number } | null
+  } {
+    const galaxy = this.#host.render.galaxyRender()
+    const terrain = this.#host.render.terrain()
+    const sky =
+      galaxy === null || galaxy.cache === undefined
+        ? null
+        : {
+            // The cache's own flag, not its tile count: a published cube can
+            // sit at 0 of 1,638 refined tiles with nothing in flight, and a
+            // capture that waited for the count would wait forever.
+            pending: galaxy.cache.pending,
+            tiles: `${galaxy.cache.completedTiles}/${galaxy.cache.totalTiles}`,
+            survey: galaxy.survey?.pending ?? false,
+          }
+    const ground =
+      terrain === null
+        ? null
+        : { pending: terrain.pending, patches: terrain.patches }
+    return {
+      ok:
+        (sky === null || (!sky.pending && !sky.survey)) &&
+        (ground === null || ground.pending === 0),
+      galaxy: sky,
+      terrain: ground,
+    }
   }
 
   /**
@@ -1986,6 +2133,8 @@ export class GameHarness {
     latitude: number
     longitude: number
     elevation: number
+    /** The star's elevation over this place, degrees, at the held instant. */
+    sun: number
     region: string
   }[] {
     const body = this.#requireBody(address)
@@ -1994,6 +2143,19 @@ export class GameHarness {
     // to stand — six clickable throws in the Ground section. An empty list is
     // the answer the panel draws an honest empty state for.
     if (!hasSolidSurface(body)) return []
+    /*
+     * The sun over each place, so a caller choosing where to stand can choose
+     * the lit one. Survey order is kept — the panel's rows are named places
+     * and a list that reshuffled with the time of day would move the button
+     * somebody was reaching for — so `sun` is a column, not a sort.
+     */
+    const at = body.address
+    if (at.kind !== 'body') return []
+    const toStar = this.#starDirection(
+      at.system,
+      bodyFixedFrameId(body.address),
+      this.observatory.time,
+    )
     return surveySites(body).map((site) => ({
       id: site.id,
       name: site.name,
@@ -2001,6 +2163,7 @@ export class GameHarness {
       latitude: (site.latitude * 180) / Math.PI,
       longitude: (site.longitude * 180) / Math.PI,
       elevation: site.elevation,
+      sun: this.#sunElevation(toStar, site.latitude, site.longitude),
       region: `${site.region.face}.${site.region.level}.${site.region.i}.${site.region.j}`,
     }))
   }
@@ -2394,7 +2557,9 @@ export class GameHarness {
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
       "  ir.view('orbit' | 'chase')     stand the flight camera beside the hull, or behind it",
       '  ir.flightCamera               that camera itself — drag, turn, zoom, recenter',
-      '  ir.sites(address?)            the named places on a body, derived from its own terrain',
+      '  ir.sites(address?)            the named places on a body, derived from its own terrain, with the sun over each',
+      '  ir.light(address?)            how lit the view is: sun elevation on the ground, phase angle from orbit, and a verdict',
+      '  ir.settled()                  whether the sky and the ground have stopped arriving — what a capture waits for',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',
       '  ir.ascend()                   back to orbit, at the framing you left',

@@ -321,6 +321,23 @@ export const QUERY = {
    * renderer can offer one.
    */
   producer: 'producer',
+  /**
+   * Every mode: `0` clears the interface for the page's lifetime — the state
+   * `Shift+H` and `ir.chrome(false)` reach, from the address bar, so a plate
+   * is one navigation and no script. Not persisted, for the reason
+   * `hud/chrome.ts` gives; the next address without it has its controls.
+   */
+  chrome: 'chrome',
+  /** Every mode: `0` takes the names and traces out of the frame with it. */
+  layers: 'layers',
+  /**
+   * Every mode: `standard` or `extended`, the output mode for this page's
+   * lifetime, over the stored preference. A diagnostic like `picture`: a
+   * captured plate is a committed file every display has to agree about, and
+   * the preference it would otherwise read belongs to whoever owns the
+   * profile.
+   */
+  output: 'output',
 } as const
 
 /**

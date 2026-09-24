@@ -23,7 +23,7 @@
     "test:me": "vitest run --reporter=dot --reporter=vitest-nyancat-reporter",
     "test:gpu": "vitest run --config apps/game/vitest.gpu.config.ts",
     "test:slow": "vitest run --config apps/game/vitest.slow.config.ts",
-    "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/ingest/tsconfig.json && pnpm --filter @inertialref/game check",
+    "typecheck": "node scripts/check.mjs --only typecheck",
     "lint": "oxlint",
     "fta": "fta .",
     "fta:check": "fta . --score-cap 91",
@@ -46,7 +46,10 @@
     "solar:fetch": "node apps/ingest/src/main.ts solar",
     "shapes:build": "node apps/ingest/src/main.ts shapes",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
-    "check": "pnpm graph && pnpm spelling:check && pnpm brand:check && pnpm presets:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:slow && pnpm build"
+    "check": "node scripts/check.mjs",
+    "check:gate": "node scripts/check.mjs --only gate",
+    "presets:ledger": "vitest run apps/headless/src/pictureLedger.test.ts --update",
+    "presets:compare": "node scripts/presets/compare.mjs"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",

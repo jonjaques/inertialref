@@ -251,9 +251,9 @@ runs the root suite after every turn; `pnpm check` and CI run both, which is
 where "the ship
 lands on the ground it drew" has to be proved before a merge. Anything else
 that streams a landing takes the suffix. A change under
-`engine/terrainStreamer.ts` or the terrain path is therefore proved by `/ship`
-rather than by the gate, and `pnpm test:slow` by hand is how to prove it
-sooner. [Test speed](../../design/plans/test-speed.md) carries the dated
+`engine/terrainStreamer.ts` or the terrain path is therefore proved by
+`pnpm check` and CI rather than by the Stop gate, and `pnpm test:slow` by hand
+is how to prove it sooner. [Test speed](../../design/plans/test-speed.md) carries the dated
 measurements and remaining cold-run work.
 
 `galaxy/field.slow.test.ts` also takes the suffix. Its count-convergence check
@@ -465,6 +465,39 @@ completes. Measure cold and warm runs separately, with the browser closed during
 CPU benchmarks. [ADR-0045](../adr/0045-generated-terrain-is-a-disposable-cache.md)
 states the invalidation contract.
 
+## The pictures are a fixture
+
+A preset is an address, a framing, a lens and a held instant, so it is the one
+frame the renderer can be asked for twice. The thirteen shipped pictures are
+therefore the regression fixture for anything visible, in two halves.
+
+`pnpm presets:compare` is the browser half. It serves the tree on a port of its
+own, opens each picture's public URL with the chrome cleared and standard
+output, waits until the sky and the ground have stopped arriving, and
+differences the frame against the committed plate — the frame a reviewer last
+accepted — printing the pixels over a 3% per-pixel threshold, the peak, and a
+verdict against a floor measured from two captures of one build. By default it
+compares the lit pictures only: a frame that is mostly sky or shadow compares
+its noise, so a plate has to be a fifth lit and the ledger's verdict has to
+agree, and the dark ones are named as skipped (`--all` compares them).
+`--base <ref>` serves that commit from a worktree of its own and photographs
+it instead, for plates known to be behind or for a same-machine control;
+`--twice` photographs the tree a second time and is the rig against itself.
+Each result has a
+`reference | tree | difference` pair under `.data/presets/compare/`, which is
+what a pull request attaches. A move is accepted with `pnpm presets:plates <id>`.
+
+`apps/headless/src/pictureLedger.test.ts` is the Node half, in `pnpm test`.
+It takes the thirteen against the real catalog and snapshots what the camera
+decided — position, lens, altitude, a digest of the body, how lit the view is
+(the sun's elevation over a stance, the phase angle from orbit), and for a
+stance on the ground the terrain the plate's 480×320 asks the streamer for —
+into `pictureLedger.json`. Five of the pictures stand on generated bodies outside
+Sol, so a change to the procedural terrain or the detail floor moves a number
+there before a plate is taken. It also holds the world's state hash across all
+thirteen, which is rule 37 executed rather than described.
+`pnpm presets:ledger` rewrites the snapshot after a deliberate move.
+
 ## The capability checks
 
 Twelve executable assertions about the architecture, in
@@ -504,7 +537,7 @@ pnpm vitest run world.test      # one file
 # answers "No test files found" for anything named *.gpu.test.ts.
 pnpm vitest run --config apps/game/vitest.gpu.config.ts materials.gpu
 pnpm vitest                     # watch
-pnpm check                      # graph, brand, presets, format, lint, typecheck, test, test:slow, build
+pnpm check                      # every stage as one graph; --only gate is the Stop hook's four
 ```
 
 ---

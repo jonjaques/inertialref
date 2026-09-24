@@ -13,6 +13,7 @@
     "@inertialref/physics": "workspace:*",
     "@inertialref/procedural": "workspace:*",
     "@inertialref/protocol": "workspace:*",
+    "@inertialref/rendering": "workspace:*",
     "@inertialref/shared": "workspace:*",
     "@inertialref/simulation": "workspace:*",
     "@inertialref/spatial": "workspace:*",

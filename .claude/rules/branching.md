@@ -30,12 +30,12 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
   `required_linear_history` and takes squash merges only, so a merge commit cannot land:
   `git fetch origin && git rebase origin/main`. Do it before running the checks, so the
   evidence describes the commit that will actually merge. `--force-with-lease` after a
-  rebase of an already-pushed branch is the ordinary end of a rebase; it prompts like any
-  other push. Never a bare `--force`, and never at `main`.
+  rebase of an already-pushed branch is the ordinary end of a rebase. Never a bare
+  `--force`, and never at `main`.
 
 - **Pushing and opening a pull request are `/ship`.** Invoking that skill is the
   approval for everything in it. Reviewing is not part of it — `/code-review` is a
   separate command the user runs. `git push -f` and the direct `git push … main` forms
   are denied by matcher, and GitHub's ruleset refuses a non-fast-forward to `main`
-  server-side besides; every other push prompts. Check the branch yourself rather than
-  trusting either to catch it.
+  server-side besides. An ordinary push does not prompt and merging to `main` does.
+  Check the branch yourself rather than trusting either to catch it.

@@ -107,6 +107,7 @@ const OPTIONS = {
   js: { type: 'string', multiple: true },
   file: { type: 'string', multiple: true },
   wait: { type: 'string', multiple: true },
+  settle: { type: 'string', multiple: true },
   shot: { type: 'string', multiple: true },
   sample: { type: 'string', multiple: true },
   'sample-js': { type: 'string', default: 'ir.terrain()' },
@@ -128,6 +129,7 @@ const STEPS = new Set([
   'js',
   'file',
   'wait',
+  'settle',
   'shot',
   'cast',
   'trace',
@@ -147,7 +149,10 @@ Steps run in the order they are written, in one browser session:
                      \`return\` for a multi-statement body; \`await\` works.
   --file <path>      evaluate a local .js/.mjs file in the page, for anything
                      too long or too quote-heavy for a shell argument
-  --wait <ms>        settle. Textures stream in asynchronously after a seek
+  --wait <ms>        a fixed pause. Textures stream in asynchronously after a seek
+  --settle <ms>      wait until ir.settled() says the sky and the ground have
+                     stopped arriving, for at most <ms>; reports what was still
+                     pending if it ran out. What a plate waits for
   --shot <path>      screenshot. A bare filename lands in .data/drive/;
                      a .jpg extension captures JPEG, which is what to read
   --sample <n>       n consecutive rAF frames of --sample-js, with a per-field
@@ -209,7 +214,11 @@ Photographic fixtures (session flags, before all measurement steps):
   node scripts/drive.mjs --picture shot.json --query 'save=1' --logs
 
 --preset and --picture select /planetarium on --url's host. To test the built-in
-alias itself, use --url 'http://localhost:5173/planetarium?preset=earthrise'.`
+alias itself, use --url 'http://localhost:5173/planetarium?preset=earthrise'.
+Three query fields carry the rest of a plate's state, so a fixture is one
+navigation and a settle: --query chrome=0 clears the interface, --query layers=0
+takes the names and traces with it, --query output=standard is SDR for the
+page's lifetime.`
 
 const { values, tokens } = parseArgs({
   options: OPTIONS,
@@ -319,9 +328,13 @@ function checkScript() {
   )
     throw new Error('--user-gesture needs a --js or --file step')
   for (const { step, arg } of script) {
-    if (!JAVASCRIPT && (step === 'sample' || step === 'cast'))
+    if (
+      !JAVASCRIPT &&
+      (step === 'sample' || step === 'cast' || step === 'settle')
+    )
       throw new Error(`--${step} needs page scripts; omit --no-javascript`)
     if (step === 'wait') count(arg, 'wait', 0)
+    if (step === 'settle') count(arg, 'settle', 0)
     if (step === 'sample') count(arg, 'sample', 1)
     if (step === 'trace') count(arg, 'trace', 100)
   }
@@ -1028,6 +1041,35 @@ async function main() {
         const ms = count(arg, 'wait', 0)
         await sleep(ms)
         results.push({ step, ms })
+        break
+      }
+      case 'settle': {
+        /*
+         * Two quiet reads in a row, not one: the sky publishes its cubes tile
+         * by tile and the streamer asks for another ring as the last one
+         * lands, so a single `ok` can sit in the gap between two bursts. The
+         * budget is a guard against a scene that never converges, and running
+         * out is reported rather than hidden — a plate taken then is a plate
+         * of something still arriving, and the report says which.
+         */
+        const budget = count(arg, 'settle', 0)
+        const began = performance.now()
+        let quiet = 0
+        let report = null
+        for (;;) {
+          report = await evaluate(send, 'ir.settled()')
+          quiet = report?.ok ? quiet + 1 : 0
+          if (quiet >= 2 || performance.now() - began >= budget) break
+          await sleep(250)
+        }
+        const ms = Math.round(performance.now() - began)
+        const settled = quiet >= 2
+        results.push({ step, ms, settled, ...(report ?? {}) })
+        say(
+          settled
+            ? `settle: converged after ${ms}ms`
+            : `settle: still arriving after ${ms}ms — ${JSON.stringify(report)}`,
+        )
         break
       }
       case 'reload': {

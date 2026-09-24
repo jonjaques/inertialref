@@ -422,13 +422,28 @@ framing it left; both are camera moves, so `world.stateHash()` is untouched —
 `ir.land` is the one that teleports the ship.
 
 ```js
-ir.sites(address?)                       // the named places on a body
+ir.sites(address?)                       // the named places on a body, with the sun over each
+ir.light(address?)                       // sun elevation on the ground, phase from orbit, and a verdict
 ir.visit(address?, { site, height })     // stand there, now. Degrees and meters
 ir.visit(address?, { latitude, longitude, heading, pitch })
 ir.drop(lat, lon, { address, seconds })  // fly down there, facing the star
 ir.observatory.setStanceScrub(0.5)       // the height slider, logarithmic
 ir.ascend()                              // and this abandons a drop in flight
+ir.settled()                             // whether the sky and the ground have stopped arriving
 ```
+
+**Stand where the sun is.** A picture taken in the dark compares nothing: a
+star field jittering under a black disk, or a slope a low sun has left in
+shadow, differs from the next capture by thousands of pixels while a lit face
+differs by none. `ir.sites()` carries `sun`, the star's elevation over each
+place in degrees at the held instant, so the lit site is the one with the
+largest; `ir.light()` says the same for the view as it stands — `sun` on the
+ground, `phase` from orbit with zero the full face and 180 the silhouette —
+and `lit` is the verdict a fixture is chosen by. `ir.settled()` is what a
+capture waits for instead of a number of milliseconds: the sky's physical
+cubes publish tile by tile and the streamer fills a ring at a time, and a
+still taken while either is in flight is a still of something still
+arriving. `pnpm drive --settle <ms>` polls it.
 
 **`visit` cuts and `drop` flies**, and the difference is the intent rather than
 the destination. `visit` is what a plate is captured through, so the frame after

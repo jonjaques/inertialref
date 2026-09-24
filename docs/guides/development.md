@@ -19,15 +19,19 @@ pnpm preview          # production build, served by the real Worker on 8787
 pnpm test             # Vitest, Node environment only
 pnpm test:gpu         # the shader suite on the real GPU via Dawn; not in check
 pnpm test:slow        # terrain descent and galaxy convergence/population checks; in check and CI
-pnpm typecheck        # five tsconfig projects and Astro templates
+pnpm typecheck        # the six type projects, in parallel — a group of pnpm check
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
 pnpm brand            # regenerate brand artifacts from design/brand/brandmark.svg
 pnpm presets:plates   # recapture the built-in preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
+pnpm presets:compare  # photograph the pictures and difference them against the plates, or --base <ref>
+pnpm presets:ledger   # rewrite the headless picture ledger after a deliberate move
 pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Astro build
-pnpm check            # graph, spelling, brand, presets, format, lint, typecheck, test, test:slow, build
+pnpm check            # every stage as one graph: graph, spelling, brand, presets, format, lint,
+                      # typecheck, test, test:slow, sim, build. --list prints them, --force ignores the stamps
+pnpm check --only gate  # what the Stop hook runs: graph, lint, typecheck, test
 
 # Reports describe the tree; spelling:check also gates it.
 pnpm fta              # complexity per file; fta:check exits 1 above a score of 91
@@ -109,7 +113,16 @@ built-in. After any change to `wrangler.jsonc`, regenerate
 `apps/server/worker-configuration.d.ts` with
 `pnpm --filter @inertialref/server run types` and commit it.
 
-`pnpm check` is the gate. Do not report a task complete without it passing.
+`pnpm check` is the gate, and `scripts/check.mjs` is what it runs: every stage
+as one graph under the machine's core budget, with a line for what each cost.
+Sequentially the stages cost 244 s on a ten-core M5 from a cold terrain archive;
+as a graph the same tree runs in 80.5 s warm, bounded by the slowest stage and
+whatever cannot fit beside it. A stage that passes is stamped with a key made
+of the working tree's content, so a run on an unchanged tree reuses the stamp
+and says so — the Stop hook's stages are what a later `pnpm check` usually
+reuses — and `--force` runs everything. CI runs the same command, so there is
+no list of CI stages to drift; a pull request is not done until it passes
+there.
 
 Complexity, unused-code and coverage reports stay outside the gate. `fta`
 scores complexity, coverage counts what the suite executed, and `knip` asks
@@ -272,16 +285,26 @@ framing it was shot at, so it can be shot again. Astro's sitemap integration
 emits the route sitemap during the application build.
 
 **Preset plates** are the thumbnails under the planetarium's Presets panel, in
-`apps/game/public/presets/`. `pnpm presets:plates` recaptures the built-in set,
-or one by id — by driving Chrome against `pnpm dev`, so a dev server has to be
-up and the machine needs a GPU. They are vendored for the reason the share card
-is: a build that needed a GPU would not run in CI, on a fork, or on a machine
-with no display, and the one thing a thumbnail may not do is be absent.
-`pnpm presets:check` is in `pnpm check` and proves only that each picture has a
-plate and names a composition that still resolves — nothing can check that a
-plate still _looks_ like the picture, because comparing it to what the renderer
-produces now is the review itself. Recapture, and a diff in `git status` is the
-signal.
+`apps/game/public/presets/`, and the frames a reviewer last accepted for the
+thirteen pictures. `pnpm presets:plates` recaptures the set, or one by id — it
+serves the tree on a port of its own and drives Chrome at it, so the machine
+needs a GPU and nothing else. They are vendored for the reason the share card is: a build that
+needed a GPU would not run in CI, on a fork, or on a machine with no display,
+and the one thing a thumbnail may not do is be absent. `pnpm presets:check` is
+in `pnpm check` and proves that each picture has a plate and names a
+composition that still resolves. Whether a plate still _looks_ like the picture
+is `pnpm presets:compare`: it opens each picture's public URL from a server of
+its own, waits for the sky and the ground to stop arriving, and differences
+the frame against its plate, or against a baseline served from `--base <ref>`,
+reporting the pixels that moved with a `reference | tree | difference` pair
+for each. It compares the lit pictures by default — a frame that is mostly sky
+or shadow compares its noise — and names the dark ones it skipped. A move is accepted by
+recapturing the plate, and the rewritten file in the pull request is the claim
+under review. The headless half is the picture ledger in
+`apps/headless/src/pictureLedger.json` — where each camera stands, its lens,
+the body it resolved and the terrain a stance asks for — which `pnpm test`
+holds as a snapshot and `pnpm presets:ledger` rewrites.
+[Testing](testing.md#the-pictures-are-a-fixture) has both halves.
 
 **The documentation site** at `/docs` is generated. `pnpm docs:build` renders
 every markdown file under `docs/`, plus the two adopted from the root —

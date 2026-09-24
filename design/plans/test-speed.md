@@ -56,6 +56,18 @@ so the per-turn gate pays sixteen seconds of test rather than two minutes, and
 the landing is still proved once per pull request. That moves the payment, not
 the price; what follows is what would move the price.
 
+The graph moves the wall clock without touching the price. `scripts/check.mjs`
+runs every stage under a core budget of `availableParallelism()`, longest
+first, and on 19 September 2026 at `2e314c52` the same machine measured the
+ten stages at 244 s sequentially from a cold archive — 96 s of the slow suite,
+69 s of `build` with its second typecheck, 27 s of `test`, 25 s of the spelling
+scan on one core — and 80.5 s wall at 428 s of CPU for the eighteen stages as a
+graph, warm and `--force`d. Under that load the stages read slower than alone:
+`test` 47 s against 27, `spelling` 43 s against 25, `docs` 32 s. The gate group
+alone is 29.5 s, bounded by the root suite with the six type projects in its
+shadow. A figure taken under `pnpm check` is therefore a figure about the graph,
+not the stage; the runner's own table says what each cost in company.
+
 The GPU producer does not accelerate the CPU descent test. That test keeps the
 CPU generation path; its persistent archive skips repeated work after a cold
 run. The [testing guide](../../docs/guides/testing.md#reconstruction-and-persistent-terrain)

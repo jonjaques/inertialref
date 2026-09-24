@@ -97,7 +97,8 @@ batch first, then `node scripts/drive.mjs --port <port> --down` for that rig.
 | --------------- | ----------------------------------------------------------------------- |
 | `--js <expr>`   | a bare expression is returned, so `--js "ir.terrain()"` prints          |
 | `--file <path>` | a local `.mjs` evaluated in the page, when quoting gets ugly            |
-| `--wait <ms>`   | textures stream in asynchronously after a look or a seek                |
+| `--wait <ms>`   | a fixed pause, for what no readout reports                              |
+| `--settle <ms>` | until `ir.settled()` is quiet twice — the sky's cubes and the ground    |
 | `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read      |
 | `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field                   |
 | `--cast <n>`    | `n` **rendered** frames, differenced — the only step that sees a strobe |
@@ -145,20 +146,36 @@ capture does not wait for first light or activate the renderer.
 
 ## Presets as reproducible browser fixtures
 
-**Use the public URL restore path when the setup is a photograph.** `--preset <id>`
-expands a bundled planetarium shot into its full query fields. `--picture <path>`
+**Load the URL. Do not build the picture with verbs.** The page opens anywhere
+the address bar can say, so a fixture is one navigation and a settle — never a
+boot, a `--js` that moves the camera, a wait guessed at, and a shot. `--preset <id>`
+expands a bundled planetarium shot into its full query fields; `--picture <path>`
 reads a JSON export containing exactly one shot. Both choose `/planetarium` on
-`--url`'s host and use the application's serializer; they do not call a separate
-camera setter. Use either source flag, not both.
+`--url`'s host and use the application's serializer. Three query fields carry the
+rest of a plate's state: `chrome=0` clears the interface, `layers=0` takes the
+names and traces with it, `output=standard` is SDR for the page's lifetime. Then
+`--settle` waits for the sky and the ground to stop arriving, which is the wait a
+fixed `--wait` can only guess at.
 
 ```bash
-node scripts/drive.mjs --preset earthrise --wait 2000 --shot earthrise.jpg
+node scripts/drive.mjs --preset earthrise --query chrome=0 --query layers=0 \
+  --query output=standard --settle 30000 --shot earthrise.jpg
 node scripts/drive.mjs --picture .scratch/shoreline.json \
   --query 'lens.zoom=2' --query 'time=841996882.478' \
-  --wait 2000 --shot shoreline-detail.jpg
+  --settle 30000 --shot shoreline-detail.jpg
 node scripts/drive.mjs --picture .scratch/shoreline.json \
   --query 'save=1' --js '({path:location.pathname, dialog:!!document.querySelector("[role=dialog]")})'
 ```
+
+**Photograph what the sun is on.** A frame that is mostly sky or shadow compares
+its noise — two captures of one build differ there by thousands of pixels and by
+none on a lit face — so pick the lit scenario before picking anything else.
+`ir.light()` says whether the view is lit (`sun` on the ground, `phase` from
+orbit, `lit` the verdict), `ir.sites(addr)` carries the sun's elevation over
+every named place so the summit in daylight is the one with the largest `sun`,
+and the ledger in `apps/headless/src/pictureLedger.json` says it for the
+thirteen presets without a browser. `pnpm presets:compare` compares the lit ones
+by default and names the dark ones it skipped.
 
 `--query <key=value>` repeats, applies after the fixture, and keeps the last
 value for each key. Quote the shell argument and write raw text: `--query
@@ -185,6 +202,15 @@ opens `/planetarium/presets` with a suggested name after restoration; it does no
 save automatically. A malformed `--query`, such as `lens.zoom=broken`, reaches
 the page so a test can assert its error and unchanged view. An invalid JSON file
 fails before the browser starts.
+
+**A change that could move a frame is checked against all thirteen at once.**
+`pnpm presets:compare` photographs them from the tree and differences each against
+its committed plate — or against a baseline served from `--base <ref>` — and prints
+the pixels that moved with a `reference | tree | difference` pair under
+`.data/presets/compare/`. Run it before saying ship for anything under `render/`,
+`scene/`, the terrain, the HUD or the planetarium; it is about a minute against the
+plates, and `pnpm presets:plates <id>` accepts a move. The headless ledger in
+`pnpm test` catches the camera and terrain half of the same move without a browser.
 
 Codec and driver URL tests run without Chrome:
 `pnpm vitest run presetUrl.test driveUrl.test`. For browser regressions, check a

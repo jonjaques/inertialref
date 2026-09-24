@@ -96,12 +96,29 @@ import {
 let singleton: GameEngine | null = null
 
 function engineInstance(catalog: StarCatalog): GameEngine {
-  singleton ??= new GameEngine({
-    seed:
-      new URLSearchParams(window.location.search).get('seed') ?? 'inertialref',
+  if (singleton !== null) return singleton
+  const query = new URLSearchParams(window.location.search)
+  singleton = new GameEngine({
+    seed: query.get('seed') ?? 'inertialref',
     catalog,
   })
+  /*
+   * The address bar's chrome and layer stances, pushed once the engine exists
+   * and before anything mounts. A capture rig loads a preset URL and
+   * photographs it, and the state a plate is defined in is otherwise a verb it
+   * has to evaluate in the page after boot. Every mode sees the layer stance
+   * pushed here except the planetarium, which writes `labels` and
+   * `showOrbits` into its own stance on mount, above this one — so it reads
+   * `layers=0` itself.
+   */
+  if (query.get(QUERY.chrome) === '0') singleton.setChrome(false)
+  if (query.get(QUERY.layers) === '0') singleton.setLayers(false)
   return singleton
+}
+
+/** The page-lifetime output override, or null when the address carries none. */
+function parseOutputQuery(value: string | null): OutputPreference | null {
+  return value === 'standard' || value === 'extended' ? value : null
 }
 
 /** HUD refresh rate. The simulation runs at 64 Hz; a human reads about 8. */
@@ -213,7 +230,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * directions. Persisted, because a player who turned it off did not mean
    * "until the next reload".
    */
-  const [hdr, setHdr] = usePersistentState(RENDER_HDR)
+  const [storedHdr, setHdr] = usePersistentState(RENDER_HDR)
+  const [outputOverride] = useState(() =>
+    parseOutputQuery(
+      new URLSearchParams(window.location.search).get(QUERY.output),
+    ),
+  )
+  // The override wins for this page's lifetime and writes nothing back: a
+  // change made in the panel still lands in storage, for the next address.
+  const hdr = outputOverride ?? storedHdr
   const [storedPicture] = usePersistentState(RENDER_PICTURE)
   const [pictureQuery] = useState(() =>
     new URLSearchParams(window.location.search).get(QUERY.picture),

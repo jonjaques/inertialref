@@ -125,10 +125,12 @@ Claude, Cursor, and Codex adapters share the hook implementations in
 [`.codex/README.md`](../../.codex/README.md). When the host has not trusted or
 enabled hooks, perform setup, formatting, and verification explicitly.
 
-A Stop hook runs `graph → lint → typecheck → test` after a turn that touched
-source. It is a safety net, not the definition of done. The full `pnpm check`
-gates the push, which is what the `ship` skill runs, and `pnpm sim --self-test`
-runs in CI. `IR_SKIP_GATE=1` disables the hook when you must.
+A Stop hook runs the `gate` group of `scripts/check.mjs` — graph, lint, the
+six typecheck projects and the root suite — after a turn that touched source,
+as a graph under the machine's core budget. It is a safety net, not the
+definition of done. The full `pnpm check` is the same runner with every stage,
+and CI runs it on every push; the `ship` skill does not. `IR_SKIP_GATE=1`
+disables the hook when you must.
 
 ---
 
@@ -184,15 +186,13 @@ exists to describe a change. That license does not extend to the source comment
 next to it.
 
 Pushing and opening a pull request are [`/ship`](../../.claude/skills/ship/SKILL.md).
-It rebases onto `origin/main` first, then runs the checks the diff actually warrants —
-the full `pnpm check` alongside the invariant and documentation audits for a source
-change, a picture for anything visible, `pnpm format:check` and nothing else for a
-prose-only one. Then it opens the PR, **ready rather than draft**: everything a draft
-exists to defer has already happened by that point.
-
-Scoping the checks is not corner-cutting. A browser cannot say anything about a
-paragraph, and a green build on a documentation PR proves nothing about the words —
-what it costs is twenty minutes and a verification section the reader learns to skip.
+It rebases onto `origin/main`, commits what is uncommitted in house style, pushes,
+opens the PR **ready rather than draft** and watches CI. It runs no check of its own:
+"ship" is said when the work is verified, and the pull request's verification section
+lists what ran — the gate on every turn, the `pnpm presets:compare` table for anything
+visible, `pnpm test:gpu` for a shader, a headless probe for a number — and what did
+not. CI runs `pnpm check` on the pushed commit, and a green run there is the same graph
+a developer runs locally.
 
 Reviewing is deliberately not part of it. `/code-review --fix` is a separate command the
 user runs on the finished PR.

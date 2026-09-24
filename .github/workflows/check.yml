@@ -1,20 +1,23 @@
-# Health check for pull requests.
+# Health check for pull requests, and for `main` after each merge.
 #
-# `pnpm check` is deliberately the whole job. It was designed to be exactly that
-# — non-interactive, with a useful exit code — so CI does not get its own list of
-# stages that can drift out of step with what a developer runs locally. See
-# docs/roadmap.md ("Automation gaps").
+# `pnpm check` is deliberately the whole job. `scripts/check.mjs` runs every
+# stage the repository has — layering, spelling, brand, presets, format, lint,
+# the six type projects, the root and slow test suites, the capability
+# self-test, and the build — as one graph under the runner's core budget, so CI
+# cannot keep a list of its own that drifts from what a developer runs. The
+# runner's own log says what each stage cost here.
 #
-# The self-test runs separately because it proves something different: `check`
-# says the code compiles, lints and passes its unit tests; `sim --self-test`
-# executes the twelve milestone capability claims against the real simulation in
-# Node, with no DOM. A regression in precision, determinism or frame-rate
-# independence shows up there and nowhere else.
+# The run on `main` exists for the cache, not for the verdict: a pull request
+# restores caches created on its own branch or on the default branch, and
+# nothing else. Without a `main` run every pull request would start from an
+# empty terrain archive and pay the cold descent.
 
 name: check
 
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 # A PR that is pushed to twice does not need the first run to finish.
@@ -32,18 +35,34 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      # `lfs: true` because `data/models/enterprise-d.glb` is git-lfs tracked and
-      # two things here read the bytes, not the pointer. `hullClearance.test.ts`
+      # Pointers only. `actions/checkout` skips the smudge filter unless asked
+      # for LFS, and the objects arrive below from a cache keyed on exactly
+      # which ones the tree points at — a fresh download of the two hulls and
+      # the pad on every run is forty megabytes of LFS bandwidth for files
+      # that change a few times a year.
+      - uses: actions/checkout@v5
+
+      - name: Which LFS objects the tree points at
+        run: |
+          mkdir -p .data
+          git lfs ls-files -l | cut -d' ' -f1 | sort > .data/lfs-objects
+
+      - uses: actions/cache@v6
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.data/lfs-objects') }}
+
+      # Two things here read the bytes, not the pointer. `hullClearance.test.ts`
       # decodes the glTF to check the cutscene camera clears the hull, and it is
       # the only test in the repo that touches LFS content — without this it
       # throws "is not a binary glTF" during collection and takes the whole
       # suite with it. Worse and quieter: `shipModels.ts` pulls the model in
       # through `import.meta.glob`, so `pnpm build` bundles whatever is on disk.
       # A pointer checkout produces a green build that ships a 130-byte file
-      # where the hero ship should be.
-      - uses: actions/checkout@v5
-        with:
-          lfs: true
+      # where the hero ship should be. With the objects already under
+      # `.git/lfs` this is a checkout and no download.
+      - name: LFS objects
+        run: git lfs pull
 
       # Reads the pinned version from package.json's `packageManager` field, so
       # the lockfile format and the CI pnpm can never disagree.
@@ -62,13 +81,52 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # graph → brand → presets → format → lint → typecheck → test → test:slow
-      # → build, failing fast. `test:slow` is the terrain descent, about a
-      # hundred seconds on an M5 and longer here; the job's twenty minutes has
-      # room for it.
+      # The terrain archive (ADR-0045). The slow suite lands on Proxima
+      # Centauri b and generates every heightfield of that descent through an
+      # inline worker: 92 s cold on an M5 and longer on this runner, against a
+      # few seconds when the tiles are on disk. The archive validates every
+      # tile it serves against the full request, so a restored one can only
+      # skip work, never change a result — and its key carries the cache
+      # version, so a terrain or task bump starts from empty rather than from
+      # tiles no request can match.
+      #
+      # Every run saves under its own key and restores the newest one under the
+      # prefix, which is how a cache that grows gets updated at all: a GitHub
+      # cache is immutable once written. The save is conditional on the archive
+      # having grown, so a warm run uploads nothing.
+      - name: Terrain archive key
+        id: archive
+        run: echo "version=$(node scripts/terrainArchive.mjs version)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@v6
+        id: archive-restore
+        with:
+          path: .data/heightfields
+          key: terrain-${{ runner.os }}-${{ steps.archive.outputs.version }}-${{ github.run_id }}
+          restore-keys: |
+            terrain-${{ runner.os }}-${{ steps.archive.outputs.version }}-
+
+      - name: Terrain archive before
+        id: before
+        run: echo "entries=$(node scripts/terrainArchive.mjs entries)" >> "$GITHUB_OUTPUT"
+
       - name: Check
         run: pnpm check
 
-      # The twelve capability claims, executed rather than described.
-      - name: Capability self-test
-        run: pnpm sim --self-test
+      # After a red run as well: the tiles a failed run generated are as valid
+      # as any, and the next push should not pay for them again. Not after a
+      # cancellation, whose archive may be mid-write.
+      - name: Terrain archive after
+        id: after
+        if: success() || failure()
+        run: |
+          after=$(node scripts/terrainArchive.mjs entries)
+          echo "entries=$after" >> "$GITHUB_OUTPUT"
+          if [ "$after" -gt "${{ steps.before.outputs.entries }}" ]; then echo "grew=true" >> "$GITHUB_OUTPUT"; fi
+          echo "terrain archive: ${{ steps.before.outputs.entries }} tiles restored, $after after the run"
+
+      - uses: actions/cache/save@v6
+        if: (success() || failure()) && steps.after.outputs.grew == 'true'
+        with:
+          path: .data/heightfields
+          key: ${{ steps.archive-restore.outputs.cache-primary-key }}

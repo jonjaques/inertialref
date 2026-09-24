@@ -383,12 +383,13 @@ unreachable rather than merely discouraged.
 ## Verification
 
 ```bash
-pnpm check   # graph → brand → presets → format → lint → typecheck (5 projects and Astro templates) → tests → slow tests → build
+pnpm check   # every stage below as one graph under the core budget — scripts/check.mjs
 ```
 
 | Stage           | What it proves                                                                                 |
 | --------------- | ---------------------------------------------------------------------------------------------- |
 | `graph`         | layering intact, no cycles                                                                     |
+| `spelling`      | no British identifier declarations                                                             |
 | `brand:check`   | generated brand artifacts match their source                                                   |
 | `presets:check` | every picture still has a plate, and every composition it names still resolves                 |
 | `format:check`  | committed files match Prettier                                                                 |
@@ -396,12 +397,15 @@ pnpm check   # graph → brand → presets → format → lint → typecheck (5 
 | `typecheck`     | five tsconfig projects plus Astro templates                                                    |
 | `test`          | the regular Vitest suite runs in plain Node — `packages/*` and `apps/*` alike                  |
 | `test:slow`     | terrain descent and galaxy convergence/population checks run separately from the regular suite |
+| `sim`           | the twelve capability checks, against the assembled world in Node                              |
 | `build`         | the server renders every public route and bundles the client and workers                       |
 
-On top of that, twelve **capability checks** execute the milestone's claims
-against the live build — in Node via `pnpm sim --self-test`, and in the browser
-via `await ir.selfTest()`. They are the definition of done made executable
-rather than described. [Testing](guides/testing.md)
+The twelve **capability checks** execute the milestone's claims against the
+live build — in Node as the `sim` stage, which is `pnpm sim --self-test`, and
+in the browser via `await ir.selfTest()`. They are the definition of done made
+executable rather than described. The thirteen preset pictures are the fixture
+for anything visible: a headless ledger in `pnpm test`, and
+`pnpm presets:compare` through the renderer. [Testing](guides/testing.md)
 
 ---
 

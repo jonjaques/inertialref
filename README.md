@@ -329,24 +329,24 @@ in `packages/*`.
 
 ### Commands
 
-| Command                       | What it does                                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------------------- |
-| `pnpm dev`                    | Astro on :5173 **and** the Worker on :8787, in one terminal                                   |
-| `pnpm dev:client`             | Just the Astro development server on :5173                                                    |
-| `pnpm dev:server`             | Just `wrangler dev`                                                                           |
-| `pnpm preview`                | Build, then serve it through the real Worker on :8787                                         |
-| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                                     |
-| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`                          |
-| `pnpm typecheck`              | Five independent tsconfig projects and Astro templates; see below                             |
-| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                                     |
-| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                                       |
-| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                                    |
-| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`                       |
-| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then Astro and emitted HTML checks            |
-| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → test:slow → build.** |
-| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                                |
-| `pnpm vitest run <substring>` | A single test file                                                                            |
-| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`                        |
+| Command                       | What it does                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`                    | Astro on :5173 **and** the Worker on :8787, in one terminal                                                        |
+| `pnpm dev:client`             | Just the Astro development server on :5173                                                                         |
+| `pnpm dev:server`             | Just `wrangler dev`                                                                                                |
+| `pnpm preview`                | Build, then serve it through the real Worker on :8787                                                              |
+| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                                                          |
+| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`                                               |
+| `pnpm typecheck`              | The six type projects, in parallel — a group of `pnpm check`; see below                                            |
+| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                                                          |
+| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                                                            |
+| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                                                         |
+| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`                                            |
+| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then Astro and emitted HTML checks                                 |
+| **`pnpm check`**              | **The gate, as one graph: graph, spelling, brand, presets, format, lint, typecheck, test, test:slow, sim, build.** |
+| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                                                     |
+| `pnpm vitest run <substring>` | A single test file                                                                                                 |
+| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`                                             |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.
