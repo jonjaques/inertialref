@@ -1,3 +1,4 @@
+import type { PassReport } from './passReport.ts'
 import type { PictureReport } from './pictureReport.ts'
 import {
   GENERATION_VERSIONS,
@@ -383,6 +384,11 @@ export interface RenderHost {
    * `ir.gpu()` says so rather than printing a number about nothing.
    */
   measureGpu(frames?: number): Promise<number> | null
+  /**
+   * `measureGpu`'s frames with every pass timed and named. Null where there is
+   * no device, or the device has no `timestamp-query`.
+   */
+  measurePasses(frames?: number): Promise<PassReport> | null
 }
 
 /**
@@ -421,6 +427,7 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
     setLayers: overrides.setLayers ?? (() => {}),
     timing: overrides.timing ?? (() => null),
     measureGpu: overrides.measureGpu ?? (() => null),
+    measurePasses: overrides.measurePasses ?? (() => null),
   }
 }
 
@@ -2467,6 +2474,21 @@ export class GameHarness {
     return { ms: await measurement, frames: frames ?? 40 }
   }
 
+  /**
+   * Where the GPU's frame goes, pass by pass.
+   *
+   * `gpu()`'s held frames with a timestamp pair on every pass three encodes,
+   * named by the target it draws into — `scene` is the sensor's pass, and a
+   * `scene after copy` row is the same pass resumed after the sea read the
+   * frame behind it. `gaps` are the time between passes that none accounts
+   * for: a copy, a raw WebGPU pass such as the upscaler's. `wallMs` is the
+   * drained figure over the same frames, so `busyMs` can be checked against
+   * it. Null, like `gpu()`, where the host has no device or no timestamps.
+   */
+  async passes(frames?: number): Promise<PassReport | null> {
+    return (await this.#host.render.measurePasses(frames)) ?? null
+  }
+
   /** The observatory's camera, or null when it has no target. */
   observerStatus(): ObserverStatus | null {
     return this.#observatory.target === null &&
@@ -2580,6 +2602,7 @@ export class GameHarness {
       '  ir.timing.tracks() / .mark(name) / .drain()',
       '  await ir.profile(ms)          arm, record, disarm; .text is the answer',
       '  await ir.gpu(frames?)         ms per presented frame, across a drained queue',
+      '  await ir.passes(frames?)      the same frames, GPU ms by named pass, and the gaps',
       '  ir.logs(n)',
     ].join('\n')
   }

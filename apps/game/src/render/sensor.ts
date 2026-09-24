@@ -54,6 +54,7 @@ import { warmPipeline } from './warmup.ts'
 import { SensorHistory } from './sensorHistory.ts'
 import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
 import { beginGpuTiming, endGpuTiming } from './gpuTiming.ts'
+import { namePass } from './passTimeline.ts'
 
 /* The sensor owns the only scene draw, then applies lens-side optics,
  * detector response and the canvas encode. MSAA belongs to the scene target;
@@ -265,6 +266,7 @@ export function createSensor(
   }
   declareSceneTarget(renderer, shape)
   const scenePass = pass(scene, camera, { samples: shape.samples })
+  namePass(scenePass.renderTarget, 'scene')
   scenePass.renderTarget.depthTexture!.type =
     shape.depthType ?? scenePass.renderTarget.depthTexture!.type
   scenePass.setResolutionScale(1 / pictureRatio(picture))
