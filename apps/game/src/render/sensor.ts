@@ -107,8 +107,31 @@ export function declareSceneTarget(
   renderer: object,
   shape: SceneTargetShape,
 ): void {
-  targets.get(renderer)?.standIn?.dispose()
+  const standIn = targets.get(renderer)?.standIn
+  if (standIn != null) retire(standIn)
   targets.set(renderer, { shape, standIn: null })
+}
+
+/*
+ * Warm-ups still building against a stand-in, and whether a later
+ * declaration has replaced it.
+ *
+ * A stand-in outlives its declaration while anything compiles against it.
+ * Three keys a render context on the attachment shape rather than the target,
+ * and `compileAsync` builds each queued pipeline after a yield, reading the
+ * depth format from the texture that shared context holds by then. The sensor
+ * declares its shape again when it mounts — at boot, on a picture change, on
+ * a hot reload — and a warm-up from the build-ahead can be mid-queue when it
+ * does. Disposed there, the texture has no format, and every pipeline left in
+ * the queue is refused at the device with `depthStencil.format` undefined:
+ * logged, marked broken, and compiled again by the first frame that needs it.
+ */
+const holds = new WeakMap<RenderTarget, { count: number; retired: boolean }>()
+
+function retire(standIn: RenderTarget): void {
+  const hold = holds.get(standIn)
+  if (hold === undefined || hold.count === 0) standIn.dispose()
+  else hold.retired = true
 }
 
 /** The declared shape, or the renderer's own sample count when none was. */
@@ -135,6 +158,33 @@ export function warmTargetFor(renderer: WebGPURenderer): RenderTarget {
   }
   record.standIn ??= sceneTarget(4, 4, shape)
   return record.standIn
+}
+
+/**
+ * `warmTargetFor`, held until `release`: a declaration made meanwhile
+ * disposes the stand-in only once every hold on it is released.
+ */
+export function holdWarmTarget(renderer: WebGPURenderer): {
+  readonly target: RenderTarget
+  release(): void
+} {
+  const target = warmTargetFor(renderer)
+  let hold = holds.get(target)
+  if (hold === undefined) {
+    hold = { count: 0, retired: false }
+    holds.set(target, hold)
+  }
+  hold.count += 1
+  let released = false
+  return {
+    target,
+    release() {
+      if (released) return
+      released = true
+      hold.count -= 1
+      if (hold.count === 0 && hold.retired) target.dispose()
+    },
+  }
 }
 
 function sceneTarget(

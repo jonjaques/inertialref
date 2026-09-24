@@ -15,7 +15,8 @@ import { vec3, vec4 } from 'three/tsl'
 import { type GpuSession, openGpu, type Pixels } from './gpuHarness.ts'
 import { groundDummy } from './groundWear.ts'
 import { createStarMaterial } from './materials.ts'
-import { warmCompile, warmSensorPass } from './warmup.ts'
+import { declareSceneTarget } from './sensor.ts'
+import { warmCompile, warmRenderer, warmSensorPass } from './warmup.ts'
 
 /*
  * The half of `warmup.test.ts` that file says it cannot cover: whether the
@@ -243,5 +244,61 @@ it('warms depthless sensor attachments without rebuilding their first draw', asy
     renderer.setRenderTarget(previous)
     target.dispose()
     material.dispose()
+  }
+})
+
+it('keeps the stand-in target alive until the compiles bound to it land', async () => {
+  /*
+   * Three keys a render context on the attachment shape, not on the target,
+   * and `compileAsync` builds each queued pipeline after a yield from
+   * whatever depth texture that shared context holds by then. A sensor that
+   * mounts while a warm-up is still building declares its shape again, and
+   * the stand-in the warm-up bound goes with the old declaration — so the
+   * next pipeline reads the format of a disposed texture, `undefined`, and
+   * the device refuses the descriptor: "Required member is undefined". The
+   * hold opens that window on purpose: the first pipeline is asked for and
+   * held, the shape is declared again, and the second pipeline is built
+   * after it.
+   */
+  const { renderer } = gpu
+  declareSceneTarget(renderer, { samples: 0 })
+  const scene = new Scene()
+  for (const [i, x] of [-1.2, 1.2].entries()) {
+    const material = new MeshBasicNodeMaterial()
+    material.colorNode = vec3(0.23, 0.41 + i * 0.07, 0.19)
+    const mesh = new Mesh(new SphereGeometry(1, 8, 8), material)
+    mesh.position.x = x
+    scene.add(mesh)
+  }
+  scene.updateMatrixWorld(true)
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+  camera.position.z = 5
+  camera.updateMatrixWorld()
+
+  const from = gpu.reported().length
+  const before = created()
+  const gate = gpu.holdNextPipeline()
+  const compiled = warmCompile(warmRenderer(renderer), {
+    object: scene,
+    camera,
+    scene,
+  })
+  try {
+    await gate.requested
+    declareSceneTarget(renderer, { samples: 4 })
+  } finally {
+    gate.release()
+  }
+  await compiled
+  expect(created() - before).toBe(2)
+  expect(
+    gpu
+      .reported()
+      .slice(from)
+      .filter((entry) => entry.type === 'error'),
+  ).toEqual([])
+  for (const mesh of scene.children as Mesh[]) {
+    mesh.geometry.dispose()
+    ;(mesh.material as MeshBasicNodeMaterial).dispose()
   }
 })

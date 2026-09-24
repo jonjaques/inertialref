@@ -13,7 +13,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
-import { sceneTargetShape, warmTargetFor } from './sensor.ts'
+import { holdWarmTarget, sceneTargetShape } from './sensor.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
 /*
@@ -169,7 +169,10 @@ export const warmRenderer = (gl: object): WarmRenderer => {
   return {
     compileAsync(object, camera, scene) {
       const previousMrt = renderer.getMRT()
-      const unbind = bindWarmTarget(renderer, warmTargetFor(renderer))
+      // Held until the last pipeline lands, not until the walk returns — see
+      // `holdWarmTarget`.
+      const hold = holdWarmTarget(renderer)
+      const unbind = bindWarmTarget(renderer, hold.target)
       const shape = sceneTargetShape(renderer)
       if (shape.optics === true || shape.temporal === true)
         renderer.setMRT(sensorMrt(shape.temporal, shape.optics === true))
@@ -180,6 +183,9 @@ export const warmRenderer = (gl: object): WarmRenderer => {
       })
       unbind()
       renderer.setMRT(previousMrt)
+      // Settled, not all: `Promise.all` rejects at the first failure while
+      // the rest of the queue is still building against the stand-in.
+      void Promise.allSettled(compiles).then(hold.release)
       return Promise.all(compiles)
     },
   }

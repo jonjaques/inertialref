@@ -157,6 +157,16 @@ export interface GpuSession {
    */
   warnings(): GpuMessage[]
   /**
+   * Everything three has reported since the session opened, in order, left
+   * in place.
+   *
+   * For work no verb runs: `warmCompile` swallows its rejection by design,
+   * and a pipeline three builds after a warm-up's yield reports its failure
+   * to the sink and to nobody else. A test about that takes the length
+   * before and reads the tail after.
+   */
+  reported(): readonly GpuMessage[]
+  /**
    * Render pipelines built at the device since the session opened.
    *
    * The one observation that separates "compiled everything" from "walked
@@ -673,6 +683,10 @@ export async function openGpu(
       messages.length = 0
       for (const entry of kept) messages.push(entry)
       return drained
+    },
+
+    reported() {
+      return [...messages]
     },
 
     pipelinesBuilt() {
