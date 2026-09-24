@@ -9,7 +9,7 @@ function slots(pairs: readonly (readonly [number, number])[]): BigUint64Array {
 }
 
 describe('summarize', () => {
-  it('averages per frame, orders by the GPU, and prices the gaps', () => {
+  it('averages per frame, charges each pass its advance, and prices the gaps', () => {
     const pending = [
       { label: 'scene', kind: 'render', frame: 0, slot: 0 },
       { label: 'scene after copy', kind: 'render', frame: 0, slot: 2 },
@@ -32,33 +32,67 @@ describe('summarize', () => {
       ['scene after copy', 1, 1.5],
       ['canvas', 1, expect.closeTo(0.2, 9)],
     ])
-    expect(result.spanMs).toBeCloseTo(9.2, 9)
     expect(result.busyMs).toBeCloseTo(6.7, 9)
+    expect(result.spanMs).toBeCloseTo(15.1, 9)
     expect(result.gaps.map((g) => [g.after, g.before, g.ms])).toEqual([
+      ['canvas', 'scene', expect.closeTo(5.9, 9)],
       ['scene after copy', 'canvas', 2],
       ['scene', 'scene after copy', 0.5],
     ])
     expect(result.wallMs).toBe(9)
   })
 
-  it('reports an overlap as a negative gap', () => {
+  /*
+   * The shape a tiled GPU reports: every pair spans most of the frame. The
+   * raw pairs sum to three times the busy time; the shares sum to it.
+   */
+  it('charges overlapping passes their advance, not their latency', () => {
     const pending = [
       { label: 'scene', kind: 'render', frame: 0, slot: 0 },
-      { label: 'canvas', kind: 'render', frame: 0, slot: 2 },
+      { label: 'blur', kind: 'render', frame: 0, slot: 2 },
+      { label: 'canvas', kind: 'render', frame: 0, slot: 4 },
     ] as const
     const result = summarize(
       pending,
       slots([
-        [1, 5],
-        [4, 6],
+        [1, 8],
+        [1.5, 9],
+        [2, 10],
       ]),
       1,
-      5,
+      9,
       0,
     )
-    expect(result.busyMs).toBeCloseTo(6, 9)
-    expect(result.spanMs).toBeCloseTo(5, 9)
-    expect(result.gaps).toEqual([{ after: 'scene', before: 'canvas', ms: -1 }])
+    expect(result.passes.map((p) => [p.label, p.ms, p.latencyMs])).toEqual([
+      ['scene', 7, 7],
+      ['blur', 1, 7.5],
+      ['canvas', 1, 8],
+    ])
+    expect(result.busyMs).toBe(9)
+    expect(result.spanMs).toBe(9)
+    expect(result.gaps).toEqual([])
+  })
+
+  it('keeps the head start of a long pass that ends after a short one', () => {
+    const pending = [
+      { label: 'long', kind: 'render', frame: 0, slot: 0 },
+      { label: 'short', kind: 'render', frame: 0, slot: 2 },
+    ] as const
+    const result = summarize(
+      pending,
+      slots([
+        [1, 10],
+        [2, 3],
+      ]),
+      1,
+      9,
+      0,
+    )
+    expect(result.busyMs).toBe(9)
+    expect(result.passes.map((p) => [p.label, p.ms])).toEqual([
+      ['long', 7],
+      ['short', 2],
+    ])
   })
 
   it('leaves out a pass whose slots were never written', () => {

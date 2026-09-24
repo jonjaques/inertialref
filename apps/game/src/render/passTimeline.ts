@@ -55,14 +55,18 @@ export interface PassTime {
   readonly kind: PassKind
   /** Passes of this name per frame. */
   readonly count: number
-  /** GPU milliseconds per frame, summed over every pass of this name. */
+  /**
+   * GPU milliseconds per frame this pass moved the completion frontier —
+   * the latest end any earlier-finishing pass reached — summed over every
+   * pass of this name. The shares of a run add up to the time the GPU was
+   * busy, which a sum of the raw pairs does not; see `summarize`.
+   */
   readonly ms: number
+  /** Begin to end of the raw pair, per frame: latency, not cost. */
+  readonly latencyMs: number
 }
 
-/**
- * Time between two consecutive passes that no pass accounts for — or, when
- * negative, how far they overlap.
- */
+/** Time no pass was running, between the pass that finished and the next to begin. */
 export interface PassGap {
   readonly after: string
   readonly before: string
@@ -73,18 +77,13 @@ export interface PassTimelineResult {
   readonly frames: number
   /** Wall clock per frame across a drained queue — `measureGpuFrameMs`'s figure. */
   readonly wallMs: number
-  /** First pass begin to last pass end, per frame. */
+  /** First pass begin to last pass end over the run, per frame. */
   readonly spanMs: number
-  /**
-   * The sum of every pass's own duration, per frame. It can exceed `spanMs`:
-   * Apple's tiled GPUs begin a pass's vertex work before the previous pass's
-   * fragments finish, so consecutive intervals overlap, and a sum of pass
-   * times is not a frame time. `wallMs` is the frame; the passes are shares.
-   */
+  /** The shares summed, per frame: the time any timed pass was running. */
   readonly busyMs: number
   /** In the order the first frame encoded them. */
   readonly passes: readonly PassTime[]
-  /** Gaps and overlaps at least `GAP_FLOOR_MS` either way, largest first. */
+  /** Idle gaps of at least `GAP_FLOOR_MS` a frame, largest first. */
   readonly gaps: readonly PassGap[]
   /** Passes that found the query set full and went untimed. */
   readonly dropped: number
@@ -97,7 +96,7 @@ export interface PassTimelineResult {
  */
 const QUERY_CAPACITY = 4096
 
-/** Gaps and overlaps inside the timestamp quantum are noise, not a finding. */
+/** Gaps inside the timestamp quantum are noise, not a finding. */
 const GAP_FLOOR_MS = 0.05
 
 const NAMES = new WeakMap<object, string>()
@@ -326,6 +325,7 @@ export class PassTimeline {
 interface Interval {
   readonly label: string
   readonly kind: PassKind
+  readonly frame: number
   readonly begin: number
   readonly end: number
 }
@@ -334,9 +334,20 @@ interface Interval {
  * The per-frame means, from the raw slots. Exported for the test: the
  * arithmetic is the part that can be wrong without a GPU.
  *
- * A pass whose end reads before its begin was not written — a pass that
- * allocated slots and then threw before it encoded — and is left out rather
- * than counted as a negative duration.
+ * **A raw pair is latency, not cost, on this machine.** Metal samples a
+ * pass's timestamps at its stage boundaries, and Apple's GPUs pipeline
+ * passes and frames deeply: at the shore at 3 m every pass of the sensor
+ * chain, a 60×37 blur level and the canvas quad included, read 23–35 ms
+ * begin to end in a frame the drained queue put at 24 ms. So each pass is
+ * charged only for how far it moved the completion frontier — passes taken
+ * in end order, a pass's share `end − max(frontier, begin)` — which sums to
+ * the union of the intervals and puts a stall waiting on an earlier pass on
+ * that pass rather than on every pass that overlapped it. Time with no pass
+ * running is a gap, charged to neither neighbor.
+ *
+ * A pass whose end reads before its begin, or whose begin is zero, was not
+ * written — it allocated slots and then threw before it encoded — and is left
+ * out rather than counted.
  */
 export function summarize(
   pending: readonly Pending[],
@@ -345,65 +356,86 @@ export function summarize(
   wallMs: number,
   dropped: number,
 ): PassTimelineResult {
-  const byFrame: Interval[][] = Array.from({ length: frames }, () => [])
+  const intervals: Interval[] = []
   for (const pass of pending) {
     const begin = times[pass.slot]!
     const end = times[pass.slot + 1]!
     if (end < begin || begin === 0n) continue
-    byFrame[pass.frame]!.push({
+    intervals.push({
       label: pass.label,
       kind: pass.kind,
+      frame: pass.frame,
       begin: Number(begin) / 1e6,
       end: Number(end) / 1e6,
     })
   }
+  const empty = { frames, wallMs, dropped, gaps: [], passes: [] }
+  if (intervals.length === 0) return { ...empty, spanMs: 0, busyMs: 0 }
 
+  // The order a reader expects is the encoding order of the first frame.
   const order: string[] = []
   const totals = new Map<
     string,
-    { kind: PassKind; count: number; ms: number }
+    { kind: PassKind; count: number; ms: number; latency: number }
   >()
-  const gaps = new Map<string, PassGap & { total: number }>()
-  let span = 0
-  let busy = 0
-  for (const intervals of byFrame) {
-    if (intervals.length === 0) continue
-    // Submission order is the query order; the GPU's is the begin order.
-    intervals.sort((a, b) => a.begin - b.begin)
-    span += intervals.at(-1)!.end - intervals[0]!.begin
-    let previous: Interval | null = null
-    for (const interval of intervals) {
-      const ms = interval.end - interval.begin
-      busy += ms
-      const total = totals.get(interval.label)
-      if (total === undefined) {
-        order.push(interval.label)
-        totals.set(interval.label, { kind: interval.kind, count: 1, ms })
-      } else {
-        total.count += 1
-        total.ms += ms
-      }
-      if (previous !== null) {
-        const key = `${previous.label}\u0000${interval.label}`
-        const gap = interval.begin - previous.end
-        const entry = gaps.get(key)
-        if (entry === undefined)
-          gaps.set(key, {
-            after: previous.label,
-            before: interval.label,
-            ms: 0,
-            total: gap,
-          })
-        else entry.total += gap
-      }
-      previous = interval
+  for (const interval of intervals) {
+    if (!totals.has(interval.label)) {
+      order.push(interval.label)
+      totals.set(interval.label, {
+        kind: interval.kind,
+        count: 0,
+        ms: 0,
+        latency: 0,
+      })
     }
+    const total = totals.get(interval.label)!
+    total.count += 1
+    total.latency += interval.end - interval.begin
   }
 
+  /*
+   * In end order, a pass is charged from the later of the previous end and
+   * the earliest begin of any pass not yet ended — its own or a longer one's
+   * that started first — to its own end. Before that earliest begin and after
+   * the previous end nothing was running, so that stretch is a gap.
+   */
+  const byEnd = [...intervals].sort((a, b) => a.end - b.end)
+  const earliest = new Array<number>(byEnd.length)
+  for (let i = byEnd.length - 1, low = Infinity; i >= 0; i -= 1) {
+    low = Math.min(low, byEnd[i]!.begin)
+    earliest[i] = low
+  }
+  const gaps = new Map<
+    string,
+    { after: string; before: string; total: number }
+  >()
+  const first = earliest[0]!
+  let frontier = first
+  let busy = 0
+  let previous: Interval | null = null
+  byEnd.forEach((interval, i) => {
+    const start = Math.max(frontier, earliest[i]!)
+    if (previous !== null && start > frontier) {
+      const key = `${previous.label}\u0000${interval.label}`
+      const gap = gaps.get(key)
+      if (gap === undefined)
+        gaps.set(key, {
+          after: previous.label,
+          before: interval.label,
+          total: start - frontier,
+        })
+      else gap.total += start - frontier
+    }
+    const share = interval.end - start
+    totals.get(interval.label)!.ms += share
+    busy += share
+    frontier = interval.end
+    previous = interval
+  })
+
   return {
-    frames,
-    wallMs,
-    spanMs: span / frames,
+    ...empty,
+    spanMs: (frontier - first) / frames,
     busyMs: busy / frames,
     passes: order.map((label) => {
       const total = totals.get(label)!
@@ -412,6 +444,7 @@ export function summarize(
         kind: total.kind,
         count: total.count / frames,
         ms: total.ms / frames,
+        latencyMs: total.latency / frames,
       }
     }),
     gaps: [...gaps.values()]
@@ -420,9 +453,8 @@ export function summarize(
         before,
         ms: total / frames,
       }))
-      .filter((gap) => Math.abs(gap.ms) >= GAP_FLOOR_MS)
-      .sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms)),
-    dropped,
+      .filter((gap) => gap.ms >= GAP_FLOOR_MS)
+      .sort((a, b) => b.ms - a.ms),
   }
 }
 

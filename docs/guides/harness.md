@@ -574,6 +574,37 @@ boots of the same build to establish its own variation. Use `ir.gpu()` for the
 complete chain and the report's per-pass readings for reconstruction alone.
 [Testing](testing.md#reconstruction-and-persistent-terrain) gives the focused gates.
 
+### Where the GPU's frame goes
+
+```js
+await ir.gpu(40) // ms per presented frame, across a drained queue
+await ir.passes(40) // the same frames, by named pass
+```
+
+`ir.passes` holds the loop, submits the frames through the presenting chain
+with a timestamp pair on every pass three encodes, and names each pass by its
+target: `scene` is the sensor's pass, `scene after copy` is the same pass
+resumed after the sea read the frame behind it, `defocus 0`–`3` and
+`Sensor PSF n` are the optics, `canvas` is the output. It returns `wallMs` —
+`ir.gpu()`'s figure over the same frames — beside `busyMs`, the passes' shares
+summed, and the two agree within 2% at the shore; a larger disagreement is time
+in work the timeline does not see, such as the upscaler's own passes, which
+also shows in `gaps`.
+
+**A pass's `ms` is its share, not its timestamp pair.** Apple's GPUs pipeline
+passes and frames, and Metal samples a pass's timestamps at its stage
+boundaries, so the raw pair is latency: at the shore every pass, a 60×37 blur
+level and the output quad included, read 23–35 ms begin to end in a 24 ms
+frame. Each pass is charged for how far it moved the completion frontier
+instead, and the raw pair is kept as `latencyMs`.
+[`render/passTimeline.ts`](../../apps/game/src/render/passTimeline.ts) has the
+arithmetic, and why three's own timestamp tracking cannot be read for this.
+
+A lever's cost is the difference in `wallMs` with the lever moved, taken in
+one boot: the default read at the start and the end of a sweep agrees within
+1.5 ms, and a second boot can read every pass a third slower at once. Set the
+lever on `engine.surfaceQuality`, let the terrain settle, then measure.
+
 ---
 
 ## Measuring terrain

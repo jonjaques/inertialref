@@ -8,15 +8,18 @@ export interface PassReport {
   readonly wallMs: number
   /** First pass begin to last pass end, per frame. */
   readonly spanMs: number
-  /** Every pass's own duration summed, per frame. */
+  /** The passes' shares summed, per frame: time any timed pass ran. */
   readonly busyMs: number
   readonly passes: readonly {
     readonly label: string
     readonly kind: 'render' | 'compute'
     readonly count: number
+    /** How far the pass moved the completion frontier — its cost. */
     readonly ms: number
+    /** Begin to end of the raw timestamp pair — its latency. */
+    readonly latencyMs: number
   }[]
-  /** Negative where two passes overlap, which a tiled GPU does. */
+  /** Time between passes with no pass running. */
   readonly gaps: readonly {
     readonly after: string
     readonly before: string

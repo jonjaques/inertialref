@@ -14,6 +14,7 @@ import {
   installPassTimeline,
   namePass,
   passTimelineOf,
+  type PassTimelineResult,
 } from './passTimeline.ts'
 
 let gpu: GpuSession
@@ -79,7 +80,7 @@ describe('the pass timeline on the physical GPU', () => {
       // is a harness to fix, not a test to skip.
       expect(timeline).not.toBeNull()
       rig.draw() // compile outside the measurement
-      let result!: Awaited<ReturnType<typeof timeline.measure>>
+      let result!: PassTimelineResult
       expect(
         await validated(async () => {
           result = await timeline!.measure(rig.draw, 8)
@@ -109,7 +110,7 @@ describe('the pass timeline on the physical GPU', () => {
       await timeline.measure(rig.draw, 2)
       // An unarmed frame between two measurements must not write into the
       // second one's slots, which a descriptor still naming the set would.
-      let again!: Awaited<ReturnType<typeof timeline.measure>>
+      let again!: PassTimelineResult
       expect(
         await validated(async () => {
           rig.draw()
