@@ -53,15 +53,20 @@ if (
 )
   throw new Error('--port needs an integer from 1 to 65535.')
 
+// Every name, not just one of them: a typo beside a real id would otherwise
+// capture the real one and report the run complete.
+const unknown = wanted.filter((id) => !PICTURES.some((one) => one.id === id))
+if (unknown.length > 0) {
+  console.error(
+    `no picture called ${unknown.join(', ')}. Pictures: ${PICTURES.map((one) => one.id).join(', ')}`,
+  )
+  process.exit(1)
+}
+
 const pictures =
   wanted.length === 0
     ? PICTURES
     : PICTURES.filter((one) => wanted.includes(one.id))
-
-if (pictures.length === 0) {
-  console.error(`no picture called ${wanted.join(', ')}`)
-  process.exit(1)
-}
 
 let origin = values.url
 let stop = null

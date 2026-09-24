@@ -160,14 +160,19 @@ async function litFraction(file) {
   )
 }
 
+// Every name, not just one of them: a typo beside a real id would otherwise
+// compare the real one and report every plate the same.
+const unknown = wanted.filter((id) => !PICTURES.some((one) => one.id === id))
+if (unknown.length > 0) {
+  console.error(
+    `no picture called ${unknown.join(', ')}. Pictures: ${PICTURES.map((one) => one.id).join(', ')}`,
+  )
+  process.exit(1)
+}
 const named =
   wanted.length === 0
     ? PICTURES
     : PICTURES.filter((one) => wanted.includes(one.id))
-if (named.length === 0) {
-  console.error(`no picture called ${wanted.join(', ')}`)
-  process.exit(1)
-}
 
 /*
  * Which pictures to photograph: the lit ones, unless named or `--all`.
