@@ -32,8 +32,8 @@
       "fill": 1,
       "tracking": null,
       "light": {
-        "sun": 24.04988401,
-        "phase": 16.3037083,
+        "sun": 24.05,
+        "phase": 16.304,
         "lit": true
       },
       "surface": {
@@ -75,8 +75,8 @@
         "yaw": 0,
         "pitch": 0
       },
-      "altitude": 60167712.27,
-      "fill": 0.1692307692,
+      "altitude": 14401521.51,
+      "fill": 0.55,
       "tracking": null,
       "light": {
         "sun": null,
@@ -180,8 +180,8 @@
         "yaw": 0,
         "pitch": 0
       },
-      "altitude": 4298377.103,
-      "fill": 0.6769230769,
+      "altitude": 5813546.719,
+      "fill": 0.55,
       "tracking": null,
       "light": {
         "sun": null,
@@ -289,8 +289,8 @@
       "fill": 1,
       "tracking": null,
       "light": {
-        "sun": -13.99999967,
-        "phase": 120.9570806,
+        "sun": -14,
+        "phase": 120.957,
         "lit": false
       },
       "surface": {
@@ -336,8 +336,8 @@
       "fill": 1,
       "tracking": null,
       "light": {
-        "sun": 51.14279338,
-        "phase": 159.1573095,
+        "sun": 51.143,
+        "phase": 159.157,
         "lit": true
       },
       "surface": {
@@ -383,8 +383,8 @@
       "fill": 1,
       "tracking": null,
       "light": {
-        "sun": -6.922447823,
-        "phase": 44.59080726,
+        "sun": -6.922,
+        "phase": 44.591,
         "lit": false
       },
       "surface": {
@@ -430,8 +430,8 @@
       "fill": 1,
       "tracking": null,
       "light": {
-        "sun": 4.578709147,
-        "phase": 43.73473331,
+        "sun": 4.579,
+        "phase": 43.735,
         "lit": true
       },
       "surface": {
@@ -477,8 +477,8 @@
       "fill": 1,
       "tracking": null,
       "light": {
-        "sun": 4.582966944,
-        "phase": 107.6432662,
+        "sun": 4.583,
+        "phase": 107.643,
         "lit": true
       },
       "surface": {
@@ -525,7 +525,7 @@
       "tracking": null,
       "light": {
         "sun": null,
-        "phase": 179.9999991,
+        "phase": 180,
         "lit": false
       },
       "surface": null,

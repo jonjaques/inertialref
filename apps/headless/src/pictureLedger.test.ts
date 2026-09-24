@@ -56,6 +56,17 @@ const PLATE: Viewport = { width: PLATE_WIDTH, height: PLATE_HEIGHT }
 
 const figure = (value: number): number => Number(value.toPrecision(10))
 
+/**
+ * An angle of light to a thousandth of a degree, not ten digits.
+ *
+ * The phase is an arccosine, and at a silhouette the cosine sits within a few
+ * ulps of −1, where one ulp is 1e-7 of a degree: `solar-crescent` reads
+ * 179.9999991, which is one bit away from 180. Ten digits would fail the
+ * ledger on a reordered sum in the ephemeris that no plate could show. The
+ * verdict these feed is three degrees wide.
+ */
+const degrees = (value: number): number => Math.round(value * 1e3) / 1e3
+
 const digest = (value: unknown): string =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)
 
@@ -139,6 +150,12 @@ describe('the shipped photographs', () => {
       const before = session.world.stateHash()
       const entries: Entry[] = []
       for (const picture of PICTURES) {
+        // Every plate is a fresh page, which starts from the flight lens. A
+        // recipe solves only the lens geometry and inherits the other
+        // channels, so without this a recipe listed after `solar-crescent`
+        // would write its zoom of eight into the ledger and no browser would
+        // ever photograph it.
+        held = LENS_PRESETS.flight
         const taken = session.harness.preset(picture.id)
         const { status } = taken
         expect(status.target?.address, picture.id).toContain(picture.address)
@@ -208,8 +225,8 @@ describe('the shipped photographs', () => {
           light: (() => {
             const light = session.harness.light()
             return {
-              sun: light.sun === null ? null : figure(light.sun),
-              phase: light.phase === null ? null : figure(light.phase),
+              sun: light.sun === null ? null : degrees(light.sun),
+              phase: light.phase === null ? null : degrees(light.phase),
               lit: light.lit,
             }
           })(),
