@@ -27,13 +27,15 @@
  * stages that run beside each other, so the six projects cost what the
  * slowest one costs rather than their sum.
  *
- * **The Stop hook and `/ship` run the same stages on the same tree, minutes
- * apart.** A stage that passed is stamped with a key made of the working
- * tree's content — every tracked and untracked file, hashed — and the Node
- * version and the stage's own command line. A later run on a byte-identical
- * tree reuses the stamp and says so. A single edit anywhere changes the key,
- * so this never skips a stage against a tree it did not see, and `--force` runs
- * everything regardless. CI has no `.data/check/` and therefore no stamps.
+ * **The Stop hook and a `pnpm check` by hand run the same stages on the same
+ * tree, minutes apart.** A stage that passed is stamped with a key made of the
+ * working tree's content — every tracked and untracked file, hashed — and the
+ * Node version and the stage's own command line. A later run on a
+ * byte-identical tree reuses the stamp and says so. A single edit anywhere
+ * changes the key, so this never skips a stage against a tree it did not see:
+ * the key is taken again when a stage passes, and a stage that ran across an
+ * edit is not stamped, because it may have read either side of it. `--force`
+ * runs everything regardless. CI has no `.data/check/` and therefore no stamps.
  *
  * Every stage is a package.json script or a binary the scripts already use,
  * named here by its command line, so what this runs and what a developer runs
@@ -85,6 +87,9 @@ const VITEST_WORKERS = Math.max(1, Math.min(4, availableParallelism() - 1))
  * a large multiple of the cost.
  *
  * `weight` is cores. `needs` are stages that must have passed first.
+ * `outputs` are the ignored files a stage exists to write: a stamp says the
+ * stage passed on this tree, not that what it wrote is still on disk, so a
+ * stage with outputs is reused only while they are there.
  */
 const STAGES = [
   {
@@ -199,6 +204,9 @@ const STAGES = [
     name: 'docs',
     why: 'the documentation build — an unlisted page or a dead link',
     argv: ['pnpm', 'docs:build'],
+    // `bundle` reads this, and a reused stamp over a deleted directory would
+    // hand it a build that stops at "Run pnpm docs:build".
+    outputs: ['apps/game/public/doc-content/manifest.json'],
     weight: 1,
     cost: 15,
     timeout: 300_000,
@@ -394,12 +402,17 @@ function writeStamp(stage, key, seconds) {
   )
 }
 
-let tree = null
-try {
-  tree = treeKey()
-} catch {
-  /* not a git checkout, or git is unavailable: every stage runs */
+/** The tree's key now, or null when git cannot say. */
+function treeNow() {
+  try {
+    return treeKey()
+  } catch {
+    /* not a git checkout, or git is unavailable: every stage runs */
+    return null
+  }
 }
+
+const tree = treeNow()
 
 // --- output ------------------------------------------------------------------------
 
@@ -450,13 +463,30 @@ const startedAt = performance.now()
  * alone, and a fork that outlives it keeps the stage's stdout open, so `close`
  * never fires and the runner waits on a stage it has already reported as
  * killed. The signal has to reach everything holding the pipe.
+ *
+ * SIGKILL follows after a grace period for the same reason: a process that
+ * ignores SIGTERM holds the pipe as surely as one that never got it. It is
+ * sent only while the stage is still open — its leader running, or a member
+ * of its group holding stdout — so the group id cannot have been reused.
  */
+const KILL_GRACE = 5_000
+
 function killStage(child) {
-  try {
-    process.kill(-child.pid, 'SIGTERM')
-  } catch {
-    /* already gone */
+  const signal = (name) => {
+    try {
+      process.kill(-child.pid, name)
+    } catch {
+      /* already gone */
+    }
   }
+  signal('SIGTERM')
+  const open = () =>
+    (child.exitCode === null && child.signalCode === null) ||
+    !child.stdout.closed ||
+    !child.stderr.closed
+  setTimeout(() => {
+    if (open()) signal('SIGKILL')
+  }, KILL_GRACE).unref()
 }
 
 /*
@@ -536,7 +566,10 @@ function start(stage) {
   const key = tree === null ? null : stampKey(stage, tree)
   if (!values.force && key !== null) {
     const stamp = readStamp(stage)
-    if (stamp?.key === key) {
+    if (
+      stamp?.key === key &&
+      (stage.outputs ?? []).every((file) => existsSync(join(ROOT, file)))
+    ) {
       record(stage, { status: 'reused', at: stamp.at, ms: 0 })
       return
     }
@@ -585,7 +618,8 @@ function start(stage) {
       record(stage, { status: 'failed', ms, output, code })
       return
     }
-    if (key !== null) writeStamp(stage, key, ms / 1000)
+    // Only a tree that held still for the whole stage is the tree it passed on.
+    if (key !== null && treeNow() === tree) writeStamp(stage, key, ms / 1000)
     record(stage, { status: 'passed', ms })
   })
   running.set(stage.name, { child, done, cancelled: false })
