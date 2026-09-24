@@ -1106,6 +1106,19 @@ export class GameHarness {
   }
 
   /**
+   * The star's elevation over a place, degrees, from a body-fixed direction to
+   * it. Clamped because a unit dot product can land a rounding past ±1, and
+   * `asin` of that is NaN rather than ±90.
+   */
+  #sunElevation(toStar: Vec3, latitude: number, longitude: number): number {
+    const up = geodeticDirection(latitude, longitude)
+    return (
+      (Math.asin(Math.max(-1, Math.min(1, Vec.dot(toStar, up)))) * 180) /
+      Math.PI
+    )
+  }
+
+  /**
    * How lit the view is, in degrees.
    *
    * The number a scenario is chosen by. A comparison taken in the dark is a
@@ -1152,18 +1165,7 @@ export class GameHarness {
     if (onIt && status.surface !== null) {
       const toStar = this.#starDirection(at.system, bodyFixedFrameId(at), time)
       const { latitude, longitude } = status.surface.stance
-      sun =
-        (Math.asin(
-          Math.max(
-            -1,
-            Math.min(
-              1,
-              Vec.dot(toStar, geodeticDirection(latitude, longitude)),
-            ),
-          ),
-        ) *
-          180) /
-        Math.PI
+      sun = this.#sunElevation(toStar, latitude, longitude)
     }
     /*
      * The eye at the framing the camera is *arriving at*, not where the ease
@@ -2161,18 +2163,7 @@ export class GameHarness {
       latitude: (site.latitude * 180) / Math.PI,
       longitude: (site.longitude * 180) / Math.PI,
       elevation: site.elevation,
-      sun:
-        (Math.asin(
-          Math.max(
-            -1,
-            Math.min(
-              1,
-              Vec.dot(toStar, geodeticDirection(site.latitude, site.longitude)),
-            ),
-          ),
-        ) *
-          180) /
-        Math.PI,
+      sun: this.#sunElevation(toStar, site.latitude, site.longitude),
       region: `${site.region.face}.${site.region.level}.${site.region.i}.${site.region.j}`,
     }))
   }
