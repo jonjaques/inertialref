@@ -10588,6 +10588,13 @@ derived GLBs are in LFS; the Blender preparation script and source terms are
 bundled. Animation remains presentation state and cannot change contact or
 the saved world.
 
+The finished integration passed all 18 `pnpm check` stages in 85.9 s. The seven
+lit planetarium plates differed from their committed references by 1–25 pixels
+above the 8% per-pixel threshold, within the existing 200-pixel tolerance.
+The final browser pass checked standing, crouching, and first-person views at
+the Mars pad; the crouch asset regression measures the deformed helmet at
+1.276 m with planted boots, rather than only checking bone tracks.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
