@@ -96,6 +96,14 @@ longer-term purpose is survey and physical work, rather than a shooter.
 
 ## The suit
 
+The rendered character is a 1.8 m EVA suit derived from DigitalSpace
+Corporation’s [Astronaut model](https://science.nasa.gov/3d-resources/astronaut/),
+distributed through NASA 3D Resources. It has neutral materials, a closed visor,
+and no backpack or agency insignia. An original 39-bone rig carries ten clips
+for locomotion, crouching, strafing, jumping, falling, and flight. The source
+terms and modification license ship with the asset at
+`apps/game/public/models/astronaut/LICENSE.txt`.
+
 Suit survival is unimplemented. The design calls for oxygen, power, thermal
 state, radiation exposure, and integrity to define an excursion. These gauges
 must describe simulated resources before the HUD presents them as readings.

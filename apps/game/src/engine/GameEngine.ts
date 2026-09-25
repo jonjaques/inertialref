@@ -475,7 +475,7 @@ export class GameEngine {
    *
    * **One producer, under the pose's own precedence.** `AGENTS.md` forbids a
    * second producer of the camera and orders the arms *cutscene, then
-   * observatory, then the ship*; the optics follow the same order through the
+   * observatory, then the controlled entity*; the optics follow that order through the
    * same code, because a picture composed through one lens and measured through
    * another is exactly the class of bug this phase exists to close. The
    * ordinary observatory solves a standoff against the player's flight lens.

@@ -10574,6 +10574,20 @@ the held forward and sprint inputs to zero. These checks used visitor-activated
 button clicks; they did not substitute synthetic keyboard events for browser
 input. The integrated controller and HUD suites passed all 25 tests.
 
+The Mars pad exposed a chase-camera edge case: the boom left the 25 m contact
+disk before it passed through the visible apron. Crouching put the eye
+0.073 m below the foot plane even though the ground probes succeeded. A
+grounded chase eye now also respects that plane; the regression fails without
+the bound. This is camera clearance, not an expansion of the pad's collider.
+
+The character uses a NASA-distributed DigitalSpace suit with the backpack and
+agency textures removed, following the requested grounded, neutral silhouette.
+The source was static, so the project supplies its own 39-bone rig and ten
+animation clips rather than relying on a remote animation service. Source and
+derived GLBs are in LFS; the Blender preparation script and source terms are
+bundled. Animation remains presentation state and cannot change contact or
+the saved world.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
