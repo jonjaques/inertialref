@@ -31,7 +31,7 @@ PROVENANCE = {
     "landingRadiusMeters": 25,
     "foundationRadiusMeters": 45,
     "skirtDepthMeters": 6,
-    "revision": 2,
+    "revision": 3,
 }
 PARTS = []
 MATERIALS = {}
@@ -410,16 +410,51 @@ def build():
             rotation=theta,
         )
 
-    # The short ramp reaches terrain three meters below the landing datum.
+    # The access ramp leaves the outer apron's south corner for the terrain
+    # three meters below the landing datum. Its head is a landing flush with
+    # the apron's top that fills the notch between the corner's two faces,
+    # so the slope begins where the apron ends: a top that started inside the
+    # skirt would run under it and surface a meter down at the corner.
+    corner = 45 * 0.992
+    notch = corner - 4.6 * math.tan(math.pi / 8)
+    landing = bpy.data.meshes.new("Ramp landing")
+    landing.from_pydata(
+        [
+            (-4.6, -notch, -0.18),
+            (0, -corner, -0.18),
+            (4.6, -notch, -0.18),
+            (4.6, -44.7, -0.18),
+            (-4.6, -44.7, -0.18),
+            (-4.6, -notch, -0.7),
+            (0, -corner, -0.7),
+            (4.6, -notch, -0.7),
+            (4.6, -44.7, -0.7),
+            (-4.6, -44.7, -0.7),
+        ],
+        [],
+        [
+            (0, 1, 2, 3, 4),
+            (9, 8, 7, 6, 5),
+            (0, 5, 6, 1),
+            (1, 6, 7, 2),
+            (2, 7, 8, 3),
+            (3, 8, 9, 4),
+            (4, 9, 5, 0),
+        ],
+    )
+    landing.update()
+    landing_obj = bpy.data.objects.new("Ramp landing", landing)
+    bpy.context.collection.objects.link(landing_obj)
+    finish(landing_obj, "Ramp landing", "structural-steel", 0.05)
     ramp = bpy.data.meshes.new("Ramp")
     ramp.from_pydata(
         [
-            (-4.6, -40, -0.17),
-            (4.6, -40, -0.17),
+            (-4.6, -44.7, -0.18),
+            (4.6, -44.7, -0.18),
             (4.6, -57, -3.5),
             (-4.6, -57, -3.5),
-            (-4.6, -40, -1),
-            (4.6, -40, -1),
+            (-4.6, -44.7, -0.7),
+            (4.6, -44.7, -0.7),
             (4.6, -57, -4),
             (-4.6, -57, -4),
         ],
@@ -437,21 +472,22 @@ def build():
     ramp_obj = bpy.data.objects.new("Surface access ramp", ramp)
     bpy.context.collection.objects.link(ramp_obj)
     finish(ramp_obj, "Surface access ramp", "structural-steel", 0.05)
-    slope = math.atan2(3.33, 17)
+    run, drop = 57 - 44.7, 3.5 - 0.18
+    slope = math.atan2(drop, run)
     for edge in (-1, 1):
         obj = box(
             f"Ramp edge {edge}",
-            (edge * 4.3, -48.5, -1.69),
-            (0.28, math.hypot(17, 3.33), 0.2),
+            (edge * 4.3, -(44.7 + run / 2), -(0.18 + drop / 2) + 0.1),
+            (0.28, math.hypot(run, drop), 0.2),
             "hazard-ochre",
             bevel=0.025,
         )
         obj.rotation_euler.x = slope
-    for step in range(18):
-        t = (step + 0.5) / 18
+    for step in range(13):
+        t = (step + 0.5) / 13
         obj = box(
             f"Ramp traction bar {step}",
-            (0, -40 - 17 * t, -0.115 - 3.33 * t),
+            (0, -44.7 - run * t, -0.18 - drop * t + 0.045),
             (7.8, 0.13, 0.075),
             "service-ceramic",
             bevel=0.01,

@@ -51,6 +51,7 @@ import {
   MILKY_WAY,
   parseSurfaceFrameId,
   parseAddress,
+  supportCeiling,
   surfaceAsset,
   surfaceRadius,
   geodeticDirection,
@@ -302,15 +303,16 @@ export class World implements FlightWorld {
     if (cached !== undefined) return cached
     let height = 0
     for (const placement of this.structuresOn(address)) {
-      const support = surfaceAsset(placement.assetId)?.supportRadius
-      if (support === null || support === undefined) continue
+      const asset = surfaceAsset(placement.assetId)
+      if (asset === undefined || asset.support.length === 0) continue
       height = Math.max(
         height,
         surfaceRadius(
           body,
           geodeticDirection(placement.latitude, placement.longitude),
         ) +
-          placement.height -
+          placement.height +
+          supportCeiling(asset) -
           body.radius,
       )
     }

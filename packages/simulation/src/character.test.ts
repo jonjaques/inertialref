@@ -7,8 +7,11 @@ import {
   surfaceRadius,
   bodyFixedDirection,
   bodyFrameId,
+  directionToGeodetic,
+  type EntityId,
   MARS_PAD,
 } from '@inertialref/universe'
+import { placementBasis } from './surfacePlacement.ts'
 import { World } from './world.ts'
 
 function setup(canFly = false) {
@@ -212,4 +215,123 @@ it('refuses a ship-frame teleport atomically', () => {
     world.teleport(id, { ...entity.state, frame: bodyFrameId(body.address) }),
   ).toThrow(/body-fixed/)
   expect(world.stateHash()).toBe(before)
+})
+
+/*
+ * The pad in its own meters: a character placed at (x, z) of the asset, and
+ * read back the same way, so a test can say "26 m out on the deck" and
+ * "the top of the ramp" rather than a latitude to nine places.
+ */
+function padRig() {
+  const { world, body } = setup()
+  world.placeStructure(MARS_PAD)
+  const basis = placementBasis(MARS_PAD)
+  const datum = surfaceRadius(body, basis.up) + MARS_PAD.height
+  const place = (x: number, z: number, heading: number) => {
+    const point = Vec.add(
+      Vec.scale(basis.up, datum),
+      Vec.add(Vec.scale(basis.east, x), Vec.scale(basis.south, z)),
+    )
+    const site = directionToGeodetic(Vec.normalize(point))
+    const id = world.spawnCharacter(body, site.latitude, site.longitude, {
+      heading,
+    }).id
+    world.runTicks(1)
+    return id
+  }
+  const read = (id: string) => {
+    const position = world.entities.require(id as EntityId).state.position
+    const direction = Vec.normalize(position)
+    const cosine = Vec.dot(basis.up, direction)
+    const tangent = Vec.sub(direction, Vec.scale(basis.up, cosine))
+    const scale = datum / cosine
+    return {
+      x: scale * Vec.dot(tangent, basis.east),
+      z: scale * Vec.dot(tangent, basis.south),
+      top: Vec.length(position) * cosine - datum,
+      grounded: world.entities.require(id as EntityId).character!.grounded,
+    }
+  }
+  // The asset's +X is east turned by the heading; +Z is south turned by it.
+  const alongX = MARS_PAD.heading + Math.PI / 2
+  const alongZ = MARS_PAD.heading + Math.PI
+  return { world, body, place, read, alongX, alongZ }
+}
+
+describe('the pad is solid where it is drawn', () => {
+  it('steps off the deck onto the aprons and falls only past the outer edge', () => {
+    const { world, place, read, alongX } = padRig()
+    const id = place(24, 0, alongX)
+    world.setCharacterInput(id, { forward: 1 })
+    let left = false
+    for (let i = 0; i < 48; i += 1) {
+      world.runTicks(8)
+      const at = read(id)
+      if (at.x < 44) {
+        // Deck, joint, warning band, apron panels, outer apron: every drop
+        // between them is a boot's step, so the walk never leaves the ground.
+        expect(at.grounded, `x=${at.x.toFixed(2)}`).toBe(true)
+        if (at.x > 30 && at.x < 37) expect(at.top).toBeCloseTo(-0.08, 3)
+        if (at.x > 38 && at.x < 44) expect(at.top).toBeCloseTo(-0.18, 3)
+      } else if (at.x > 45) left = true
+    }
+    expect(left).toBe(true)
+    world.runTicks(256)
+    const off = read(id)
+    // The skirt is buried in ground that lies about two meters under the
+    // datum at the anchor; the fall ends on terrain, not inside the pad.
+    expect(off.grounded).toBe(true)
+    expect(off.top).toBeLessThan(-1)
+  })
+
+  it('walks down the access ramp attached to it and back up again', () => {
+    const { world, place, read, alongZ } = padRig()
+    const id = place(0, 37, alongZ)
+    world.setCharacterInput(id, { forward: 1 })
+    let sampled = 0
+    for (let i = 0; i < 40; i += 1) {
+      world.runTicks(8)
+      const at = read(id)
+      if (at.z > 45 && at.z < 56) {
+        sampled += 1
+        expect(at.grounded, `z=${at.z.toFixed(2)}`).toBe(true)
+        // The ramp is buried where the ground rises to meet it, about two
+        // meters under the datum here, and the ground is what carries a
+        // boot from there: the top is never below the slab.
+        const slab = -0.18 - ((at.z - 44.7) / 12.3) * 3.32
+        expect(at.top).toBeGreaterThan(slab - 0.005)
+        if (at.z < 50) expect(at.top).toBeCloseTo(slab, 2)
+      }
+    }
+    expect(sampled).toBeGreaterThan(6)
+    // Turn around at the foot of the ramp and climb it.
+    world.setCharacterInput(id, { forward: 0 })
+    world.runTicks(8)
+    const foot = read(id)
+    expect(foot.z).toBeGreaterThan(50)
+    world.setCharacterInput(id, { yaw: alongZ + Math.PI, forward: 1 })
+    world.runTicks(64 * 8)
+    const back = read(id)
+    // Back across the aprons and onto the deck: the climb is a walk.
+    expect(back.z).toBeLessThan(40)
+    expect(back.grounded).toBe(true)
+    expect(back.top).toBeGreaterThanOrEqual(-0.18)
+    expect(back.top).toBeLessThanOrEqual(0.02)
+  })
+
+  it('is stopped by a service plinth as by any rise a step cannot take', () => {
+    const { world, place, read, alongX } = padRig()
+    const theta = Math.PI / 8
+    const radial = (r: number) => [r * Math.cos(theta), -r * Math.sin(theta)]
+    const [x, z] = radial(35)
+    const id = place(x!, z!, alongX - theta)
+    world.setCharacterInput(id, { forward: 1 })
+    world.runTicks(64 * 3)
+    const at = read(id)
+    // The plinth's near face is 1.7 m inside its 38.5 m center.
+    expect(Math.hypot(at.x, at.z)).toBeLessThan(36.85)
+    expect(Math.hypot(at.x, at.z)).toBeGreaterThan(36.3)
+    expect(at.top).toBeCloseTo(-0.08, 3)
+    expect(at.grounded).toBe(true)
+  })
 })
