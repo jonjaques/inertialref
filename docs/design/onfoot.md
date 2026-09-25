@@ -19,6 +19,11 @@ then activate **Lock to walk**. The browser must grant pointer lock before the
 character enters play. Entering from the planetarium opens solo play and leaves
 the browsing camera behind. A refused request leaves free look available.
 
+For a repeatable scale check, open the author's **Controls** panel and choose
+**Scenarios → Walk the Mars pad**. This stages the character in third person
+beside the 46 m Rocinante and opens solo play. It leaves the pointer free;
+choose **Resume controls** to walk.
+
 These are the default bindings. Settings can rebind them; the HUD and keys
 sheet display the current bindings.
 
