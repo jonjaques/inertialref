@@ -121,6 +121,26 @@ describe('the bundled astronaut', () => {
     second.dispose()
   })
 
+  it.each(['crouch', 'crouchWalk'] as const)(
+    '%s lowers the skinned helmet to the crouched collision height',
+    (animation) => {
+      const astronaut = createAstronaut(source)
+      const standing = new Box3().setFromObject(astronaut.group, true)
+      for (let frame = 0; frame < 90; frame++) {
+        astronaut.update(motion(animation), 1 / 60)
+        if (frame < 15) continue // Let the transition from idle complete.
+        // `precise` bounds call getVertexPosition for every skinned vertex.
+        // Bone translations alone cannot prove that the suit actually bends.
+        const crouched = new Box3().setFromObject(astronaut.group, true)
+        expect(crouched.min.y).toBeCloseTo(0, 3)
+        expect(crouched.max.y).toBeGreaterThan(1.15)
+        expect(crouched.max.y).toBeLessThan(1.3)
+        expect(standing.max.y - crouched.max.y).toBeGreaterThan(0.48)
+      }
+      astronaut.dispose()
+    },
+  )
+
   it('holds the same pose when presentation time is paused', () => {
     const astronaut = createAstronaut(source)
     astronaut.update(motion('run'), 0.1)

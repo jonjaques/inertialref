@@ -191,12 +191,14 @@ def pose(action, phase):
     moving = action in ['Walk', 'Run', 'CrouchWalk', 'StrafeLeft', 'StrafeRight']
     crouch = action in ['Crouch', 'CrouchWalk']
     airborne = action in ['Jump', 'Fall', 'Fly']
-    stride = 0.27 if action == 'Run' else 0.16 if moving else 0
-    lift = 0.13 if action == 'Run' else 0.065
-    pelvis_z = 0.64 if crouch else 0.865
+    stride = 0.10 if action == 'CrouchWalk' else 0.27 if action == 'Run' else 0.16 if moving else 0
+    lift = 0.045 if crouch else 0.13 if action == 'Run' else 0.065
+    # Crouching shares the controller's 1.2 m clearance, with a little helmet
+    # padding. Plant the feet and fold the knees; do not shrink the suit.
+    pelvis_z = 0.35 if crouch else 0.865
     pelvis_z += 0.009 * math.sin(phase * 2) if moving else 0.003 * math.sin(phase)
-    lean = 0.15 if crouch else 0.07 if action == 'Run' else 0.01
-    pelvis = Vector((0, -0.025, pelvis_z))
+    lean = 0.20 if crouch else 0.07 if action == 'Run' else 0.01
+    pelvis = Vector((0, 0.08 if crouch else -0.025, pelvis_z))
     chest = pelvis + Vector((0, -lean * 0.3, 0.2))
     neck = chest + Vector((0, -lean * 0.65, 0.33))
     head = neck + Vector((0, 0, 0.13))
