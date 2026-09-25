@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MemorySaveStore } from '@inertialref/persistence'
 import { GameEngine } from './GameEngine.ts'
-import { UV } from '@inertialref/spatial'
+import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 
 const makeEngine = (canFly = true) =>
   new GameEngine({
@@ -13,6 +13,23 @@ const makeEngine = (canFly = true) =>
   })
 
 describe('character activation', () => {
+  it('keeps the crouching chase camera above the pad at its support edge', () => {
+    const game = makeEngine()
+    game.character.atMarsPad()
+    game.character.lockChanged(true)
+    game.character.input({ crouch: true })
+    game.frame(1 / 30)
+    const view = game.characterView!
+    const camera = game.characterCamera!.camera
+    expect(
+      Vec.dot(
+        Vec.sub(camera.position, view.position),
+        Q.rotate(view.orientation, vec3(0, 1, 0)),
+      ),
+    ).toBeGreaterThanOrEqual(0.19)
+    game.dispose()
+  })
+
   it('stages a character beside the landed Rocinante and shares one camera eye', () => {
     const game = makeEngine()
     const ship = game.player()

@@ -73,8 +73,11 @@ export function characterCameraPose(input: CharacterCameraInput) {
   for (let probe = 0.25; probe <= 4.5; probe += 0.25) {
     const point = UV.translate(eye, Vec.scale(backward, probe))
     if (
+      // A boom can leave a deck's contact disk before descending through its
+      // visible rim. Keep a grounded player's chase eye above the foot plane.
+      (altitude <= 0.1 && Vec.dot(UV.difference(point, feet), up) < 0.2) ||
       Vec.length(UV.difference(point, input.spin.position)) <
-      groundAt(input, point).drawn + 0.2
+        groundAt(input, point).drawn + 0.2
     )
       break
     distance = probe
