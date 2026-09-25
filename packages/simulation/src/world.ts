@@ -630,11 +630,11 @@ export class World implements FlightWorld {
     )
     this.loadSystem(body.address.system)
     const direction = geodeticDirection(latitude, longitude)
-    const east = vec3(Math.sin(longitude), 0, Math.cos(longitude))
+    const east = vec3(-Math.sin(longitude), 0, -Math.cos(longitude))
     const south = Vec.cross(east, direction)
     const orientation = Q.multiply(
       Q.fromBasis(east, direction, south),
-      Q.fromAxisAngle(vec3(0, 1, 0), heading),
+      Q.fromAxisAngle(vec3(0, 1, 0), -heading),
     )
     return this.spawn({
       id: dynamicEntityId(this.#entities.nextDynamicIndex()),
@@ -673,6 +673,31 @@ export class World implements FlightWorld {
       rails: null,
     })
     this.#landed.delete(id)
+    return true
+  }
+
+  /** A session host reconciles restored privileges with its current authority. */
+  setCharacterFlightPermission(id: EntityId, canFly: boolean): void {
+    const entity = this.#entities.require(id)
+    invariant(entity.character !== null, `${id} is not a character`)
+    this.#entities.update(id, {
+      character: {
+        ...entity.character,
+        canFly,
+        flying: entity.character.flying && canFly,
+      },
+    })
+  }
+
+  /** Release an on-foot avatar when control returns to its parked vessel. */
+  removeCharacter(id: EntityId): boolean {
+    const entity = this.#entities.get(id)
+    if (entity?.character == null) return false
+    this.#entities.remove(id)
+    this.#previous.delete(id)
+    this.#landed.delete(id)
+    this.#altitudes.delete(id)
+    this.#forgetDerived(id)
     return true
   }
 
@@ -719,6 +744,10 @@ export class World implements FlightWorld {
   /** Move an entity into another frame without moving it in the universe. */
   reframeEntity(id: EntityId, frame: FrameId): Entity {
     const entity = this.#entities.require(id)
+    invariant(
+      entity.character === null || this.binding(frame)?.spinFrame === frame,
+      'A character requires a body-fixed destination',
+    )
     const state = reframe(this.frames, entity.state, frame, this.clock.time)
     this.#landed.delete(id)
     this.#forgetDerived(id)
@@ -738,6 +767,11 @@ export class World implements FlightWorld {
     // Off the rails as well: the epoch describes where the entity was, and it
     // is not there now. It earns a new one on its next coasting tick.
     const held = this.#entities.require(id)
+    invariant(
+      held.character === null ||
+        this.binding(state.frame)?.spinFrame === state.frame,
+      'A character requires a body-fixed destination',
+    )
     const entity = this.#entities.update(id, {
       state,
       rails: null,
@@ -1210,6 +1244,14 @@ export class World implements FlightWorld {
 
   #liftOff(id: EntityId, time: Seconds): void {
     const entity = this.#entities.require(id)
+    if (entity.character !== null) {
+      this.#entities.update(id, {
+        character: { ...entity.character, grounded: false },
+      })
+      this.#landed.delete(id)
+      this.#forgetDerived(id)
+      return
+    }
     const binding = this.binding(entity.state.frame)
     if (binding === undefined) return
     // reframe supplies the ground speed the ship inherits — several hundred m/s

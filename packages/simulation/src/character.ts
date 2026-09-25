@@ -132,7 +132,7 @@ export function stepCharacter(
   let up = Vec.normalize(position)
   let orientation = Q.normalize(
     Q.multiply(
-      Q.fromAxisAngle(up, input.yaw - held.heading),
+      Q.fromAxisAngle(up, held.heading - input.yaw),
       entity.state.orientation,
     ),
   )
@@ -207,8 +207,18 @@ export function stepCharacter(
         nextSupport = support
       }
     }
-    const nextUp = Vec.normalize(candidate)
     let nextRadius = radius + vertical * step
+    if (
+      !grounded &&
+      nextSupport > nextRadius + 1e-6 &&
+      nextSupport > support + 1e-6
+    ) {
+      // An airborne motor hitting a hillside stops at the hillside; lifting
+      // the feet to its summit would turn collision into an upward teleport.
+      candidate = position
+      nextSupport = support
+    }
+    const nextUp = Vec.normalize(candidate)
     // Small descending steps remain attached; a ledge starts a gravity fall.
     if (grounded && nextRadius - nextSupport <= CHARACTER.stepHeight)
       nextRadius = nextSupport
