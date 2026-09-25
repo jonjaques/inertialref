@@ -88,7 +88,9 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
   }, [anisotropy, gl, camera, scene])
 
   useTimedFrame('shipModel', () => {
-    const wanted = engine.cinematic?.ship.model ?? null
+    const wanted =
+      engine.cinematic?.ship.model ??
+      (engine.character.padPreview ? 'rocinante' : null)
     if (wanted !== stagedId) setStagedId(wanted)
     const scene = engine.scene()
     if (scene === null || group.current === null) return
@@ -119,8 +121,16 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
       return
     }
 
-    group.current.visible = engine.showShip && onStage
-    const ship = scene.entities.find((entity) => entity.isCamera)
+    const ship =
+      engine.parkedRocinante ??
+      scene.entities.find(
+        (entity) =>
+          entity.kind === 'ship' &&
+          (engine.character.active
+            ? entity.id === engine.character.ship
+            : entity.isCamera),
+      )
+    group.current.visible = engine.showShip && onStage && ship !== undefined
     if (ship === undefined) return
     group.current.position.set(
       ship.position.x,

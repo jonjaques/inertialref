@@ -9,6 +9,9 @@ import type {
   GuideHostPort,
 } from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
+import { CharacterController } from './characterController.ts'
+import type { CharacterView } from './characterView.ts'
+import { characterCameraPose } from '@inertialref/rendering'
 import {
   DEFAULT_SENSOR_SETTINGS,
   GALAXY_VIEWS,
@@ -30,10 +33,12 @@ import { formatSeed } from '@inertialref/procedural'
 import { encodeUniverseVector } from '@inertialref/protocol'
 import {
   orientationToRenderSpace,
+  Quaternion as Q,
   type Quat,
   type RenderOrigin,
   toRenderSpace,
   UV,
+  Vec,
   type UniverseVector,
   type Vec3,
   vec3,
@@ -56,6 +61,8 @@ import {
 } from '@inertialref/universe'
 import {
   buildScene,
+  lookAlong,
+  ROCI_HALF_LENGTH,
   type CinematicEffects,
   type CinematicTextState,
   isUsableLens,
@@ -256,6 +263,7 @@ export { NO_EFFECTS }
 export type { CinematicEffects, CinematicTextState }
 
 export interface GameEngineOptions {
+  readonly canFly?: boolean
   readonly seed?: string
   /** The star catalog this world is generated against. */
   readonly catalog?: StarCatalog
@@ -285,6 +293,10 @@ export interface GameEngineOptions {
  * render origin, the scene, the terrain streamer and the starfield.
  */
 export class GameEngine {
+  readonly character: CharacterController
+  characterCamera: ObserverView | null = null
+  characterView: CharacterView | null = null
+  parkedRocinante: ObserverView['camera'] | null = null
   readonly session: Session
   readonly harness: GameHarness
   /** Supplied only while the Planetarium owns its lazy guide. */
@@ -911,6 +923,7 @@ export class GameEngine {
 
   constructor(options: GameEngineOptions = {}) {
     this.session = openSession({
+      ...(options.canFly === undefined ? {} : { canFly: options.canFly }),
       ...(options.seed === undefined ? {} : { seed: options.seed }),
       ...(options.catalog === undefined ? {} : { catalog: options.catalog }),
       // `undefined` means "the browser default"; `null` means "no pool at all".
@@ -963,6 +976,7 @@ export class GameEngine {
       onWorldReplaced: () => this.#invalidateDerived(),
     })
     this.harness = this.session.harness
+    this.character = new CharacterController(this)
     this.cutscene = createCutsceneSession({
       status: () => this.harness.cutsceneStatus(),
       outcome: () => this.harness.cutsceneOutcome(),
@@ -1197,6 +1211,9 @@ export class GameEngine {
    * and `load` is how the starfield came to survive a jump of four light years.
    */
   #invalidateDerived(): void {
+    this.character.reset()
+    this.characterCamera = null
+    this.characterView = null
     this.rotationStop = null
     this.origin = null
     this.snapshot = null
@@ -1443,11 +1460,32 @@ export class GameEngine {
         ? undefined
         : shot.entities.find((entity) => entity.id === player)
 
+    const onFoot = camera?.character
+    const characterPose =
+      onFoot == null
+        ? null
+        : characterCameraPose({
+            position: camera!.position,
+            orientation: camera!.orientation,
+            body: onFoot.body,
+            spin: onFoot.spin,
+            structures: shot.structures.filter(
+              (s) => s.body.id === onFoot.body.id,
+            ),
+            eyeHeight: onFoot.eyeHeight,
+            pitch: this.character.pitch,
+            view: this.character.view,
+          })
+
     const eye =
-      cinematic?.camera.position ?? observed?.position ?? camera?.position
+      cinematic?.camera.position ??
+      observed?.position ??
+      characterPose?.position ??
+      camera?.position
     this.#presentedPose =
       cinematic?.camera ??
       observed ??
+      characterPose ??
       (camera === undefined
         ? null
         : { position: camera.position, orientation: camera.orientation })
@@ -1461,6 +1499,53 @@ export class GameEngine {
     }
 
     this.origin = originForCamera(this.origin, eye)
+    this.characterCamera =
+      characterPose === null
+        ? null
+        : {
+            camera: {
+              position: toRenderSpace(this.origin, characterPose.position),
+              orientation: orientationToRenderSpace(
+                this.origin,
+                characterPose.orientation,
+              ),
+            },
+          }
+    this.characterView =
+      onFoot == null || characterPose === null
+        ? null
+        : {
+            position: toRenderSpace(this.origin, characterPose.feet),
+            orientation: orientationToRenderSpace(
+              this.origin,
+              camera!.orientation,
+            ),
+            visible:
+              cinematic === null &&
+              observed === null &&
+              this.character.view === 'third',
+            animation: onFoot.flying
+              ? 'fly'
+              : !onFoot.grounded
+                ? Vec.dot(
+                    camera!.localVelocity,
+                    Vec.normalize(camera!.localPosition),
+                  ) > 0
+                  ? 'jump'
+                  : 'fall'
+                : onFoot.crouched
+                  ? onFoot.speed > 0.1
+                    ? 'crouchWalk'
+                    : 'crouch'
+                  : onFoot.speed < 0.1
+                    ? 'idle'
+                    : onFoot.input.sprint
+                      ? 'run'
+                      : 'walk',
+            speed: onFoot.speed,
+            forward: onFoot.input.forward,
+            right: onFoot.input.right,
+          }
     this.observer =
       observed === null || observed === undefined
         ? null
@@ -1545,9 +1630,29 @@ export class GameEngine {
       shot,
       this.origin,
       player,
-      cinematic !== null ? cinematic.camera : (observed ?? undefined),
+      cinematic !== null
+        ? cinematic.camera
+        : (observed ?? characterPose ?? undefined),
       view === null ? undefined : lodThresholds(view.lens, view.viewport),
     )
+    const pad = this.character.padPreview
+      ? this.#scene.structures.find(
+          (structure) => structure.id === 'mars-basin-pad',
+        )
+      : undefined
+    this.parkedRocinante =
+      pad === undefined
+        ? null
+        : {
+            position: Vec.add(
+              pad.position,
+              Q.rotate(pad.orientation, vec3(0, ROCI_HALF_LENGTH, 0)),
+            ),
+            orientation: Q.multiply(
+              pad.orientation,
+              lookAlong(vec3(0, 1, 0), vec3(0, 0, -1)),
+            ),
+          }
     this.#phases.step('scene', ENGINE_PHASE)
 
     /*
@@ -1771,6 +1876,7 @@ export class GameEngine {
     translation: [number, number, number],
     rotation: [number, number, number],
   ): void {
+    if (this.character.active) return
     const player = this.session.player()
     if (player === null) return
     this.world.setControl(player, vec3(...translation), vec3(...rotation))
@@ -1778,6 +1884,7 @@ export class GameEngine {
 
   /** The main drive, 0..1. Returns the setting the world kept. */
   setThrottle(fraction: number): number {
+    if (this.character.active) return 0
     const player = this.session.player()
     if (player === null) return 0
     return this.world.setThrottle(player, fraction).control.throttle
@@ -1785,6 +1892,7 @@ export class GameEngine {
 
   /** Walk the throttle by a step, from wherever it is. */
   nudgeThrottle(delta: number): number {
+    if (this.character.active) return 0
     const player = this.session.player()
     if (player === null) return 0
     const held = this.world.entities.require(player).control.throttle
