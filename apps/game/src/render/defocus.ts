@@ -1,3 +1,4 @@
+import { namePass } from './passTimeline.ts'
 import { warmSensorPass, type WarmPass } from './warmup.ts'
 import { GLASS_PRESETS, type Glass } from '@inertialref/rendering'
 import {
@@ -167,8 +168,9 @@ export class DefocusNode extends TempNode<'vec4'> {
     )
     const color = mix(base, near.rgb.div(max(near.a, float(1e-6))), nearOpacity)
     this.#stages[3]!.material.fragmentNode = vec4(color, 1).context(context)
-    this.#stages.forEach(({ material }, i) => {
+    this.#stages.forEach(({ material, target }, i) => {
       material.name = `Sensor Defocus ${i}`
+      namePass(target, `defocus ${i}`)
     })
     this.#smallGathers.forEach(({ material }, i) => {
       material.name = `Sensor Defocus ${i + 1} small`

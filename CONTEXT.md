@@ -10491,6 +10491,45 @@ test that had not failed. It carries the descent's five minutes. The stage's
 own 900 s is the budget for the suite; a test's number below it says how far
 the slowest runner may fall behind the M5 before a pass reads as a hang.
 
+## The warm-up's stand-in went before its queue did, and the rig blamed the next run (23 Sep 2026)
+
+Three r185 keys a `RenderContext` on the attachment shape — count, format,
+type, samples, depth, stencil, MRT — not on the target, and `compileAsync`
+builds each queued pipeline after a yield, reading the depth format from
+whatever texture that shared context holds by then. `declareSceneTarget`
+disposed the warm-up's 4 × 4 stand-in whenever the sensor declared its shape
+again — at boot, on a picture change, on a hot reload — and a build-ahead
+warm-up (WarpFx, CinematicStage, a body) could be mid-queue when it did. The
+texture then has no format, and the device refuses every pipeline left in the
+queue: `Failed to read the 'format' property from 'GPUDepthStencilState':
+Required member is undefined`, in Dawn `undefined is not a valid enum value of
+GPUTextureFormat`. Three marks each broken under a key no frame draws with, so
+the only cost is the error and the warm-up the first frame then pays for.
+`holdWarmTarget` holds the stand-in until every compile bound to it has
+settled — `allSettled`, because `Promise.all` rejects while the rest of the
+queue is still building — and a declaration made meanwhile disposes it on the
+last release. `warmup.gpu.test.ts` holds the first pipeline with
+`holdNextPipeline`, declares a new shape inside the window, and reads the
+sink through the harness's new `reported()`; it failed with the Dawn refusal
+before the fix.
+
+It was first charged to `ir.passes`, on two failing runs of four against none
+of three without it. The count was about something else. `scripts/drive.mjs`
+sends `Runtime.enable` before it navigates, and V8 replays the console of the
+page about to be replaced, so the trailing errors of an invocation include
+the previous page's. Every failing run followed a scripted edit to a renderer
+module while the rig's page stood at 2 km — Vite hot-reloaded the sensor under
+it — and every clean run followed none. Appending a newline to `defocus.ts`
+under a live page reproduced it twice of twice with no measurement at all; the
+same edit after the fix, twice, logged nothing. A figure about a rig run is
+also about the page before it.
+
+Seen while there: the renderer holds 303 render contexts at boot, one per warm
+call, because every warm-up builds a fresh `sensorMrt` node and the MRT id is
+part of the key. The count stayed at 303 after a 2 km and a 3 m visit on
+Gliese 908 IV, so it is a boot cost, not a leak, and the stale contexts
+among them hold disposed textures only as JavaScript objects.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

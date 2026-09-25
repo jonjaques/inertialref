@@ -92,6 +92,10 @@ import {
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
 import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
+import {
+  passTimelineOf,
+  type PassTimelineResult,
+} from '../render/passTimeline.ts'
 import { holdFrames } from './frameHold.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
@@ -369,6 +373,22 @@ export class GameEngine {
     if (draw === null) return null
     const release = holdFrames()
     return measureGpuFrameMs(gl.renderer, draw, frames).finally(release)
+  }
+
+  /**
+   * `measureGpu`'s frames with every pass timed and named — see
+   * `render/passTimeline.ts`. Null where `measureGpu` is, and on a device
+   * without `timestamp-query`. Only the presenting chain is timed: the
+   * fallback `renderer.render` is a path nothing presents.
+   */
+  measurePasses(frames = 40): Promise<PassTimelineResult> | null {
+    const gl = this.gl
+    const present = this.present
+    if (gl === null || present === null) return null
+    const timeline = passTimelineOf(gl.renderer)
+    if (timeline === null) return null
+    const release = holdFrames()
+    return timeline.measure(present, frames).finally(release)
   }
 
   origin: RenderOrigin | null = null
@@ -938,6 +958,7 @@ export class GameEngine {
         setChrome: (visible) => this.setChrome(visible),
         setLayers: (visible) => this.setLayers(visible),
         measureGpu: (frames) => this.measureGpu(frames),
+        measurePasses: (frames) => this.measurePasses(frames),
       },
       onWorldReplaced: () => this.#invalidateDerived(),
     })

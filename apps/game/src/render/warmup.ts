@@ -13,7 +13,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
-import { sceneTargetShape, warmTargetFor } from './sensor.ts'
+import { holdWarmTarget, sceneTargetShape } from './sensor.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
 /*
@@ -169,17 +169,29 @@ export const warmRenderer = (gl: object): WarmRenderer => {
   return {
     compileAsync(object, camera, scene) {
       const previousMrt = renderer.getMRT()
-      const unbind = bindWarmTarget(renderer, warmTargetFor(renderer))
-      const shape = sceneTargetShape(renderer)
-      if (shape.optics === true || shape.temporal === true)
-        renderer.setMRT(sensorMrt(shape.temporal, shape.optics === true))
+      // Held until the last pipeline lands, not until the walk returns — see
+      // `holdWarmTarget`.
+      const hold = holdWarmTarget(renderer)
       const compiles: Promise<unknown>[] = []
-      object.traverseVisible((node) => {
-        if (isRenderable(node))
-          compiles.push(renderer.compileAsync(node, camera, scene))
-      })
-      unbind()
-      renderer.setMRT(previousMrt)
+      const unbind = bindWarmTarget(renderer, hold.target)
+      try {
+        const shape = sceneTargetShape(renderer)
+        if (shape.optics === true || shape.temporal === true)
+          renderer.setMRT(sensorMrt(shape.temporal, shape.optics === true))
+        object.traverseVisible((node) => {
+          if (isRenderable(node))
+            compiles.push(renderer.compileAsync(node, camera, scene))
+        })
+      } finally {
+        // A throw in the walk otherwise leaves every later frame bound to a
+        // 4×4 target and the hold never released, so a retired stand-in is
+        // never disposed.
+        unbind()
+        renderer.setMRT(previousMrt)
+        // Settled, not all: `Promise.all` rejects at the first failure while
+        // the rest of the queue is still building against the stand-in.
+        void Promise.allSettled(compiles).then(hold.release)
+      }
       return Promise.all(compiles)
     },
   }
