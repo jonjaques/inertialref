@@ -75,10 +75,10 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   again. Reconcile against the state's actual owner instead —
   `observatory.target?.address === wanted` — which is idempotent by construction.
 - **One producer of the camera**, in `GameEngine.#step`: cutscene, then observatory, then
-  the ship. Each is a presentation eye handed to `buildScene`. Pushing a camera at the
+  the controlled entity. Its player arm resolves the ship or character camera. Each is a presentation eye handed to `buildScene`. Pushing a camera at the
   Three.js object instead leaves LOD, star brightness, `up` and flare occlusion all told
   about a different viewpoint from the one on screen. **No arm may depend on a later one
-  resolving** — only the ship needs a player, and a cutscene sample placed below the
+  resolving** — only the player arm needs an entity, and a cutscene sample placed below the
   missing-player return latched `engine.cinematic` for the rest of the session.
 - **One producer of the lens, and the field of view is derived from it.** `engine.lens`
   resolves a script's lens, then an active fixed galaxy instrument's declared lens

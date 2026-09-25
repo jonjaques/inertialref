@@ -215,6 +215,7 @@ export class CharacterController {
   }
 
   leave(): void {
+    if (!this.active) return
     const character = this.entity
     this.stop()
     this.locked = false
