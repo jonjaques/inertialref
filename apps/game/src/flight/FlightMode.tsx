@@ -8,8 +8,7 @@ import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FlightStrip } from '../hud/FlightStrip.tsx'
 import { NavCluster } from '../hud/NavCluster.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
-import { useFlightContext } from '../hud/useShipControls.ts'
-import { useKeyLabel } from '../input/useKeymap.ts'
+import { useKeyContext, useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
 import { DeferredMultiplayer } from './DeferredMultiplayer.tsx'
 import { NotConnected } from './NotConnected.tsx'
@@ -72,9 +71,12 @@ export function FlightMode({
 
   // The axes are live here and nowhere else. The planetarium binds the arrows
   // to orbiting a camera and `F` to framing a target, and both are flight axes.
-  useFlightContext()
+  const characterActive = useEngine(
+    (snapshot) => snapshot.character?.active ?? false,
+  )
+  useKeyContext({ context: 'flight' }, !characterActive)
   const chromeHidden = useChromeHidden()
-  const surface = useFlightCameraInput(engine)
+  const surface = useFlightCameraInput(engine, !characterActive)
   // The view, sampled with the rest of the status: a string, so it bails out
   // of the re-render with `Object.is` while the strip beside it re-renders at
   // the sample rate.
@@ -99,13 +101,19 @@ export function FlightMode({
       <div
         ref={surface}
         className="hud-bleed pointer-events-auto absolute touch-none select-none"
-        style={{ cursor: view === 'orbit' ? 'grab' : 'move' }}
+        style={{
+          cursor: characterActive
+            ? 'default'
+            : view === 'orbit'
+              ? 'grab'
+              : 'move',
+        }}
         aria-hidden
       />
 
       {/* The strip and the reticle are chrome, so `Shift+H` clears them. The
           workspace puts itself away — see `hud/chrome.ts`. */}
-      {!chromeHidden && (
+      {!chromeHidden && !characterActive && (
         <>
           <ErrorBoundary
             what="the flight strip"

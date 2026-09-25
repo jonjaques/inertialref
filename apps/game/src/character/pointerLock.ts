@@ -109,7 +109,9 @@ export class PointerLock {
       this.#locked = true
       this.#callbacks.changed(true)
     }
-    const error = (): void => this.#failed(this.#generation)
+    const error = (): void => {
+      if (this.#requested) this.#failed(this.#generation)
+    }
     const move = (event: Event): void => {
       if (!this.#locked || document.pointerLockElement !== target) return
       const mouse = event as MouseEvent
