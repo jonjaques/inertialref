@@ -45,8 +45,8 @@ is the engineering-facing view of this same table.
 | Exotic remnants        | ⬜     | Post-MVP                             | White dwarfs, neutron stars, black holes — a body kind; the hard part is rendering                                                                                                                                                        |
 | Vegetation, flora      | ⬜     | Post-MVP                             | Region-seeded scatter; the `o:` address segment exists for it                                                                                                                                                                             |
 | Rocks, surface scatter | 🟡     | **MVP**                              | Region-seeded boulders addressed as `o:` objects, four generated shapes instanced in the terrain's own material — [ADR-0021](../adr/0021-the-ground.md). No outcrops, no debris, no collision                                             |
-| Structures, outposts   | ⬜     | 3 kinds, parts-assembled             | First real consumer of [persistent mutations](../roadmap.md#persistent-mutations)                                                                                                                                                         |
-| Humanoids              | ⬜     | Post-MVP                             | Needs a character controller on a surface frame                                                                                                                                                                                           |
+| Structures, outposts   | 🟡     | 3 kinds, parts-assembled             | Durable body-fixed placements and a Mars landing pad with a flat support disk exist; outposts and interiors remain unbuilt. [ADR-0040](../adr/0040-structures-keep-a-body-fixed-anchor.md)                                                |
+| Humanoids              | 🟡     | Surface traversal                    | Canonical character movement, optional pointer lock, first-person and third-person views, and permitted flight; suit survival, inventory, and interaction remain unbuilt. [On foot](onfoot.md)                                            |
 | Small physical objects | 🟡     | Samples, tools, debris               | Debug cubes render at correct scale today; no interaction                                                                                                                                                                                 |
 
 ---
@@ -79,24 +79,23 @@ something better later is a change to one file. That is the right posture.
 
 ### Body kinds
 
-| Kind              | Landable | Notes                                                                                                                                                                |
-| ----------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rocky             | ✅       | The default. Terrain, no or thin atmosphere.                                                                                                                         |
-| Ice               | ✅       | Terrain with an ice material set; often outer-system                                                                                                                 |
-| Gas giant         | ❌       | Approachable, ring systems, moons. A destination without a surface.                                                                                                  |
-| Ice giant         | ❌       |                                                                                                                                                                      |
-| Moon              | ✅       | Anything orbiting a body rather than a star                                                                                                                          |
-| Asteroid          | ⬜       | Modeled and drawn with its real figure; **not landable yet** — micro-gravity is still the most interesting on-foot environment in the game and nothing implements it |
-| Comet             | ⬜       | The nucleus is modeled and drawn. The coma and tail — the part anybody has ever seen — are a rendering problem nobody has started                                    |
-| Dwarf planet      | ✅       | Round, and a world. Pluto has its heart; Haumea is a genuine tri-axial ellipsoid because it turns in 3.9 hours                                                       |
-| Exotic remnant ⬜ | ❌       | White dwarf, neutron star, black hole. Hazard and spectacle.                                                                                                         |
+| Kind              | Landable | Notes                                                                                                                                                                  |
+| ----------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rocky             | ✅       | The default. Terrain, no or thin atmosphere.                                                                                                                           |
+| Ice               | ✅       | Terrain with an ice material set; often outer-system                                                                                                                   |
+| Gas giant         | ❌       | Approachable, ring systems, moons. A destination without a surface.                                                                                                    |
+| Ice giant         | ❌       |                                                                                                                                                                        |
+| Moon              | ✅       | Anything orbiting a body rather than a star                                                                                                                            |
+| Asteroid          | 🟡       | Character contact uses canonical terrain on the body datum; the measured rendered figure is not a collision mesh. Microgravity movement is kinematic, not orbital EVA. |
+| Comet             | 🟡       | The solid nucleus admits canonical terrain contact; its rendered figure is not a collision mesh. Coma and tail rendering remain unbuilt.                               |
+| Dwarf planet      | ✅       | Round, and a world. Pluto has its heart; Haumea is a genuine tri-axial ellipsoid because it turns in 3.9 hours                                                         |
+| Exotic remnant ⬜ | ❌       | White dwarf, neutron star, black hole. Hazard and spectacle.                                                                                                           |
 
 Below about 200 km a body stops being a spheroid and starts being a _shape_ —
 see [ADR-0013](../adr/0013-measured-figures.md). That is a rendering and data
-distinction rather than a gameplay one today, but it is the thing that makes an
-asteroid feel like a place rather than a small planet, and the on-foot design
-should assume an irregular surface with a gravity vector that does not point at
-the center.
+distinction. Character contact reads the canonical datum and terrain field,
+not that shape mesh. Gravity remains a radial point-mass model, so traversing
+a measured irregular figure is not yet a physically matched surface walk.
 
 ---
 

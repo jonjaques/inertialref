@@ -144,23 +144,23 @@ landing at free-fall accuracy within 0.03%.
 
 ### Pillar 4 — You Are One Person
 
-The camera is a head. It is always a head. There is no third-person chase view,
-no orbital camera, no top-down tactical layer, no unit selection, no character
-sheet you visit. You see a cockpit through a visor, or a corridor through a
-visor, and the interface is diegetic wherever a real instrument could plausibly
-show it.
+The player controls one person. First-person view places the camera at the
+character's head; optional third-person view follows the same embodied player.
+The ship camera can likewise follow the controlled hull. Camera choice does
+not add actors, fleet commands, or a strategic view that controls the world
+from above. The planetarium's orbit camera remains a passive way to observe
+that world.
 
 _What this forbids:_ fleet command, base-building from above, an RTS layer, an
 inventory screen that pauses the world.
 
-_Consequence:_ every system in the game needs an answer to "where is this
-displayed, physically?" That constraint is what will make the cockpit good.
+_Consequence:_ cockpit and suit instruments belong to the person using them.
+Where a real instrument could display a reading, the design gives it a physical
+home. Third-person controls add spatial awareness while movement, collision,
+and permission remain attached to the same canonical player.
 
-> 🎮 Designer's Note: Pillar 4 is the one that will be argued with most, because
-> a third-person camera solves a hundred small problems cheaply — spatial
-> awareness in combat, seeing your own ship, screenshots. Elite Dangerous shipped
-> without one for years and its cockpit is the most-praised thing about it. The
-> discipline is the product.
+The implemented camera and control boundary is recorded in
+[ADR-0047](../adr/0047-the-character-walks-in-a-body-fixed-frame.md).
 
 ---
 

@@ -46,7 +46,7 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
 | `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames                                                                                                 |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
+| `simulation`    | 4     | done — clock, entities, flight, surface characters, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                        |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas, bounded guide contracts                                                                                                                               |
 | `workers`       | 5     | done — typed tasks, ports, pool, seven shared tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                            |
 | `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                                                                            |
@@ -76,11 +76,18 @@ JavaScript; request-time rendering can use the same shell when needed.
 [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
 
 Surface structures have durable body-fixed anchors, shared by flight,
-planetarium, and Cinema. Save schema 2 carries placements; World verbs place,
+planetarium, and Cinema. Save schema 4 carries placements and character state; World verbs place,
 move, and remove them. Flat support disks participate in surface contact.
 The Blender-authored Mars pad and its sunset Rocinante landing are the first
 consumer. [ADR-0040](docs/adr/0040-structures-keep-a-body-fixed-anchor.md)
 records the boundary; placement controls currently live in the harness.
+
+Characters walk on canonical planetary terrain and flat support disks, with
+local-gravity jumps and first-person or third-person cameras. Explicit pointer
+lock enters gameplay from a landed ship or near-ground observatory stance;
+ordinary browsing remains presentation-only. Trusted session permission gates
+flight. [ADR-0047](docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md)
+records the controller, save, and camera boundaries.
 
 The application hosts also include `apps/ingest`, which builds committed
 astronomical assets offline, and `apps/server`, the Cloudflare adapter. All
@@ -10530,6 +10537,35 @@ part of the key. The count stayed at 303 after a 2 km and a 3 m visit on
 Gliese 908 IV, so it is a boot cost, not a leak, and the stale contexts
 among them hold disposed textures only as JavaScript objects.
 
+## The pointer enters play only after the browser grants it (24 Sep 2026)
+
+A planetarium stance is an eye above drawn ground, not a canonical character.
+[ADR-0047](docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md) keeps that
+boundary: explicit pointer-lock success selects a body-fixed character and
+opens solo play. Rejection leaves browsing unchanged. The document element
+holds the lock because removing a mode's drag surface during navigation would
+otherwise release it immediately.
+
+Held sprint needs its own edges. A Shift flag captured only when movement
+starts cannot detect Shift pressed halfway through a stride. The shared
+keymap treats either physical Shift key as the same held binding, and releasing
+one while the other remains down keeps sprint active. Binding capture accepts
+Shift on release so it can still capture a shifted chord.
+
+A dialog exposed a separate held-input gap. Claiming modal keyboard ownership
+blocked subsequent movement presses but left an already-held action active.
+The regression produces only a down edge with the modal release removed and
+both down and up with it present. Blur, hidden documents, pointer release,
+route changes, and controller reset also clear input. A browser grant arriving
+after cancellation is released rather than entering gameplay.
+
+The input verification covers 101 tests across the keymap, fake pointer-lock
+adapter, character intent, routes, and preferences. The modal regression was
+reintroduced alone and failed before restoring the fix. This count is focused
+input evidence, not a renderer or full-gate result. The Mars pad scale fixture
+is `GameEngine.character.atMarsPad()`, beside a static 46 m Rocinante; its
+visual acceptance is separate from these input tests.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
@@ -10670,7 +10706,11 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   counted because nothing distinguishes it from a correct parse.
 - No n-body perturbation; patched conics only.
 - Terrain has no persistence of modifications yet (the schema anticipates it).
-- Collision is ground contact only — no hull, no other entities.
+- Character collision covers canonical terrain and flat support disks. Rock
+  scatter, hull walls, ceilings, other entities, and rendered irregular figure
+  meshes are outside the contact model. Suit survival, inventory, tools, and
+  moving ship interiors remain unimplemented. Flight permission comes from the
+  trusted session; there is no online admin authentication.
 - The atmosphere is an analytic shell — exponential density and a twilight
   ring as of 21 Aug, but still geometry rather than scattering. The Bruneton
   LUTs spike 2 made a requirement remain the specified replacement.
