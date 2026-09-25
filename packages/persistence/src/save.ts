@@ -134,6 +134,7 @@ export function captureSave(
       throttle: entity.control.throttle,
     },
     flightAssist: entity.flightAssist,
+    character: entity.character,
     rails: entity.rails === null ? null : encodeRailsEpoch(entity.rails),
   }))
 
@@ -259,6 +260,18 @@ export function restoreSave(
     // epoch on a non-neutral input. A restored coaster has a neutral one by
     // ADR-0025, so the verb would leave it alone, but "would" is a reading of
     // two rules where a spawn argument is one.
+    if ((entity.kind === 'character') !== (entity.character !== null))
+      return err(
+        `entity ${entity.id}: character kind and controller must agree`,
+      )
+    if (
+      entity.character !== null &&
+      (entity.rails !== null ||
+        world.binding(state.value.frame)?.spinFrame !== state.value.frame)
+    )
+      return err(
+        `entity ${entity.id}: character requires a body-fixed frame and no rails`,
+      )
     const canonical: CanonicalEntity = {
       id: entity.id as EntityId,
       kind: entity.kind as EntityKind,
@@ -280,6 +293,7 @@ export function restoreSave(
         throttle: entity.control.throttle,
       },
       flightAssist: entity.flightAssist,
+      character: entity.character,
       ballisticCoefficient: entity.ballisticCoefficient,
       landed: entity.landed,
       rails: rails.value,

@@ -1,3 +1,4 @@
+import type { CharacterState } from './character.ts'
 import type { Kilograms, Seconds } from '@inertialref/shared'
 import type { ControlInput, ThrusterProfile } from '@inertialref/physics'
 import { NEUTRAL_CONTROL } from '@inertialref/physics'
@@ -24,7 +25,7 @@ import type { EntityId, UniverseAddress } from '@inertialref/universe'
  * be mutated by the renderer holding them.
  */
 
-export type EntityKind = 'ship' | 'probe' | 'debris' | 'marker'
+export type EntityKind = 'ship' | 'probe' | 'debris' | 'marker' | 'character'
 
 /**
  * The instant a coasting entity is propagated from, in its own frame.
@@ -81,6 +82,7 @@ export interface Entity {
    * entity is integrated tick by tick.
    */
   readonly rails: RailsEpoch | null
+  readonly character: CharacterState | null
 }
 
 export interface EntityInit {
@@ -101,6 +103,7 @@ export interface EntityInit {
   readonly control?: ControlInput
   readonly flightAssist?: boolean
   readonly rails?: RailsEpoch | null
+  readonly character?: CharacterState | null
 }
 
 export function createEntity(init: EntityInit): Entity {
@@ -119,6 +122,7 @@ export function createEntity(init: EntityInit): Entity {
     address: init.address ?? null,
     spawnedAt: init.spawnedAt ?? 0,
     rails: init.rails ?? null,
+    character: init.character ?? null,
   }
 }
 

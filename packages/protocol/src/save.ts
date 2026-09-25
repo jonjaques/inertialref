@@ -42,7 +42,7 @@ import {
  * than a change of model.
  */
 
-export const SAVE_SCHEMA_VERSION = 3
+export const SAVE_SCHEMA_VERSION = 4
 
 /**
  * A maneuvering entity's drive, as the save carries it.
@@ -111,6 +111,55 @@ export const decodeSaveSurfacePlacement: Decoder<SaveSurfacePlacement> =
     ),
   })
 
+/** The portable character controller record; simulation owns its behavior. */
+export interface SaveCharacterState {
+  readonly canFly: boolean
+  readonly flying: boolean
+  readonly grounded: boolean
+  readonly crouched: boolean
+  readonly jumpHeld: boolean
+  readonly heading: number
+  readonly input: {
+    readonly forward: number
+    readonly right: number
+    readonly sprint: boolean
+    readonly crouch: boolean
+    readonly jump: boolean
+    readonly ascend: boolean
+    readonly descend: boolean
+    readonly yaw: number
+  }
+}
+
+const decodeCharacterAxis = refine(
+  decodeNumber,
+  (value): value is number => Math.abs(value) <= 1,
+  'an axis between -1 and 1',
+)
+export const decodeSaveCharacter: Decoder<SaveCharacterState> = refine(
+  decodeObject({
+    canFly: decodeBoolean,
+    flying: decodeBoolean,
+    grounded: decodeBoolean,
+    crouched: decodeBoolean,
+    jumpHeld: decodeBoolean,
+    heading: decodeNumber,
+    input: decodeObject({
+      forward: decodeCharacterAxis,
+      right: decodeCharacterAxis,
+      sprint: decodeBoolean,
+      crouch: decodeBoolean,
+      jump: decodeBoolean,
+      ascend: decodeBoolean,
+      descend: decodeBoolean,
+      yaw: decodeNumber,
+    }),
+  }),
+  (value): value is SaveCharacterState =>
+    !value.flying || (value.canFly && !value.grounded),
+  'flight requires its capability and cannot be grounded',
+)
+
 export interface SaveEntity {
   readonly id: string
   readonly kind: string
@@ -138,6 +187,7 @@ export interface SaveEntity {
    * canonical state for the reason `WireRailsEpoch` gives.
    */
   readonly rails: WireRailsEpoch | null
+  readonly character: SaveCharacterState | null
 }
 
 export const SAVE_MUTATION_KINDS = [
@@ -218,6 +268,8 @@ export const decodeSaveEntity: Decoder<SaveEntity> = decodeObject({
     },
   ),
   flightAssist: decodeOptional(decodeBoolean, true),
+  character: (value, path) =>
+    value === null ? ok(null) : decodeSaveCharacter(value, path),
   // Defaulted rather than versioned, like `control`: a save written before
   // entities coasted has every entity integrated, which is what null means.
   rails: decodeOptional(

@@ -1,4 +1,10 @@
 import {
+  characterInput,
+  createCharacter,
+  stepCharacter,
+  type CharacterInput,
+} from './character.ts'
+import {
   getLogger,
   invariant,
   LIGHT_YEAR,
@@ -602,6 +608,74 @@ export class World implements FlightWorld {
     })
   }
 
+  /** Put a suited character's feet on canonical support. Contact earns groundedness. */
+  spawnCharacter(
+    body: Body,
+    latitude: number,
+    longitude: number,
+    options: { readonly canFly?: boolean; readonly heading?: number } = {},
+  ): Entity {
+    invariant(hasSolidSurface(body), `${body.name} has no solid surface`)
+    invariant(
+      Number.isFinite(latitude) &&
+        Math.abs(latitude) <= Math.PI / 2 &&
+        Number.isFinite(longitude),
+      'Character coordinates must be finite and latitude must be within the poles',
+    )
+    const heading = options.heading ?? 0
+    invariant(Number.isFinite(heading), 'Character heading must be finite')
+    invariant(
+      body.address.kind === 'body',
+      'Character surface requires a body address',
+    )
+    this.loadSystem(body.address.system)
+    const direction = geodeticDirection(latitude, longitude)
+    const east = vec3(Math.sin(longitude), 0, Math.cos(longitude))
+    const south = Vec.cross(east, direction)
+    const orientation = Q.multiply(
+      Q.fromBasis(east, direction, south),
+      Q.fromAxisAngle(vec3(0, 1, 0), heading),
+    )
+    return this.spawn({
+      id: dynamicEntityId(this.#entities.nextDynamicIndex()),
+      kind: 'character',
+      name: 'Explorer',
+      mass: 100,
+      state: {
+        ...restState(bodyFixedFrameId(body.address)),
+        position: Vec.scale(direction, this.contactRadius(body, direction)),
+        orientation,
+      },
+      character: createCharacter(options.canFly ?? false, heading),
+    })
+  }
+
+  setCharacterInput(id: EntityId, input: Partial<CharacterInput>): Entity {
+    const entity = this.#entities.require(id)
+    invariant(entity.character !== null, `${id} is not a character`)
+    return this.#entities.update(id, {
+      character: {
+        ...entity.character,
+        input: characterInput(entity.character.input, input),
+      },
+      rails: null,
+    })
+  }
+
+  /** A host-granted capability is necessary even when callers bypass the HUD. */
+  setCharacterFlying(id: EntityId, flying: boolean): boolean {
+    const entity = this.#entities.require(id)
+    if (entity.character === null || (flying && !entity.character.canFly))
+      return false
+    this.#entities.update(id, {
+      character: { ...entity.character, flying, grounded: false },
+      state: { ...entity.state, velocity: Vec.ZERO },
+      rails: null,
+    })
+    this.#landed.delete(id)
+    return true
+  }
+
   isLanded(id: EntityId): boolean {
     return this.#landed.has(id)
   }
@@ -663,7 +737,13 @@ export class World implements FlightWorld {
   teleport(id: EntityId, state: FrameState): Entity {
     // Off the rails as well: the epoch describes where the entity was, and it
     // is not there now. It earns a new one on its next coasting tick.
-    const entity = this.#entities.update(id, { state, rails: null })
+    const held = this.#entities.require(id)
+    const entity = this.#entities.update(id, {
+      state,
+      rails: null,
+      character:
+        held.character === null ? null : { ...held.character, grounded: false },
+    })
     this.#previous.set(id, state)
     this.#altitudes.delete(id)
     this.#forgetDerived(id)
@@ -773,6 +853,24 @@ export class World implements FlightWorld {
     let checks: EntityId[] | null = null
     for (const entity of this.#entities.ordered()) {
       this.#previous.set(entity.id, entity.state)
+
+      if (entity.character !== null) {
+        const binding = this.binding(entity.state.frame)
+        invariant(
+          binding?.body != null && binding.spinFrame === entity.state.frame,
+          'A character belongs to its body-fixed frame',
+        )
+        const result = stepCharacter(this, binding.body, entity, TICK_DURATION)
+        this.#entities.update(entity.id, {
+          state: result.state,
+          character: result.character,
+          rails: null,
+        })
+        this.#altitudes.set(entity.id, result.altitude)
+        if (result.character.grounded) this.#landed.add(entity.id)
+        else this.#landed.delete(entity.id)
+        continue
+      }
 
       if (entity.rails !== null) {
         const record = this.#coastRecord(entity)

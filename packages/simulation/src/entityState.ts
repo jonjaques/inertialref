@@ -1,3 +1,4 @@
+import type { CharacterState } from './character.ts'
 import type { Kilograms } from '@inertialref/shared'
 import type { ControlInput, ThrusterProfile } from '@inertialref/physics'
 import type { FrameState } from '@inertialref/spatial'
@@ -44,6 +45,7 @@ export interface CanonicalEntity {
    * tick.
    */
   readonly landed: boolean
+  readonly character: CharacterState | null
   readonly rails: RailsEpoch | null
 }
 
@@ -63,6 +65,7 @@ export function canonicalEntity(
     ballisticCoefficient: entity.ballisticCoefficient,
     landed,
     rails: entity.rails,
+    character: entity.character,
   }
 }
 
@@ -86,6 +89,7 @@ export function canonicalEntityInit(entity: CanonicalEntity): EntityInit {
     flightAssist: entity.flightAssist,
     ballisticCoefficient: entity.ballisticCoefficient,
     rails: entity.rails,
+    character: entity.character,
   }
 }
 
@@ -119,11 +123,23 @@ export function canonicalEntityLine(entity: CanonicalEntity): string {
     `|${c.throttle}` +
     `|${entity.flightAssist ? 'assist' : 'manual'}` +
     `|bc:${entity.ballisticCoefficient}` +
+    characterLine(entity.character) +
     `|${entity.landed ? 'landed' : 'free'}` +
     (r === null
       ? '|integrated'
       : `|rails:${r.time}:${xyz(r.position)}:${xyz(r.velocity)}` +
         `:${r.orientation.x},${r.orientation.y},${r.orientation.z},${r.orientation.w}` +
         `:${xyz(r.angularVelocity)}`)
+  )
+}
+
+/** Explicit order keeps decoded and constructed records on the same hash. */
+function characterLine(character: CharacterState | null): string {
+  if (character === null) return ''
+  const c = character
+  const i = c.input
+  return (
+    `|character:${c.canFly},${c.flying},${c.grounded},${c.crouched},${c.jumpHeld},${c.heading}` +
+    `:${i.forward},${i.right},${i.sprint},${i.crouch},${i.jump},${i.ascend},${i.descend},${i.yaw}`
   )
 }
