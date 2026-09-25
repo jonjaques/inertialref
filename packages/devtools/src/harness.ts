@@ -386,7 +386,9 @@ export interface RenderHost {
   measureGpu(frames?: number): Promise<number> | null
   /**
    * `measureGpu`'s frames with every pass timed and named. Null where there is
-   * no device, or the device has no `timestamp-query`.
+   * no device, the device has no `timestamp-query`, or no presenting chain is
+   * mounted — `measureGpu` falls back to a bare render there, and this does
+   * not time a path nothing presents.
    */
   measurePasses(frames?: number): Promise<PassReport> | null
 }
@@ -2483,7 +2485,8 @@ export class GameHarness {
    * frame behind it. `gaps` are the time between passes that none accounts
    * for: a copy, a raw WebGPU pass such as the upscaler's. `wallMs` is the
    * drained figure over the same frames, so `busyMs` can be checked against
-   * it. Null, like `gpu()`, where the host has no device or no timestamps.
+   * it. Null where the host has no device, no timestamps, or no presenting
+   * chain — the last is a case where `gpu()` still answers.
    */
   async passes(frames?: number): Promise<PassReport | null> {
     return (await this.#host.render.measurePasses(frames)) ?? null

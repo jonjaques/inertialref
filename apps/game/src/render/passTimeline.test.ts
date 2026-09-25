@@ -11,12 +11,12 @@ function slots(pairs: readonly (readonly [number, number])[]): BigUint64Array {
 describe('summarize', () => {
   it('averages per frame, charges each pass its advance, and prices the gaps', () => {
     const pending = [
-      { label: 'scene', kind: 'render', frame: 0, slot: 0 },
-      { label: 'scene after copy', kind: 'render', frame: 0, slot: 2 },
-      { label: 'canvas', kind: 'render', frame: 0, slot: 4 },
-      { label: 'scene', kind: 'render', frame: 1, slot: 6 },
-      { label: 'scene after copy', kind: 'render', frame: 1, slot: 8 },
-      { label: 'canvas', kind: 'render', frame: 1, slot: 10 },
+      { label: 'scene', kind: 'render', slot: 0 },
+      { label: 'scene after copy', kind: 'render', slot: 2 },
+      { label: 'canvas', kind: 'render', slot: 4 },
+      { label: 'scene', kind: 'render', slot: 6 },
+      { label: 'scene after copy', kind: 'render', slot: 8 },
+      { label: 'canvas', kind: 'render', slot: 10 },
     ] as const
     const times = slots([
       [10, 14],
@@ -48,9 +48,9 @@ describe('summarize', () => {
    */
   it('charges overlapping passes their advance, not their latency', () => {
     const pending = [
-      { label: 'scene', kind: 'render', frame: 0, slot: 0 },
-      { label: 'blur', kind: 'render', frame: 0, slot: 2 },
-      { label: 'canvas', kind: 'render', frame: 0, slot: 4 },
+      { label: 'scene', kind: 'render', slot: 0 },
+      { label: 'blur', kind: 'render', slot: 2 },
+      { label: 'canvas', kind: 'render', slot: 4 },
     ] as const
     const result = summarize(
       pending,
@@ -75,8 +75,8 @@ describe('summarize', () => {
 
   it('keeps the head start of a long pass that ends after a short one', () => {
     const pending = [
-      { label: 'long', kind: 'render', frame: 0, slot: 0 },
-      { label: 'short', kind: 'render', frame: 0, slot: 2 },
+      { label: 'long', kind: 'render', slot: 0 },
+      { label: 'short', kind: 'render', slot: 2 },
     ] as const
     const result = summarize(
       pending,
@@ -97,12 +97,32 @@ describe('summarize', () => {
 
   it('leaves out a pass whose slots were never written', () => {
     const pending = [
-      { label: 'scene', kind: 'render', frame: 0, slot: 0 },
-      { label: 'lost', kind: 'compute', frame: 0, slot: 2 },
+      { label: 'scene', kind: 'render', slot: 0 },
+      { label: 'lost', kind: 'compute', slot: 2 },
     ] as const
     const times = BigUint64Array.from([1_000_000n, 2_000_000n, 0n, 0n])
     const result = summarize(pending, times, 1, 1, 0)
     expect(result.passes.map((p) => p.label)).toEqual(['scene'])
+    expect(result.gaps).toEqual([])
+  })
+
+  /*
+   * A query set keeps its values between submissions, so on a second run an
+   * unwritten slot holds the first run's timestamps. Counted, they would
+   * stretch the span across the idle time between the two runs.
+   */
+  it('leaves out a pass whose slots still hold an earlier run', () => {
+    const pending = [
+      { label: 'scene', kind: 'render', slot: 0 },
+      { label: 'lost', kind: 'render', slot: 2 },
+    ] as const
+    const times = slots([
+      [5000, 5004],
+      [10, 11],
+    ])
+    const result = summarize(pending, times, 1, 4, 0, BigInt(4000 * 1e6))
+    expect(result.passes.map((p) => p.label)).toEqual(['scene'])
+    expect(result.spanMs).toBe(4)
     expect(result.gaps).toEqual([])
   })
 })

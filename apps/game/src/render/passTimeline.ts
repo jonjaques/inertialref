@@ -1,4 +1,5 @@
 import type { WebGPURenderer } from 'three/webgpu'
+import { drainedFrameMs } from './measure.ts'
 
 /*
  * The frame's GPU time, pass by pass, with a name on every pass.
@@ -44,7 +45,6 @@ export type PassKind = 'render' | 'compute'
 interface Pending {
   readonly label: string
   readonly kind: PassKind
-  readonly frame: number
   /** The first of the pass's two query slots. */
   readonly slot: number
 }
@@ -173,10 +173,23 @@ export class PassTimeline {
   readonly #read: GPUBuffer
   readonly #pending: Pending[] = []
   #armed = false
-  #frame = 0
+  /** From the drain before the frames to the unmap after them. */
+  #measuring = false
   #dropped = 0
-  /** The pass `initTimestampQuery` is about to be called for. */
-  #next: { label: string; kind: PassKind } | null = null
+  /*
+   * The latest timestamp any earlier measurement read back. A query set keeps
+   * its values between submissions, so a slot allocated and never written
+   * resolves to whatever the last measurement left there rather than to zero;
+   * the GPU clock only moves forward, so anything at or before this is stale.
+   */
+  #floor = 0n
+  /*
+   * The pass `initTimestampQuery` is about to be called for, kept as the raw
+   * context or compute group and labeled only when armed: the hooks run on
+   * every pass of every frame, and a label is a string built per pass.
+   */
+  #nextKind: PassKind | null = null
+  #nextSubject: unknown = null
   readonly #restore: () => void
 
   constructor(backend: Backend, device: GPUDevice) {
@@ -202,28 +215,33 @@ export class PassTimeline {
     const initTimestampQuery = backend.initTimestampQuery
     const copyFramebuffer = backend.copyFramebufferToTexture
     backend.beginRender = (context) => {
-      this.#next = {
-        label: renderLabel(context as { renderTarget: Target | null }),
-        kind: 'render',
-      }
+      this.#nextKind = 'render'
+      this.#nextSubject = context
       try {
         beginRender.call(backend, context)
       } finally {
-        this.#next = null
+        this.#nextKind = null
+        this.#nextSubject = null
       }
     }
     backend.beginCompute = (group) => {
-      this.#next = { label: computeLabel(group), kind: 'compute' }
+      this.#nextKind = 'compute'
+      this.#nextSubject = group
       try {
         beginCompute.call(backend, group)
       } finally {
-        this.#next = null
+        this.#nextKind = null
+        this.#nextSubject = null
       }
     }
     backend.initTimestampQuery = (type, uid, descriptor) => {
-      const next = this.#next
-      if (this.#armed && next !== null) {
-        const writes = this.#allocate(next.label, next.kind)
+      const kind = this.#nextKind
+      if (this.#armed && kind !== null) {
+        const label =
+          kind === 'render'
+            ? renderLabel(this.#nextSubject as { renderTarget: Target | null })
+            : computeLabel(this.#nextSubject)
+        const writes = this.#allocate(label, kind)
         if (writes !== null) {
           descriptor.timestampWrites = writes
           return
@@ -241,9 +259,9 @@ export class PassTimeline {
         descriptor !== undefined &&
         current?.querySet === this.#querySet
       ) {
-        const label = this.#pending.find(
-          (pass) => pass.slot === current.beginningOfPassWriteIndex,
-        )?.label
+        // Slots are allocated two to a pass, in order.
+        const label =
+          this.#pending[current.beginningOfPassWriteIndex / 2]?.label
         const writes = this.#allocate(`${label ?? 'pass'} after copy`, 'render')
         // The resumed pass reads the descriptor inside the original call.
         descriptor.timestampWrites = writes ?? undefined
@@ -264,7 +282,7 @@ export class PassTimeline {
       this.#dropped += 1
       return null
     }
-    this.#pending.push({ label, kind, frame: this.#frame, slot })
+    this.#pending.push({ label, kind, slot })
     return {
       querySet: this.#querySet,
       beginningOfPassWriteIndex: slot,
@@ -280,37 +298,62 @@ export class PassTimeline {
    * loop submits in the middle would be timed as one of these.
    */
   async measure(draw: () => void, frames: number): Promise<PassTimelineResult> {
-    if (this.#read.mapState !== 'unmapped')
-      throw new Error('A pass timeline is already being read')
-    const queue = this.#device.queue
-    this.#pending.length = 0
-    this.#dropped = 0
-    await queue.onSubmittedWorkDone()
-    const started = performance.now()
-    this.#armed = true
+    // The whole run, not only the readback: a second call during the first
+    // drain would empty `#pending` under the frames the first one submitted.
+    if (this.#measuring) throw new Error('A pass timeline is already running')
+    this.#measuring = true
     try {
-      for (this.#frame = 0; this.#frame < frames; this.#frame += 1) draw()
-    } finally {
-      this.#armed = false
-    }
-    await queue.onSubmittedWorkDone()
-    const wallMs = (performance.now() - started) / frames
+      this.#pending.length = 0
+      this.#dropped = 0
+      // Armed per frame rather than across the drains, so nothing encoded
+      // while the queue drains is taken for one of these frames.
+      const wallMs = await drainedFrameMs(
+        this.#device,
+        () => {
+          this.#armed = true
+          try {
+            draw()
+          } finally {
+            this.#armed = false
+          }
+        },
+        frames,
+      )
 
-    const used = this.#pending.length * 2
-    if (used === 0)
-      return summarize([], new BigUint64Array(0), frames, wallMs, this.#dropped)
-    const encoder = this.#device.createCommandEncoder({
-      label: 'pass timeline resolve',
-    })
-    encoder.resolveQuerySet(this.#querySet, 0, used, this.#resolve, 0)
-    encoder.copyBufferToBuffer(this.#resolve, 0, this.#read, 0, used * 8)
-    queue.submit([encoder.finish()])
-    await this.#read.mapAsync(GPUMapMode.READ, 0, used * 8)
-    try {
-      const times = new BigUint64Array(this.#read.getMappedRange(0, used * 8))
-      return summarize(this.#pending, times, frames, wallMs, this.#dropped)
+      const used = this.#pending.length * 2
+      if (used === 0)
+        return summarize(
+          [],
+          new BigUint64Array(0),
+          frames,
+          wallMs,
+          this.#dropped,
+        )
+      const queue = this.#device.queue
+      const encoder = this.#device.createCommandEncoder({
+        label: 'pass timeline resolve',
+      })
+      encoder.resolveQuerySet(this.#querySet, 0, used, this.#resolve, 0)
+      encoder.copyBufferToBuffer(this.#resolve, 0, this.#read, 0, used * 8)
+      queue.submit([encoder.finish()])
+      await this.#read.mapAsync(GPUMapMode.READ, 0, used * 8)
+      try {
+        const times = new BigUint64Array(this.#read.getMappedRange(0, used * 8))
+        const floor = this.#floor
+        for (const time of times) if (time > this.#floor) this.#floor = time
+        return summarize(
+          this.#pending,
+          times,
+          frames,
+          wallMs,
+          this.#dropped,
+          floor,
+        )
+      } finally {
+        this.#read.unmap()
+      }
     } finally {
-      this.#read.unmap()
+      this.#measuring = false
     }
   }
 
@@ -325,7 +368,6 @@ export class PassTimeline {
 interface Interval {
   readonly label: string
   readonly kind: PassKind
-  readonly frame: number
   readonly begin: number
   readonly end: number
 }
@@ -345,9 +387,11 @@ interface Interval {
  * that pass rather than on every pass that overlapped it. Time with no pass
  * running is a gap, charged to neither neighbor.
  *
- * A pass whose end reads before its begin, or whose begin is zero, was not
- * written — it allocated slots and then threw before it encoded — and is left
- * out rather than counted.
+ * A pass whose end reads before its begin, or whose begin is at or before
+ * `floor`, was not written — it allocated slots and then threw before it
+ * encoded — and is left out rather than counted. `floor` is zero for a fresh
+ * query set and the latest timestamp read back since: an unwritten slot holds
+ * what the previous measurement left in it, not zero.
  */
 export function summarize(
   pending: readonly Pending[],
@@ -355,16 +399,16 @@ export function summarize(
   frames: number,
   wallMs: number,
   dropped: number,
+  floor = 0n,
 ): PassTimelineResult {
   const intervals: Interval[] = []
   for (const pass of pending) {
     const begin = times[pass.slot]!
     const end = times[pass.slot + 1]!
-    if (end < begin || begin === 0n) continue
+    if (end < begin || begin <= floor) continue
     intervals.push({
       label: pass.label,
       kind: pass.kind,
-      frame: pass.frame,
       begin: Number(begin) / 1e6,
       end: Number(end) / 1e6,
     })

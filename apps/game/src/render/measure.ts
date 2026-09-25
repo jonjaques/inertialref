@@ -62,7 +62,15 @@ export async function measureGpuFrameMs(
 ): Promise<number> {
   const device = deviceOf(renderer)
   if (device === null) return Number.NaN
+  return drainedFrameMs(device, draw, frames)
+}
 
+/** `measureGpuFrameMs` for a caller that already holds the device. */
+export async function drainedFrameMs(
+  device: GPUDevice,
+  draw: () => void,
+  frames: number,
+): Promise<number> {
   // Start from an empty queue, so the timing covers this batch and not whatever
   // the render loop had in flight when the button was pressed.
   await device.queue.onSubmittedWorkDone()
