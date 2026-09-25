@@ -3,6 +3,7 @@ import {
   type ActionDefinition,
   type ActionId,
   actionFor,
+  arbitrate,
   type Bindings,
   type KeyContext,
   resolveBindings,
@@ -75,6 +76,7 @@ export class KeymapStore {
    * of its own for it would be a second `keydown` on the window for a question
    * this object already has the answer to.
    */
+  readonly #contexts = new Set<() => void>()
   readonly #activity = new Set<() => void>()
   /** What a physical key is called on the keyboard actually attached. */
   #layout: ReadonlyMap<string, string> | null = null
@@ -142,10 +144,19 @@ export class KeymapStore {
     return () => this.#activity.delete(watcher)
   }
 
+  /** Observe modal ownership without another window keyboard listener. */
+  watchContexts(watcher: () => void): () => void {
+    this.#contexts.add(watcher)
+    return () => this.#contexts.delete(watcher)
+  }
+
   claim(claim: ContextClaim): () => void {
     this.#claims.add(claim)
+    if (arbitrate(this.live).length !== this.live.length) this.#releaseHeld()
+    for (const watcher of this.#contexts) watcher()
     return () => {
       this.#claims.delete(claim)
+      for (const watcher of this.#contexts) watcher()
       // Leaving a context with keys held would leave the drive burning for the
       // rest of the session, with nothing still listening for the key-up.
       this.#releaseHeld()
@@ -238,6 +249,8 @@ export class KeymapStore {
 
   handleKeyUp(event: KeyboardEvent): void {
     const released = chordFromEvent(event)
+    // Releasing one Shift while its twin stays held does not stop sprinting.
+    if (released?.code === 'Shift' && event.shiftKey) return
     if (released === null) {
       // A key released with Ctrl or Meta newly down still has to end whatever
       // it started, or the axis it drives stays on forever.

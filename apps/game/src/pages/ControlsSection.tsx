@@ -46,7 +46,11 @@ export function ControlsSection() {
   const bindings = useMemo(() => resolveBindings(overrides), [overrides])
   const clashes = useMemo(() => clashesIn(bindings), [bindings])
 
-  const capture = (action: ActionDefinition, event: React.KeyboardEvent) => {
+  const capture = (
+    action: ActionDefinition,
+    event: React.KeyboardEvent,
+    released = false,
+  ) => {
     const pressed = chordFromEvent(event.nativeEvent)
     /*
      * A modifier on its own is the first half of a chord, so keep listening.
@@ -56,7 +60,7 @@ export function ControlsSection() {
      * bare modifier, which then fires on every Shift press — and the editor
      * could never express one of its own defaults.
      */
-    if (pressed !== null && isModifierCode(pressed.code)) {
+    if (pressed !== null && isModifierCode(pressed.code) && !released) {
       event.preventDefault()
       return
     }
@@ -164,6 +168,14 @@ export function ControlsSection() {
                   onKeyDown={(event) =>
                     capturing === action.id ? capture(action, event) : undefined
                   }
+                  onKeyUp={(event) => {
+                    if (
+                      capturing === action.id &&
+                      (event.code === 'ShiftLeft' ||
+                        event.code === 'ShiftRight')
+                    )
+                      capture(action, event, true)
+                  }}
                   onBlur={() =>
                     setCapturing((current) =>
                       current === action.id ? null : current,

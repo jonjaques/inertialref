@@ -76,6 +76,7 @@ describe('the default table', () => {
     expect([...shadows].sort()).toEqual([
       'Escape: overlay.close over cutscene.skip',
       'Slash: docs.search over nav.goTo',
+      'Space: character.jump over time.pause',
       'Space: cinema.play over time.pause',
     ])
   })
@@ -107,7 +108,7 @@ describe('the default table', () => {
     ).toBe('chrome.settings')
   })
 
-  it('refuses a bare modifier, so a chord can be captured at all', () => {
+  it('reserves non-Shift modifiers for chord capture', () => {
     /*
      * `Shift+H` arrives as two `keydown`s and the modifier's comes first, so an
      * editor that binds the first event it sees binds `Shift+ShiftLeft` — a
@@ -117,7 +118,7 @@ describe('the default table', () => {
      * dispatcher's key-*up* goes through that and a null there means "release
      * everything held".
      */
-    for (const code of ['ShiftLeft', 'AltRight', 'ControlLeft', 'CapsLock']) {
+    for (const code of ['AltRight', 'ControlLeft', 'CapsLock']) {
       const pressed = chordFromEvent({
         code,
         shiftKey: code.startsWith('Shift'),
@@ -130,6 +131,7 @@ describe('the default table', () => {
       // And a stored one from before the refusal is not believed either.
       expect(parseChord(formatChord(pressed!)), code).toBeNull()
     }
+    expect(parseChord('Shift')).toEqual(chord('Shift'))
     // The chord it is half of is still perfectly bindable.
     expect(isBindable(chord('KeyH', { shift: true }))).toBe(true)
   })
@@ -166,6 +168,74 @@ describe('the default table', () => {
       if (action.chord.code === 'Escape') continue
       expect(isBindable(action.chord), action.id).toBe(true)
     }
+  })
+})
+
+describe('character input', () => {
+  it('takes movement and jump only in the character context', () => {
+    const bindings = resolveBindings()
+    expect(
+      actionFor(bindings, ['global', 'character'], chord('Space'))?.id,
+    ).toBe('character.jump')
+    expect(
+      actionFor(
+        bindings,
+        ['global', 'character'],
+        chord('KeyW', { shift: true }),
+      )?.id,
+    ).toBe('character.forward')
+    expect(
+      actionFor(bindings, ['global', 'planetarium'], chord('KeyL'))?.id,
+    ).toBe('observe.freeLook')
+    expect(
+      actionFor(
+        bindings,
+        ['global', 'planetarium', 'character-entry'],
+        chord('KeyL', { shift: true }),
+      )?.id,
+    ).toBe('character.lock')
+  })
+
+  it('changes sprint while a movement key stays held', () => {
+    const store = new KeymapStore()
+    const edges: string[] = []
+    store.claim({ context: 'character' })
+    for (const id of ['character.forward', 'character.sprint']) {
+      store.register(id, (event) => edges.push(`${id}:${event.phase}`))
+    }
+    store.handleKeyDown(keyEvent('KeyW'))
+    store.handleKeyDown(keyEvent('ShiftLeft', { shiftKey: true }))
+    store.handleKeyUp(keyEvent('ShiftLeft'))
+    store.handleKeyUp(keyEvent('KeyW'))
+    expect(edges).toEqual([
+      'character.forward:down',
+      'character.sprint:down',
+      'character.sprint:up',
+      'character.forward:up',
+    ])
+  })
+
+  it('keeps sprint held until both shift keys are released', () => {
+    const store = new KeymapStore()
+    const phases: string[] = []
+    store.claim({ context: 'character' })
+    store.register('character.sprint', (event) => phases.push(event.phase))
+    store.handleKeyDown(keyEvent('ShiftLeft', { shiftKey: true }))
+    store.handleKeyDown(keyEvent('ShiftRight', { shiftKey: true }))
+    store.handleKeyUp(keyEvent('ShiftLeft', { shiftKey: true }))
+    expect(phases).toEqual(['down'])
+    store.handleKeyUp(keyEvent('ShiftRight'))
+    expect(phases).toEqual(['down', 'up'])
+  })
+
+  it('releases movement when a dialog claims the keyboard', () => {
+    const store = new KeymapStore()
+    const phases: string[] = []
+    store.claim({ context: 'character' })
+    store.register('character.forward', (event) => phases.push(event.phase))
+    store.handleKeyDown(keyEvent('KeyW'))
+    store.claim({ context: 'dialog' })
+    expect(phases).toEqual(['down', 'up'])
   })
 })
 
