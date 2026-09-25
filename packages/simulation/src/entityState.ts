@@ -139,7 +139,7 @@ function characterLine(character: CharacterState | null): string {
   const c = character
   const i = c.input
   return (
-    `|character:${c.canFly},${c.flying},${c.grounded},${c.crouched},${c.jumpHeld},${c.heading}` +
+    `|character:${c.canFly},${c.flying},${c.grounded},${c.crouched},${c.jumpHeld},${c.heading},${c.airTicks},${c.jumpBuffer}` +
     `:${i.forward},${i.right},${i.sprint},${i.crouch},${i.jump},${i.ascend},${i.descend},${i.yaw}`
   )
 }

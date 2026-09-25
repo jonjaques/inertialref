@@ -5,17 +5,24 @@ import {
   bodyFixedFrameId,
   systemId,
 } from '@inertialref/universe'
-import { CHARACTER, createCharacter, stepCharacter } from './character.ts'
+import {
+  CHARACTER,
+  type CharacterInput,
+  createCharacter,
+  stepCharacter,
+} from './character.ts'
 import { createEntity, type Entity } from './entity.ts'
 import { TICK_DURATION } from './clock.ts'
 import { World } from './world.ts'
+
+const sphereRadius = 1e6
 
 function sphere(gravity = 9.81) {
   const world = new World({ seed: 'inertialref' })
   const mars = world
     .loadSystem(systemId('SOL'))
     .planets.find((body) => body.name === 'Mars')!
-  const radius = 1e6
+  const radius = sphereRadius
   const body = {
     ...mars,
     radius,
@@ -98,7 +105,7 @@ describe('character motor geometry', () => {
           input: { ...entity.character!.input, forward: 1 },
         },
       }
-      for (let i = 0; i < 64; i += 1) entity = next(body, entity, contact)
+      for (let i = 0; i < 128; i += 1) entity = next(body, entity, contact)
       if (height < CHARACTER.stepHeight) {
         expect(entity.state.position.y).toBeGreaterThan(4)
         expect(Vec.length(entity.state.position) - radius).toBeCloseTo(
@@ -160,4 +167,143 @@ it('stops at a steep grade and cannot fly through a terrain cliff', () => {
   for (let i = 0; i < 128; i += 1) entity = next(body, entity, cliff)
   expect(entity.state.position.y).toBeLessThan(1)
   expect(Vec.length(entity.state.position) - radius).toBeCloseTo(2, 5)
+})
+
+/** The fixture's entity with these keys held, ready to step. */
+function holding(entity: Entity, input: Partial<CharacterInput>): Entity {
+  return {
+    ...entity,
+    character: {
+      ...entity.character!,
+      input: { ...entity.character!.input, ...input },
+    },
+  }
+}
+
+describe('momentum and the edges of a jump', () => {
+  it('keeps the momentum it left the ground with, and only leans it in the air', () => {
+    const { body, entity: initial, radius } = sphere()
+    let entity = holding(
+      next(body, initial, () => radius),
+      { forward: 1 },
+    )
+    for (let i = 0; i < 64; i += 1) entity = next(body, entity, () => radius)
+    const launchSpeed = Vec.length(entity.state.velocity)
+    expect(launchSpeed).toBeCloseTo(CHARACTER.walkSpeed, 9)
+    // Jump, then let go of everything: a walker in the air does not stop.
+    entity = holding(entity, { jump: true })
+    entity = next(body, entity, () => radius)
+    entity = holding(entity, { forward: 0, jump: false })
+    expect(entity.character?.grounded).toBe(false)
+    let ticks = 0
+    while (!entity.character?.grounded && ticks < 400) {
+      entity = next(body, entity, () => radius)
+      ticks += 1
+      if (!entity.character?.grounded) {
+        const up = Vec.normalize(entity.state.position)
+        const planar = Vec.sub(
+          entity.state.velocity,
+          Vec.scale(up, Vec.dot(entity.state.velocity, up)),
+        )
+        expect(Vec.length(planar)).toBeCloseTo(launchSpeed, 9)
+      }
+    }
+    expect(ticks).toBeGreaterThan(40)
+    // Holding the opposite key in flight leans the arc but cannot turn it.
+    let against = holding(
+      next(body, initial, () => radius),
+      { forward: 1 },
+    )
+    for (let i = 0; i < 64; i += 1) against = next(body, against, () => radius)
+    against = next(body, holding(against, { jump: true }), () => radius)
+    against = holding(against, { forward: -1, jump: false })
+    const start = against.state.position.y
+    while (!against.character?.grounded)
+      against = next(body, against, () => radius)
+    const airtime = (2 * CHARACTER.jumpSpeed) / 9.81
+    const drift = against.state.position.y - start
+    expect(drift).toBeGreaterThan(CHARACTER.walkSpeed * airtime * 0.5)
+    expect(drift).toBeLessThan(CHARACTER.walkSpeed * airtime)
+  })
+
+  it('honors a jump pressed just after an edge and refuses one pressed later', () => {
+    const ledge = (d: BodyFixedDirection): number =>
+      sphereRadius + (d.y * sphereRadius > 1 ? -5 : 0)
+    const walkOff = (pressAfter: number) => {
+      const { body, entity: initial } = sphere()
+      let entity = holding(next(body, initial, ledge), { forward: 1 })
+      for (let i = 0; i < 128 && entity.character?.grounded; i += 1)
+        entity = next(body, entity, ledge)
+      expect(entity.character?.grounded).toBe(false)
+      for (let i = 0; i < pressAfter; i += 1) entity = next(body, entity, ledge)
+      entity = next(body, holding(entity, { jump: true }), ledge)
+      const up = Vec.normalize(entity.state.position)
+      return Vec.dot(entity.state.velocity, up)
+    }
+    expect(walkOff(CHARACTER.coyoteTicks - 2)).toBeGreaterThan(
+      CHARACTER.jumpSpeed - 1,
+    )
+    expect(walkOff(CHARACTER.coyoteTicks + 4)).toBeLessThan(0)
+  })
+
+  it('does not let the coyote window double a jump', () => {
+    const { body, entity: initial, radius } = sphere()
+    let entity = next(body, holding(initial, { jump: true }), () => radius)
+    entity = next(body, holding(entity, { jump: false }), () => radius)
+    const before = Vec.dot(
+      entity.state.velocity,
+      Vec.normalize(entity.state.position),
+    )
+    entity = next(body, holding(entity, { jump: true }), () => radius)
+    const after = Vec.dot(
+      entity.state.velocity,
+      Vec.normalize(entity.state.position),
+    )
+    expect(after).toBeLessThan(before)
+  })
+
+  it('banks a jump pressed just before landing and spends it on the ground', () => {
+    const { body, entity: initial, radius } = sphere()
+    let entity = next(body, holding(initial, { jump: true }), () => radius)
+    entity = holding(entity, { jump: false })
+    let ticks = 0
+    while (
+      ticks < 400 &&
+      (Vec.length(entity.state.position) - radius > 0.4 ||
+        Vec.dot(entity.state.velocity, Vec.normalize(entity.state.position)) >
+          0)
+    ) {
+      entity = next(body, entity, () => radius)
+      ticks += 1
+    }
+    // Falling, a few centimeters up: press, release, and land.
+    expect(entity.character?.grounded).toBe(false)
+    entity = next(body, holding(entity, { jump: true }), () => radius)
+    entity = holding(entity, { jump: false })
+    expect(entity.character?.jumpBuffer).toBeGreaterThan(0)
+    let launched = false
+    for (let i = 0; i < CHARACTER.jumpBufferTicks + 2; i += 1) {
+      entity = next(body, entity, () => radius)
+      const up = Vec.normalize(entity.state.position)
+      if (Vec.dot(entity.state.velocity, up) > CHARACTER.jumpSpeed - 1)
+        launched = true
+    }
+    expect(launched).toBe(true)
+  })
+
+  it('slides along a wall it walks into at an angle', () => {
+    const wall = (d: BodyFixedDirection): number =>
+      sphereRadius + (d.y * sphereRadius > 1 ? 100 : 0)
+    const { body, entity: initial } = sphere()
+    // Heading is north; forward and right together is a 45° approach.
+    let entity = holding(next(body, initial, wall), { forward: 1, right: 1 })
+    for (let i = 0; i < 128; i += 1) entity = next(body, entity, wall)
+    // The half-meter look-ahead that refuses a slope keeps a suit's width
+    // of standoff from a wall; the walk reaches it and turns, not stops.
+    expect(entity.state.position.y).toBeLessThan(1.05)
+    expect(entity.state.position.y).toBeGreaterThan(0.5)
+    // Along the wall the walk continues at the component it arrived with.
+    expect(Math.abs(entity.state.position.z)).toBeGreaterThan(3)
+    expect(entity.character?.grounded).toBe(true)
+  })
 })

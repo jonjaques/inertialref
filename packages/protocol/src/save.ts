@@ -119,6 +119,8 @@ export interface SaveCharacterState {
   readonly crouched: boolean
   readonly jumpHeld: boolean
   readonly heading: number
+  readonly airTicks: number
+  readonly jumpBuffer: number
   readonly input: {
     readonly forward: number
     readonly right: number
@@ -136,6 +138,11 @@ const decodeCharacterAxis = refine(
   (value): value is number => Math.abs(value) <= 1,
   'an axis between -1 and 1',
 )
+const decodeTickCount = refine(
+  decodeInteger,
+  (value): value is number => value >= 0,
+  'a count of ticks',
+)
 export const decodeSaveCharacter: Decoder<SaveCharacterState> = refine(
   decodeObject({
     canFly: decodeBoolean,
@@ -144,6 +151,8 @@ export const decodeSaveCharacter: Decoder<SaveCharacterState> = refine(
     crouched: decodeBoolean,
     jumpHeld: decodeBoolean,
     heading: decodeNumber,
+    airTicks: decodeTickCount,
+    jumpBuffer: decodeTickCount,
     input: decodeObject({
       forward: decodeCharacterAxis,
       right: decodeCharacterAxis,

@@ -31,7 +31,11 @@ describe('surface characters', () => {
     world.setCharacterInput(id, { forward: 1 })
     world.runTicks(64)
     const entity = world.entities.require(id)
-    expect(Vec.distance(entity.state.position, before)).toBeGreaterThan(3)
+    // A third of a second of the second is spent reaching the walk.
+    expect(Vec.distance(entity.state.position, before)).toBeGreaterThan(
+      CHARACTER.walkSpeed -
+        CHARACTER.walkSpeed ** 2 / CHARACTER.groundAcceleration,
+    )
     expect(entity.character?.grounded).toBe(true)
     expect(entity.rails).toBeNull()
   })
@@ -72,9 +76,10 @@ it('walks and falls from the authored Mars deck when its support is removed', ()
     MARS_PAD.latitude,
     MARS_PAD.longitude,
   ).id
-  world.runTicks(1)
-  const before = world.entities.require(id).state.position
   world.setCharacterInput(id, { right: 1 })
+  // Past the acceleration, the second second is a walk at exactly the walk.
+  world.runTicks(32)
+  const before = world.entities.require(id).state.position
   world.runTicks(64)
   expect(
     Vec.distance(world.entities.require(id).state.position, before),
@@ -119,9 +124,9 @@ it('normalizes diagonal input and applies crouch ahead of sprint (property)', ()
           MARS_PAD.latitude,
           MARS_PAD.longitude,
         ).id
-        world.runTicks(1)
-        const before = world.entities.require(id).state.position
         world.setCharacterInput(id, { forward, right, sprint, crouch })
+        world.runTicks(32)
+        const before = world.entities.require(id).state.position
         world.runTicks(64)
         const entity = world.entities.require(id)
         const speed = crouch
@@ -164,7 +169,8 @@ it('lands descending flight, and rejects giants and nonfinite input', () => {
   world.setCharacterInput(id, { ascend: true })
   world.runTicks(32)
   world.setCharacterInput(id, { ascend: false, descend: true })
-  world.runTicks(64)
+  // A quarter second to turn the climb around, then the fall to the ground.
+  world.runTicks(96)
   expect(world.entities.require(id).character?.flying).toBe(false)
   expect(world.isLanded(id)).toBe(true)
   expect(() => world.setCharacterInput(id, { yaw: NaN })).toThrow()
@@ -264,7 +270,7 @@ describe('the pad is solid where it is drawn', () => {
     const id = place(24, 0, alongX)
     world.setCharacterInput(id, { forward: 1 })
     let left = false
-    for (let i = 0; i < 48; i += 1) {
+    for (let i = 0; i < 64; i += 1) {
       world.runTicks(8)
       const at = read(id)
       if (at.x < 44) {
