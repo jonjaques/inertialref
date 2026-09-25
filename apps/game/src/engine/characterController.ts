@@ -19,6 +19,7 @@ import {
   surfacePlacementPose,
   type CharacterInput,
 } from '@inertialref/simulation'
+import type { CharacterCameraMemory } from '@inertialref/rendering'
 import type { GameEngine } from './GameEngine.ts'
 
 export interface CharacterStatus {
@@ -43,6 +44,8 @@ export class CharacterController {
   locked = false
   view: 'first' | 'third' = 'first'
   error: string | null = null
+  /** The camera's between-frame filters; null is a cut. Written by the frame. */
+  cameraMemory: CharacterCameraMemory | null = null
 
   constructor(engine: GameEngine) {
     this.#engine = engine
@@ -150,6 +153,7 @@ export class CharacterController {
     this.#pitch = site.pitch
     this.view = 'first'
     this.error = null
+    this.cameraMemory = null
     this.#engine.world.clock.setTimeScale(1)
     this.#engine.world.clock.setPaused(false)
     this.#engine.declareCut()
@@ -188,6 +192,10 @@ export class CharacterController {
   toggleView(): void {
     if (!this.active) return
     this.view = this.view === 'first' ? 'third' : 'first'
+    // Not a cut for the boom: it eases out from the head, which is the one
+    // transition between the two views that reads as a camera move.
+    this.cameraMemory =
+      this.cameraMemory === null ? null : { ...this.cameraMemory, boom: 0 }
     this.#engine.declareCut()
   }
 
@@ -224,6 +232,7 @@ export class CharacterController {
     if (character?.character != null && this.#engine.player() !== character.id)
       this.#engine.world.removeCharacter(character.id)
     this.#padPreview = false
+    this.cameraMemory = null
     this.#engine.declareCut()
   }
 
@@ -237,6 +246,7 @@ export class CharacterController {
     this.#pitch = 0
     this.#yaw = this.entity?.character?.input.yaw ?? 0
     this.error = null
+    this.cameraMemory = null
     const entity = this.entity
     if (entity?.character != null) {
       this.#engine.world.setCharacterFlightPermission(
@@ -285,6 +295,7 @@ export class CharacterController {
     this.#pitch = 0.25
     this.view = 'third'
     this.#padPreview = true
+    this.cameraMemory = null
     engine.declareCut()
     return true
   }

@@ -144,7 +144,9 @@ describe('body-fixed structures', () => {
     // The definition of the deck alone, with the terrain sampled before the
     // disk is tested: inside its radius the datum plane, beyond the footprint
     // nothing. The aprons between the two are their own features.
-    const sampled = (direction: BodyFixedDirection): number | null => {
+    const sampled = (
+      direction: BodyFixedDirection,
+    ): number | null | undefined => {
       const cosine = Vec.dot(up, direction)
       if (cosine <= 0) return null
       const radius = (surfaceRadius(body, up) + placement.height) / cosine

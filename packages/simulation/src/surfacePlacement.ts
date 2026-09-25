@@ -22,7 +22,7 @@ export type { SurfacePlacement }
 
 /** The asset's own axes in body-fixed coordinates: +X east, +Y up, −Z north, turned by the heading. */
 export interface PlacementBasis {
-  readonly up: Vec3
+  readonly up: BodyFixedDirection
   readonly east: Vec3
   readonly south: Vec3
   readonly orientation: Quat

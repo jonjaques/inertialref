@@ -1475,7 +1475,15 @@ export class GameEngine {
             eyeHeight: onFoot.eyeHeight,
             pitch: this.character.pitch,
             view: this.character.view,
+            grounded: onFoot.grounded,
+            verticalSpeed: Vec.dot(
+              camera!.localVelocity,
+              Vec.normalize(camera!.localPosition),
+            ),
+            delta,
+            memory: this.character.cameraMemory,
           })
+    this.character.cameraMemory = characterPose?.memory ?? null
 
     const eye =
       cinematic?.camera.position ??
