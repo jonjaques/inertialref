@@ -10566,6 +10566,14 @@ input evidence, not a renderer or full-gate result. The Mars pad scale fixture
 is `GameEngine.character.atMarsPad()`, beside a static 46 m Rocinante; its
 visual acceptance is separate from these input tests.
 
+The isolated Chromium rig exercised the browser grant itself: an unlocked Mars
+stance kept the world hash unchanged, **Lock to walk** moved from planetarium
+to solo play with `document.documentElement` still owning pointer lock, and
+held sprint produced 7 m/s. Opening Settings cleared pointer lock and reduced
+the held forward and sprint inputs to zero. These checks used visitor-activated
+button clicks; they did not substitute synthetic keyboard events for browser
+input. The integrated controller and HUD suites passed all 25 tests.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

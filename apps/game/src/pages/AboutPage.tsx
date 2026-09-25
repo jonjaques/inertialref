@@ -62,6 +62,20 @@ export function AboutPage() {
           never blurs the two. Licensed {SITE.license}.
         </p>
 
+        <p className="text-slate-400">
+          The spacesuit adapts DigitalSpace Corporation’s Astronaut model from{' '}
+          <a
+            href="https://science.nasa.gov/3d-resources/astronaut/"
+            target="_blank"
+            rel="noreferrer"
+            className={`rounded text-sky-300 hover:text-sky-200 ${FOCUS_RING}`}
+          >
+            NASA 3D Resources
+          </a>
+          , with a modified silhouette, neutral materials, and original rigging
+          and animation. NASA does not endorse this project.
+        </p>
+
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
           <a
             href={SITE.repository}

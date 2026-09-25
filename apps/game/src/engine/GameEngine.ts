@@ -1452,8 +1452,8 @@ export class GameEngine {
       cinematic === null ? this.harness.observerSample(delta) : null
     this.#phases.step('observatory', ENGINE_PHASE)
 
-    // The one precedence order, unchanged: cutscene, then observatory, then
-    // the ship. Only the *last* of the three needs a player.
+    // The one precedence order: cutscene, observatory, then the controlled
+    // ship or character. Only the last arm needs a player.
     const player = this.session.player()
     const camera =
       player === null
