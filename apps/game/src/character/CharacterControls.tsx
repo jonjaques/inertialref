@@ -25,6 +25,7 @@ export function CharacterControls({ engine }: { engine: GameEngine }) {
     useShallow((snapshot) => ({
       available: snapshot.character?.available ?? false,
       active: snapshot.character?.active ?? false,
+      locked: snapshot.character?.locked ?? false,
       view: snapshot.character?.view ?? 'first',
       flying: snapshot.character?.flying ?? false,
       canFly: snapshot.character?.canFly ?? false,
@@ -37,6 +38,7 @@ export function CharacterControls({ engine }: { engine: GameEngine }) {
   const controls = useCharacterControls(engine.character, {
     enabled,
     active: state.active,
+    locked: state.locked,
     onEnter: () => {
       if (mode === 'planetarium') void navigate(PLAY_SOLO)
     },

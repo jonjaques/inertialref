@@ -42,7 +42,7 @@ describe('the default table', () => {
     ).toEqual([])
   })
 
-  it('shadows only the three outer acts it means to', () => {
+  it('shadows only the outer acts it means to', () => {
     /*
      * A shadow is an inner context taking a chord an outer one also holds, and
      * every one of these is the design rather than an accident:
@@ -64,7 +64,7 @@ describe('the default table', () => {
      *
      * Deduplicated because a shadow repeats in every live set that contains
      * both contexts, and the claim is about the pairs rather than about how
-     * many arrangements they appear in. Pinned exactly, so a fourth has to be
+     * many arrangements they appear in. Pinned exactly, so another has to be
      * argued for here rather than discovered in a mode where a key quietly
      * stopped working.
      */

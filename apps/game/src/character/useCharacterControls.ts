@@ -9,6 +9,7 @@ export function useCharacterControls(
   options: {
     readonly enabled: boolean
     readonly active: boolean
+    readonly locked: boolean
     readonly onEnter: () => void
   },
 ) {
@@ -52,6 +53,9 @@ export function useCharacterControls(
   useEffect(() => {
     if (!options.enabled) lock.release()
   }, [lock, options.enabled])
+  useEffect(() => {
+    if (lock.locked && !controller.locked) lock.release()
+  }, [lock, controller, options.locked, options.active])
   useEffect(
     () =>
       store.watchContexts(() => {
@@ -60,6 +64,15 @@ export function useCharacterControls(
       }),
     [store, lock],
   )
+
+  const request = (): void => {
+    if (!latest.current.enabled) return
+    if (!controller.available()) {
+      setError('Land on a solid surface before entering character controls.')
+      return
+    }
+    lock.request()
+  }
 
   useKeyContext({ context: 'character-entry' }, options.enabled)
   useKeyContext(
@@ -70,7 +83,7 @@ export function useCharacterControls(
     ['character.lock'],
     () => {
       if (lock.locked) lock.release()
-      else lock.request()
+      else request()
     },
     options.enabled,
   )
@@ -93,7 +106,7 @@ export function useCharacterControls(
   return {
     locked,
     error,
-    request: () => lock.request(),
+    request,
     release: () => lock.release(),
     leave: () => {
       lock.release()
