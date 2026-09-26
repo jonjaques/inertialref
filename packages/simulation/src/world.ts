@@ -1,4 +1,10 @@
 import {
+  characterInput,
+  createCharacter,
+  stepCharacter,
+  type CharacterInput,
+} from './character.ts'
+import {
   getLogger,
   invariant,
   LIGHT_YEAR,
@@ -45,6 +51,7 @@ import {
   MILKY_WAY,
   parseSurfaceFrameId,
   parseAddress,
+  supportCeiling,
   surfaceAsset,
   surfaceRadius,
   geodeticDirection,
@@ -296,15 +303,16 @@ export class World implements FlightWorld {
     if (cached !== undefined) return cached
     let height = 0
     for (const placement of this.structuresOn(address)) {
-      const support = surfaceAsset(placement.assetId)?.supportRadius
-      if (support === null || support === undefined) continue
+      const asset = surfaceAsset(placement.assetId)
+      if (asset === undefined || asset.support.length === 0) continue
       height = Math.max(
         height,
         surfaceRadius(
           body,
           geodeticDirection(placement.latitude, placement.longitude),
         ) +
-          placement.height -
+          placement.height +
+          supportCeiling(asset) -
           body.radius,
       )
     }
@@ -602,6 +610,99 @@ export class World implements FlightWorld {
     })
   }
 
+  /** Put a suited character's feet on canonical support. Contact earns groundedness. */
+  spawnCharacter(
+    body: Body,
+    latitude: number,
+    longitude: number,
+    options: { readonly canFly?: boolean; readonly heading?: number } = {},
+  ): Entity {
+    invariant(hasSolidSurface(body), `${body.name} has no solid surface`)
+    invariant(
+      Number.isFinite(latitude) &&
+        Math.abs(latitude) <= Math.PI / 2 &&
+        Number.isFinite(longitude),
+      'Character coordinates must be finite and latitude must be within the poles',
+    )
+    const heading = options.heading ?? 0
+    invariant(Number.isFinite(heading), 'Character heading must be finite')
+    invariant(
+      body.address.kind === 'body',
+      'Character surface requires a body address',
+    )
+    this.loadSystem(body.address.system)
+    const direction = geodeticDirection(latitude, longitude)
+    const east = vec3(-Math.sin(longitude), 0, -Math.cos(longitude))
+    const south = Vec.cross(east, direction)
+    const orientation = Q.multiply(
+      Q.fromBasis(east, direction, south),
+      Q.fromAxisAngle(vec3(0, 1, 0), -heading),
+    )
+    return this.spawn({
+      id: dynamicEntityId(this.#entities.nextDynamicIndex()),
+      kind: 'character',
+      name: 'Explorer',
+      mass: 100,
+      state: {
+        ...restState(bodyFixedFrameId(body.address)),
+        position: Vec.scale(direction, this.contactRadius(body, direction)),
+        orientation,
+      },
+      character: createCharacter(options.canFly ?? false, heading),
+    })
+  }
+
+  setCharacterInput(id: EntityId, input: Partial<CharacterInput>): Entity {
+    const entity = this.#entities.require(id)
+    invariant(entity.character !== null, `${id} is not a character`)
+    return this.#entities.update(id, {
+      character: {
+        ...entity.character,
+        input: characterInput(entity.character.input, input),
+      },
+      rails: null,
+    })
+  }
+
+  /** A host-granted capability is necessary even when callers bypass the HUD. */
+  setCharacterFlying(id: EntityId, flying: boolean): boolean {
+    const entity = this.#entities.require(id)
+    if (entity.character === null || (flying && !entity.character.canFly))
+      return false
+    this.#entities.update(id, {
+      character: { ...entity.character, flying, grounded: false },
+      state: { ...entity.state, velocity: Vec.ZERO },
+      rails: null,
+    })
+    this.#landed.delete(id)
+    return true
+  }
+
+  /** A session host reconciles restored privileges with its current authority. */
+  setCharacterFlightPermission(id: EntityId, canFly: boolean): void {
+    const entity = this.#entities.require(id)
+    invariant(entity.character !== null, `${id} is not a character`)
+    this.#entities.update(id, {
+      character: {
+        ...entity.character,
+        canFly,
+        flying: entity.character.flying && canFly,
+      },
+    })
+  }
+
+  /** Release an on-foot avatar when control returns to its parked vessel. */
+  removeCharacter(id: EntityId): boolean {
+    const entity = this.#entities.get(id)
+    if (entity?.character == null) return false
+    this.#entities.remove(id)
+    this.#previous.delete(id)
+    this.#landed.delete(id)
+    this.#altitudes.delete(id)
+    this.#forgetDerived(id)
+    return true
+  }
+
   isLanded(id: EntityId): boolean {
     return this.#landed.has(id)
   }
@@ -645,6 +746,10 @@ export class World implements FlightWorld {
   /** Move an entity into another frame without moving it in the universe. */
   reframeEntity(id: EntityId, frame: FrameId): Entity {
     const entity = this.#entities.require(id)
+    invariant(
+      entity.character === null || this.binding(frame)?.spinFrame === frame,
+      'A character requires a body-fixed destination',
+    )
     const state = reframe(this.frames, entity.state, frame, this.clock.time)
     this.#landed.delete(id)
     this.#forgetDerived(id)
@@ -663,7 +768,18 @@ export class World implements FlightWorld {
   teleport(id: EntityId, state: FrameState): Entity {
     // Off the rails as well: the epoch describes where the entity was, and it
     // is not there now. It earns a new one on its next coasting tick.
-    const entity = this.#entities.update(id, { state, rails: null })
+    const held = this.#entities.require(id)
+    invariant(
+      held.character === null ||
+        this.binding(state.frame)?.spinFrame === state.frame,
+      'A character requires a body-fixed destination',
+    )
+    const entity = this.#entities.update(id, {
+      state,
+      rails: null,
+      character:
+        held.character === null ? null : { ...held.character, grounded: false },
+    })
     this.#previous.set(id, state)
     this.#altitudes.delete(id)
     this.#forgetDerived(id)
@@ -773,6 +889,24 @@ export class World implements FlightWorld {
     let checks: EntityId[] | null = null
     for (const entity of this.#entities.ordered()) {
       this.#previous.set(entity.id, entity.state)
+
+      if (entity.character !== null) {
+        const binding = this.binding(entity.state.frame)
+        invariant(
+          binding?.body != null && binding.spinFrame === entity.state.frame,
+          'A character belongs to its body-fixed frame',
+        )
+        const result = stepCharacter(this, binding.body, entity, TICK_DURATION)
+        this.#entities.update(entity.id, {
+          state: result.state,
+          character: result.character,
+          rails: null,
+        })
+        this.#altitudes.set(entity.id, result.altitude)
+        if (result.character.grounded) this.#landed.add(entity.id)
+        else this.#landed.delete(entity.id)
+        continue
+      }
 
       if (entity.rails !== null) {
         const record = this.#coastRecord(entity)
@@ -1112,6 +1246,14 @@ export class World implements FlightWorld {
 
   #liftOff(id: EntityId, time: Seconds): void {
     const entity = this.#entities.require(id)
+    if (entity.character !== null) {
+      this.#entities.update(id, {
+        character: { ...entity.character, grounded: false },
+      })
+      this.#landed.delete(id)
+      this.#forgetDerived(id)
+      return
+    }
     const binding = this.binding(entity.state.frame)
     if (binding === undefined) return
     // reframe supplies the ground speed the ship inherits — several hundred m/s

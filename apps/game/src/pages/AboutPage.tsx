@@ -15,13 +15,13 @@ import { Reference } from './Reference.tsx'
  */
 
 const FACTS: readonly (readonly [string, string])[] = [
-  ['Status', 'Pre-alpha — architectural proof first; gameplay is not built'],
+  ['Status', 'Pre-alpha — flight and surface exploration'],
   ['Catalog', '7,123 real systems and 702 planets within 150 light years'],
   ['Beyond That', 'Generated from a seed — identical on every client, forever'],
   ['Proven', '12/12 milestone capabilities, in the browser and in Node'],
   [
     'Modes',
-    'Planetarium, cinema, and dockable authoring panels over a live scene',
+    'Flight, surface exploration, planetarium, cinema, and authoring panels',
   ],
   ['Offline', 'The base case — the galaxy is derived, not downloaded'],
 ]
@@ -32,18 +32,16 @@ export function AboutPage() {
       <div className="flex flex-col gap-3">
         <p className="text-slate-300">
           {SITE.name} is an open-source spaceflight simulator whose universe is
-          a deterministic function of a seed and a star catalog. This build is
-          the first milestone: a vertical architectural proof. The graphics are
-          primitives; the point is precision, determinism and identity — fly
-          from the galactic center to a mountainside, resolve an inch, and get
-          the same answer twice.
+          a deterministic function of a seed and a star catalog. Fly between
+          worlds, land, and explore solid terrain on foot with first-person or
+          third-person controls.
         </p>
 
         <p className="text-slate-400">
-          There is no gameplay yet. What is here is the platform: the real
-          catalog within 150 light years, procedural generation beyond that, a
-          planetarium over the live sky, a cinema player for scripted scenes,
-          and an authoring workspace that drives the same harness the tests do.
+          The real catalog extends 150 light years, with procedural generation
+          beyond it. Browse the live sky in the planetarium, watch scripted
+          scenes in the cinema, or use the authoring workspace to compose your
+          own. Survival, missions, and progression are still planned.
         </p>
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-y border-slate-800 py-2">
@@ -62,6 +60,20 @@ export function AboutPage() {
           <span className="text-slate-300">observed</span> or{' '}
           <span className="text-slate-300">projected</span>, and the interface
           never blurs the two. Licensed {SITE.license}.
+        </p>
+
+        <p className="text-slate-400">
+          The spacesuit adapts DigitalSpace Corporation’s Astronaut model from{' '}
+          <a
+            href="https://science.nasa.gov/3d-resources/astronaut/"
+            target="_blank"
+            rel="noreferrer"
+            className={`rounded text-sky-300 hover:text-sky-200 ${FOCUS_RING}`}
+          >
+            NASA 3D Resources
+          </a>
+          , with a modified silhouette, neutral materials, and original rigging
+          and animation. NASA does not endorse this project.
         </p>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">

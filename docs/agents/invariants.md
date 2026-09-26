@@ -340,8 +340,9 @@ is `100dvh` and cannot scroll.
 ### Rule 31
 
 **Never add a second producer of the camera.** In `GameEngine.#step` the
-order is **cutscene, then observatory, then the ship.** No arm of that
-order may depend on a later one resolving. Only the last needs a player.
+order is **cutscene, then observatory, then the controlled entity.** The player
+arm resolves either a ship or a character. No arm of that order may depend on a
+later one resolving. Only the last needs a player.
 
 ### Rule 32
 

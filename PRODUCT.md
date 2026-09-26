@@ -76,7 +76,9 @@ that the assumptions everything else depends on are **proven executably rather
 than asserted** — and they are: 12/12 capability checks pass in Node and Chrome,
 online and offline.
 
-Status is pre-alpha, single maintainer, no release, no gameplay.
+Status is pre-alpha, with one maintainer and no release. Flight and surface
+movement are playable; discovery progression, suit survival, and a complete
+survey loop remain unimplemented.
 
 ---
 
@@ -166,6 +168,15 @@ and no DOM lib — the same source runs in the browser main thread, a Web Worker
 and Node. A package may depend only on strictly lower layers. Both rules are
 enforced by `pnpm graph`, not documented. `pnpm check` is the gate.
 
+**On foot.** Solid planetary terrain supports walking, sprinting, strafing,
+crouching, and jumps under local gravity, with first-person and third-person
+views. Pointer lock starts only on explicit activation after landing; the
+planetarium has no walker and its stance flies with the keys. A trusted
+session capability permits flight, granted to a local solo owner by default.
+Contact covers terrain and the walkable relief a structure declares. Suit survival, object interaction, and ship interiors are
+unimplemented. [On foot](docs/design/onfoot.md) records the current controls
+and scope.
+
 **Production constraints that shape every feature.**
 
 | Constraint                    | Consequence                                                                                                                          |
@@ -177,7 +188,7 @@ enforced by `pnpm graph`, not documented. `pnpm check` is the gate.
 | Real data, forever changing   | Address stability and generation purity are non-negotiable.                                                                          |
 
 **Deliberately not built, with the seam named for each** — multiplayer, n-body
-gravity, hull and entity collision, and the ship-parts content pipeline. See [roadmap](docs/roadmap.md).
+gravity, rock and hull collision, entity-to-entity contact, online admin authentication, and the ship-parts content pipeline. See [roadmap](docs/roadmap.md).
 
 **Undecided, and not to be invented.** Perf budgets are written for a 2023-class
 laptop at 1920×1080. The build records several Apple M5 operating points,
@@ -249,8 +260,9 @@ non-commercial clause is not an open source license. See `NOTICE` and
 
 **Absences that future work must not fabricate.** There are no users, no
 release, no testimonials, no press, no adoption numbers, and no benchmarks on
-target hardware. There is no gameplay. Any claim in any of those categories
-would be invented.
+target hardware. Flight and surface movement exist, but there is no completed
+discovery progression or survey loop. Claims of release traction or completed
+systems in those categories would be invented.
 
 ---
 

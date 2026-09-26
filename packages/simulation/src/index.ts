@@ -1,3 +1,4 @@
+export * from './character.ts'
 export * from './binding.ts'
 export * from './clock.ts'
 export * from './entity.ts'

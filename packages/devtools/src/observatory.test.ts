@@ -1168,3 +1168,40 @@ describe('a drop', () => {
     expect(ir.observatory.aim).toBeNull()
   })
 })
+
+describe('flying the stance', () => {
+  it('moves along the heading at a speed the height sets and never writes the world', () => {
+    const { harness: ir, session } = harness()
+    ir.visit('g:milky-way/s:SOL/b:2', { site: 'summit', height: 2 })
+    const before = session.world.stateHash()
+    const observatory = ir.observatory
+    const start = observatory.status().surface!.stance
+    observatory.setHeading(0)
+    observatory.setStanceFlight({ forward: 1, right: 0, up: 0, fast: false })
+    for (let i = 0; i < 60; i += 1) ir.observerSample(1 / 60)
+    const walked = observatory.status().surface!.stance
+    // Heading north at the floor speed: four meters in a second.
+    const body = session.world
+      .loadSystem(systemId('SOL'))
+      .planets.find((planet) => planet.name === 'Earth')!
+    expect((walked.latitude - start.latitude) * (body.radius + 2)).toBeCloseTo(
+      4,
+      1,
+    )
+    expect(walked.longitude).toBeCloseTo(start.longitude, 9)
+    expect(walked.height).toBeCloseTo(2, 9)
+    expect(session.world.stateHash()).toBe(before)
+    // Turned east, holding fast, and rising: the height changes the speed.
+    observatory.setHeading(Math.PI / 2)
+    observatory.setStanceFlight({ forward: 1, right: 0, up: 1, fast: true })
+    for (let i = 0; i < 60; i += 1) ir.observerSample(1 / 60)
+    const flown = observatory.status().surface!.stance
+    expect(flown.longitude).toBeGreaterThan(walked.longitude)
+    expect(flown.height).toBeGreaterThan(2 + 4 * 4 * 0.9)
+    expect(session.world.stateHash()).toBe(before)
+    // Nothing held: nothing moves, however long the frames run.
+    observatory.setStanceFlight(null)
+    ir.observerSample(1)
+    expect(observatory.status().surface!.stance).toEqual(flown)
+  })
+})

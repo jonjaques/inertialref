@@ -34,6 +34,8 @@ export type KeyContext =
   | 'flight'
   | 'planetarium'
   | 'standing'
+  | 'character-entry'
+  | 'character'
   | 'cinema'
   | 'docs'
   /** A routed dialog, open over whatever mode is behind it. */
@@ -53,7 +55,8 @@ export type KeyContext =
  */
 const MODE_SETS: readonly (readonly KeyContext[])[] = [
   ['global', 'menu'],
-  ['global', 'flight'],
+  ['global', 'flight', 'character-entry'],
+  ['global', 'character', 'character-entry'],
   ['global', 'planetarium'],
   ['global', 'planetarium', 'standing'],
   ['global', 'cinema'],
@@ -107,6 +110,8 @@ const SPECIFICITY: Readonly<Record<KeyContext, number>> = {
   flight: 1,
   planetarium: 1,
   standing: 2,
+  'character-entry': 1,
+  character: 2,
   cutscene: 3,
   /*
    * Above the cutscene, because the two can be live together and both bind
@@ -496,6 +501,121 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Standing',
     'standing',
     chord('Backspace'),
+  ),
+  /*
+   * Flying the stance. Held, like the flight axes, because a key that moves
+   * the eye for as long as it is down is an axis. The letters are the ship's
+   * translation keys, which is deliberate: a hand that knows the ship knows
+   * the stance, and the two contexts are never live together.
+   */
+  press('stand.forward', 'Fly Forward', 'Standing', 'standing', chord('KeyW'), {
+    held: true,
+    shiftScales: true,
+    hint: 'along the heading; hold Shift for fast',
+  }),
+  press('stand.back', 'Fly Back', 'Standing', 'standing', chord('KeyS'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.left', 'Fly Left', 'Standing', 'standing', chord('KeyA'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.right', 'Fly Right', 'Standing', 'standing', chord('KeyD'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.rise', 'Fly Up', 'Standing', 'standing', chord('KeyE'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.lower', 'Fly Down', 'Standing', 'standing', chord('KeyQ'), {
+    held: true,
+    shiftScales: true,
+  }),
+
+  /* ------------------------------ character ----------------------------- */
+  press(
+    'character.lock',
+    'Lock pointer to walk',
+    'Character',
+    'character-entry',
+    chord('KeyL', { shift: true }),
+  ),
+  press(
+    'character.forward',
+    'Walk forward',
+    'Character',
+    'character',
+    chord('KeyW'),
+    { held: true, shiftScales: true },
+  ),
+  press(
+    'character.back',
+    'Walk backward',
+    'Character',
+    'character',
+    chord('KeyS'),
+    { held: true, shiftScales: true },
+  ),
+  press(
+    'character.left',
+    'Strafe left',
+    'Character',
+    'character',
+    chord('KeyA'),
+    { held: true, shiftScales: true },
+  ),
+  press(
+    'character.right',
+    'Strafe right',
+    'Character',
+    'character',
+    chord('KeyD'),
+    { held: true, shiftScales: true },
+  ),
+  press(
+    'character.sprint',
+    'Sprint',
+    'Character',
+    'character',
+    chord('Shift'),
+    { held: true },
+  ),
+  press(
+    'character.crouch',
+    'Crouch or fly down',
+    'Character',
+    'character',
+    chord('KeyC'),
+    { held: true, shiftScales: true },
+  ),
+  press(
+    'character.jump',
+    'Jump or fly up',
+    'Character',
+    'character',
+    chord('Space'),
+    {
+      held: true,
+      shiftScales: true,
+      hint: 'double-tap to toggle flight when permitted',
+    },
+  ),
+  press(
+    'character.view',
+    'Character camera',
+    'Character',
+    'character',
+    chord('KeyV'),
+    { hint: 'switch between first and third person' },
+  ),
+  press(
+    'character.release',
+    'Release pointer',
+    'Character',
+    'character',
+    chord('Escape'),
   ),
 
   /* ------------------------------- cinema ------------------------------- */

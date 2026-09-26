@@ -184,6 +184,10 @@ export const WINGS = [
             'docs/adr/0046-the-check-is-a-graph-and-the-pictures-are-the-fixture.md',
             'The check is a graph',
           ],
+          [
+            'docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md',
+            'The character walks',
+          ],
         ],
       },
     ],

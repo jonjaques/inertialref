@@ -55,6 +55,8 @@ const log = getLogger('devtools.session')
 const SPAWN_DISTANCE = 3
 
 export interface SessionOptions {
+  /** Trusted host capability. Local solo worlds grant flight to their owner. */
+  readonly canFly?: boolean
   readonly seed?: string
   readonly system?: string
   /**
@@ -106,6 +108,9 @@ export interface SessionOptions {
 
 /** A running session: the host the harness is built over, and what came with it. */
 export interface Session extends Host {
+  readonly canFly: boolean
+  /** Transfer control without replacing the world or rebuilding its adapters. */
+  controlPlayer(id: EntityId): void
   readonly harness: GameHarness
   readonly store: SaveStore
   /** The system loaded at open, and the body the ship was placed above. */
@@ -232,6 +237,11 @@ export function openSession(options: SessionOptions = {}): Session {
   // the `world` getter is written once and there is no second copy of the
   // simulation half to keep in step with it.
   return Object.assign(host, {
+    canFly: options.canFly ?? options.authority === undefined,
+    controlPlayer: (id: EntityId) => {
+      world.entities.require(id)
+      player = id
+    },
     harness,
     store,
     system,

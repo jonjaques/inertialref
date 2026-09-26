@@ -86,7 +86,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     if (fill.current !== null) fill.current.intensity = lighting.fill
     if (scene === null) return
 
-    const override = cinematic ?? engine.observer
+    const override = cinematic ?? engine.observer ?? engine.characterCamera
 
     /*
      * The lens, applied here rather than pushed at the camera from React: the

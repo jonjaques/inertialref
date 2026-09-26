@@ -26,8 +26,8 @@ loading screens and no scale seams.
 The first milestone, a vertical architectural proof, is complete. The current
 build adds measured Solar System bodies, streamed terrain, a planetarium,
 portable photographs, cinematic playback and a calibrated stellar population
-with diffuse sky and dust. Flight remains a simulation foundation; the
-exploration reward loop and ship subsystems are still design work.
+with diffuse sky and dust. Flight and on-foot surface movement are playable;
+the exploration reward loop and ship subsystems are still design work.
 
 The hard problems in a game at this scale are precision, determinism and
 identity, and all three are solved and demonstrated here rather than asserted. You
@@ -35,7 +35,8 @@ can fly from the galactic center to a mountainside, resolve an inch, save the
 session as compact references and dynamic state, and get the same answer twice
 when the seed, catalog and generation versions agree.
 
-> **Status: pre-alpha, single maintainer, no release.** There is no gameplay yet.
+> **Status: pre-alpha, single maintainer, no release.** Flight and surface
+> traversal work; the exploration reward loop is unimplemented.
 > [`docs/roadmap.md`](docs/roadmap.md) says what is deliberately not built and
 > where each piece will attach.
 
@@ -215,6 +216,15 @@ pnpm sim --help                # all flags
   addressed as `o:` objects lying on it — and the ground the ship lands on and
   the ground you can see are two functions 1.25 m apart, measured and written
   down.
+- **On-foot movement on solid planetary terrain**, with walking, sprinting,
+  strafing, crouching, and local-gravity jumps in first or third person, in a
+  heat-weighted EVA suit whose gait is locked to the ground it covers.
+  **Lock to walk** or the default Shift + L activates pointer capture after
+  landing; the planetarium has no walker and its stance flies with the keys.
+  A local solo owner can double-tap the jump binding to fly. Contact covers
+  terrain and the walkable relief a structure declares — the pad's deck,
+  aprons, ramp and equipment. [On foot](docs/design/onfoot.md) lists the
+  controls and limits.
 - **Save and load to IndexedDB**, storing references and dynamic state rather
   than generated content. The self-test's flown session is about 1 KB; save
   size grows with entities, loaded-system references and mutations.
@@ -433,7 +443,14 @@ Stated plainly, because discovering these by surprise is worse than reading them
 - **Multiple-star systems are modeled as single stars.** The catalog records
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
-- **Collision is ground contact only** — no hull, no entity-to-entity.
+- **Collision covers terrain and a structure's declared relief.** Characters
+  step, slide along a wall and reject steep uphill movement. Rock scatter,
+  hull walls, ceilings, and entity-to-entity contact remain unimplemented. The rendered shape mesh of an
+  irregular body is not its canonical contact field.
+- **On-foot survival and interaction are unimplemented.** There are no suit
+  resources, injuries, inventory, tools, or walkable ship interiors. Flight
+  permission is a trusted session capability; online admin authentication is
+  not implemented.
 - **Terrain costs more than its budget.** The quadtree covers the whole disk —
   morphed, seamless, measured to the ground rather than the datum — and it
   refines craters, plates, volcanism and ice from each body's own facts and

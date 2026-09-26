@@ -29,21 +29,30 @@ import {
 
 export function useFlightCameraInput(
   engine: GameEngine,
+  enabled = true,
 ): (node: HTMLElement | null) => void {
   // State rather than a ref, for the reason `useObserverInput` gives: a ref
   // callback does not re-run the effect that attaches the listeners.
   const [surface, setSurface] = useState<HTMLElement | null>(null)
 
-  useActions(['flight.view'], () => {
-    engine.harness.flightCamera.cycleView()
-  })
-  useActions(['flight.recenter'], () => {
-    engine.harness.flightCamera.recenter()
-  })
+  useActions(
+    ['flight.view'],
+    () => {
+      engine.harness.flightCamera.cycleView()
+    },
+    enabled,
+  )
+  useActions(
+    ['flight.recenter'],
+    () => {
+      engine.harness.flightCamera.recenter()
+    },
+    enabled,
+  )
 
   useEffect(() => {
     const node = surface
-    if (node === null) return
+    if (node === null || !enabled) return
     const flightCamera = engine.harness.flightCamera
 
     const down = new Map<number, Point>()
@@ -60,6 +69,8 @@ export function useFlightCameraInput(
     })
 
     const onPointerDown = (event: PointerEvent): void => {
+      if (engine.character.active || document.pointerLockElement !== null)
+        return
       // The primary button and the secondary; the middle one stays the
       // browser's autoscroll.
       if (
@@ -129,7 +140,7 @@ export function useFlightCameraInput(
       node.removeEventListener('wheel', onWheel)
       node.removeEventListener('contextmenu', onContextMenu)
     }
-  }, [engine, surface])
+  }, [engine, surface, enabled])
 
   return setSurface
 }

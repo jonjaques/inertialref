@@ -273,6 +273,16 @@ export interface ObserverStatus {
  */
 export const TRAVEL_TAU: Seconds = 0.55
 
+/*
+ * Flying the stance. The speed is a share of the height per second, with a
+ * floor for the walkable band: two meters up moves at a run, a hundred meters
+ * up at highway speed, and the orbit floor at kilometers a second, which is
+ * the same logarithm the scrub spends on the same six decades.
+ */
+export const FLIGHT_SPEED_PER_HEIGHT = 0.8
+export const FLIGHT_FLOOR_SPEED: Meters = 4
+export const FLIGHT_FAST = 4
+
 /**
  * Below this the ease has arrived and snaps.
  *
@@ -858,6 +868,19 @@ export class Observatory {
   #stance: SurfaceStance | null = null
   /** Which survey site the stance came from, when it came from one. */
   #site: string | null = null
+  /**
+   * The keys held against the stance, in its own heading: forward, right and
+   * up in -1..1, and whether the fast modifier is down. Null when nothing is
+   * held. Applied by `sample`, so a flight is a presentation motion like the
+   * fly-to ease and never a write to the world — the planetarium keeps its
+   * promise while the viewer crosses a continent.
+   */
+  #flight: {
+    readonly forward: number
+    readonly right: number
+    readonly up: number
+    readonly fast: boolean
+  } | null = null
   /**
    * The drop in flight, when there is one.
    *
@@ -1621,6 +1644,70 @@ export class Observatory {
       height,
     })
     return this.status()
+  }
+
+  /**
+   * Fly the stance with the keys: axes in the stance's own heading, -1..1.
+   *
+   * The speed follows the height, a brisk walk two meters up and the whole
+   * planet in reach from the orbit floor, so one set of keys serves the
+   * shoreline and the crossing to the next continent. The heading is where
+   * the head is turned, which is what free look already sets; the keys do
+   * not turn it, so a viewer looking at a peak flies toward the peak.
+   */
+  setStanceFlight(
+    flight: {
+      readonly forward: number
+      readonly right: number
+      readonly up: number
+      readonly fast: boolean
+    } | null,
+  ): void {
+    const held =
+      flight === null ||
+      (flight.forward === 0 && flight.right === 0 && flight.up === 0)
+        ? null
+        : {
+            forward: Math.max(-1, Math.min(1, flight.forward)),
+            right: Math.max(-1, Math.min(1, flight.right)),
+            up: Math.max(-1, Math.min(1, flight.up)),
+            fast: flight.fast,
+          }
+    if (
+      held !== null &&
+      ![held.forward, held.right, held.up].every(Number.isFinite)
+    )
+      return
+    this.#flight = held
+  }
+
+  #advanceFlight(dt: Seconds): void {
+    const flight = this.#flight
+    const stance = this.#stance
+    const body = this.#body()
+    if (flight === null || stance === null || body === null || !(dt > 0)) return
+    const speed =
+      Math.max(FLIGHT_FLOOR_SPEED, stance.height * FLIGHT_SPEED_PER_HEIGHT) *
+      (flight.fast ? FLIGHT_FAST : 1)
+    const distance = speed * Math.min(dt, 0.1)
+    const north =
+      flight.forward * Math.cos(stance.heading) -
+      flight.right * Math.sin(stance.heading)
+    const east =
+      flight.forward * Math.sin(stance.heading) +
+      flight.right * Math.cos(stance.heading)
+    const reach = body.radius + stance.height
+    const latitude = clampLatitude(stance.latitude + (north * distance) / reach)
+    const cosine = Math.max(1e-6, Math.cos(latitude))
+    let longitude = stance.longitude + (east * distance) / (reach * cosine)
+    if (longitude > Math.PI) longitude -= 2 * Math.PI
+    if (longitude < -Math.PI) longitude += 2 * Math.PI
+    this.#stance = { ...stance, latitude, longitude }
+    if (flight.up !== 0)
+      this.setStanceHeight(stance.height + flight.up * distance)
+    // A flight moves the picture as surely as a drag does, and the address
+    // bar follows the revision; `#changed` stays quiet while sampling.
+    this.#mutationRevision += 1
   }
 
   /** Back to orbit, at whatever framing the camera had before the descent. */
@@ -2396,8 +2483,9 @@ export class Observatory {
     if (target === null) return null
     // A drop rewrites the stance every frame from its arc and the wall clock,
     // and lands by clearing itself. Before the short-circuit below, because it
-    // is the one motion the surface arm has.
+    // is one of the two motions the surface arm has; the keys are the other.
     if (this.#descent !== null) this.#advanceDescent(dt)
+    else if (this.#flight !== null) this.#advanceFlight(dt)
     // The surface arm short-circuits the ease entirely. See `stand`.
     if (this.#stance !== null) return this.#surfacePose()
 
