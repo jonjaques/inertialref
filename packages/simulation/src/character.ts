@@ -59,8 +59,8 @@ export interface CharacterState {
  * player can lean it a little, not turn it around.
  */
 export const CHARACTER = {
-  walkSpeed: 3.2,
-  sprintSpeed: 6.4,
+  walkSpeed: 2.8,
+  sprintSpeed: 5.6,
   crouchSpeed: 1.5,
   flySpeed: 9,
   groundAcceleration: 30,

@@ -15,8 +15,8 @@ contains no NASA logos, agency patches, name labels, or identifiable human face.
 NASA does not endorse InertialRef.
 
 The model is adapted by the InertialRef project: the backpack is removed; the
-surface uses neutral ivory fabric and an opaque gold visor; the mesh is softened,
-weighted to a 39-bone humanoid armature, and supplied with original idle, walk,
+surface uses neutral ivory fabric and an opaque gold visor; the mesh is welded,
+softened, heat-weighted to a 39-bone humanoid armature, and supplied with generated idle, walk,
 run, crouch, crouch-walk, left/right strafe, jump, fall and fly animations.
 These original modifications and the preparation script use the repository's
 Apache License 2.0. The NASA-distributed source remains subject to the terms above.

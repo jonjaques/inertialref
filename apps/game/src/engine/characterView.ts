@@ -1,7 +1,8 @@
 import type { Quat, Vec3 } from '@inertialref/spatial'
 
-/** Presentation only, sampled from the character at the frame's instant. */
+/** Presentation only, sampled from a character at the frame's instant. */
 export interface CharacterView {
+  readonly id: string
   readonly position: Vec3
   readonly orientation: Quat
   readonly visible: boolean

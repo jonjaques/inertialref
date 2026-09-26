@@ -11,7 +11,7 @@ import type {
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import { CharacterController } from './characterController.ts'
 import type { CharacterView } from './characterView.ts'
-import { characterCameraPose } from '@inertialref/rendering'
+import { characterCameraPose, characterFeet } from '@inertialref/rendering'
 import {
   DEFAULT_SENSOR_SETTINGS,
   GALAXY_VIEWS,
@@ -295,7 +295,9 @@ export interface GameEngineOptions {
 export class GameEngine {
   readonly character: CharacterController
   characterCamera: ObserverView | null = null
+  /** The player's own suit, when the player is one; also in `characterViews`. */
   characterView: CharacterView | null = null
+  characterViews: readonly CharacterView[] = []
   parkedRocinante: ObserverView['camera'] | null = null
   readonly session: Session
   readonly harness: GameHarness
@@ -1214,6 +1216,7 @@ export class GameEngine {
     this.character.reset()
     this.characterCamera = null
     this.characterView = null
+    this.characterViews = []
     this.rotationStop = null
     this.origin = null
     this.snapshot = null
@@ -1519,41 +1522,59 @@ export class GameEngine {
               ),
             },
           }
-    this.characterView =
-      onFoot == null || characterPose === null
-        ? null
-        : {
-            position: toRenderSpace(this.origin, characterPose.feet),
-            orientation: orientationToRenderSpace(
-              this.origin,
-              camera!.orientation,
-            ),
-            visible:
-              cinematic === null &&
-              observed === null &&
-              this.character.view === 'third',
-            animation: onFoot.flying
-              ? 'fly'
-              : !onFoot.grounded
-                ? Vec.dot(
-                    camera!.localVelocity,
-                    Vec.normalize(camera!.localPosition),
-                  ) > 0
-                  ? 'jump'
-                  : 'fall'
-                : onFoot.crouched
-                  ? onFoot.speed > 0.1
-                    ? 'crouchWalk'
-                    : 'crouch'
-                  : onFoot.speed < 0.1
-                    ? 'idle'
-                    : onFoot.input.sprint
-                      ? 'run'
-                      : 'walk',
-            speed: onFoot.speed,
-            forward: onFoot.input.forward,
-            right: onFoot.input.right,
-          }
+    // Every character in the frame gets a view, the player's own drawn only
+    // from outside its head. A second player's suit arrives the same way a
+    // second ship does: as an entity in the snapshot, not a second producer.
+    const origin = this.origin
+    const views: CharacterView[] = []
+    for (const entity of shot.entities) {
+      const walker = entity.character
+      if (walker == null) continue
+      const own = entity.id === player
+      const feet =
+        own && characterPose !== null
+          ? characterPose.feet
+          : characterFeet({
+              position: entity.position,
+              body: walker.body,
+              spin: walker.spin,
+              structures: shot.structures.filter(
+                (s) => s.body.id === walker.body.id,
+              ),
+            })
+      views.push({
+        id: entity.id,
+        position: toRenderSpace(origin, feet),
+        orientation: orientationToRenderSpace(origin, entity.orientation),
+        visible:
+          cinematic === null &&
+          observed === null &&
+          (!own || this.character.view === 'third'),
+        animation: walker.flying
+          ? 'fly'
+          : !walker.grounded
+            ? Vec.dot(
+                entity.localVelocity,
+                Vec.normalize(entity.localPosition),
+              ) > 0
+              ? 'jump'
+              : 'fall'
+            : walker.crouched
+              ? walker.speed > 0.1
+                ? 'crouchWalk'
+                : 'crouch'
+              : walker.speed < 0.1
+                ? 'idle'
+                : walker.input.sprint
+                  ? 'run'
+                  : 'walk',
+        speed: walker.speed,
+        forward: walker.input.forward,
+        right: walker.input.right,
+      })
+    }
+    this.characterViews = views
+    this.characterView = views.find((view) => view.id === player) ?? null
     this.observer =
       observed === null || observed === undefined
         ? null

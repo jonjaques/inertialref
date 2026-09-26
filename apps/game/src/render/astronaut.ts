@@ -2,7 +2,7 @@ import type { Quat, Vec3 } from '@inertialref/spatial'
 import { getLogger } from '@inertialref/shared'
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
-import { Box3, Group, Matrix4, SkinnedMesh, Vector3 } from 'three/webgpu'
+import { Box3, Group, SkinnedMesh } from 'three/webgpu'
 import {
   createAstronautAnimation,
   type AstronautMotion,
@@ -17,7 +17,7 @@ export interface AstronautView extends AstronautMotion {
 }
 
 export interface AstronautSource {
-  readonly characterView: AstronautView | null
+  readonly characterViews: readonly (AstronautView & { readonly id: string })[]
   readonly world: { readonly clock: { readonly renderTime: number } }
 }
 
@@ -27,7 +27,16 @@ export interface LoadedAstronaut {
   dispose(): void
 }
 
-/** The skinned asset has a foot datum and faces -Z in the render frame. */
+/**
+ * The skinned asset has a foot datum and faces -Z in the render frame.
+ *
+ * The datum is the rig's: the build script puts the soles on z = 0 of the
+ * rest pose and every grounded clip keeps a planted sole there, so the group
+ * is anchored once, from the rest pose, and never again. Anchoring per frame
+ * to the lowest skinned vertex made the whole suit ride the boot that
+ * happened to be lowest, a sawtooth at the stride rate on top of the walk,
+ * and lifted an airborne suit by the height of its tucked feet.
+ */
 export function createAstronaut(source: GLTF, anisotropy = 1): LoadedAstronaut {
   const model = clone(source.scene) as Group
   rebuildMaterials(model, anisotropy)
@@ -42,43 +51,21 @@ export function createAstronaut(source: GLTF, anisotropy = 1): LoadedAstronaut {
   content.scale.setScalar(1.8 / (bounds.max.y - bounds.min.y))
   // NASA's authored forward is +Z after glTF's axis conversion.
   content.rotation.y = Math.PI
-  const feet: Array<{ mesh: SkinnedMesh; indices: number[] }> = []
+  content.position.y = -bounds.min.y * content.scale.y
+  let skinned = false
   model.traverse((object) => {
     if (!(object instanceof SkinnedMesh)) return
+    skinned = true
     // Deformed bounds change every pose. Static frustum bounds can cull an
     // arm or a crouching helmet before its skeleton reaches the screen edge.
     object.frustumCulled = false
-    const positions = object.geometry.getAttribute('position')
-    const indices: number[] = []
-    for (let i = 0; i < positions.count; i++) {
-      if (positions.getY(i) < 0.2) indices.push(i)
-    }
-    if (indices.length > 0) feet.push({ mesh: object, indices })
   })
-  if (feet.length === 0) throw new Error('astronaut lacks skinned boots')
-  const vertex = new Vector3()
-  const inverse = new Matrix4()
-  const relative = new Matrix4()
-  const anchorFeet = (): void => {
-    group.updateMatrixWorld(true)
-    inverse.copy(group.matrixWorld).invert()
-    let floor = Infinity
-    for (const { mesh, indices } of feet) {
-      relative.multiplyMatrices(inverse, mesh.matrixWorld)
-      for (const index of indices) {
-        mesh.getVertexPosition(index, vertex).applyMatrix4(relative)
-        floor = Math.min(floor, vertex.y)
-      }
-    }
-    if (Math.abs(floor) > 1e-10) content.position.y -= floor
-    group.updateMatrixWorld(true)
-  }
-  anchorFeet()
+  if (!skinned) throw new Error('astronaut lacks a skinned suit')
+  group.updateMatrixWorld(true)
   return {
     group,
     update(motion, delta) {
       animation.update(motion, delta)
-      anchorFeet()
     },
     dispose() {
       animation.dispose()

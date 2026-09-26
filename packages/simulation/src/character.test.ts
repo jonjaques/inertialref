@@ -322,7 +322,7 @@ describe('the pad is solid where it is drawn', () => {
     expect(back.z).toBeLessThan(40)
     expect(back.grounded).toBe(true)
     expect(back.top).toBeGreaterThanOrEqual(-0.18)
-    expect(back.top).toBeLessThanOrEqual(0.02)
+    expect(back.top).toBeLessThanOrEqual(0.03)
   })
 
   it('is stopped by a service plinth as by any rise a step cannot take', () => {

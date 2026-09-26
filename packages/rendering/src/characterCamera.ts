@@ -111,6 +111,29 @@ function groundAt(input: CharacterCameraInput, position: UniverseVector) {
   return { support, drawn }
 }
 
+/**
+ * Where a character's feet are drawn: the canonical contact carried onto the
+ * visible ground, which is what an avatar with no camera of its own needs.
+ * The player's own feet come from `characterCameraPose`, which adds the lift
+ * the camera is absorbing so the suit and the eye stay in step.
+ */
+export function characterFeet(
+  input: Pick<
+    CharacterCameraInput,
+    'position' | 'body' | 'spin' | 'structures'
+  >,
+): UniverseVector {
+  const radial = UV.difference(input.position, input.spin.position)
+  const radius = Vec.length(radial)
+  const up = Vec.scale(radial, 1 / radius)
+  const ground = groundAt(input as CharacterCameraInput, input.position)
+  const altitude = radius - ground.support
+  const correction =
+    (ground.drawn - ground.support) *
+    Math.max(0, Math.min(1, (5 - altitude) / 3))
+  return UV.translate(input.position, Vec.scale(up, correction))
+}
+
 /** Exponential approach: the fraction of the gap closed in `delta` at time constant `tau`. */
 const ease = (from: number, to: number, delta: number, tau: number): number =>
   delta <= 0 ? from : to + (from - to) * Math.exp(-delta / tau)

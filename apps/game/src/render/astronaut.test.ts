@@ -85,23 +85,53 @@ describe('the bundled astronaut', () => {
     'jump',
     'fall',
     'fly',
-  ] as const)(
-    '%s deforms the real rig without moving its foot datum',
-    (animation) => {
-      const astronaut = createAstronaut(source)
-      const body = astronaut.group.getObjectByName('Body')!
-      const before = body.position.clone()
-      const state = motion(animation)
-      for (let frame = 0; frame < 90; frame++) astronaut.update(state, 1 / 60)
+  ] as const)('%s deforms the real rig about the foot datum', (animation) => {
+    const astronaut = createAstronaut(source)
+    const body = astronaut.group.getObjectByName('Body')!
+    const before = body.position.clone()
+    const state = motion(animation)
+    const grounded = !['jump', 'fall', 'fly'].includes(animation)
+    let lowest = Infinity
+    for (let frame = 0; frame < 90; frame++) {
+      astronaut.update(state, 1 / 60)
+      if (frame < 12 || !grounded) continue
+      // A grounded clip keeps a sole on the datum: a heel dips through it by
+      // a centimeter at a strike and no more, and only the run, which has a
+      // flight phase, ever lifts both boots off it.
       const bounds = new Box3().setFromObject(astronaut.group, true)
-      expect(bounds.min.y).toBeCloseTo(0, 3)
-      expect(bounds.max.y).toBeGreaterThan(0.9)
-      expect(bounds.max.y).toBeLessThan(2.1)
-      expect(body.position.distanceTo(before)).toBeGreaterThan(1e-6)
-      expect(astronaut.group.position.toArray()).toEqual([0, 0, 0])
+      lowest = Math.min(lowest, bounds.min.y)
+      expect(bounds.min.y, `${animation} frame ${frame}`).toBeGreaterThan(-0.02)
+      if (animation !== 'run')
+        expect(bounds.min.y, `${animation} frame ${frame}`).toBeLessThan(0.03)
+    }
+    if (grounded) expect(lowest).toBeLessThan(0.03)
+    const bounds = new Box3().setFromObject(astronaut.group, true)
+    // An airborne suit tucks or points its feet; nothing hauls it back to
+    // the datum by its lowest vertex.
+    if (!grounded) expect(bounds.min.y).toBeGreaterThan(0.005)
+    expect(bounds.max.y).toBeGreaterThan(0.9)
+    expect(bounds.max.y).toBeLessThan(2.1)
+    expect(body.position.distanceTo(before)).toBeGreaterThan(1e-6)
+    expect(astronaut.group.position.toArray()).toEqual([0, 0, 0])
+    astronaut.dispose()
+  })
+
+  it('locks the gait to the ground covered, so a slower walk is a slower cycle', () => {
+    const paced = (speed: number) => {
+      const astronaut = createAstronaut(source)
+      for (let frame = 0; frame < 30; frame++)
+        astronaut.update({ ...motion('walk'), speed }, 1 / 60)
+      const leg = astronaut.group.getObjectByName('UpperLegL')!
+      const pose = leg.quaternion.clone()
       astronaut.dispose()
-    },
-  )
+      return pose
+    }
+    // Half a second at 1.4 m/s is half a cycle; at 0.7 m/s a quarter of one.
+    expect(paced(1.4).angleTo(paced(0.7))).toBeGreaterThan(0.1)
+    // Standing still, the cycle does not advance at all: two suits that
+    // stood for the same half second agree to the quaternion's precision.
+    expect(paced(0).angleTo(paced(0))).toBeLessThan(1e-3)
+  })
 
   it('steps sideways and backward without rotating the view or sharing a pose', () => {
     const first = createAstronaut(source)
@@ -132,10 +162,12 @@ describe('the bundled astronaut', () => {
         // `precise` bounds call getVertexPosition for every skinned vertex.
         // Bone translations alone cannot prove that the suit actually bends.
         const crouched = new Box3().setFromObject(astronaut.group, true)
-        expect(crouched.min.y).toBeCloseTo(0, 3)
-        expect(crouched.max.y).toBeGreaterThan(1.15)
-        expect(crouched.max.y).toBeLessThan(1.3)
-        expect(standing.max.y - crouched.max.y).toBeGreaterThan(0.48)
+        expect(crouched.min.y).toBeGreaterThan(-0.02)
+        // The controller's crouch stands 1.3 m; the helmet agrees within a
+        // hand's width either way across the whole cycle.
+        expect(crouched.max.y).toBeGreaterThan(1.2)
+        expect(crouched.max.y).toBeLessThan(1.42)
+        expect(standing.max.y - crouched.max.y).toBeGreaterThan(0.38)
       }
       astronaut.dispose()
     },
