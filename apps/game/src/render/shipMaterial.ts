@@ -20,7 +20,16 @@ export function rebuildShipMaterial(
   source: MeshStandardMaterial,
   anisotropy: number,
 ): MeshStandardNodeMaterial {
-  const material = sensorRadiance(new MeshStandardNodeMaterial())
+  // A blended surface — the hull's marking planes, twenty millimeters off
+  // the armor with no depth write of their own — declares its coverage as
+  // reactive, or the temporal path reprojects it with the history of the
+  // opaque hull under it and the registry shimmers whenever the eye moves.
+  const material = sensorRadiance(
+    new MeshStandardNodeMaterial(),
+    false,
+    false,
+    source.transparent ? 'alpha' : 0,
+  )
   material.name = source.name
   material.color.copy(source.color)
   material.map = source.map
