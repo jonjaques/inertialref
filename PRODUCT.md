@@ -170,10 +170,10 @@ enforced by `pnpm graph`, not documented. `pnpm check` is the gate.
 
 **On foot.** Solid planetary terrain supports walking, sprinting, strafing,
 crouching, and jumps under local gravity, with first-person and third-person
-views. Pointer lock starts only on explicit activation after landing; casual
-planetarium free look stays available. A trusted session capability permits
-flight, granted to a local solo owner by default. Contact covers terrain and
-flat support disks. Suit survival, object interaction, and ship interiors are
+views. Pointer lock starts only on explicit activation after landing; the
+planetarium has no walker and its stance flies with the keys. A trusted
+session capability permits flight, granted to a local solo owner by default.
+Contact covers terrain and the walkable relief a structure declares. Suit survival, object interaction, and ship interiors are
 unimplemented. [On foot](docs/design/onfoot.md) records the current controls
 and scope.
 

@@ -217,11 +217,14 @@ pnpm sim --help                # all flags
   the ground you can see are two functions 1.25 m apart, measured and written
   down.
 - **On-foot movement on solid planetary terrain**, with walking, sprinting,
-  strafing, crouching, and local-gravity jumps in first or third person.
+  strafing, crouching, and local-gravity jumps in first or third person, in a
+  heat-weighted EVA suit whose gait is locked to the ground it covers.
   **Lock to walk** or the default Shift + L activates pointer capture after
-  landing; casual planetarium free look remains a drag control. A local solo
-  owner can double-tap the jump binding to fly. Contact covers terrain and flat
-  support disks. [On foot](docs/design/onfoot.md) lists the controls and limits.
+  landing; the planetarium has no walker and its stance flies with the keys.
+  A local solo owner can double-tap the jump binding to fly. Contact covers
+  terrain and the walkable relief a structure declares — the pad's deck,
+  aprons, ramp and equipment. [On foot](docs/design/onfoot.md) lists the
+  controls and limits.
 - **Save and load to IndexedDB**, storing references and dynamic state rather
   than generated content. The self-test's flown session is about 1 KB; save
   size grows with entities, loaded-system references and mutations.
@@ -440,9 +443,9 @@ Stated plainly, because discovering these by surprise is worse than reading them
 - **Multiple-star systems are modeled as single stars.** The catalog records
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
-- **Collision covers terrain and flat support disks.** Characters can step
-  and reject steep uphill movement. Rock scatter, hull walls, ceilings, and
-  entity-to-entity contact remain unimplemented. The rendered shape mesh of an
+- **Collision covers terrain and a structure's declared relief.** Characters
+  step, slide along a wall and reject steep uphill movement. Rock scatter,
+  hull walls, ceilings, and entity-to-entity contact remain unimplemented. The rendered shape mesh of an
   irregular body is not its canonical contact field.
 - **On-foot survival and interaction are unimplemented.** There are no suit
   resources, injuries, inventory, tools, or walkable ship interiors. Flight
