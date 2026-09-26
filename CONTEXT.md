@@ -10530,6 +10530,50 @@ part of the key. The count stayed at 303 after a 2 km and a 3 m visit on
 Gliese 908 IV, so it is a boot cost, not a leak, and the stale contexts
 among them hold disposed textures only as JavaScript objects.
 
+## scriptc compiles the field and runs it eighteen times slower (26 Sep 2026)
+
+A spike on whether compiling the core to WebAssembly through scriptc, Vercel
+Labs' TypeScript-to-native compiler, buys the CPU terrain path anything.
+Report in `design/reports/scriptc-wasm-spike.md`; the gated plan in
+`design/plans/wasm.md`; the roadmap row that asked for evidence now cites
+it.
+
+**The shape hypothesis is right and does not matter.** Nine in ten statements
+of the core compile statically as they stand; `field.ts` is at 97% with
+`Math.imul` the only gap. The blockers are shallow: `Math.imul`, `Math.fround`,
+`Math.tanh`, `Math.cosh` have no lowering, `WeakMap` is refused outright
+because the runtime is reference-counted, `Set` elements are numbers and
+strings only, and the two module cycles with top-level code
+(`terrain ↔ drainage`, `system ↔ solar/system`) fail preflight for the
+whole graph.
+
+**The compiled code is slower, and the emitted C says why.** The noise field,
+unmodified, on a 2.1 GHz Xeon under Node 26: 692 ns a sample in V8, 3,295 ns
+as a scriptc native executable at `-O2`, 12,900 ns as scriptc wasm on the
+same V8. Plain double math with `sin`/`cos` is at parity (267 against 244
+native, 285 wasm — the libm dominates); a `Float64Array` read is 6× slower
+native and 10× as wasm because it is a bounds-checked accessor call; a
+`mix32` is 7× and 11× slower because every `^`, `>>>` and `|0` is a runtime
+function taking and returning a double. Every `number` is a `double`,
+records are heap-allocated and refcounted, and the objects are MVP wasm with
+no `simd128`. Restructuring the field to write into a scratch array instead
+of returning a record recovers 8–13%; the arithmetic is the cost, not the
+allocation. Checksums are bit-identical across the three runtimes, including
+20,000 transcendental evaluations.
+
+**The wasm is a program, not a library.** scriptc's wasm32-wasi target emits a
+WASI Preview 1 command with `main` as its entry; library mode, the path that
+exports C symbols, is refused for wasm with `SC3002`. There are no exported
+functions for a Worker to call and no linear memory to view. The shipped route
+needs Zig; the module here was linked by hand from `--emit=obj`, the runtime
+pack, Ubuntu's `wasi-libc` and two compiler-rt builtins, and it runs.
+
+**And the resource is wrong**, which ADR-0023 already records: the GPU
+producer runs the same band stack 80× faster than the pool, so even a wasm
+kernel at 2× V8 leaves the drawn path 40× behind what it has. The CPU path is
+the contact sample and the no-WebGPU fallback. The gate for revisiting is
+three conditions with figures, in the plan.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

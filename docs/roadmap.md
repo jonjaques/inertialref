@@ -408,15 +408,15 @@ The build has a shared timeline, browser driving and profiling tools, a physical
 GPU test suite, and recorded cold/warm operating points. These establish costs
 under named conditions; they do not establish the 60 fps target on every laptop.
 
-| Technique                              | Status | Current boundary                                                                               |
-| -------------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
-| Typed arrays and transferables         | ✅     | Terrain fields, vertex buffers and worker results                                              |
-| Worker pools                           | ✅     | Galaxy queries, canonical terrain and client atmosphere tasks                                  |
-| Instanced rendering                    | 🟡     | Stars and rock scatter; a visible asteroid-belt population remains unbuilt                     |
-| GPU projection and bounded sky updates | ✅     | Source uploads follow selection changes; observer uniforms handle ordinary camera movement     |
-| Physical sky reuse                     | ✅     | Progressive cubes, a bounded regenerable disk cache and temporal history, governed by ADR-0038 |
-| WebGPU                                 | ✅     | TSL renderer and compute terrain; WebGL 2 remains a slower fallback                            |
-| WASM and shared mutable buffers        | ⬜     | Require evidence that the existing kernels or transferables are insufficient                   |
+| Technique                              | Status | Current boundary                                                                                                                                             |
+| -------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Typed arrays and transferables         | ✅     | Terrain fields, vertex buffers and worker results                                                                                                            |
+| Worker pools                           | ✅     | Galaxy queries, canonical terrain and client atmosphere tasks                                                                                                |
+| Instanced rendering                    | 🟡     | Stars and rock scatter; a visible asteroid-belt population remains unbuilt                                                                                   |
+| GPU projection and bounded sky updates | ✅     | Source uploads follow selection changes; observer uniforms handle ordinary camera movement                                                                   |
+| Physical sky reuse                     | ✅     | Progressive cubes, a bounded regenerable disk cache and temporal history, governed by ADR-0038                                                               |
+| WebGPU                                 | ✅     | TSL renderer and compute terrain; WebGL 2 remains a slower fallback                                                                                          |
+| WASM and shared mutable buffers        | ⬜     | Measured and declined: scriptc 0.1.5 runs the noise field 15–20× slower than V8 as wasm and emits no callable exports; the gate is in `design/plans/wasm.md` |
 
 `ir.profile(ms)`, `pnpm timing` and the Perf panel expose engine, terrain,
 render, boot and worker work. [ADR-0038](adr/0038-the-stars-and-the-diffuse-sky.md)
