@@ -69,6 +69,13 @@ export class CharacterController {
     return this.#padPreview
   }
 
+  /**
+   * Where a walker would step out: beside the landed ship, on its body.
+   *
+   * Only a landed ship. The planetarium's stance is an eye over ground the
+   * world has not been asked to support, and its mode is a promise to leave
+   * the world alone, so it flies free instead of spawning anyone.
+   */
   #site(): {
     body: Body
     latitude: number
@@ -78,20 +85,7 @@ export class CharacterController {
   } | null {
     const engine = this.#engine
     if (engine.harness.cutsceneStatus() !== null) return null
-    const observed = engine.harness.observerStatus()
-    if (observed?.target !== null && observed?.target !== undefined) {
-      const body = engine.world.bodyAt(observed.target.frame)
-      const stance = observed.surface?.stance
-      if (
-        body === null ||
-        stance === undefined ||
-        stance.height > 3 ||
-        observed.descent !== null ||
-        observed.traveling
-      )
-        return null
-      return { body, ...stance }
-    }
+    if (engine.harness.observerStatus()?.target != null) return null
     const entity = this.entity
     if (entity === null || !engine.world.landedEntities().includes(entity.id))
       return null

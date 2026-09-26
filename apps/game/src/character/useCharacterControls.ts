@@ -10,7 +10,6 @@ export function useCharacterControls(
     readonly enabled: boolean
     readonly active: boolean
     readonly locked: boolean
-    readonly onEnter: () => void
   },
 ) {
   const latest = useRef(options)
@@ -33,7 +32,6 @@ export function useCharacterControls(
             )
             return false
           }
-          latest.current.onEnter()
           return true
         },
         changed: (value) => {

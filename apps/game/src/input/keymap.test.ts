@@ -190,10 +190,18 @@ describe('character input', () => {
     expect(
       actionFor(
         bindings,
-        ['global', 'planetarium', 'character-entry'],
+        ['global', 'flight', 'character-entry'],
         chord('KeyL', { shift: true }),
       )?.id,
     ).toBe('character.lock')
+    // The planetarium browses; it has no avatar to lock a pointer to.
+    expect(
+      actionFor(
+        bindings,
+        ['global', 'planetarium', 'standing'],
+        chord('KeyL', { shift: true }),
+      ),
+    ).toBeNull()
   })
 
   it('changes sprint while a movement key stays held', () => {

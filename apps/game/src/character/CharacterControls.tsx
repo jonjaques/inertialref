@@ -1,23 +1,24 @@
-import { useLocation, useNavigate } from 'react-router'
+import { useLocation } from 'react-router'
 import { Footprints, LockKeyhole, PersonStanding } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { useChromeHidden } from '../hud/chrome.ts'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
 import { useActionTitle, useKeyLabel } from '../input/useKeymap.ts'
-import {
-  isOverlayPath,
-  modeForPath,
-  PLAY_SOLO,
-  resolvedLocation,
-} from '../pages/paths.ts'
+import { isOverlayPath, modeForPath, resolvedLocation } from '../pages/paths.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { useCharacterControls } from './useCharacterControls.ts'
 
-/** Persistent ownership lets the pointer survive entering play from the planetarium. */
+/**
+ * The on-foot controls, in play and nowhere else.
+ *
+ * The planetarium is a camera over a world it never touches; its standing
+ * stance flies free with the keys instead, and nothing there spawns a
+ * walker. Lock ownership still attaches to the document element, so a
+ * mode's drag surface unmounting under a route change cannot release it.
+ */
 export function CharacterControls({ engine }: { engine: GameEngine }) {
   const location = useLocation()
-  const navigate = useNavigate()
   const mode = modeForPath(resolvedLocation(location).pathname)
   const dialog = isOverlayPath(location.pathname)
   const hidden = useChromeHidden()
@@ -33,15 +34,11 @@ export function CharacterControls({ engine }: { engine: GameEngine }) {
       cinema: snapshot.cinema,
     })),
   )
-  const enabled =
-    (mode === 'flight' || mode === 'planetarium') && !dialog && !state.cinema
+  const enabled = mode === 'flight' && !dialog && !state.cinema
   const controls = useCharacterControls(engine.character, {
     enabled,
     active: state.active,
     locked: state.locked,
-    onEnter: () => {
-      if (mode === 'planetarium') void navigate(PLAY_SOLO)
-    },
   })
   const lockTitle = useActionTitle(
     'character.lock',

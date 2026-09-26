@@ -73,14 +73,22 @@ describe('character activation', () => {
     expect(game.player()).toBe(ship)
     game.dispose()
   })
-  it('keeps browsing passive and requires a solid surface near the ground', () => {
+  it('keeps the planetarium passive and steps out beside a landed ship', () => {
     const game = makeEngine()
     const before = game.world.stateHash()
     expect(game.character.available()).toBe(false)
     expect(game.character.enter()).toBe(false)
     expect(game.world.stateHash()).toBe(before)
+    // A stance over the ground is a picture, not a place to stand: nothing
+    // in the planetarium can spawn a walker, however low the eye.
     game.harness.visit('g:milky-way/s:SOL/b:3', { height: 2 })
     expect(game.world.stateHash()).toBe(before)
+    expect(game.character.available()).toBe(false)
+    expect(game.character.enter()).toBe(false)
+    expect(game.world.stateHash()).toBe(before)
+    game.harness.observatory.clear()
+    game.harness.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+    game.world.runTicks(1)
     expect(game.character.available()).toBe(true)
     expect(game.character.enter()).toBe(true)
     expect(game.world.entities.require(game.player()!).kind).toBe('character')
@@ -89,7 +97,8 @@ describe('character activation', () => {
 
   it('clears held movement on unlock and applies host flight permission', () => {
     const game = makeEngine(false)
-    game.harness.visit('g:milky-way/s:SOL/b:3', { height: 2 })
+    game.harness.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+    game.world.runTicks(1)
     game.character.enter()
     game.character.lockChanged(true)
     game.character.input({ forward: 1, sprint: true, jump: true })

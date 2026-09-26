@@ -57,8 +57,8 @@ const MODE_SETS: readonly (readonly KeyContext[])[] = [
   ['global', 'menu'],
   ['global', 'flight', 'character-entry'],
   ['global', 'character', 'character-entry'],
-  ['global', 'planetarium', 'character-entry'],
-  ['global', 'planetarium', 'standing', 'character-entry'],
+  ['global', 'planetarium'],
+  ['global', 'planetarium', 'standing'],
   ['global', 'cinema'],
   ['global', 'docs'],
 ]
@@ -502,6 +502,37 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'standing',
     chord('Backspace'),
   ),
+  /*
+   * Flying the stance. Held, like the flight axes, because a key that moves
+   * the eye for as long as it is down is an axis. The letters are the ship's
+   * translation keys, which is deliberate: a hand that knows the ship knows
+   * the stance, and the two contexts are never live together.
+   */
+  press('stand.forward', 'Fly Forward', 'Standing', 'standing', chord('KeyW'), {
+    held: true,
+    shiftScales: true,
+    hint: 'along the heading; hold Shift for fast',
+  }),
+  press('stand.back', 'Fly Back', 'Standing', 'standing', chord('KeyS'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.left', 'Fly Left', 'Standing', 'standing', chord('KeyA'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.right', 'Fly Right', 'Standing', 'standing', chord('KeyD'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.rise', 'Fly Up', 'Standing', 'standing', chord('KeyE'), {
+    held: true,
+    shiftScales: true,
+  }),
+  press('stand.lower', 'Fly Down', 'Standing', 'standing', chord('KeyQ'), {
+    held: true,
+    shiftScales: true,
+  }),
 
   /* ------------------------------ character ----------------------------- */
   press(
