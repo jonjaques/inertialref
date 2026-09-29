@@ -1,5 +1,7 @@
 import { Link } from 'react-router'
 import { LogIn } from 'lucide-react'
+import { AccountDialog } from '../account/AccountDialog.tsx'
+import { useAccounts } from '../account/accounts.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { NotYet } from './NotYet.tsx'
 import { SIGN_UP } from './paths.ts'
@@ -9,6 +11,8 @@ export function SignInPage() {
   // The cross-link stays inside the dialog, so it carries the mode behind it —
   // see `useOverlay`. Without the state it takes the mode down with it.
   const { keep } = useOverlay()
+  const accounts = useAccounts()
+  if (accounts) return <AccountDialog page="sign-in" />
   return (
     <NotYet title="sign in" icon={LogIn}>
       <p className="text-slate-400">

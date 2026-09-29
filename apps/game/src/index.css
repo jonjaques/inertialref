@@ -1,3 +1,10 @@
+/* Clerk's layer, between Tailwind's base and its utilities. Clerk injects its
+   component styles at runtime, and unlayered they outrank every layered rule
+   whatever the specificity — so the utility classes `account/appearance.ts`
+   passes it would lose to the styles they exist to override. Named here, before
+   Tailwind declares the rest, because the first `@layer` statement to mention a
+   layer fixes its place in the order. */
+@layer theme, base, clerk, components, utilities;
 @import 'tailwindcss';
 /* The `animate-in` / `animate-out` / `fade-*` / `zoom-*` utilities that every
    shadcn/ui overlay component (dialog, popover, tooltip, select) references in

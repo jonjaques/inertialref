@@ -150,7 +150,7 @@ export const PAGES: readonly PageMeta[] = [
   ].map((page) => ({
     ...page,
     description:
-      'Account features are planned for connected flight. Solo flight and the planetarium are available without an account.',
+      'An optional InertialRef account. Solo flight and the planetarium need none; discovery credit and sync for connected flight are planned on top of it.',
     index: false,
   })),
   {

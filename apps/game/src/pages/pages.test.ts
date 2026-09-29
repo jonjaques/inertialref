@@ -133,12 +133,13 @@ describe('the routed dialogs', () => {
     expect(about).toContain('Pre-alpha')
     expect(about).toContain('Source on GitHub')
     expect(about).toContain('href="https://github.com/jonjaques/inertialref"')
-    // The account pages must say they are unbuilt and must never render a
-    // credential field that goes nowhere — people reuse passwords, and a form
-    // that looks real is one they will type a real one into.
+    // Without an account provider the account pages must say so, and must
+    // never render a credential field that goes nowhere — people reuse
+    // passwords, and a form that looks real is one they will type a real one
+    // into.
     for (const path of [SIGN_IN, SIGN_UP, PROFILE]) {
       const markup = at(path)
-      expect(markup).toContain('designed and not built')
+      expect(markup).toContain('no account provider configured')
       expect(markup).not.toContain('type="password"')
       expect(markup).not.toContain('<form')
     }

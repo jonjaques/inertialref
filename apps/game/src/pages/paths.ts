@@ -85,7 +85,7 @@ export const ABOUT = '/about'
  */
 export const KEYS = '/keys'
 
-/** The account routes. Stubs today — the seam, not the feature. */
+/** The account routes: Clerk's sign-in, sign-up and profile, as dialogs. */
 export const SIGN_IN = '/sign-in'
 export const SIGN_UP = '/sign-up'
 export const PROFILE = '/profile'

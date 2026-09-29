@@ -12,6 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { AccountBadge } from '../account/AccountBadge.tsx'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
 import { DOCS, HOME, overlayState, SETTINGS } from '../pages/paths.ts'
@@ -193,6 +194,13 @@ export function IrMenu({
         </TooltipTrigger>
         <TooltipContent side="top">Settings</TooltipContent>
       </Tooltip>
+
+      {/*
+       * Who is flying, last: the one control here that is about the person
+       * rather than the place. Nothing at all in a build without accounts —
+       * the badge decides that, so the separator comes with it.
+       */}
+      <AccountBadge divider />
     </motion.nav>
   )
 }

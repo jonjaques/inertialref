@@ -3,23 +3,23 @@ import { CloudOff, type LucideIcon } from 'lucide-react'
 import { OverlayPage } from './OverlayPage.tsx'
 
 /*
- * The account routes: reserved, wired, and honest about being unbuilt.
+ * The account routes, in a build that offers no accounts.
  *
- * They exist now because two of the three are expensive to add later. A redirect
- * URI is registered with an identity provider ahead of time and changing it is a
- * coordinated deploy on both sides; and a service worker precaches a route list,
- * so a path that did not exist at install time is a path an offline client
- * cannot reach until the worker updates. Reserving `/sign-in`, `/sign-up`,
- * `/profile` and `/auth/callback` costs four route entries today.
+ * Accounts are Clerk's (`account/accounts.ts`), and they exist only where the
+ * build was given a publishable key — the deployment, not a fork and not a
+ * keyless `pnpm dev`. The routes are there either way: a service worker
+ * precaches the route list, and a link to `/sign-in` from somewhere else should
+ * land on a sentence rather than a 404.
  *
  * What they must not do is *pretend*. `docs/design/modes.md` makes solo offline
  * the base case and an account is only ever an addition to a complete game —
- * so these pages say what an account will be for, say that it does not exist
- * yet, and never render a credential field that goes nowhere. A sign-in form
- * that silently discards a password is worse than no sign-in page: people reuse
+ * so these pages say what an account is for, say that this build has none, and
+ * never render a credential field that goes nowhere. A sign-in form that
+ * silently discards a password is worse than no sign-in page: people reuse
  * passwords, and a form that looks real is one they will type a real one into.
  *
- * This is the shell all four share; each page is the sentence that differs.
+ * This is the shell the account pages share; each page is the sentence that
+ * differs.
  */
 
 /** What signing in will eventually buy, from `docs/design/modes.md`. */
@@ -39,7 +39,7 @@ export function NotYet({
   children?: ReactNode
 }) {
   return (
-    <OverlayPage title={title} subtitle="not built yet — the seam is">
+    <OverlayPage title={title} subtitle="not offered by this build">
       <div className="flex flex-col gap-3">
         <div className="flex items-start gap-3">
           <Icon
@@ -47,9 +47,9 @@ export function NotYet({
             className="mt-0.5 size-5 shrink-0 text-sky-400/70"
           />
           <p className="text-slate-300">
-            Accounts are designed and not built. The game is complete without
-            one: the universe is derived, saves live in this browser, and
-            everything works with no network at all.
+            This build has no account provider configured. The game is complete
+            without one: the universe is derived, saves live in this browser,
+            and everything works with no network at all.
           </p>
         </div>
 
