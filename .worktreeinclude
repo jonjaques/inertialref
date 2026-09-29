@@ -28,8 +28,7 @@
 #                    data/catalog (committed). `pnpm catalog:fetch` re-downloads them.
 #   apps/server/.wrangler/ — local Worker state; a fresh one is correct.
 #   apps/server/.cloudflare/output/ — the staged deploy; `cf deploy` rebuilds it.
-#   apps/game/public/media/ — the cutscene's reference audio. It used to be listed here on
-#                    the grounds that no command could fetch it back. `pnpm media:pull`
-#                    now can — it comes out of the site's own R2 bucket, and `cf`'s
-#                    credentials are machine-global rather than per-checkout — so by this
-#                    file's own test it no longer belongs. `pnpm build` pulls it anyway.
+#   apps/game/public/media/ — the cutscene's reference audio. `pnpm media:pull` fetches it
+#                    back from the site's own R2 bucket, and `cf`'s credentials are
+#                    machine-global rather than per-checkout, so by this file's own test
+#                    it does not belong. `pnpm build` pulls it anyway.

@@ -16,8 +16,10 @@ Reasoning: `docs/guides/development.md`, ADR-0007, ADR-0008.
   ports — `persistence/src/store.ts` is the pattern — and the host implements them.
 - **Regenerate `.cloudflare/types/index.d.ts` after any change to `cloudflare.config.ts`**, with
   `pnpm --filter @inertialref/server run types`, and commit it. It is generated and
-  committed; add a binding without regenerating and the typecheck passes against a stale
-  `Env`.
+  committed. `Env` is inferred from the config by type, so a binding reaches the
+  typecheck without it; the runtime half is pinned to the compatibility date and workerd
+  it was generated with, and a date bump without regenerating typechecks against the
+  old runtime. Nothing in CI regenerates it to compare.
 - **`apps/server/tsconfig.json` is neither the browser nor Node.** It type-checks against
   workerd globals and that generated `Env`.
 - **`pnpm dev` proxies `/api` and `/ws` to 8787.** Without `pnpm dev:server` running, the

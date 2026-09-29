@@ -78,17 +78,41 @@ function cf(args, { into } = {}) {
     const sink = part === undefined ? undefined : createWriteStream(part)
     let output = ''
     let settled = false
+    /*
+     * Every failure here has to become `{ ok: false }`, never a throw: `done`
+     * runs from event handlers nobody awaits, so a rejected rename would be an
+     * unhandled rejection that fails the build this script must not fail.
+     */
     const done = async (result) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       if (sink !== undefined) {
+        /*
+         * Unpiped and drained, not merely ended. `pnpm` is the child; `cf` is
+         * its child and holds the same pipe. After a timeout it can outlive
+         * the SIGTERM, and a pipe nobody reads fills and blocks its writes —
+         * with the stdout handle keeping this process alive, that is the hung
+         * deploy the timeout exists to prevent.
+         */
+        child.stdout.unpipe(sink)
+        child.stdout.resume()
         await new Promise((closed) => sink.end(closed))
-        if (result.ok) await rename(part, into)
-        else await rm(part, { force: true })
+        try {
+          if (result.ok) await rename(part, into)
+          else await rm(part, { force: true })
+        } catch (cause) {
+          await rm(part, { force: true }).catch(() => {})
+          result = { ok: false, output: `${result.output}\n${cause.message}` }
+        }
       }
       resolve(result)
     }
+    // A full disk or an unwritable directory, reported like any other failure.
+    sink?.on('error', (cause) => {
+      child.kill('SIGTERM')
+      done({ ok: false, output: `${output}\n${cause.message}` })
+    })
     /*
      * A ceiling, because this runs inside `pnpm build` and therefore inside a
      * deploy. Nothing here is worth more than two minutes, and a hung transfer

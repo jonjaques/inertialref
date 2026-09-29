@@ -10,7 +10,9 @@ const server = fileURLToPath(new URL('../../apps/server', import.meta.url))
  * `cf dev` has no `--env-file`; it reads each declared secret from its own
  * environment. This process exists only to start it, so loading the file here
  * reaches the Worker and nothing else — `scripts/dev.mjs` starts Vite as a
- * sibling of this process, not a child.
+ * sibling of this process, not a child. The bundler under `cf dev` consults the
+ * environment only when `apps/server/.dev.vars` is absent; that file, if it
+ * exists, shadows every key loaded here.
  */
 if (existsSync(local)) process.loadEnvFile(local)
 const args = [
