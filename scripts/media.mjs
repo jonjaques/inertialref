@@ -25,7 +25,8 @@
  * Without credentials it says so once and exits 0.
  */
 import { spawn } from 'node:child_process'
-import { mkdir, stat } from 'node:fs/promises'
+import { createWriteStream } from 'node:fs'
+import { mkdir, rename, rm, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MEDIA, MEDIA_BUCKET } from '../apps/server/src/media.ts'
@@ -47,33 +48,45 @@ const localPath = (object) => `apps/game/public/media/${object.name}`
 const there = (path) => fileURLToPath(new URL(path, ROOT))
 
 /**
- * Wrangler, from the app that owns `wrangler.jsonc`.
+ * `cf`, from the app that declares it, run against the account rather than the
+ * local simulator — `cf r2 objects` is remote unless `--local` is passed.
  *
- * Run from anywhere else it has no account to talk to. `--remote` is not
- * optional either: `r2 object` defaults to the local simulator in Wrangler 4,
- * so without it a pull silently succeeds against an empty local bucket.
+ * `into` names a file for stdout. `cf r2 objects get` has no `--file`; it
+ * writes the object's bytes to stdout, so a pull streams them to a `.part`
+ * beside the destination and renames it only once `cf` exits 0. A failed or
+ * timed-out pull therefore leaves nothing behind, rather than a truncated
+ * track that `pull` would count as present on the next build.
  */
-function wrangler(args) {
+function cf(args, { into } = {}) {
   return new Promise((resolve) => {
     const child = spawn(
       'pnpm',
-      ['--filter', '@inertialref/server', 'exec', 'wrangler', ...args],
+      ['--filter', '@inertialref/server', 'exec', 'cf', ...args],
       {
         cwd: there('.'),
         /*
          * Piped, not inherited, and that is load-bearing twice over. It is what
-         * lets a failure be reported as one indented block instead of raw
-         * Wrangler noise in the middle of a build log — and Wrangler decides
-         * whether it may prompt for an interactive login by looking at whether
-         * stdout is a TTY. With a pipe it is not, so an unauthenticated pull
-         * fails with a sentence rather than trying to open a browser.
+         * lets a failure be reported as one indented block instead of raw CLI
+         * noise in the middle of a build log — and with stdin closed and no TTY
+         * an unauthenticated `cf` fails with a sentence naming
+         * CLOUDFLARE_API_TOKEN rather than trying to open a browser.
          */
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     )
+    const part = into === undefined ? undefined : `${into}.part`
+    const sink = part === undefined ? undefined : createWriteStream(part)
     let output = ''
-    const done = (result) => {
+    let settled = false
+    const done = async (result) => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
+      if (sink !== undefined) {
+        await new Promise((closed) => sink.end(closed))
+        if (result.ok) await rename(part, into)
+        else await rm(part, { force: true })
+      }
       resolve(result)
     }
     /*
@@ -90,7 +103,8 @@ function wrangler(args) {
         output: `${output}\ntimed out after ${TIMEOUT_MS / 1000}s`,
       })
     }, TIMEOUT_MS)
-    child.stdout.on('data', (chunk) => (output += chunk))
+    if (sink !== undefined) child.stdout.pipe(sink, { end: false })
+    else child.stdout.on('data', (chunk) => (output += chunk))
     child.stderr.on('data', (chunk) => (output += chunk))
     child.on('error', (cause) =>
       done({ ok: false, output: `${output}${cause.message}` }),
@@ -114,15 +128,10 @@ async function pull({ force, optional }) {
     console.log(
       `media: fetching ${item.what} from r2://${MEDIA_BUCKET}/${item.key}`,
     )
-    const result = await wrangler([
-      'r2',
-      'object',
-      'get',
-      `${MEDIA_BUCKET}/${item.key}`,
-      '--remote',
-      '--file',
-      file,
-    ])
+    const result = await cf(
+      ['r2', 'objects', 'get', item.key, '--bucket-name', MEDIA_BUCKET],
+      { into: file },
+    )
     if (result.ok && (await bytes(file)) > 0) {
       console.log(`media: ${localPath(item)} (${await bytes(file)} bytes)`)
       continue
@@ -140,13 +149,13 @@ async function pull({ force, optional }) {
     /*
      * The line that has to be readable a month later, in a build log nobody is
      * watching. It names the consequence rather than the error, because the
-     * error — an unauthenticated wrangler — is not a problem for anyone
+     * error — an unauthenticated `cf` — is not a problem for anyone
      * building a fork, and the consequence is the only thing they would
      * otherwise have to guess at from a silent cutscene.
      */
     console.warn(
       '\nmedia: continuing without it. The site builds and runs; the cutscene\n' +
-        '       plays silent. Run `wrangler login` (or set CLOUDFLARE_API_TOKEN\n' +
+        '       plays silent. Run `cf auth login` (or set CLOUDFLARE_API_TOKEN\n' +
         '       with R2 read) if the audio is meant to ship.',
     )
     return
@@ -165,12 +174,13 @@ async function push() {
     console.log(
       `media: uploading ${localPath(item)} to r2://${MEDIA_BUCKET}/${item.key}`,
     )
-    const result = await wrangler([
+    const result = await cf([
       'r2',
-      'object',
+      'objects',
       'put',
-      `${MEDIA_BUCKET}/${item.key}`,
-      '--remote',
+      item.key,
+      '--bucket-name',
+      MEDIA_BUCKET,
       '--file',
       file,
       '--content-type',

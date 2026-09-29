@@ -14,9 +14,9 @@
  * So: one command, two children, one lifetime. Nothing here changes what either
  * process does.
  *
- *     pnpm dev        vite on 5173, wrangler on 8787, /api and /ws proxied
+ *     pnpm dev        vite on 5173, cf dev on 8787, /api and /ws proxied
  *     pnpm dev:client just vite — raw stdio, so its `r`/`o`/`q` keys work
- *     pnpm dev:server just wrangler
+ *     pnpm dev:server just cf dev
  *     pnpm preview    the built bundle served by the real Worker, on 8787
  *     node scripts/dev.mjs --ensure
  *                     the editor's Launch Browser task: reuse 5173 if it is
@@ -74,9 +74,10 @@ const CHILDREN = [
 ]
 
 /*
- * `--inspect` is for `pnpm sim` (port 9229). Wrangler already opens workerd's
- * inspector on 9230. A leftover `NODE_OPTIONS=--inspect` inherited into both
- * children would fight itself for 9229, and fight the headless runner too.
+ * `--inspect` is for `pnpm sim` (port 9229). `cf dev` already opens workerd's
+ * inspector on 9230 (`apps/server/wrangler.config.ts`). A leftover
+ * `NODE_OPTIONS=--inspect` inherited into both children would fight itself for
+ * 9229, and fight the headless runner too.
  *
  * Astro's agent detection, which would daemonize the client child and end it
  * cleanly a second in, is switched off in the game package's own `dev` script
@@ -188,9 +189,9 @@ function clientHolder() {
 }
 
 /*
- * Both ports, before either child starts. Otherwise wrangler boots, Astro
+ * Both ports, before either child starts. Otherwise the Worker boots, Astro
  * fails on the port, and the "one down means both down" rule below kills
- * wrangler with a 143 — three screens of output whose only real line is the
+ * the Worker with a 143 — three screens of output whose only real line is the
  * one about the port. Refusing here is also the same rule as `--ensure`: a
  * server this script did not start is not one it kills.
  */
@@ -296,7 +297,7 @@ for (const { label, color, argv } of CHILDREN) {
    * Without it each chunk is decoded in isolation by `Buffer#toString('utf8')`
    * when it is appended below — so a codepoint split across a pipe boundary
    * becomes two U+FFFD. Both children print three-byte glyphs in their opening
-   * lines (Wrangler's ⛅ and its box rules, Vite's ⚡), which is exactly the
+   * lines (the Worker's ▲ and box rules, Vite's ⚡), which is exactly the
    * output most likely to straddle the first chunk. `setEncoding` installs
    * Node's `StringDecoder`, which holds an incomplete sequence until the rest
    * of it arrives. The line buffering below already does the same job one level
@@ -323,7 +324,7 @@ for (const { label, color, argv } of CHILDREN) {
      * exact confusion this script exists to remove.
      *
      * This child stays in `running` until stop() has signaled its group: pnpm
-     * can be gone while its grandchild is not — wrangler dying without reaping
+     * can be gone while its grandchild is not — `cf dev` dying without reaping
      * workerd, which holds its own pipes and so does not delay this event —
      * and the group is what carries the signal, not the pid that closed.
      */

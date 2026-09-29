@@ -1,11 +1,13 @@
 {
   /* The fourth environment (AGENTS.md).
      Not the browser and not Node: workerd's globals, plus the `Env` this
-     Worker's own bindings produce. Both come from `worker-configuration.d.ts`,
-     which `pnpm --filter @inertialref/server run types` generates from
-     wrangler.jsonc and which is committed — a binding added to the config and
-     not to the checked-in types is a typecheck that passes locally and fails in
-     CI, or worse, the reverse. */
+     Worker's own bindings produce. Both come from
+     `.cloudflare/types/index.d.ts`, which `pnpm --filter @inertialref/server
+     run types` (`cf workers types`) generates and which is committed. It
+     infers `Env` from `cloudflare.config.ts` by type, so a binding added there
+     reaches this project at once — but the runtime types are pinned to the
+     compatibility date the file was generated at, so a date bump without
+     regenerating is a typecheck against the old runtime. */
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
@@ -14,5 +16,5 @@
        bundle this Worker serves and lives in `data/catalog/manifest.json`. */
     "resolveJsonModule": true
   },
-  "include": ["src", "worker-configuration.d.ts"]
+  "include": ["src", ".cloudflare/types/index.d.ts"]
 }

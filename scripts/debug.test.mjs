@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import bundler from '../apps/server/wrangler.config.ts'
 
 /*
  * The four editor debug configurations, and the Node inspect flag they
@@ -55,11 +56,7 @@ describe('editor debug configurations', () => {
   })
 
   it('keeps the Worker inspector off Node’s default port and uploads its maps', () => {
-    const wrangler = readFileSync(
-      new URL('apps/server/wrangler.jsonc', ROOT),
-      'utf8',
-    )
-    expect(wrangler).toMatch(/"upload_source_maps":\s*true/)
-    expect(wrangler).toMatch(/"inspector_port":\s*9230/)
+    expect(bundler.uploadSourceMaps).toBe(true)
+    expect(bundler.dev.inspectorPort).toBe(9230)
   })
 })

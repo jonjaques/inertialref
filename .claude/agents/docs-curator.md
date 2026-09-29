@@ -38,7 +38,8 @@ makes twelve capability claims that are supposed to be executable.
 - **Check the rules contract.** Every one-line imperative in `.claude/rules/*.md` must
   correspond to something in `AGENTS.md`. The rules are the derived half; if they disagree,
   `AGENTS.md` wins and the rule is what changes. See `.claude/rules/README.md`.
-- **Check `worker-configuration.d.ts` was regenerated** if `wrangler.jsonc` moved.
+- **Check `apps/server/.cloudflare/types/index.d.ts` was regenerated** if
+  `apps/server/cloudflare.config.ts` moved.
 
 ## House style, which is not optional here
 

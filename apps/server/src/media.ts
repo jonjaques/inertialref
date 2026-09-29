@@ -26,7 +26,7 @@
  * what exists or where it is.
  */
 
-/** The bucket bound as `env.MEDIA` in `wrangler.jsonc`. */
+/** The bucket bound as `env.MEDIA` in `cloudflare.config.ts`. */
 export const MEDIA_BUCKET = 'inertialrefd-storage'
 
 export interface MediaObject {

@@ -3,19 +3,20 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Cloudflare Worker: serves the client bundle, answers /api, and will route /ws to a partition authority.",
+  "description": "Cloudflare Worker: serves the client bundle, answers /api, and will route /ws to a partition authority. Configured in cloudflare.config.ts and driven by cf.",
   "scripts": {
     "dev": "node ../../scripts/tour/dev.mjs",
-    "deploy": "wrangler deploy",
-    "versions:upload": "wrangler versions upload",
-    "tail": "wrangler tail --format pretty",
-    "types": "wrangler types"
+    "deploy": "cf deploy",
+    "versions:upload": "cf workers versions create",
+    "tail": "wrangler tail inertialrefd --format pretty",
+    "types": "cf workers types"
   },
   "dependencies": {
     "@inertialref/protocol": "workspace:*",
     "@inertialref/universe": "workspace:*"
   },
   "devDependencies": {
-    "wrangler": "^4.125.0"
+    "cf": "1.0.0-beta.5",
+    "wrangler": "^4.142.0"
   }
 }

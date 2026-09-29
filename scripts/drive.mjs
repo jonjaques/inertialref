@@ -381,7 +381,7 @@ async function serve(state) {
     fs.openSync(path.join(RIG, 'dev.log'), 'a'),
   )
   // Detached and in its own process group: this outlives the invocation on
-  // purpose, and `--down` kills the group so wrangler goes with vite.
+  // purpose, and `--down` kills the group so the Worker goes with vite.
   const child = spawn('node', ['scripts/dev.mjs'], {
     cwd: ROOT,
     stdio: ['ignore', log, log],
@@ -937,7 +937,7 @@ async function down() {
   }
   if (state.startedServer === true && alive(state.serverPid)) {
     // `dev.mjs` is a group leader (`detached`, in serve()) that starts vite and
-    // wrangler in groups of their own, so the signal reaches them through its
+    // `cf dev` in groups of their own, so the signal reaches them through its
     // SIGTERM handler, which relays to both. The fallback is for a recorded pid
     // that leads no group.
     try {

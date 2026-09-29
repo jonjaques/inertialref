@@ -236,7 +236,7 @@ three; they are here because they explain what it is doing:
    different unrelated file each run and passed clean once `--down` had run.
    A single timeout that moves between runs is a reading about the machine.
 7. **`--serve` cannot start a dev server in a worktree that has never built** —
-   `wrangler dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
+   `cf dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
    or build once. [development](../guides/development.md) § Commands.
 
 Default readiness is `window.engine.gl`, not `window.ir`. The harness appears

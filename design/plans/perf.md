@@ -20,7 +20,7 @@ Keep the upscaler and optional optical effects separate.
 flight start in Earth orbit at 27.6 km/s, the planetarium looking at Earth from
 14,400 km, arrival at Earth's summit site, and the converged summit stance —
 profiled on the dev build and, where the entry says so, re-measured on the
-shipped build served by `wrangler dev` on 8787. And the game as it is played:
+shipped build served by `cf dev` on 8787. And the game as it is played:
 mode switches, planet-to-planet retargets, a camera orbit, a scrub descent from
 380 km to two meters, flight teleports, time warp, landings, jumps to two
 generated systems and back, the title cutscene, and the documentation. The

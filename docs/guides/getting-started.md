@@ -8,7 +8,7 @@ From clone to flying, and the first things worth trying.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm build        # creates the assets directory used by Wrangler
+pnpm build        # creates the assets directory the Worker serves
 pnpm dev          # → http://localhost:5173
 ```
 
@@ -28,7 +28,7 @@ settings also offer the CC-BY Rocinante, with a debug cone during loading.
 
 ```mermaid
 flowchart LR
-    A["pnpm install"] --> B["pnpm build"] --> C["pnpm dev<br/><i>Astro + Wrangler</i>"]
+    A["pnpm install"] --> B["pnpm build"] --> C["pnpm dev<br/><i>Astro + cf dev</i>"]
     C --> D["localhost:5173/play/solo"]
     D --> E["fly or call ir.help()"]
     D --> F["await ir.selfTest()"]
@@ -208,7 +208,7 @@ puts it under thrust, which is what an integrated tick costs.
 ## Commands
 
 ```bash
-pnpm dev          # Astro on 5173 and wrangler on 8787, in one terminal
+pnpm dev          # Astro on 5173 and cf dev on 8787, in one terminal
 pnpm preview      # build, then serve it through the real Worker on 8787
 pnpm test         # vitest, node environment only
 pnpm typecheck    # the six type projects, in parallel

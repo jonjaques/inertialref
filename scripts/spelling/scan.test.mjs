@@ -11,9 +11,11 @@ function check(source, args = []) {
   try {
     mkdirSync(join(root, 'packages/sample/src'), { recursive: true })
     writeFileSync(join(root, 'packages/sample/src/sample.ts'), source)
-    mkdirSync(join(root, 'apps/server/src'), { recursive: true })
+    mkdirSync(join(root, 'apps/server/src/.cloudflare/types'), {
+      recursive: true,
+    })
     writeFileSync(
-      join(root, 'apps/server/src/worker-configuration.d.ts'),
+      join(root, 'apps/server/src/.cloudflare/types/index.d.ts'),
       'declare const cancelled: boolean',
     )
     return spawnSync(process.execPath, [scanner, '--root', root, ...args], {

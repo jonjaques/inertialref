@@ -67,7 +67,8 @@
       "Bash(pnpm run deploy:worker)",
       "Bash(pnpm catalog:build:*)",
       "Bash(pnpm textures:build:*)",
-      "Bash(wrangler:*)"
+      "Bash(wrangler:*)",
+      "Bash(cf:*)"
     ],
     "deny": [
       "Bash(git push -f:*)",

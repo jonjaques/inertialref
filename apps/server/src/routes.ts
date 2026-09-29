@@ -15,7 +15,7 @@ import { type MediaObject, mediaFor } from './media.ts'
  * will need `@cloudflare/vitest-pool-workers` (and a Vitest bump) when there is
  * a Durable Object; routing does not, and should not wait for one.
  *
- * `run_worker_first` in wrangler.jsonc means `asset` is normally unreachable —
+ * `runWorkerFirst` in cloudflare.config.ts means `asset` is normally unreachable —
  * a path that is not `/api`, `/api/*`, `/ws` or `/media/*` never wakes the
  * script. It is handled anyway, because "unreachable by configuration" is
  * exactly the kind of claim that stops being true in an edit nobody connects to

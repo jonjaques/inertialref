@@ -81,11 +81,7 @@ const DECLARATIONS = new Set([
 const found = []
 for (const file of project.getSourceFiles()) {
   const path = file.getFilePath().replace(ROOT, '')
-  if (
-    path.includes('node_modules') ||
-    path.endsWith('worker-configuration.d.ts')
-  )
-    continue
+  if (path.includes('node_modules') || path.includes('/.cloudflare/')) continue
   file.forEachDescendant((node) => {
     if (
       !Node.isIdentifier(node) &&
@@ -177,10 +173,10 @@ for (const name of names) {
     // them as boundary cases found in its own source.
     '-g',
     '!**/scripts/spelling/**',
-    // `worker-configuration.d.ts` is `wrangler types` output describing
-    // Cloudflare's API, where `"cancelled"` is their spelling of their field.
+    // `.cloudflare/types` is `cf workers types` output describing Cloudflare's
+    // API, where `"cancelled"` is their spelling of their field.
     '-g',
-    '!**/worker-configuration.d.ts',
+    '!**/.cloudflare/**',
     '-e',
     `"${name}"`,
     '-e',

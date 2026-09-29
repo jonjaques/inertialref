@@ -66,7 +66,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * Astro on its own port, serving the given checkout.
  *
  * `astro dev` straight from the package rather than `pnpm dev`, which also
- * starts wrangler and needs a `dist/` a fresh worktree does not have. The
+ * starts `cf dev` and needs a `dist/` a fresh worktree does not have. The
  * environment variable is what the package's own `dev` script sets: Astro
  * daemonizes itself when it detects a coding agent, and a detached server is
  * one this cannot stop. The child is its own process group, so the stop

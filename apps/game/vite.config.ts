@@ -287,7 +287,7 @@ export function gameVite(
        * the plugin when the second terminal is more annoying than a build
        * regression with two suspects, and revisit it on its own.
        *
-       * With `wrangler dev` not running, these fail and the client reports
+       * With `cf dev` not running, these fail and the client reports
        * `no server` — which is the offline path, exercised by default.
        */
       proxy: {

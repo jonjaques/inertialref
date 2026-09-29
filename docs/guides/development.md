@@ -14,7 +14,7 @@ bun to change dependencies.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm dev              # Astro on 5173 and wrangler on 8787
+pnpm dev              # Astro on 5173 and cf dev on 8787
 pnpm preview          # production build, served by the real Worker on 8787
 pnpm test             # Vitest, Node environment only
 pnpm test:gpu         # the shader suite on the real GPU via Dawn; not in check
@@ -59,14 +59,14 @@ pnpm shapes:build              # measured shape models into data/shapes
 pnpm solar:fetch               # data/reference/solar-system.json, from JPL
 
 pnpm dev:client                # Astro only
-pnpm dev:server                # wrangler on 127.0.0.1:8787
-pnpm run deploy:worker         # build, then wrangler deploy
+pnpm dev:server                # cf dev on localhost:8787
+pnpm run deploy:worker         # build, then cf deploy
 pnpm media:pull                # reference audio from R2; not in git
 pnpm media:push
 ```
 
 **`pnpm dev` needs a `dist/` to exist, which a fresh worktree does not have.**
-`apps/server/wrangler.jsonc` binds its assets to `../game/dist`, and `wrangler
+`apps/server/wrangler.config.ts` points the assets at `../game/dist`, and `cf
 dev` refuses to start when that directory is absent — so in a worktree created
 by [`/parallel`](../../.claude/skills/parallel/SKILL.md), or in any clone that
 has never built, the Worker half exits immediately and `scripts/dev.mjs` stops
@@ -92,7 +92,7 @@ environment for Claude Code, Codex, Cursor and the rest, and a detected `astro
 dev` or `astro preview` spawns a detached copy of itself, writes a lock file
 under `apps/game/.astro/`, and returns: from a terminal, a server that outlives
 the session; under `scripts/dev.mjs`, a client child that exits cleanly a
-second in and takes wrangler with it. The game package's `dev` and `preview`
+second in and takes the Worker with it. The game package's `dev` and `preview`
 scripts set `ASTRO_DEV_BACKGROUND` and `ASTRO_PREVIEW_BACKGROUND`, the
 variables Astro gives its own detached child so that it does not daemonize
 twice, and so every route into Astro stays in the foreground. They are the only
@@ -109,8 +109,8 @@ gone, and `pnpm dev` then says so and points at `lsof` instead;
 alone and lets Vite proxy to the Worker already there.
 
 `pnpm run deploy:worker`, not `pnpm deploy:worker` — `deploy` is a pnpm
-built-in. After any change to `wrangler.jsonc`, regenerate
-`apps/server/worker-configuration.d.ts` with
+built-in. After any change to `apps/server/cloudflare.config.ts`, regenerate
+`apps/server/.cloudflare/types/index.d.ts` with
 `pnpm --filter @inertialref/server run types` and commit it.
 
 `pnpm check` is the gate, and `scripts/check.mjs` is what it runs: every stage
@@ -168,7 +168,7 @@ tsconfig projects type-check the portable core and four host environments:
 | `tsconfig.json`               | `packages/*/src`  | **No DOM lib, no Node lib** — must run in the browser, a worker, and Node |
 | `apps/game/tsconfig.json`     | the client        | DOM, WebWorker, JSX                                                       |
 | `apps/headless/tsconfig.json` | the Node runner   | Node types                                                                |
-| `apps/server/tsconfig.json`   | the Worker        | workerd globals and `Env`, from `worker-configuration.d.ts`               |
+| `apps/server/tsconfig.json`   | the Worker        | workerd globals and `Env`, from `.cloudflare/types/index.d.ts`            |
 | `apps/ingest/tsconfig.json`   | the catalog build | Node types; runs offline, never at play time                              |
 
 `packages/*` are source-only workspace links. There is no build step between
@@ -381,20 +381,21 @@ Four configurations in [`.vscode/launch.json`](../../.vscode/launch.json),
 shared by VS Code and Cursor. The play button on **Launch Browser** starts
 the game.
 
-| Configuration      | Debuggee                                       | Port |
-| ------------------ | ---------------------------------------------- | ---- |
-| **Launch Browser** | the client; the editor starts Astro + wrangler | 5173 |
-| **Attach Browser** | Chrome already running with remote debugging   | 9222 |
-| **Launch Node**    | `apps/headless` (`--self-test`)                | —    |
-| **Attach Node**    | `pnpm sim` (`node --inspect=127.0.0.1:9229`)   | 9229 |
+| Configuration      | Debuggee                                     | Port |
+| ------------------ | -------------------------------------------- | ---- |
+| **Launch Browser** | the client; the editor starts Astro + cf dev | 5173 |
+| **Attach Browser** | Chrome already running with remote debugging | 9222 |
+| **Launch Node**    | `apps/headless` (`--self-test`)              | —    |
+| **Attach Node**    | `pnpm sim` (`node --inspect=127.0.0.1:9229`) | 9229 |
 
 Launch Browser runs `node scripts/dev.mjs --ensure` as a background task. If
 5173 is already up, it reuses that process and does not kill it when debugging
 stops; if it is not, the task is `pnpm dev` and stopping debugging stops both
 children.
 
-Wrangler's workerd inspector is on **9230** so it does not steal Node's
-default. Press `d` in a wrangler terminal to open it. Source maps ship in
+The Worker's workerd inspector under `cf dev` is on **9230** so it does not
+steal Node's default; `dev.inspectorPort` in `apps/server/wrangler.config.ts`
+sets it. Source maps ship in
 `pnpm dev` and in the production JS (including the universe worker);
 `build.sourcemap: true` is the switch, and a build that omitted the
 `sourceMappingURL` comment fails the gate. Production CSS has no map — Vite 8

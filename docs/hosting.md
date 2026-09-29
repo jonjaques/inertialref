@@ -30,23 +30,31 @@ scene and local tour controls do not require provider credentials. See
 [ADR-0041](adr/0041-the-guide-requests-the-view.md) for the execution boundary.
 
 Local `pnpm dev` starts the server through `scripts/tour/dev.mjs`. That adapter
-passes the repository's gitignored `.env.local` to Wrangler alone. Use
-`OPENAI_API_KEY` and `TOUR_GUIDE_PASSWORD` without a `VITE_` prefix. The client
-bundle, preference store, and public build variables never receive them.
+loads the repository's gitignored `.env.local` into its own process, which
+starts nothing but `cf dev`; `cf dev` reads each declared secret from that
+environment. Use `OPENAI_API_KEY` and `TOUR_GUIDE_PASSWORD` without a `VITE_`
+prefix. Vite never sees the file, so the client bundle, preference store, and
+public build variables never receive them.
 
-Production uses Worker secrets, entered through Wrangler's secret prompt:
+Production uses Worker secrets. `cf` 1.0.0-beta.5 has no command that sets one,
+so they are entered through Wrangler's secret prompt, which needs the Worker
+name because the platform configuration is `cloudflare.config.ts` and Wrangler
+does not read it:
 
 ```bash
-pnpm --filter @inertialref/server exec wrangler secret put OPENAI_API_KEY
-pnpm --filter @inertialref/server exec wrangler secret put TOUR_GUIDE_PASSWORD
+pnpm --filter @inertialref/server exec wrangler secret put OPENAI_API_KEY --name inertialrefd
+pnpm --filter @inertialref/server exec wrangler secret put TOUR_GUIDE_PASSWORD --name inertialrefd
 ```
 
+`cf deploy --secrets-file <path>` (JSON or `.env`) uploads secrets with a
+version instead.
+
 The Worker implements no Durable Object. [ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)
-moved the conversation into the browser, and the `tour-v2` migration deletes
-the `TourSession` and `TourAdmission` classes the earlier design bound.
-Regenerate host declarations with `pnpm --filter @inertialref/server types`
-when bindings change. Deployment applies the class-deletion migration; it does
-not require a simulation or D1 migration.
+moved the conversation into the browser, and the deployed Worker's `tour-v2`
+migration has deleted the `TourSession` and `TourAdmission` classes the earlier
+design bound, so `cloudflare.config.ts` declares no `exports` and no migration.
+Regenerate host declarations with `pnpm --filter @inertialref/server run types`
+when bindings change. Deployment requires no simulation or D1 migration.
 
 | Endpoint                     | Purpose                                                                          |
 | ---------------------------- | -------------------------------------------------------------------------------- |
@@ -76,12 +84,15 @@ provider failure carrying the provider's status, error type, error code,
 message and request id — the browser sees only the 503, so this record is the
 one place a revoked key or a spent project is readable. Workers Traces holds a
 span per route with the provider round trip as a child. Both are unsampled and
-persisted; `apps/server/wrangler.jsonc` says why. Read them in the dashboard
+persisted; `apps/server/cloudflare.config.ts` says why. Read them in the dashboard
 under the Worker's Logs and Traces tabs, or live:
 
 ```bash
 pnpm --filter @inertialref/server run tail
 ```
+
+The script is `wrangler tail inertialrefd --format pretty`: `cf` 1.0.0-beta.5
+has no live-log command.
 
 The message log lives where the messages do. `ir.guideTrace(true)`
 enables the browser's application-message log and `ir.guideTrace()` returns its
@@ -228,7 +239,7 @@ They move; re-check before relying on one.
 
 **The class/object row is the one people misread, so read it twice.** A
 Durable Object _class_ is a type — a blueprint, declared once in
-`wrangler.jsonc`. A Durable Object _object_ is a live instance of that class,
+`cloudflare.config.ts` with `exports.durableObject({ storage: 'sqlite' })`. A Durable Object _object_ is a live instance of that class,
 addressed by name. **This entire plan defines exactly one class**,
 `PartitionAuthority`, and instantiates it once per partition key. Five hundred
 players in five hundred different star systems is 500 _objects_ of 1 _class_,
@@ -245,43 +256,54 @@ irrelevant — the bundle is an _asset_, not part of the script.
 
 ### H-1 · One Worker serves the client and the API
 
-✅ **Built.** `apps/server` owns `wrangler.jsonc` and the Worker entry point,
-and points `assets.directory` at `apps/game/dist`. `run_worker_first` sends
-`/api`, `/ws` and `/media/*` to the script; everything else is served as a static asset
-without invoking it.
+✅ **Built.** `apps/server` owns `cloudflare.config.ts` and the Worker entry
+point. `wrangler.config.ts` beside it points `assetsDirectory` at
+`apps/game/dist`. `runWorkerFirst` sends `/api`, `/ws` and `/media/*` to the
+script; everything else is served as a static asset without invoking it.
 
-The asset routing is configured in `apps/server/wrangler.jsonc`:
+The platform configuration is `apps/server/cloudflare.config.ts`, read by `cf`
+(excerpt; the bindings and observability are in the file):
 
-```jsonc
-{
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "inertialrefd",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-08-20",
-  // A custom domain, not a route: it provisions the DNS record and the
-  // certificate and points the hostname at this Worker. A route is a pattern
-  // over an origin that already exists, and there is no origin here.
-  "routes": [{ "pattern": "inertialref.app", "custom_domain": true }],
-  "assets": {
-    "directory": "../game/dist",
-    "binding": "ASSETS",
-    // Astro emits route HTML; an unknown address receives a real 404.
-    "not_found_handling": "404-page",
-    "html_handling": "drop-trailing-slash",
-    // `/api` is listed as well as `/api/*` because the glob does not match the
-    // bare path. Media names go through the R2 allow-list.
-    "run_worker_first": ["/api", "/api/*", "/ws", "/media/*"],
+```ts
+export default defineConfig({
+  worker: {
+    name: 'inertialrefd',
+    compatibilityDate: '2026-08-20',
+    entrypoint: 'src/index.ts',
+
+    // Version previews identify one build; workers.dev does not track production.
+    workersDev: false,
+    previewUrls: true,
+
+    assets: {
+      // Astro emits route HTML; an unknown address receives a real 404.
+      notFoundHandling: '404-page',
+      htmlHandling: 'drop-trailing-slash',
+      // `/api` is listed as well as `/api/*` because the glob does not match
+      // the bare path. Media names go through the R2 allow-list.
+      runWorkerFirst: ['/api', '/api/*', '/ws', '/media/*'],
+    },
+
+    // Custom domains, not routes: each provisions the DNS record and the
+    // certificate and points the hostname at this Worker.
+    domains: ['inertialref.app', 'inertialref.jonjaques.com'],
+
+    env: {
+      MEDIA: bindings.r2({ name: 'inertialrefd-storage' }),
+      CF_VERSION_METADATA: bindings.versionMetadata(),
+      ASSETS: bindings.assets(),
+      // …the guide's text, secret and rate-limit bindings
+    },
   },
-  "version_metadata": { "binding": "CF_VERSION_METADATA" },
-  "observability": {
-    "enabled": true,
-    "logs": { "invocation_logs": true, "head_sampling_rate": 1 },
-    "traces": { "enabled": true, "head_sampling_rate": 1 },
-  },
-}
+})
 ```
 
-`run_worker_first` needs Wrangler ≥ 4.20.0.
+`cf` bundles this project with Wrangler, so the bundler's half —
+`assetsDirectory`, `uploadSourceMaps`, the dev inspector port and
+`types: { generate: false }` — is `apps/server/wrangler.config.ts`
+(`defineWranglerConfig` from `wrangler/experimental-config`). The toolchain is
+`cf` 1.0.0-beta.5 with `wrangler` ^4.142.0 beside it as a devDependency of
+`apps/server`; `cf` requires Wrangler ≥ 4.136.0.
 
 `main` builds every API reference page as HTML. Review builds keep prose HTML
 and a shared `/docs/api` loading shell, with exact `_redirects` proxies for
@@ -291,13 +313,15 @@ addresses still return 404. TypeDoc validation runs in both builds.
 branch. See the [development guide](guides/development.md#toolchain) and
 [ADR-0039](adr/0039-the-shell-before-the-scene.md).
 
-The checked-in configuration binds no Durable Object. The guide's original
-`TourSession` and `TourAdmission` classes were created by the `tour-v1`
-migration and deleted by `tour-v2` once the browser took over the conversation
-([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)); the deleted-class
-migration must stay in the list so a deploy from a version that had them
-applies the deletion. Multiplayer partition objects and D1 bindings are the
-next `new_sqlite_classes` migration, and are future milestones.
+The checked-in configuration binds no Durable Object and has no `exports`
+block. The guide's original `TourSession` and `TourAdmission` classes were
+created by the `tour-v1` migration and deleted by `tour-v2` once the browser
+took over the conversation
+([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)); the deployed Worker has
+applied both, so there is no class lifecycle left to declare. Multiplayer
+partition objects are the next `exports.durableObject({ storage: 'sqlite' })`
+entry in `cloudflare.config.ts`, and they and the D1 bindings are future
+milestones.
 
 `version_metadata` was not in the original sketch and earns its place: the
 health record reports the deployment's version id, so "am I talking to the
@@ -508,10 +532,10 @@ gate, and the one asset the repository will not carry.
 
 **One canonical hostname.** `inertialref.app` is what
 `<link rel="canonical">` names, what the sitemap lists, and the only host
-`src/analytics.ts` will load a tag on. Every Wrangler preview URL is the same
+`src/analytics.ts` will load a tag on. Every version preview URL is the same
 deployment under a different name — useful for checking a build, and wrong to
 count as visits or to let a crawler index as a duplicate site. The Worker's own
-`workers.dev` route is off (`workers_dev: false` in `wrangler.jsonc`), so there
+`workers.dev` route is off (`workersDev: false` in `cloudflare.config.ts`), so there
 is no additional `workers.dev` address tracking production. Both custom
 origins remain live so installed apps keep their storage; a preview URL names
 one version.
@@ -587,7 +611,7 @@ They are not two sources. It is one object under one key, reached by two
 transports, and the fallback is what makes a credential-less build a slower
 first byte rather than a missing feature.
 
-**`run_worker_first` covers `/media/*`.** The script asks `env.ASSETS` first
+**`runWorkerFirst` covers `/media/*`.** The script asks `env.ASSETS` first
 and reaches R2 on a miss. The response is `immutable`, so a cache can reuse it
 on later plays. Unlisted names return 404 before any bucket read.
 
@@ -625,7 +649,8 @@ read; `mediaFor` answers for exactly the names in the table.
 > the status off it answers every plain GET with `206 Partial Content`. Browsers
 > mostly cope; caches are entitled not to.
 
-Workers Builds needs R2 read on whatever token it runs `wrangler` with for the
+Workers Builds needs R2 read on the `CLOUDFLARE_API_TOKEN` its build runs `cf`
+with — `scripts/media.mjs` fetches through `cf r2 objects get` — for the
 _bundled_ copy to exist. If it does not have one, the deploy still succeeds, the
 build log says so in one line, and the Worker serves the track from the bucket
 instead — which is the whole point of having both.
@@ -672,11 +697,12 @@ the coincidence.
 
 ```
 apps/server/                    ✅ the only place Cloudflare appears
-  wrangler.jsonc                ✅
+  cloudflare.config.ts          ✅ the platform configuration `cf` reads
+  wrangler.config.ts            ✅ the bundler's half: assets directory, dev inspector
   tsconfig.json                 ✅ the fourth typecheck project
   src/index.ts                  ✅ fetch handler: /api/health, /ws (501), assets
   src/routes.ts                 ✅ pure routing, so it is testable in plain Node
-  worker-configuration.d.ts     ✅ generated by `wrangler types`, committed
+  .cloudflare/types/index.d.ts  ✅ generated by `cf workers types`, committed
   src/partition.ts              ⬜ class PartitionAuthority extends DurableObject
   src/api/                      ⬜ discovery, catalog, sync
   migrations/                   ⬜ D1 schema, one file per change
@@ -701,7 +727,7 @@ it is a deduplication rather than a feature: the overlay and the authority both
 have to know which partition owns a ship, and two open-codings of the same
 coincidence is precisely what H0 had just finished removing.
 
-`apps/server` is an **app**, so it may depend on `wrangler`,
+`apps/server` is an **app**, so it may depend on `cf`, `wrangler`,
 `@cloudflare/workers-types` and `cloudflare:workers`. `pnpm graph` reads
 `packages/` only, which is correct and deliberate: the vendor is allowed at the
 edge of the graph and nowhere else.
@@ -881,10 +907,13 @@ Two things follow, and neither is work for today:
 accidental. `apps/server` is the fourth.
 
 One correction to the plan: `@cloudflare/workers-types` is not involved.
-`wrangler types` emits the runtime types _and_ the `Env` interface into a single
-`worker-configuration.d.ts` — 580 KB of it — so the project has `types: []` and
-includes that file. It is committed, which means it is also in `.prettierignore`:
-reformatting generated output produces a diff nobody wrote.
+`cf workers types` (the package's `types` script) emits the runtime types _and_
+an `Env` inferred from `cloudflare.config.ts` into a single
+`apps/server/.cloudflare/types/index.d.ts` — about 600 KB of it — so the project
+has `types: []` and includes `src` and that file. It is committed while the rest
+of `.cloudflare/` (the Build Output a `cf deploy` stages) is ignored, and
+`.cloudflare/` is in `.prettierignore`: reformatting generated output produces a
+diff nobody wrote.
 
 ### Tests run in Node, on purpose, and DO tests cannot
 
@@ -901,15 +930,15 @@ is what makes hibernation and teardown testable at all. Note that the pool wants
 
 ### The dev loop is two servers, and that is the cheaper option
 
-`pnpm dev` starts Astro on 5173 and Wrangler on 8787. Astro's Vite server
+`pnpm dev` starts Astro on 5173 and `cf dev` on 8787. Astro's Vite server
 proxies `/api` and `/ws` to the Worker. `scripts/dev.mjs` gives both processes a
 shared lifetime; `pnpm dev:client` and `pnpm dev:server` run either half alone.
 Astro owns the page build, while the React Compiler and Tailwind remain Vite
 plugins inside that build.
 
 **`pnpm preview` is the production emulation.** It builds and runs
-`wrangler dev` against the resulting static assets. That exercises the real
-`run_worker_first`, per-route HTML and 404 behavior, and registers the service
+`cf dev` against the resulting static assets. That exercises the real
+`runWorkerFirst`, per-route HTML and 404 behavior, and registers the service
 worker because the assets are a production build.
 
 A property worth keeping rather than fixing: with the Worker **not** running,
@@ -940,7 +969,7 @@ put it on the debug overlay, and look at it for a phase before trusting it.
 | --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **H0** ✅ | Fix the coincidence                  | `inspect.ts` calls `partitionForAddress`; a renamed frame grammar breaks a test rather than production                                                                                        |
 | **H1** ✅ | The client is on a URL               | `apps/server` exists, serves `apps/game/dist`, prerendered route HTML and 404s work, service worker excludes `/api` and `/ws`, custom domain live, 12/12 capability checks pass in production |
-| **H2** 🟡 | The API exists and is empty          | `/api/version` returns seed, galaxy and `GENERATION_VERSIONS`; D1 bound with one migration; `wrangler types` output committed; fourth tsconfig project green                                  |
+| **H2** 🟡 | The API exists and is empty          | `/api/version` returns seed, galaxy and `GENERATION_VERSIONS`; D1 bound with one migration; `cf workers types` output committed; fourth tsconfig project green                                |
 | **H3** ✅ | The port exists, still offline       | `packages/net` with `AuthorityPort` + `LocalAuthority`; `openSession` takes one and defaults to local; **no behavioral change**, proven by an unchanged `stateHash`                           |
 | **H4**    | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction                       |
 | **H5**    | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                                        |
@@ -997,34 +1026,47 @@ regression is reproducible in CI without a browser.
 ## Environments, deployment and secrets
 
 **Workers Builds** is the repo-connected deployment path. `main` is production;
-other branches upload versions. The guide's Durable Objects prevent automatic
-version preview URLs, so an upload is not a deployed review app. That removes the API token from GitHub entirely, which
-is why it won out over a deploy workflow in Actions.
+other branches upload versions. That removes the API token from GitHub entirely,
+which is why it won out over a deploy workflow in Actions. Both commands run
+`cf` in `apps/server`, so the Workers Builds configuration is:
 
-| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workers_dev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                   |
-| Review apps     | Branch uploads preserve a Worker version. Durable Object classes prevent automatic preview URLs; deployed guide review needs a separately configured staging Worker.                                                                                                                                                                                                                                                 |
-| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                           |
-| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
-| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                       |
-| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                     |
-| Migrations      | The `tour-v1` Durable Object migration creates `TourSession` and `TourAdmission` on deployment. D1 migrations remain future multiplayer work.                                                                                                                                                                                                                                                                        |
-| Secrets         | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.                                                                                                                                                                                                                              |
-| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.          |
-| Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                                        |
-| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                    |
-| Observability   | Workers Logs and Workers Traces, unsampled and persisted. `apps/server/src/tour/log.ts` writes one object per record in the `scope` / `message` / fields shape `packages/shared` uses, with the level as the console method; the guide section above says what is recorded and how to read it.                                                                                                                       |
+| Setting                       | Command                                                 |
+| ----------------------------- | ------------------------------------------------------- |
+| Build command                 | `pnpm build`                                            |
+| Deploy command                | `pnpm --filter @inertialref/server run deploy`          |
+| Non-production branch command | `pnpm --filter @inertialref/server run versions:upload` |
+
+`deploy` is `cf deploy`, which stages its Build Output — the Worker bundle and a
+copy of `apps/game/dist` — under the ignored `apps/server/.cloudflare/output/`.
+`versions:upload` is `cf workers versions create`. `cf` authenticates with
+`CLOUDFLARE_API_TOKEN` in a build and with `cf auth login` on a developer's
+machine.
+
+| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production      | Push to `main` → `cf deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workersDev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                                                 |
+| Review apps     | A branch upload creates a Worker version with its own preview URL (`previewUrls: true`). That holds while the Worker implements no Durable Object; see below.                                                                                                                                                                                                                                                                               |
+| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                                                  |
+| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assetsDirectory` in `wrangler.config.ts` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
+| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                                              |
+| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                                            |
+| Migrations      | None declared: the deployed Worker's `tour-v2` migration has deleted the guide's former classes. H4's `PartitionAuthority` is declared in `cloudflare.config.ts` with `exports.durableObject({ storage: 'sqlite' })`. D1 migrations remain future multiplayer work.                                                                                                                                                                         |
+| Secrets         | Declared with `bindings.secret()`, never `bindings.text()`, and **not** Workers Builds' build variables — those exist only during the build. Values are set with `wrangler secret put <NAME> --name inertialrefd` (`cf` 1.0.0-beta.5 has no secret command) or uploaded with a version by `cf deploy --secrets-file`. Nothing in `cloudflare.config.ts` may be a credential; it is committed.                                               |
+| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.                                 |
+| Rollback        | Promote a previous version from the dashboard (`cf workers deployments` lists them), or `wrangler rollback --name inertialrefd` from the command line. DO SQLite migrations are not rolled back by either; write them additively.                                                                                                                                                                                                           |
+| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                                           |
+| Observability   | Workers Logs and Workers Traces, unsampled and persisted. `apps/server/src/tour/log.ts` writes one object per record in the `scope` / `message` / fields shape `packages/shared` uses, with the level as the console method; the guide section above says what is recorded and how to read it.                                                                                                                                              |
 
 ### Durable Objects require a different review environment
 
 Cloudflare's [preview URL documentation](https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/)
 states that Workers implementing Durable Objects do not receive version preview
-URLs. The guide introduces those classes before multiplayer H4. `preview_urls`
-remaining enabled in Wrangler does not remove that platform limitation.
+URLs. The Worker implements none, so `cf workers versions create` produces a
+preview URL. H4's `PartitionAuthority` ends that, and `previewUrls: true`
+remaining in `cloudflare.config.ts` does not remove the platform limitation.
 
-Local review uses `wrangler dev`, which runs workerd and the guide's Durable
-Objects. A deployed provider test needs a separately configured staging Worker
+From then on, local review uses `cf dev`, which runs workerd and the Worker's
+Durable Objects. A deployed test needs a separately configured staging Worker
 and its own namespaces and secrets. That environment is an operational setup
 step; the source configuration and a versions upload do not prove it exists.
 
