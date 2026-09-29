@@ -11,11 +11,6 @@ function check(source, args = []) {
   try {
     mkdirSync(join(root, 'packages/sample/src'), { recursive: true })
     writeFileSync(join(root, 'packages/sample/src/sample.ts'), source)
-    mkdirSync(join(root, 'apps/server/src'), { recursive: true })
-    writeFileSync(
-      join(root, 'apps/server/src/worker-configuration.d.ts'),
-      'declare const cancelled: boolean',
-    )
     return spawnSync(process.execPath, [scanner, '--root', root, ...args], {
       encoding: 'utf8',
     })
@@ -48,7 +43,7 @@ describe('the spelling gate', () => {
     expect(result.status).toBe(1)
     expect(JSON.parse(result.stdout).map((row) => row.name)).toEqual(['colour'])
   })
-  it('permits prose examples and generated vendor declarations', () => {
+  it('permits prose examples', () => {
     const result = check(
       "export const color = 1; export const example = 'colour'",
       ['--check'],

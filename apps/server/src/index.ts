@@ -46,7 +46,7 @@ import { serveTour } from './tour/routes.ts'
  *     rather than wall time.
  *   - Static asset requests never reach this script and are not billed, so
  *     serving the client from the same origin as the API is free. `assets` and
- *     `run_worker_first` in wrangler.jsonc are what make that true.
+ *     `runWorkerFirst` in cloudflare.config.ts are what make that true.
  */
 
 /** The client's universe, as this deployment derives it. */
@@ -71,7 +71,7 @@ export default {
         const health: ServerHealth = {
           ...IDENTITY,
           revision: env.CF_VERSION_METADATA?.id ?? 'unknown',
-          // Absent under `wrangler dev`, where there is no edge to name.
+          // Absent under `cf dev`, where there is no edge to name.
           colo: request.cf?.colo ?? '',
         }
         return api(health)

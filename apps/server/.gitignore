@@ -1,3 +1,12 @@
 # Wrangler's local state: the workerd bundle cache and the miniflare stores that
-# back D1/DO in `wrangler dev`. Regenerated on demand, never shared.
+# back D1/DO under `cf dev`. Regenerated on demand, never shared.
 .wrangler
+
+# `cf`'s working directory. `output/` is the Build Output a `cf deploy` stages —
+# the Worker bundle plus a full copy of `apps/game/dist` — and is rebuilt on
+# every deploy. `types/` is `cf workers types` output and is committed: the
+# Worker's tsconfig reads the workerd runtime types and `Env` from it, so a
+# typecheck is hermetic. `Env` is inferred from `cloudflare.config.ts` by type;
+# the runtime half is what goes stale, on a compatibility-date bump.
+.cloudflare/*
+!.cloudflare/types/

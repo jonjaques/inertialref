@@ -41,7 +41,7 @@ export const NET_PROTOCOL_VERSION = 1
 
 /**
  * Paths, in one place, because four things have to agree on them: the client,
- * the Worker's router, `run_worker_first` in `wrangler.jsonc`, and the service
+ * the Worker's router, `runWorkerFirst` in `cloudflare.config.ts`, and the service
  * worker's cache bypass. The last of those is plain JavaScript in
  * `apps/game/public/` and cannot import this file — it repeats the prefix with
  * a comment pointing here, which is the one duplicate that could not be

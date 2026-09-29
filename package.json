@@ -15,7 +15,7 @@
     "format": "prettier -w .",
     "format:check": "prettier -c .",
     "build": "node scripts/media.mjs pull --optional && pnpm docs:build && pnpm typecheck && pnpm --filter @inertialref/game build",
-    "preview": "pnpm build && pnpm --filter @inertialref/server exec wrangler dev",
+    "preview": "pnpm build && pnpm --filter @inertialref/server exec cf dev",
     "preview:client": "pnpm --filter @inertialref/game preview",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

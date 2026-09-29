@@ -10,10 +10,11 @@ the play button on **Launch Browser** is the one that starts the game.
 | **Launch Node**    | the headless runner (`--self-test`)        | —    |
 | **Attach Node**    | `pnpm sim`, which listens with `--inspect` | 9229 |
 
-Wrangler's workerd inspector is on **9230**, so it does not steal Node's
-default. It is not one of the four configurations; press `d` in a wrangler
-terminal, or attach a Node debugger to 9230, if the Worker script is the
-thing with the breakpoint.
+The Worker's workerd inspector under `cf dev` is on **9230**, so it does not
+steal Node's default; the port is `dev.inspectorPort` in
+`apps/server/wrangler.config.ts`. It is not one of the four configurations;
+attach a Node debugger to 9230 if the Worker script is the thing with the
+breakpoint.
 
 ## Launch Browser
 

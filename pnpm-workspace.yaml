@@ -5,8 +5,8 @@ packages:
 # pnpm refuses to run install scripts unless the package is named here, and
 # pnpm 11 and later want the decision spelled out per package, not as a list.
 # These all ship native binaries and genuinely need their postinstall; workerd is
-# the Workers runtime `wrangler dev` and `wrangler deploy` execute against, and
-# without its postinstall there is no binary to run.
+# the Workers runtime `cf dev` and `cf deploy` execute against, and without its
+# postinstall there is no binary to run.
 allowBuilds:
   '@tailwindcss/oxide': true
   # sharp is how `apps/ingest` resizes a 21600x10800 GEBCO elevation PNG into a
@@ -25,10 +25,12 @@ allowBuilds:
   # that file, not flipping this to true.
   webgpu: false
 
-# wrangler moves fast enough to trip the release-age gate. Recorded rather than
-# waived globally, so the exception is visible and dated with the lockfile.
+# The Cloudflare toolchain moves fast enough to trip the release-age gate: `cf`
+# is a beta, and it refuses a Wrangler older than the one it was built against.
+# Recorded rather than waived globally, so the exception is visible and dated
+# with the lockfile.
 minimumReleaseAgeExclude:
-  - miniflare@5.20260820.0-alpha
-  - wrangler@4.125.0
   - '@astrojs/markdown-satteri@0.4.1'
   - astro@7.3.2
+  - '@cloudflare/codemods@0.2.1'
+  - cf@1.0.0-beta.5

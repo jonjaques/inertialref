@@ -76,7 +76,7 @@ they are part of the change, not a gate on it:
 - **The ledger or a plate**, if a change moved a picture on purpose: `pnpm
 presets:ledger` rewrites the headless ledger, `pnpm presets:plates <id>` the plate,
   and the rewritten file in the diff is the claim under review.
-- **`worker-configuration.d.ts`** if `wrangler.jsonc` changed
+- **`apps/server/.cloudflare/types/index.d.ts`** if `cloudflare.config.ts` changed
   (`pnpm --filter @inertialref/server run types`).
 
 ## 3. Push

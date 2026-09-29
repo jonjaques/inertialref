@@ -96,7 +96,7 @@ pnpm --version    # 12.x
 git clone git@github.com:jonjaques/inertialref.git
 cd inertialref
 pnpm install --frozen-lockfile
-pnpm build               # creates the assets directory used by Wrangler
+pnpm build               # creates the assets directory the Worker serves
 pnpm dev                 # → http://localhost:5173
 ```
 
@@ -343,7 +343,7 @@ in `packages/*`.
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `pnpm dev`                    | Astro on :5173 **and** the Worker on :8787, in one terminal                                                        |
 | `pnpm dev:client`             | Just the Astro development server on :5173                                                                         |
-| `pnpm dev:server`             | Just `wrangler dev`                                                                                                |
+| `pnpm dev:server`             | Just `cf dev`, the Worker on :8787                                                                                 |
 | `pnpm preview`                | Build, then serve it through the real Worker on :8787                                                              |
 | `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                                                          |
 | `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`                                               |

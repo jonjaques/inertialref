@@ -15,9 +15,11 @@ credentials or raw provider errors.
 
 ## Development
 
-`pnpm dev` starts Vite and the Worker. `dev.mjs` is the Worker half: it passes
-the repository's gitignored `.env.local` to Wrangler alone, so the client
-bundle never sees `OPENAI_API_KEY` or `TOUR_GUIDE_PASSWORD`.
+`pnpm dev` starts Vite and the Worker. `dev.mjs` is the Worker half: it loads
+the repository's gitignored `.env.local` into its own process, which only
+starts `cf dev`, and `cf dev` reads secrets from that environment. Vite never
+sees the file, so the client bundle never sees `OPENAI_API_KEY` or
+`TOUR_GUIDE_PASSWORD`.
 
 The browser console has three harness verbs for the guide, all of which use
 the runtime the dock panel owns rather than opening a second one:
