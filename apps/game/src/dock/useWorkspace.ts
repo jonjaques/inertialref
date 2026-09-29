@@ -73,6 +73,8 @@ export interface Workspace {
   readonly panes: PaneState
   /** The frame a floating panel is clamped into, live across a resize. */
   readonly viewport: FloatSize
+  /** A ref for the float field, which is what `viewport` then measures. */
+  readonly frame: (node: HTMLElement | null) => void
   /** Whether a panel is showing its header alone. */
   readonly isCollapsed: (panel: string) => boolean
   /**
@@ -143,20 +145,41 @@ export function useWorkspace(
    * resize with nothing floating is a comparison and no state change.
    */
   const [viewport, setViewport] = useState(viewportSize)
+  /*
+   * The float field, once it is on screen — the box a floating panel's
+   * position is measured in.
+   *
+   * Not the window. The field is inside `.hud-layer`, which is inset by the
+   * safe areas and, with the menu attached to an edge, by its band — so a
+   * clamp against `innerHeight` lets a panel hang a band's height past the
+   * bottom of the frame it is drawn in, under the bar or off the display.
+   * The window is the answer only before the field exists and on a phone,
+   * where there is no field and nothing floats.
+   */
+  const [frame, setFrame] = useState<HTMLElement | null>(null)
   useEffect(() => {
-    // The bail is on the values, not the object: `viewportSize` returns a
-    // fresh literal every call and React compares with `Object.is`, so
-    // without this every resize event re-rendered the whole workspace.
-    const onResize = (): void =>
-      setViewport((previous) => {
-        const next = viewportSize()
-        return next.width === previous.width && next.height === previous.height
+    // The bail is on the values, not the object: a measurement is a fresh
+    // literal every call and React compares with `Object.is`, so without this
+    // every resize re-rendered the whole workspace.
+    const accept = (next: FloatSize): void =>
+      setViewport((previous) =>
+        next.width === previous.width && next.height === previous.height
           ? previous
-          : next
-      })
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
+          : next,
+      )
+    if (frame === null) {
+      const onResize = (): void => accept(viewportSize())
+      window.addEventListener('resize', onResize)
+      return () => window.removeEventListener('resize', onResize)
+    }
+    // Fires once on `observe`, and again when the menu takes or returns its
+    // band, which is not a window resize at all.
+    const observer = new ResizeObserver(() =>
+      accept({ width: frame.clientWidth, height: frame.clientHeight }),
+    )
+    observer.observe(frame)
+    return () => observer.disconnect()
+  }, [frame])
 
   const floats = pruneFloats(
     storedFloats,
@@ -204,6 +227,7 @@ export function useWorkspace(
     floats,
     panes,
     viewport,
+    frame: setFrame,
     isCollapsed: (panel) => collapsed.includes(panel),
 
     drop: (panel, zone, visible, visibleIndex) => {

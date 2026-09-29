@@ -513,6 +513,38 @@ body,
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+  /* The IR menu attached to an edge, as a band the height of one row of its
+     glyphs. `dock/Workspace.tsx` measures floating panels against what is left
+     rather than repeating this number. */
+  --dock-band: 2.5rem;
+  --dock-top: 0px;
+  --dock-bottom: 0px;
+}
+
+/*
+ * An attached menu takes its band the way the notch takes the top: as an inset
+ * the layer spends, so every piece of chrome is laid out in what is left.
+ *
+ * The alternative was to teach each piece — the panes, the flight strip, the
+ * notices, the character prompt, the corner readouts, the cinema transport, the
+ * floating panels' clamp — where the bar is, which is a dozen call sites today
+ * and a thirteenth that is wrong the day it is written. This is the mechanism
+ * the safe areas already use, and a readout added next year is clear of the bar
+ * without being told.
+ *
+ * `:has()` on the bar itself, rather than a flag set by whoever renders it,
+ * because "is an attached bar on screen" has more answers than the preference:
+ * no bar on the menu's own page, none on a phone (where `CompactDock` replaces
+ * it), none while `Shift+H` has cleared the chrome. Each of those removes the
+ * element, and the band goes with it. The attribute is on one element in the
+ * document, so the selector invalidates on that element and nothing else.
+ */
+:root:has([data-dock-attached='top']) {
+  --dock-top: var(--dock-band);
+}
+
+:root:has([data-dock-attached='bottom']) {
+  --dock-bottom: var(--dock-band);
 }
 
 body {
@@ -685,10 +717,11 @@ a {
      here would move nothing. This sets all four offsets, so the element must
      not also carry `inset-0`: the two rules are the same specificity and only
      the cascade layer separates them, which is a version bump away from being
-     the other way round. Same rule as `hud-bleed` below. */
-  top: var(--safe-top);
+     the other way round. Same rule as `hud-bleed` below. The attached menu's
+     band is spent here too, beside the inset on the same edge. */
+  top: calc(var(--safe-top) + var(--dock-top));
   right: var(--safe-right);
-  bottom: var(--safe-bottom);
+  bottom: calc(var(--safe-bottom) + var(--dock-bottom));
   left: var(--safe-left);
 }
 
@@ -727,14 +760,49 @@ a {
  * `inset-0` and keeps `absolute`.
  */
 @utility hud-bleed {
-  top: calc(-1 * var(--safe-top));
+  /* Back out over the attached menu's band as well as the insets: a dialog's
+     scrim dims the bar the way it dims the floating one, and the boot cover
+     covers it. The padding puts the dialog's card below it. */
+  top: calc(-1 * (var(--safe-top) + var(--dock-top)));
   right: calc(-1 * var(--safe-right));
-  bottom: calc(-1 * var(--safe-bottom));
+  bottom: calc(-1 * (var(--safe-bottom) + var(--dock-bottom)));
   left: calc(-1 * var(--safe-left));
-  padding-top: var(--safe-top);
+  padding-top: calc(var(--safe-top) + var(--dock-top));
   padding-right: var(--safe-right);
-  padding-bottom: var(--safe-bottom);
+  padding-bottom: calc(var(--safe-bottom) + var(--dock-bottom));
   padding-left: var(--safe-left);
+}
+
+/**
+ * The attached menu, in the band `.hud-layer` gave up for it.
+ *
+ * Positioned against the layer, from outside it: the layer's edge is where the
+ * band ends, so the bar is offset back across the band and the inset on the
+ * same edge. Its ground reaches the physical edges of the display — a bar that
+ * stopped short of the notch or the rounded corners would read as a card
+ * floating very close to the edge — and its row is padded back inside them,
+ * `max` rather than a sum so a display with no safe area gets the design's own
+ * spacing. `box-sizing` is the preflight's `border-box`, so the height is the
+ * band plus the inset, and the row is the band.
+ */
+@utility dock-bar-top {
+  top: calc(-1 * (var(--safe-top) + var(--dock-band)));
+  right: calc(-1 * var(--safe-right));
+  left: calc(-1 * var(--safe-left));
+  height: calc(var(--safe-top) + var(--dock-band));
+  padding-top: var(--safe-top);
+  padding-right: max(0.5rem, var(--safe-right));
+  padding-left: max(0.5rem, var(--safe-left));
+}
+
+@utility dock-bar-bottom {
+  right: calc(-1 * var(--safe-right));
+  bottom: calc(-1 * (var(--safe-bottom) + var(--dock-band)));
+  left: calc(-1 * var(--safe-left));
+  height: calc(var(--safe-bottom) + var(--dock-band));
+  padding-right: max(0.5rem, var(--safe-right));
+  padding-bottom: var(--safe-bottom);
+  padding-left: max(0.5rem, var(--safe-left));
 }
 
 /**

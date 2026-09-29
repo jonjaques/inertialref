@@ -34,6 +34,7 @@ import {
   isFloatPositions,
   NO_FLOATS,
 } from '../dock/floating.ts'
+import { DOCK_PLACEMENTS, type DockPlacement } from '../dock/placement.ts'
 import { parseChord } from '../input/chord.ts'
 import { isLens, reviveLens } from '../hud/controls.ts'
 import { isLabelDensity, isOrbitScope } from '../planetarium/layers.ts'
@@ -558,6 +559,18 @@ export const DOCK_COLLAPSED = family<readonly string[]>({
   accept: arrayOf(isString),
 })
 
+/**
+ * Floating, or attached to an edge. One answer for every mode — see
+ * `dock/placement.ts` for why this is not per workspace like the layout.
+ */
+export const DOCK_PLACEMENT = define<DockPlacement>({
+  key: 'dock.placement',
+  group: 'workspace',
+  what: 'where the menu bar sits',
+  initial: 'floating',
+  accept: oneOf(DOCK_PLACEMENTS),
+})
+
 export const DOCK_PANES = family<PaneState>({
   prefix: 'dock.panes.',
   group: 'workspace',
@@ -599,6 +612,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   NAVIGATOR_FILTERING,
   DEBUG_ON,
   TIMING_LEVEL,
+  DOCK_PLACEMENT,
 ]
 
 export const FAMILIES: readonly AnyFamily[] = [
