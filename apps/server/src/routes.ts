@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_PATH,
   API_PREFIX,
   HEALTH_PATH,
   MEDIA_PREFIX,
@@ -25,6 +26,7 @@ import { type MediaObject, mediaFor } from './media.ts'
 export type Route =
   | { readonly kind: 'tour' }
   | { readonly kind: 'health' }
+  | { readonly kind: 'account' }
   | { readonly kind: 'socket' }
   | { readonly kind: 'api-not-found' }
   | { readonly kind: 'media'; readonly object: MediaObject }
@@ -37,6 +39,7 @@ export function routeFor(pathname: string): Route {
   if (pathname === '/api/tour' || pathname.startsWith('/api/tour/'))
     return { kind: 'tour' }
   if (pathname === HEALTH_PATH) return { kind: 'health' }
+  if (pathname === ACCOUNT_PATH) return { kind: 'account' }
   if (pathname === SOCKET_PATH) return { kind: 'socket' }
   /*
    * Anything else under /api is a 404 from the API, not a page.

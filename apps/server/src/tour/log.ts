@@ -21,8 +21,14 @@ export type LogFields = Readonly<Record<string, unknown>>
 
 const SCOPE = 'server.tour'
 
-export function log(level: LogLevel, message: string, fields?: LogFields) {
-  console[level]({ scope: SCOPE, message, ...fields })
+/** `scope` names the route family writing the record; the guide's is the default. */
+export function log(
+  level: LogLevel,
+  message: string,
+  fields?: LogFields,
+  scope: string = SCOPE,
+) {
+  console[level]({ scope, message, ...fields })
 }
 
 /**

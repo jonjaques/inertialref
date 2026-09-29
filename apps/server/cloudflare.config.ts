@@ -96,6 +96,22 @@ export default defineConfig({
       TOUR_GUIDE_PASSWORD: bindings.secret(),
 
       /*
+       * Accounts (`src/account.ts`). The browser signs in against Clerk and
+       * presents the session token it was given; these are how the Worker
+       * checks one. The secret key alone is enough — it fetches the instance's
+       * signing keys once per isolate. The JWT key is the same instance's PEM
+       * public key and is optional: with it the check makes no network call.
+       * Neither set means the Worker answers every account question with
+       * "not configured", which is what a fork and a keyless `pnpm dev` see.
+       *
+       * The publishable key is not here. It is the browser's, a build variable
+       * of the client (`apps/game/.env.example`), and the Worker never needs it
+       * because it verifies tokens rather than running Clerk's sign-in handshake.
+       */
+      CLERK_SECRET_KEY: bindings.secret(),
+      CLERK_JWT_KEY: bindings.secret(),
+
+      /*
        * The site's object storage (docs/hosting.md H-8).
        *
        * It holds what the repository will not carry: today, one piece of

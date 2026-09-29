@@ -12,6 +12,7 @@
     "types": "cf workers types"
   },
   "dependencies": {
+    "@clerk/backend": "^3.20.1",
     "@inertialref/protocol": "workspace:*",
     "@inertialref/universe": "workspace:*"
   },

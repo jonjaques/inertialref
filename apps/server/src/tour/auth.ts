@@ -1,18 +1,8 @@
+import { DEVELOPMENT, HOSTS, isPreviewOrigin } from '../origins.ts'
+
 const encoder = new TextEncoder()
 const COOKIE = 'tour_access'
 const SESSION_MS = 86_400_000
-const HOSTS = new Set([
-  'https://inertialref.app',
-  'https://inertialref.jonjaques.com',
-])
-const DEVELOPMENT = new Set([
-  'http://localhost',
-  'http://127.0.0.1',
-  'http://localhost:5173',
-  'http://localhost:8787',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:8787',
-])
 
 export function allowedOrigin(request: Request): boolean {
   const origin = request.headers.get('origin')
@@ -29,16 +19,7 @@ export function allowedOrigin(request: Request): boolean {
   }
   if (HOSTS.has(target)) return origin === target
   if (DEVELOPMENT.has(target)) return DEVELOPMENT.has(origin)
-  // Version preview origins are exact: the request cannot choose another host.
-  // The account's workers.dev subdomain is `jaquers`, whatever the custom
-  // domains say; a preview URL reads `<version>-inertialrefd.jaquers.workers.dev`.
-  return (
-    new URL(request.url).hostname.endsWith(
-      '-inertialrefd.jaquers.workers.dev',
-    ) &&
-    origin === target &&
-    target.startsWith('https://')
-  )
+  return isPreviewOrigin(new URL(request.url)) && origin === target
 }
 
 export async function passwordMatches(
