@@ -355,6 +355,17 @@ environment variable wins over the file. `apps/game/.env.example` documents
 the setup. Nothing secret may go in either place because every `VITE_*` value
 ships in the bundle.
 
+**Accounts** are Clerk's
+([ADR-0048](../adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md))
+and exist only where both halves have a key. The client needs
+`PUBLIC_CLERK_PUBLISHABLE_KEY` — `PUBLIC_`, because Astro exposes nothing else
+to the browser — in gitignored `apps/game/.env.local` for `pnpm dev` and as a
+build variable for a deploy. The Worker needs `CLERK_SECRET_KEY` in the root
+`.env.local`, which `pnpm dev:server` loads into the Worker alone, and as a
+Worker secret in production. Without the first there is no account badge;
+without the second `/api/account` answers that accounts are not configured.
+Both states are supported builds.
+
 **Reference audio** is not in git. It lives in R2 and reaches the browser
 from one table, `apps/server/src/media.ts`: `pnpm media:pull` copies it into
 gitignored `apps/game/public/media/`, and the Worker's `MEDIA` binding serves

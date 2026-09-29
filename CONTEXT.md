@@ -10677,6 +10677,66 @@ showed the stride at every eighth frame. Sprinting from the pad's staging into
 the hull put the chase camera inside the Rocinante — hull collision remains
 outside the contact model, for the walker and the boom alike.
 
+## Accounts arrive through the dialogs, and the menu can hold an edge (29 Sep 2026)
+
+The reserved account routes are Clerk's now, in a build that has a publishable
+key, and the Worker answers `GET /api/account` with its own verdict on the
+session token the browser presents.
+[ADR-0048](docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)
+has the decision and the alternatives; what follows is what the libraries did
+that their documentation did not say.
+
+`@clerk/backend`'s root `verifyToken` throws. Its internal function returns
+`{ data } | { errors }`, and `dist/tokens/verify.d.ts` describes that shape,
+but the export is wrapped in `withLegacyReturn`, which returns the payload and
+throws the error — the first draft of `account.ts` read `.errors` off what
+is a JWT payload, and the tests caught it. A key-set
+fetch answered with an HTML error page throws the `SyntaxError` from parsing
+it, not a `TokenVerificationError`, which is why `identify` treats anything
+that is not a verdict on the token as the deployment's fault and answers 503.
+Clerk's party check also skips the claim entirely when `authorizedParties` is
+empty; a request to a host `origins.ts` does not know is refused before
+Clerk is asked. Its PEM loader strips a fixed 2048-bit, e=65537 SPKI prefix
+rather than parsing the key, so the tests mint exactly that.
+
+`ClerkProvider` forwards later prop changes for `appearance` and
+`localization` and nothing else (`useLoadedIsomorphicClerk`). The router
+functions and `afterSignOutUrl` it was constructed with are the ones it keeps,
+so the functions read the location from a ref and the sign-out URL is a
+marker the router adapter replaces with wherever the reader is. Passed
+straight through, Clerk's own "Sign up" link cleared `location.state` and
+would have unmounted the planetarium behind the dialog; checked in the rig,
+the background survives the hop and closing returns to `/planetarium`. The
+adapter's first version also named a cold-loaded dialog as its own
+background, which would have made closing `/sign-up` open `/sign-in`. Clerk's
+`UserProfile` throws `cannot_render_user_missing` for a signed-out visitor, and
+a cold `/profile` is one; the dialog renders it only for somebody signed in.
+The provider server-renders under Astro with its components drawing nothing
+until the client loads, so hydration matches.
+
+Astro exposes only `PUBLIC_*` to client code (`envPrefix` defaults to it in
+`astro/dist/core/create-vite.js`, and `gameVite` does not override it), which
+is why the publishable key is `PUBLIC_CLERK_PUBLISHABLE_KEY`. It is also very
+likely why analytics has not been measuring: `VITE_GA_MEASUREMENT_ID` is set
+to a twelve-character id in `apps/game/.env.production`, and a production
+build of today's tree contains it in none of its files. Not fixed here — the
+name is a Workers Builds variable as well, and renaming it is a dashboard
+change beside the code change.
+
+The IR menu floats by default and attaches to the top or bottom edge as a
+40 px band the full width of the display. The band is spent as an inset on
+`.hud-layer`, keyed by `:root:has([data-dock-attached])` on the bar itself so
+that the menu page, a phone and cleared chrome — each of which removes the
+bar — also remove the band; `hud-bleed` reaches back over it. Measured at
+1600×900: floating unchanged at 490,850 620×38; top at 0,0 1600×40 with both
+layers at y=40, height 860; `ir.chrome(false)` and a 390 px window return the
+layers to full height with `top` stored. Two things were in viewport pixels
+and would have been wrong once the layer moved: the float clamp read
+`innerWidth × innerHeight`, and a drop stored `getSourceClientOffset()` as the
+position. The clamp now measures the float field with a `ResizeObserver`, and
+the drop converts into the field's coordinates. A drag-and-drop was not
+performed in the rig; the float button's placement was.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
