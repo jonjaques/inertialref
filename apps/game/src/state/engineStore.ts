@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import type { HarnessStatus, ObserverStatus } from '@inertialref/devtools'
 import type { Playhead } from '../cinema/session.ts'
+import type { CharacterStatus } from '../engine/characterController.ts'
 
 /*
  * The seam between the engine and React.
@@ -74,6 +75,7 @@ export interface PresentationSnapshot {
  * `useShallow`. A wide snapshot read widely is worse than the props it replaced.
  */
 export interface EngineSnapshot {
+  readonly character: CharacterStatus | null
   readonly exposure: Exposure | null
   /** `null` until the first sample lands, which is one interval after mount. */
   readonly status: HarnessStatus | null
@@ -97,6 +99,7 @@ export interface EngineSnapshot {
  * grow a dependency on the renderer by accident.
  */
 export interface EngineSource {
+  readonly character?: { status(): CharacterStatus }
   readonly exposure?: Exposure | null
   readonly harness: {
     status(): HarnessStatus
@@ -130,6 +133,7 @@ const NOTHING_DRAWN: PresentationSnapshot = {
 }
 
 const IDLE: EngineSnapshot = {
+  character: null,
   exposure: null,
   status: null,
   cinema: false,
@@ -147,6 +151,7 @@ export function createEngineStore(): EngineStore {
 /** Republish the engine's current description. The only writer. */
 export function sampleOnce(store: EngineStore, source: EngineSource): void {
   store.setState({
+    character: source.character?.status() ?? null,
     exposure: source.exposure ?? null,
     status: source.harness.status(),
     cinema: source.cinematic !== null,

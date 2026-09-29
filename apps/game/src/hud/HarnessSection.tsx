@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { modeForPath, PLAY_SOLO, resolvedLocation } from '../pages/paths.ts'
 import { Action } from './Action.tsx'
 import { attempt, describeCause } from './notice.ts'
 import { Section } from './Section.tsx'
@@ -13,8 +15,8 @@ import { Section } from './Section.tsx'
  * Mixing the two under one title would file the product's navigation under the
  * instruments and hide the author's tools in plain sight.
  *
- * Everything here is a harness call, and that is a rule rather than an
- * observation: nothing a button does may be unreachable from the console and
+ * Each action calls a public engine or harness verb. The button does not own
+ * the scene setup, so the same scene remains reachable from the console and
  * from a headless test.
  */
 export function HarnessSection({
@@ -24,6 +26,9 @@ export function HarnessSection({
   readonly engine: GameEngine
   readonly onNotice: (message: string) => void
 }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const mode = modeForPath(resolvedLocation(location).pathname)
   /*
    * The scenario currently running, if any.
    *
@@ -83,6 +88,25 @@ export function HarnessSection({
         trailing={pending === null ? undefined : `${pending} running…`}
       >
         <div className="flex flex-wrap gap-1">
+          <Action
+            label={
+              pending === 'Mars pad walk'
+                ? 'Staging Mars pad…'
+                : 'Walk the Mars pad'
+            }
+            disabled={pending !== null}
+            title="Stand beside the 46 m Rocinante on Mars, ready to resume on-foot controls"
+            onClick={() =>
+              awaited('Mars pad walk', async () => {
+                if (!engine.character.atMarsPad())
+                  throw new Error(
+                    engine.character.error ?? 'Could not stage the Mars pad',
+                  )
+                if (mode !== 'flight') await navigate(PLAY_SOLO)
+                return 'On foot beside the Rocinante. Resume controls to walk.'
+              })
+            }
+          />
           {engine.harness.scenarios().map((name) => (
             <Action
               key={name}
@@ -95,6 +119,7 @@ export function HarnessSection({
               }
               onClick={() =>
                 awaited(name, async () => {
+                  engine.character.leave()
                   const result = await engine.harness.scenario(name)
                   return result.detail
                 })
@@ -107,6 +132,7 @@ export function HarnessSection({
             title="The twelve milestone capability checks, against this build"
             onClick={() =>
               awaited('self test', async () => {
+                engine.character.leave()
                 const report = await engine.harness.selfTest()
                 console.info(report.report)
                 return `${report.passed}/${report.total} capabilities · report in the console`

@@ -153,8 +153,17 @@ survive. Reconcile against the state's actual owner instead
 ## One producer of the camera
 
 In `GameEngine.#step` the order is **cutscene, then observatory, then the
-ship**. Each arm hands a presentation eye to `buildScene`. No arm may depend
-on a later one resolving, and only the last needs a player.
+controlled player**. The player arm resolves a ship or character. Each arm
+hands a presentation eye to `buildScene`. No arm may depend on a later one
+resolving, and only the last needs a player.
+
+The character's first-person and third-person poses resolve before render
+origin and terrain selection. The third-person boom sweeps visible ground and
+support disks. The drawn-ground correction belongs to the camera and avatar
+presentation; it does not move canonical contact. The browser's pointer-lock
+adapter sends input to the character controller and never writes the Three.js
+camera. [ADR-0047](../adr/0047-the-character-walks-in-a-body-fixed-frame.md)
+records that boundary.
 
 **The lens follows the same order through the same code.** `engine.lens` is a
 getter choosing the cinematic lens, then an active fixed galaxy instrument's
@@ -176,8 +185,10 @@ Earth from the console while `tng-intro` plays parks the camera 29.8 Mm out
 against the 20.8 Mm the flight lens asks for, permanently.
 
 The planetarium does not write canonical state. The observatory resolves an
-address, asks the world where that is this tick, and returns a pose. No
-teleport, no clock, no entity write, no save.
+address, asks the world where that is at the snapshot's presentation instant,
+and returns a pose. No teleport, no clock, no entity write, no save. Explicit
+**Lock to walk** activation leaves the planetarium for solo play before normal
+character controls take over.
 [`observatory.test.ts`](../../packages/devtools/src/observatory.test.ts)
 compares `world.stateHash()` across a session of flying around; that test is
 the design promise. See [planetarium](../design/planetarium.md).

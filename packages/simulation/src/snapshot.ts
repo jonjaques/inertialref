@@ -1,3 +1,4 @@
+import { CHARACTER, type CharacterState } from './character.ts'
 import type { Meters, Seconds, Tick } from '@inertialref/shared'
 import {
   canonicalOrientation,
@@ -17,6 +18,8 @@ import {
   type Body,
   type BodyFigure,
   bodyFixedFrameId,
+  bodyFixedDirection,
+  surfaceRadius,
   bodyFrameId,
   type EntityId,
   formatAddress,
@@ -56,6 +59,16 @@ export interface SnapshotStructure extends SurfacePlacement {
  * interpolation error at all, at any time warp.
  */
 
+export interface CharacterSnapshot extends CharacterState {
+  readonly body: Body
+  readonly spin: FramePose
+  readonly height: Meters
+  readonly eyeHeight: Meters
+  readonly terrainRadius: Meters
+  readonly supportRadius: Meters
+  readonly speed: number
+}
+
 export interface EntitySnapshot {
   readonly id: EntityId
   readonly name: string
@@ -94,6 +107,7 @@ export interface EntitySnapshot {
    * changing this demand. Null for anything that cannot maneuver.
    */
   readonly thrust: ThrustDemand | null
+  readonly character: CharacterSnapshot | null
 }
 
 export interface BodySnapshot {
@@ -184,6 +198,39 @@ export function entitySnapshot(
   const previous = world.previousState(entity.id) ?? entity.state
   const state = lerpState(previous, entity.state, alpha)
   const address: UniverseAddress | null = entity.address
+  let character: CharacterSnapshot | null = null
+  if (entity.character !== null) {
+    const binding = world.binding(state.frame)
+    if (binding?.body != null && binding.spinFrame !== null) {
+      const spin = world.frames.pose(binding.spinFrame, renderTime)
+      const direction = bodyFixedDirection(
+        spin,
+        canonicalPosition(world.frames, state, renderTime),
+      )
+      const terrainRadius = surfaceRadius(binding.body, direction)
+      const up = Vec.normalize(state.position)
+      character = {
+        ...entity.character,
+        body: binding.body,
+        spin,
+        height: entity.character.crouched
+          ? CHARACTER.crouchHeight
+          : CHARACTER.height,
+        eyeHeight: entity.character.crouched
+          ? CHARACTER.crouchEyeHeight
+          : CHARACTER.eyeHeight,
+        terrainRadius,
+        supportRadius: world.contactRadius(
+          binding.body,
+          direction,
+          terrainRadius,
+        ),
+        speed: Vec.length(
+          Vec.sub(state.velocity, Vec.scale(up, Vec.dot(state.velocity, up))),
+        ),
+      }
+    }
+  }
   return {
     id: entity.id,
     name: entity.name,
@@ -211,6 +258,7 @@ export function entitySnapshot(
     altitude: world.altitudeOf(entity.id),
     // Resolve demand from the current entity, not the interpolated pose.
     thrust: thrustDemand(entity, TICK_DURATION),
+    character,
   }
 }
 

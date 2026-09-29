@@ -5,6 +5,7 @@ import {
   type BodyFixedDirection,
   bodyFixedFrameId,
   geodeticDirection,
+  supportCeiling,
   surfaceAsset,
   surfaceRadius,
   systemId,
@@ -12,6 +13,7 @@ import {
 import { World } from './world.ts'
 import { snapshot } from './snapshot.ts'
 import {
+  placementBasis,
   type SurfacePlacement,
   surfacePlacementPose,
   surfaceSupportRadius,
@@ -127,26 +129,35 @@ describe('body-fixed structures', () => {
     const later = snapshot(world, 0, body.rotationPeriod / 4).structures[0]!
     expect(Q.approxEquals(first.orientation, later.orientation)).toBe(false)
   })
-  it('decides a miss on the body radius exactly where the terrain sample would', () => {
+  it('finds the deck where the terrain sample would and nothing past the footprint', () => {
     const world = create(),
       body = world.loadSystem(systemId('SOL')).planets[3]!
-    const support = surfaceAsset(placement.assetId)!.supportRadius!
+    const asset = surfaceAsset(placement.assetId)!
+    const deck = asset.support.find(
+      (feature) => feature.kind === 'disk' && feature.height === 0,
+    )!
+    expect(deck.kind).toBe('disk')
+    const reach = deck.kind === 'disk' ? deck.radius : 0
     const up = geodeticDirection(placement.latitude, placement.longitude)
     const east = Vec.normalize(Vec.cross(vec3(0, 1, 0), up))
     const north = Vec.cross(up, east)
-    // The definition, with the terrain sampled before the disk is tested.
-    const sampled = (direction: BodyFixedDirection): number | null => {
+    // The definition of the deck alone, with the terrain sampled before the
+    // disk is tested: inside its radius the datum plane, beyond the footprint
+    // nothing. The aprons between the two are their own features.
+    const sampled = (
+      direction: BodyFixedDirection,
+    ): number | null | undefined => {
       const cosine = Vec.dot(up, direction)
       if (cosine <= 0) return null
       const radius = (surfaceRadius(body, up) + placement.height) / cosine
       const tangent = Vec.sub(direction, Vec.scale(up, cosine))
-      return Vec.lengthSquared(tangent) * radius * radius > support * support
-        ? null
-        : radius
+      const spread = Vec.lengthSquared(tangent) * radius * radius
+      if (spread <= reach * reach) return radius
+      return spread > asset.footprintRadius ** 2 ? null : undefined
     }
-    // Offsets in units of the disk's angular radius, so the edge is at unit
+    // Offsets in units of the deck's angular radius, so the edge is at unit
     // distance and both sides of it are sampled densely.
-    const angle = support / body.radius
+    const angle = reach / body.radius
     fc.assert(
       fc.property(
         fc.double({ min: -3, max: 3, noNaN: true }),
@@ -158,8 +169,10 @@ describe('body-fixed structures', () => {
               Vec.add(Vec.scale(east, a * angle), Vec.scale(north, b * angle)),
             ),
           ) as BodyFixedDirection
+          const expected = sampled(direction)
+          if (expected === undefined) return
           expect(surfaceSupportRadius(placement, body, direction)).toBe(
-            sampled(direction),
+            expected,
           )
         },
       ),
@@ -168,6 +181,40 @@ describe('body-fixed structures', () => {
     expect(
       surfaceSupportRadius(placement, body, up as BodyFixedDirection),
     ).not.toBeNull()
+  })
+
+  it('turns the relief with the heading, so the ramp leaves the pad where it is drawn', () => {
+    const world = create(),
+      body = world.loadSystem(systemId('SOL')).planets[3]!
+    const asset = surfaceAsset(placement.assetId)!
+    const ramp = asset.support.find((feature) => feature.kind === 'ramp')!
+    expect(ramp.kind).toBe('ramp')
+    if (ramp.kind !== 'ramp') return
+    const up = geodeticDirection(placement.latitude, placement.longitude)
+    const datum = surfaceRadius(body, up) + placement.height
+    // A point on the ramp, in the asset's own meters, carried through the
+    // same pose the renderer draws the model with.
+    for (const heading of [0, 0.4, 2.5, -1.1]) {
+      const turned = { ...placement, heading }
+      const basis = placementBasis(turned)
+      const z = (ramp.from + ramp.to) / 2
+      const local = Q.rotate(basis.orientation, vec3(0, 0, z))
+      const direction = Vec.normalize(
+        Vec.add(Vec.scale(up, datum), local),
+      ) as BodyFixedDirection
+      const radius = surfaceSupportRadius(turned, body, direction)
+      expect(radius).not.toBeNull()
+      const top = ramp.height + (ramp.heightTo - ramp.height) / 2
+      expect(radius! * Vec.dot(up, direction) - datum).toBeCloseTo(top, 3)
+      // The apron's north corner reaches 44.64 m; there is no ramp that way.
+      const corner = Q.rotate(basis.orientation, vec3(0, 0, -42))
+      const opposite = Vec.normalize(
+        Vec.add(Vec.scale(up, datum), corner),
+      ) as BodyFixedDirection
+      const back = surfaceSupportRadius(turned, body, opposite)
+      expect(back).not.toBeNull()
+      expect(back! * Vec.dot(up, opposite) - datum).toBeCloseTo(-0.18, 3)
+    }
   })
   it('indexes placements by body and keeps the tallest deck current', () => {
     const world = create(),
@@ -186,10 +233,17 @@ describe('body-fixed structures', () => {
       placement.height
     // The basin is below the datum sphere, so the seeded deck is inside the
     // ground band and the band above it is zero; a tower clears the datum.
-    expect(world.contactHeight(body)).toBeCloseTo(Math.max(0, deck), 6)
+    // The band reaches the tallest top on the pad, not the deck alone: a
+    // service enclosure two meters up is what a descending tick can touch.
+    const ceiling = supportCeiling(surfaceAsset(placement.assetId)!)
+    expect(ceiling).toBeCloseTo(2, 6)
+    expect(world.contactHeight(body)).toBeCloseTo(
+      Math.max(0, deck + ceiling),
+      6,
+    )
     world.moveStructure({ ...placement, height: 6000 })
     expect(world.contactHeight(body)).toBeCloseTo(
-      Math.max(0, deck + 6000 - placement.height),
+      Math.max(0, deck + 6000 - placement.height + ceiling),
       6,
     )
     expect(world.contactHeight(body)).toBeGreaterThan(0)

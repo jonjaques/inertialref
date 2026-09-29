@@ -253,6 +253,16 @@ Three of its rules are decisions rather than details:
   is 19.79° _below_ level, so a camera held level at the top of a descent is a
   picture of empty sky. The small-angle `√(2h/r)` is 2.6% wrong there and grows.
 
+**The keys fly the stance.** W, A, S and D along the heading, E and Q up and
+down, Shift for fast — the ship's own translation letters, which is deliberate,
+since the two contexts are never live together. The speed is 0.8 of the height
+a second with a four-meter floor, the scrub's logarithm again: a run two meters
+up, highway speed at a hundred meters, kilometers a second at the orbit floor.
+The flight is a presentation motion the observatory applies in its own per-frame
+sample, beside the fly-to ease, so it can no more write the world than a drag
+can. There is no walker here; the avatar is the player's, in play, and steps
+out beside a landed ship. [On foot](onfoot.md#controls).
+
 **Entering is a cut or a drop, and which one is the caller's.** The site
 buttons cut: this arm is the instrument a plate is captured through, and an ease
 means every capture waits an unspecified number of frames for a filter to settle

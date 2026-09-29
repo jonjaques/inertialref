@@ -29,8 +29,8 @@ flowchart LR
 **M1 is complete.** The twelve foundation checks pass in Node and in recorded
 Chrome runs, including a warmed offline production build. Later milestone
 scope below is a design target, not a claim that every item is unfinished.
-The galaxy, terrain and camera have implemented parts of M2 and M4 without
-closing their gameplay acceptance gates.
+The galaxy, terrain, camera, and surface character implement parts of M2, M4,
+and M5 without closing their gameplay acceptance gates.
 
 ---
 
@@ -44,13 +44,15 @@ than a slice of one.
 > You survey what you find, your name goes on what you found first, and the
 > catalog gets better over time because real astronomy does.**
 
-**No combat. No on-foot layer. No multiplayer beyond discovery records.**
+Combat and multiplayer beyond discovery records remain outside the MVP.
+Basic on-foot traversal is implemented alongside exploration. Suit survival,
+object interaction, and continuous ship interiors remain M5 scope.
 
 ### Why this is the right MVP
 
 **It is the only slice where the pillars are all fully expressed.** Continuity,
-reality, momentum and first-person are all load-bearing in the survey loop and
-none of them needs combat or a character controller to be true.
+reality, orbital momentum, and an embodied player all matter to the survey
+loop. That loop does not require combat, suit survival, or ship interiors.
 
 **It is a whole game to a large audience.** A substantial share of Elite
 Dangerous players spend nearly all of their time exploring, with no combat and no
@@ -61,9 +63,10 @@ audience.
 compete with Elite's decade of tuning. Exploration on real, versioned astronomy
 is where nobody competes at all.
 
-**It defers the two hardest scope risks** — humanoid animation and netcode —
-past the first release, where they can be evaluated against real players rather
-than against optimism.
+**Interior interaction and networked play remain separate scope.** Basic
+character locomotion does not settle continuous boarding, physical tools,
+pressure boundaries, or multiplayer reconciliation. Those systems retain
+their own acceptance gates.
 
 ---
 
@@ -137,6 +140,13 @@ exploration game that may grow.
 ---
 
 ## M5 — On Foot
+
+Surface traversal already has a canonical character, local-gravity jumps,
+optional pointer lock, and first-person and third-person controls. Terrain and
+flat support disks supply contact. A trusted local session can permit flight.
+[On foot](onfoot.md) distinguishes this implemented movement from the remaining
+suit, interaction, EVA, and interior systems. The full excursion gate below is
+still open.
 
 |              |                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

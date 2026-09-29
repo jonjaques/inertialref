@@ -119,7 +119,24 @@ const v2ToV3: Migration = {
   }),
 }
 
-export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2, v2ToV3]
+const v3ToV4: Migration = {
+  from: 3,
+  to: 4,
+  describe: 'distinguish surface characters from flight entities',
+  migrate: (raw) => ({
+    ...raw,
+    schemaVersion: 4,
+    entities: Array.isArray(raw['entities'])
+      ? raw['entities'].map((entity: unknown) =>
+          typeof entity === 'object' && entity !== null
+            ? { ...entity, character: null }
+            : entity,
+        )
+      : raw['entities'],
+  }),
+}
+
+export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2, v2ToV3, v3ToV4]
 
 export function migrateSave(
   raw: unknown,

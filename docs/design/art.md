@@ -484,7 +484,9 @@ at the joins read as authentic rather than as a seam in the generator.
 
 ## Animation
 
-Very little, all of it in service of continuity.
+Character locomotion supports a first-person or third-person view of the same
+player. The sequences below describe the broader animation direction; seating,
+airlocks, tools, and suit instruments remain unimplemented.
 
 | Moment                   | Requirement                                                                                                                                                                                           |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -496,10 +498,15 @@ Very little, all of it in service of continuity.
 | **Suit and ship gauges** | Never instant. A gauge that snaps reads as UI; one that moves reads as an instrument.                                                                                                                 |
 | **Hands**                | Always present, holding things with mass                                                                                                                                                              |
 
-**No third-person animation exists.** There is no character to animate from
-outside, which removes an entire discipline from the critical path — one of the
-largest scope savings
-[pillar 4](charter.md#pillar-4--you-are-one-person) delivers.
+Third-person animation reads the character's canonical motion and action
+state. The rig covers idle, walking, sprinting, strafing, crouching, jumping,
+falling, and permitted flight. Foot placement and apparent body height must
+agree with the ground correction used by the camera. Animation never writes
+canonical displacement or determines contact.
+
+[Pillar 4](charter.md#pillar-4--you-are-one-person) keeps the player embodied
+while allowing that external camera. Suit appearance does not imply working
+life support, inventory, or equipment.
 
 ---
 

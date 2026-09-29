@@ -37,6 +37,7 @@ const idle = {
 }
 
 const EMPTY: EngineSnapshot = {
+  character: null,
   status: null,
   exposure: null,
   cinema: false,

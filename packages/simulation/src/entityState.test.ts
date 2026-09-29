@@ -1,3 +1,4 @@
+import { createCharacter } from './character.ts'
 import { describe, expect, it } from 'vitest'
 import { NEUTRAL_CONTROL } from '@inertialref/physics'
 import { type FrameId, restState, vec3 } from '@inertialref/spatial'
@@ -24,6 +25,7 @@ const base: CanonicalEntity = {
   ballisticCoefficient: 320,
   landed: false,
   rails: null,
+  character: null,
 }
 
 /*
@@ -46,6 +48,7 @@ const moved: { readonly [K in keyof CanonicalEntity]: CanonicalEntity[K] } = {
   flightAssist: false,
   ballisticCoefficient: 900,
   landed: true,
+  character: createCharacter(true),
   rails: {
     time: 0,
     position: vec3(0, 0, 0),

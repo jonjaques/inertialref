@@ -30,6 +30,11 @@ export function TargetActions({
   /** The panel's own try/catch-and-report. See `NavigatorPanel`. */
   run: (label: string, action: () => void) => void
 }) {
+  const travel = (label: string, action: () => void): void =>
+    run(label, () => {
+      engine.character.leave()
+      action()
+    })
   if (target.kind === 'system')
     return (
       <>
@@ -38,7 +43,7 @@ export function TargetActions({
           tone="primary"
           title="Orbit this system's star, looking at it"
           onClick={() =>
-            run(`traveling to ${target.name}`, () =>
+            travel(`traveling to ${target.name}`, () =>
               engine.harness.goTo(target.address),
             )
           }
@@ -63,7 +68,7 @@ export function TargetActions({
         tone="primary"
         title="Circular orbit at an altitude that frames the body"
         onClick={() =>
-          run(`orbiting ${target.name}`, () =>
+          travel(`orbiting ${target.name}`, () =>
             engine.harness.goTo(target.address),
           )
         }
@@ -73,7 +78,7 @@ export function TargetActions({
         disabled={!target.landable}
         title={target.landable ? 'Park on the surface' : 'Not solid ground'}
         onClick={() =>
-          run(`landing on ${target.name}`, () =>
+          travel(`landing on ${target.name}`, () =>
             engine.harness.land(
               target.address,
               DEBUG_LANDING_SITE.latitude,
@@ -86,7 +91,7 @@ export function TargetActions({
         label="Face"
         title="Point the nose at it without touching the trajectory"
         onClick={() =>
-          run(`facing ${target.name}`, () =>
+          travel(`facing ${target.name}`, () =>
             engine.harness.face(target.address),
           )
         }
@@ -95,7 +100,7 @@ export function TargetActions({
         label="Burn"
         title="Aim at it and light the main drive"
         onClick={() =>
-          run(`burning toward ${target.name}`, () =>
+          travel(`burning toward ${target.name}`, () =>
             engine.harness.burnToward(target.address),
           )
         }

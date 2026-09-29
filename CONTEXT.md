@@ -46,7 +46,7 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
 | `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames                                                                                                 |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                                            |
+| `simulation`    | 4     | done — clock, entities, flight, surface characters, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                        |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas, bounded guide contracts                                                                                                                               |
 | `workers`       | 5     | done — typed tasks, ports, pool, seven shared tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                            |
 | `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                                                                            |
@@ -76,11 +76,18 @@ JavaScript; request-time rendering can use the same shell when needed.
 [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
 
 Surface structures have durable body-fixed anchors, shared by flight,
-planetarium, and Cinema. Save schema 2 carries placements; World verbs place,
+planetarium, and Cinema. Save schema 4 carries placements and character state; World verbs place,
 move, and remove them. Flat support disks participate in surface contact.
 The Blender-authored Mars pad and its sunset Rocinante landing are the first
 consumer. [ADR-0040](docs/adr/0040-structures-keep-a-body-fixed-anchor.md)
 records the boundary; placement controls currently live in the harness.
+
+Characters walk on canonical planetary terrain and flat support disks, with
+local-gravity jumps and first-person or third-person cameras. Explicit pointer
+lock enters gameplay from a landed ship or near-ground observatory stance;
+ordinary browsing remains presentation-only. Trusted session permission gates
+flight. [ADR-0047](docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md)
+records the controller, save, and camera boundaries.
 
 The application hosts also include `apps/ingest`, which builds committed
 astronomical assets offline, and `apps/server`, the Cloudflare adapter. All
@@ -10530,6 +10537,146 @@ part of the key. The count stayed at 303 after a 2 km and a 3 m visit on
 Gliese 908 IV, so it is a boot cost, not a leak, and the stale contexts
 among them hold disposed textures only as JavaScript objects.
 
+## The pointer enters play only after the browser grants it (24 Sep 2026)
+
+A planetarium stance is an eye above drawn ground, not a canonical character.
+[ADR-0047](docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md) keeps that
+boundary: explicit pointer-lock success selects a body-fixed character and
+opens solo play. Rejection leaves browsing unchanged. The document element
+holds the lock because removing a mode's drag surface during navigation would
+otherwise release it immediately.
+
+Held sprint needs its own edges. A Shift flag captured only when movement
+starts cannot detect Shift pressed halfway through a stride. The shared
+keymap treats either physical Shift key as the same held binding, and releasing
+one while the other remains down keeps sprint active. Binding capture accepts
+Shift on release so it can still capture a shifted chord.
+
+A dialog exposed a separate held-input gap. Claiming modal keyboard ownership
+blocked subsequent movement presses but left an already-held action active.
+The regression produces only a down edge with the modal release removed and
+both down and up with it present. Blur, hidden documents, pointer release,
+route changes, and controller reset also clear input. A browser grant arriving
+after cancellation is released rather than entering gameplay.
+
+The input verification covers 101 tests across the keymap, fake pointer-lock
+adapter, character intent, routes, and preferences. The modal regression was
+reintroduced alone and failed before restoring the fix. This count is focused
+input evidence, not a renderer or full-gate result. The Mars pad scale fixture
+is `GameEngine.character.atMarsPad()`, beside a static 46 m Rocinante; its
+visual acceptance is separate from these input tests.
+
+The isolated Chromium rig exercised the browser grant itself: an unlocked Mars
+stance kept the world hash unchanged, **Lock to walk** moved from planetarium
+to solo play with `document.documentElement` still owning pointer lock, and
+held sprint produced 7 m/s. Opening Settings cleared pointer lock and reduced
+the held forward and sprint inputs to zero. These checks used visitor-activated
+button clicks; they did not substitute synthetic keyboard events for browser
+input. The integrated controller and HUD suites passed all 25 tests.
+
+The Mars pad exposed a chase-camera edge case: the boom left the 25 m contact
+disk before it passed through the visible apron. Crouching put the eye
+0.073 m below the foot plane even though the ground probes succeeded. A
+grounded chase eye now also respects that plane; the regression fails without
+the bound. This is camera clearance, not an expansion of the pad's collider.
+
+The character uses a NASA-distributed DigitalSpace suit with the backpack and
+agency textures removed, following the requested grounded, neutral silhouette.
+The source was static, so the project supplies its own 39-bone rig and ten
+animation clips rather than relying on a remote animation service. Source and
+derived GLBs are in LFS; the Blender preparation script and source terms are
+bundled. Animation remains presentation state and cannot change contact or
+the saved world.
+
+The finished integration passed all 18 `pnpm check` stages in 85.9 s. The seven
+lit planetarium plates differed from their committed references by 1–25 pixels
+above the 8% per-pixel threshold, within the existing 200-pixel tolerance.
+The final browser pass checked standing, crouching, and first-person views at
+the Mars pad; the crouch asset regression measures the deformed helmet at
+1.276 m with planted boots, rather than only checking bone tracks.
+
+## The walker meets the pad it can see (25 Sep 2026)
+
+A structure's contact was one flat disk at its origin. The Mars pad's was
+25 m across on an apron drawn out to 41.2 m at a face and 44.6 m at a corner,
+so a walker crossing the deck's painted ring fell two meters through the
+drawn apron and carried on inside the skirt; the chase camera had been taught
+to stay above the foot plane at that edge, which treated the symptom. An asset
+now declares its walkable relief — disks, rings, an octagonal skirt, boxes and
+a ramp, the tallest top winning — in its own meters, transcribed from the
+pad's build script, and the ray-to-relief resolver turns the plane's point by
+the placement's heading so the relief lies where the model is drawn. A
+two-meter enclosure is a wall by being a rise a step cannot take. The ramp's
+head had been authored 4.6 m inside the apron's corner, so its slope ran
+under the skirt and surfaced 0.9 m down: walkable down, not up. It now lands
+flush with the apron and slopes at 15.1° over 12.3 m; the terrain about 1.9 m
+under the datum meets it near z = 51 m and carries the boot from there.
+
+The motor set the velocity from the keys every substep, so a key was a
+switch and a running jump lost its run the instant the key came up. Momentum
+lives in the entity's velocity now, driven at 30 m/s² on the ground, 42 to
+stop, 2 in the air — a one-second hop leans by two meters a second and cannot
+turn around — and 40 in creative flight. A blocked move reads the ground's
+gradient around the obstacle and slides the rest along it, at a suit's width
+of standoff from a wall because the half-meter look-ahead that refuses a
+slope finds the wall first. Six ticks of coyote time, eight of jump buffer,
+both in the hash and save schema 4, which has not shipped. The velocity is
+written from the motion, not the displacement: a step up is a 22 m/s spike
+the next tick read as a launch.
+
+**`Q.fromUnitVectors` answers the identity under 0.08°.** On Mars that is
+every substep of a 4.7 km walk, so the orientation was never transported at
+all: the forward axis left the tangent plane at 6 nrad per tick and a motor
+pushing along it climbed 14 µm in two seconds of flight. The controller now
+transports by the exact cross-and-sum rotation, held to 1e-16 over 128
+ticks. The shared helper keeps its threshold for callers that want a snap.
+
+The camera carries a memory between frames — eased eye height (0.1 s), a lift
+that absorbs a 0.35 m step or a landing over 0.09 s, and a boom refined by
+bisection to a centimeter that snaps in and eases out over 0.3 s, pivoted
+0.35 m over the shoulder — dropped on a cut. The camera test that stood a
+level boom on open terrain read 2.47 m of its 3.6 because the slope behind
+the suit was the obstruction; the boom test stands on the deck.
+
+The suit was skinned by the three nearest bone segments at a fifth-power
+falloff and posed by a gait whose planted foot moved forward under the pelvis,
+with the feet placed beyond the 0.775 m legs' reach so the shin stretched to
+them; the loader then re-anchored the whole suit every frame to whichever
+skinned vertex was lowest, a sawtooth at the stride rate that was the visible
+vibration. The rig is heat-weighted over the welded 3,054-vertex source and
+subdivided afterward, with the helmet to the head and each boot, up to the
+ankle, to its foot — a sole blended into the shin sinks the heel 4 cm when the
+knee bends. The gait places the feet and lowers the pelvis to reach the planted
+one; the foot pitch had its sign inverted (toes down at the strike), and a
+rolled foot's ankle now rises by what the sole needs, with the boot's levers
+measured off its vertices: the toe runs 0.257 m ahead of the ankle, the heel
+0.095 behind. Strides are short because the legs are — 0.7 m at 2.8 m/s,
+1.0 m at 5.6 in a run with a flight phase — and the controller's walk and
+sprint moved to those speeds so the gait is played at the pace it is authored.
+The runtime anchors the suit once and advances the moving clips' shared cycle
+by the ground covered; every character entity gets a view and its own
+instance. The suit's clips passed 14 asset tests and the gait was checked from
+the side at every eighth frame in Cycles renders before the GLB shipped.
+
+The Rocinante's registry and navy markings are six blended planes 20 mm off
+the armor with no depth write; their loader material declared no reactive
+coverage, which under the temporal picture path is the surface the sensor
+documents as reprojected with the hull's history. A blended glTF material now
+declares its alpha reactive. The shimmer was not reproduced in the rig at
+native or temporal, at DPR 1 or 2, still or panning; a trace from the
+reporter's window is the next evidence if it persists.
+
+The planetarium no longer spawns a walker from a low stance; the avatar is
+the player's, in play, beside a landed ship. The standing stance flies with W,
+A, S, D, E and Q instead, at 0.8 of the height a second with a four-meter
+floor, as a motion of the observatory's own sample, and the hash test that
+proves it never writes the world covers a second of flight north and a second
+climbing east. The rig walked the deck edge onto the aprons, off the corner
+onto the terrain and down the ramp in third person, and the walking cast
+showed the stride at every eighth frame. Sprinting from the pad's staging into
+the hull put the chase camera inside the Rocinante — hull collision remains
+outside the contact model, for the walker and the boom alike.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
@@ -10670,7 +10817,11 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   counted because nothing distinguishes it from a correct parse.
 - No n-body perturbation; patched conics only.
 - Terrain has no persistence of modifications yet (the schema anticipates it).
-- Collision is ground contact only — no hull, no other entities.
+- Character collision covers canonical terrain and flat support disks. Rock
+  scatter, hull walls, ceilings, other entities, and rendered irregular figure
+  meshes are outside the contact model. Suit survival, inventory, tools, and
+  moving ship interiors remain unimplemented. Flight permission comes from the
+  trusted session; there is no online admin authentication.
 - The atmosphere is an analytic shell — exponential density and a twilight
   ring as of 21 Aug, but still geometry rather than scattering. The Bruneton
   LUTs spike 2 made a requirement remain the specified replacement.

@@ -1,256 +1,202 @@
 # On foot
 
-The first-person layer: the suit, movement across real gravity, interaction,
-inventory, and the inside of a ship.
+A character can walk, sprint, strafe, crouch, and jump on solid planetary
+terrain, with first-person and third-person views. Pointer lock is an explicit
+choice after landing. The planetarium has no avatar: its standing stance flies
+with the keys and never touches the world.
 
-> **Scope decision, stated up front.** This is an interaction and hazard layer,
-> not a shooter. The antagonist is the environment. Combat exists and is covered
-> in [combat](combat.md#on-foot-combat), where it is deliberately scarce and
-> deliberately lethal. The reasoning is in
-> [charter](charter.md#the-honest-constraints): a competitive-feeling shooter is
-> the highest fidelity bar in the industry, and effort spent clearing it is
-> effort not spent on the things this project can actually win.
+The controller also contacts the walkable relief a surface structure declares:
+the pad's deck, aprons, ramp, grilles, lamp housings and service enclosures,
+each the top of something a boot can stand on. A rise a step cannot take is a
+wall the walk slides along. Rocks, hull walls, ceilings, other characters, and
+arbitrary meshes do not participate in character collision. The suit, interaction, and interior systems
+below remain design direction. They are not implemented survival mechanics.
+[ADR-0047](../adr/0047-the-character-walks-in-a-body-fixed-frame.md) records the
+controller and camera boundaries.
 
----
+## Controls
 
-## The reference set
+Land a ship on a solid body, then activate **Lock to walk**. The browser must
+grant pointer lock before the character enters play; the walker steps out
+beside the hull. A refused request leaves the ship's camera controls as they
+were. The planetarium offers no walker: standing there,
+[the keys fly the stance](planetarium.md#on-the-ground).
 
-| Game                       | What we take                                                                                              |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **Hardspace: Shipbreaker** | First-person work as the verb. Tools, not weapons. Physical objects with mass that hurt you.              |
-| **Alien: Isolation**       | Tension from an environment that is indifferent rather than hostile. Very few threats, each one total.    |
-| **Deliver Us The Moon**    | Vacuum, oxygen, and the pacing of moving through a dead structure.                                        |
-| **Outer Wilds**            | Curiosity as the only objective. Nothing is gated; understanding is the reward.                           |
-| **Elite: Odyssey**         | What to avoid — an on-foot layer built as a shooter first, in a game whose players wanted a survey layer. |
+For a repeatable scale check, open the author's **Controls** panel and choose
+**Scenarios → Walk the Mars pad**. This stages the character in third person
+beside the 46 m Rocinante and opens solo play. It leaves the pointer free;
+choose **Resume controls** to walk.
 
----
+These are the default bindings. Settings can rebind them; the HUD and keys
+sheet display the current bindings.
 
-## The suit
+| Action                                    | Default          |
+| ----------------------------------------- | ---------------- |
+| Lock or release the pointer               | Shift + L        |
+| Look while locked                         | Mouse movement   |
+| Move forward, left, backward, right       | W, A, S, D       |
+| Sprint                                    | Either Shift key |
+| Crouch                                    | C                |
+| Jump                                      | Space            |
+| Switch first-person and third-person view | V                |
+| Release the pointer                       | Escape           |
+| Toggle flight, when permitted             | Double-tap Space |
+| Rise or descend while flying              | Space or C       |
 
-The suit is the character sheet, and it is the only one. There are no attributes,
-no skills and no levels; there is a suit with modules and five gauges.
+Releasing pointer lock stops held movement. Resume requires another explicit
+activation. Focus loss, a hidden tab, a dialog, or a cutscene also releases the
+controls. **Return to ship** leaves the character and restores ship control.
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│  O₂    ████████████████░░░░   68%      42 min                  │
-│  PWR   ██████████████████░░   91%                              │
-│  THRM  ███████░░░░░░░░░░░░░   nominal      −118 °C ext         │
-│  RAD   ██░░░░░░░░░░░░░░░░░░   0.4 Sv accumulated               │
-│  INTG  ████████████████████   100%                             │
-└────────────────────────────────────────────────────────────────┘
-```
-
-| Gauge         | Depletes from                                       | Refills from                               | Failure                                            |
-| ------------- | --------------------------------------------------- | ------------------------------------------ | -------------------------------------------------- |
-| **Oxygen**    | Time, exertion, breach                              | Ship, station, breathable atmosphere       | Unconsciousness → death, ~90 s                     |
-| **Power**     | Life support, lights, tools, thrusters              | Ship, station, solar in-system             | Everything else stops working                      |
-| **Thermal**   | Ambient extremes, stellar exposure, no shade        | Time in tolerance, ship                    | Integrity loss, then death                         |
-| **Radiation** | Stellar flares, unshielded remnants, some anomalies | Does not refill — cumulative per excursion | Forced return; damage persists to end of excursion |
-| **Integrity** | Falls, impacts, thrown objects, weapons, heat       | Repair at ship or station only             | Breach: oxygen dumps fast                          |
-
-**Radiation is the only one that does not refill**, which makes it the excursion
-clock — the thing that says _you have been out here long enough_. It is what
-makes a walk on an unshielded world near an active star feel different from a
-walk on a quiet one, using real stellar data to set the rate.
-
-### Suit modules
-
-Same [size-and-grade system as ship modules](ships.md#size-and-grade), same
-data-unlocked acquisition, same D-is-best-for-explorers tension — a light suit
-lets you carry more sample mass.
-
-| Slot             | Options                                            |
-| ---------------- | -------------------------------------------------- |
-| **Life support** | Tank capacity vs mass; rebreather efficiency       |
-| **Thermal**      | Insulation vs heat rejection; you cannot have both |
-| **Shielding**    | Radiation attenuation; heavy                       |
-| **Mobility**     | EVA thruster ΔV; jump assist; magnetic boots       |
-| **Tools** (2)    | Sampler, cutter, scanner, tether, lamp             |
-| **Utility**      | Cargo rack, repair kit, beacon                     |
-
----
+Flight permission comes from the trusted session host. A local solo world's
+owner has permission by default. There is no online administrator sign-in or
+role service yet, and the browser's movement keys do not grant permission.
 
 ## Movement
 
-**Gravity is real and it is different everywhere.** A moon at 0.16 g, a
-super-Earth at 2.3 g, and a station at 0 g are three genuinely different
-locomotion problems, and the design leans into that rather than normalizing it.
+The character has canonical state in a body's rotating `bf:` frame. The
+simulation consumes held input at 64 Hz, normalizes diagonal movement, and
+transports the character's heading across the surface, including the poles.
+Local gravity controls jump and fall acceleration. The motor is kinematic;
+it does not integrate an orbital trajectory with Coriolis or centrifugal terms.
 
-| Environment                | Surface gravity        | How it plays                                                                      |
-| -------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
-| **Micro-g** (< 0.05 g)     | Asteroids, small moons | Ballistic. Every push is a commitment. Magnetic boots or tether or you leave.     |
-| **Low** (0.05 – 0.4 g)     | Most moons, Mars-likes | Long float-y strides. Falls are slow and survivable. Jumping is a mode of travel. |
-| **Standard** (0.4 – 1.3 g) | Earth-likes            | Conventional. The baseline the controls are tuned for.                            |
-| **High** (1.3 – 2.5 g)     | Super-Earths           | Slow, heavy, expensive. Sprint is short. A fall is serious.                       |
-| **Extreme** (> 2.5 g)      | Rare                   | Not walkable. Suit warns and refuses egress.                                      |
+| Parameter           | Current value |
+| ------------------- | ------------- |
+| Walk speed          | 2.8 m/s       |
+| Sprint speed        | 5.6 m/s       |
+| Crouch speed        | 1.5 m/s       |
+| Flight speed        | 9 m/s         |
+| Sprint flight speed | 18 m/s        |
+| Ground acceleration | 30 m/s²       |
+| Ground deceleration | 42 m/s²       |
+| Air acceleration    | 2 m/s²        |
+| Flight acceleration | 40 m/s²       |
+| Jump launch speed   | 5 m/s         |
+| Coyote time         | 6 ticks       |
+| Jump buffer         | 8 ticks       |
+| Standing eye height | 1.68 m        |
+| Crouched eye height | 1.15 m        |
+| Step height         | 0.35 m        |
+| Uphill slope limit  | 50°           |
+| Fall speed limit    | 55 m/s        |
 
-**Technical note.** The player, like a landed ship, attaches kinematically to a
-**rotating surface frame** rather than being integrated in it — the same approach
-`flight.ts` already takes, and for the same reason: integrating in a rotating
-frame without Coriolis and centrifugal terms is simply wrong, and adding them is
-a lot of subtle code for one case. The
-[roadmap](../roadmap.md#content-the-rest-of-the-vision) names this exactly:
-_"needs a character controller on a surface frame."_
+The motor drives momentum, held in the entity's velocity, toward what the keys
+ask: a key press is a push that reaches the walk in about a tenth of a second
+and stops faster, a jump keeps the momentum it left the ground with, and the
+air push can lean a hop but not turn it around. A jump pressed within six
+ticks of walking off an edge still counts, and one pressed within eight ticks
+of landing is spent on the ground. Jump height and airtime depend on the
+body's gravity. Walking speed does not model suit exertion, oxygen use,
+fatigue, or high-gravity egress restrictions. Flight remains subject to ground
+contact; descending into the ground returns the character to walking.
 
-| Parameter         | Standard g     | Notes                                                                       |
-| ----------------- | -------------- | --------------------------------------------------------------------------- |
-| Walk              | 1.4 m/s        | Deliberately slow; this is a suit, not a soldier                            |
-| Run               | 3.8 m/s        | Costs oxygen at 2.2×                                                        |
-| Jump              | 0.45 m         | Scales with `1/g`                                                           |
-| EVA thruster ΔV   | 42 m/s total   | Rechargeable at the ship only. **This is the scariest number in the game.** |
-| Fall damage onset | 4.5 m/s impact | Scales with suit mass                                                       |
+Contact uses canonical terrain and the relief a structure declares. The
+visible terrain has a detail tail bounded by `drawnDivergence`, currently
+1.25 m. The renderer adjusts the character's visible feet and camera to that
+ground near contact, then fades the adjustment while airborne. It does not
+write the adjustment back into the world, save, or state hash.
 
-**The ground drawn here is not quite the ground the contact test integrates, and
-this is the layer where that stops being free.** The mesh, the material and the
-standing camera are made from `drawnElevation`; the contact test, the saves and
-the survey sites read `groundElevation`; and `drawnDivergence` bounds the gap at
-**1.25 m** ([ADR-0021](../adr/0021-the-ground.md)). A landing ship spans tens of
-meters and never notices. A walker does — 1.25 m is nearly three times the jump
-height in the table above, so a rim you can see and a rim you can stand on are a
-traversal decision apart. Closing it means carrying the tail into the canonical
-field, which is terrain algorithm v3 and the one version bump
-[the terrain plan](../../design/plans/terrain.md) § 3 reserves, because it moves the ground
-under every landed hull in every save.
+## The camera
 
-**Scatter has no collision**, for the same reason and with a cheaper fix. A rock
-is generated, addressed as `r:…/o:n`, and instanced in the terrain's material,
-and the contact test does not know it exists.
+The camera keeps a memory between frames, and every number in it is a
+filter over a canonical value that moves in steps: the crouch eases the eye
+over 0.1 s; a step up, which teleports the feet 0.35 m in one tick, is held
+and paid back over 0.09 s; a landing dips the eye by a share of the speed the
+ground stopped, at most 0.16 m. The memory is dropped on a cut, so a teleport
+does not ease across a planet.
 
-> 🎮 Designer's Note: EVA thruster ΔV as a hard, non-regenerating budget is the
-> single mechanic that will produce the game's best stories. Forty-two meters per
-> second, spent, is a person drifting away from their ship. It should never be
-> made forgiving. It should be made _legible_ — a large, always-visible number,
-> and a predicted-trajectory line while thrusting.
+The third-person boom is 3.6 m, pivoted 0.35 m over the shoulder so the suit
+stands beside the crosshair. It sweeps the visible ground and the relief,
+refined to a centimeter, snaps in when a ridge takes it and eases back out
+over 0.3 s. A grounded chase eye stays above the foot plane, so it cannot
+leave a deck and descend through its rim. Switching from first to third
+person lets the boom ease out from the head.
 
----
+Save schema 4 records character state and the consumed jump edge. Loading a
+save releases held input and pointer capture, and the host reapplies flight
+permission. A saved camera preference or a pointer-lock flag is not permission
+to resume moving.
+
+## The reference set
+
+The design takes first-person work from Hardspace: Shipbreaker, environmental
+tension from Alien: Isolation, and curiosity from Outer Wilds. The current
+movement controls offer direct keyboard movement and optional flight. The
+longer-term purpose is survey and physical work, rather than a shooter.
+
+## The suit
+
+The rendered character is a 1.8 m EVA suit derived from DigitalSpace
+Corporation’s [Astronaut model](https://science.nasa.gov/3d-resources/astronaut/),
+distributed through NASA 3D Resources. It has neutral materials, a closed visor,
+and no backpack or agency insignia. A 39-bone rig, heat-weighted over the
+welded source, carries ten generated clips for locomotion, crouching,
+strafing, jumping, falling, and flight. The gait places the feet and lowers
+the pelvis to reach them, rolls each foot from heel to toe, and is authored at
+the walk and sprint speeds; the runtime advances its cycle by the ground the
+entity covers, so a planted foot stays planted at any speed. The suit is
+anchored once at its rest pose's soles and never re-anchored per frame. The
+source terms and modification license ship with the asset at
+`apps/game/public/models/astronaut/LICENSE.txt`; the build script is
+`scripts/models/astronaut.py`.
+
+Suit survival is unimplemented. The design calls for oxygen, power, thermal
+state, radiation exposure, and integrity to define an excursion. These gauges
+must describe simulated resources before the HUD presents them as readings.
+There are no current oxygen costs for sprinting, fall injuries, pressure
+failures, or radiation limits.
+
+### Suit modules
+
+Life support, shielding, thermal control, tools, and mobility equipment remain
+future content. Magnetic boots, tethers, and a finite EVA propellant supply
+need their own mechanics. The permitted flight mode is not that EVA system.
 
 ## Interaction
 
-Physical, diegetic, and always through hands.
-[Pillar 4](charter.md#pillar-4--you-are-one-person) means there is no inventory
-screen that pauses the world and no context menu.
-
-| Verb        | Input                 | Notes                                                 |
-| ----------- | --------------------- | ----------------------------------------------------- |
-| **Look at** | Crosshair proximity   | Object name and a one-line readout appear on the HUD  |
-| **Pick up** | Hold `E`              | Object is held in front of you, physically, with mass |
-| **Throw**   | Release with movement | Real momentum; in low g this is locomotion            |
-| **Stow**    | `Q` while held        | Into the suit rack, if mass allows                    |
-| **Use**     | `F`                   | Contextual: switch, hatch, terminal, sampler          |
-| **Tether**  | Tool                  | Attach to a surface; the anti-drift answer to EVA     |
-| **Sample**  | Tool, hold            | The ground-truth verb; 6 s and a physical core        |
-
-**Mass is real.** A sample core weighs something, and what you can carry depends
-on suit grade and local gravity. On a 0.16 g moon you can carry six cores; on a
-2 g world, one. That is not an inventory rule, it is the physics already in the
-engine, and it means _where you are_ determines _how much you can take_.
+Looking around and traversing terrain are implemented. Picking up objects,
+throwing, operating hatches, sampling, and using tools remain unimplemented.
+The intended survey role is described in
+[exploration](exploration.md#tier-4--ground-truth); the separate combat direction
+is in [combat](combat.md#on-foot-combat).
 
 ### Inventory
 
-A **rack**, not a grid. Six slots, mass-limited, visible on the suit.
-
-| Rule                           | Why                                                                                                                        |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Mass-limited, not slot-limited | Slots are an abstraction; mass is already simulated                                                                        |
-| No pause                       | Pillar 4. Swapping tools happens in real time, and in a hazard that costs you                                              |
-| Ship is the depot              | The ship holds cargo. The suit holds what you are working with.                                                            |
-| Dropped items persist          | They are `placed` mutations — the [roadmap](../roadmap.md#persistent-mutations) names this as already-working for the ship |
-
----
+The intended inventory is a visible suit rack with mass limits and a ship as
+its depot. There is no inventory interface, carried-object simulation, or
+persistent dropped-item interaction yet.
 
 ## Ship interiors
 
-The seam that makes [pillar 1](charter.md#pillar-1--one-continuous-space) true
-in both directions: you can walk out of the cockpit, down the ship, and out onto
-a planet without a single transition.
-
-```
-   [ cockpit ] ─ [ spine corridor ] ─ [ bay ] ─ [ airlock ] ─ [ surface ]
-        │                                            │
-        └─ seat: enter/exit is an animation,          └─ cycle: 6 s, and
-           not a scene change. The world keeps           the pressure gauge
-           running behind you.                           is a real gauge.
-```
-
-**Interiors are generated from parts**, like hulls — a spine, a set of room
-modules, and greebling, laid out deterministically from the hull id. One person
-cannot author twenty ship interiors; one person can author twelve room modules
-and a layout grammar.
-
-| Room module     | Function                                                    |
-| --------------- | ----------------------------------------------------------- |
-| Cockpit         | The seat. The only place the ship flies from.               |
-| Spine corridor  | Connective; length varies by hull                           |
-| Cargo bay       | Where cargo physically is, visibly                          |
-| Fabrication bay | Module refit, repair, sample processing                     |
-| Quarters        | The save point that is not a save point — you save anywhere |
-| Airlock         | The pressure boundary; 6 s cycle                            |
-| Hangar          | _Herschel_ only; a smaller craft inside a larger one        |
+A hull model is scenery for character collision. Walkable rooms, doorways,
+airlocks, pressure volumes, seating transitions, and interior movement are
+unimplemented. The current **Return to ship** control changes the controlled
+entity; it does not animate boarding through an airlock.
 
 ### During a burn
 
-**The ship does not stop while you are in it, and a burn has a floor.** This is
-where [the travel model](flight.md#the-burn) and the on-foot layer meet, and it
-is one of the better consequences of the v0.2 redesign.
-
-| Felt acceleration                   | What it is like inside                                               |
-| ----------------------------------- | -------------------------------------------------------------------- |
-| 0 g — coast, or **the flip**        | Freefall. Handholds, and everything unsecured is floating.           |
-| 0.1–1.4 g — transit                 | Normal. There is a floor and it is aft. You can work.                |
-| 1.5–3 g — hard transit, or maneuver | Heavy. Movement is slow and expensive; the suit warns.               |
-| 3–5 g — combat maneuvering          | **Secure yourself or be injured.** Unsecured objects become hazards. |
-| > 5 g                               | Crew stations only. Egress from the seat is refused.                 |
-
-Two consequences worth having. **"Down" is the direction the drive is not** — so
-during a burn the ship's floor is aft, and after the flip it is forward, which
-means the interior's usable orientation reverses mid-trip. And **the four seconds
-of the flip are the only reliable zero-g in the game**, which makes them the
-window for anything that needs it.
-
-Walking around during a fight is allowed and is a very bad idea. Nothing about
-the interior is a safe mode.
-
----
+The design calls for acceleration to determine a ship interior's floor and for
+freefall during coasting. The body-fixed surface controller does not implement
+that moving-hull frame or its contact geometry.
 
 ## Structures
 
-⬜ **Designed, not built.**
-
-Buildings on planets. Enter and exit with no transition, same as ships.
-
-Three kinds, in the order they should be built:
-
-| Kind              | Purpose                                                      | Generation                                      |
-| ----------------- | ------------------------------------------------------------ | ----------------------------------------------- |
-| **Outposts**      | Refuel, refit, bank data. The social hub in online modes.    | Assembled from parts; placed at generated sites |
-| **Installations** | Automated, uninhabited, resource or research                 | Fully generated                                 |
-| **Wrecks** ⬜     | The setting's only narrative surface — see [world](world.md) | Generated with authored fragments               |
-
-All three are the first real consumer of
-[persistent mutations](../roadmap.md#persistent-mutations), because a structure
-that can be entered is a structure whose doors have state.
-
----
+Durable surface placements use the shared body-fixed anchors from
+[ADR-0040](../adr/0040-structures-keep-a-body-fixed-anchor.md). Each asset
+declares its walkable relief in its own meters — disks, rings, an octagonal
+skirt, boxes and a ramp, the tallest top winning where they overlap — and the
+world resolves a body-fixed ray to it. This provides the floors, walls and
+ramp of a landing pad, not general mesh collision with the rest of a
+structure.
 
 ## What is deliberately not here
 
-Stated so it does not get added by accident:
-
-- **No third-person view.** Pillar 4.
-- **No character customization screen.** You have a suit and a helmet, and you
-  see your hands. There is no body to customize and no mirror to see it in.
-- **No stamina bar as a distinct resource.** Exertion costs oxygen. One gauge.
-- **No crafting tree.** Samples are data, not ingredients.
-- **No base building.** Out of scope and it fights pillar 4 immediately, because
-  building from a first-person view at human scale does not scale to anything.
-- **No NPCs to talk to** in the MVP. See [world](world.md) for the reasoning.
-
----
+First-person and third-person controls are both available. Character
+customization, NPC dialogue, base building, crafting, suit survival, inventory,
+and combat are outside the implemented movement feature.
 
 ## Related
 
-- [combat](combat.md#on-foot-combat) — the scarce, lethal version
-- [exploration](exploration.md#tier-4--ground-truth) — why the on-foot layer exists mechanically
-- [ux](ux.md#on-foot-hud) — where the five gauges live
-- [ADR-0021](../adr/0021-the-ground.md) — the 1.25 m between the ground you see and the ground you land on
-- [`docs/roadmap.md`](../roadmap.md#content-the-rest-of-the-vision) — humanoids, structures, small objects
+- [ADR-0047](../adr/0047-the-character-walks-in-a-body-fixed-frame.md) records character state, input, permissions, and camera ownership.
+- [ADR-0021](../adr/0021-the-ground.md) defines the drawn and canonical terrain split.
+- [Roadmap](../roadmap.md#content-the-rest-of-the-vision) tracks the remaining content.
+- [On-foot HUD](ux.md#on-foot-hud) describes the intended suit instruments.

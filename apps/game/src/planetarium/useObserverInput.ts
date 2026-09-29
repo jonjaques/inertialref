@@ -136,6 +136,42 @@ export function useObserverInput(
   )
 
   useActions(['stand.leave'], () => engine.harness.observatory.leaveSurface())
+  // The six flight keys, as one held set: every edge rewrites the whole
+  // vector, so a key that goes up while its opposite stays down leaves the
+  // opposite's motion and nothing of its own.
+  const flying = useRef(new Set<string>())
+  useActions(
+    [
+      'stand.forward',
+      'stand.back',
+      'stand.left',
+      'stand.right',
+      'stand.rise',
+      'stand.lower',
+    ],
+    (id, event) => {
+      const held = flying.current
+      if (event.phase === 'down') held.add(id)
+      else held.delete(id)
+      const axis = (positive: string, negative: string): number =>
+        Number(held.has(positive)) - Number(held.has(negative))
+      latest.current.onGesture()
+      engine.harness.observatory.setStanceFlight({
+        forward: axis('stand.forward', 'stand.back'),
+        right: axis('stand.right', 'stand.left'),
+        up: axis('stand.rise', 'stand.lower'),
+        fast: event.shift,
+      })
+    },
+    options.standing,
+  )
+  useEffect(
+    () => () => {
+      flying.current.clear()
+      engine.harness.observatory.setStanceFlight(null)
+    },
+    [engine],
+  )
   useActions(['stand.up', 'stand.down'], (id, event) => {
     if (event.phase !== 'down') return
     const observatory = engine.harness.observatory
@@ -187,6 +223,7 @@ export function useObserverInput(
     })
 
     const onPointerDown = (event: PointerEvent): void => {
+      if (document.pointerLockElement !== null) return
       /*
        * The primary button orbits and the secondary looks; the middle one is
        * the browser's autoscroll and stays the browser's.
@@ -227,6 +264,7 @@ export function useObserverInput(
     }
 
     const onPointerMove = (event: PointerEvent): void => {
+      if (document.pointerLockElement !== null) return
       if (!down.has(event.pointerId)) return
       down.set(event.pointerId, local(event))
       // Which of the two the camera gets is `gestureStep`'s decision, tested in

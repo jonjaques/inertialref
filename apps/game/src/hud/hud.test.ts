@@ -1,5 +1,6 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openSession } from '@inertialref/devtools'
 import { engineStore } from '../state/engineStore.ts'
@@ -118,9 +119,13 @@ function panelMarkup(context: DevContext, id: string): string {
   // binding for it — the same tree `main.tsx` builds.
   return renderToStaticMarkup(
     createElement(
-      KeymapProvider,
+      MemoryRouter,
       null,
-      createElement('div', null, panel.render()),
+      createElement(
+        KeymapProvider,
+        null,
+        createElement('div', null, panel.render()),
+      ),
     ),
   )
 }

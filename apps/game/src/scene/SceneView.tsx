@@ -5,6 +5,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { createTerrainMaterial } from '../render/terrain.ts'
 import { createWaterMaterial } from '../render/water.ts'
 import { Bodies } from './Bodies.tsx'
+import { AstronautModel } from './AstronautModel.tsx'
 import { CinematicStage } from './CinematicStage.tsx'
 import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
@@ -92,6 +93,7 @@ export function SceneView({
       <SunFlare engine={engine} />
       <SurfaceStructures engine={engine} />
       <ShipModel engine={engine} />
+      <AstronautModel engine={engine} />
       <ThrusterFx engine={engine} />
       <CinematicStage engine={engine} />
       <WarpFx engine={engine} />

@@ -66,6 +66,7 @@ const sampleSave: SaveGame = {
       control: { translation: [0, 0, 1], rotation: [0, 0, 0], throttle: 0.5 },
       flightAssist: true,
       rails: null,
+      character: null,
     },
   ],
   playerEntity: '#0',

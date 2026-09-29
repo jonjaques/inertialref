@@ -78,6 +78,7 @@ export const REFUSED_CODES: readonly string[] = ['Tab', 'Escape', 'F11', 'F12']
  * going up mid-burn would stop the drive.
  */
 const MODIFIER_CODES: readonly string[] = [
+  'Shift',
   'ShiftLeft',
   'ShiftRight',
   'AltLeft',
@@ -96,7 +97,7 @@ export const isModifierCode = (code: string): boolean =>
 /** Whether the editor may bind this chord. */
 export const isBindable = (candidate: Chord): boolean =>
   !REFUSED_CODES.includes(candidate.code) &&
-  !isModifierCode(candidate.code) &&
+  (!isModifierCode(candidate.code) || candidate.code === 'Shift') &&
   candidate.code !== ''
 
 export const chordEquals = (a: Chord, b: Chord): boolean =>
@@ -117,6 +118,10 @@ export function chordFromEvent(event: {
   // `REFUSED_CODES` is deliberately not applied here. It says what the editor
   // will not bind, and `Escape` is bound by default in the cinema; refusing to
   // *read* it would leave that binding with nothing to fire it.
+  // Either physical Shift key drives the same held sprint binding. Its own
+  // modifier bit is omitted so the press and release name the same chord.
+  if (event.code === 'ShiftLeft' || event.code === 'ShiftRight')
+    return chord('Shift')
   return chord(event.code, { shift: event.shiftKey, alt: event.altKey })
 }
 
@@ -165,6 +170,7 @@ export function parseChord(text: string): Chord | null {
  * itself, which is ugly and is never wrong.
  */
 const US_LABELS: Readonly<Record<string, string>> = {
+  Shift: 'Shift',
   Space: 'Space',
   Enter: 'Enter',
   Backspace: 'Backspace',
