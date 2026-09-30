@@ -26,6 +26,8 @@ beforeAll(async () => {
 })
 afterEach(() => {
   vi.unstubAllGlobals()
+  // A silenced console left over from one case hides the next one's records.
+  vi.restoreAllMocks()
 })
 
 describe('identify', () => {
@@ -262,6 +264,25 @@ describe('the key set', () => {
     state.status = 200
     vi.advanceTimersByTime(60_000)
     expect(await signedIn(keys, await issuer.sign(session()))).toBe(true)
+  })
+
+  it('abandons a fetch that never settles, a minute on', async () => {
+    // In workerd a shared fetch belongs to the request that started it; when
+    // that request is canceled the fetch never settles, and waiting on it
+    // for good would wedge every later check in the isolate.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const answered = Response.json({ keys: [issuer.jwk] })
+    const fetcher = vi
+      .fn<(input: RequestInfo | URL) => Promise<Response>>()
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockImplementation(async () => answered.clone())
+    vi.stubGlobal('fetch', fetcher)
+    const keys = instance()
+    const token = await issuer.sign(session({ exp: now() + 3600 }))
+    void signedIn(keys, token)
+    vi.advanceTimersByTime(60_000)
+    expect(await signedIn(keys, token)).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
   it('drops a key the instance stops listing', async () => {

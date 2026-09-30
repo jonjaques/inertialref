@@ -223,6 +223,13 @@ export async function identify(
  *   unknown A `kid` the set lacks is one refetch, then a refusal. Refetches
  *           and retries after a failure are at most one per `KEYS_RETRY_MS`,
  *           so no visitor can make this Worker call Clerk faster than that.
+ *
+ * A fetch in flight is shared, and a shared promise is the other request's
+ * I/O: if the request that started it is canceled — its visitor gone, a
+ * limit hit — workerd drops its continuations, the fetch never settles, and
+ * nothing clears `pending`. So a fetch pending longer than `KEYS_RETRY_MS` is
+ * abandoned and the next request starts its own, which keeps the rate bound
+ * and stops one canceled request wedging every check in the isolate.
  */
 const KEYS_FRESH_MS = 5 * 60_000
 const KEYS_STALE_MS = 60 * 60_000
@@ -237,6 +244,16 @@ interface KeySet {
   /** Why the last fetch failed, or `null` if it did not. */
   failure: string | null
   pending: Promise<void> | null
+}
+
+/** Start a fetch of the set, shared by every request until it settles. */
+function reload(set: KeySet, secretKey: string): void {
+  // `finally` runs a microtask later, after `loading` is assigned, so it can
+  // tell its own fetch from one that replaced it after being abandoned.
+  const loading: Promise<void> = load(set, secretKey).finally(() => {
+    if (set.pending === loading) set.pending = null
+  })
+  set.pending = loading
 }
 
 const keySets = new Map<string, KeySet>()
@@ -263,8 +280,8 @@ async function signingKey(
   const held = set.keys.get(kid)
   if (held !== undefined && Date.now() - set.loadedAt < KEYS_FRESH_MS)
     return held
-  if (set.pending === null && Date.now() - set.attemptedAt >= KEYS_RETRY_MS)
-    set.pending = load(set, secretKey)
+  // A pending fetch older than the floor is abandoned (see above).
+  if (Date.now() - set.attemptedAt >= KEYS_RETRY_MS) reload(set, secretKey)
   if (set.pending !== null) await set.pending
 
   const key = set.keys.get(kid)
@@ -277,29 +294,31 @@ async function signingKey(
   return null
 }
 
-/** One fetch of the key set. Never throws: the outcome is written to `set`. */
+/**
+ * One fetch of the key set. Never throws: the outcome is written to `set` —
+ * unless a later fetch has replaced this one, whose outcome is the current one.
+ */
 async function load(set: KeySet, secretKey: string): Promise<void> {
-  set.attemptedAt = Date.now()
+  const started = Date.now()
+  set.attemptedAt = started
   try {
     const { keys = [] } = await clientFor(secretKey).jwks.getJwks()
     const held = new Map<string, JsonWebKey>()
     for (const { kid, kty, alg, n, e } of keys)
       if (kty === 'RSA') held.set(kid, { kty, alg, n, e })
     if (held.size === 0) throw new Error('the key set holds no RSA keys')
+    if (set.attemptedAt !== started) return
     set.keys = held
     set.loadedAt = Date.now()
     set.failure = null
   } catch (error) {
-    set.failure = isClerkAPIResponseError(error)
-      ? `keys-${error.status}`
-      : 'keys-unreachable'
+    if (set.attemptedAt !== started) return
+    set.failure = failureReason('keys', error)
     log('error', 'signing keys unavailable', {
       reason: set.failure,
       held: set.keys.size,
       error: errorText(error),
     })
-  } finally {
-    set.pending = null
   }
 }
 
@@ -362,9 +381,7 @@ async function lookUp(userId: string, secretKey: string): Promise<Flags> {
     return user.privateMetadata
   } catch (error) {
     if (isClerkAPIResponseError(error) && error.status === 404) return {}
-    const reason = isClerkAPIResponseError(error)
-      ? `backend-${error.status}`
-      : 'backend-unreachable'
+    const reason = failureReason('backend', error)
     log('error', 'user lookup failed', { reason, error: errorText(error) })
     throw new AccountUnavailableError(reason)
   }
@@ -394,6 +411,16 @@ function refused(reason: string): null {
 
 const errorText = (error: unknown): string =>
   error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+
+/*
+ * A reason code for a failed call to Clerk. The Backend API client wraps a
+ * network failure in the same `ClerkAPIResponseError` as an HTTP one, with no
+ * status, so the class alone would log `keys-undefined` for an outage.
+ */
+const failureReason = (call: string, error: unknown): string =>
+  isClerkAPIResponseError(error) && typeof error.status === 'number'
+    ? `${call}-${error.status}`
+    : `${call}-unreachable`
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
