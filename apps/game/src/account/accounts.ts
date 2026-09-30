@@ -7,6 +7,7 @@ import {
   SIGN_IN,
   SIGN_UP,
 } from '../pages/paths.ts'
+import { SITE } from '../site.ts'
 
 /*
  * Accounts, from the client's side: which provider, whether this build has
@@ -40,9 +41,45 @@ import {
  * beside the matching `CLERK_SECRET_KEY` on the Worker.
  * `apps/game/.env.example` documents it.
  */
-export const PUBLISHABLE_KEY: string = usablePublishableKey(
+const BUILD_KEY: string = usablePublishableKey(
   import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? '',
 )
+
+/**
+ * The key this page signs in with: the build's, unless this is a production
+ * build on a host Clerk's production instance does not serve.
+ *
+ * Decided from the page's host at module load, before the first render, and
+ * never after: the provider wraps the canvas's host, and mounting it or
+ * removing it once the tree exists remounts the renderer. The prerender has
+ * no host and is written for the canonical one.
+ */
+export const PUBLISHABLE_KEY: string = keyForHost(
+  BUILD_KEY,
+  typeof window === 'undefined' ? SITE.host : window.location.hostname,
+)
+
+/**
+ * Whether this build has accounts but this page's host does not — the
+ * production build on its second host.
+ */
+export const ACCOUNTS_ELSEWHERE: boolean =
+  BUILD_KEY !== '' && PUBLISHABLE_KEY === ''
+
+/**
+ * A key, or nothing on a host its instance does not serve.
+ *
+ * A live key is the production instance's, which Clerk configures for one
+ * domain and whose Frontend API refuses a page on any other origin
+ * (`origin_invalid`): on the second host every sign-in would fail, so that
+ * host has no accounts at all, and without an account nobody is offered the
+ * guide. The Worker makes the same decision (`apps/server/src/origins.ts`).
+ * A test key is the development instance's, which answers any origin — every
+ * Worker Preview and `localhost`.
+ */
+export function keyForHost(key: string, hostname: string): string {
+  return key.startsWith('pk_live_') && hostname !== SITE.host ? '' : key
+}
 
 /**
  * The key, if Clerk can use it, or nothing.

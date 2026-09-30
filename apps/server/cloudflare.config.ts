@@ -13,25 +13,12 @@ import { bindings, defineConfig } from 'cf/config'
  * this repository is public and a fork should not measure into somebody else's
  * property. `apps/game/src/analytics.ts`.
  */
-export default defineConfig(({ isPreview, mode }) => {
+export default defineConfig(({ isPreview }) => {
   /*
-   * Which of the three places this is being evaluated for, because the flags
-   * below differ between them and `cf` gives the config no other way to vary.
-   *
-   *   previews    `cf previews deploy` — Worker Previews, one per branch; `cf`
-   *               evaluates the config with `isPreview`.
-   *   development `cf dev --mode development`, which `pnpm dev:server` and
-   *               `pnpm preview` run. Treated like a preview.
-   *   production  everything else — `cf deploy --mode production`, the
-   *               `deploy` script the `main` build trigger runs, and equally
-   *               a bare `cf deploy` or a build command edited in the
-   *               dashboard.
-   *
-   * Production is the default because it is the side that is safe to be
-   * wrong on. A deploy that lost its `--mode` and came out as development
-   * would ship the guide and accounts on to production with nobody asking; a
-   * local server that lost it comes out with both off, which is a missing
-   * feature on one machine and says so.
+   * `cf previews deploy` evaluates this with `isPreview`, and a preview
+   * differs from production in one thing: it has no custom domains (below).
+   * Everything else is the same in a preview, in production and under
+   * `cf dev`, whatever `--mode` says.
    *
    * Plain-text variables are declared here rather than set in the dashboard,
    * and it is not a preference. `cf` has no `keep_vars`: a deploy replaces the
@@ -50,10 +37,8 @@ export default defineConfig(({ isPreview, mode }) => {
    * is one: the dashboard reports each custom domain's route with `zone_name`,
    * `enabled` and `previews_enabled`, which no local configuration produces,
    * so one dashboard change refuses every build after it however closely the
-   * rest matches. docs/hosting.md says what does not end it.
+   * rest matches. docs/hosting.md says what ends it, and what does not.
    */
-  const production = !isPreview && mode !== 'development'
-  const flag = (on: boolean) => bindings.text(on ? 'true' : 'false')
 
   return {
     worker: {
@@ -141,19 +126,26 @@ export default defineConfig(({ isPreview, mode }) => {
 
       env: {
         /*
-         * The two switches, on in previews and under `--mode development` and
-         * off in every other evaluation (`production` above). Turning either
-         * on in production is a change to this file, reviewed like any other —
-         * a dashboard edit is no way round that, and stops the next deploy
-         * from running at all (above).
+         * The two switches, on everywhere. Turning either off is a change to
+         * this file, reviewed like any other — a dashboard edit is no way
+         * round that, and stops the next deploy from running at all (above).
          *
          *   TOUR_GUIDE_ENABLED  the Planetarium guide (`src/tour/routes.ts`).
          *   CLERK_ENABLED       accounts on the Worker (`src/account.ts`); off, it
          *                       answers every account question with "not
          *                       configured" and the guide admits nobody.
+         *
+         * On is not the same as answering everywhere. Which hosts offer
+         * accounts is decided per request (`offersAccounts` in
+         * `src/origins.ts`): in production only `inertialref.app`, the one
+         * domain Clerk's production instance serves, while the second host
+         * answers as a deployment without accounts and so without the guide.
+         * Each still needs its secrets: without `CLERK_SECRET_KEY` accounts
+         * are not configured, and without `OPENAI_API_KEY` the guide is
+         * unavailable.
          */
-        TOUR_GUIDE_ENABLED: flag(!production),
-        CLERK_ENABLED: flag(!production),
+        TOUR_GUIDE_ENABLED: bindings.text('true'),
+        CLERK_ENABLED: bindings.text('true'),
         OPENAI_API_KEY: bindings.secret(),
 
         /*

@@ -11,10 +11,12 @@ import {
 import {
   accountNavigation,
   isAccountPath,
+  keyForHost,
   returnAddress,
   SIGNED_OUT_LANDING,
   usablePublishableKey,
 } from './accounts.ts'
+import { SITE } from '../site.ts'
 
 const at = (pathname: string, extra: Partial<Location> = {}): Location => ({
   pathname,
@@ -118,5 +120,30 @@ describe('usablePublishableKey', () => {
       '',
     ])
       expect(usablePublishableKey(key), key).toBe('')
+  })
+})
+
+describe('keyForHost', () => {
+  const live = `pk_live_${btoa('clerk.inertialref.app$')}`
+  const test = `pk_test_${btoa('example-otter-1234.clerk.accounts.dev$')}`
+
+  it('signs in with the production instance on its own host only', () => {
+    expect(keyForHost(live, SITE.host)).toBe(live)
+    // Clerk refuses the second host's origin, so it gets no accounts at all.
+    expect(keyForHost(live, 'inertialref.jonjaques.com')).toBe('')
+    expect(keyForHost(live, 'localhost')).toBe('')
+  })
+
+  it('signs in with the development instance on any host', () => {
+    for (const host of [
+      SITE.host,
+      'a67318ec-inertialrefd.jaquers.workers.dev',
+      'localhost',
+    ])
+      expect(keyForHost(test, host), host).toBe(test)
+  })
+
+  it('keeps no key as no key', () => {
+    expect(keyForHost('', SITE.host)).toBe('')
   })
 })

@@ -5,7 +5,8 @@ pages and a mode signs in through a modal, and the guide is granted per
 account; then verification is networkless over a held key set, grants are held
 a minute, the account routes carry allowances, production is the default
 evaluation of the config, and a connection that outlives its token
-re-presents one. Fills the account routes reserved by
+re-presents one; amended 30 Sep 2026: accounts and the guide are on in every
+evaluation, and answer on one production host. Fills the account routes reserved by
 [ADR-0011](0011-application-shell-and-modes.md), answers the account half of
 the open question in [hosting](../hosting.md#open-questions), and amends the
 guide's authorization in [ADR-0042](0042-the-guide-speaks-in-one-voice.md).
@@ -66,14 +67,22 @@ private metadata, which the Worker reads.**
 dev` — against the development instance: each environment's build settings
   and secrets in Cloudflare carry their own instance's keys under the same
   names. `CLERK_ENABLED` is declared in `cloudflare.config.ts`, because `cf`
-  replaces dashboard variables on every deploy: on in Worker Previews and
-  under `--mode development`, which `pnpm dev:server` passes, and off in every
-  other evaluation. Production is the default rather than a mode a deploy has
-  to remember, so a build command that loses its flag ships production's
-  answer instead of switching accounts and the guide on. Nothing is committed. Without a usable publishable key there is
+  replaces dashboard variables on every deploy, and it is on in every
+  evaluation. Nothing is committed. Without a usable publishable key there is
   no badge and the account pages say the build offers none; without the secret,
   or with accounts switched off, the Worker answers "not configured", which is a
   different sentence from "signed out", and the guide is unavailable.
+- **One production host has accounts.** Clerk's production instance serves
+  `inertialref.app` alone, and its Frontend API refuses a page on any other
+  origin (`origin_invalid`). So the host decides, per request and per page:
+  the Worker offers accounts at `inertialref.app`, on every Worker Preview and
+  in development (`offersAccounts`, `apps/server/src/origins.ts`), and the
+  browser uses a `pk_live_` key only on that host (`keyForHost`,
+  `account/accounts.ts`). The second production host answers as a build
+  without accounts, and so without the guide, and its account pages point at
+  the first. The browser decides at module load, before the first render,
+  because the provider wraps the canvas's host and mounting it later
+  remounts the renderer.
 - **Two ways in, by where the visitor stands.** From the menu, or by address,
   `/sign-in`, `/sign-up` and `/profile` are pages of the menu over its own
   scene, and the front door links to them. Inside a mode the badge at the end
@@ -237,8 +246,12 @@ tree above `GameLoader`, which remounts the renderer.
   `aria-modal` outside the layer, which a Clerk modal is.
 - A Clerk production instance is configured for one primary domain. The site
   answers on two hosts, and signing in on the second needs Clerk's satellite
-  domains, which require a paid plan in production. Until one is chosen,
-  accounts are available on one host only.
+  domains, which require a paid plan in production. Until one is chosen, the
+  second host has no accounts and no guide.
+- The account pages are prerendered once, for the canonical host, where
+  Clerk's form draws nothing on the server. On the second host the first
+  render matches that empty section, and the sentence pointing at the
+  canonical host arrives with hydration.
 - Clerk's components render in this system's material only through
   `account/appearance.ts` and a `clerk` cascade layer below Tailwind's
   utilities; its styles arrive unlayered and would otherwise outrank every
@@ -252,7 +265,5 @@ tree above `GameLoader`, which remounts the renderer.
 - The allowances count per Cloudflare location and settle eventually, so a
   burst spread across locations gets somewhat past them. They bound scripts;
   a person never meets them.
-- `cf dev` run by hand without `--mode development` evaluates as production,
-  and the local Worker answers with accounts and the guide off.
 - `/auth/callback` stays reserved and unused: Clerk's OAuth return comes back
   to `/sign-in#/sso-callback`.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowedOrigin, siteOrigins } from './origins.ts'
+import { allowedOrigin, offersAccounts, siteOrigins } from './origins.ts'
 
 describe('allowedOrigin', () => {
   it('requires exact approved origins on mutations and websocket upgrade', () => {
@@ -84,5 +84,28 @@ describe('siteOrigins', () => {
     const preview = 'https://a67318ec-inertialrefd.jaquers.workers.dev'
     expect(siteOrigins(new Request(`${preview}/x`))).toEqual([preview])
     expect(siteOrigins(new Request('https://unknown.example/x'))).toEqual([])
+  })
+})
+
+describe('offersAccounts', () => {
+  const at = (url: string) => offersAccounts(new Request(url))
+
+  it('answers accounts on one production host, where Clerk’s production instance lives', () => {
+    expect(at('https://inertialref.app/api/account')).toBe(true)
+    // Clerk refuses a page on this origin, so the Worker offers nothing there.
+    expect(at('https://inertialref.jonjaques.com/api/account')).toBe(false)
+  })
+
+  it('answers accounts on every preview and development host', () => {
+    expect(
+      at('https://a67318ec-inertialrefd.jaquers.workers.dev/api/account'),
+    ).toBe(true)
+    expect(at('http://localhost:8787/api/account')).toBe(true)
+    expect(at('http://127.0.0.1:8787/api/account')).toBe(true)
+  })
+
+  it('answers nothing on a host that is not this site', () => {
+    expect(at('https://unknown.example/api/account')).toBe(false)
+    expect(at('https://inertialref.app.evil.test/api/account')).toBe(false)
   })
 })

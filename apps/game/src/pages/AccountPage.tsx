@@ -1,9 +1,11 @@
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { ArrowLeft, CloudOff } from 'lucide-react'
 import { AccountForm } from '../account/AccountForm.tsx'
-import { useAccounts } from '../account/accounts.ts'
+import { ACCOUNTS_ELSEWHERE, useAccounts } from '../account/accounts.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
+import { canonicalUrl, SITE } from '../site.ts'
+import { useHydrated } from '../state/hydration.ts'
 import {
   ACCOUNT_PAGE,
   type AccountPageId,
@@ -28,9 +30,17 @@ import { Poster } from './Poster.tsx'
  * somewhere else should land on an explanation rather than a 404. What it must
  * never do is render a credential field that goes nowhere — people reuse
  * passwords, and a form that looks real is one they will type a real one into.
+ *
+ * The production build on its second host has accounts and cannot use them
+ * there (`ACCOUNTS_ELSEWHERE`), so it points at the host that can. That
+ * sentence waits for hydration: the page was prerendered for the canonical
+ * host, where Clerk's form draws nothing on the server, and a first render
+ * that disagreed with that empty section would be a hydration mismatch.
  */
 export function AccountPage({ page }: { page: AccountPageId }) {
   const accounts = useAccounts()
+  const hydrated = useHydrated()
+  const { pathname } = useLocation()
   const { title, lead } = ACCOUNT_PAGE[page]
   return (
     <Poster>
@@ -52,13 +62,28 @@ export function AccountPage({ page }: { page: AccountPageId }) {
       >
         {accounts ? (
           <AccountForm page={page} />
-        ) : (
+        ) : ACCOUNTS_ELSEWHERE && !hydrated ? null : (
           <div className="type-body flex max-w-[33rem] flex-col gap-3">
-            <p className="text-slate-300">
-              This build has no account provider configured. The game is
-              complete without one: the universe is derived, saves live in this
-              browser, and everything works with no network at all.
-            </p>
+            {ACCOUNTS_ELSEWHERE ? (
+              <p className="text-slate-300">
+                Accounts are at{' '}
+                <a
+                  href={canonicalUrl(pathname)}
+                  className={`text-sky-300 underline-offset-2 hover:underline ${FOCUS_RING}`}
+                >
+                  {SITE.host}
+                </a>
+                , not at this address. The game here is complete without one:
+                the universe is derived, saves live in this browser, and
+                everything works with no network at all.
+              </p>
+            ) : (
+              <p className="text-slate-300">
+                This build has no account provider configured. The game is
+                complete without one: the universe is derived, saves live in
+                this browser, and everything works with no network at all.
+              </p>
+            )}
             <ul className="flex flex-col gap-1 border-y border-slate-800 py-2">
               {WHAT_AN_ACCOUNT_IS_FOR.map((line) => (
                 <li key={line} className="flex gap-2 text-slate-400">

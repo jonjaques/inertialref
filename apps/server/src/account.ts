@@ -6,7 +6,7 @@ import {
 import { decodeJwt, verifyJwt } from '@clerk/backend/jwt'
 import type { AccountStatus } from '@inertialref/protocol'
 import { logger } from './log.ts'
-import { siteOrigins } from './origins.ts'
+import { offersAccounts, siteOrigins } from './origins.ts'
 
 /*
  * Who is asking, as the Worker decides it (docs/hosting.md H-2).
@@ -59,17 +59,18 @@ export interface AccountKeys {
 }
 
 /**
- * The keys this deployment checks accounts with, or none while
- * `CLERK_ENABLED` is off.
+ * The keys this deployment checks accounts with for this request, or none
+ * while `CLERK_ENABLED` is off or the request's host offers no accounts
+ * (`offersAccounts`).
  *
  * Which Clerk instance that is was decided before the request arrived: each
  * environment holds its own `CLERK_SECRET_KEY` — production the production
  * instance's, Previews Base the development instance's — and the browser was
- * built with the matching publishable key. Off means "not configured", the
+ * built with the matching publishable key. None means "not configured", the
  * answer a fork gets, and the guide admits nobody.
  */
-export function accountKeys(env: Env): AccountKeys {
-  return String(env.CLERK_ENABLED) === 'false'
+export function accountKeys(env: Env, request: Request): AccountKeys {
+  return String(env.CLERK_ENABLED) === 'false' || !offersAccounts(request)
     ? {}
     : { secretKey: env.CLERK_SECRET_KEY }
 }
