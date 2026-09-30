@@ -35,11 +35,22 @@ export default defineConfig(({ isPreview, mode }) => {
    *
    * Plain-text variables are declared here rather than set in the dashboard,
    * and it is not a preference. `cf` has no `keep_vars`: a deploy replaces the
-   * Worker's variables with the ones declared, and a CI upload refuses outright
-   * when the dashboard holds one this file does not ("Aborting the upload
-   * operation because of conflicts"). Secrets are the other way round — never
-   * declared with a value, set per environment in the dashboard (Production,
-   * and Previews Base for previews), and never removed by a deploy.
+   * Worker's variables with the ones declared. Secrets are the other way round
+   * — never declared with a value, never removed by a deploy, and set per
+   * environment: Production's from the command line, Previews Base's in the
+   * dashboard.
+   *
+   * The production Worker is never changed from the dashboard — not a
+   * variable, a secret, nor anything else. While its latest change came from
+   * there, `cf deploy` compares the dashboard's configuration with this file's
+   * in Wrangler's strict mode, which it always uses and has no flag to relax,
+   * and in a build any difference that would remove something aborts the
+   * upload ("Aborting the upload operation because of conflicts"; the
+   * `--strict` it says to drop is not a flag `cf deploy` takes). There always
+   * is one: the dashboard reports each custom domain's route with `zone_name`,
+   * `enabled` and `previews_enabled`, which no local configuration produces,
+   * so one dashboard change refuses every build after it however closely the
+   * rest matches. docs/hosting.md says what does not end it.
    */
   const production = !isPreview && mode !== 'development'
   const flag = (on: boolean) => bindings.text(on ? 'true' : 'false')
@@ -133,7 +144,8 @@ export default defineConfig(({ isPreview, mode }) => {
          * The two switches, on in previews and under `--mode development` and
          * off in every other evaluation (`production` above). Turning either
          * on in production is a change to this file, reviewed like any other —
-         * a dashboard edit is overwritten by the next deploy.
+         * a dashboard edit is no way round that, and stops the next deploy
+         * from running at all (above).
          *
          *   TOUR_GUIDE_ENABLED  the Planetarium guide (`src/tour/routes.ts`).
          *   CLERK_ENABLED       accounts on the Worker (`src/account.ts`); off, it
