@@ -17,8 +17,13 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/*
+ * A fresh secret key per call: grants are held per key and user for a minute
+ * (`account.ts`), so a second case reusing one would read the first one's.
+ */
+let instances = 0
 const keys = (overrides: Partial<AccountKeys> = {}): AccountKeys => ({
-  secretKey: 'sk_test_lookup',
+  secretKey: `sk_test_lookup_${++instances}`,
   jwtKey: issuer.pem,
   ...overrides,
 })
@@ -43,6 +48,8 @@ function clerkWith(privateMetadata: Record<string, unknown>, status = 200) {
   return lookup
 }
 
+const NOBODY = { signedIn: false, authorized: false, userId: null }
+
 const asking = async (token?: string) =>
   new Request(`${SITE}/api/tour/sessions`, {
     headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
@@ -57,14 +64,16 @@ describe('guideAccess', () => {
       { admin: true, tour: true },
     ]) {
       const lookup = clerkWith(flags)
-      expect(await guideAccess(await asking(token), keys())).toEqual({
+      const held = keys()
+      expect(await guideAccess(await asking(token), held)).toEqual({
         signedIn: true,
         authorized: true,
+        userId: 'user_2test',
       })
       // The secret key, and nothing from the visitor, authorizes the lookup.
       expect(
         new Headers(lookup.mock.calls[0]![1]?.headers).get('authorization'),
-      ).toBe('Bearer sk_test_lookup')
+      ).toBe(`Bearer ${held.secretKey}`)
     }
   })
 
@@ -75,21 +84,16 @@ describe('guideAccess', () => {
       expect(await guideAccess(await asking(token), keys())).toEqual({
         signedIn: true,
         authorized: false,
+        userId: 'user_2test',
       })
     }
   })
 
   it('does not ask Clerk about somebody who is not signed in', async () => {
     const lookup = clerkWith({ admin: true })
-    expect(await guideAccess(await asking(), keys())).toEqual({
-      signedIn: false,
-      authorized: false,
-    })
+    expect(await guideAccess(await asking(), keys())).toEqual(NOBODY)
     const forged = await (await signer()).sign(session())
-    expect(await guideAccess(await asking(forged), keys())).toEqual({
-      signedIn: false,
-      authorized: false,
-    })
+    expect(await guideAccess(await asking(forged), keys())).toEqual(NOBODY)
     expect(lookup).not.toHaveBeenCalled()
   })
 
@@ -98,7 +102,7 @@ describe('guideAccess', () => {
     clerkWith({ admin: true })
     expect(
       await guideAccess(await asking(token), keys({ secretKey: undefined })),
-    ).toEqual({ signedIn: false, authorized: false })
+    ).toEqual(NOBODY)
   })
 
   it('treats a deleted user as ungranted and an unreachable Clerk as the server’s fault', async () => {
@@ -107,12 +111,59 @@ describe('guideAccess', () => {
     expect(await guideAccess(await asking(token), keys())).toEqual({
       signedIn: true,
       authorized: false,
+      userId: 'user_gone',
     })
     clerkWith({ admin: true }, 500)
     vi.spyOn(console, 'error').mockImplementation(() => {})
     await expect(
       guideAccess(await asking(await issuer.sign(session())), keys()),
     ).rejects.toBeInstanceOf(AccountUnavailableError)
+  })
+})
+
+describe('the grant, held', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('asks Clerk once a minute per user, however many requests ask', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const token = await issuer.sign(session())
+    const lookup = clerkWith({ tour: true })
+    const held = keys()
+    const verdicts = await Promise.all(
+      Array.from({ length: 4 }, async () =>
+        guideAccess(await asking(token), held),
+      ),
+    )
+    expect(verdicts.every((verdict) => verdict.authorized)).toBe(true)
+    // Four at once share one call, and a second later is still that answer.
+    expect(lookup).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(59_000)
+    await guideAccess(await asking(token), held)
+    expect(lookup).toHaveBeenCalledTimes(1)
+    // A grant revoked in the dashboard is read at the next ask past a minute.
+    clerkWith({})
+    vi.advanceTimersByTime(1_000)
+    expect(await guideAccess(await asking(token), held)).toMatchObject({
+      authorized: false,
+    })
+  })
+
+  it('does not hold a failed lookup', async () => {
+    const token = await issuer.sign(session())
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const held = keys()
+    clerkWith({ admin: true }, 500)
+    await expect(guideAccess(await asking(token), held)).rejects.toBeInstanceOf(
+      AccountUnavailableError,
+    )
+    const lookup = clerkWith({ admin: true })
+    expect(await guideAccess(await asking(token), held)).toMatchObject({
+      authorized: true,
+    })
+    expect(lookup).toHaveBeenCalledTimes(1)
   })
 })
 

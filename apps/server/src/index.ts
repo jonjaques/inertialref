@@ -20,6 +20,7 @@ import { GENERATION_VERSIONS } from '@inertialref/universe'
  */
 import catalogManifest from '../../../data/catalog/manifest.json' with { type: 'json' }
 import { accountKeys, AccountUnavailableError, identify } from './account.ts'
+import { allowed, RETRY_AFTER, sourceKey } from './limits.ts'
 import { routeFor } from './routes.ts'
 import { type MediaStores, serveMedia } from './serveMedia.ts'
 import { serveTour } from './tour/routes.ts'
@@ -61,6 +62,19 @@ const IDENTITY = {
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const route = routeFor(new URL(request.url).pathname)
+
+    /*
+     * One allowance per address across the account route and the guide's,
+     * because both ask Clerk who is calling, and Clerk's API has a rate limit
+     * of its own that every visitor shares. Checked before any of that work.
+     */
+    if (
+      (route.kind === 'account' || route.kind === 'tour') &&
+      !(await allowed(env.ACCOUNT_LIMIT, await sourceKey(request, 'account')))
+    )
+      return api({ error: 'Too many requests. Try again in a minute.' }, 429, {
+        'retry-after': RETRY_AFTER,
+      })
 
     switch (route.kind) {
       case 'tour':
@@ -158,10 +172,15 @@ function stores(env: Env): MediaStores {
  * skips `/api` for exactly that reason — this header is what protects the
  * request from every other cache between here and the tab.
  */
-function api(body: unknown, status = 200): Response {
+function api(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
+      ...headers,
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
     },

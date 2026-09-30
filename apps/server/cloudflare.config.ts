@@ -157,6 +157,29 @@ export default defineConfig(({ isPreview, mode }) => {
         CLERK_SECRET_KEY: bindings.secret(),
 
         /*
+         * Allowances (`src/limits.ts`). Counted per location and settled
+         * eventually, so each is a bound on a script, not a meter on a person.
+         * A namespace is any integer unique within the account.
+         *
+         *   ACCOUNT_LIMIT        per address, across `/api/account` and
+         *                        `/api/tour/*`: every one asks who is calling,
+         *                        and Clerk's API rate-limits the instance as a
+         *                        whole.
+         *   GUIDE_SESSION_LIMIT  per account, on creating a guide session:
+         *                        each is minutes of the OpenAI project's
+         *                        budget, and a granted token is the one caller
+         *                        every other check admits.
+         */
+        ACCOUNT_LIMIT: bindings.rateLimit({
+          namespace: '1002',
+          simple: { limit: 120, period: 60 },
+        }),
+        GUIDE_SESSION_LIMIT: bindings.rateLimit({
+          namespace: '1003',
+          simple: { limit: 6, period: 60 },
+        }),
+
+        /*
          * The site's object storage (docs/hosting.md H-8).
          *
          * It holds what the repository will not carry: today, one piece of
