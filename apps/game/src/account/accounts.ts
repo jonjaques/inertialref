@@ -2,23 +2,30 @@ import { createContext, useContext } from 'react'
 import type { Location } from 'react-router'
 import {
   HOME,
-  isOverlayPath,
-  overlayState,
+  PROFILE,
   resolvedLocation,
-  type OverlayLocationState,
+  SIGN_IN,
+  SIGN_UP,
 } from '../pages/paths.ts'
 
 /*
  * Accounts, from the client's side: which provider, whether this build has
- * one, and how its navigations become this app's.
+ * one, who is signed in, and how the provider's navigations become this app's.
  *
  * The provider is Clerk. It signs a visitor in from the browser, holds the
- * session, and hands the page a short-lived token that the Worker verifies at
- * `ACCOUNT_PATH` (`apps/server/src/account.ts`). Nothing the game simulates
- * depends on it — solo offline is the base case (`docs/design/modes.md`) and
- * an account is an addition to a complete game — so a build without a key is
- * a supported build rather than a broken one: no badge, and account pages
- * that say this deployment does not offer accounts.
+ * session, and hands the page a short-lived token that the Worker verifies
+ * (`apps/server/src/account.ts`). Nothing the game simulates depends on it —
+ * solo offline is the base case (`docs/design/modes.md`) and an account is an
+ * addition to a complete game — so a build without a key is a supported build
+ * rather than a broken one: no badge, and account pages that say this build
+ * does not offer accounts.
+ *
+ * Accounts are reached two ways, and which one is a question of where the
+ * visitor is standing. From the menu, or by address, `/sign-in`, `/sign-up`
+ * and `/profile` are pages of their own over the menu's scene. Inside a mode —
+ * the planetarium, flight — the badge opens Clerk's own modal and the address
+ * does not change: a flight in progress is not a place to navigate away from
+ * to answer "who am I signed in as".
  */
 
 /**
@@ -33,18 +40,40 @@ import {
 export const PUBLISHABLE_KEY: string =
   import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? ''
 
-/**
- * Whether the tree below is inside the provider.
- *
- * Asked rather than inferred from the key, because the key is a build
- * constant and the provider is a render: the server-render tests draw the
- * account pages with no provider at all, and a Clerk hook called outside one
- * throws. A component reads this and only then renders the half that calls
- * Clerk.
- */
-export const AccountsContext = createContext(false)
+/** Who is signed in, as far as this page knows. */
+export interface AccountState {
+  /** Whether this build has accounts at all. */
+  readonly configured: boolean
+  /** Whether the provider has answered yet; nothing is known before it does. */
+  readonly loaded: boolean
+  readonly userId: string | null
+}
 
-export const useAccounts = (): boolean => useContext(AccountsContext)
+/**
+ * The account state, for everything outside `account/`.
+ *
+ * Its own context rather than Clerk's hooks, and for two reasons. Clerk's
+ * hooks throw outside the provider, and the server-render tests and a fork
+ * both draw the shell with no provider at all — this has a default that means
+ * "no accounts". And a module that is not about accounts — the guide, the
+ * home page — should not know which vendor answers the question.
+ * `AccountBridge` is the one writer.
+ */
+export const AccountContext = createContext<AccountState>({
+  configured: false,
+  loaded: true,
+  userId: null,
+})
+
+export const useAccount = (): AccountState => useContext(AccountContext)
+
+/** Whether the tree below is inside the provider. */
+export const useAccounts = (): boolean => useContext(AccountContext).configured
+
+/** The account pages: pages of their own, never dialogs over a mode. */
+export function isAccountPath(pathname: string): boolean {
+  return pathname === SIGN_IN || pathname === SIGN_UP || pathname === PROFILE
+}
 
 /**
  * Where Clerk is told to go after a sign-out, as a marker rather than a place.
@@ -63,55 +92,45 @@ const hrefOf = (location: Pick<Location, 'pathname' | 'search' | 'hash'>) =>
   `${location.pathname}${location.search}${location.hash}`
 
 /**
- * Where to go once an account dialog is done with — signed in, signed out, or
- * dismissed: the mode behind it, or the menu when there is none.
- *
- * "None" includes a cold load of an account page, whose resolved location is
- * the dialog itself; landing there after signing out would show a profile to
- * nobody.
+ * Where to be once signed out: where the reader already is, unless that is an
+ * account page, which has nothing to show somebody signed out of it.
  */
 export function returnAddress(here: Location): string {
   const base = resolvedLocation(here)
-  return isOverlayPath(base.pathname) ? HOME : hrefOf(base)
+  return isAccountPath(base.pathname) ? HOME : hrefOf(base)
 }
 
 export interface AccountNavigation {
   readonly to: string
   readonly replace: boolean
-  readonly state?: OverlayLocationState
 }
 
 /**
- * One of Clerk's navigations, as this router has to perform it.
+ * One of Clerk's navigations, as this router has to perform it — or `null`
+ * when there is nowhere to go.
  *
- * Clerk moves between its own pages — sign-in to sign-up, a sign-in step to
- * the next, the profile's sections — through the `routerPush` it was given,
- * and it knows nothing about the background location that keeps a mode alive
- * behind a dialog. Passed through bare, the first hop from `/sign-in` to
- * `/sign-up` would clear `location.state`, `ModeRoutes` would re-resolve at
- * the dialog's own path, and the planetarium behind it would unmount — the
- * failure `useOverlay` describes, reached from a library this time.
+ * **Resolved against the current address, not the site root.** Clerk moves
+ * between a component's own steps with a bare fragment — `#/security` inside
+ * the profile — and a URL resolved against `/` turns that into the menu. React
+ * Router would resolve the bare string against the current path, but the
+ * decisions here have to be taken about the same address it will land on.
  *
- * So an account dialog is opened over the mode that is actually running —
- * `resolvedLocation`, which is the background when a dialog is already up —
- * and anything that is not a dialog is an ordinary navigation that closes one.
- * A cold-loaded dialog has no mode behind it, and carries none on: naming the
- * dialog itself as the background would make closing `/sign-up` open
- * `/sign-in`. That is `useOverlay`'s `keep`, for the same reason.
+ * A modal finishing where it was opened asks to go to the address the reader
+ * is already at; pushing it would add a history entry that goes nowhere, and a
+ * navigation to the current address drops whatever `location.state` a dialog
+ * behind it was keeping.
  */
 export function accountNavigation(
   to: string,
   here: Location,
   replace: boolean,
-): AccountNavigation {
-  const target = new URL(to, 'https://inertialref.invalid')
-  if (
+): AccountNavigation | null {
+  const origin = 'https://inertialref.invalid'
+  const target = new URL(to, `${origin}${hrefOf(here)}`)
+  const signedOut =
     target.pathname === HOME &&
     target.searchParams.get('account') === 'signed-out'
-  )
-    return { to: returnAddress(here), replace: true }
-  const base = resolvedLocation(here)
-  if (isOverlayPath(target.pathname) && !isOverlayPath(base.pathname))
-    return { to, replace, state: overlayState(base) }
-  return { to, replace }
+  const next = signedOut ? returnAddress(here) : hrefOf(target)
+  if (next === hrefOf(here)) return null
+  return { to: next, replace: signedOut || replace }
 }

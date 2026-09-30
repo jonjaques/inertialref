@@ -1,34 +1,34 @@
-import { Link, useLocation } from 'react-router'
-import { UserButton, useAuth } from '@clerk/react'
+import { useLocation } from 'react-router'
+import { UserButton, useAuth, useClerk } from '@clerk/react'
 import { CircleUserRound } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { FOCUS_RING } from '../hud/focus.ts'
-import {
-  overlayState,
-  PROFILE,
-  resolvedLocation,
-  SIGN_IN,
-} from '../pages/paths.ts'
+import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { resolvedLocation } from '../pages/paths.ts'
 
 /**
- * The account control itself: a sign-in link, or the signed-in badge.
+ * The account control inside a mode: a sign-in button, or the signed-in badge
+ * — and both open Clerk's own modal, never an address.
  *
- * The badge is Clerk's `UserButton` — the avatar, and a popover with the
- * profile and sign-out — because the popover is account UI Clerk keeps
- * current and this repository should not. What it does *not* get to do is
- * open Clerk's own modal for the profile: `navigation` mode sends "Manage
- * account" to `/profile` through the router, where it is a dialog over the
- * running mode like every other one, with an address and a close button.
+ * A mode is a place with a camera, a clock and a flight in it, and the URL is
+ * what says which one (`pages/paths.ts`). Sending the visitor to `/sign-in` to
+ * answer "who am I signed in as" would leave that place; a modal answers it
+ * over the running scene and closes back onto it. The pages at `/sign-in` and
+ * `/profile` are for arriving by address or from the menu.
+ *
+ * Signing in from the modal returns to the address it was opened at, which
+ * `accountNavigation` recognizes as nowhere to go. Signing out from the
+ * badge's popover lands on the same address for the same reason.
  *
  * While Clerk is still loading this holds the space and draws nothing. The
- * badge and the link are the same size, so the bar does not shift when the
+ * badge and the button are the same size, so the bar does not shift when the
  * answer arrives — and if Clerk never loads (a blocked script, no network) the
- * bar is one blank slot wide rather than carrying a sign-in link that leads to
- * a form that cannot appear.
+ * bar is one blank slot wide rather than carrying a sign-in button that opens
+ * nothing.
  */
 export function AccountButton({
   compact,
@@ -38,6 +38,7 @@ export function AccountButton({
   side: 'top' | 'bottom'
 }) {
   const { isLoaded, isSignedIn } = useAuth()
+  const clerk = useClerk()
   const location = useLocation()
   const size = compact ? 'size-11' : 'size-7'
 
@@ -47,8 +48,6 @@ export function AccountButton({
     return (
       <span className={`flex ${size} shrink-0 items-center justify-center`}>
         <UserButton
-          userProfileMode="navigation"
-          userProfileUrl={PROFILE}
           appearance={{
             elements: {
               // 20 px inside a 28 px slot: the avatar is a face, and at the
@@ -61,20 +60,25 @@ export function AccountButton({
       </span>
     )
 
+  const back = resolvedLocation(location)
+  const here = `${back.pathname}${back.search}${back.hash}`
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Link
-          to={SIGN_IN}
-          // The mode behind, not this address: from inside a dialog the raw
-          // location is the dialog's, and carrying it would make the sign-in
-          // page its own background.
-          state={overlayState(resolvedLocation(location))}
+        <Button
+          variant="ghost"
           aria-label="Sign in"
-          className={`flex ${size} shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-800/60 hover:text-sky-200 ${FOCUS_RING}`}
+          onClick={(event) => {
+            releaseFocus(event)
+            clerk.openSignIn({
+              forceRedirectUrl: here,
+              signUpForceRedirectUrl: here,
+            })
+          }}
+          className={`${size} shrink-0 rounded p-0 text-slate-400 hover:bg-slate-800/60 hover:text-sky-200 ${FOCUS_RING}`}
         >
           <CircleUserRound aria-hidden className="size-4" />
-        </Link>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side={side}>Sign in</TooltipContent>
     </Tooltip>

@@ -709,6 +709,16 @@ a {
  * canvas is a sibling and would be clamped with them. Chrome and Safari
  * implement it; Firefox does not, and has no extended-range output to need it.
  */
+/*
+ * Clerk's modal and the badge's popover, which Clerk portals to the document
+ * body — outside `.hud-layer`, so outside the clamp below. Its public element
+ * classes are the only handle on nodes this code does not render.
+ */
+.cl-modalBackdrop,
+.cl-userButtonPopoverCard {
+  dynamic-range-limit: standard;
+}
+
 .hud-layer {
   dynamic-range-limit: standard;
   /* See `:root` above: this is the one place the safe-area insets are spent.

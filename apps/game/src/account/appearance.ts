@@ -11,15 +11,16 @@ import { FOCUS_RING } from '../hud/focus.ts'
  * tooltip, at page scale.
  *
  * The variables carry the palette: `slate-950` ground, `slate-200` ink,
- * `sky` accent, Plex Sans, the 0.5 rem radius. The elements carry the two
- * things a variable cannot say:
+ * `sky` accent, Plex Sans, the 0.5 rem radius. The elements carry what a
+ * variable cannot say: **the primary button is a wash, not a fill** — the
+ * accent as material, the rule every control in `hud/Action.tsx` follows.
+ * Clerk's is a solid `colorPrimary` block with a gradient sheen on `::after`,
+ * both removed.
  *
- *   - **The card is not drawn.** The sign-in and profile components sit inside
- *     `OverlayPage`, which is already the card; Clerk's own border, shadow and
- *     ground inside it are a card in a card.
- *   - **The primary button is a wash, not a fill** — the accent as material,
- *     the rule every control in `hud/Action.tsx` follows. Clerk's is a solid
- *     `colorPrimary` block with a gradient sheen on `::after`, both removed.
+ * Clerk's card stays here, because its modal needs one: inside a mode the
+ * modal is the only ground between the form and a sunlit planet. The account
+ * pages take it away (`PAGE_ELEMENTS`), where the menu's gradient already is
+ * the ground and a card on it is a box drawn around a column of type.
  *
  * `cssLayerName` is what lets any of the element classes win. Clerk injects
  * its styles unlayered, and an unlayered rule beats every layered one
@@ -49,11 +50,16 @@ export const APPEARANCE = {
     borderRadius: '0.5rem',
   },
   elements: {
-    rootBox: 'w-full',
-    cardBox: 'w-full max-w-none border-0 shadow-none',
-    card: 'bg-transparent px-0 py-2 shadow-none',
-    footer: 'bg-none bg-transparent',
+    cardBox: 'border border-slate-700/60 shadow-xl shadow-black/50',
     formButtonPrimary: `rounded border border-sky-500/50 bg-sky-500/15 bg-none text-sky-200 shadow-none after:hidden hover:border-sky-400 hover:bg-sky-500/25 ${FOCUS_RING}`,
     userButtonPopoverCard: 'border border-slate-700/60 shadow-xl',
   },
 } as const satisfies ClerkProviderProps['appearance']
+
+/** Clerk's card, removed, for a component that is the body of an account page. */
+export const PAGE_ELEMENTS = {
+  rootBox: 'w-full',
+  cardBox: 'w-full max-w-none border-0 shadow-none',
+  card: 'bg-transparent px-0 py-2 shadow-none',
+  footer: 'bg-none bg-transparent',
+} as const

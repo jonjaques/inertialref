@@ -6,8 +6,10 @@ import { DocsMode } from '../docs/DocsMode.tsx'
 import { BootLedger } from '../hud/BootLedger.tsx'
 import { BootNav } from '../hud/BootNav.tsx'
 import { PRELUDE } from '../render/bootState.ts'
+import { AccountPage } from './AccountPage.tsx'
 import { HomePage } from './HomePage.tsx'
 import { LoadedMode } from './LoadedMode.tsx'
+import { MenuScene } from './MenuScene.tsx'
 import { modeLoaders, preloadMode } from './modeLoader.ts'
 import { useRuntimeFailure } from '../runtimeFailure.ts'
 import {
@@ -15,6 +17,9 @@ import {
   DOCS,
   HOME,
   PLANETARIUM,
+  PROFILE,
+  SIGN_IN,
+  SIGN_UP,
   modeForPath,
   resolvedLocation,
 } from './paths.ts'
@@ -164,7 +169,6 @@ export function ModeRoutes(props: ModeRouteProps) {
 
   return (
     <Routes location={at}>
-      <Route path={HOME} element={<HomePage engine={props.engine} />} />
       <Route
         path="/play/:mode"
         element={
@@ -255,14 +259,23 @@ export function ModeRoutes(props: ModeRouteProps) {
         }
       />
       {/*
-       * Anything else falls through to the menu rather than to a 404 page.
+       * The menu's pages — the front door and the account pages — under one
+       * `MenuScene`, so moving between them changes the page over a scene
+       * that keeps turning rather than restarting its orbit.
        *
+       * Anything else falls through to the menu rather than to a 404 page.
        * The URL is the only way in and a typed one is a normal event; a game
        * that answers a misspelling with an error page is a game that made the
        * misspelling look like a failure of the game. The menu is the answer to
        * "where am I", which is the question a wrong URL actually asks.
        */}
-      <Route path="*" element={<HomePage engine={props.engine} />} />
+      <Route element={<MenuScene engine={props.engine} />}>
+        <Route path={HOME} element={<HomePage />} />
+        <Route path={SIGN_IN} element={<AccountPage page="sign-in" />} />
+        <Route path={SIGN_UP} element={<AccountPage page="sign-up" />} />
+        <Route path={PROFILE} element={<AccountPage page="profile" />} />
+        <Route path="*" element={<HomePage />} />
+      </Route>
     </Routes>
   )
 }

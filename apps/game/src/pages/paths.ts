@@ -85,7 +85,11 @@ export const ABOUT = '/about'
  */
 export const KEYS = '/keys'
 
-/** The account routes: Clerk's sign-in, sign-up and profile, as dialogs. */
+/**
+ * The account pages: Clerk's sign-in, sign-up and profile, as pages of the
+ * menu. Never dialogs over a mode — inside one, the badge opens Clerk's modal
+ * and the address does not change (`account/accounts.ts`).
+ */
 export const SIGN_IN = '/sign-in'
 export const SIGN_UP = '/sign-up'
 export const PROFILE = '/profile'
@@ -131,8 +135,8 @@ export type AppMode = (typeof MODES)[number]
 /**
  * The mode a path runs in.
  *
- * Overlay routes — settings, about, the account pages — deliberately answer
- * `menu`. They are dialogs and can be opened over any mode, and when one is
+ * Overlay routes — settings, about, the keys — deliberately answer `menu`,
+ * and so do the account pages, which are the menu's own. They are dialogs and can be opened over any mode, and when one is
  * opened from inside a mode the router carries the mode's location as the
  * background (see `routes.tsx`), so this is only consulted for a *cold* load.
  * Cold-loading `/settings` over the menu is the honest answer: there is no
@@ -156,9 +160,6 @@ export function isOverlayPath(pathname: string): boolean {
     pathname.startsWith(`${SETTINGS}/`) ||
     pathname === ABOUT ||
     pathname === KEYS ||
-    pathname === PROFILE ||
-    pathname === SIGN_IN ||
-    pathname === SIGN_UP ||
     pathname === AUTH_CALLBACK
   )
 }

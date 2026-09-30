@@ -8,7 +8,7 @@ import {
   type KeyContext,
   resolveBindings,
 } from './keymap.ts'
-import { isOverlayControl, isTyping } from '../hud/focus.ts'
+import { isForeignModal, isOverlayControl, isTyping } from '../hud/focus.ts'
 
 /*
  * The one window `keydown` listener, and everything it needs to decide.
@@ -197,7 +197,7 @@ export class KeymapStore {
     // A key typed into the search box is not a camera command. The focus check
     // is here rather than in the table because "is something else listening" is
     // a fact about the document, not about the key.
-    if (isTyping(event)) return
+    if (isTyping(event) || isForeignModal(event)) return
     const pressed = chordFromEvent(event)
     if (pressed === null) return
     const action = this.resolve(pressed)

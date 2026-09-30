@@ -2,9 +2,9 @@ import { type ReactNode, useCallback, useLayoutEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { ClerkProvider } from '@clerk/react'
 import { SIGN_IN, SIGN_UP } from '../pages/paths.ts'
+import { AccountBridge } from './AccountBridge.tsx'
 import {
   accountNavigation,
-  AccountsContext,
   PUBLISHABLE_KEY,
   SIGNED_OUT_LANDING,
 } from './accounts.ts'
@@ -45,9 +45,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const go = useCallback((to: string, replace: boolean): Promise<void> => {
     const { navigate: push, location: here } = current.current
     const next = accountNavigation(to, here, replace)
-    return Promise.resolve(
-      push(next.to, { replace: next.replace, state: next.state }),
-    )
+    return next === null
+      ? Promise.resolve()
+      : Promise.resolve(push(next.to, { replace: next.replace }))
   }, [])
   const routerPush = useCallback((to: string) => go(to, false), [go])
   const routerReplace = useCallback((to: string) => go(to, true), [go])
@@ -63,7 +63,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       afterSignOutUrl={SIGNED_OUT_LANDING}
       appearance={APPEARANCE}
     >
-      <AccountsContext value>{children}</AccountsContext>
+      <AccountBridge>{children}</AccountBridge>
     </ClerkProvider>
   )
 }

@@ -6,6 +6,8 @@ import {
   ABOUT,
   AUTH_CALLBACK,
   HOME,
+  isOverlayPath,
+  KEYS,
   modeForPath,
   overlayBackground,
   QUERY,
@@ -19,6 +21,7 @@ import {
   SIGN_UP,
 } from './paths.ts'
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
+import { AccountPage } from './AccountPage.tsx'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
 
 /*
@@ -126,20 +129,35 @@ describe('the routed dialogs', () => {
     expect(markup).toContain('Lens Flare')
   })
 
-  it('renders the informational and account pages', () => {
+  it('renders the informational pages', () => {
     const about = at(ABOUT)
     expect(about).toContain('>About</h1>')
     expect(about).toContain('7,123')
     expect(about).toContain('Pre-alpha')
     expect(about).toContain('Source on GitHub')
     expect(about).toContain('href="https://github.com/jonjaques/inertialref"')
-    // Without an account provider the account pages must say so, and must
-    // never render a credential field that goes nowhere — people reuse
-    // passwords, and a form that looks real is one they will type a real one
-    // into.
-    for (const path of [SIGN_IN, SIGN_UP, PROFILE]) {
-      const markup = at(path)
+  })
+
+  it('draws the account pages as pages of the menu, never as dialogs', () => {
+    // Without an account provider they must say so, and must never render a
+    // credential field that goes nowhere — people reuse passwords, and a form
+    // that looks real is one they will type a real one into.
+    for (const [path, page] of [
+      [SIGN_IN, 'sign-in'],
+      [SIGN_UP, 'sign-up'],
+      [PROFILE, 'profile'],
+    ] as const) {
+      expect(at(path), path).toBe('')
+      expect(isOverlayPath(path)).toBe(false)
+      const markup = renderToStaticMarkup(
+        createElement(
+          MemoryRouter,
+          { initialEntries: [path] },
+          createElement(AccountPage, { page }),
+        ),
+      )
       expect(markup).toContain('no account provider configured')
+      expect(markup).toContain('href="/"')
       expect(markup).not.toContain('type="password"')
       expect(markup).not.toContain('<form')
     }
@@ -244,7 +262,7 @@ describe('the surface a dialog belongs to', () => {
   })
 
   it('keeps distinct dialogs distinct, so one replaces the other', () => {
-    const surfaces = [ABOUT, SIGN_IN, PROFILE, SETTINGS].map(overlaySurface)
+    const surfaces = [ABOUT, KEYS, AUTH_CALLBACK, SETTINGS].map(overlaySurface)
     expect(new Set(surfaces).size).toBe(surfaces.length)
   })
 
@@ -256,6 +274,9 @@ describe('the surface a dialog belongs to', () => {
       '/play/solo',
       '/planetarium',
       '/cinema/tng-intro',
+      SIGN_IN,
+      SIGN_UP,
+      PROFILE,
     ])
       expect(overlaySurface(path)).toBe('none')
   })
