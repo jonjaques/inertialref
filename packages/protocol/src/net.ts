@@ -1,6 +1,8 @@
 import {
+  decodeBoolean,
   decodeInteger,
   decodeLiteral,
+  decodeNullable,
   decodeNumberRecord,
   decodeObject,
   decodeOptional,
@@ -49,6 +51,7 @@ export const NET_PROTOCOL_VERSION = 1
  */
 export const API_PREFIX = '/api/'
 export const HEALTH_PATH = '/api/health'
+export const ACCOUNT_PATH = '/api/account'
 export const SOCKET_PATH = '/ws'
 
 /**
@@ -115,6 +118,35 @@ export const decodeServerHealth: Decoder<ServerHealth> = decodeObject({
   // a session over a missing debug field would be the tail wagging the dog.
   revision: decodeOptional(decodeString, 'unknown'),
   colo: decodeOptional(decodeString, ''),
+})
+
+/**
+ * Who the server believes is asking — the answer at `ACCOUNT_PATH`.
+ *
+ * The browser already knows who it signed in as; this is the other side's
+ * verdict on the same credential, and the two can disagree for real reasons:
+ * a token minted for another origin, one that expired in a background tab, or
+ * a deployment with no identity provider configured at all. Anything the
+ * server will later refuse or attribute — a discovery claim, a guide session —
+ * is decided on this verdict, never on the client's.
+ *
+ * Three states rather than a user id alone, because "nobody is signed in" and
+ * "this deployment cannot tell" are different sentences: the second is a fork
+ * or a local server without a key, and telling its visitor to sign in again
+ * would send them round a loop that cannot end.
+ */
+export interface AccountStatus {
+  /** Whether this deployment can verify an account at all. */
+  readonly configured: boolean
+  readonly signedIn: boolean
+  /** The provider's stable user id. `null` whenever `signedIn` is false. */
+  readonly userId: string | null
+}
+
+export const decodeAccountStatus: Decoder<AccountStatus> = decodeObject({
+  configured: decodeBoolean,
+  signedIn: decodeBoolean,
+  userId: decodeNullable(decodeString),
 })
 
 /**

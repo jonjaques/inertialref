@@ -23,6 +23,7 @@ import {
 } from './save.ts'
 import { decodeWorkerRequest } from './worker.ts'
 import {
+  decodeAccountStatus,
   decodeServerHealth,
   describeDrift,
   HEALTH_PATH,
@@ -358,6 +359,21 @@ describe('the network handshake', () => {
       catalog: 'hyg-4.4',
     }
     expect(versionDrift(same, { ...same })).toEqual([])
+  })
+
+  it('decodes the server’s account verdict, null user included', () => {
+    const out = { configured: true, signedIn: false, userId: null }
+    expect(decode(decodeAccountStatus, out)).toEqual({ ok: true, value: out })
+    const inside = { configured: true, signedIn: true, userId: 'user_2x' }
+    expect(decode(decodeAccountStatus, inside)).toEqual({
+      ok: true,
+      value: inside,
+    })
+    // An omitted user is not a null one: the server states it either way.
+    expect(
+      decode(decodeAccountStatus, { configured: true, signedIn: false }).ok,
+    ).toBe(false)
+    expect(decode(decodeAccountStatus, '<!doctype html>').ok).toBe(false)
   })
 
   it('decodes a health record rather than trusting a 200', () => {

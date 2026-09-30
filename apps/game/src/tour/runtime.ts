@@ -42,9 +42,16 @@ import {
  * takeover, a pause, a new delegation or a new move ends the wait.
  */
 
+/**
+ * What the Worker says about the guide, for whoever is asking.
+ *
+ * `authorized` is the Worker's verdict and the only one that counts: the grant
+ * lives in the account's private metadata, which the browser cannot read.
+ */
 export interface GuideCapabilities {
   readonly available: boolean
-  readonly authenticated: boolean
+  readonly signedIn: boolean
+  readonly authorized: boolean
   readonly voices: readonly string[]
   readonly reason: string | null
 }
@@ -219,38 +226,49 @@ export class GuideRuntime {
 
   inspect(): Promise<void> {
     if (this.#inspect !== null) return this.#inspect
-    this.#inspect = this.#request('/api/tour/capabilities')
+    /*
+     * Every write below first checks that this is still the current read. A
+     * `refresh` replaces it — somebody signed in, out, or as somebody else —
+     * and the read it replaced is about whoever was asking then: landing
+     * late, it would put their verdict back over the new one, and failing
+     * late it would drop the new read from `#inspect`. A superseded read
+     * settles with the current one instead, so a `start` already waiting on
+     * it reads the verdict that replaced it.
+     */
+    const inspection: Promise<void> = this.#request('/api/tour/capabilities')
       .then(async (response) => {
         const value = (await response.json()) as GuideCapabilities
         if (
           !value ||
           typeof value.available !== 'boolean' ||
-          typeof value.authenticated !== 'boolean' ||
+          typeof value.signedIn !== 'boolean' ||
+          typeof value.authorized !== 'boolean' ||
           !Array.isArray(value.voices)
         )
           throw new Error('Guide availability could not be read.')
+        if (this.#inspect !== inspection) return this.#inspect ?? undefined
         this.#update({ capabilities: value })
+        return undefined
       })
       .catch((cause: unknown) => {
+        if (this.#inspect !== inspection) return this.#inspect ?? undefined
         // A failed read is not an answer. Keeping the settled promise would
         // leave `capabilities` null for the life of the page, and the panel
         // draws no Start without it — so "close and reopen it to try again",
         // which is what the panel says, would do nothing.
         this.#inspect = null
         this.#update({ message: message(cause) })
+        return undefined
       })
-    return this.#inspect
+    this.#inspect = inspection
+    return inspection
   }
 
-  async login(password: string): Promise<void> {
-    try {
-      await this.#request('/api/tour/login', { password })
-      this.#inspect = null
-      await this.inspect()
-      this.#update({ message: null })
-    } catch (cause) {
-      this.#update({ message: message(cause) })
-    }
+  /** Ask again: somebody signed in, out, or as somebody else. */
+  refresh(): Promise<void> {
+    this.#inspect = null
+    this.#update({ message: null })
+    return this.inspect()
   }
 
   /** Request the microphone, post the offer, greet. */
@@ -263,8 +281,9 @@ export class GuideRuntime {
       const capabilities = this.#snapshot.capabilities
       if (!capabilities?.available)
         throw new Error(capabilities?.reason ?? 'The guide is unavailable.')
-      if (!capabilities.authenticated)
-        throw new Error('Enter the private alpha password first.')
+      if (!capabilities.signedIn) throw new Error('Sign in to use the guide.')
+      if (!capabilities.authorized)
+        throw new Error('This account does not have the guide.')
       const chosen = capabilities.voices.includes(voice)
         ? voice
         : (capabilities.voices[0] ?? 'marin')

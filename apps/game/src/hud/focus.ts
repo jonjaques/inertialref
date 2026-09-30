@@ -94,3 +94,28 @@ export function isOverlayControl(event: KeyboardEvent): boolean {
   const target = event.target
   return target instanceof HTMLElement && target.closest('.hud-layer') !== null
 }
+
+/**
+ * A key pressed inside somebody else's modal — Clerk's, today.
+ *
+ * Clerk portals its sign-in and profile modals to the document body, outside
+ * `.hud-layer`, and takes focus into them. Its inputs are refused as typing;
+ * a key on one of its buttons is not, so Space on "Continue" would press the
+ * button and pause the clock, and the standing stance would walk the camera
+ * behind the form. A modal owns the keyboard while it is open. Ours are inside
+ * the layer and declare a `dialog` context instead, so they are not this.
+ *
+ * The badge's popover is the same case without the attribute: portalled to
+ * the body, and not modal, so without its class here Space on "Sign out"
+ * pauses the clock and the window handler's `preventDefault` cancels the
+ * press. Clerk's public element class is the only handle on it.
+ */
+export function isForeignModal(event: KeyboardEvent): boolean {
+  if (typeof HTMLElement === 'undefined') return false
+  const target = event.target
+  return (
+    target instanceof HTMLElement &&
+    target.closest('.hud-layer') === null &&
+    target.closest('[aria-modal="true"], .cl-userButtonPopoverCard') !== null
+  )
+}

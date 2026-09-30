@@ -6,12 +6,13 @@
   "description": "Cloudflare Worker: serves the client bundle, answers /api, and will route /ws to a partition authority. Configured in cloudflare.config.ts and driven by cf.",
   "scripts": {
     "dev": "node ../../scripts/tour/dev.mjs",
-    "deploy": "cf deploy",
-    "versions:upload": "cf workers versions create",
+    "deploy": "cf deploy --mode production",
+    "previews:deploy": "cf previews deploy",
     "tail": "wrangler tail inertialrefd --format pretty",
     "types": "cf workers types"
   },
   "dependencies": {
+    "@clerk/backend": "^3.20.1",
     "@inertialref/protocol": "workspace:*",
     "@inertialref/universe": "workspace:*"
   },

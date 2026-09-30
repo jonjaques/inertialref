@@ -5,19 +5,8 @@ import { AboutPage } from './AboutPage.tsx'
 import { KeysPage } from './KeysPage.tsx'
 import { AuthCallbackPage } from './AuthCallbackPage.tsx'
 import { overlaySurface } from './paths.ts'
-import {
-  ABOUT,
-  KEYS,
-  AUTH_CALLBACK,
-  PROFILE,
-  SETTINGS,
-  SIGN_IN,
-  SIGN_UP,
-} from './paths.ts'
-import { ProfilePage } from './ProfilePage.tsx'
+import { ABOUT, KEYS, AUTH_CALLBACK, SETTINGS } from './paths.ts'
 import { SettingsPage } from './SettingsPage.tsx'
-import { SignInPage } from './SignInPage.tsx'
-import { SignUpPage } from './SignUpPage.tsx'
 
 /**
  * The dialogs need far less than the modes do, and saying so is what keeps the
@@ -30,7 +19,7 @@ interface OverlayRouteProps {
 }
 
 /**
- * The dialogs: settings, about, the account pages.
+ * The dialogs: settings, about, the keys, the auth callback.
  *
  * `AnimatePresence` is what gives one an exit animation — React Router swaps
  * the subtree, and without something holding the outgoing tree mounted there is
@@ -68,9 +57,6 @@ export function OverlayRoutes({ render, onNotice }: OverlayRouteProps) {
         />
         <Route path={ABOUT} element={<AboutPage />} />
         <Route path={KEYS} element={<KeysPage />} />
-        <Route path={SIGN_IN} element={<SignInPage />} />
-        <Route path={SIGN_UP} element={<SignUpPage />} />
-        <Route path={PROFILE} element={<ProfilePage />} />
         <Route path={AUTH_CALLBACK} element={<AuthCallbackPage />} />
         <Route path="*" element={null} />
       </Routes>

@@ -41,11 +41,18 @@ export function DockPane({
   zone,
   panels,
   workspace,
+  clearMenu,
 }: {
   zone: PaneZone
   /** The panels in this pane, in order, already filtered of anything suppressed. */
   panels: readonly DockPanelDefinition[]
   workspace: Workspace
+  /**
+   * Stop above the floating menu. It sits over the bottom of the frame at
+   * `bottom-3`; attached, it has taken its band out of the frame already and
+   * the pane runs to the ordinary inset.
+   */
+  clearMenu: boolean
 }) {
   const container = useRef<HTMLDivElement>(null)
   const [indicator, setIndicator] = useState<number | null>(null)
@@ -145,7 +152,8 @@ export function DockPane({
         aria-label={`${zone} pane`}
         inert={!open}
         className={[
-          'absolute top-3 bottom-16 flex min-h-0 flex-col gap-2 overflow-x-visible overflow-y-auto',
+          'absolute top-3 flex min-h-0 flex-col gap-2 overflow-x-visible overflow-y-auto',
+          clearMenu ? 'bottom-16' : 'bottom-3',
           'px-3 transition-transform duration-300 ease-out motion-reduce:transition-none',
           side,
           PANE_WIDTH,

@@ -76,7 +76,7 @@ const at = (path: string | Partial<Location>, node: ReactNode): string =>
 describe('the HTML page before the renderer starts', () => {
   it('renders a visible homepage and ordinary navigation without DOM globals', () => {
     expect(typeof window).toBe('undefined')
-    const html = at('/', createElement(HomePage, { engine: null }))
+    const html = at('/', createElement(HomePage))
     expect(html).toContain('A spaceflight simulator')
     expect(html).toContain('href="/docs"')
     expect(html).toContain('href="/planetarium"')

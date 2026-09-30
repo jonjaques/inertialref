@@ -18,6 +18,8 @@ import type { LabelDensity } from './layers.ts'
 /** What the panels are handed. One object, because they all read most of it. */
 export interface PlanetariumContext {
   readonly guide: GuideLifetime<GuideRuntime>
+  /** Whether the signed-in account is granted the guide (`tour/access.ts`). */
+  readonly guideOffered: boolean
   readonly engine: GameEngine
   /** The address the observatory is on, refreshed by the mode at panel rate. */
   readonly target: string | null

@@ -1,4 +1,5 @@
 'use no memo'
+import { useCallback, useRef } from 'react'
 import { useDrop } from 'react-dnd'
 import { FloatingPanel } from './FloatingPanel.tsx'
 import {
@@ -38,6 +39,7 @@ export function FloatField({
   workspace: Workspace
   viewport: { readonly width: number; readonly height: number }
 }) {
+  const field = useRef<HTMLDivElement | null>(null)
   const [{ active }, drop] = useDrop<PanelDragItem, void, { active: boolean }>(
     () => ({
       accept: PANEL_DRAG_TYPE,
@@ -50,14 +52,25 @@ export function FloatField({
          * should land where it visibly *is*, not with its corner snapped under
          * the cursor — which is a jump of most of the panel's width and reads
          * as the drop having missed. `getSourceClientOffset` is React DnD's
-         * answer to exactly this and it is already in the coordinate space
-         * `clampFloat` works in.
+         * answer to exactly this.
          *
          * It is null on some synthesized drags; `FloatingPanel`'s own `end`
          * handler covers that case with a delta, and a panel arriving from a
          * pane with nothing to go on gets the cascade.
          */
-        const at = monitor.getSourceClientOffset()
+        const client = monitor.getSourceClientOffset()
+        /*
+         * Client coordinates are the display's; a float position is this
+         * field's, and the field starts wherever `.hud-layer` does — below the
+         * notch, and below the menu when it is attached to the top. Stored
+         * as-is, a panel dropped under a top bar lands a band's height below
+         * the hand that dropped it.
+         */
+        const origin = field.current?.getBoundingClientRect()
+        const at =
+          client === null || origin === undefined
+            ? client
+            : { x: client.x - origin.left, y: client.y - origin.top }
         const rect = document
           .querySelector(`[data-dock-panel="${CSS.escape(item.id)}"]`)
           ?.getBoundingClientRect()
@@ -72,11 +85,25 @@ export function FloatField({
     [workspace],
   )
 
+  /*
+   * One ref for the life of the field, by hand because this file opts out of
+   * the compiler. A fresh arrow each render is detached with `null` and
+   * attached again on every commit, and `frame` is state in `useWorkspace`:
+   * the pair queues a second render of the whole workspace after each one.
+   */
+  const { frame } = workspace
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      field.current = node
+      drop(node)
+      frame(node)
+    },
+    [drop, frame],
+  )
+
   return (
     <div
-      ref={(node) => {
-        drop(node)
-      }}
+      ref={attach}
       data-dock-zone="float"
       className={`absolute inset-0 ${active ? 'pointer-events-auto' : 'pointer-events-none'}`}
     >

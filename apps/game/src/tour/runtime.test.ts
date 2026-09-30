@@ -59,7 +59,8 @@ function rig() {
       if (path.endsWith('/capabilities'))
         return Response.json({
           available: true,
-          authenticated: true,
+          signedIn: true,
+          authorized: true,
           voices: ['marin', 'cedar'],
           reason: null,
         })
@@ -69,7 +70,10 @@ function rig() {
           expiresAt: time + 7_200_000,
           sdp: 'answer',
         })
-      return Response.json({ authenticated: true })
+      return Response.json(
+        { error: 'No such guide endpoint.' },
+        { status: 404 },
+      )
     },
     executor: (events) => {
       executor = new GuideExecutor(session.harness, {
@@ -469,11 +473,10 @@ describe('the guide runtime', () => {
     f.session.dispose()
   })
 
-  it('records an opt-in trace of the channel without the password, bounded and detached', async () => {
+  it('records an opt-in trace of the channel, bounded and detached', async () => {
     const f = rig()
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
     try {
-      await f.runtime.login('password-never-recorded')
       expect(f.runtime.trace()).toEqual([])
       f.runtime.trace(true)
       await f.runtime.start('marin')
@@ -481,7 +484,6 @@ describe('the guide runtime', () => {
         f.receive({ type: 'session.usage.updated', usage: { seconds: i } })
       const entries = f.runtime.trace()
       expect(entries).toHaveLength(200)
-      expect(JSON.stringify(entries)).not.toContain('password-never-recorded')
       ;(entries[0] as unknown as { message: { type: string } }).message.type =
         'changed'
       expect(JSON.stringify(f.runtime.trace())).not.toContain('changed')

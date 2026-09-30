@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { MotionConfig } from 'motion/react'
+import { AccountProvider } from './account/AccountProvider.tsx'
 import { TooltipProvider } from './components/ui/tooltip.tsx'
 import type { InitialDocs } from './docs/initialDocs.ts'
 import GameLoader from './GameLoader.tsx'
@@ -18,16 +19,18 @@ export default function Root({
   return (
     <StrictMode>
       <ShellRouter url={url}>
-        <MotionConfig reducedMotion="user">
-          <TooltipProvider>
-            <KeymapProvider>
-              <div className="relative h-full w-full text-slate-200">
-                <GameLoader />
-                <PageShell initialDocs={initialDocs} />
-              </div>
-            </KeymapProvider>
-          </TooltipProvider>
-        </MotionConfig>
+        <AccountProvider>
+          <MotionConfig reducedMotion="user">
+            <TooltipProvider>
+              <KeymapProvider>
+                <div className="relative h-full w-full text-slate-200">
+                  <GameLoader />
+                  <PageShell initialDocs={initialDocs} />
+                </div>
+              </KeymapProvider>
+            </TooltipProvider>
+          </MotionConfig>
+        </AccountProvider>
       </ShellRouter>
     </StrictMode>
   )

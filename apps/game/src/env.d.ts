@@ -14,6 +14,8 @@
 interface ImportMetaEnv {
   /** GA4 measurement id, `G-XXXXXXXXXX`. See `src/analytics.ts`. */
   readonly VITE_GA_MEASUREMENT_ID?: string
+  /** Clerk's publishable key, `pk_…`. See `src/account/accounts.ts`. */
+  readonly PUBLIC_CLERK_PUBLISHABLE_KEY?: string
 }
 
 interface ImportMeta {

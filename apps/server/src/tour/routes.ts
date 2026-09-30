@@ -1,11 +1,8 @@
 import { GUIDE_VOICES, isGuideVoice } from '@inertialref/protocol'
-import {
-  allowedOrigin,
-  authenticate,
-  digest,
-  loginCookie,
-  passwordMatches,
-} from './auth.ts'
+import { accountKeys, AccountUnavailableError } from '../account.ts'
+import { logger, span } from '../log.ts'
+import { allowedOrigin } from '../origins.ts'
+import { guideAccess } from './access.ts'
 import {
   boundedString,
   readJson,
@@ -13,30 +10,28 @@ import {
   TourHttpError,
   tourJson,
 } from './http.ts'
-import { log, span } from './log.ts'
 import { createLiveSession, GuideProviderError } from './openaiLive.ts'
 
+const log = logger('server.tour')
+
 /*
- * The guide's Worker: two stateless routes and a capability report.
+ * The guide's Worker: one stateless route and a capability report.
  *
- * The Worker holds the alpha password and the provider key, and nothing else.
- * It does not see the conversation, the scene, a tool call, or a usage event:
- * the browser owns the session through its own peer connection, executes
- * every tool against the observatory it already has, and reads the provider's
- * usage off the data channel. Without a sideband the Worker cannot meter a
- * session, so there is no per-user ledger — a browser's report of its own
- * spend would be advisory. The spending bound is the OpenAI project's limit
- * and the duration bound is the provider's own session expiry.
+ * The Worker holds the provider key, and nothing else of the guide's. It does
+ * not see the conversation, the scene, a tool call, or a usage event: the
+ * browser owns the session through its own peer connection, executes every
+ * tool against the observatory it already has, and reads the provider's usage
+ * off the data channel. Without a sideband the Worker cannot meter a session,
+ * so there is no per-user ledger — a browser's report of its own spend would
+ * be advisory. The spending bound is the OpenAI project's limit and the
+ * duration bound is the provider's own session expiry.
  *
  * What a tampered browser can abuse is therefore two things, and both are
- * enforced here: only a request carrying the signed cookie can create a
- * session, and the session's configuration — prompts, tools, model, the
- * data-channel allow list — is authored at creation and cannot be changed
- * afterward.
+ * enforced here: only an account the guide is granted to can create a session
+ * (`access.ts`, from the session token the browser presents), and the
+ * session's configuration — prompts, tools, model, the data-channel allow
+ * list — is authored at creation and cannot be changed afterward.
  */
-
-/** Sign-in attempts per source per minute, when the binding is present. */
-const LOGIN_LIMIT_KEY = 'tour-login'
 
 /*
  * Every route runs inside one span named for it, with the provider round trip
@@ -68,53 +63,33 @@ async function handle(
   path: string,
 ): Promise<Response> {
   try {
+    // The provider, and the accounts that decide who may use it.
+    const keys = accountKeys(env)
     const configured = Boolean(
       env.OPENAI_API_KEY &&
-      env.TOUR_GUIDE_PASSWORD &&
+      keys.secretKey &&
       String(env.TOUR_GUIDE_ENABLED) !== 'false',
     )
-    const user = await authenticate(
-      request,
-      env.TOUR_GUIDE_PASSWORD ?? '',
-      Date.now(),
-    )
-    if (path === '/api/tour/capabilities' && request.method === 'GET')
+    if (path === '/api/tour/capabilities' && request.method === 'GET') {
+      const access = configured
+        ? await guideAccess(request, keys)
+        : { signedIn: false, authorized: false }
       return tourJson({
         available: configured,
-        authenticated: user !== null,
+        signedIn: access.signedIn,
+        authorized: access.authorized,
         voices: GUIDE_VOICES,
         reason: configured ? null : 'The guide is unavailable.',
       })
+    }
     if (!allowedOrigin(request))
       throw new TourHttpError('Use the guide from this site.', 403)
     if (!configured) throw new TourHttpError('The guide is unavailable.', 503)
-    if (path === '/api/tour/login' && request.method === 'POST') {
-      const input = record(await readJson(request, 2048), ['password'])
-      const source = await digest(
-        `${LOGIN_LIMIT_KEY}:${request.headers.get('cf-connecting-ip') ?? 'development'}`,
-      )
-      const limit = await env.TOUR_LOGIN_LIMIT?.limit({ key: source })
-      if (limit !== undefined && !limit.success)
-        throw new TourHttpError(
-          'Too many sign-in attempts. Try again later.',
-          429,
-        )
-      if (
-        !(await passwordMatches(
-          boundedString(input.password, 1024),
-          env.TOUR_GUIDE_PASSWORD,
-        ))
-      )
-        throw new TourHttpError('The guide password is incorrect.', 401)
-      return tourJson({ authenticated: true }, 200, {
-        'set-cookie': await loginCookie(
-          env.TOUR_GUIDE_PASSWORD,
-          new URL(request.url).origin,
-          Date.now(),
-        ),
-      })
-    }
-    if (!user) throw new TourHttpError('Enter the guide password first.', 401)
+    const access = await guideAccess(request, keys)
+    if (!access.signedIn)
+      throw new TourHttpError('Sign in to use the guide.', 401)
+    if (!access.authorized)
+      throw new TourHttpError('This account does not have the guide.', 403)
     if (path === '/api/tour/sessions' && request.method === 'POST') {
       const input = record(await readJson(request, 80_000), [
         'voice',
@@ -151,6 +126,10 @@ async function handle(
         reason: error.message,
       })
       return tourJson({ error: error.message }, error.status)
+    }
+    if (error instanceof AccountUnavailableError) {
+      // Logged with its reason by the account module.
+      return tourJson({ error: 'The guide is unavailable.' }, 503)
     }
     if (error instanceof GuideProviderError) {
       log('error', 'provider refused the session', {

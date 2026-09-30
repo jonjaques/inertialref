@@ -1,9 +1,11 @@
 # ADR-0042: The guide speaks in one voice, and the browser runs its loop
 
-Status: accepted · 14 Sep 2026. Supersedes the two-model narration, the
-controlled clips, the application socket, and the Durable Object session
-store of [ADR-0041](0041-the-guide-requests-the-view.md); keeps that ADR's
-execution boundary.
+Status: accepted · 14 Sep 2026; authorization amended 29 Sep 2026 by
+[ADR-0048](0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md),
+where an account grant replaces the shared password. Supersedes the two-model
+narration, the controlled clips, the application socket, and the Durable
+Object session store of [ADR-0041](0041-the-guide-requests-the-view.md); keeps
+that ADR's execution boundary.
 
 ## Context
 
@@ -42,8 +44,8 @@ tool chain has not ended, and honors a browser-authored developer message and
 ## Decision
 
 **One model talks, one model thinks, and the browser runs the tool loop over
-the WebRTC data channel; the server holds the key and the password and nothing
-else.** There is one conversation. GPT Live listens and speaks; every request
+the WebRTC data channel; the server holds the key and the decision on who may
+open a session, and nothing else.** There is one conversation. GPT Live listens and speaks; every request
 that needs the scene, the record, or reasoning is delegated to GPT-6 Astra,
 which sees the current view, holds the tool inventory, composes a tour on the
 spot, and paces it with the browser's clock. There is no director planning
@@ -96,9 +98,11 @@ output and transcripts are data and never become an instruction.
   because a move that replaces a move still starting is a camera that thrashes.
   A response continues only once every call it made has its output.
 
-- **The server holds two things.** Authorization: the shared alpha password
-  issues a signed, HttpOnly cookie, and only a request carrying it can create a
-  session. And the configuration: prompts, model, reasoning effort, service
+- **The server holds two things.** Authorization: only a signed-in account
+  whose private metadata grants the guide can create a session — the browser
+  presents its Clerk session token and the Worker reads the grant
+  ([ADR-0048](0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)).
+  And the configuration: prompts, model, reasoning effort, service
   tier, voice, and the data-channel allow list are authored at session creation
   and cannot be changed by the browser, because `session.update` is not on the
   allow list. The spending bound is the provider project's limit and the
@@ -108,8 +112,8 @@ output and transcripts are data and never become an instruction.
   a browser could not forge anyway.
 
 The Worker implements no Durable Object. The `tour-v2` migration deletes the
-`TourSession` and `TourAdmission` classes. The three routes that remain are
-`GET /api/tour/capabilities`, `POST /api/tour/login`, and `POST /api/tour/sessions`;
+`TourSession` and `TourAdmission` classes. The two routes that remain are
+`GET /api/tour/capabilities` and `POST /api/tour/sessions`;
 the events socket, the `/speech` route, the close and status and usage routes,
 and the controlling-tab application socket are gone.
 
@@ -139,8 +143,8 @@ and the controlling-tab application socket are gone.
   browser switch the backend model or enable web search for the life of its
   session. The allow list omits it; the scene reaches the backend as a queued
   developer message instead, and the blast radius of a modified browser stays
-  its own session's backend tokens on a spending-limited project behind a
-  password.
+  its own session's backend tokens on a spending-limited project behind an
+  account grant.
 
 ## Consequences
 

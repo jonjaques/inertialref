@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAccount } from '../account/accounts.ts'
 import type { PlanetariumContext } from '../planetarium/context.ts'
 import type { GuideRuntime } from './runtime.ts'
 import { GuideControls } from './GuideControls.tsx'
@@ -11,9 +12,7 @@ export function GuidePanel({ guide }: PlanetariumContext) {
     void guide
       .load()
       .then((ready) => {
-        if (!active) return
-        setRuntime(ready)
-        void ready.inspect()
+        if (active) setRuntime(ready)
       })
       .catch(() => {
         if (active)
@@ -25,6 +24,16 @@ export function GuidePanel({ guide }: PlanetariumContext) {
       active = false
     }
   }, [guide])
+  /*
+   * The capabilities are the Worker's answer for whoever was signed in when
+   * they were read. Asked when the runtime arrives, and again on a sign-in, a
+   * sign-out or a different account, so the panel never offers Start on the
+   * strength of somebody else's grant.
+   */
+  const { userId } = useAccount()
+  useEffect(() => {
+    void runtime?.refresh()
+  }, [runtime, userId])
   return runtime === null ? (
     <p className="type-ui text-slate-400" role="status">
       {failure ?? 'Opening guide…'}

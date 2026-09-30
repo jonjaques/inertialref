@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { HEALTH_PATH, SOCKET_PATH, mediaPath } from '@inertialref/protocol'
+import {
+  ACCOUNT_PATH,
+  HEALTH_PATH,
+  SOCKET_PATH,
+  mediaPath,
+} from '@inertialref/protocol'
 import { MEDIA, resolveRange } from './media.ts'
 import { routeFor } from './routes.ts'
 
@@ -9,8 +14,9 @@ describe('worker routing', () => {
     expect(routeFor('/api/tour/sessions').kind).toBe('tour')
     expect(routeFor('/api/tourish').kind).toBe('api-not-found')
   })
-  it('sends the two live paths to the script', () => {
+  it('sends the live paths to the script', () => {
     expect(routeFor(HEALTH_PATH).kind).toBe('health')
+    expect(routeFor(ACCOUNT_PATH).kind).toBe('account')
     expect(routeFor(SOCKET_PATH).kind).toBe('socket')
   })
 
@@ -24,6 +30,7 @@ describe('worker routing', () => {
       '/api/',
       '/api/health/',
       '/api/heath',
+      '/api/account/',
       '/api/discoveries',
       '/api/v2/anything',
     ]) {

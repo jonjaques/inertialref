@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { SITE } from '../apps/game/src/site.ts'
 import config from '../apps/server/cloudflare.config.ts'
 
-const { worker } = config
+/*
+ * The config is a function of where it is evaluated (`cloudflare.config.ts`):
+ * these are production's answers, which is what the hosting boundary is about.
+ */
+const at = (context) => config(context).worker
+const worker = at({ isPreview: false, mode: 'production' })
 
 describe('the static hosting boundary', () => {
   it('deploys on the production domain used by canonical metadata', () => {
@@ -24,6 +29,31 @@ describe('the static hosting boundary', () => {
       '/api/*',
       '/ws',
       '/media/*',
+    ])
+  })
+
+  it('names the custom domains in production and nowhere else', () => {
+    // A Worker Preview upload refuses a config with `domains` in it.
+    expect(at({ isPreview: true, mode: undefined }).domains).toBeUndefined()
+  })
+
+  it('switches the guide and accounts off in production and on everywhere else', () => {
+    const flags = (context) => {
+      const { env } = at(context)
+      return [env.TOUR_GUIDE_ENABLED.value, env.CLERK_ENABLED.value]
+    }
+    expect(flags({ isPreview: false, mode: 'production' })).toEqual([
+      'false',
+      'false',
+    ])
+    // A Worker Preview, and `cf dev` under `pnpm dev`.
+    expect(flags({ isPreview: true, mode: undefined })).toEqual([
+      'true',
+      'true',
+    ])
+    expect(flags({ isPreview: false, mode: undefined })).toEqual([
+      'true',
+      'true',
     ])
   })
 })

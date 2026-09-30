@@ -151,9 +151,10 @@ The site deploys to the `inertialrefd` Worker. Canonical URL:
 without redirecting, so existing installations retain access to their
 origin-scoped saves and service worker. To
 check a build before trusting DNS, `pnpm --filter @inertialref/server run
-versions:upload` uploads a version without promoting it and prints its own
-preview URL; analytics and `<link rel="canonical">` name the custom domain, so a
-preview never counts as a visit.
+previews:deploy` deploys a Worker Preview named for the branch and prints its
+URL — every branch push does the same in Workers Builds; analytics and
+`<link rel="canonical">` name the custom domain, so a preview never counts as a
+visit.
 
 ---
 
@@ -354,6 +355,24 @@ reads the same name from gitignored `apps/game/.env.production`; a real
 environment variable wins over the file. `apps/game/.env.example` documents
 the setup. Nothing secret may go in either place because every `VITE_*` value
 ships in the bundle.
+
+**Accounts** are Clerk's
+([ADR-0048](../adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md))
+and exist only where both halves have a key. The client needs
+`PUBLIC_CLERK_PUBLISHABLE_KEY` — `PUBLIC_`, because Astro exposes nothing else
+to the browser — in gitignored `apps/game/.env.local` for `pnpm dev` and as a
+build variable for a deploy — the production instance's in the Production build
+settings and the development instance's in Previews Base. The Worker needs
+`CLERK_SECRET_KEY` in the root `.env.local`, which `pnpm dev:server` loads into
+the Worker alone; deployed, each environment holds its own instance's key under
+that name. `CLERK_ENABLED` and `TOUR_GUIDE_ENABLED` are declared in
+`cloudflare.config.ts`, on under `pnpm dev` and in previews and off in
+production, which the `deploy` script's `--mode production` is how the config
+knows. Without the first there is no account badge;
+without the second `/api/account` answers that accounts are not configured and
+the guide is unavailable. Both states are supported builds. The guide is
+granted by hand: `tour: true` or `admin: true` in the user's private metadata
+in Clerk's dashboard.
 
 **Reference audio** is not in git. It lives in R2 and reaches the browser
 from one table, `apps/server/src/media.ts`: `pnpm media:pull` copies it into

@@ -188,6 +188,10 @@ export const WINGS = [
             'docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md',
             'The character walks',
           ],
+          [
+            'docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md',
+            'Accounts are Clerk’s',
+          ],
         ],
       },
     ],

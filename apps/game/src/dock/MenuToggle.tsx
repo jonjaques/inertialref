@@ -28,6 +28,7 @@ export function MenuToggle({
   hint,
   pressed,
   onClick,
+  side = 'top',
 }: {
   icon: LucideIcon
   label: string
@@ -35,6 +36,8 @@ export function MenuToggle({
   hint?: string
   pressed: boolean
   onClick: () => void
+  /** Away from the edge the menu is on. */
+  side?: 'top' | 'bottom'
 }) {
   return (
     <Tooltip>
@@ -64,7 +67,7 @@ export function MenuToggle({
           <Icon className="size-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="top">
+      <TooltipContent side={side}>
         {hint === undefined ? label : `${label} — ${hint}`}
       </TooltipContent>
     </Tooltip>

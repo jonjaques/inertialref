@@ -11,6 +11,7 @@ import { isOpen, useWorkspace } from './useWorkspace.ts'
 import { useWorkspaceKeys } from './useWorkspaceKeys.ts'
 import { useChromeHidden } from '../hud/chrome.ts'
 import { useCompact } from '../hud/viewport.ts'
+import { DOCK_PLACEMENT, usePersistentState } from '../state/preferences.ts'
 
 /*
  * The whole arrangement: two panes, a field of floating panels, and the menu
@@ -71,6 +72,7 @@ export function Workspace({
    * controls is what is *rendered*, which is `visiblePanels` below.
    */
   const workspace = useWorkspace(id, allPanels(groups))
+  const [placement, setPlacement] = usePersistentState(DOCK_PLACEMENT)
   const visible = visiblePanels(groups, dev.open)
   const byId = new Map(visible.map((panel) => [panel.id, panel]))
   /*
@@ -154,6 +156,7 @@ export function Workspace({
             zone={zone}
             panels={inZone(zone)}
             workspace={workspace}
+            clearMenu={placement === 'floating'}
           />
         ))}
         <IrMenu
@@ -162,6 +165,8 @@ export function Workspace({
           workspace={workspace}
           revealed={dev.open ? DEV_REVEALED : NO_GROUPS}
           onReveal={() => dev.onOpenChange(!dev.open)}
+          placement={placement}
+          onPlace={setPlacement}
         />
       </div>
     </DockProvider>

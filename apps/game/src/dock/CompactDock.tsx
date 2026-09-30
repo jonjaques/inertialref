@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router'
 import { ChevronDown, ChevronUp, Rows3, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { AccountBadge } from '../account/AccountBadge.tsx'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
@@ -292,6 +293,7 @@ export function CompactDock({
         >
           <SlidersHorizontal className="size-4" />
         </Link>
+        <AccountBadge compact />
       </nav>
     </div>
   )

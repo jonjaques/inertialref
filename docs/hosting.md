@@ -7,8 +7,9 @@ behind that URL before the persistent universe is possible.
 > the optional Planetarium guide are implemented. Remote simulation authority
 > and persistent mutations remain planned.** The client is live at
 > <https://inertialref.app> and the retained `inertialref.jonjaques.com` origin.
-> `apps/server` serves the static bundle, `/api/health`, and the authenticated
-> `/api/tour` service that signs in and creates a GPT Live session. The Worker
+> `apps/server` serves the static bundle, `/api/health`, the account verdict at
+> `/api/account`, and the `/api/tour` service that creates a GPT Live session
+> for an account granted the guide. The Worker
 > implements no Durable Object; the browser holds the guide conversation over
 > WebRTC ([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)). The
 > multiplayer `/ws` path still returns a deliberate 501; partition authorities
@@ -24,16 +25,25 @@ behind that URL before the persistent universe is possible.
 
 ## The private Planetarium guide
 
-The Guide is an optional cloud service within the Planetarium. Missing secrets
-or `TOUR_GUIDE_ENABLED=false` make cloud capabilities unavailable; the ordinary
-scene and local tour controls do not require provider credentials. See
+The Guide is an optional cloud service within the Planetarium, for signed-in
+accounts whose private metadata in Clerk says `admin: true` or `tour: true`
+([ADR-0048](adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)).
+The Planetarium offers the Guide panel only to such an account, and the Worker
+refuses a session to anybody else. Missing secrets or `TOUR_GUIDE_ENABLED=false`
+make cloud capabilities unavailable; the ordinary scene and local tour controls
+do not require provider credentials. See
 [ADR-0041](adr/0041-the-guide-requests-the-view.md) for the execution boundary.
+
+A grant is set by hand: in the Clerk dashboard, **Users** → the user →
+**Metadata** → **Private**, `{ "tour": true }`. Private metadata is not in the
+session token and not in the user object the browser sees, so the Worker reads
+it with the secret key on each capabilities check and each session.
 
 Local `pnpm dev` starts the server through `scripts/tour/dev.mjs`. That adapter
 loads the repository's gitignored `.env.local` into its own process, which
 starts nothing but `cf dev`; `cf dev` reads each declared secret from that
-environment. Use `OPENAI_API_KEY` and `TOUR_GUIDE_PASSWORD` without a `VITE_`
-prefix. Vite never sees the file, so the client bundle, preference store, and
+environment. Use `OPENAI_API_KEY` and `CLERK_SECRET_KEY` without a `VITE_` or
+`PUBLIC_` prefix. Vite never sees the file, so the client bundle, preference store, and
 public build variables never receive them.
 
 Production uses Worker secrets, entered at a prompt so the value never reaches
@@ -42,7 +52,7 @@ configuration is `cloudflare.config.ts` and Wrangler does not read it:
 
 ```bash
 pnpm --filter @inertialref/server exec wrangler secret put OPENAI_API_KEY --name inertialrefd
-pnpm --filter @inertialref/server exec wrangler secret put TOUR_GUIDE_PASSWORD --name inertialrefd
+pnpm --filter @inertialref/server exec wrangler secret put CLERK_SECRET_KEY --name inertialrefd
 ```
 
 `cf workers secrets update <NAME> --worker inertialrefd --type secret_text`
@@ -60,17 +70,16 @@ it. Deployment requires no simulation or D1 migration.
 
 | Endpoint                     | Purpose                                                                          |
 | ---------------------------- | -------------------------------------------------------------------------------- |
-| `GET /api/tour/capabilities` | Availability, admission, and the voices the panel offers; images are disabled    |
-| `POST /api/tour/login`       | Password admission with a signed cookie and login throttling                     |
+| `GET /api/tour/capabilities` | Availability, whether the caller is signed in and granted, and the voices        |
 | `POST /api/tour/sessions`    | Creates one GPT Live session: writes the configuration, exchanges the WebRTC SDP |
 
 The browser holds the session over its own WebRTC peer connection and data
 channel; there is no application socket, no `/speech`, `/close`, `/status`, or
-`/usage` route, and no controlling tab. Tour responses are uncached, and the
-mutating routes validate the origin and the session cookie. The cookie lasts
-24 hours, is HttpOnly and SameSite Strict, and is Secure on HTTPS. Every holder
-of the shared password uses the same alpha principal; clearing cookies does not
-create a fresh one.
+`/usage` route, and no controlling tab. Tour responses are uncached. Session
+creation validates the origin and the account: the browser sends its Clerk
+session token as a bearer header, the Worker verifies it and reads the user's
+grant, and answers 401 to somebody signed out, 403 to an account without the
+grant, and 503 when Clerk cannot be reached.
 
 The Worker keeps no session ledger and no session timer. The spending bound is
 the OpenAI project's own limit and the duration bound is the provider's session
@@ -112,10 +121,11 @@ Guide admission and operation are separate from public hosting. Do not claim a
 provider gate from a successful page build or a `session.started` event. Real
 spoken replies, delegation, closure, and repeated listening need explicit
 verification. Because the Worker implements no Durable Object, Cloudflare
-generates a version preview URL for it, and deployed guide verification uses an
-ordinary `pnpm --filter @inertialref/server run versions:upload` preview under
-the account's `workers.dev` subdomain — the origin rule admits that subdomain
-so a preview can sign in.
+serves previews for it, and deployed guide verification uses a Worker Preview —
+any branch push, or `pnpm --filter @inertialref/server run previews:deploy` —
+under the account's `workers.dev` subdomain, where the guide and accounts are
+on and sign-in is the development Clerk instance. The origin rule and the
+account check both admit that subdomain, so a preview can create a session.
 
 ---
 
@@ -664,20 +674,21 @@ instead — which is the whole point of having both.
 Worth stating plainly, because most of this plan is wiring rather than
 invention:
 
-| Seam                                                     | Status | Where                                           |
-| -------------------------------------------------------- | ------ | ----------------------------------------------- |
-| Partition keys as opaque strings                         | ✅     | `packages/universe/src/partition.ts`            |
-| Authority follows the frame chain, not the address       | ✅     | `devtools/inspect.ts` via `systemOfFrameId`     |
-| Storage behind a port, with a memory implementation      | ✅     | `packages/persistence/src/store.ts`             |
-| Host capabilities behind a port, with an in-process fake | ✅     | `packages/workers/src/transport.ts`             |
-| Versioned, validated, decoded-not-cast wire schemas      | ✅     | `packages/protocol`                             |
-| Replication set == save set                              | ✅     | `SaveGame.entities` + `SaveGame.mutations`      |
-| No vendor SDK below `apps/`, mechanically enforced       | ✅     | `scripts/check-graph.mjs`                       |
-| Session assembled in exactly one place                   | ✅     | `packages/devtools/src/session.ts`              |
-| A versioned handshake that refuses a mismatch            | ✅     | `packages/protocol/src/net.ts`                  |
-| `AuthorityPort` + `LocalAuthority`                       | ✅     | `packages/net`                                  |
-| A session built around a port, with no `if (online)`     | ✅     | `openSession({ authority })`                    |
-| Input log for prediction and replay                      | ⬜     | [roadmap](roadmap.md#replay-and-reconciliation) |
+| Seam                                                     | Status | Where                                                                                                                               |
+| -------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Partition keys as opaque strings                         | ✅     | `packages/universe/src/partition.ts`                                                                                                |
+| Authority follows the frame chain, not the address       | ✅     | `devtools/inspect.ts` via `systemOfFrameId`                                                                                         |
+| Storage behind a port, with a memory implementation      | ✅     | `packages/persistence/src/store.ts`                                                                                                 |
+| Host capabilities behind a port, with an in-process fake | ✅     | `packages/workers/src/transport.ts`                                                                                                 |
+| Versioned, validated, decoded-not-cast wire schemas      | ✅     | `packages/protocol`                                                                                                                 |
+| Replication set == save set                              | ✅     | `SaveGame.entities` + `SaveGame.mutations`                                                                                          |
+| No vendor SDK below `apps/`, mechanically enforced       | ✅     | `scripts/check-graph.mjs`                                                                                                           |
+| Session assembled in exactly one place                   | ✅     | `packages/devtools/src/session.ts`                                                                                                  |
+| A versioned handshake that refuses a mismatch            | ✅     | `packages/protocol/src/net.ts`                                                                                                      |
+| `AuthorityPort` + `LocalAuthority`                       | ✅     | `packages/net`                                                                                                                      |
+| A session built around a port, with no `if (online)`     | ✅     | `openSession({ authority })`                                                                                                        |
+| An account verdict the server owns, not the browser      | ✅     | `GET /api/account`, `apps/server/src/account.ts` — [ADR-0048](adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md) |
+| Input log for prediction and replay                      | ⬜     | [roadmap](roadmap.md#replay-and-reconciliation)                                                                                     |
 
 **One of those was a lie by coincidence, and H0 fixed it.** `inspect.ts`
 computed the authority key by scanning the frame chain for an `s:` prefix
@@ -1028,36 +1039,45 @@ regression is reproducible in CI without a browser.
 ## Environments, deployment and secrets
 
 **Workers Builds** is the repo-connected deployment path. `main` is production;
-other branches upload versions. That removes the API token from GitHub entirely,
-which is why it won out over a deploy workflow in Actions. Both commands run
-`cf` in `apps/server`, so the Workers Builds configuration is:
+every other branch deploys a Worker Preview. That removes the API token from
+GitHub entirely, which is why it won out over a deploy workflow in Actions. Both
+commands run `cf` in `apps/server`, so the Workers Builds configuration is:
 
-| Setting                       | Command                                                 |
-| ----------------------------- | ------------------------------------------------------- |
-| Build command                 | `pnpm build`                                            |
-| Deploy command                | `pnpm --filter @inertialref/server run deploy`          |
-| Non-production branch command | `pnpm --filter @inertialref/server run versions:upload` |
+| Setting                        | Command                                                 |
+| ------------------------------ | ------------------------------------------------------- |
+| Build command, both            | `pnpm install --frozen-lockfile && pnpm build`          |
+| Deploy command, Production     | `pnpm --filter @inertialref/server run deploy`          |
+| Preview command, Previews Base | `pnpm --filter @inertialref/server run previews:deploy` |
 
-`deploy` is `cf deploy`, which stages its Build Output — the Worker bundle and a
-copy of `apps/game/dist` — under the ignored `apps/server/.cloudflare/output/`.
-`versions:upload` is `cf workers versions create`. `cf` authenticates with
+`deploy` is `cf deploy --mode production`, which stages its Build Output — the
+Worker bundle and a copy of `apps/game/dist` — under the ignored
+`apps/server/.cloudflare/output/`; the mode is how `cloudflare.config.ts` tells
+production from development, which `cf` otherwise evaluates identically.
+`previews:deploy` is `cf previews deploy`, which evaluates the config with
+`isPreview` and deploys a preview named for the branch. `cf` authenticates with
 `CLOUDFLARE_API_TOKEN` in a build and with `cf auth login` on a developer's
 machine.
 
-| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `cf deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workersDev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                                                     |
-| Review apps     | A branch upload creates a Worker version with its own preview URL (`previewUrls: true`). That holds while the Worker implements no Durable Object; see below.                                                                                                                                                                                                                                                                                   |
-| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                                                      |
-| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assetsDirectory` in `wrangler.config.ts` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry).     |
-| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                                                  |
-| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                                                |
-| Migrations      | None declared: the deployed Worker's `tour-v2` migration has deleted the guide's former classes. H4's `PartitionAuthority` is declared in `cloudflare.config.ts` with `exports.durableObject({ storage: 'sqlite' })`. D1 migrations remain future multiplayer work.                                                                                                                                                                             |
-| Secrets         | Declared with `bindings.secret()`, never `bindings.text()`, and **not** Workers Builds' build variables — those exist only during the build. Values are set at a prompt with `wrangler secret put <NAME> --name inertialrefd` or `cf workers secrets update <NAME> --worker inertialrefd --type secret_text`, or uploaded with a version by `cf deploy --secrets-file`. Nothing in `cloudflare.config.ts` may be a credential; it is committed. |
-| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.                                     |
-| Rollback        | Promote a previous version from the dashboard (`cf workers deployments` lists them), or `wrangler rollback --name inertialrefd` from the command line. DO SQLite migrations are not rolled back by either; write them additively.                                                                                                                                                                                                               |
-| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                                               |
-| Observability   | Workers Logs and Workers Traces, unsampled and persisted. `apps/server/src/tour/log.ts` writes one object per record in the `scope` / `message` / fields shape `packages/shared` uses, with the level as the console method; the guide section above says what is recorded and how to read it.                                                                                                                                                  |
+Production and Previews Base each have their own secrets and build variables in
+the dashboard, and nothing else: plain-text variables are declared in
+`cloudflare.config.ts`, per environment, because `cf` has no `keep_vars` — a
+deploy replaces the variables with the declared ones, and a CI upload refuses
+when the dashboard holds one the config does not.
+
+| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production      | Push to `main` → `cf deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workersDev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Review apps     | A branch push deploys a Worker Preview with its own URL and the Previews Base secrets and build variables: the development Clerk instance, and the guide and accounts switched on. That holds while the Worker implements no Durable Object; see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assetsDirectory` in `wrangler.config.ts` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry).                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Migrations      | None declared: the deployed Worker's `tour-v2` migration has deleted the guide's former classes. H4's `PartitionAuthority` is declared in `cloudflare.config.ts` with `exports.durableObject({ storage: 'sqlite' })`. D1 migrations remain future multiplayer work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Secrets         | Declared with `bindings.secret()`, never `bindings.text()`, and **not** Workers Builds' build variables — those exist only during the build. Values are set at a prompt with `wrangler secret put <NAME> --name inertialrefd` or `cf workers secrets update <NAME> --worker inertialrefd --type secret_text`, or uploaded with a version by `cf deploy --secrets-file`. Nothing in `cloudflare.config.ts` may be a credential; it is committed. The Worker's are `OPENAI_API_KEY` for the guide and `CLERK_SECRET_KEY` for accounts and the guide's grant — one name, set per environment: the production Clerk instance's key under Production, the development instance's under Previews Base. Every declared secret is required: an environment's upload fails while one is unset. `pnpm dev:server` reads them from the root `.env.local`. |
+| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation. `PUBLIC_CLERK_PUBLISHABLE_KEY` is the same kind of variable, for the same reason, and set per environment: the production instance's `pk_live_…` in the Production build settings and the development instance's `pk_test_…` in Previews Base, matching each environment's `CLERK_SECRET_KEY`. Without a usable key the build has no accounts ([ADR-0048](adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)).  |
+| Rollback        | Promote a previous version from the dashboard (`cf workers deployments` lists them), or `wrangler rollback --name inertialrefd` from the command line. DO SQLite migrations are not rolled back by either; write them additively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Observability   | Workers Logs and Workers Traces, unsampled and persisted. `apps/server/src/log.ts` writes one object per record in the `scope` / `message` / fields shape `packages/shared` uses, with the level as the console method; the guide section above says what is recorded and how to read it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ### Durable Objects require a different review environment
 
@@ -1219,16 +1239,15 @@ cost driver and it is the one nobody would think to log.
 Named rather than answered, because guessing at them in a document is how a
 guess becomes a citation.
 
-| Question                                                                              | How it gets settled                                                                                               |
-| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Is `PARTITION_ENTRY_RADIUS` (4e12 m) right?                                           | Measure at H4 with real latency and two real clients. ADR-0008 already calls it a guess.                          |
-| What does handoff between partitions look like when a ship leaves Sol?                | The frame-transition machinery is the natural home; it already does the local equivalent.                         |
-| Does a player need an account at all, or is a device-scoped token enough for the MVP? | H5. Discovery credit is the first thing that needs attributable identity.                                         |
-| Where does the client's authoritative-vs-predicted split live?                        | Needs the input log first — [replay](roadmap.md#replay-and-reconciliation).                                       |
-| Does the DO ever _simulate_, or only relay and persist?                               | **The load-bearing one.** H4 relays. Everything cheap about this plan depends on it staying that way — see below. |
-| Does a busy system need a region-sharded partition key?                               | Only if contested gameplay arrives. Decide before the key grammar hardens.                                        |
-| How many concurrent players actually fit in one partition?                            | Measure at H4. The arithmetic says 100–200 against a ~1,000 req/s ceiling, and arithmetic is not a measurement.   |
-| What happens to a client whose `GENERATION_VERSIONS` are older than the partition's?  | Refused with a reason, per H-5 — but "what the player sees" is a UX question, not solved.                         |
+| Question                                                                             | How it gets settled                                                                                               |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Is `PARTITION_ENTRY_RADIUS` (4e12 m) right?                                          | Measure at H4 with real latency and two real clients. ADR-0008 already calls it a guess.                          |
+| What does handoff between partitions look like when a ship leaves Sol?               | The frame-transition machinery is the natural home; it already does the local equivalent.                         |
+| Where does the client's authoritative-vs-predicted split live?                       | Needs the input log first — [replay](roadmap.md#replay-and-reconciliation).                                       |
+| Does the DO ever _simulate_, or only relay and persist?                              | **The load-bearing one.** H4 relays. Everything cheap about this plan depends on it staying that way — see below. |
+| Does a busy system need a region-sharded partition key?                              | Only if contested gameplay arrives. Decide before the key grammar hardens.                                        |
+| How many concurrent players actually fit in one partition?                           | Measure at H4. The arithmetic says 100–200 against a ~1,000 req/s ceiling, and arithmetic is not a measurement.   |
+| What happens to a client whose `GENERATION_VERSIONS` are older than the partition's? | Refused with a reason, per H-5 — but "what the player sees" is a UX question, not solved.                         |
 
 ### The one that decides whether any of this is cheap
 

@@ -1,5 +1,5 @@
 /*
- * The Worker's half of structured logging.
+ * The Worker's structured logging, for every route family.
  *
  * Workers Logs indexes the fields of a single object passed to a console
  * method and takes the level from the method, so a record is one object with
@@ -10,8 +10,8 @@
  * span is attributed to that span, so a record written while the provider
  * call is open lands on the request's trace beside the subrequest.
  *
- * Nothing that passes through here may be a credential, a cookie, an SDP or a
- * scene line. Callers log a status, a code, a length or an id — the answer to
+ * Nothing that passes through here may be a credential, a session token, an
+ * SDP or a scene line. Callers log a status, a code, a length or an id — the answer to
  * "what went wrong", never the material it went wrong with.
  */
 
@@ -19,10 +19,15 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export type LogFields = Readonly<Record<string, unknown>>
 
-const SCOPE = 'server.tour'
-
-export function log(level: LogLevel, message: string, fields?: LogFields) {
-  console[level]({ scope: SCOPE, message, ...fields })
+/**
+ * A writer for one route family, named by its scope — `server.tour`,
+ * `server.account` — which is the field the query builder filters on to read
+ * one family's records and not the other's.
+ */
+export function logger(scope: string) {
+  return (level: LogLevel, message: string, fields?: LogFields): void => {
+    console[level]({ scope, message, ...fields })
+  }
 }
 
 /**

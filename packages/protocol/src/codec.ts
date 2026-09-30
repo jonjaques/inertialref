@@ -112,6 +112,11 @@ export function decodeOptional<T>(inner: Decoder<T>, fallback: T): Decoder<T> {
     value === undefined ? ok(fallback) : inner(value, path)
 }
 
+/** A field that is present and may say `null` on purpose — not a missing one. */
+export function decodeNullable<T>(inner: Decoder<T>): Decoder<T | null> {
+  return (value, path) => (value === null ? ok(null) : inner(value, path))
+}
+
 /**
  * A string-keyed map whose keys are not known ahead of time.
  *

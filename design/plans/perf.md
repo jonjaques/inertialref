@@ -258,6 +258,23 @@ visible sky, progressive convergence, archive-hit reload and peak whole-app
 memory still need their own boot record. The old 120 ms full-bake estimate is
 not a performance claim.
 
+### Clerk's script loads during every boot that has accounts, unmeasured
+
+A build with `PUBLIC_CLERK_PUBLISHABLE_KEY`
+([ADR-0048](../../docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md))
+mounts `ClerkProvider` around the shell, which injects `clerk.browser.js` and
+Clerk's UI bundle from Clerk's own origin as soon as it mounts — during the
+preload, whether or not the visitor ever signs in. The fetch runs on another
+origin in parallel with the catalog; the parse and execute are main-thread time
+inside the budget the texture warm already fills. Nothing has measured it.
+
+The question is the `preload` measure and `navigation to first light` under
+`?timing=full`, on a cold load, with and without the key, at two window sizes.
+Deferring the load is not a remount-free change: the provider wraps the
+canvas's host, so it cannot be inserted after boot — a lever, if one is needed,
+is Clerk's own loading (a bundled `ui` passed to the provider, or holding its
+script until first light), not the tree.
+
 ## The galaxy
 
 Unless dated separately, figures here are from the 5 September 2026 run, on an Apple M5, through

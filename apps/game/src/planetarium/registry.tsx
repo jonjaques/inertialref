@@ -29,21 +29,13 @@ export function planetariumPanels(
   context: PlanetariumContext,
 ): readonly DockPanelDefinition[] {
   return [
-    {
-      id: 'guide',
-      title: 'Guide',
-      icon: AudioLines,
-      zone: 'right',
-      defaultOpen: false,
-      hint: 'A tour, a question, and time to look',
-      render: () => (
-        <Suspense
-          fallback={<p className="type-ui text-slate-400">Opening guide…</p>}
-        >
-          <GuidePanel {...context} />
-        </Suspense>
-      ),
-    },
+    /*
+     * Only for an account granted the guide. Absent rather than disabled: it
+     * is a private alpha, and a panel most visitors can never open is a
+     * glyph in their menu that means nothing to them.
+     */
+    ...(context.guideOffered ? [guidePanel(context)] : []),
+
     {
       id: 'catalog',
       title: 'Navigator',
@@ -130,4 +122,22 @@ export function planetariumPanels(
       render: () => <TimePanel {...context} />,
     },
   ]
+}
+
+function guidePanel(context: PlanetariumContext): DockPanelDefinition {
+  return {
+    id: 'guide',
+    title: 'Guide',
+    icon: AudioLines,
+    zone: 'right',
+    defaultOpen: false,
+    hint: 'A tour, a question, and time to look',
+    render: () => (
+      <Suspense
+        fallback={<p className="type-ui text-slate-400">Opening guide…</p>}
+      >
+        <GuidePanel {...context} />
+      </Suspense>
+    ),
+  }
 }
