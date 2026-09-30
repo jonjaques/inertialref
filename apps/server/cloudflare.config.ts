@@ -130,9 +130,10 @@ export default defineConfig(({ isPreview, mode }) => {
 
       env: {
         /*
-         * The two switches, off in production and on everywhere else. Turning
-         * either on in production is a change to this file, reviewed like any
-         * other — a dashboard edit is overwritten by the next deploy.
+         * The two switches, on in previews and under `--mode development` and
+         * off in every other evaluation (`production` above). Turning either
+         * on in production is a change to this file, reviewed like any other —
+         * a dashboard edit is overwritten by the next deploy.
          *
          *   TOUR_GUIDE_ENABLED  the Planetarium guide (`src/tour/routes.ts`).
          *   CLERK_ENABLED       accounts on the Worker (`src/account.ts`); off, it
