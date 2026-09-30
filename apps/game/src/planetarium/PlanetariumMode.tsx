@@ -1,6 +1,7 @@
 'use no memo'
 import { useGuideActions } from '../tour/useGuideActions.ts'
 import { useGuideAccess } from '../tour/access.ts'
+import { grantsGuide } from '../tour/capabilities.ts'
 import { createGuide, mountGuide } from '../tour/guide.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Outlet, useNavigate } from 'react-router'
@@ -259,7 +260,8 @@ export function PlanetariumMode({
     void navigate({ pathname: CATALOG, search: params.toString() })
   }
 
-  const guideOffered = useGuideAccess()
+  const guideAccess = useGuideAccess()
+  const guideOffered = grantsGuide(guideAccess)
   /*
    * Withdrawing the panel withdraws the only Pause and End on screen. A
    * sign-out, or a switch to another account, while a conversation is running
@@ -272,7 +274,7 @@ export function PlanetariumMode({
   }, [guide, guideOffered])
   const panels = planetariumPanels({
     guide,
-    guideOffered,
+    guideAccess,
     engine,
     target,
     focus,

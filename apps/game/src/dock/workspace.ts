@@ -83,6 +83,8 @@ export function visiblePanels(
   devOpen: boolean,
 ): WorkspacePanels {
   return groups.flatMap((group) =>
-    group.guarded === true && !devOpen ? [] : group.panels,
+    group.guarded === true && !devOpen
+      ? []
+      : group.panels.filter((panel) => panel.suppressed !== true),
   )
 }

@@ -36,6 +36,17 @@ export interface DockPanelDefinition {
    * it. Only the guarded group sets it.
    */
   readonly defaultOpen?: boolean
+  /**
+   * Known to the layout and not drawn: a panel this visitor may not have yet.
+   *
+   * The guide's panel is the case — granted per account, and unknown until the
+   * Worker answers. Leaving it out of the list instead would make the layout
+   * forget it: `normalizeLayout` drops an unknown id, so an arrangement written
+   * in the moment before the answer, or after a sign-out, loses the slot the
+   * visitor gave it. Suppressed, it keeps its slot and its zone, and nothing
+   * draws it — not the menu, not a pane, not the number row.
+   */
+  readonly suppressed?: boolean
   /** One line, for the menu's tooltip. */
   readonly hint: string
   /**

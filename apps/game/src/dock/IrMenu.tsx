@@ -170,17 +170,19 @@ export function IrMenu({
                 />
               )}
               {open &&
-                group.panels.map((panel) => (
-                  <MenuToggle
-                    key={panel.id}
-                    icon={panel.icon}
-                    label={panel.title}
-                    hint={panel.hint}
-                    pressed={isOpen(workspace.layout, panel.id)}
-                    onClick={() => workspace.toggle(panel.id)}
-                    side={side}
-                  />
-                ))}
+                group.panels
+                  .filter((panel) => panel.suppressed !== true)
+                  .map((panel) => (
+                    <MenuToggle
+                      key={panel.id}
+                      icon={panel.icon}
+                      label={panel.title}
+                      hint={panel.hint}
+                      pressed={isOpen(workspace.layout, panel.id)}
+                      onClick={() => workspace.toggle(panel.id)}
+                      side={side}
+                    />
+                  ))}
             </div>
           )
         })}

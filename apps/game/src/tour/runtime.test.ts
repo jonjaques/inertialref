@@ -224,6 +224,44 @@ function rig() {
 }
 
 describe('the guide runtime', () => {
+  it('adopts the access check’s answer instead of asking the Worker again', async () => {
+    const f = rig()
+    const granted = {
+      available: true,
+      signedIn: true,
+      authorized: true,
+      voices: ['marin'],
+      reason: null,
+    }
+    f.runtime.adopt(granted)
+    await f.runtime.start('cedar')
+    // The adopted voices decide the voice, and capabilities were never asked.
+    expect(
+      f.requests.filter((request) => request.path.endsWith('/capabilities')),
+    ).toHaveLength(0)
+    expect(f.runtime.getSnapshot().voice).toBe('marin')
+    await f.dispose()
+  })
+
+  it('refuses to start for an adopted answer without the grant', async () => {
+    const f = rig()
+    f.runtime.adopt({
+      available: true,
+      signedIn: true,
+      authorized: false,
+      voices: ['marin'],
+      reason: null,
+    })
+    await f.runtime.start('marin')
+    expect(f.runtime.getSnapshot().message).toBe(
+      'This account does not have the guide.',
+    )
+    expect(
+      f.requests.some((request) => request.path === '/api/tour/sessions'),
+    ).toBe(false)
+    await f.dispose()
+  })
+
   it('starts a session from the offer, greets by the documented recipe, and listens', async () => {
     const f = rig()
     await f.runtime.start('cedar')

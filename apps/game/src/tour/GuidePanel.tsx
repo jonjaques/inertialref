@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useAccount } from '../account/accounts.ts'
 import type { PlanetariumContext } from '../planetarium/context.ts'
 import type { GuideRuntime } from './runtime.ts'
 import { GuideControls } from './GuideControls.tsx'
 
-export function GuidePanel({ guide }: PlanetariumContext) {
+export function GuidePanel({ guide, guideAccess }: PlanetariumContext) {
   const [runtime, setRuntime] = useState<GuideRuntime | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   useEffect(() => {
@@ -25,15 +24,14 @@ export function GuidePanel({ guide }: PlanetariumContext) {
     }
   }, [guide])
   /*
-   * The capabilities are the Worker's answer for whoever was signed in when
-   * they were read. Asked when the runtime arrives, and again on a sign-in, a
-   * sign-out or a different account, so the panel never offers Start on the
-   * strength of somebody else's grant.
+   * The planetarium's access check already asked the Worker for whoever is
+   * signed in; the runtime takes that answer rather than asking again every
+   * time the panel is opened, docked or floated. A new account is a new answer
+   * from the check, and it reaches the runtime here.
    */
-  const { userId } = useAccount()
   useEffect(() => {
-    void runtime?.refresh()
-  }, [runtime, userId])
+    if (runtime !== null && guideAccess !== null) runtime.adopt(guideAccess)
+  }, [runtime, guideAccess])
   return runtime === null ? (
     <p className="type-ui text-slate-400" role="status">
       {failure ?? 'Opening guide…'}
