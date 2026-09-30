@@ -64,7 +64,7 @@ async function handle(
 ): Promise<Response> {
   try {
     // The provider, and the accounts that decide who may use it.
-    const keys = accountKeys(request, env)
+    const keys = accountKeys(env)
     const configured = Boolean(
       env.OPENAI_API_KEY &&
       keys.secretKey &&

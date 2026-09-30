@@ -125,30 +125,24 @@ describe('identify', () => {
 })
 
 describe('accountKeys', () => {
-  const env = (preview?: string) =>
+  const env = (enabled: string) =>
     ({
-      CLERK_SECRET_KEY: 'sk_live_production',
-      CLERK_PREVIEW_SECRET_KEY: preview,
+      CLERK_ENABLED: enabled,
+      CLERK_SECRET_KEY: 'sk_test_key',
     }) as unknown as Env
-  const at = (url: string, preview?: string) =>
-    accountKeys(new Request(url), env(preview)).secretKey
 
-  it('checks the production hosts against the production instance only', () => {
-    for (const host of [SITE, 'https://inertialref.jonjaques.com'])
-      expect(at(`${host}/api/account`, 'sk_test_development')).toBe(
-        'sk_live_production',
-      )
+  it('checks accounts with this environment’s key while they are on', () => {
+    expect(accountKeys(env('true'))).toEqual({ secretKey: 'sk_test_key' })
   })
 
-  it('checks previews and development against the development instance', () => {
-    for (const url of [
-      'https://a67318ec-inertialrefd.jaquers.workers.dev/api/account',
-      'http://127.0.0.1:8787/api/account',
-    ])
-      expect(at(url, 'sk_test_development')).toBe('sk_test_development')
-  })
-
-  it('lets a local environment with one key use it for everything', () => {
-    expect(at('http://127.0.0.1:8787/api/account')).toBe('sk_live_production')
+  it('checks nothing while they are off, which reads as not configured', async () => {
+    expect(accountKeys(env('false'))).toEqual({})
+    const token = await issuer.sign(session())
+    expect(
+      await identify(
+        request(`${SITE}/api/account`, { authorization: `Bearer ${token}` }),
+        accountKeys(env('false')),
+      ),
+    ).toEqual({ configured: false, signedIn: false, userId: null })
   })
 })

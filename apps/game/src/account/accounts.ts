@@ -35,11 +35,10 @@ import {
  * the browser. Not a secret — it is in the bundle and names the instance — and
  * still not in the repository, for the reason the analytics id is not: a fork
  * built from a committed key would sign its visitors into somebody else's
- * instance. Each Workers Builds trigger carries its own: the production
- * instance's on the production trigger, the development instance's on the
- * preview trigger, which is the choice the Worker makes by host
- * (`accountKeys` in `apps/server/src/account.ts`). `apps/game/.env.example`
- * documents it.
+ * instance. Each Cloudflare environment builds with its own: the production
+ * instance's in Production, the development instance's in Previews Base,
+ * beside the matching `CLERK_SECRET_KEY` on the Worker.
+ * `apps/game/.env.example` documents it.
  */
 export const PUBLISHABLE_KEY: string = usablePublishableKey(
   import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? '',

@@ -151,9 +151,10 @@ The site deploys to the `inertialrefd` Worker. Canonical URL:
 without redirecting, so existing installations retain access to their
 origin-scoped saves and service worker. To
 check a build before trusting DNS, `pnpm --filter @inertialref/server run
-versions:upload` uploads a version without promoting it and prints its own
-preview URL; analytics and `<link rel="canonical">` name the custom domain, so a
-preview never counts as a visit.
+previews:deploy` deploys a Worker Preview named for the branch and prints its
+URL — every branch push does the same in Workers Builds; analytics and
+`<link rel="canonical">` name the custom domain, so a preview never counts as a
+visit.
 
 ---
 
@@ -360,13 +361,14 @@ ships in the bundle.
 and exist only where both halves have a key. The client needs
 `PUBLIC_CLERK_PUBLISHABLE_KEY` — `PUBLIC_`, because Astro exposes nothing else
 to the browser — in gitignored `apps/game/.env.local` for `pnpm dev` and as a
-build variable for a deploy — per Workers Builds trigger, the production
-instance's on `main` and the development instance's on every other branch. The
-Worker needs `CLERK_SECRET_KEY` in the root `.env.local`, which
-`pnpm dev:server` loads into the Worker alone. Deployed, it holds
-`CLERK_SECRET_KEY` for the production instance and `CLERK_PREVIEW_SECRET_KEY`
-for the development one, and picks by host: the production hosts use the
-first, version previews and `pnpm dev` the second when it is set. Without the first there is no account badge;
+build variable for a deploy — the production instance's in the Production build
+settings and the development instance's in Previews Base. The Worker needs
+`CLERK_SECRET_KEY` in the root `.env.local`, which `pnpm dev:server` loads into
+the Worker alone; deployed, each environment holds its own instance's key under
+that name. `CLERK_ENABLED` and `TOUR_GUIDE_ENABLED` are declared in
+`cloudflare.config.ts`, on under `pnpm dev` and in previews and off in
+production, which the `deploy` script's `--mode production` is how the config
+knows. Without the first there is no account badge;
 without the second `/api/account` answers that accounts are not configured and
 the guide is unavailable. Both states are supported builds. The guide is
 granted by hand: `tour: true` or `admin: true` in the user's private metadata

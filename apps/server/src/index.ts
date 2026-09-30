@@ -83,7 +83,7 @@ export default {
           return api({ error: 'account is a GET' }, 405)
         }
         try {
-          return api(await identify(request, accountKeys(request, env)))
+          return api(await identify(request, accountKeys(env)))
         } catch (error) {
           // Logged with its reason in `identify`; the visitor gets the fact.
           if (error instanceof AccountUnavailableError)

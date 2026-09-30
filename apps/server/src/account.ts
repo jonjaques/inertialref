@@ -6,7 +6,7 @@ import {
 } from '@clerk/backend/errors'
 import type { AccountStatus } from '@inertialref/protocol'
 import { logger } from './log.ts'
-import { HOSTS, siteOrigins } from './origins.ts'
+import { siteOrigins } from './origins.ts'
 
 /*
  * Who is asking, as the Worker decides it (docs/hosting.md H-2).
@@ -50,18 +50,19 @@ export interface AccountKeys {
 }
 
 /**
- * Which Clerk instance a request is checked against, by where it arrived.
+ * The keys this deployment checks accounts with, or none while
+ * `CLERK_ENABLED` is off.
  *
- * The production hosts trust the production instance and nothing else. Every
- * other host — a version preview, `pnpm dev` — is the development instance's,
- * whose key falls back to the production name so a local `.env.local` with
- * one key keeps working. The browser makes the same choice at build time: the
- * preview trigger builds with the development instance's publishable key.
+ * Which Clerk instance that is was decided before the request arrived: each
+ * environment holds its own `CLERK_SECRET_KEY` — production the production
+ * instance's, Previews Base the development instance's — and the browser was
+ * built with the matching publishable key. Off means "not configured", the
+ * answer a fork gets, and the guide admits nobody.
  */
-export function accountKeys(request: Request, env: Env): AccountKeys {
-  if (HOSTS.has(new URL(request.url).origin))
-    return { secretKey: env.CLERK_SECRET_KEY }
-  return { secretKey: env.CLERK_PREVIEW_SECRET_KEY || env.CLERK_SECRET_KEY }
+export function accountKeys(env: Env): AccountKeys {
+  return String(env.CLERK_ENABLED) === 'false'
+    ? {}
+    : { secretKey: env.CLERK_SECRET_KEY }
 }
 
 const log = logger('server.account')

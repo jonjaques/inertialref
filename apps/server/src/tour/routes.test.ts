@@ -26,6 +26,7 @@ function env(overrides: Partial<Env> = {}): Env {
   return {
     OPENAI_API_KEY: 'key-canary',
     CLERK_SECRET_KEY: 'sk_test_route',
+    CLERK_ENABLED: 'true',
     TOUR_GUIDE_ENABLED: 'true',
     ...overrides,
   } as unknown as Env
@@ -76,6 +77,7 @@ describe('the guide Worker', () => {
     // Switched off, or with no way to read a grant, nobody is told they have it.
     for (const overrides of [
       { TOUR_GUIDE_ENABLED: 'false' },
+      { CLERK_ENABLED: 'false' },
       { CLERK_SECRET_KEY: undefined },
     ] as unknown as Partial<Env>[]) {
       expect(await (await capabilities(overrides)).json()).toMatchObject({

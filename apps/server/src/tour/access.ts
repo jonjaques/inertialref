@@ -25,9 +25,10 @@ export const grantsGuide = (flags: Readonly<Record<string, unknown>>) =>
   flags.admin === true || flags.tour === true
 
 /**
- * The verdict for one request, against the instance `accountKeys` chose for
- * it. Needs the secret key — a JWT key alone can verify a session but cannot
- * read metadata — so without one the guide is granted to nobody.
+ * The verdict for one request, with this environment's keys
+ * (`accountKeys`). Needs the secret key — a JWT key alone can verify a
+ * session but cannot read metadata — so without one, or with accounts
+ * switched off, the guide is granted to nobody.
  */
 export async function guideAccess(
   request: Request,
