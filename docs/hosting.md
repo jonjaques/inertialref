@@ -29,7 +29,9 @@ The Guide is an optional cloud service within the Planetarium, for signed-in
 accounts whose private metadata in Clerk says `admin: true` or `tour: true`
 ([ADR-0048](adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)).
 The Planetarium offers the Guide panel only to such an account, and the Worker
-refuses a session to anybody else. Missing secrets or `TOUR_GUIDE_ENABLED=false`
+refuses a session to anybody else. It answers only where accounts do:
+`inertialref.app` in production, and every preview and development host.
+Missing secrets or `TOUR_GUIDE_ENABLED=false`
 make cloud capabilities unavailable; the ordinary scene and local tour controls
 do not require provider credentials. See
 [ADR-0041](adr/0041-the-guide-requests-the-view.md) for the execution boundary.
@@ -1095,12 +1097,22 @@ reports each custom domain's route with `zone_name`, `enabled` and
 therefore refuses every production build after it, however closely the rest
 matches.
 
+The comparison follows the newest _version_, not the live deployment. A
+variable or a secret edited in the dashboard uploads a version without
+deploying it, so `cf workers deployments list` can show `cf`'s deployment
+serving traffic while `cf workers versions list --worker-id inertialrefd`
+shows the dashboard's version on top and every build is refused.
+
 Redeploying the live version from the command line does not end it. The
 deployment is recorded as `cf`'s, and the Worker still counts as changed from
 the dashboard: the next build is refused on the same diff. A deploy from a
 terminal, `pnpm run deploy:worker`, runs the same comparison but asks instead
 of aborting. It ships a local build, with whatever build variables that
-machine holds rather than those of the Production build settings.
+machine holds rather than those of the Production build settings — and a
+production build still reads `apps/game/.env.local`, so a machine set up for
+`pnpm dev` ships the development instance's `pk_test_` key to production. Set
+the Production build settings' values in the environment, which wins over any
+file, or `PUBLIC_CLERK_PUBLISHABLE_KEY=` to ship a client with no accounts.
 
 A production build of `main` runs again without a push through
 `cf builds create <trigger> --body '{"branch":"main","commit_hash":"<sha>"}'`.

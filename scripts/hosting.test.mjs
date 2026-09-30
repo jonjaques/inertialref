@@ -37,26 +37,20 @@ describe('the static hosting boundary', () => {
     expect(at({ isPreview: true, mode: undefined }).domains).toBeUndefined()
   })
 
-  it('switches the guide and accounts off in production and on only where asked', () => {
+  it('switches the guide and accounts on in every evaluation', () => {
     const flags = (context) => {
       const { env } = at(context)
       return [env.TOUR_GUIDE_ENABLED.value, env.CLERK_ENABLED.value]
     }
-    expect(flags({ isPreview: false, mode: 'production' })).toEqual([
-      'false',
-      'false',
+    // Production, a Worker Preview, `pnpm dev`, and a deploy that lost its
+    // `--mode`: which host answers accounts is the Worker's per-request
+    // decision (`apps/server/src/origins.ts`), not the evaluation's.
+    for (const context of [
+      { isPreview: false, mode: 'production' },
+      { isPreview: true, mode: undefined },
+      { isPreview: false, mode: 'development' },
+      { isPreview: false, mode: undefined },
     ])
-    // A Worker Preview, and `cf dev --mode development` under `pnpm dev`.
-    expect(flags({ isPreview: true, mode: undefined })).toEqual([
-      'true',
-      'true',
-    ])
-    expect(flags({ isPreview: false, mode: 'development' })).toEqual([
-      'true',
-      'true',
-    ])
-    // A deploy that lost its `--mode`, or ran with another, is production.
-    for (const mode of [undefined, 'staging'])
-      expect(flags({ isPreview: false, mode })).toEqual(['false', 'false'])
+      expect(flags(context)).toEqual(['true', 'true'])
   })
 })

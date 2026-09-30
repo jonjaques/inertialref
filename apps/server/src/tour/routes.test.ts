@@ -90,6 +90,18 @@ describe('the guide Worker', () => {
         authorized: false,
       })
     }
+    // The production host Clerk does not serve has no accounts, so no guide.
+    const elsewhere = await serveTour(
+      new Request('https://inertialref.jonjaques.com/api/tour/capabilities', {
+        headers: { 'sec-fetch-site': 'same-origin' },
+      }),
+      env(),
+    )
+    expect(await elsewhere.json()).toMatchObject({
+      available: false,
+      signedIn: false,
+      authorized: false,
+    })
   })
 
   it('refuses a session to a visitor who is not signed in, or not granted the guide', async () => {

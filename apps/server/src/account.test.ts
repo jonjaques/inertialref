@@ -305,18 +305,37 @@ describe('accountKeys', () => {
       CLERK_SECRET_KEY: 'sk_test_key',
     }) as unknown as Env
 
+  const here = request(`${SITE}/api/account`)
+
   it('checks accounts with this environment’s key while they are on', () => {
-    expect(accountKeys(env('true'))).toEqual({ secretKey: 'sk_test_key' })
+    expect(accountKeys(env('true'), here)).toEqual({
+      secretKey: 'sk_test_key',
+    })
   })
 
   it('checks nothing while they are off, which reads as not configured', async () => {
-    expect(accountKeys(env('false'))).toEqual({})
+    expect(accountKeys(env('false'), here)).toEqual({})
     const token = await issuer.sign(session())
-    expect(
-      await identify(
-        request(`${SITE}/api/account`, { authorization: `Bearer ${token}` }),
-        accountKeys(env('false')),
-      ),
-    ).toEqual({ configured: false, signedIn: false, userId: null })
+    const asked = request(`${SITE}/api/account`, {
+      authorization: `Bearer ${token}`,
+    })
+    expect(await identify(asked, accountKeys(env('false'), asked))).toEqual({
+      configured: false,
+      signedIn: false,
+      userId: null,
+    })
+  })
+
+  it('checks nothing on the production host Clerk does not serve', async () => {
+    const token = await issuer.sign(session())
+    const asked = request('https://inertialref.jonjaques.com/api/account', {
+      authorization: `Bearer ${token}`,
+    })
+    expect(accountKeys(env('true'), asked)).toEqual({})
+    expect(await identify(asked, accountKeys(env('true'), asked))).toEqual({
+      configured: false,
+      signedIn: false,
+      userId: null,
+    })
   })
 })

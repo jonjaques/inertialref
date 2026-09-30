@@ -42,6 +42,30 @@ export function isPreviewOrigin(target: URL): boolean {
 }
 
 /**
+ * The one production host where accounts, and the guide with them, answer.
+ *
+ * Clerk's production instance is configured for `inertialref.app`, and its
+ * Frontend API refuses a page on any other origin (`origin_invalid`). Serving
+ * the second host too is a satellite domain, which is a paid plan. So the
+ * second host answers as a deployment with no accounts at all — "not
+ * configured", and no guide — rather than as one where every sign-in fails.
+ * The browser makes the same decision from the page's own host
+ * (`apps/game/src/account/accounts.ts`), and never loads Clerk there.
+ */
+export const ACCOUNT_HOST = 'https://inertialref.app'
+
+/**
+ * Whether accounts answer at the host this request arrived at: the account
+ * host in production, and every preview and development host, which sign in
+ * against the development instance and are not held to one origin.
+ */
+export function offersAccounts(request: Request): boolean {
+  const target = new URL(request.url)
+  if (HOSTS.has(target.origin)) return target.origin === ACCOUNT_HOST
+  return DEVELOPMENT.has(target.origin) || isPreviewOrigin(target)
+}
+
+/**
  * The origins a page talking to this request's host may be served from.
  *
  * Grouped by where the request *arrived*, not merged into one list: a
