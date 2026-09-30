@@ -95,23 +95,32 @@ export default defineConfig({
       OPENAI_API_KEY: bindings.secret(),
 
       /*
-       * Accounts (`src/account.ts`). The browser signs in against Clerk and
-       * presents the session token it was given; these are how the Worker
-       * checks one. The secret key alone is enough — it fetches the instance's
-       * signing keys once per isolate — and it is also what reads a user's
-       * private metadata, where the guide's grant lives (`src/tour/access.ts`),
-       * so without it the guide is unavailable. The JWT key is the same
-       * instance's PEM public key and is optional: with it the signature check
-       * makes no network call. Neither set means the Worker answers every
-       * account question with "not configured", which is what a fork and a
-       * keyless `pnpm dev` see.
+       * Accounts (`src/account.ts`): how the Worker checks the session token
+       * the browser presents, and — the secret key being also what reads a
+       * user's private metadata — where the guide's grant comes from
+       * (`src/tour/access.ts`).
        *
-       * The publishable key is not here. It is the browser's, a build variable
-       * of the client (`apps/game/.env.example`), and the Worker never needs it
-       * because it verifies tokens rather than running Clerk's sign-in handshake.
+       * Two, because there are two Clerk instances and one Worker. The
+       * production hosts sign in against the production instance; every
+       * version preview and `pnpm dev` signs in against the development one.
+       * A preview version inherits the Worker's secrets, so the preview key
+       * cannot simply be a different value of the same name — the Worker picks
+       * by the host a request arrived at (`accountKeys`). Locally the preview
+       * key may be left unset and `CLERK_SECRET_KEY` answers alone.
+       *
+       * Both are required: a declared secret that is not set on the Worker
+       * fails the version upload, which is what makes a missing key a build
+       * failure instead of a guide that silently admits nobody. For the same
+       * reason there is no JWT key here — it is optional, and a declared one
+       * would have to hold something.
+       *
+       * The publishable keys are not here. They are the browser's: a build
+       * variable per Workers Builds trigger, the production instance's on the
+       * production trigger and the development instance's on the preview one
+       * (`apps/game/.env.example`).
        */
       CLERK_SECRET_KEY: bindings.secret(),
-      CLERK_JWT_KEY: bindings.secret(),
+      CLERK_PREVIEW_SECRET_KEY: bindings.secret(),
 
       /*
        * The site's object storage (docs/hosting.md H-8).

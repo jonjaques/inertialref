@@ -1,4 +1,4 @@
-import { identify, privateMetadata } from '../account.ts'
+import { type AccountKeys, identify, privateMetadata } from '../account.ts'
 
 /*
  * Who may use the guide.
@@ -25,20 +25,17 @@ export const grantsGuide = (flags: Readonly<Record<string, unknown>>) =>
   flags.admin === true || flags.tour === true
 
 /**
- * The verdict for one request. Needs the secret key — a JWT key alone can
- * verify a session but cannot read metadata — so a Worker without it grants
- * the guide to nobody.
+ * The verdict for one request, against the instance `accountKeys` chose for
+ * it. Needs the secret key — a JWT key alone can verify a session but cannot
+ * read metadata — so without one the guide is granted to nobody.
  */
 export async function guideAccess(
   request: Request,
-  env: Env,
+  keys: AccountKeys,
 ): Promise<GuideAccess> {
-  const secretKey = env.CLERK_SECRET_KEY
+  const secretKey = keys.secretKey
   if (!secretKey) return NOBODY
-  const status = await identify(request, {
-    secretKey,
-    jwtKey: env.CLERK_JWT_KEY,
-  })
+  const status = await identify(request, keys)
   if (!status.signedIn || status.userId === null) return NOBODY
   return {
     signedIn: true,

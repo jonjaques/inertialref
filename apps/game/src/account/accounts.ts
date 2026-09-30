@@ -35,10 +35,35 @@ import {
  * the browser. Not a secret — it is in the bundle and names the instance — and
  * still not in the repository, for the reason the analytics id is not: a fork
  * built from a committed key would sign its visitors into somebody else's
- * instance. `apps/game/.env.example` documents it.
+ * instance. Each Workers Builds trigger carries its own: the production
+ * instance's on the production trigger, the development instance's on the
+ * preview trigger, which is the choice the Worker makes by host
+ * (`accountKeys` in `apps/server/src/account.ts`). `apps/game/.env.example`
+ * documents it.
  */
-export const PUBLISHABLE_KEY: string =
-  import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? ''
+export const PUBLISHABLE_KEY: string = usablePublishableKey(
+  import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? '',
+)
+
+/**
+ * The key, if Clerk can use it, or nothing.
+ *
+ * A publishable key is `pk_test_` or `pk_live_` and then the instance's
+ * Frontend API host in base64, ending in `$`. Anything else — the placeholder
+ * a Workers Builds variable holds until the real key replaces it, a secret key
+ * pasted into the wrong box — would reach Clerk as an instance that does not
+ * exist, and the build is better off with no accounts than with a badge that
+ * never loads.
+ */
+export function usablePublishableKey(key: string): string {
+  const match = /^pk_(?:test|live)_([A-Za-z0-9+/]+={0,2})$/.exec(key)
+  if (match === null) return ''
+  try {
+    return atob(match[1]!).endsWith('$') ? key : ''
+  } catch {
+    return ''
+  }
+}
 
 /** Who is signed in, as far as this page knows. */
 export interface AccountState {

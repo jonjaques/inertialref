@@ -1,5 +1,5 @@
 import { GUIDE_VOICES, isGuideVoice } from '@inertialref/protocol'
-import { AccountUnavailableError } from '../account.ts'
+import { accountKeys, AccountUnavailableError } from '../account.ts'
 import { logger, span } from '../log.ts'
 import { allowedOrigin } from '../origins.ts'
 import { guideAccess } from './access.ts'
@@ -64,14 +64,15 @@ async function handle(
 ): Promise<Response> {
   try {
     // The provider, and the accounts that decide who may use it.
+    const keys = accountKeys(request, env)
     const configured = Boolean(
       env.OPENAI_API_KEY &&
-      env.CLERK_SECRET_KEY &&
+      keys.secretKey &&
       String(env.TOUR_GUIDE_ENABLED) !== 'false',
     )
     if (path === '/api/tour/capabilities' && request.method === 'GET') {
       const access = configured
-        ? await guideAccess(request, env)
+        ? await guideAccess(request, keys)
         : { signedIn: false, authorized: false }
       return tourJson({
         available: configured,
@@ -84,7 +85,7 @@ async function handle(
     if (!allowedOrigin(request))
       throw new TourHttpError('Use the guide from this site.', 403)
     if (!configured) throw new TourHttpError('The guide is unavailable.', 503)
-    const access = await guideAccess(request, env)
+    const access = await guideAccess(request, keys)
     if (!access.signedIn)
       throw new TourHttpError('Sign in to use the guide.', 401)
     if (!access.authorized)

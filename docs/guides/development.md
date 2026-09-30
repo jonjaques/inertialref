@@ -360,9 +360,13 @@ ships in the bundle.
 and exist only where both halves have a key. The client needs
 `PUBLIC_CLERK_PUBLISHABLE_KEY` — `PUBLIC_`, because Astro exposes nothing else
 to the browser — in gitignored `apps/game/.env.local` for `pnpm dev` and as a
-build variable for a deploy. The Worker needs `CLERK_SECRET_KEY` in the root
-`.env.local`, which `pnpm dev:server` loads into the Worker alone, and as a
-Worker secret in production. Without the first there is no account badge;
+build variable for a deploy — per Workers Builds trigger, the production
+instance's on `main` and the development instance's on every other branch. The
+Worker needs `CLERK_SECRET_KEY` in the root `.env.local`, which
+`pnpm dev:server` loads into the Worker alone. Deployed, it holds
+`CLERK_SECRET_KEY` for the production instance and `CLERK_PREVIEW_SECRET_KEY`
+for the development one, and picks by host: the production hosts use the
+first, version previews and `pnpm dev` the second when it is set. Without the first there is no account badge;
 without the second `/api/account` answers that accounts are not configured and
 the guide is unavailable. Both states are supported builds. The guide is
 granted by hand: `tour: true` or `admin: true` in the user's private metadata

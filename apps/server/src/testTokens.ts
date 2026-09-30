@@ -2,7 +2,8 @@
  * Session tokens minted the way Clerk mints them, for tests.
  *
  * An RS256 JWT over the claims Clerk puts in a session token, and the matching
- * public key as a PEM — the networkless path `CLERK_JWT_KEY` enables. Clerk
+ * public key as a PEM — the networkless path, which the Worker itself does not
+ * take. Clerk
  * turns a PEM into a JWK by stripping a fixed 2048-bit, e=65537 SPKI prefix
  * rather than parsing it, so the key has to be exactly that shape.
  */

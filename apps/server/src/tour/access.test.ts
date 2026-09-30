@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { AccountUnavailableError } from '../account.ts'
+import { type AccountKeys, AccountUnavailableError } from '../account.ts'
 import { session, SITE, type Signer, signer } from '../testTokens.ts'
 import { grantsGuide, guideAccess } from './access.ts'
 
@@ -17,12 +17,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const env = (overrides: Partial<Env> = {}): Env =>
-  ({
-    CLERK_SECRET_KEY: 'sk_test_lookup',
-    CLERK_JWT_KEY: issuer.pem,
-    ...overrides,
-  }) as unknown as Env
+const keys = (overrides: Partial<AccountKeys> = {}): AccountKeys => ({
+  secretKey: 'sk_test_lookup',
+  jwtKey: issuer.pem,
+  ...overrides,
+})
 
 /** Clerk's Backend API, holding one user with the given private metadata. */
 function clerkWith(privateMetadata: Record<string, unknown>, status = 200) {
@@ -58,7 +57,7 @@ describe('guideAccess', () => {
       { admin: true, tour: true },
     ]) {
       const lookup = clerkWith(flags)
-      expect(await guideAccess(await asking(token), env())).toEqual({
+      expect(await guideAccess(await asking(token), keys())).toEqual({
         signedIn: true,
         authorized: true,
       })
@@ -73,7 +72,7 @@ describe('guideAccess', () => {
     const token = await issuer.sign(session())
     for (const flags of [{}, { tour: false }, { tour: 'true' }, { admin: 1 }]) {
       clerkWith(flags)
-      expect(await guideAccess(await asking(token), env())).toEqual({
+      expect(await guideAccess(await asking(token), keys())).toEqual({
         signedIn: true,
         authorized: false,
       })
@@ -82,12 +81,12 @@ describe('guideAccess', () => {
 
   it('does not ask Clerk about somebody who is not signed in', async () => {
     const lookup = clerkWith({ admin: true })
-    expect(await guideAccess(await asking(), env())).toEqual({
+    expect(await guideAccess(await asking(), keys())).toEqual({
       signedIn: false,
       authorized: false,
     })
     const forged = await (await signer()).sign(session())
-    expect(await guideAccess(await asking(forged), env())).toEqual({
+    expect(await guideAccess(await asking(forged), keys())).toEqual({
       signedIn: false,
       authorized: false,
     })
@@ -98,24 +97,21 @@ describe('guideAccess', () => {
     const token = await issuer.sign(session())
     clerkWith({ admin: true })
     expect(
-      await guideAccess(
-        await asking(token),
-        env({ CLERK_SECRET_KEY: undefined } as unknown as Partial<Env>),
-      ),
+      await guideAccess(await asking(token), keys({ secretKey: undefined })),
     ).toEqual({ signedIn: false, authorized: false })
   })
 
   it('treats a deleted user as ungranted and an unreachable Clerk as the server’s fault', async () => {
     const token = await issuer.sign(session({ sub: 'user_gone' }))
     clerkWith({ admin: true })
-    expect(await guideAccess(await asking(token), env())).toEqual({
+    expect(await guideAccess(await asking(token), keys())).toEqual({
       signedIn: true,
       authorized: false,
     })
     clerkWith({ admin: true }, 500)
     vi.spyOn(console, 'error').mockImplementation(() => {})
     await expect(
-      guideAccess(await asking(await issuer.sign(session())), env()),
+      guideAccess(await asking(await issuer.sign(session())), keys()),
     ).rejects.toBeInstanceOf(AccountUnavailableError)
   })
 })

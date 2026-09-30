@@ -19,7 +19,7 @@ import { GENERATION_VERSIONS } from '@inertialref/universe'
  * disagree about where the stars were.
  */
 import catalogManifest from '../../../data/catalog/manifest.json' with { type: 'json' }
-import { AccountUnavailableError, identify } from './account.ts'
+import { accountKeys, AccountUnavailableError, identify } from './account.ts'
 import { routeFor } from './routes.ts'
 import { type MediaStores, serveMedia } from './serveMedia.ts'
 import { serveTour } from './tour/routes.ts'
@@ -83,12 +83,7 @@ export default {
           return api({ error: 'account is a GET' }, 405)
         }
         try {
-          return api(
-            await identify(request, {
-              secretKey: env.CLERK_SECRET_KEY,
-              jwtKey: env.CLERK_JWT_KEY,
-            }),
-          )
+          return api(await identify(request, accountKeys(request, env)))
         } catch (error) {
           // Logged with its reason in `identify`; the visitor gets the fact.
           if (error instanceof AccountUnavailableError)

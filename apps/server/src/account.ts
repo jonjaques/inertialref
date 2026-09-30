@@ -6,7 +6,7 @@ import {
 } from '@clerk/backend/errors'
 import type { AccountStatus } from '@inertialref/protocol'
 import { logger } from './log.ts'
-import { siteOrigins } from './origins.ts'
+import { HOSTS, siteOrigins } from './origins.ts'
 
 /*
  * Who is asking, as the Worker decides it (docs/hosting.md H-2).
@@ -41,10 +41,27 @@ export interface AccountKeys {
    */
   readonly secretKey?: string | undefined
   /**
-   * `CLERK_JWT_KEY`, the instance's PEM public key. When present the check is
-   * networkless, which takes Clerk's API off the path of a cold isolate.
+   * The instance's PEM public key: with it the signature check makes no
+   * network call. The Worker does not carry one — a declared secret is a
+   * required one (`cloudflare.config.ts`) — and the tests do, because it is
+   * the path that verifies a token without Clerk on the other end.
    */
   readonly jwtKey?: string | undefined
+}
+
+/**
+ * Which Clerk instance a request is checked against, by where it arrived.
+ *
+ * The production hosts trust the production instance and nothing else. Every
+ * other host — a version preview, `pnpm dev` — is the development instance's,
+ * whose key falls back to the production name so a local `.env.local` with
+ * one key keeps working. The browser makes the same choice at build time: the
+ * preview trigger builds with the development instance's publishable key.
+ */
+export function accountKeys(request: Request, env: Env): AccountKeys {
+  if (HOSTS.has(new URL(request.url).origin))
+    return { secretKey: env.CLERK_SECRET_KEY }
+  return { secretKey: env.CLERK_PREVIEW_SECRET_KEY || env.CLERK_SECRET_KEY }
 }
 
 const log = logger('server.account')

@@ -55,14 +55,19 @@ the session token it is handed, which is the verdict anything attributed
 uses. The guide is granted by `admin: true` or `tour: true` in the account's
 private metadata, which the Worker reads.**
 
-- **Optional per build.** Accounts exist where the client is built with
-  `PUBLIC_CLERK_PUBLISHABLE_KEY` — `PUBLIC_` because Astro exposes nothing
-  else to the browser — and the Worker has `CLERK_SECRET_KEY` (optionally
-  `CLERK_JWT_KEY`, the PEM key, for a networkless signature check). Neither is
-  committed. Without the publishable key there is no badge and the account
-  pages say the build offers none; without the secret the Worker answers "not
-  configured", which is a different sentence from "signed out", and the guide
-  is unavailable.
+- **Optional per build, and one instance per environment.** Accounts exist
+  where the client is built with a usable `PUBLIC_CLERK_PUBLISHABLE_KEY` —
+  `PUBLIC_` because Astro exposes nothing else to the browser — and the Worker
+  has its secret key. Production signs in against Clerk's production instance
+  and everything else — version previews, `pnpm dev` — against the development
+  instance. The browser's key is a build variable per Workers Builds trigger;
+  the Worker holds `CLERK_SECRET_KEY` and `CLERK_PREVIEW_SECRET_KEY` and picks
+  by the host a request arrived at (`accountKeys`), because a version preview
+  inherits the Worker's secrets and cannot hold a different value under the
+  same name. Nothing is committed. Without a usable publishable key there is no
+  badge and the account pages say the build offers none; without the secret
+  the Worker answers "not configured", which is a different sentence from
+  "signed out", and the guide is unavailable.
 - **Two ways in, by where the visitor stands.** From the menu, or by address,
   `/sign-in`, `/sign-up` and `/profile` are pages of the menu over its own
   scene, and the front door links to them. Inside a mode the badge at the end

@@ -1,13 +1,13 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { AccountUnavailableError, identify } from './account.ts'
+import { accountKeys, AccountUnavailableError, identify } from './account.ts'
 import { now, session, SITE, type Signer, signer } from './testTokens.ts'
 
 /*
  * Real tokens, signed and checked, with no network.
  *
  * Each test mints an RS256 session token the way Clerk does and hands the
- * matching public key over as `jwtKey`, which is the networkless path
- * `identify` takes in production when `CLERK_JWT_KEY` is set.
+ * matching public key over as `jwtKey`, the networkless path. The checks
+ * after the signature are the same whichever way the key arrived.
  */
 
 const request = (url: string, headers: Record<string, string> = {}): Request =>
@@ -121,5 +121,34 @@ describe('identify', () => {
         { secretKey: 'sk_test_unusable' },
       ),
     ).rejects.toBeInstanceOf(AccountUnavailableError)
+  })
+})
+
+describe('accountKeys', () => {
+  const env = (preview?: string) =>
+    ({
+      CLERK_SECRET_KEY: 'sk_live_production',
+      CLERK_PREVIEW_SECRET_KEY: preview,
+    }) as unknown as Env
+  const at = (url: string, preview?: string) =>
+    accountKeys(new Request(url), env(preview)).secretKey
+
+  it('checks the production hosts against the production instance only', () => {
+    for (const host of [SITE, 'https://inertialref.jonjaques.com'])
+      expect(at(`${host}/api/account`, 'sk_test_development')).toBe(
+        'sk_live_production',
+      )
+  })
+
+  it('checks previews and development against the development instance', () => {
+    for (const url of [
+      'https://a67318ec-inertialrefd.jaquers.workers.dev/api/account',
+      'http://127.0.0.1:8787/api/account',
+    ])
+      expect(at(url, 'sk_test_development')).toBe('sk_test_development')
+  })
+
+  it('lets a local environment with one key use it for everything', () => {
+    expect(at('http://127.0.0.1:8787/api/account')).toBe('sk_live_production')
   })
 })

@@ -13,6 +13,7 @@ import {
   isAccountPath,
   returnAddress,
   SIGNED_OUT_LANDING,
+  usablePublishableKey,
 } from './accounts.ts'
 
 const at = (pathname: string, extra: Partial<Location> = {}): Location => ({
@@ -98,5 +99,24 @@ describe('isAccountPath', () => {
       '/auth/callback',
     ])
       expect(isAccountPath(path)).toBe(false)
+  })
+})
+
+describe('usablePublishableKey', () => {
+  it('keeps a key that names an instance', () => {
+    const key = `pk_test_${btoa('example-otter-1234.clerk.accounts.dev$')}`
+    expect(usablePublishableKey(key)).toBe(key)
+    const live = `pk_live_${btoa('clerk.example.test$')}`
+    expect(usablePublishableKey(live)).toBe(live)
+  })
+
+  it('treats a placeholder or the wrong kind of key as no key', () => {
+    for (const key of [
+      'pk_live_REPLACE_WITH_PRODUCTION_PUBLISHABLE_KEY',
+      `pk_test_${btoa('no-terminator.example')}`,
+      'sk_test_abcdef0123456789',
+      '',
+    ])
+      expect(usablePublishableKey(key), key).toBe('')
   })
 })
