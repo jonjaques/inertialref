@@ -1068,8 +1068,12 @@ switch: `cloudflare.config.ts` evaluates anything that is neither a preview nor
 `--mode development` as production, so a deploy command that loses the flag
 still ships production's variables. `pnpm dev:server` and `pnpm preview` pass
 `--mode development`.
-`previews:deploy` is `cf previews deploy`, which evaluates the config with
-`isPreview` and deploys a preview named for the branch. `cf` authenticates with
+`previews:deploy` runs `cf previews deploy`, which evaluates the config with
+`isPreview` and deploys a preview named for the branch, through
+`scripts/previews-deploy.mjs`. The wrapper exists for the pull request's
+preview link: Workers Builds reads what a deploy produced from an output file,
+not the log, and `cf previews deploy` only prints its `preview` record, so the
+wrapper writes that record where `wrangler preview` would. `cf` authenticates with
 `CLOUDFLARE_API_TOKEN` in a build and with `cf auth login` on a developer's
 machine.
 
