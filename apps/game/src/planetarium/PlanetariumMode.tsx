@@ -1,5 +1,6 @@
 'use no memo'
 import { useGuideActions } from '../tour/useGuideActions.ts'
+import { useGuideAccess } from '../tour/access.ts'
 import { createGuide, mountGuide } from '../tour/guide.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Outlet, useNavigate } from 'react-router'
@@ -258,8 +259,10 @@ export function PlanetariumMode({
     void navigate({ pathname: CATALOG, search: params.toString() })
   }
 
+  const guideOffered = useGuideAccess()
   const panels = planetariumPanels({
     guide,
+    guideOffered,
     engine,
     target,
     focus,

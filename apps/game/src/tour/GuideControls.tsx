@@ -1,6 +1,5 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Mic, Pause, Play, Square } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { Action } from '../hud/Action.tsx'
 import { useActionTitle } from '../input/useKeymap.ts'
 import {
@@ -10,7 +9,9 @@ import {
 import type { GuideRuntime } from './runtime.ts'
 
 /*
- * The Guide panel: a voice picker and three controls.
+ * The Guide panel: a voice picker and three controls, for an account the
+ * guide is granted to. The panel is only offered to one (`useGuideAccess`),
+ * and the Worker refuses a session to anybody else whatever this draws.
  *
  * Start requests the microphone, posts the offer and shows Connecting until
  * the session starts; Pause becomes Resume and mutes both directions; End
@@ -26,14 +27,13 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
     runtime.getSnapshot,
     runtime.getSnapshot,
   )
-  const [password, setPassword] = useState('')
   const [voice, setVoice] = usePersistentState(PLANETARIUM_GUIDE_VOICE)
   const pauseTitle = useActionTitle(
     'guide.pause',
     state.paused ? 'Resume the guide' : 'Pause the guide',
   )
   const endTitle = useActionTitle('guide.end', 'End the guide')
-  const authenticated = state.capabilities?.authenticated === true
+  const authorized = state.capabilities?.authorized === true
   const available = state.capabilities?.available === true
   const offline = state.connection === 'offline'
   const connecting = state.connection === 'connecting'
@@ -42,32 +42,7 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {!authenticated && (
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault()
-            const value = password
-            setPassword('')
-            void runtime.login(value)
-          }}
-        >
-          <label className="type-ui text-slate-400" htmlFor="guide-password">
-            Private alpha password
-          </label>
-          <div className="flex gap-1.5">
-            <Input
-              id="guide-password"
-              type="password"
-              value={password}
-              autoComplete="current-password"
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <Action label="Unlock" type="submit" disabled={!password} />
-          </div>
-        </form>
-      )}
-      {authenticated && available && (
+      {authorized && available && (
         <>
           <div className="flex flex-wrap gap-1" aria-label="Guide voice">
             {voices.map((choice) => (
@@ -121,6 +96,15 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
             which holds the conversation and moves the camera through this app.
           </p>
         </>
+      )}
+      {/* Reachable only in the moment between a sign-out, or a revoked
+          grant, and the panel being withdrawn. */}
+      {available && !authorized && (
+        <p className="type-ui text-slate-400">
+          {state.capabilities?.signedIn
+            ? 'This account does not have the guide.'
+            : 'Sign in to use the guide.'}
+        </p>
       )}
       {state.capabilities?.reason && (
         <p className="type-ui text-slate-400">{state.capabilities.reason}</p>

@@ -1,11 +1,11 @@
 /*
  * Which origins are this site, from the Worker's side.
  *
- * Two checks read these and they must agree: the guide's `allowedOrigin`, which
- * refuses a request made from anywhere else, and the account check's
- * authorized parties, which refuses a session token minted for anywhere else.
- * A host added to one and not the other is a site where the guide works and
- * nobody is signed in, or the reverse.
+ * Two checks read these and they must agree: `allowedOrigin`, which refuses a
+ * mutation made from a page anywhere else, and the account check's authorized
+ * parties, which refuses a session token minted for a page anywhere else. A
+ * host added to one and not the other is a site where one of them silently
+ * refuses everything.
  */
 
 /** The deployment's own hosts. Both answer; neither redirects. */
@@ -53,4 +53,30 @@ export function siteOrigins(request: Request): readonly string[] {
   if (HOSTS.has(target.origin)) return [...HOSTS]
   if (DEVELOPMENT.has(target.origin)) return [...DEVELOPMENT]
   return isPreviewOrigin(target) ? [target.origin] : []
+}
+
+/**
+ * Whether a request came from a page of this site.
+ *
+ * Exact origins, never a suffix: `inertialref.app.evil.test` ends with the
+ * host. A development host accepts any development origin, because Vite
+ * proxies `/api` from 5173 to the Worker on 8787 with the browser's own
+ * `Origin`. A preview accepts only itself.
+ */
+export function allowedOrigin(request: Request): boolean {
+  const origin = request.headers.get('origin')
+  const target = new URL(request.url).origin
+  if (!origin) {
+    // Browsers omit Origin on same-origin GETs. Mutations and WebSocket
+    // upgrades still require the exact origin.
+    return (
+      request.method === 'GET' &&
+      request.headers.get('upgrade') === null &&
+      request.headers.get('sec-fetch-site') === 'same-origin' &&
+      (HOSTS.has(target) || DEVELOPMENT.has(target))
+    )
+  }
+  if (HOSTS.has(target)) return origin === target
+  if (DEVELOPMENT.has(target)) return DEVELOPMENT.has(origin)
+  return isPreviewOrigin(new URL(request.url)) && origin === target
 }

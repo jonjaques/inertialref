@@ -1,3 +1,4 @@
+import { sessionToken } from '../account/token.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GuideExecutor } from './executor.ts'
 import { LiveConnection } from './media.ts'
@@ -12,18 +13,25 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
     now: () => Date.now(),
     localTime: () =>
       new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    request: (path, body, signal) =>
-      fetch(path, {
+    /*
+     * Every request carries the account's session token, fetched per request
+     * because Clerk mints a fresh one near expiry. The Worker decides from it
+     * whether this account has the guide (`apps/server/src/tour/access.ts`);
+     * without one it answers as it would for anybody signed out.
+     */
+    request: async (path, body, signal) => {
+      const token = await sessionToken()
+      const headers = new Headers()
+      if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+      if (body !== undefined) headers.set('Content-Type', 'application/json')
+      return fetch(path, {
         method: body === undefined ? 'GET' : 'POST',
-        credentials: 'same-origin',
         cache: 'no-store',
-        headers:
-          body === undefined
-            ? undefined
-            : { 'Content-Type': 'application/json' },
+        headers,
         body: body === undefined ? undefined : JSON.stringify(body),
         signal,
-      }),
+      })
+    },
     executor: ({ onArrival, onTakeover }) => {
       const readiness = new ViewReadiness()
       const executor = new GuideExecutor(engine.harness, {

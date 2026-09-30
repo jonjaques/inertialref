@@ -1,28 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GUIDE_CLIENT_EVENTS, GUIDE_TOOLS } from '@inertialref/protocol'
-import { loginCookie } from './auth.ts'
+import { AccountUnavailableError } from '../account.ts'
+import type { GuideAccess } from './access.ts'
 import { serveTour } from './routes.ts'
 
+/*
+ * The route's decisions, with the account verdict as an input. Who is signed
+ * in and what their metadata grants is `access.test.ts`'s, against real
+ * tokens; here it is whatever the test says it is.
+ */
+const verdict = vi.hoisted(() => ({
+  current: { signedIn: false, authorized: false } as GuideAccess | Error,
+}))
+vi.mock('./access.ts', () => ({
+  guideAccess: async () => {
+    if (verdict.current instanceof Error) throw verdict.current
+    return verdict.current
+  },
+}))
+const GRANTED: GuideAccess = { signedIn: true, authorized: true }
+
 const ORIGIN = 'http://localhost:5173'
-const PASSWORD = 'alpha-password'
 
 function env(overrides: Partial<Env> = {}): Env {
   return {
     OPENAI_API_KEY: 'key-canary',
-    TOUR_GUIDE_PASSWORD: PASSWORD,
+    CLERK_SECRET_KEY: 'sk_test_route',
     TOUR_GUIDE_ENABLED: 'true',
     ...overrides,
   } as unknown as Env
 }
 
-function post(path: string, body: unknown, cookie?: string): Request {
+function post(path: string, body: unknown): Request {
   return new Request(`${ORIGIN}${path}`, {
     method: 'POST',
-    headers: {
-      origin: ORIGIN,
-      'content-type': 'application/json',
-      ...(cookie === undefined ? {} : { cookie }),
-    },
+    headers: { origin: ORIGIN, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
 }
@@ -30,6 +42,7 @@ function post(path: string, body: unknown, cookie?: string): Request {
 describe('the guide Worker', () => {
   // Every refusal writes a record; the test output is not where they go.
   beforeEach(() => {
+    verdict.current = { signedIn: false, authorized: false }
     vi.spyOn(console, 'info').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
@@ -37,53 +50,86 @@ describe('the guide Worker', () => {
     vi.restoreAllMocks()
   })
 
-  it('reports availability and voices without a cookie', async () => {
-    const response = await serveTour(
-      new Request(`${ORIGIN}/api/tour/capabilities`, {
-        headers: { 'sec-fetch-site': 'same-origin' },
-      }),
-      env(),
-    )
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as Record<string, unknown>
-    expect(body.available).toBe(true)
-    expect(body.authenticated).toBe(false)
+  it('reports availability, the verdict and the voices', async () => {
+    const capabilities = (overrides?: Partial<Env>) =>
+      serveTour(
+        new Request(`${ORIGIN}/api/tour/capabilities`, {
+          headers: { 'sec-fetch-site': 'same-origin' },
+        }),
+        env(overrides),
+      )
+    const anonymous = await capabilities()
+    expect(anonymous.status).toBe(200)
+    const body = (await anonymous.json()) as Record<string, unknown>
+    expect(body).toMatchObject({
+      available: true,
+      signedIn: false,
+      authorized: false,
+    })
     expect(body.voices).toContain('marin')
     expect(body.voices).toContain('cedar')
-    const off = await serveTour(
-      new Request(`${ORIGIN}/api/tour/capabilities`, {
-        headers: { 'sec-fetch-site': 'same-origin' },
-      }),
-      env({ TOUR_GUIDE_ENABLED: 'false' } as unknown as Partial<Env>),
-    )
-    expect(((await off.json()) as { available: boolean }).available).toBe(false)
+    verdict.current = GRANTED
+    expect(await (await capabilities()).json()).toMatchObject({
+      signedIn: true,
+      authorized: true,
+    })
+    // Switched off, or with no way to read a grant, nobody is told they have it.
+    for (const overrides of [
+      { TOUR_GUIDE_ENABLED: 'false' },
+      { CLERK_SECRET_KEY: undefined },
+    ] as unknown as Partial<Env>[]) {
+      expect(await (await capabilities(overrides)).json()).toMatchObject({
+        available: false,
+        authorized: false,
+      })
+    }
   })
 
-  it('issues the cookie for the password and refuses a wrong one', async () => {
-    const wrong = await serveTour(
-      post('/api/tour/login', { password: 'guess' }),
-      env(),
-    )
-    expect(wrong.status).toBe(401)
-    const right = await serveTour(
-      post('/api/tour/login', { password: PASSWORD }),
-      env(),
-    )
-    expect(right.status).toBe(200)
-    expect(right.headers.get('set-cookie')).toMatch(/^tour_access=/)
+  it('refuses a session to a visitor who is not signed in, or not granted the guide', async () => {
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    try {
+      const ask = () =>
+        serveTour(
+          post('/api/tour/sessions', {
+            voice: 'marin',
+            sdp: 'offer',
+            scene: 'x',
+          }),
+          env(),
+        )
+      const anonymous = await ask()
+      expect(anonymous.status).toBe(401)
+      expect(await anonymous.json()).toEqual({
+        error: 'Sign in to use the guide.',
+      })
+      verdict.current = { signedIn: true, authorized: false }
+      const ungranted = await ask()
+      expect(ungranted.status).toBe(403)
+      expect(await ungranted.json()).toEqual({
+        error: 'This account does not have the guide.',
+      })
+      // The provider is never asked on behalf of either.
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
-  it('throttles sign-in through the platform counter when it is bound', async () => {
-    const limit = vi.fn(async () => ({ success: false }))
+  it('answers 503 when the accounts behind the grant cannot be reached', async () => {
+    verdict.current = new AccountUnavailableError('backend-500')
     const response = await serveTour(
-      post('/api/tour/login', { password: PASSWORD }),
-      env({ TOUR_LOGIN_LIMIT: { limit } } as unknown as Partial<Env>),
+      post('/api/tour/sessions', { voice: 'marin', sdp: 'offer', scene: 'x' }),
+      env(),
     )
-    expect(response.status).toBe(429)
-    expect(limit).toHaveBeenCalledOnce()
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'The guide is unavailable.',
+    })
   })
 
-  it('creates a session only for a signed-in browser, with the authored configuration', async () => {
+  it('creates a session for a granted account, with the authored configuration', async () => {
+    verdict.current = GRANTED
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         Response.json({
@@ -93,37 +139,21 @@ describe('the guide Worker', () => {
     )
     vi.stubGlobal('fetch', fetcher)
     try {
-      const anonymous = await serveTour(
+      const badVoice = await serveTour(
         post('/api/tour/sessions', {
-          voice: 'marin',
+          voice: 'alloy',
           sdp: 'offer',
           scene: 'x',
         }),
         env(),
       )
-      expect(anonymous.status).toBe(401)
-      const cookie = (await loginCookie(PASSWORD, ORIGIN, Date.now())).split(
-        ';',
-      )[0]!
-      const badVoice = await serveTour(
-        post(
-          '/api/tour/sessions',
-          { voice: 'alloy', sdp: 'offer', scene: 'x' },
-          cookie,
-        ),
-        env(),
-      )
       expect(badVoice.status).toBe(400)
       const created = await serveTour(
-        post(
-          '/api/tour/sessions',
-          {
-            voice: 'cedar',
-            sdp: 'offer',
-            scene: 'Current view: Saturn. Local time 21:04.',
-          },
-          cookie,
-        ),
+        post('/api/tour/sessions', {
+          voice: 'cedar',
+          sdp: 'offer',
+          scene: 'Current view: Saturn. Local time 21:04.',
+        }),
         env(),
       )
       expect(created.status).toBe(200)
@@ -188,15 +218,13 @@ describe('the guide Worker', () => {
     )
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      const cookie = (await loginCookie(PASSWORD, ORIGIN, Date.now())).split(
-        ';',
-      )[0]!
+      verdict.current = GRANTED
       const response = await serveTour(
-        post(
-          '/api/tour/sessions',
-          { voice: 'marin', sdp: 'offer', scene: 'x' },
-          cookie,
-        ),
+        post('/api/tour/sessions', {
+          voice: 'marin',
+          sdp: 'offer',
+          scene: 'x',
+        }),
         env(),
       )
       expect(response.status).toBe(503)
@@ -239,15 +267,13 @@ describe('the guide Worker', () => {
     )
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      const cookie = (await loginCookie(PASSWORD, ORIGIN, Date.now())).split(
-        ';',
-      )[0]!
+      verdict.current = GRANTED
       const response = await serveTour(
-        post(
-          '/api/tour/sessions',
-          { voice: 'marin', sdp: 'offer', scene: 'x' },
-          cookie,
-        ),
+        post('/api/tour/sessions', {
+          voice: 'marin',
+          sdp: 'offer',
+          scene: 'x',
+        }),
         env(),
       )
       expect(response.status).toBe(503)
@@ -275,15 +301,13 @@ describe('the guide Worker', () => {
     )
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      const cookie = (await loginCookie(PASSWORD, ORIGIN, Date.now())).split(
-        ';',
-      )[0]!
+      verdict.current = GRANTED
       const response = await serveTour(
-        post(
-          '/api/tour/sessions',
-          { voice: 'marin', sdp: 'offer', scene: 'x' },
-          cookie,
-        ),
+        post('/api/tour/sessions', {
+          voice: 'marin',
+          sdp: 'offer',
+          scene: 'x',
+        }),
         env(),
       )
       expect(response.status).toBe(503)

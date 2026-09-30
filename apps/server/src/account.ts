@@ -1,11 +1,12 @@
-import { verifyToken } from '@clerk/backend'
+import { createClerkClient, verifyToken } from '@clerk/backend'
 import {
+  isClerkAPIResponseError,
   TokenVerificationError,
   TokenVerificationErrorReason,
 } from '@clerk/backend/errors'
 import type { AccountStatus } from '@inertialref/protocol'
+import { logger } from './log.ts'
 import { siteOrigins } from './origins.ts'
-import { log } from './tour/log.ts'
 
 /*
  * Who is asking, as the Worker decides it (docs/hosting.md H-2).
@@ -46,7 +47,7 @@ export interface AccountKeys {
   readonly jwtKey?: string | undefined
 }
 
-const SCOPE = 'server.account'
+const log = logger('server.account')
 
 const UNCONFIGURED: AccountStatus = {
   configured: false,
@@ -116,18 +117,13 @@ export async function identify(
     const reason =
       error instanceof TokenVerificationError ? error.reason : 'unexpected'
     if (reason === 'unexpected' || DEPLOYMENT_FAULTS.has(reason)) {
-      log(
-        'error',
-        'account keys unusable',
-        {
-          reason,
-          error:
-            error instanceof Error
-              ? `${error.name}: ${error.message}`
-              : String(error),
-        },
-        SCOPE,
-      )
+      log('error', 'account keys unusable', {
+        reason,
+        error:
+          error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : String(error),
+      })
       throw new AccountUnavailableError(reason)
     }
     refused(reason)
@@ -143,9 +139,46 @@ export async function identify(
   return { configured: true, signedIn: true, userId: claims.sub }
 }
 
+/**
+ * A user's private metadata, as the instance holds it now.
+ *
+ * Private metadata is the one place a grant can live that the visitor can
+ * neither read nor write: it is not in the session token, not in the user
+ * object the browser sees, and only a secret key can set it. That is what
+ * makes it the right home for an authorization flag set by hand in the
+ * dashboard — and why the answer costs a round trip to Clerk's API instead of
+ * reading a claim. The route that asks is the one that decides what the flags
+ * mean; this only fetches them.
+ *
+ * A user who no longer exists has none. Anything else that goes wrong is the
+ * deployment's, and throws, for the reason `DEPLOYMENT_FAULTS` gives.
+ */
+export async function privateMetadata(
+  userId: string,
+  secretKey: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  try {
+    const user = await createClerkClient({ secretKey }).users.getUser(userId)
+    return user.privateMetadata
+  } catch (error) {
+    if (isClerkAPIResponseError(error) && error.status === 404) return {}
+    const reason = isClerkAPIResponseError(error)
+      ? `backend-${error.status}`
+      : 'backend-unreachable'
+    log('error', 'user lookup failed', {
+      reason,
+      error:
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error),
+    })
+    throw new AccountUnavailableError(reason)
+  }
+}
+
 /** The reason code only. A token is a credential until it expires. */
 function refused(reason: string): void {
-  log('warn', 'account token refused', { reason }, SCOPE)
+  log('warn', 'account token refused', { reason })
 }
 
 /** Longer than any session token Clerk mints; a bound, not a format check. */

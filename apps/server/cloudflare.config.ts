@@ -93,16 +93,18 @@ export default defineConfig({
     env: {
       TOUR_GUIDE_ENABLED: bindings.text('true'),
       OPENAI_API_KEY: bindings.secret(),
-      TOUR_GUIDE_PASSWORD: bindings.secret(),
 
       /*
        * Accounts (`src/account.ts`). The browser signs in against Clerk and
        * presents the session token it was given; these are how the Worker
        * checks one. The secret key alone is enough — it fetches the instance's
-       * signing keys once per isolate. The JWT key is the same instance's PEM
-       * public key and is optional: with it the check makes no network call.
-       * Neither set means the Worker answers every account question with
-       * "not configured", which is what a fork and a keyless `pnpm dev` see.
+       * signing keys once per isolate — and it is also what reads a user's
+       * private metadata, where the guide's grant lives (`src/tour/access.ts`),
+       * so without it the guide is unavailable. The JWT key is the same
+       * instance's PEM public key and is optional: with it the signature check
+       * makes no network call. Neither set means the Worker answers every
+       * account question with "not configured", which is what a fork and a
+       * keyless `pnpm dev` see.
        *
        * The publishable key is not here. It is the browser's, a build variable
        * of the client (`apps/game/.env.example`), and the Worker never needs it
@@ -136,27 +138,14 @@ export default defineConfig({
        */
       CF_VERSION_METADATA: bindings.versionMetadata(),
 
-      /*
-       * The one piece of state the guide keeps, and it is not the Worker's: a
-       * counter the platform holds per key. Sign-in is a shared alpha password
-       * behind a constant-time compare, and without a bound on attempts that
-       * is a password an offline guess list would eventually walk. Ten a
-       * minute per source is generous to a person and useless to a script.
-       * The namespace is any integer unique within the account.
-       */
-      TOUR_LOGIN_LIMIT: bindings.rateLimit({
-        namespace: '1001',
-        simple: { limit: 10, period: 60 },
-      }),
-
       ASSETS: bindings.assets(),
     },
 
     /*
      * No `exports` block, and that is load-bearing twice over. The Worker
-     * implements no Durable Object class: the guide (docs/hosting.md) is two
-     * stateless routes — sign in, and create a voice session from the
-     * browser's SDP offer — because the browser owns its session through its
+     * implements no Durable Object class: the guide (docs/hosting.md) is one
+     * stateless route — create a voice session from the browser's SDP offer,
+     * for an account granted the guide — because the browser owns its session through its
      * own peer connection and executes every tool itself; a server-side object
      * would hold a second copy of state it cannot see. And Cloudflare does not
      * issue version preview URLs for a Worker that implements a Durable Object,
