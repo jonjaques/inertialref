@@ -94,6 +94,13 @@ export interface PanelGroup {
   readonly icon?: LucideIcon
 }
 
+/**
+ * Whether a panel may be drawn at all (`suppressed`). One predicate, because
+ * the menu and `visiblePanels` must never disagree about what is on screen.
+ */
+export const drawn = (panel: DockPanelDefinition): boolean =>
+  panel.suppressed !== true
+
 /** Every panel in every group, in menu order. */
 export const allPanels = (
   groups: readonly PanelGroup[],

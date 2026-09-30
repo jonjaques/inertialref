@@ -1,5 +1,5 @@
 import { Bug } from 'lucide-react'
-import type { DockPanelDefinition, PanelGroup } from './panels.ts'
+import { type DockPanelDefinition, drawn, type PanelGroup } from './panels.ts'
 
 /*
  * How a mode's panels and the author's instruments become one menu.
@@ -83,8 +83,6 @@ export function visiblePanels(
   devOpen: boolean,
 ): WorkspacePanels {
   return groups.flatMap((group) =>
-    group.guarded === true && !devOpen
-      ? []
-      : group.panels.filter((panel) => panel.suppressed !== true),
+    group.guarded === true && !devOpen ? [] : group.panels.filter(drawn),
   )
 }
