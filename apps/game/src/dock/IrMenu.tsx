@@ -17,7 +17,7 @@ import { FOCUS_RING } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
 import { DOCS, HOME, overlayState, SETTINGS } from '../pages/paths.ts'
 import { MenuToggle } from './MenuToggle.tsx'
-import type { PanelGroup } from './panels.ts'
+import { drawn, type PanelGroup } from './panels.ts'
 import type { DockPlacement } from './placement.ts'
 import { PlacementMenu } from './PlacementMenu.tsx'
 import { isOpen, type Workspace } from './useWorkspace.ts'
@@ -170,17 +170,19 @@ export function IrMenu({
                 />
               )}
               {open &&
-                group.panels.map((panel) => (
-                  <MenuToggle
-                    key={panel.id}
-                    icon={panel.icon}
-                    label={panel.title}
-                    hint={panel.hint}
-                    pressed={isOpen(workspace.layout, panel.id)}
-                    onClick={() => workspace.toggle(panel.id)}
-                    side={side}
-                  />
-                ))}
+                group.panels
+                  .filter(drawn)
+                  .map((panel) => (
+                    <MenuToggle
+                      key={panel.id}
+                      icon={panel.icon}
+                      label={panel.title}
+                      hint={panel.hint}
+                      pressed={isOpen(workspace.layout, panel.id)}
+                      onClick={() => workspace.toggle(panel.id)}
+                      side={side}
+                    />
+                  ))}
             </div>
           )
         })}

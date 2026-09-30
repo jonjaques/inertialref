@@ -10783,6 +10783,58 @@ has no credentials for the account; the grant's decision is covered by tests
 against real RS256 tokens and a stubbed user lookup, and the account's
 metadata was read back as `{ tour: true, admin: true }`.
 
+## Clerk's key cache answered to the token's header, and production became the default (29 Sep 2026)
+
+The review of the accounts branch named four things; two were the Worker's.
+
+**`verifyToken` with only the secret key let a visitor choose how often the
+Worker called Clerk.** Read from `@clerk/backend` 3.20.1: the key set is cached
+per module for five minutes, and a token whose `kid` the cache lacks is a fetch
+every time, through `retry`, which makes five attempts over about two seconds
+when the fetch fails. The header is the visitor's to write, so an invented
+`kid` made every request a call to Clerk's API — five, while Clerk was
+failing — against a rate limit the whole instance shares. The same cache empties itself when it expires, before
+refetching, so a Clerk outage would have signed out every visitor five minutes
+in, keys verified a second earlier included. The Worker holds the key set
+itself now (`apps/server/src/account.ts`): fresh for five minutes, a missing
+`kid` refetched at most once a minute, a held key served through failed
+refreshes for an hour and refused after. It checks the token with `verifyJwt`,
+which is what `verifyToken` calls once it has a key; `verifyToken`'s only other
+check refuses machine tokens by a header category constant, and a required
+`sid` does the same job from a documented claim. Removing the once-a-minute
+floor fails two tests — the invented `kid` one and the outage one, which each
+count calls. The route a socket will take is the same verdict on a bare token,
+`verifySession`, and the design for a connection that outlives a sixty-second
+token is in ADR-0048: the token rides on the client's own traffic, and nothing
+wakes a hibernating authority to check it.
+
+Grants are held a minute per user, so the capabilities check and the session
+request after it cost one lookup, and two rate-limit bindings bound what a
+script can spend — per address on the account routes, per account on guide
+sessions. `cf previews deploy` has no dry run, so whether a Worker Preview
+upload accepts rate-limit bindings is first answered by the Workers Builds
+check on the branch.
+
+**A shared fetch belonged to the request that started it.** In workerd a
+canceled request's continuations are dropped, so a key-set fetch whose visitor
+walked away would never settle, and every later check awaiting it would wait
+until the isolate was recycled. A fetch pending longer than the once-a-minute
+floor is abandoned and the next request starts its own; the abandoned one
+writes nothing if it ever returns. That follows from how workerd treats a
+canceled request's I/O and is not reproduced in workerd — the Node suite
+covers a fetch that never settles. The rate-limit binding fails open with a
+log line: it runs ahead of every account and guide route, and a throw there
+was a Worker exception on each of them. An IPv6 caller is counted by its /64,
+the prefix one subscriber controls.
+
+**Production was the evaluation a deploy had to ask for.** The flags that
+switch the guide and accounts off in production keyed on
+`mode === 'production'`, so a deploy command that lost `--mode production` —
+a dashboard edit, a bare `cf deploy` — would have shipped both on. The config
+now treats anything that is neither a preview nor `--mode development` as
+production; `pnpm dev:server` and `pnpm preview` pass the flag, and a `cf dev`
+started by hand without it answers with both off.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

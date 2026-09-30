@@ -18,22 +18,41 @@ export default defineConfig(({ isPreview, mode }) => {
    * Which of the three places this is being evaluated for, because the flags
    * below differ between them and `cf` gives the config no other way to vary.
    *
-   *   production  `cf deploy --mode production` — the `deploy` script, run by
-   *               the `main` build trigger.
    *   previews    `cf previews deploy` — Worker Previews, one per branch; `cf`
    *               evaluates the config with `isPreview`.
-   *   development `cf dev`, under `pnpm dev`: neither, and treated like a
-   *               preview.
+   *   development `cf dev --mode development`, which `pnpm dev:server` and
+   *               `pnpm preview` run. Treated like a preview.
+   *   production  everything else — `cf deploy --mode production`, the
+   *               `deploy` script the `main` build trigger runs, and equally
+   *               a bare `cf deploy` or a build command edited in the
+   *               dashboard.
+   *
+   * Production is the default because it is the side that is safe to be
+   * wrong on. A deploy that lost its `--mode` and came out as development
+   * would ship the guide and accounts on to production with nobody asking; a
+   * local server that lost it comes out with both off, which is a missing
+   * feature on one machine and says so.
    *
    * Plain-text variables are declared here rather than set in the dashboard,
    * and it is not a preference. `cf` has no `keep_vars`: a deploy replaces the
-   * Worker's variables with the ones declared, and a CI upload refuses outright
-   * when the dashboard holds one this file does not ("Aborting the upload
-   * operation because of conflicts"). Secrets are the other way round — never
-   * declared with a value, set per environment in the dashboard (Production,
-   * and Previews Base for previews), and never removed by a deploy.
+   * Worker's variables with the ones declared. Secrets are the other way round
+   * — never declared with a value, never removed by a deploy, and set per
+   * environment: Production's from the command line, Previews Base's in the
+   * dashboard.
+   *
+   * The production Worker is never changed from the dashboard — not a
+   * variable, a secret, nor anything else. While its latest change came from
+   * there, `cf deploy` compares the dashboard's configuration with this file's
+   * in Wrangler's strict mode, which it always uses and has no flag to relax,
+   * and in a build any difference that would remove something aborts the
+   * upload ("Aborting the upload operation because of conflicts"; the
+   * `--strict` it says to drop is not a flag `cf deploy` takes). There always
+   * is one: the dashboard reports each custom domain's route with `zone_name`,
+   * `enabled` and `previews_enabled`, which no local configuration produces,
+   * so one dashboard change refuses every build after it however closely the
+   * rest matches. docs/hosting.md says what does not end it.
    */
-  const production = !isPreview && mode === 'production'
+  const production = !isPreview && mode !== 'development'
   const flag = (on: boolean) => bindings.text(on ? 'true' : 'false')
 
   return {
@@ -122,9 +141,11 @@ export default defineConfig(({ isPreview, mode }) => {
 
       env: {
         /*
-         * The two switches, off in production and on everywhere else. Turning
-         * either on in production is a change to this file, reviewed like any
-         * other — a dashboard edit is overwritten by the next deploy.
+         * The two switches, on in previews and under `--mode development` and
+         * off in every other evaluation (`production` above). Turning either
+         * on in production is a change to this file, reviewed like any other —
+         * a dashboard edit is no way round that, and stops the next deploy
+         * from running at all (above).
          *
          *   TOUR_GUIDE_ENABLED  the Planetarium guide (`src/tour/routes.ts`).
          *   CLERK_ENABLED       accounts on the Worker (`src/account.ts`); off, it
@@ -155,6 +176,29 @@ export default defineConfig(({ isPreview, mode }) => {
          * (`apps/game/.env.example`).
          */
         CLERK_SECRET_KEY: bindings.secret(),
+
+        /*
+         * Allowances (`src/limits.ts`). Counted per location and settled
+         * eventually, so each is a bound on a script, not a meter on a person.
+         * A namespace is any integer unique within the account.
+         *
+         *   ACCOUNT_LIMIT        per address, across `/api/account` and
+         *                        `/api/tour/*`: every one asks who is calling,
+         *                        and Clerk's API rate-limits the instance as a
+         *                        whole.
+         *   GUIDE_SESSION_LIMIT  per account, on creating a guide session:
+         *                        each is minutes of the OpenAI project's
+         *                        budget, and a granted token is the one caller
+         *                        every other check admits.
+         */
+        ACCOUNT_LIMIT: bindings.rateLimit({
+          namespace: '1002',
+          simple: { limit: 120, period: 60 },
+        }),
+        GUIDE_SESSION_LIMIT: bindings.rateLimit({
+          namespace: '1003',
+          simple: { limit: 6, period: 60 },
+        }),
 
         /*
          * The site's object storage (docs/hosting.md H-8).

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAccount } from '../account/accounts.ts'
 import { sessionHeaders } from '../account/token.ts'
+import { type GuideCapabilities, readCapabilities } from './capabilities.ts'
 
 /*
  * Whether the planetarium offers the guide to whoever is signed in.
@@ -19,18 +20,22 @@ import { sessionHeaders } from '../account/token.ts'
  * and the runtime, its media and its timers load only when the panel opens.
  */
 
-/** Whether the guide's panel belongs in this visitor's menu. */
-export function useGuideAccess(): boolean {
+/**
+ * The Worker's answer for whoever is signed in, or `null` while there is
+ * nobody to ask about or no answer yet. `grantsGuide` reads it; the guide's
+ * runtime adopts it rather than asking again.
+ */
+export function useGuideAccess(): GuideCapabilities | null {
   const { userId } = useAccount()
   const [answer, setAnswer] = useState<{
     readonly userId: string
-    readonly granted: boolean
+    readonly capabilities: GuideCapabilities | null
   } | null>(null)
   useEffect(() => {
     if (userId === null) return
     let live = true
-    void askWorker().then((granted) => {
-      if (live) setAnswer({ userId, granted })
+    void askWorker().then((capabilities) => {
+      if (live) setAnswer({ userId, capabilities })
     })
     return () => {
       live = false
@@ -38,24 +43,21 @@ export function useGuideAccess(): boolean {
   }, [userId])
   // Compared rather than cleared, so an answer about the previous account is
   // never read as one about this one.
-  return userId !== null && answer?.userId === userId && answer.granted
+  return userId !== null && answer?.userId === userId
+    ? answer.capabilities
+    : null
 }
 
-async function askWorker(): Promise<boolean> {
+async function askWorker(): Promise<GuideCapabilities | null> {
   try {
     const headers = await sessionHeaders()
-    if (!headers.has('Authorization')) return false
+    if (!headers.has('Authorization')) return null
     const response = await fetch('/api/tour/capabilities', {
       headers,
       cache: 'no-store',
     })
-    if (!response.ok) return false
-    const body = (await response.json()) as {
-      available?: unknown
-      authorized?: unknown
-    }
-    return body.available === true && body.authorized === true
+    return response.ok ? readCapabilities(await response.json()) : null
   } catch {
-    return false
+    return null
   }
 }

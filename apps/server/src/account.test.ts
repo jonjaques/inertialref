@@ -1,6 +1,12 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { accountKeys, AccountUnavailableError, identify } from './account.ts'
+import {
+  accountKeys,
+  AccountUnavailableError,
+  identify,
+  verifySession,
+} from './account.ts'
 import { now, session, SITE, type Signer, signer } from './testTokens.ts'
+import type { AccountKeys } from './account.ts'
 
 /*
  * Real tokens, signed and checked, with no network.
@@ -16,10 +22,12 @@ const request = (url: string, headers: Record<string, string> = {}): Request =>
 let issuer: Signer
 let stranger: Signer
 beforeAll(async () => {
-  ;[issuer, stranger] = await Promise.all([signer(), signer()])
+  ;[issuer, stranger] = await Promise.all([signer(), signer('ins_stranger')])
 })
 afterEach(() => {
   vi.unstubAllGlobals()
+  // A silenced console left over from one case hides the next one's records.
+  vi.restoreAllMocks()
 })
 
 describe('identify', () => {
@@ -68,6 +76,12 @@ describe('identify', () => {
     [
       'for a session still pending its tasks',
       () => issuer.sign(session({ sts: 'pending' })),
+    ],
+    [
+      // A machine token: the instance's key signs those too, and there is
+      // no session behind one to sign out of.
+      'that names no session',
+      () => issuer.sign(session({ sid: undefined, sub: 'mch_test' })),
     ],
   ])('refuses a token %s', async (_, mint) => {
     const status = await identify(
@@ -132,26 +146,155 @@ describe('identify', () => {
   it('reports a deployment that cannot load its keys instead of signing everyone out', async () => {
     // The secret-key path fetches the instance's key set; a Clerk outage or a
     // revoked secret must read as the server's fault, not the visitor's.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response('unavailable', { status: 503 })),
+    const fetcher = vi.fn(
+      async () => new Response('unavailable', { status: 503 }),
     )
+    vi.stubGlobal('fetch', fetcher)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const token = await issuer.sign(session())
-    // Clerk retries the key-set fetch five times with a backoff of about two
-    // seconds in all; the fake clock spends it without the suite waiting.
-    vi.useFakeTimers({ toFake: ['setTimeout'] })
-    try {
-      const unavailable = expect(
-        identify(
-          request(`${SITE}/api/account`, { authorization: `Bearer ${token}` }),
-          { secretKey: 'sk_test_unusable' },
-        ),
-      ).rejects.toBeInstanceOf(AccountUnavailableError)
-      await vi.runAllTimersAsync()
-      await unavailable
-    } finally {
-      vi.useRealTimers()
-    }
+    const ask = () =>
+      identify(
+        request(`${SITE}/api/account`, { authorization: `Bearer ${token}` }),
+        { secretKey: 'sk_test_unusable' },
+      )
+    await expect(ask()).rejects.toBeInstanceOf(AccountUnavailableError)
+    // And the next visitor within the minute is told the same without a
+    // second call: an outage is not a reason to call Clerk faster.
+    await expect(ask()).rejects.toBeInstanceOf(AccountUnavailableError)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('verifySession', () => {
+  it('says who, which session, and until when', async () => {
+    const exp = now() + 60
+    const token = await issuer.sign(session({ exp }))
+    expect(await verifySession(token, { jwtKey: issuer.pem }, [SITE])).toEqual({
+      userId: 'user_2test',
+      sessionId: 'sess_test',
+      expiresAt: exp,
+    })
+  })
+})
+
+describe('the key set', () => {
+  /** Clerk's `GET /v1/jwks`, answering with `keys` until told otherwise. */
+  function clerkWithKeys(...keys: Signer[]) {
+    const state = { keys, status: 200 }
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('https://api.clerk.com/v1/jwks')
+      return state.status === 200
+        ? Response.json({ keys: state.keys.map((signer) => signer.jwk) })
+        : Response.json(
+            { errors: [{ code: 'internal', message: 'unavailable' }] },
+            { status: state.status },
+          )
+    })
+    vi.stubGlobal('fetch', fetcher)
+    return { fetcher, state }
+  }
+
+  /** A fresh instance per test: the set is held per secret key, per isolate. */
+  let instances = 0
+  const instance = (): AccountKeys => ({
+    secretKey: `sk_test_keys_${++instances}`,
+  })
+  const signedIn = async (keys: AccountKeys, token: string) =>
+    (
+      await identify(
+        request(`${SITE}/api/account`, { authorization: `Bearer ${token}` }),
+        keys,
+      )
+    ).signedIn
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('is fetched once and then verifies with no call to Clerk', async () => {
+    const { fetcher } = clerkWithKeys(stranger, issuer)
+    const keys = instance()
+    const token = await issuer.sign(session())
+    const verdicts = await Promise.all(
+      Array.from({ length: 4 }, () => signedIn(keys, token)),
+    )
+    expect(verdicts).toEqual([true, true, true, true])
+    expect(await signedIn(keys, token)).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('refetches for a key it has not seen at most once a minute', async () => {
+    // Under Clerk's own cache an invented `kid` is a key-set fetch per request.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { fetcher, state } = clerkWithKeys(issuer)
+    const keys = instance()
+    expect(await signedIn(keys, await issuer.sign(session()))).toBe(true)
+    const rotated = await signer('ins_rotated')
+    const next = await rotated.sign(session())
+    for (let i = 0; i < 5; i++) expect(await signedIn(keys, next)).toBe(false)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    // A minute on, the instance has rotated to it, and the first token that
+    // names it is the one refetch.
+    state.keys = [issuer, rotated]
+    vi.advanceTimersByTime(60_000)
+    expect(await signedIn(keys, next)).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps verifying with a held key while Clerk is down, for an hour', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { fetcher, state } = clerkWithKeys(issuer)
+    const keys = instance()
+    expect(await signedIn(keys, await issuer.sign(session()))).toBe(true)
+    state.status = 503
+    // Past the five fresh minutes the refresh fails, and the key still serves.
+    vi.advanceTimersByTime(6 * 60_000)
+    expect(await signedIn(keys, await issuer.sign(session()))).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    // An hour after the last confirmation, a check nobody could confirm
+    // fails closed.
+    vi.advanceTimersByTime(55 * 60_000)
+    await expect(
+      signedIn(keys, await issuer.sign(session())),
+    ).rejects.toBeInstanceOf(AccountUnavailableError)
+    // Clerk back: the next refresh restores it.
+    state.status = 200
+    vi.advanceTimersByTime(60_000)
+    expect(await signedIn(keys, await issuer.sign(session()))).toBe(true)
+  })
+
+  it('abandons a fetch that never settles, a minute on', async () => {
+    // In workerd a shared fetch belongs to the request that started it; when
+    // that request is canceled the fetch never settles, and waiting on it
+    // for good would wedge every later check in the isolate.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const answered = Response.json({ keys: [issuer.jwk] })
+    const fetcher = vi
+      .fn<(input: RequestInfo | URL) => Promise<Response>>()
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockImplementation(async () => answered.clone())
+    vi.stubGlobal('fetch', fetcher)
+    const keys = instance()
+    const token = await issuer.sign(session({ exp: now() + 3600 }))
+    void signedIn(keys, token)
+    vi.advanceTimersByTime(60_000)
+    expect(await signedIn(keys, token)).toBe(true)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('drops a key the instance stops listing', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { state } = clerkWithKeys(issuer)
+    const keys = instance()
+    const token = await issuer.sign(session({ exp: now() + 3600 }))
+    expect(await signedIn(keys, token)).toBe(true)
+    state.keys = [stranger]
+    vi.advanceTimersByTime(5 * 60_000)
+    expect(await signedIn(keys, token)).toBe(false)
   })
 })
 

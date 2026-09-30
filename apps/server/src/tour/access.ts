@@ -16,9 +16,11 @@ import { type AccountKeys, identify, privateMetadata } from '../account.ts'
 export interface GuideAccess {
   readonly signedIn: boolean
   readonly authorized: boolean
+  /** Who, when signed in: what a per-account allowance is keyed on. */
+  readonly userId: string | null
 }
 
-const NOBODY: GuideAccess = { signedIn: false, authorized: false }
+const NOBODY: GuideAccess = { signedIn: false, authorized: false, userId: null }
 
 /** The two flags that grant the guide. Strictly `true`: a string is not a grant. */
 export const grantsGuide = (flags: Readonly<Record<string, unknown>>) =>
@@ -41,5 +43,6 @@ export async function guideAccess(
   return {
     signedIn: true,
     authorized: grantsGuide(await privateMetadata(status.userId, secretKey)),
+    userId: status.userId,
   }
 }

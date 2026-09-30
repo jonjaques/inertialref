@@ -6,6 +6,7 @@ import type {
 } from '@inertialref/devtools'
 import { NO_GUIDE_USAGE } from '@inertialref/devtools'
 import type { GuideCall, GuideToolOutput } from '@inertialref/protocol'
+import { type GuideCapabilities, readCapabilities } from './capabilities.ts'
 import { SpeechClock } from './clock.ts'
 import type { GuideArrival, SceneFacts } from './executor.ts'
 import { GuideLoop } from './loop.ts'
@@ -41,20 +42,6 @@ import {
  * and then for the declared seconds, and only then a prompt to continue. A
  * takeover, a pause, a new delegation or a new move ends the wait.
  */
-
-/**
- * What the Worker says about the guide, for whoever is asking.
- *
- * `authorized` is the Worker's verdict and the only one that counts: the grant
- * lives in the account's private metadata, which the browser cannot read.
- */
-export interface GuideCapabilities {
-  readonly available: boolean
-  readonly signedIn: boolean
-  readonly authorized: boolean
-  readonly voices: readonly string[]
-  readonly reason: string | null
-}
 
 export interface GuideSnapshot {
   readonly capabilities: GuideCapabilities | null
@@ -227,24 +214,19 @@ export class GuideRuntime {
   inspect(): Promise<void> {
     if (this.#inspect !== null) return this.#inspect
     /*
-     * Every write below first checks that this is still the current read. A
-     * `refresh` replaces it — somebody signed in, out, or as somebody else —
-     * and the read it replaced is about whoever was asking then: landing
-     * late, it would put their verdict back over the new one, and failing
-     * late it would drop the new read from `#inspect`. A superseded read
-     * settles with the current one instead, so a `start` already waiting on
-     * it reads the verdict that replaced it.
+     * Every write below first checks that this is still the current read. An
+     * `adopt` replaces it — the planetarium's access check answered for
+     * somebody who signed in, out, or as somebody else — and the read it
+     * replaced is about whoever was asking then: landing late, it would put
+     * their verdict back over the new one, and failing late it would drop the
+     * new read from `#inspect`. A superseded read settles with the current one
+     * instead, so a `start` already waiting on it reads the verdict that
+     * replaced it.
      */
     const inspection: Promise<void> = this.#request('/api/tour/capabilities')
       .then(async (response) => {
-        const value = (await response.json()) as GuideCapabilities
-        if (
-          !value ||
-          typeof value.available !== 'boolean' ||
-          typeof value.signedIn !== 'boolean' ||
-          typeof value.authorized !== 'boolean' ||
-          !Array.isArray(value.voices)
-        )
+        const value = readCapabilities(await response.json())
+        if (value === null)
           throw new Error('Guide availability could not be read.')
         if (this.#inspect !== inspection) return this.#inspect ?? undefined
         this.#update({ capabilities: value })
@@ -264,11 +246,22 @@ export class GuideRuntime {
     return inspection
   }
 
-  /** Ask again: somebody signed in, out, or as somebody else. */
-  refresh(): Promise<void> {
-    this.#inspect = null
-    this.#update({ message: null })
-    return this.inspect()
+  /**
+   * Take an answer the planetarium's access check already has, instead of
+   * asking the Worker again.
+   *
+   * The check asks once per signed-in user, and the panel mounts every time it
+   * is opened, docked or floated; asking again on each of those costs the
+   * Worker a user lookup for an answer that has not changed, and an identical
+   * answer is left alone so a message on screen survives a remount. A new
+   * answer clears the message: it was about the answer it replaces — the
+   * previous account's refusal, or a read that failed — and would otherwise
+   * greet whoever signed in next.
+   */
+  adopt(capabilities: GuideCapabilities): void {
+    if (this.#snapshot.capabilities === capabilities) return
+    this.#inspect = Promise.resolve()
+    this.#update({ capabilities, message: null })
   }
 
   /** Request the microphone, post the offer, greet. */

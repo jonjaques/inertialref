@@ -1,5 +1,6 @@
 import { GUIDE_VOICES, isGuideVoice } from '@inertialref/protocol'
 import { accountKeys, AccountUnavailableError } from '../account.ts'
+import { allowed, RETRY_AFTER } from '../limits.ts'
 import { logger, span } from '../log.ts'
 import { allowedOrigin } from '../origins.ts'
 import { guideAccess } from './access.ts'
@@ -91,6 +92,20 @@ async function handle(
     if (!access.authorized)
       throw new TourHttpError('This account does not have the guide.', 403)
     if (path === '/api/tour/sessions' && request.method === 'POST') {
+      /*
+       * Per account, after the grant: a session is minutes of the OpenAI
+       * project's budget, and a granted account's token in a script is the
+       * one caller that clears every check above. A person starting, pausing
+       * and restarting the guide stays far inside it.
+       */
+      if (
+        access.userId !== null &&
+        !(await allowed(env.GUIDE_SESSION_LIMIT, access.userId))
+      )
+        throw new TourHttpError(
+          'Too many guide sessions. Try again in a minute.',
+          429,
+        )
       const input = record(await readJson(request, 80_000), [
         'voice',
         'sdp',
@@ -125,7 +140,11 @@ async function handle(
         status: error.status,
         reason: error.message,
       })
-      return tourJson({ error: error.message }, error.status)
+      return tourJson(
+        { error: error.message },
+        error.status,
+        error.status === 429 ? { 'retry-after': RETRY_AFTER } : undefined,
+      )
     }
     if (error instanceof AccountUnavailableError) {
       // Logged with its reason by the account module.

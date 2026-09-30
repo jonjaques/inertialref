@@ -1,10 +1,9 @@
-import { createClerkClient, verifyToken } from '@clerk/backend'
+import { createClerkClient } from '@clerk/backend'
 import {
   isClerkAPIResponseError,
   TokenVerificationError,
-  TokenVerificationErrorReason,
 } from '@clerk/backend/errors'
-import { decodeJwt } from '@clerk/backend/jwt'
+import { decodeJwt, verifyJwt } from '@clerk/backend/jwt'
 import type { AccountStatus } from '@inertialref/protocol'
 import { logger } from './log.ts'
 import { siteOrigins } from './origins.ts'
@@ -27,18 +26,27 @@ import { siteOrigins } from './origins.ts'
  * tab throttles, while `getToken()` refreshes on demand, so a tab left open
  * overnight is signed in the moment it asks rather than one refresh later.
  *
- * **Verified here, not by `authenticateRequest`.** That call is Clerk's answer
- * for a server that renders documents: it reads the cookie, compares it with
- * `__client_uat`, and answers a stale one with a redirect handshake. None of
- * that applies to a JSON endpoint behind `runWorkerFirst`, and all of it needs
- * the publishable key as well. `verifyToken` is the part underneath it.
+ * **Verified here, not by `authenticateRequest`, and not by `verifyToken`
+ * either.** The first is Clerk's answer for a server that renders documents:
+ * it reads the cookie, compares it with `__client_uat`, and answers a stale
+ * one with a redirect handshake. None of that applies to a JSON endpoint
+ * behind `runWorkerFirst`. The second is the part underneath it, and its key
+ * handling is wrong for this Worker in three ways `signingKey` below spells
+ * out. What is left once the key is in hand is `verifyJwt` — the function
+ * `verifyToken` itself ends in — and one claim check it adds, made here.
+ *
+ * **Every check after the first is arithmetic.** The key set is held for the
+ * isolate and a grant for a minute, so the hot path of a request makes no call
+ * to Clerk. That is what lets the same verdict serve a socket that re-presents
+ * a fresh token every minute for as long as a player is online (ADR-0048): the
+ * socket calls `verifySession` with each one, and each costs a signature check.
  */
 
 /** The two ways this deployment can check a signature, from the Worker's secrets. */
 export interface AccountKeys {
   /**
    * `CLERK_SECRET_KEY`. Enough on its own: the instance's signing keys are
-   * fetched with it once per isolate and cached.
+   * fetched with it and held for the isolate (`signingKey`).
    */
   readonly secretKey?: string | undefined
   /**
@@ -80,24 +88,105 @@ const SIGNED_OUT: AccountStatus = {
 }
 
 /**
- * Failures that are the deployment's, not the visitor's.
+ * The deployment could not reach a verdict — no keys, or Clerk unreachable
+ * with nothing held.
  *
- * Answering these as "signed out" would send a visitor with a perfectly good
- * session round a sign-in loop that cannot fix a secret nobody set. They throw,
+ * Answering that as "signed out" would send a visitor with a perfectly good
+ * session round a sign-in loop that cannot fix a secret nobody set. It throws,
  * and the route answers 503 — the same split the guide makes between a 4xx
  * and a misconfigured provider.
  */
-const DEPLOYMENT_FAULTS: ReadonlySet<string> = new Set([
-  TokenVerificationErrorReason.InvalidSecretKey,
-  TokenVerificationErrorReason.LocalJWKMissing,
-  TokenVerificationErrorReason.RemoteJWKFailedToLoad,
-  TokenVerificationErrorReason.RemoteJWKInvalid,
-  TokenVerificationErrorReason.RemoteJWKMissing,
-  TokenVerificationErrorReason.JWKFailedToResolve,
-])
-
 export class AccountUnavailableError extends Error {}
 
+/** A session token the Worker accepted: who, which session, and until when. */
+export interface Session {
+  readonly userId: string
+  /** Clerk's session id, which is what signing out elsewhere revokes. */
+  readonly sessionId: string
+  /**
+   * When the token stops being evidence, in seconds since the epoch. A
+   * connection that outlives it needs a fresh token before then.
+   */
+  readonly expiresAt: number
+}
+
+/**
+ * The verdict on one session token, for a page on one of `parties`.
+ *
+ * `null` is a token that proves nobody — forged, expired, for another site,
+ * signed by a key this instance does not hold, or a session still pending its
+ * tasks — and the reason is logged. A throw is `AccountUnavailableError`.
+ * This takes the bare token so that a caller with no request to read it from,
+ * a socket re-presenting one, gets the same verdict as a request does.
+ */
+export async function verifySession(
+  token: string,
+  keys: AccountKeys,
+  parties: readonly string[],
+): Promise<Session | null> {
+  /*
+   * An empty list is not "no restriction" here, though it is to Clerk: its
+   * check skips the claim entirely when there are no parties. A request to a
+   * host this Worker does not recognize has no page it could have come from.
+   */
+  if (parties.length === 0) return refused('unrecognized-host')
+
+  /*
+   * The token's shape is judged before anything else sees it. Clerk
+   * destructures the header ahead of its own error handling, so a header that
+   * decodes to JSON `null` escapes as a `TypeError` — which would read as the
+   * deployment's fault, a 503 any visitor could provoke at will. And the key
+   * id is what the key set is looked up by.
+   */
+  const kid = keyId(token)
+  if (kid === null) return refused('token-malformed')
+
+  let key: JsonWebKey | string | null
+  if (keys.jwtKey) key = keys.jwtKey
+  else if (keys.secretKey) key = await signingKey(kid, keys.secretKey)
+  else throw new AccountUnavailableError('unconfigured')
+  if (key === null) return refused('jwk-kid-mismatch')
+
+  let claims: Readonly<Record<string, unknown>>
+  try {
+    claims = await verifyJwt(token, {
+      key,
+      authorizedParties: [...parties],
+    })
+  } catch (error) {
+    /*
+     * The package's exports throw where its internals return a result. Every
+     * `TokenVerificationError` from here is a verdict on the token — the key
+     * is already in hand — and anything else is not, so it is the
+     * deployment's, whatever its class.
+     */
+    if (error instanceof TokenVerificationError) return refused(error.reason)
+    log('error', 'token check failed', { error: errorText(error) })
+    throw new AccountUnavailableError('unexpected')
+  }
+
+  /*
+   * A session token names its session. That is the check `verifyToken` makes
+   * and `verifyJwt` does not: the instance's key also signs machine tokens,
+   * whose subject is a machine and which carry no session to revoke.
+   */
+  const { sub, sid, exp, sts } = claims
+  if (
+    typeof sub !== 'string' ||
+    typeof sid !== 'string' ||
+    typeof exp !== 'number'
+  )
+    return refused('not-a-session')
+  /*
+   * A pending session has signed in and not finished what the instance
+   * requires of it — choosing an organization, say. Clerk's own request
+   * check treats it as signed out by default, and so does this.
+   */
+  if (sts === 'pending') return refused('session-pending')
+  return { userId: sub, sessionId: sid, expiresAt: exp }
+}
+
+/** Who a request is from, by the bearer token it carries. */
 export async function identify(
   request: Request,
   keys: AccountKeys,
@@ -105,74 +194,136 @@ export async function identify(
   if (!keys.secretKey && !keys.jwtKey) return UNCONFIGURED
   const token = bearer(request)
   if (token === null) return SIGNED_OUT
+  const session = await verifySession(token, keys, siteOrigins(request))
+  return session === null
+    ? SIGNED_OUT
+    : { configured: true, signedIn: true, userId: session.userId }
+}
 
-  /*
-   * An empty list is not "no restriction" here, though it is to Clerk: its
-   * check skips the claim entirely when there are no parties. A request to a
-   * host this Worker does not recognize has no page it could have come from.
-   */
-  const parties = siteOrigins(request)
-  if (parties.length === 0) {
-    refused('unrecognized-host')
-    return SIGNED_OUT
-  }
+/*
+ * The instance's signing keys, held for the isolate.
+ *
+ * `verifyToken` given the secret key fetches the key set itself and keeps it
+ * five minutes, and three things about that are wrong here. A token naming a
+ * key the cache lacks is a fetch every time, so an invented `kid` makes every
+ * request a call to Clerk — five of them over two seconds while Clerk is
+ * failing. An expired cache is emptied before the refetch, so a Clerk outage
+ * signs out every visitor five minutes in, including keys verified a second
+ * ago. And a socket re-presenting a token every minute for hours should pay a
+ * signature check each time, not a round trip.
+ *
+ * So the set is fetched here, one request at a time per isolate:
+ *
+ *   fresh   A key younger than `KEYS_FRESH_MS` is used with no I/O. Five
+ *           minutes is Clerk's own window, so a signing key removed from the
+ *           instance is trusted no longer than the SDK would trust it.
+ *   stale   An older one is refreshed first. If the refresh fails the held
+ *           key is used anyway, until `KEYS_STALE_MS` — past that, a check
+ *           Clerk could not confirm fails closed.
+ *   unknown A `kid` the set lacks is one refetch, then a refusal. Refetches
+ *           and retries after a failure are at most one per `KEYS_RETRY_MS`,
+ *           so no visitor can make this Worker call Clerk faster than that.
+ *
+ * A fetch in flight is shared, and a shared promise is the other request's
+ * I/O: if the request that started it is canceled — its visitor gone, a
+ * limit hit — workerd drops its continuations, the fetch never settles, and
+ * nothing clears `pending`. So a fetch pending longer than `KEYS_RETRY_MS` is
+ * abandoned and the next request starts its own, which keeps the rate bound
+ * and stops one canceled request wedging every check in the isolate.
+ */
+const KEYS_FRESH_MS = 5 * 60_000
+const KEYS_STALE_MS = 60 * 60_000
+const KEYS_RETRY_MS = 60_000
 
-  /*
-   * The token's shape is judged here, before Clerk sees it. `verifyToken`
-   * destructures the header ahead of its own error handling, so a header that
-   * decodes to JSON `null` escapes as a `TypeError` — which the catch below
-   * cannot tell from a key set that failed to parse, and would answer with a
-   * 503 and an error record that any visitor could provoke at will. A header
-   * with no `kid` is refused here too, rather than costing a key-set fetch.
-   */
-  if (!namesKey(token)) {
-    refused('token-malformed')
-    return SIGNED_OUT
-  }
+interface KeySet {
+  keys: ReadonlyMap<string, JsonWebKey>
+  /** The last fetch that succeeded; `-Infinity` before the first. */
+  loadedAt: number
+  /** The last fetch, whichever way it went. */
+  attemptedAt: number
+  /** Why the last fetch failed, or `null` if it did not. */
+  failure: string | null
+  pending: Promise<void> | null
+}
 
-  let claims: Awaited<ReturnType<typeof verifyToken>>
-  try {
-    claims = await verifyToken(token, {
-      ...(keys.jwtKey
-        ? { jwtKey: keys.jwtKey }
-        : { secretKey: keys.secretKey }),
-      authorizedParties: [...parties],
-    })
-  } catch (error) {
-    /*
-     * The package's root export throws where its internal one returns a
-     * result, and not only `TokenVerificationError`: a key-set fetch that
-     * comes back as an HTML error page surfaces as the `SyntaxError` from
-     * parsing it. Anything that is not a verdict on the token is therefore
-     * the deployment's fault, whatever its class.
-     */
-    const reason =
-      error instanceof TokenVerificationError ? error.reason : 'unexpected'
-    if (reason === 'unexpected' || DEPLOYMENT_FAULTS.has(reason)) {
-      log('error', 'account keys unusable', {
-        reason,
-        error:
-          error instanceof Error
-            ? `${error.name}: ${error.message}`
-            : String(error),
-      })
-      throw new AccountUnavailableError(reason)
+/** Start a fetch of the set, shared by every request until it settles. */
+function reload(set: KeySet, secretKey: string): void {
+  // `finally` runs a microtask later, after `loading` is assigned, so it can
+  // tell its own fetch from one that replaced it after being abandoned.
+  const loading: Promise<void> = load(set, secretKey).finally(() => {
+    if (set.pending === loading) set.pending = null
+  })
+  set.pending = loading
+}
+
+const keySets = new Map<string, KeySet>()
+
+/**
+ * The key a token names, `null` for one this instance does not have, or a
+ * throw when nobody could say.
+ */
+async function signingKey(
+  kid: string,
+  secretKey: string,
+): Promise<JsonWebKey | null> {
+  let set = keySets.get(secretKey)
+  if (set === undefined) {
+    set = {
+      keys: new Map(),
+      loadedAt: -Infinity,
+      attemptedAt: -Infinity,
+      failure: null,
+      pending: null,
     }
-    refused(reason)
-    return SIGNED_OUT
+    keySets.set(secretKey, set)
   }
+  const held = set.keys.get(kid)
+  if (held !== undefined && Date.now() - set.loadedAt < KEYS_FRESH_MS)
+    return held
+  // A pending fetch older than the floor is abandoned (see above).
+  if (Date.now() - set.attemptedAt >= KEYS_RETRY_MS) reload(set, secretKey)
+  if (set.pending !== null) await set.pending
 
-  /*
-   * A pending session has signed in and not finished what the instance
-   * requires of it — choosing an organization, say. Clerk's own request
-   * check treats it as signed out by default, and so does this.
-   */
-  if (claims.sts === 'pending') return SIGNED_OUT
-  return { configured: true, signedIn: true, userId: claims.sub }
+  const key = set.keys.get(kid)
+  if (key !== undefined) {
+    if (Date.now() - set.loadedAt < KEYS_STALE_MS) return key
+    throw new AccountUnavailableError(set.failure ?? 'keys-expired')
+  }
+  // Not a key of this instance — unless the instance could not be asked.
+  if (set.failure !== null) throw new AccountUnavailableError(set.failure)
+  return null
 }
 
 /**
- * A user's private metadata, as the instance holds it now.
+ * One fetch of the key set. Never throws: the outcome is written to `set` —
+ * unless a later fetch has replaced this one, whose outcome is the current one.
+ */
+async function load(set: KeySet, secretKey: string): Promise<void> {
+  const started = Date.now()
+  set.attemptedAt = started
+  try {
+    const { keys = [] } = await clientFor(secretKey).jwks.getJwks()
+    const held = new Map<string, JsonWebKey>()
+    for (const { kid, kty, alg, n, e } of keys)
+      if (kty === 'RSA') held.set(kid, { kty, alg, n, e })
+    if (held.size === 0) throw new Error('the key set holds no RSA keys')
+    if (set.attemptedAt !== started) return
+    set.keys = held
+    set.loadedAt = Date.now()
+    set.failure = null
+  } catch (error) {
+    if (set.attemptedAt !== started) return
+    set.failure = failureReason('keys', error)
+    log('error', 'signing keys unavailable', {
+      reason: set.failure,
+      held: set.keys.size,
+      error: errorText(error),
+    })
+  }
+}
+
+/**
+ * A user's private metadata, as the instance held it at most a minute ago.
  *
  * Private metadata is the one place a grant can live that the visitor can
  * neither read nor write: it is not in the session token, not in the user
@@ -182,28 +333,56 @@ export async function identify(
  * reading a claim. The route that asks is the one that decides what the flags
  * mean; this only fetches them.
  *
+ * Held for `GRANT_TTL_MS` per user, and concurrent asks share one call. The
+ * capabilities check and the session request arrive seconds apart for the
+ * same person, and a socket re-reads a grant on a cadence rather than per
+ * message; a minute is the revocation delay that buys. What goes wrong is
+ * not held — the next ask asks again.
+ *
  * A user who no longer exists has none. Anything else that goes wrong is the
- * deployment's, and throws, for the reason `DEPLOYMENT_FAULTS` gives.
+ * deployment's, and throws.
  */
-export async function privateMetadata(
+export function privateMetadata(
   userId: string,
   secretKey: string,
-): Promise<Readonly<Record<string, unknown>>> {
+): Promise<Flags> {
+  const key = `${secretKey}\n${userId}`
+  const now = Date.now()
+  const held = grants.get(key)
+  if (held !== undefined && now - held.at < GRANT_TTL_MS) return held.flags
+  // Deleted and set again, so insertion order stays age order and the first
+  // entry is always the one to evict.
+  grants.delete(key)
+  if (grants.size >= GRANT_LIMIT) {
+    const oldest = grants.keys().next()
+    if (oldest.done !== true) grants.delete(oldest.value)
+  }
+  const flags = lookUp(userId, secretKey)
+  grants.set(key, { at: now, flags })
+  void flags.catch(() => {
+    if (grants.get(key)?.flags === flags) grants.delete(key)
+  })
+  return flags
+}
+
+type Flags = Readonly<Record<string, unknown>>
+
+const GRANT_TTL_MS = 60_000
+/** Far above the accounts this alpha has; a bound on memory, not a working set. */
+const GRANT_LIMIT = 1024
+const grants = new Map<
+  string,
+  { readonly at: number; readonly flags: Promise<Flags> }
+>()
+
+async function lookUp(userId: string, secretKey: string): Promise<Flags> {
   try {
     const user = await clientFor(secretKey).users.getUser(userId)
     return user.privateMetadata
   } catch (error) {
     if (isClerkAPIResponseError(error) && error.status === 404) return {}
-    const reason = isClerkAPIResponseError(error)
-      ? `backend-${error.status}`
-      : 'backend-unreachable'
-    log('error', 'user lookup failed', {
-      reason,
-      error:
-        error instanceof Error
-          ? `${error.name}: ${error.message}`
-          : String(error),
-    })
+    const reason = failureReason('backend', error)
+    log('error', 'user lookup failed', { reason, error: errorText(error) })
     throw new AccountUnavailableError(reason)
   }
 }
@@ -225,22 +404,39 @@ function clientFor(secretKey: string): ReturnType<typeof createClerkClient> {
 }
 
 /** The reason code only. A token is a credential until it expires. */
-function refused(reason: string): void {
+function refused(reason: string): null {
   log('warn', 'account token refused', { reason })
+  return null
 }
+
+const errorText = (error: unknown): string =>
+  error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+
+/*
+ * A reason code for a failed call to Clerk. The Backend API client wraps a
+ * network failure in the same `ClerkAPIResponseError` as an HTTP one, with no
+ * status, so the class alone would log `keys-undefined` for an outage.
+ */
+const failureReason = (call: string, error: unknown): string =>
+  isClerkAPIResponseError(error) && typeof error.status === 'number'
+    ? `${call}-${error.status}`
+    : `${call}-unreachable`
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-/** Whether a token decodes to a header that names its key, and to claims. */
-function namesKey(token: string): boolean {
+/** The key a token's header names, if it decodes to a header and claims. */
+function keyId(token: string): string | null {
   try {
     const { header, payload } = decodeJwt(token)
-    return (
-      isRecord(header) && typeof header.kid === 'string' && isRecord(payload)
-    )
+    return isRecord(header) &&
+      typeof header.kid === 'string' &&
+      header.kid !== '' &&
+      isRecord(payload)
+      ? header.kid
+      : null
   } catch {
-    return false
+    return null
   }
 }
 

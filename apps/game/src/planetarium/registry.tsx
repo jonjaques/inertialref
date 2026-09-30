@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { grantsGuide } from '../tour/capabilities.ts'
 import { LazyGuidePanel as GuidePanel } from '../tour/LazyGuidePanel.tsx'
 import { Aperture, Eye, Image, Sun, AudioLines } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
@@ -29,13 +30,6 @@ export function planetariumPanels(
   context: PlanetariumContext,
 ): readonly DockPanelDefinition[] {
   return [
-    /*
-     * Only for an account granted the guide. Absent rather than disabled: it
-     * is a private alpha, and a panel most visitors can never open is a
-     * glyph in their menu that means nothing to them.
-     */
-    ...(context.guideOffered ? [guidePanel(context)] : []),
-
     {
       id: 'catalog',
       title: 'Navigator',
@@ -121,12 +115,21 @@ export function planetariumPanels(
       hint: 'The clock — pause it, warp it, read it',
       render: () => <TimePanel {...context} />,
     },
+    /*
+     * Last, and suppressed for anybody not granted it. A private alpha's panel
+     * is a glyph that means nothing to most visitors, so it is not drawn — but
+     * it stays in the list, where the layout keeps its slot, and at the end of
+     * it, so the number row means the same panels whether or not the guide
+     * has been granted, and does not shift when the Worker's answer arrives.
+     */
+    guidePanel(context),
   ]
 }
 
 function guidePanel(context: PlanetariumContext): DockPanelDefinition {
   return {
     id: 'guide',
+    suppressed: !grantsGuide(context.guideAccess),
     title: 'Guide',
     icon: AudioLines,
     zone: 'right',

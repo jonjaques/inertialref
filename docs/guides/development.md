@@ -366,9 +366,10 @@ settings and the development instance's in Previews Base. The Worker needs
 `CLERK_SECRET_KEY` in the root `.env.local`, which `pnpm dev:server` loads into
 the Worker alone; deployed, each environment holds its own instance's key under
 that name. `CLERK_ENABLED` and `TOUR_GUIDE_ENABLED` are declared in
-`cloudflare.config.ts`, on under `pnpm dev` and in previews and off in
-production, which the `deploy` script's `--mode production` is how the config
-knows. Without the first there is no account badge;
+`cloudflare.config.ts`, on in previews and under `--mode development` — which
+`pnpm dev:server` and `pnpm preview` pass — and off in every other evaluation,
+production included by default. A `cf dev` started by hand without the flag
+answers as production does. Without the first there is no account badge;
 without the second `/api/account` answers that accounts are not configured and
 the guide is unavailable. Both states are supported builds. The guide is
 granted by hand: `tour: true` or `admin: true` in the user's private metadata
