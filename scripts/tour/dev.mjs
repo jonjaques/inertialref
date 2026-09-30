@@ -15,10 +15,17 @@ const server = fileURLToPath(new URL('../../apps/server', import.meta.url))
  * exists, shadows every key loaded here.
  */
 if (existsSync(local)) process.loadEnvFile(local)
+/*
+ * `--mode development` is what turns the guide and accounts on: the config
+ * treats any evaluation that is neither a preview nor explicitly development
+ * as production (`apps/server/cloudflare.config.ts`).
+ */
 const args = [
   'exec',
   'cf',
   'dev',
+  '--mode',
+  'development',
   ...process.argv.slice(2).filter((argument) => argument !== '--'),
 ]
 const child = spawn('pnpm', args, { cwd: server, stdio: 'inherit' })
