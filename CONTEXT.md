@@ -10888,6 +10888,49 @@ by Clerk" is left on in development because removing it is a paid-plan
 feature in production, and a development instance that differs from
 production there is the preview lying about the product.
 
+## Accounts answer on one host, and three dashboard edits locked the builds (30 Sep 2026)
+
+**The switches went on from the dashboard, and nothing deployed.** At 05:17
+UTC production's `CLERK_SECRET_KEY`, `CLERK_ENABLED` and `TOUR_GUIDE_ENABLED`
+were edited in the Cloudflare dashboard. Each edit uploaded a version — 339,
+340, 341, `source: dash` — and none was deployed: `cf workers deployments
+list` still showed version 338, `cf_cli`, serving 100 %, and `/api/account`
+answered `{"configured":false}`. The next build of `main` was refused on the
+comparison `cloudflare.config.ts` warns about: the variables `true` → `false`
+and each custom domain's `zone_name`, `enabled` and `previews_enabled`. So the
+lock follows the newest version's source, not the live deployment's. The live
+bundle carried no publishable key at all; `PUBLIC_CLERK_PUBLISHABLE_KEY` was set
+in the Production build settings at 05:19, after the last build that ran.
+
+**Both switches are on in every evaluation now, and the host decides.** The
+production instance's key names `clerk.inertialref.app`, and its Frontend API
+answers `/v1/environment` with 200 for `Origin: https://inertialref.app` and
+400 `origin_invalid` for `Origin: https://inertialref.jonjaques.com`. A second
+host is a satellite domain, a paid plan. So the Worker offers accounts at the
+canonical host, every preview and development (`offersAccounts`), and the
+browser drops a `pk_live_` key on any other host at module load, before the
+first render (`keyForHost`) — deciding later would mount or unmount the
+provider above the canvas and remount the renderer. The second host is a
+build without accounts, and without an account nobody is offered the guide.
+
+**The prerender is written for the canonical host, and the second host has to
+agree with it for one render.** Clerk's SignIn and SignUp server-render to
+nothing — `renderToString` inside a `ClerkProvider` with a live key gave
+`<section aria-label="x"></section>` for both — so a keyed build's account
+page ships an empty section. On the second host the page renders that same
+empty section until `useHydrated` flips, then the sentence pointing at
+`inertialref.app`. Checked on a production build with the live key served at
+`127.0.0.1`, which takes the second host's path: the sentence and the link to
+`https://inertialref.app/sign-in` render, the page makes no request to any
+Clerk host, and the console carries no hydration error.
+
+**A terminal deploy from this machine would have shipped the development
+instance to production.** `pnpm run deploy:worker` builds locally, a
+production Vite build still reads `apps/game/.env.local`, and the main
+checkout's holds the development instance's `pk_test_` key while
+`apps/game/.env.production` holds no Clerk key. `docs/hosting.md` says to set
+the production values in the environment, which wins over any file.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
