@@ -10737,6 +10737,52 @@ position. The clamp now measures the float field with a `ResizeObserver`, and
 the drop converts into the field's coordinates. A drag-and-drop was not
 performed in the rig; the float button's placement was.
 
+## The profile lost the planetarium to a bare fragment, and the guide is a grant (29 Sep 2026)
+
+The account routes were dialogs over the running mode for one afternoon, and
+Clerk's profile took the mode down: from the planetarium, clicking a section
+of the profile landed on the menu. Clerk moves between a component's sections
+with a bare fragment, `#/security`, and the router adapter resolved it against
+the site root — so the hop read as an ordinary navigation, went out without
+the `location.state` that keeps a mode alive behind a dialog, and `ModeRoutes`
+re-resolved at `/profile`, where only the menu matched. The adapter now
+resolves against the current address, and the account routes are no longer
+dialogs at all
+([ADR-0048](docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)):
+`/sign-in`, `/sign-up` and `/profile` are pages of the menu, linked from the
+front door, and inside a mode the badge opens Clerk's modal with no address.
+The home page's backdrop moved into a `MenuScene` layout route so that
+following a link from the front door to an account page does not restart
+Earth's orbit.
+
+Clerk's modal renders outside `.hud-layer` and takes focus, and a key on one
+of its buttons reached the dispatcher. Measured in the rig with synthetic
+keydowns: Space on the page body paused the clock (proving the events reach
+the listener), Space on the modal's button paused it with the new
+`isForeignModal` guard removed, and did not with it. Clerk's card had also
+been stripped globally for the dialog version; a modal needs one, so the
+account pages strip it locally instead.
+
+The guide's shared password, cookie, rate-limited login route, secret and
+rate-limit binding are gone. The grant is `admin: true` or `tour: true` in the
+account's private metadata, read by the Worker with the secret key
+(`apps/server/src/tour/access.ts`), because private metadata is the one grant
+neither the visitor nor the browser can read. Clerk's own "features" were
+considered first and do not fit: they come only from a Billing plan, Billing
+was not enabled on the instance (`billing_not_enabled` from `/billing/plans`),
+and the Backend API has no call that puts one user on a plan. The planetarium
+asks the Worker once per signed-in user and offers the Guide panel only on a
+yes. `@clerk/react`'s standalone `getToken` is how the guide's plain-object
+runtime gets a token: it waits up to ten seconds for Clerk, returns `null` with
+no session, and throws on the timeout, which `sessionToken()` answers as
+signed out.
+
+The signed-in path — the badge's profile modal, the Guide panel appearing, a
+session created for the granted account — was not exercised in the rig, which
+has no credentials for the account; the grant's decision is covered by tests
+against real RS256 tokens and a stubbed user lookup, and the account's
+metadata was read back as `{ tour: true, admin: true }`.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

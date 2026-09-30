@@ -19,14 +19,16 @@ credentials or raw provider errors.
 the repository's gitignored `.env.local` into its own process, which only
 starts `cf dev`, and `cf dev` reads secrets from that environment. Vite never
 sees the file, so the client bundle never sees `OPENAI_API_KEY` or
-`TOUR_GUIDE_PASSWORD`.
+`CLERK_SECRET_KEY`. The guide needs both: the second is what reads the
+account's grant (`apps/server/src/tour/access.ts`), so a local session needs a
+signed-in account whose private metadata says `tour: true` or `admin: true`.
 
 The browser console has three harness verbs for the guide, all of which use
 the runtime the dock panel owns rather than opening a second one:
 
 - `ir.guideStatus()` reads connection, state, pending calls, and usage.
 - `ir.guideTrace(true)` records the last 200 data-channel events and
-  commands, with audio and the password form excluded; `ir.guideTrace()`
+  commands, with audio and credentials excluded; `ir.guideTrace()`
   returns detached copies and `ir.guideTrace(false)` stops.
 - `await ir.guideAsk(text)` queues a typed request as the visitor's own words
   and runs the backend, which is how a drive script asks for a tour without a

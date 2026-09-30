@@ -363,8 +363,10 @@ to the browser — in gitignored `apps/game/.env.local` for `pnpm dev` and as a
 build variable for a deploy. The Worker needs `CLERK_SECRET_KEY` in the root
 `.env.local`, which `pnpm dev:server` loads into the Worker alone, and as a
 Worker secret in production. Without the first there is no account badge;
-without the second `/api/account` answers that accounts are not configured.
-Both states are supported builds.
+without the second `/api/account` answers that accounts are not configured and
+the guide is unavailable. Both states are supported builds. The guide is
+granted by hand: `tour: true` or `admin: true` in the user's private metadata
+in Clerk's dashboard.
 
 **Reference audio** is not in git. It lives in R2 and reaches the browser
 from one table, `apps/server/src/media.ts`: `pnpm media:pull` copies it into
