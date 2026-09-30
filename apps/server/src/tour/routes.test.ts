@@ -10,7 +10,8 @@ import { serveTour } from './routes.ts'
  * tokens; here it is whatever the test says it is.
  */
 const verdict = vi.hoisted(() => ({
-  current: { signedIn: false, authorized: false } as GuideAccess | Error,
+  current: { signedIn: false, authorized: false, userId: null } as
+    GuideAccess | Error,
 }))
 vi.mock('./access.ts', () => ({
   guideAccess: async () => {
@@ -18,7 +19,11 @@ vi.mock('./access.ts', () => ({
     return verdict.current
   },
 }))
-const GRANTED: GuideAccess = { signedIn: true, authorized: true }
+const GRANTED: GuideAccess = {
+  signedIn: true,
+  authorized: true,
+  userId: 'user_2test',
+}
 
 const ORIGIN = 'http://localhost:5173'
 
@@ -43,7 +48,7 @@ function post(path: string, body: unknown): Request {
 describe('the guide Worker', () => {
   // Every refusal writes a record; the test output is not where they go.
   beforeEach(() => {
-    verdict.current = { signedIn: false, authorized: false }
+    verdict.current = { signedIn: false, authorized: false, userId: null }
     vi.spyOn(console, 'info').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
@@ -105,7 +110,11 @@ describe('the guide Worker', () => {
       expect(await anonymous.json()).toEqual({
         error: 'Sign in to use the guide.',
       })
-      verdict.current = { signedIn: true, authorized: false }
+      verdict.current = {
+        signedIn: true,
+        authorized: false,
+        userId: 'user_2test',
+      }
       const ungranted = await ask()
       expect(ungranted.status).toBe(403)
       expect(await ungranted.json()).toEqual({
@@ -128,6 +137,31 @@ describe('the guide Worker', () => {
     expect(await response.json()).toEqual({
       error: 'The guide is unavailable.',
     })
+  })
+
+  it('refuses a session past the account’s allowance, before the provider is asked', async () => {
+    verdict.current = GRANTED
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    const limit = vi.fn(async (_options: RateLimitOptions) => ({
+      success: false,
+    }))
+    try {
+      const refused = await serveTour(
+        post('/api/tour/sessions', { voice: 'cedar', sdp: 'offer', scene: '' }),
+        env({ GUIDE_SESSION_LIMIT: { limit } } as Partial<Env>),
+      )
+      expect(refused.status).toBe(429)
+      expect(refused.headers.get('retry-after')).toBe('60')
+      expect(await refused.json()).toEqual({
+        error: 'Too many guide sessions. Try again in a minute.',
+      })
+      // Keyed on the account, which is what a granted token in a script shares.
+      expect(limit).toHaveBeenCalledWith({ key: 'user_2test' })
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('creates a session for a granted account, with the authored configuration', async () => {
