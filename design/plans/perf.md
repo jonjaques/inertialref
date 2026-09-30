@@ -223,6 +223,26 @@ a handful of atmospheres, against the same jump with the loop paced. The fix
 is a queue on this branch too, or the priority lane the survey section above
 finds no other use for.
 
+### The first tile of a wet body builds its drainage graph on the draw thread, unmeasured
+
+On a WebGPU page the tile producer packs a body's surface before its first
+dispatch, synchronously, inside `pump` in
+[`terrainProducer.ts`](../../apps/game/src/render/terrainProducer.ts):
+`surfaceKernel` builds the body's drainage graph and packs it for the kernel.
+Each thread builds a graph once per body and keeps up to twelve, so the cost
+lands once, in the frame whose request reaches the producer first.
+[ADR-0043](../../docs/adr/0043-the-rivers-drain.md) measures the build at
+**50 to 110 ms a body**, cold in Node. The browser figure is not measured, and
+neither is whether that frame is one a player is watching or one behind the
+boot cover or an arrival cut.
+
+**The experiment that settles it.** A descent onto a wet body whose graph no
+thread has built — Earth, and a generated wet world — under `?timing=full`,
+reading the frame that carries the body's first GPU dispatch against the frame
+before it; then the same descent with the memo warm. If the stall is in a
+watched frame, [the deepening plan](arch-review.md) § 16 moves the build off the
+draw thread. If it is behind a cover or a cut, nothing needs to move.
+
 ## Boot
 
 ### Boot is the texture warm, and that is the only line worth working
