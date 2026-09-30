@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAccount } from '../account/accounts.ts'
-import { sessionToken } from '../account/token.ts'
+import { sessionHeaders } from '../account/token.ts'
 
 /*
  * Whether the planetarium offers the guide to whoever is signed in.
@@ -43,10 +43,10 @@ export function useGuideAccess(): boolean {
 
 async function askWorker(): Promise<boolean> {
   try {
-    const token = await sessionToken()
-    if (token === null) return false
+    const headers = await sessionHeaders()
+    if (!headers.has('Authorization')) return false
     const response = await fetch('/api/tour/capabilities', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
       cache: 'no-store',
     })
     if (!response.ok) return false

@@ -260,6 +260,16 @@ export function PlanetariumMode({
   }
 
   const guideOffered = useGuideAccess()
+  /*
+   * Withdrawing the panel withdraws the only Pause and End on screen. A
+   * sign-out, or a switch to another account, while a conversation is running
+   * would otherwise leave the microphone open and the voice talking with
+   * nothing visible to stop either — so losing the grant ends the session.
+   * `end` is a no-op for a runtime that is offline or not loaded.
+   */
+  useEffect(() => {
+    if (!guideOffered) void guide.current?.end()
+  }, [guide, guideOffered])
   const panels = planetariumPanels({
     guide,
     guideOffered,

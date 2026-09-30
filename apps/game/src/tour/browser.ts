@@ -1,4 +1,4 @@
-import { sessionToken } from '../account/token.ts'
+import { sessionHeaders } from '../account/token.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GuideExecutor } from './executor.ts'
 import { LiveConnection } from './media.ts'
@@ -20,9 +20,7 @@ export function createGuideRuntime(engine: GameEngine): GuideRuntime {
      * without one it answers as it would for anybody signed out.
      */
     request: async (path, body, signal) => {
-      const token = await sessionToken()
-      const headers = new Headers()
-      if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+      const headers = await sessionHeaders()
       if (body !== undefined) headers.set('Content-Type', 'application/json')
       return fetch(path, {
         method: body === undefined ? 'GET' : 'POST',

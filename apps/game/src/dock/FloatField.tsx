@@ -1,5 +1,5 @@
 'use no memo'
-import { useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import { useDrop } from 'react-dnd'
 import { FloatingPanel } from './FloatingPanel.tsx'
 import {
@@ -85,13 +85,25 @@ export function FloatField({
     [workspace],
   )
 
+  /*
+   * One ref for the life of the field, by hand because this file opts out of
+   * the compiler. A fresh arrow each render is detached with `null` and
+   * attached again on every commit, and `frame` is state in `useWorkspace`:
+   * the pair queues a second render of the whole workspace after each one.
+   */
+  const { frame } = workspace
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      field.current = node
+      drop(node)
+      frame(node)
+    },
+    [drop, frame],
+  )
+
   return (
     <div
-      ref={(node) => {
-        field.current = node
-        drop(node)
-        workspace.frame(node)
-      }}
+      ref={attach}
       data-dock-zone="float"
       className={`absolute inset-0 ${active ? 'pointer-events-auto' : 'pointer-events-none'}`}
     >

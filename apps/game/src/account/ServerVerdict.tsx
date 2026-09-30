@@ -31,7 +31,20 @@ export function ServerVerdict() {
     let live = true
     setVerdict(CHECKING)
     void (async () => {
-      const answer = await askServer(await getToken())
+      /*
+       * `getToken` throws rather than answering null when Clerk cannot mint
+       * one — offline, above all — and a throw here is a spinner that never
+       * stops. No token is not the server's answer, so it is not asked.
+       */
+      let token: string | null
+      try {
+        token = await getToken()
+      } catch {
+        if (live)
+          setVerdict({ state: 'unreachable', detail: 'no session token' })
+        return
+      }
+      const answer = await askServer(token)
       if (live) setVerdict(answer)
     })()
     return () => {

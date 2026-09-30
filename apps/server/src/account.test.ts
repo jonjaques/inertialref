@@ -79,6 +79,28 @@ describe('identify', () => {
     expect(status).toEqual({ configured: true, signedIn: false, userId: null })
   })
 
+  it('refuses a token whose header names no key, without asking Clerk', async () => {
+    // Clerk destructures the header before its own error handling, so a
+    // `null` one escaped as a TypeError and read as the deployment's fault: a
+    // 503 any visitor could provoke. A header with no `kid` cost a key-set
+    // fetch on every request.
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    for (const token of ['bnVsbA.e30.eA', 'e30.e30.eA', 'e30.bnVsbA.eA']) {
+      for (const keys of [{ jwtKey: issuer.pem }, { secretKey: 'sk_test_x' }])
+        expect(
+          await identify(
+            request(`${SITE}/api/account`, {
+              authorization: `Bearer ${token}`,
+            }),
+            keys,
+          ),
+          token,
+        ).toEqual({ configured: true, signedIn: false, userId: null })
+    }
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   it('keeps production and development apart', async () => {
     // A page on localhost asking the production host, and the reverse: each
     // host accepts only the pages that are its own.
@@ -115,12 +137,21 @@ describe('identify', () => {
       vi.fn(async () => new Response('unavailable', { status: 503 })),
     )
     const token = await issuer.sign(session())
-    await expect(
-      identify(
-        request(`${SITE}/api/account`, { authorization: `Bearer ${token}` }),
-        { secretKey: 'sk_test_unusable' },
-      ),
-    ).rejects.toBeInstanceOf(AccountUnavailableError)
+    // Clerk retries the key-set fetch five times with a backoff of about two
+    // seconds in all; the fake clock spends it without the suite waiting.
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    try {
+      const unavailable = expect(
+        identify(
+          request(`${SITE}/api/account`, { authorization: `Bearer ${token}` }),
+          { secretKey: 'sk_test_unusable' },
+        ),
+      ).rejects.toBeInstanceOf(AccountUnavailableError)
+      await vi.runAllTimersAsync()
+      await unavailable
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

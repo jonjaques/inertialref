@@ -4,6 +4,7 @@ import {
   TokenVerificationError,
   TokenVerificationErrorReason,
 } from '@clerk/backend/errors'
+import { decodeJwt } from '@clerk/backend/jwt'
 import type { AccountStatus } from '@inertialref/protocol'
 import { logger } from './log.ts'
 import { siteOrigins } from './origins.ts'
@@ -116,6 +117,19 @@ export async function identify(
     return SIGNED_OUT
   }
 
+  /*
+   * The token's shape is judged here, before Clerk sees it. `verifyToken`
+   * destructures the header ahead of its own error handling, so a header that
+   * decodes to JSON `null` escapes as a `TypeError` — which the catch below
+   * cannot tell from a key set that failed to parse, and would answer with a
+   * 503 and an error record that any visitor could provoke at will. A header
+   * with no `kid` is refused here too, rather than costing a key-set fetch.
+   */
+  if (!namesKey(token)) {
+    refused('token-malformed')
+    return SIGNED_OUT
+  }
+
   let claims: Awaited<ReturnType<typeof verifyToken>>
   try {
     claims = await verifyToken(token, {
@@ -176,7 +190,7 @@ export async function privateMetadata(
   secretKey: string,
 ): Promise<Readonly<Record<string, unknown>>> {
   try {
-    const user = await createClerkClient({ secretKey }).users.getUser(userId)
+    const user = await clientFor(secretKey).users.getUser(userId)
     return user.privateMetadata
   } catch (error) {
     if (isClerkAPIResponseError(error) && error.status === 404) return {}
@@ -194,9 +208,40 @@ export async function privateMetadata(
   }
 }
 
+/*
+ * One Backend API client per key for the life of the isolate. A client is the
+ * key plus a set of endpoint objects, and nothing in it belongs to a request,
+ * so building one per lookup is work every guide request repeats for nothing.
+ */
+const clients = new Map<string, ReturnType<typeof createClerkClient>>()
+
+function clientFor(secretKey: string): ReturnType<typeof createClerkClient> {
+  let client = clients.get(secretKey)
+  if (client === undefined) {
+    client = createClerkClient({ secretKey })
+    clients.set(secretKey, client)
+  }
+  return client
+}
+
 /** The reason code only. A token is a credential until it expires. */
 function refused(reason: string): void {
   log('warn', 'account token refused', { reason })
+}
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** Whether a token decodes to a header that names its key, and to claims. */
+function namesKey(token: string): boolean {
+  try {
+    const { header, payload } = decodeJwt(token)
+    return (
+      isRecord(header) && typeof header.kid === 'string' && isRecord(payload)
+    )
+  } catch {
+    return false
+  }
 }
 
 /** Longer than any session token Clerk mints; a bound, not a format check. */

@@ -22,11 +22,10 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  * `anglesForPhase` solves the camera against the *sun line*: phase 0 is the
  * fully lit face with the star behind the lens, 180 is dead anti-sun, and it is
  * continuous through 360, so ramping it is a real orbit and not a preset being
- * re-applied. Dragging the azimuth — which is what this used to do — orbits
- * around the world's pole instead, and where the star ends up in that circle
- * depends on which way Sol's ecliptic happens to lie against the galactic
- * plane. The old drift was 0.4°/s of azimuth and the star never reliably
- * entered the frame at all.
+ * re-applied. Dragging the azimuth orbits around the world's pole instead, and
+ * where the star ends up in that circle depends on which way Sol's ecliptic
+ * happens to lie against the galactic plane: at 0.4°/s of azimuth the star
+ * never reliably enters the frame at all.
  *
  * The numbers, and each of them is a composition decision. The phase magnitudes
  * below were read off the running page, not derived:
@@ -45,8 +44,8 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  *   SWING_TILT   16°   the orbit is tipped off the star's own plane, so the
  *                      star passes above the limb rather than straight through
  *                      it and the axis reads as tilted rather than flat.
- *   FILL         0.66  a hair smaller than the old 0.78. The extra sky is what
- *                      the streak has to cross.
+ *   FILL         0.66  the disk at two thirds of the frame. The sky left over
+ *                      is what the streak has to cross.
  *
  * The phase is fed in **negative**, which is not a detail. A phase and its
  * negative put the camera on mirror-image arcs either side of the star line, so
@@ -100,10 +99,8 @@ export function MenuScene({ engine }: { engine: GameEngine | null }) {
     if (engine === null) return
     const observatory = engine.harness.observatory
     /*
-     * The menu's stance. It used to capture the previous values and put them
-     * back by hand — the only one of the three writers that did, which is why
-     * it was the one that worked. Now nobody remembers anything: `release`
-     * means whatever was underneath.
+     * The menu's stance. Nothing here captures the previous values to put
+     * back by hand: `release` means whatever was underneath.
      */
     const stance = engine.presentation.push({
       showShip: false,

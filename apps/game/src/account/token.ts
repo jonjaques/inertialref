@@ -21,3 +21,16 @@ export async function sessionToken(): Promise<string | null> {
     return null
   }
 }
+
+/**
+ * The headers a request to the Worker starts from: the token as a bearer
+ * credential, or no `Authorization` at all for anybody `sessionToken` answers
+ * `null` for. The Worker reads only the header (`apps/server/src/account.ts`),
+ * so this is the one place its spelling lives on this side.
+ */
+export async function sessionHeaders(): Promise<Headers> {
+  const headers = new Headers()
+  const token = await sessionToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  return headers
+}

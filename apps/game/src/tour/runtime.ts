@@ -226,7 +226,16 @@ export class GuideRuntime {
 
   inspect(): Promise<void> {
     if (this.#inspect !== null) return this.#inspect
-    this.#inspect = this.#request('/api/tour/capabilities')
+    /*
+     * Every write below first checks that this is still the current read. A
+     * `refresh` replaces it — somebody signed in, out, or as somebody else —
+     * and the read it replaced is about whoever was asking then: landing
+     * late, it would put their verdict back over the new one, and failing
+     * late it would drop the new read from `#inspect`. A superseded read
+     * settles with the current one instead, so a `start` already waiting on
+     * it reads the verdict that replaced it.
+     */
+    const inspection: Promise<void> = this.#request('/api/tour/capabilities')
       .then(async (response) => {
         const value = (await response.json()) as GuideCapabilities
         if (
@@ -237,17 +246,22 @@ export class GuideRuntime {
           !Array.isArray(value.voices)
         )
           throw new Error('Guide availability could not be read.')
+        if (this.#inspect !== inspection) return this.#inspect ?? undefined
         this.#update({ capabilities: value })
+        return undefined
       })
       .catch((cause: unknown) => {
+        if (this.#inspect !== inspection) return this.#inspect ?? undefined
         // A failed read is not an answer. Keeping the settled promise would
         // leave `capabilities` null for the life of the page, and the panel
         // draws no Start without it — so "close and reopen it to try again",
         // which is what the panel says, would do nothing.
         this.#inspect = null
         this.#update({ message: message(cause) })
+        return undefined
       })
-    return this.#inspect
+    this.#inspect = inspection
+    return inspection
   }
 
   /** Ask again: somebody signed in, out, or as somebody else. */

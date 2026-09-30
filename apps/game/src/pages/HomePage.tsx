@@ -175,12 +175,12 @@ export function HomePage() {
         )}
       </nav>
 
-      {/* No status pip here any more. A "simulation running" badge on a front
-            door is a product claiming to be live, and this one is a menu over a
-            scene — which the turning planet behind the type already says, at
-            no cost and without a word. The lead's second line is where the
-            state of the project is stated now, in a sentence rather than in a
-            label that reads like uptime. */}
+      {/* No status pip here. A "simulation running" badge on a front door is
+            a product claiming to be live, and this one is a menu over a scene —
+            which the turning planet behind the type already says, at no cost
+            and without a word. The lead's second line is where the state of
+            the project is stated, in a sentence rather than in a label that
+            reads like uptime. */}
       <footer className="type-ui flex max-w-[33rem] flex-wrap items-center gap-x-5 gap-y-2">
         <FooterLink to={DOCS} icon={BookText} label="Documentation" />
         <FooterLink to={SETTINGS} icon={SlidersHorizontal} label="Settings" />

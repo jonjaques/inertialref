@@ -53,7 +53,7 @@ export default defineConfig(({ isPreview, mode }) => {
        * request worth reading is always the one that failed. There is no level
        * knob on this side: Workers Logs keeps every console record and takes
        * its level from the console method, so the level is chosen in
-       * `src/tour/log.ts` at the call and filtered in the query builder.
+       * `src/log.ts` at the call and filtered in the query builder.
        *
        *   logs    — every console record, plus one invocation log per request
        *             with the method, path, status, colo, ray and version. A 503
