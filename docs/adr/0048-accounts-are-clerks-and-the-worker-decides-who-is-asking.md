@@ -2,7 +2,10 @@
 
 Status: accepted · 29 Sep 2026, amended the same day: the account routes are
 pages and a mode signs in through a modal, and the guide is granted per
-account. Fills the account routes reserved by
+account; then verification is networkless over a held key set, grants are held
+a minute, the account routes carry allowances, production is the default
+evaluation of the config, and a connection that outlives its token
+re-presents one. Fills the account routes reserved by
 [ADR-0011](0011-application-shell-and-modes.md), answers the account half of
 the open question in [hosting](../hosting.md#open-questions), and amends the
 guide's authorization in [ADR-0042](0042-the-guide-speaks-in-one-voice.md).
@@ -62,9 +65,12 @@ private metadata, which the Worker reads.**
   Clerk's production instance and everything else — Worker Previews, `pnpm
 dev` — against the development instance: each environment's build settings
   and secrets in Cloudflare carry their own instance's keys under the same
-  names. `CLERK_ENABLED` is declared in `cloudflare.config.ts`, off in
-  production and on elsewhere, because `cf` replaces dashboard variables on
-  every deploy. Nothing is committed. Without a usable publishable key there is
+  names. `CLERK_ENABLED` is declared in `cloudflare.config.ts`, because `cf`
+  replaces dashboard variables on every deploy: on in Worker Previews and
+  under `--mode development`, which `pnpm dev:server` passes, and off in every
+  other evaluation. Production is the default rather than a mode a deploy has
+  to remember, so a build command that loses its flag ships production's
+  answer instead of switching accounts and the guide on. Nothing is committed. Without a usable publishable key there is
   no badge and the account pages say the build offers none; without the secret,
   or with accounts switched off, the Worker answers "not configured", which is a
   different sentence from "signed out", and the guide is unavailable.
@@ -94,13 +100,52 @@ dev` — against the development instance: each environment's build settings
   cookie.** The browser attaches a cookie to a request a hostile page starts;
   only this site's script can set a header. `getToken()` also refreshes on
   demand, where the cookie is refreshed on a timer a background tab throttles.
-- **`verifyToken`, not `authenticateRequest`.** The latter reads the cookie,
-  compares it with `__client_uat` and answers a stale one with a redirect
-  handshake — machinery for a server that renders documents, which this
-  Worker does not. Authorized parties are the origins of the host the request
-  arrived at (`apps/server/src/origins.ts`, shared with the origin check); an
-  unrecognized host is refused outright, since Clerk skips the check on an
-  empty list. A pending session reads as signed out.
+- **`verifyJwt` over a key set the Worker holds, not `authenticateRequest`
+  or `verifyToken`.** The first reads the cookie, compares it with
+  `__client_uat` and answers a stale one with a redirect handshake — machinery
+  for a server that renders documents, which this Worker does not. The second
+  fetches the instance's key set itself, and its cache refetches for every
+  `kid` it lacks — five attempts over two seconds while Clerk is failing — and
+  empties itself before a refresh: an invented header makes every request a
+  call to Clerk, and a Clerk outage signs out every visitor five minutes in. The Worker fetches the set with the secret
+  key instead and holds it per isolate — fresh for five minutes, Clerk's own
+  window; a missing `kid` refetched at most once a minute; a held key served
+  through failed refreshes for up to an hour, then refused — and checks the
+  token with `verifyJwt`, the function `verifyToken` ends in. The one check
+  `verifyToken` adds, refusing a machine token signed by the same key, is a
+  required `sid` here. Authorized parties are the origins of the host the
+  request arrived at (`apps/server/src/origins.ts`, shared with the origin
+  check); an unrecognized host is refused outright, since Clerk skips the
+  check on an empty list. A pending session reads as signed out.
+- **The verdict takes a bare token.** `verifySession(token, keys, parties)`
+  answers who, which session, and until when, and `identify` is that plus
+  reading the bearer header. A caller with no request — a socket
+  re-presenting a token — gets the same verdict.
+- **Grants are held a minute, and the routes carry allowances.** A user's
+  private metadata is held per isolate for sixty seconds and concurrent asks
+  share one call, so the capabilities check and the session request seconds
+  after it cost one lookup. Two rate-limit bindings bound what a script can
+  spend: `ACCOUNT_LIMIT`, 120 a minute per address across `/api/account` and
+  `/api/tour/*`, before any work, because each asks Clerk who is calling and
+  Clerk rate-limits the instance as a whole; and `GUIDE_SESSION_LIMIT`, six a
+  minute per account on creating a guide session, because a granted token is
+  the one caller every other check admits and each session is minutes of the
+  OpenAI budget. Both answer 429 with `Retry-After`.
+- **A connection outlives its token, so the token is re-presented, never
+  trusted past its expiry.** Clerk's session tokens last a minute; a socket
+  to a partition authority (hosting H-2) lasts hours. The upgrade is a
+  request: it passes the per-address allowance, carries a token, and
+  `verifySession` admits it, recording `expiresAt` in the socket's
+  attachment. After that the token rides on the client's own traffic — the
+  first message it sends after the last token expires carries a fresh one
+  from `getToken()` — and the authority refuses anything but a heartbeat from
+  a socket whose token has lapsed, and asks a lapsed socket for a token before
+  sending it state. Each check is a signature against the key set held in the
+  authority's isolate, with no call to Clerk. The authority never wakes to
+  ask: a hibernating connection with a lapsed token costs nothing until it
+  speaks or is spoken to. Signing out elsewhere or ending a session in the
+  dashboard stops `getToken()` from minting, so revocation reaches a live
+  connection within one token lifetime of its next exchange.
 - **The guide's grant is private metadata, decided in `tour/access.ts`.** The
   account module answers who is asking and fetches the user's private
   metadata with the secret key; the tour module alone says that `admin` or
@@ -109,9 +154,10 @@ dev` — against the development instance: each environment's build settings
   only on a yes; the Worker refuses a session to anybody else — 401 signed
   out, 403 without the grant — whatever the menu showed.
 - **A deployment fault is a 503, not a refusal.** A key set that cannot be
-  loaded, a secret that is invalid, or Clerk's API unreachable during the
-  grant lookup throws — and the package's root `verifyToken` throws for a bad
-  token too, so anything that is not a verdict on the token is the
+  loaded with nothing held, a held key an hour past its last confirmation, a
+  secret that is invalid, or Clerk's API unreachable during the grant lookup
+  throws. The package's exports throw for a bad token too, so anything the
+  token check throws that is not a `TokenVerificationError` is the
   deployment's.
 - **The vendor stops at the adapters.** `@clerk/react` is in `apps/game`,
   `@clerk/backend` in `apps/server`; `packages/protocol` knows only
@@ -147,6 +193,17 @@ features that come from a subscription plan. It needs Billing enabled, a plan
 per grant, and the user subscribed to it; there is no administrator call that
 puts one user on a plan, and production billing needs a payment provider. An
 alpha allowlist is not a product anybody pays for.
+
+**Clerk's own key cache, through `verifyToken` with the secret key.** It
+works, and it hands the rate at which this Worker calls Clerk to whoever
+writes the token's header, and a Clerk outage to every signed-in visitor five
+minutes later. Holding the set is forty lines and a bound on both.
+
+**Polling Clerk for revocation on a long-lived connection.** Checking each
+connection's session with the Backend API on a timer is a call per player per
+interval against the instance's shared rate limit, and it wakes a hibernating
+authority to make it. Token re-presentation gives the same bound — one token
+lifetime — out of traffic the client sends anyway.
 
 **Public metadata copied into the session token.** Networkless — the grant
 would arrive in the verified claims — but readable by the visitor, and it
@@ -187,6 +244,15 @@ tree above `GameLoader`, which remounts the renderer.
   utilities; its styles arrive unlayered and would otherwise outrank every
   utility. A Clerk upgrade that renames an element key restyles silently.
 - A grant is a hand edit in Clerk's dashboard, and revoking one takes effect
-  at the next capabilities check or session, not in a session already open.
+  at the next capabilities check or session after the held answer's minute
+  runs out, in each isolate — not in a guide session already open.
+- A signing key removed from the instance is still trusted for up to five
+  minutes, and through a Clerk outage for up to an hour; past that hour an
+  outage is a 503 for every account check.
+- The allowances count per Cloudflare location and settle eventually, so a
+  burst spread across locations gets somewhat past them. They bound scripts;
+  a person never meets them.
+- `cf dev` run by hand without `--mode development` evaluates as production,
+  and the local Worker answers with accounts and the guide off.
 - `/auth/callback` stays reserved and unused: Clerk's OAuth return comes back
   to `/sign-in#/sso-callback`.
