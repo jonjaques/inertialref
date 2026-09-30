@@ -253,12 +253,15 @@ export class GuideRuntime {
    * The check asks once per signed-in user, and the panel mounts every time it
    * is opened, docked or floated; asking again on each of those costs the
    * Worker a user lookup for an answer that has not changed, and an identical
-   * answer is left alone so a message on screen survives a remount.
+   * answer is left alone so a message on screen survives a remount. A new
+   * answer clears the message: it was about the answer it replaces — the
+   * previous account's refusal, or a read that failed — and would otherwise
+   * greet whoever signed in next.
    */
   adopt(capabilities: GuideCapabilities): void {
     if (this.#snapshot.capabilities === capabilities) return
     this.#inspect = Promise.resolve()
-    this.#update({ capabilities })
+    this.#update({ capabilities, message: null })
   }
 
   /** Request the microphone, post the offer, greet. */

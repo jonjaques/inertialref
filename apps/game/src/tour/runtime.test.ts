@@ -259,6 +259,15 @@ describe('the guide runtime', () => {
     expect(
       f.requests.some((request) => request.path === '/api/tour/sessions'),
     ).toBe(false)
+    // The next account's answer does not arrive under the last one's refusal.
+    f.runtime.adopt({
+      available: true,
+      signedIn: true,
+      authorized: true,
+      voices: ['marin'],
+      reason: null,
+    })
+    expect(f.runtime.getSnapshot().message).toBeNull()
     await f.dispose()
   })
 
