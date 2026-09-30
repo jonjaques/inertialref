@@ -10815,6 +10815,18 @@ sessions. `cf previews deploy` has no dry run, so whether a Worker Preview
 upload accepts rate-limit bindings is first answered by the Workers Builds
 check on the branch.
 
+**A shared fetch belonged to the request that started it.** In workerd a
+canceled request's continuations are dropped, so a key-set fetch whose visitor
+walked away would never settle, and every later check awaiting it would wait
+until the isolate was recycled. A fetch pending longer than the once-a-minute
+floor is abandoned and the next request starts its own; the abandoned one
+writes nothing if it ever returns. That follows from how workerd treats a
+canceled request's I/O and is not reproduced in workerd — the Node suite
+covers a fetch that never settles. The rate-limit binding fails open with a
+log line: it runs ahead of every account and guide route, and a throw there
+was a Worker exception on each of them. An IPv6 caller is counted by its /64,
+the prefix one subscriber controls.
+
 **Production was the evaluation a deploy had to ask for.** The flags that
 switch the guide and accounts off in production keyed on
 `mode === 'production'`, so a deploy command that lost `--mode production` —
