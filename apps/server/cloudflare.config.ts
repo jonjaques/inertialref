@@ -18,12 +18,20 @@ export default defineConfig(({ isPreview, mode }) => {
    * Which of the three places this is being evaluated for, because the flags
    * below differ between them and `cf` gives the config no other way to vary.
    *
-   *   production  `cf deploy --mode production` — the `deploy` script, run by
-   *               the `main` build trigger.
    *   previews    `cf previews deploy` — Worker Previews, one per branch; `cf`
    *               evaluates the config with `isPreview`.
-   *   development `cf dev`, under `pnpm dev`: neither, and treated like a
-   *               preview.
+   *   development `cf dev --mode development`, which `pnpm dev:server` and
+   *               `pnpm preview` run. Treated like a preview.
+   *   production  everything else — `cf deploy --mode production`, the
+   *               `deploy` script the `main` build trigger runs, and equally
+   *               a bare `cf deploy` or a build command edited in the
+   *               dashboard.
+   *
+   * Production is the default because it is the side that is safe to be
+   * wrong on. A deploy that lost its `--mode` and came out as development
+   * would ship the guide and accounts on to production with nobody asking; a
+   * local server that lost it comes out with both off, which is a missing
+   * feature on one machine and says so.
    *
    * Plain-text variables are declared here rather than set in the dashboard,
    * and it is not a preference. `cf` has no `keep_vars`: a deploy replaces the
@@ -33,7 +41,7 @@ export default defineConfig(({ isPreview, mode }) => {
    * declared with a value, set per environment in the dashboard (Production,
    * and Previews Base for previews), and never removed by a deploy.
    */
-  const production = !isPreview && mode === 'production'
+  const production = !isPreview && mode !== 'development'
   const flag = (on: boolean) => bindings.text(on ? 'true' : 'false')
 
   return {

@@ -37,7 +37,7 @@ describe('the static hosting boundary', () => {
     expect(at({ isPreview: true, mode: undefined }).domains).toBeUndefined()
   })
 
-  it('switches the guide and accounts off in production and on everywhere else', () => {
+  it('switches the guide and accounts off in production and on only where asked', () => {
     const flags = (context) => {
       const { env } = at(context)
       return [env.TOUR_GUIDE_ENABLED.value, env.CLERK_ENABLED.value]
@@ -46,14 +46,17 @@ describe('the static hosting boundary', () => {
       'false',
       'false',
     ])
-    // A Worker Preview, and `cf dev` under `pnpm dev`.
+    // A Worker Preview, and `cf dev --mode development` under `pnpm dev`.
     expect(flags({ isPreview: true, mode: undefined })).toEqual([
       'true',
       'true',
     ])
-    expect(flags({ isPreview: false, mode: undefined })).toEqual([
+    expect(flags({ isPreview: false, mode: 'development' })).toEqual([
       'true',
       'true',
     ])
+    // A deploy that lost its `--mode`, or ran with another, is production.
+    for (const mode of [undefined, 'staging'])
+      expect(flags({ isPreview: false, mode })).toEqual(['false', 'false'])
   })
 })
