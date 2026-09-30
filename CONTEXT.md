@@ -10835,6 +10835,59 @@ now treats anything that is neither a preview nor `--mode development` as
 production; `pnpm dev:server` and `pnpm preview` pass the flag, and a `cf dev`
 started by hand without it answers with both off.
 
+## Clerk's mail wears the console, and a dashboard save takes half of it back (30 Sep 2026)
+
+The development instance's email is branded, and none of it is in this
+repository: it lives in Clerk, set through the Backend API's
+`PUT /templates/email/<slug>`. Twenty-one of the twenty-five system templates
+are restyled — slate-950 ground, slate ink, sky-300 links, the primary button
+as the same wash `appearance.ts` draws (sky-500 at 15 % over slate-950,
+flattened to `#041e36` with a `#08567f` edge, because Outlook drops `rgba`),
+the code in the mono stack, the title in the sans at 80 % stretch, which
+Apple Mail condenses against `-apple-system`. The header draws the
+application logo when there is one and the name always; the footer is this
+repository's own, because Clerk's `{{> footer}}` partial carries a dashed
+`#B7B8C2` rule that cannot be restyled from outside and glares on the dark
+ground. The ground is on the outer table as well as `<body>`, since Gmail
+drops body styles. The four left stock — the three billing payment templates
+and the Stripe deauthorization — report `can_edit_body: false`, and billing is
+off, so they never send. Wording and subjects are Clerk's. Each restyled
+template reports `can_revert: true`, and `POST …/revert` puts Clerk's back.
+
+**Each template is stored twice, and the two have drifted.** `markup` is the
+dashboard editor's source and `body` is the compiled HTML that is sent, and
+Clerk's own bodies already disagree with their markup — body text `#000000`
+where the markup says `#747686`, a magic-link button that reads "Sign in to
+{{app.name}}" where the markup says "Sign in", a "Didn't request this?" line
+the markup has and the body does not. Both were transformed with one palette,
+but a save from the dashboard editor recompiles the body from the markup and
+drops what only the body carries: the monospace code, the name beside the
+mark and the footer. Edit these through the API, from the listing, not in the
+dashboard. The check is `POST …/preview`, which renders a candidate body
+server-side with sample values and stores nothing; every stored body read
+back byte-identical to the one sent.
+
+**The logo is not the API's to set, and setting it changes the app.** The
+application logo and favicon are Platform API uploads that take only
+`multipart/form-data` or `application/octet-stream`; `clerk api` sends JSON
+and got a 415, so both were uploaded in the dashboard (`icon-512.png` and
+`icon-192.png`, the mark on its plate). With a logo set, Clerk's SignIn and
+SignUp draw it in their header — a second mark under an account page's
+`Logomark`, and in the modal an `<a href>` to the dashboard's Home URL, which
+on the development instance is the Account Portal's default-redirect: a click
+reloads the document and ends the mode. `options.logoPlacement: 'none'` keeps
+the components' header to their title. The CAPTCHA's theme defaults to
+`auto`, which follows the operating system, not the page, so it is `dark`.
+
+**Clerk's clone to production copies neither SSO credentials, integrations
+nor paths** (its deployment guide), so Google sign-in needs its own OAuth
+client there, and the Home, sign-in, sign-up and after-sign-out paths are set
+on the production instance. Whether the clone copies email templates is not
+documented; `clerk api /templates/email --instance prod` answers it. "Secured
+by Clerk" is left on in development because removing it is a paid-plan
+feature in production, and a development instance that differs from
+production there is the preview lying about the product.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
