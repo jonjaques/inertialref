@@ -32,6 +32,11 @@ describe('the static hosting boundary', () => {
     ])
   })
 
+  it('names the custom domains in production and nowhere else', () => {
+    // A Worker Preview upload refuses a config with `domains` in it.
+    expect(at({ isPreview: true, mode: undefined }).domains).toBeUndefined()
+  })
+
   it('switches the guide and accounts off in production and on everywhere else', () => {
     const flags = (context) => {
       const { env } = at(context)

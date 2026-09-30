@@ -110,8 +110,15 @@ export default defineConfig(({ isPreview, mode }) => {
        * IndexedDB saves belong to their origin, so the legacy host must keep
        * answering /sw.js and existing installs. Metadata names inertialref.app.
        * Custom domains provision DNS and certificates in both account zones.
+       *
+       * Production's alone. A preview has its own `workers.dev` address, and
+       * `cf previews deploy` refuses a config that names domains at all
+       * ("Preview uploads from Build Output don't support the `domains`
+       * field").
        */
-      domains: ['inertialref.app', 'inertialref.jonjaques.com'],
+      ...(isPreview
+        ? {}
+        : { domains: ['inertialref.app', 'inertialref.jonjaques.com'] }),
 
       env: {
         /*
