@@ -37,7 +37,8 @@ do not require provider credentials. See
 A grant is set by hand: in the Clerk dashboard, **Users** → the user →
 **Metadata** → **Private**, `{ "tour": true }`. Private metadata is not in the
 session token and not in the user object the browser sees, so the Worker reads
-it with the secret key on each capabilities check and each session.
+it with the secret key and holds the answer for a minute per user: a grant set
+or removed in the dashboard reaches the Worker within that minute.
 
 Local `pnpm dev` starts the server through `scripts/tour/dev.mjs`. That adapter
 loads the repository's gitignored `.env.local` into its own process, which
@@ -392,6 +393,17 @@ Two consequences that shape the code:
 WebSocketRequestResponsePair("ping", "pong"))` answers keepalives in the
   runtime, and the docs are explicit that auto-responses accrue no wall-clock
   time and are not charged.
+- **A socket outlives the token that opened it.** Clerk's session tokens last a
+  minute. The upgrade carries one, `verifySession` admits it, and its
+  `expiresAt` goes in the attachment; after that a fresh token rides on the
+  client's first message past the deadline, and a lapsed socket is refused
+  everything but a heartbeat and asked for a token before it is sent state.
+  Nothing wakes the object to check, and each check is a signature against the
+  key set its isolate holds
+  ([ADR-0048](adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)).
+  Messages on a socket never reach the Worker's `fetch`, so the Worker's rate
+  limits see only the upgrade; the object keeps its own allowance per
+  connection.
 
 ### H-3 · Two databases, and the rule for choosing
 
@@ -1051,8 +1063,11 @@ commands run `cf` in `apps/server`, so the Workers Builds configuration is:
 
 `deploy` is `cf deploy --mode production`, which stages its Build Output — the
 Worker bundle and a copy of `apps/game/dist` — under the ignored
-`apps/server/.cloudflare/output/`; the mode is how `cloudflare.config.ts` tells
-production from development, which `cf` otherwise evaluates identically.
+`apps/server/.cloudflare/output/`. The mode there is a statement, not the
+switch: `cloudflare.config.ts` evaluates anything that is neither a preview nor
+`--mode development` as production, so a deploy command that loses the flag
+still ships production's variables. `pnpm dev:server` and `pnpm preview` pass
+`--mode development`.
 `previews:deploy` is `cf previews deploy`, which evaluates the config with
 `isPreview` and deploys a preview named for the branch. `cf` authenticates with
 `CLOUDFLARE_API_TOKEN` in a build and with `cf auth login` on a developer's
