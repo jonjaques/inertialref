@@ -27,9 +27,21 @@ import { FOCUS_RING } from '../hud/focus.ts'
  * regardless of specificity — so without it a Tailwind utility passed here is
  * silently outranked. `index.css` declares the `clerk` layer below
  * `utilities`.
+ *
+ * **No logo of Clerk's own.** The application logo in the dashboard is there
+ * for the emails and the hosted pages, and Clerk's components draw it too
+ * unless told not to: a second mark under the page's `Logomark`, and in the
+ * modal a plain link to the dashboard's Home URL, which reloads the document
+ * and ends the mode it was opened over. The modal's heading names the product.
+ *
+ * **The CAPTCHA is dark.** Its theme defaults to `auto`, which follows the
+ * system rather than the page, so on a light-mode machine the sign-up
+ * challenge is a white Turnstile box on the slate-950 ground.
  */
 export const APPEARANCE = {
   cssLayerName: 'clerk',
+  options: { logoPlacement: 'none' },
+  captcha: { theme: 'dark' },
   variables: {
     colorPrimary: '#38bdf8', // sky-400
     colorPrimaryForeground: '#e0f2fe', // sky-100
