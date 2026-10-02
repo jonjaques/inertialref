@@ -1,7 +1,6 @@
 import { DRAG_RADIANS_PER_PIXEL, clampPitch } from '@inertialref/rendering'
 import type { EntityId } from '@inertialref/universe'
 import type { Entity, CharacterInput } from '@inertialref/simulation'
-import type { CharacterCameraMemory } from '@inertialref/rendering'
 import type { GameEngine } from './GameEngine.ts'
 
 export interface CharacterStatus {
@@ -17,8 +16,8 @@ export interface CharacterStatus {
 }
 
 /**
- * The browser's half of walking: pointer lock, the look, the view and the
- * camera's memory. Stepping out, stepping back in and the pad fixture are the
+ * The browser's half of walking: pointer lock, the look and the view. The
+ * camera's memory is the frame's (`onFootPresentation.ts`). Stepping out, stepping back in and the pad fixture are the
  * session's (`ir.onFoot`), so a console and a test reach the same walker; the
  * world alone moves it.
  */
@@ -32,8 +31,6 @@ export class CharacterController {
   #lockedWalker: EntityId | null = null
   view: 'first' | 'third' = 'first'
   error: string | null = null
-  /** The camera's between-frame filters; null is a cut. Written by the frame. */
-  cameraMemory: CharacterCameraMemory | null = null
 
   constructor(engine: GameEngine) {
     this.#engine = engine
@@ -137,10 +134,8 @@ export class CharacterController {
   toggleView(): void {
     if (!this.active) return
     this.view = this.view === 'first' ? 'third' : 'first'
-    // Not a cut for the boom: it eases out from the head, which is the one
-    // transition between the two views that reads as a camera move.
-    this.cameraMemory =
-      this.cameraMemory === null ? null : { ...this.cameraMemory, boom: 0 }
+    // A cut for the picture's history; the boom still eases out from the
+    // head, which `onFootPresentation.ts` keeps across exactly this one.
     this.#engine.declareCut()
   }
 
@@ -171,7 +166,7 @@ export class CharacterController {
     if (!this.active) return
     this.stop()
     this.#lockedWalker = null
-    if (this.#onFoot.board().ok) this.cameraMemory = null
+    this.#onFoot.board()
   }
 
   /** Presentation only: a replaced world keeps none of this, and writes nothing. */
@@ -181,7 +176,6 @@ export class CharacterController {
     this.#pitch = 0
     this.#yaw = this.entity?.character?.input.yaw ?? 0
     this.error = null
-    this.cameraMemory = null
   }
 
   /** Reproducible scale check beside the cinema's 46 m Rocinante and Mars pad. */
@@ -235,6 +229,5 @@ export class CharacterController {
     this.view = framing.view
     this.#padWalker = framing.pad ? walker.id : null
     this.error = null
-    this.cameraMemory = null
   }
 }
