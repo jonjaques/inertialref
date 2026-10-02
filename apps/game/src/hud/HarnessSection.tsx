@@ -21,9 +21,12 @@ import { Section } from './Section.tsx'
  */
 export function HarnessSection({
   engine,
+  onStepOut,
   onNotice,
 }: {
   readonly engine: GameEngine
+  /** The game's rule for a walker that has just stepped out: `walkingPace`. */
+  readonly onStepOut: () => void
   readonly onNotice: (message: string) => void
 }) {
   const navigate = useNavigate()
@@ -99,6 +102,7 @@ export function HarnessSection({
             onClick={() =>
               awaited('Mars pad walk', async () => {
                 engine.character.atMarsPad()
+                onStepOut()
                 if (mode !== 'flight') await navigate(PLAY_SOLO)
                 return 'On foot beside the Rocinante. Resume controls to walk.'
               })

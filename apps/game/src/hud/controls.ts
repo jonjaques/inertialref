@@ -1,3 +1,4 @@
+import type { TimeCommands } from './time.ts'
 import {
   DEFAULT_GAUGE,
   FOV_MAX,
@@ -328,18 +329,11 @@ export interface HudRenderState {
   readonly onPreference: (preference: OutputPreference) => void
 }
 
-/** Every verb that is bound to both a key and a button. See `App`. */
-export interface HudCommands {
-  readonly togglePause: () => void
-  readonly warp: (direction: number) => void
-  /**
-   * Back to one second per second, in one press.
-   *
-   * Not `warp(-1)` repeated: the ladder is seven rungs, so leaving 100,000×
-   * costs six presses and six notices. The transport strip has had the button
-   * since the dock existed and the keyboard has not had the key.
-   */
-  readonly realTime: () => void
+/**
+ * Every verb that is bound to both a key and a button. See `App`. The time
+ * commands are `hud/time.ts`'s, which the planetarium builds too.
+ */
+export interface HudCommands extends TimeCommands {
   readonly toggleAssist: () => void
   readonly killRotation: () => void
   readonly save: () => void

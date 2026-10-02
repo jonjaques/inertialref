@@ -10,6 +10,8 @@ export function useCharacterControls(
     readonly enabled: boolean
     readonly active: boolean
     readonly locked: boolean
+    /** Called once a walker is out, never on a lock that re-takes one. */
+    readonly onStepOut: () => void
   },
 ) {
   const latest = useRef(options)
@@ -25,13 +27,15 @@ export function useCharacterControls(
       new PointerLock({
         enter: () => {
           if (!latest.current.enabled) return false
-          if (!controller.active && !controller.enter()) {
+          if (controller.active) return true
+          if (!controller.enter()) {
             setError(
               controller.error ??
                 'Land on a solid surface before entering character controls.',
             )
             return false
           }
+          latest.current.onStepOut()
           return true
         },
         changed: (value) => {

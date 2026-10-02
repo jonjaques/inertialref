@@ -3,6 +3,7 @@ import type { GuideLifetime } from '../tour/lifetime.ts'
 import type { GuideRuntime } from '../tour/runtime.ts'
 import type { Picture } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import type { TimeCommands } from '../hud/time.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
 import type { LabelDensity } from './layers.ts'
 
@@ -26,6 +27,8 @@ export interface PlanetariumContext {
    */
   readonly guideAccess: GuideCapabilities | null
   readonly engine: GameEngine
+  /** Pause, warp and real time, as the keys give them, said on this mode's surface. */
+  readonly time: TimeCommands
   /** The address the observatory is on, refreshed by the mode at panel rate. */
   readonly target: string | null
   readonly focus: (address: string) => void

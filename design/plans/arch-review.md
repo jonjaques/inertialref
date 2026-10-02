@@ -38,6 +38,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | A body's visual residency is a policy that runs in Node      | [`apps/game/src/scene/bodyResidency.ts`](../../apps/game/src/scene/bodyResidency.ts) and its test               |
 | On foot is a session verb                                    | [`packages/devtools/src/onFoot.ts`](../../packages/devtools/src/onFoot.ts), ADR-0047                            |
 | The flying verbs are a module                                | [`packages/devtools/src/maneuvers.ts`](../../packages/devtools/src/maneuvers.ts) and its test                   |
+| Time has one writer                                          | [`apps/game/src/hud/time.ts`](../../apps/game/src/hud/time.ts) and its test                                     |
 
 ---
 
@@ -45,7 +46,6 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 3   | [Time has one writer](#3-time-has-one-writer)                                                                                                          | The walker and the frame | —         | Strong          |
 | 4   | [The ground under a walker is one module](#4-the-ground-under-a-walker-is-one-module)                                                                  | The walker and the frame | —         | Strong          |
 | 5   | [The walker's presentation is a function](#5-the-walkers-presentation-is-a-function)                                                                   | The walker and the frame | 4         | Worth exploring |
 | 6   | [Bodies: the uniforms are a pure mapping](#6-bodies-the-uniforms-are-a-pure-mapping)                                                                   | The walker and the frame | —         | Strong          |
@@ -70,7 +70,6 @@ The deepenings already landed, each carrying its reasoning in its own file:
 ```mermaid
 flowchart LR
   P9[9 Director and booted]
-  P3[3 Time]
   P4[4 Ground] --> P5[5 Presentation]
   P5 --> P7[7 Frame owner]
   P6[6 Bodies uniforms] --> P7
@@ -96,42 +95,13 @@ and its section says so. Three files are edited by more than one pull request,
 and the order is what keeps them apart:
 
 - `apps/game/src/engine/GameEngine.ts` — the walker's arm and the derived state
-  in 3–8, and the archive's wiring in 13. Different regions of it: a rebase, not
+  in 4–8, and the archive's wiring in 13. Different regions of it: a rebase, not
   a design dependency.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 3.** The walker's track is the one with the most left on it, and
-3 is the smallest of it: the step-out's clock write is one method of the app's
-controller, and the planetarium's time panel is the other writer.
-
----
-
-## 3. Time has one writer
-
-**Track:** the walker and the frame · **Strong** · in-process
-
-**Builds on:** nothing left open — the walker's clock write is one method of
-the app's controller. **Unblocks:** nothing.
-
-**Files.** `apps/game/src/planetarium/TimePanel.tsx` (`:95`, `:128`, `:150`),
-`apps/game/src/App.tsx` (the command table, `:506–516`),
-`apps/game/src/hud/time.ts`, `apps/game/src/planetarium/context.ts`, and
-`apps/game/src/engine/characterController.ts` (`#arrive`, the step-out rule).
-
-**The friction.** `App.tsx` says every command exists exactly once.
-`TimePanel` re-implements pause, warp and real time against
-`engine.world.clock` without the flash notice, and `CharacterController.#arrive`
-writes the same clock when a walker steps out — the game's rule, kept out of
-the session so a headless walker steps out at whatever rate it was asked.
-
-**The shape.** `TimePanel` takes `commands: HudCommands` through the
-planetarium context. Stepping out reaches the clock through the command table.
-
-**Gate.** A test holds `setTimeScale` and `setPaused` on `engine.world.clock` to
-one writer in `apps/game/src`, the way rule 34 is held for `localStorage`. Writes through `presentationClock` and the
-observatory's own time scale, which the guide's executor drives, are
-presentation and are a separate count.
+**Start with 4.** The walker's track is the one with the most left on it, and
+4 is where it continues: 5 and then 7 wait on the ground resolver.
 
 ---
 
