@@ -96,7 +96,10 @@ camera arm presents the result.**
 - Near contact, the renderer applies the drawn-versus-canonical ground
   difference to visible feet and eye height. The terrain tail remains bounded
   by `drawnDivergence`, 1.25 m, and the correction fades while airborne.
-  Structure decks use their anchor's ground correction. None of this enters
+  Structure decks use their anchor's ground correction. The camera and the
+  feet read both grounds through one port, `Ground`, whose game adapter
+  answers support from the same function the world's contact test reads,
+  so the three cannot stand a walker on different ground. None of this enters
   canonical position or the save. The camera carries a memory between frames
   — eased eye height, a lift absorbing a step or a landing, an eased boom —
   dropped on a cut. The third-person boom sweeps visible ground and the

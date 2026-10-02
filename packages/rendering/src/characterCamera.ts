@@ -7,15 +7,8 @@ import {
   Vec,
   vec3,
 } from '@inertialref/spatial'
-import {
-  type Body,
-  type SurfacePlacement,
-  bodyFixedDirection,
-  drawnSurfaceRadius,
-  geodeticDirection,
-  surfaceRadius,
-} from '@inertialref/universe'
-import { surfaceSupportRadius } from '@inertialref/simulation'
+import { bodyFixedDirection } from '@inertialref/universe'
+import type { Ground } from './ground.ts'
 import { clampPitch } from './surfaceStance.ts'
 
 /**
@@ -44,9 +37,10 @@ export interface CharacterCameraMemory {
 export interface CharacterCameraInput {
   readonly position: UniverseVector
   readonly orientation: Quat
-  readonly body: Body
+  /** The body's rotating frame, which the ground's rays are taken in. */
   readonly spin: FramePose
-  readonly structures: readonly SurfacePlacement[]
+  /** Both grounds under any point: `bodyGround` in the game. */
+  readonly ground: Ground
   readonly eyeHeight: number
   readonly pitch: number
   readonly view: 'first' | 'third'
@@ -91,24 +85,25 @@ export const CHASE = {
   landingDipLimit: 0.16,
 } as const
 
-/** The canonical contact and the corresponding visible ground, including decks. */
-function groundAt(input: CharacterCameraInput, position: UniverseVector) {
-  const direction = bodyFixedDirection(input.spin, position)
-  const canonical = surfaceRadius(input.body, direction)
-  let support = canonical
-  let drawn = drawnSurfaceRadius(input.body, direction)
-  for (const placement of input.structures) {
-    const radius = surfaceSupportRadius(placement, input.body, direction)
-    if (radius === null || radius <= support) continue
-    const anchor = geodeticDirection(placement.latitude, placement.longitude)
-    support = radius
-    drawn =
-      radius +
-      (drawnSurfaceRadius(input.body, anchor) -
-        surfaceRadius(input.body, anchor)) /
-        Vec.dot(anchor, direction)
-  }
-  return { support, drawn }
+/**
+ * Where a walker stands over the ground, and how much of the drawn ground its
+ * feet wear: all of the drawn-minus-canonical difference within two meters
+ * of the support, none from five up. The detail tail is presentational, so
+ * a walker airborne above it should not ride it.
+ */
+function footing(
+  input: Pick<CharacterCameraInput, 'spin' | 'ground'>,
+  position: UniverseVector,
+) {
+  const radial = UV.difference(position, input.spin.position)
+  const radius = Vec.length(radial)
+  const up = Vec.scale(radial, 1 / radius)
+  const ground = input.ground.at(bodyFixedDirection(input.spin, position))
+  const altitude = radius - ground.support
+  const correction =
+    (ground.drawn - ground.support) *
+    Math.max(0, Math.min(1, (5 - altitude) / 3))
+  return { radius, up, altitude, correction }
 }
 
 /**
@@ -118,19 +113,9 @@ function groundAt(input: CharacterCameraInput, position: UniverseVector) {
  * the camera is absorbing so the suit and the eye stay in step.
  */
 export function characterFeet(
-  input: Pick<
-    CharacterCameraInput,
-    'position' | 'body' | 'spin' | 'structures'
-  >,
+  input: Pick<CharacterCameraInput, 'position' | 'spin' | 'ground'>,
 ): UniverseVector {
-  const radial = UV.difference(input.position, input.spin.position)
-  const radius = Vec.length(radial)
-  const up = Vec.scale(radial, 1 / radius)
-  const ground = groundAt(input as CharacterCameraInput, input.position)
-  const altitude = radius - ground.support
-  const correction =
-    (ground.drawn - ground.support) *
-    Math.max(0, Math.min(1, (5 - altitude) / 3))
+  const { up, correction } = footing(input, input.position)
   return UV.translate(input.position, Vec.scale(up, correction))
 }
 
@@ -142,15 +127,7 @@ const ease = (from: number, to: number, delta: number, tau: number): number =>
 export function characterCameraPose(
   input: CharacterCameraInput,
 ): CharacterCameraPose {
-  const radial = UV.difference(input.position, input.spin.position)
-  const radius = Vec.length(radial)
-  const up = Vec.scale(radial, 1 / radius)
-  const ground = groundAt(input, input.position)
-  const altitude = radius - ground.support
-  // The detail tail is presentational. Fade it away once airborne above it.
-  const correction =
-    (ground.drawn - ground.support) *
-    Math.max(0, Math.min(1, (5 - altitude) / 3))
+  const { radius, up, altitude, correction } = footing(input, input.position)
 
   const held = input.memory
   let lift = held === null ? 0 : ease(held.lift, 0, input.delta, CHASE.liftEase)
@@ -200,7 +177,8 @@ export function characterCameraPose(
       return false
     return (
       Vec.length(UV.difference(point, input.spin.position)) >=
-      groundAt(input, point).drawn + CHASE.clearance
+      input.ground.at(bodyFixedDirection(input.spin, point)).drawn +
+        CHASE.clearance
     )
   }
   // Sweep outward from the head so the boom cannot pass through a ridge:
