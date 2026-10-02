@@ -10974,6 +10974,39 @@ Three decisions the plan left open:
 a console verb can now board under a held pointer lock, and a stored flag left
 the browser steering an entity that was gone.
 
+## The flying verbs answer for themselves, and every angle a verb takes is in degrees (2 Oct 2026)
+
+The flying verbs left `harness.ts` for `Maneuvers`
+(`packages/devtools/src/maneuvers.ts`), about five hundred lines of two-body
+speed, sunward placement, orbit-rate spin and nose-on-target in a class whose
+other methods mostly forward. Each verb returns a `ManeuverResult` — the
+state it wrote, `headingOf` it, the orbital phase, and `droppedEpoch`, always
+true because every one is a teleport — and the harness keeps answering with
+its status, which the console, `ir.land(...).player.landed` and the photo
+metadata read. The going-places tests rebuilt a forward vector from
+`state.orientation` and one recomputed a phase from `frames.pose`, because
+nothing they could ask answered what the verbs promised; `EntityInspection`
+now carries `heading` and `phase`, and none of them reads the world's
+entities. `face` and `burnToward` had no case on a ship; they have one each.
+
+`sunDirection` and `orbitalPhase` are functions of a time and an eye, not of
+an entity, because `ir.light()` asks about the observatory's eye at its held
+instant. `light()` computes its phase through `orbitalPhase` in universe axes
+where it used body axes; the angle is rotation-invariant and the picture
+ledger, which rounds it to a thousandth of a degree, is unchanged.
+
+`ir.land` took radians where `visit`, `drop` and `descend` took degrees —
+`visit`'s own comment called it a wart — and `Radians` is a bare `number`, so
+nothing stopped a latitude from `ir.sites()` reaching it. The four verbs and
+`DescentOptions` take `Degrees`, `ir.sites()` prints them, and a radian at
+`ir.land` is a compile error that `maneuvers.test.ts` holds with a
+`@ts-expect-error`. `deg()` in `@inertialref/shared` is the constructor, as
+`tick()` is for ticks. `ir.observatory.stand` stays in radians: the
+observatory is exposed as the object for its forty-calls-a-second gestures,
+and `visit` is its degree door. The debug landing site is one constant,
+`DEBUG_LANDING_SITE`, which the dock's Land button and the `surface`
+scenario both read; it is the old radians converted, so no landing moved.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

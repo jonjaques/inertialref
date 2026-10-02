@@ -275,7 +275,7 @@ ir.goTo('HIP71683') / ir.goTo('b:2') // teleports the SHIP; changes canonical st
 ir.look(address) // moves only a CAMERA; the planetarium's whole verb
 ir.dossier(address) // what the thing IS — the object panel's whole source, as JSON
 ir.orbit('g:milky-way/s:SOL/b:2', 400)
-ir.land('g:milky-way/s:SOL/b:0', 0.35, -1.1)
+ir.land('g:milky-way/s:SOL/b:0', 20, -63) // degrees, like every verb
 ir.shot('crescent', address) // teleports the SHIP into a composition
 ir.compose('crescent') // the same picture, moving only a CAMERA
 ir.shots() // the sixteen, with what each one is

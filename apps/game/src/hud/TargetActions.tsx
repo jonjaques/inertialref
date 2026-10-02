@@ -1,15 +1,6 @@
-import type { TravelTarget } from '@inertialref/devtools'
+import { DEBUG_LANDING_SITE, type TravelTarget } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from './Action.tsx'
-
-/**
- * Where `land` puts you when nobody says otherwise.
- *
- * The same site the `surface` scenario uses, so what the button does and what
- * `pnpm sim --scenario surface` does are the same landing, on purpose: a
- * discrepancy between them would be invisible and would waste an afternoon.
- */
-const DEBUG_LANDING_SITE = { latitude: 0.35, longitude: -1.1 }
 
 /**
  * What you can do with the selected destination.

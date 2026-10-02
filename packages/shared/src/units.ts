@@ -43,6 +43,16 @@ export type Feet = Brand<number, 'ft'>
 export type Inches = Brand<number, 'in'>
 export type Degrees = Brand<number, 'deg'>
 
+/**
+ * An angle written in degrees, where a call site writes one down.
+ *
+ * `Radians` is a bare `number`, so a degree field that took a number would
+ * take a radian too, silently; the brand makes the caller say which it means.
+ */
+export function deg(n: number): Degrees {
+  return n as Degrees
+}
+
 /* ------------------------------------------------------------------------- */
 /* Constants                                                                  */
 /* ------------------------------------------------------------------------- */
