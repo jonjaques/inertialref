@@ -11028,8 +11028,46 @@ other caller, and every call it makes is on its `eye`, the observatory's own
 clock; the test holds that too. A walker the session steps out headlessly
 keeps whatever rate the session was asked to run at.
 
+## The ground under a walker is read in one place, and the pad's relief is held to its model (2 Oct 2026)
+
+"The tallest support wins" was written twice — `World.contactRadius` over its
+own structures, and the character camera's `groundAt` over a list the engine
+filtered by body id, twice — and `surfaceSupportRadius` answers for any body
+it is handed, so "only this body's structures" was a rule every caller kept.
+`supportUnder` in `packages/simulation/src/surfacePlacement.ts` is the one
+rule, and it skips a placement on another body itself: a ray from Earth
+through the Mars pad's latitude and longitude finds the deck otherwise, two
+meters over Earth's terrain. The world reads it; so does `bodyGround` in
+`packages/rendering/src/ground.ts`, the game's adapter of a `Ground` port the
+camera and the feet now take instead of a `Body` and a structure list.
+`bodyGround` also owns the deck-drawn rule — a deck rides the drawn ground at
+its anchor, `drawnAnchorRadius`, which the scene and the Mars landing scene
+draw the model at — and the airborne fade `(5 − altitude) / 3` is written once.
+The port is what lets the camera's step and boom cases run on a plane, a
+0.3 m step and a 3 m wall built for the purpose rather than on the real pad.
+`CharacterSnapshot.terrainRadius` and `supportRadius` had no reader and cost a
+terrain sample and a contact test per walker per frame; they are gone.
+
+The relief in `packages/universe/src/structures.ts` is transcribed from the
+pad's model by hand, and `apps/headless/src/marsPadAsset.test.ts` now holds
+it, over a one-meter grid offset off the deck's open tile joints (a ray down a
+joint finds nothing). Measured: the deck agrees exactly, decals aside; no
+point inside the apron has a model surface and no relief; and of 5,644
+samples where both have a top, 27 differ by more than 0.13 m — the largest of
+the deliberate simplifications, the service enclosure's 2 m wall over a roof
+set 0.125 m in. The 27 are the ramp's 0.2 m curbs, which the relief leaves
+out; lamp housing and enclosure edges; and the landing beside the ramp's head
+(below). A 0.2 m warning band, perturbed into a scratch copy, fails the check.
+
 ## Known gaps
 
+- **The pad's relief stands a walker half a meter over the ramp's landing
+  corners.** Beside the ramp's head the relief carries the apron's -0.18 m
+  where the model drops to -0.70 m, over four samples of a meter grid either
+  side of the ramp; a walker there floats over the drawn landing. Measured
+  by `marsPadAsset.test.ts`'s relief check, not yet corrected in
+  `structures.ts`, because the correction is a transcription of the model's
+  landing outline rather than a number.
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
   voices, the introduction's wording aloud, pronunciation, and whether a
   cheaper backend than Astra paces a routine beat well are judged by listening,

@@ -94,6 +94,7 @@ import {
 } from './flight.ts'
 import {
   type SurfacePlacement,
+  supportUnder,
   surfaceSupportRadius,
   validateSurfacePlacement,
 } from './surfacePlacement.ts'
@@ -283,12 +284,12 @@ export class World implements FlightWorld {
     direction: BodyFixedDirection,
     terrain = surfaceRadius(body, direction),
   ): Meters {
-    let radius = terrain
-    for (const placement of this.structuresOn(formatAddress(body.address))) {
-      const support = surfaceSupportRadius(placement, body, direction)
-      if (support !== null && support > radius) radius = support
-    }
-    return radius
+    return supportUnder(
+      this.structuresOn(formatAddress(body.address)),
+      body,
+      direction,
+      terrain,
+    ).radius
   }
 
   /**

@@ -572,7 +572,11 @@ landing behind a term the renderer is free to change; a mesh reading the
 canonical one draws a plane at two meters, because the tolerance a patch is
 refined against **is** the amplitude floor the canonical field stops at, so
 nothing under it can ever deepen the selection.
-[ADR-0021](../adr/0021-the-ground.md).
+[ADR-0021](../adr/0021-the-ground.md). Under a walker the two are read in
+one place: `bodyGround` in `packages/rendering/src/ground.ts` answers both
+along a ray, its canonical half is `supportUnder` — the function
+`World.contactRadius` reads — and its drawn half carries a deck onto the
+drawn ground at its anchor, which is where the scene draws the model.
 
 ### Rule 54
 

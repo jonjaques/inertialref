@@ -18,8 +18,6 @@ import {
   type Body,
   type BodyFigure,
   bodyFixedFrameId,
-  bodyFixedDirection,
-  surfaceRadius,
   bodyFrameId,
   type EntityId,
   formatAddress,
@@ -64,8 +62,6 @@ export interface CharacterSnapshot extends CharacterState {
   readonly spin: FramePose
   readonly height: Meters
   readonly eyeHeight: Meters
-  readonly terrainRadius: Meters
-  readonly supportRadius: Meters
   readonly speed: number
 }
 
@@ -203,11 +199,6 @@ export function entitySnapshot(
     const binding = world.binding(state.frame)
     if (binding?.body != null && binding.spinFrame !== null) {
       const spin = world.frames.pose(binding.spinFrame, renderTime)
-      const direction = bodyFixedDirection(
-        spin,
-        canonicalPosition(world.frames, state, renderTime),
-      )
-      const terrainRadius = surfaceRadius(binding.body, direction)
       const up = Vec.normalize(state.position)
       character = {
         ...entity.character,
@@ -219,12 +210,6 @@ export function entitySnapshot(
         eyeHeight: entity.character.crouched
           ? CHARACTER.crouchEyeHeight
           : CHARACTER.eyeHeight,
-        terrainRadius,
-        supportRadius: world.contactRadius(
-          binding.body,
-          direction,
-          terrainRadius,
-        ),
         speed: Vec.length(
           Vec.sub(state.velocity, Vec.scale(up, Vec.dot(state.velocity, up))),
         ),

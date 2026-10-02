@@ -39,6 +39,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | On foot is a session verb                                    | [`packages/devtools/src/onFoot.ts`](../../packages/devtools/src/onFoot.ts), ADR-0047                            |
 | The flying verbs are a module                                | [`packages/devtools/src/maneuvers.ts`](../../packages/devtools/src/maneuvers.ts) and its test                   |
 | Time has one writer                                          | [`apps/game/src/hud/time.ts`](../../apps/game/src/hud/time.ts) and its test                                     |
+| The ground under a walker is one module                      | [`packages/rendering/src/ground.ts`](../../packages/rendering/src/ground.ts), `supportUnder`, rule 53           |
 
 ---
 
@@ -46,8 +47,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 4   | [The ground under a walker is one module](#4-the-ground-under-a-walker-is-one-module)                                                                  | The walker and the frame | —         | Strong          |
-| 5   | [The walker's presentation is a function](#5-the-walkers-presentation-is-a-function)                                                                   | The walker and the frame | 4         | Worth exploring |
+| 5   | [The walker's presentation is a function](#5-the-walkers-presentation-is-a-function)                                                                   | The walker and the frame | —         | Worth exploring |
 | 6   | [Bodies: the uniforms are a pure mapping](#6-bodies-the-uniforms-are-a-pure-mapping)                                                                   | The walker and the frame | —         | Strong          |
 | 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | 5, 6      | Strong          |
 | 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | 7         | Strong          |
@@ -70,7 +70,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 ```mermaid
 flowchart LR
   P9[9 Director and booted]
-  P4[4 Ground] --> P5[5 Presentation]
+  P5[5 Presentation]
   P5 --> P7[7 Frame owner]
   P6[6 Bodies uniforms] --> P7
   P7 --> P8[8 One generation]
@@ -95,72 +95,14 @@ and its section says so. Three files are edited by more than one pull request,
 and the order is what keeps them apart:
 
 - `apps/game/src/engine/GameEngine.ts` — the walker's arm and the derived state
-  in 4–8, and the archive's wiring in 13. Different regions of it: a rebase, not
+  in 5–8, and the archive's wiring in 13. Different regions of it: a rebase, not
   a design dependency.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 4.** The walker's track is the one with the most left on it, and
-4 is where it continues: 5 and then 7 wait on the ground resolver.
-
----
-
-## 4. The ground under a walker is one module
-
-**Track:** the walker and the frame · **Strong** · in-process
-
-**Builds on:** nothing. **Unblocks:** 5.
-
-**Files.** `packages/simulation/src/world.ts` (`contactRadius`, `:281–292`),
-`packages/simulation/src/surfacePlacement.ts` (`surfaceSupportRadius`),
-`packages/rendering/src/characterCamera.ts` (`groundAt`, `characterFeet`, the
-fade at `:133` and `:153`), `packages/rendering/src/scene.ts` (`:418–426`),
-`packages/devtools/src/cutscenes/marsLanding.ts` (`:68–72`),
-`packages/simulation/src/snapshot.ts` (`CharacterSnapshot`),
-`apps/game/src/engine/GameEngine.ts` (the two structure filters in `#step`,
-`:1475` and `:1541`).
-
-**The friction.**
-
-- **"The tallest support wins" is written twice.** `World.contactRadius` walks
-  the body's structures through `structuresOn`. The camera's `groundAt` walks a
-  list its caller filtered, and `GameEngine` filters it twice, by
-  `s.body.id ===`. `surfaceSupportRadius` does not check that a placement is on
-  the body it is asked about, so "only this body's structures" is a rule every
-  caller keeps.
-- **The deck's drawn offset is written three times** — the drawn ground at the
-  anchor minus the canonical one, over the cosine — in `groundAt`, in
-  `scene.ts`, and in the landing cutscene.
-- **The airborne fade `(5 - altitude) / 3` is written twice** in
-  `characterCamera.ts`.
-- **Two snapshot fields have no reader.** `CharacterSnapshot.terrainRadius` and
-  `supportRadius` are read by nothing outside tests, and the snapshot samples
-  terrain every frame to fill them.
-- **The camera takes a real `Body`,** so its tests cannot build a synthetic
-  ridge, and `characterCamera.test.ts` uses the real pad instead.
-
-**The shape.** The simulation exports the pure support-over-placements
-function, and `World.contactRadius` delegates to it. A ground resolver in
-`packages/rendering` answers `{ support, drawn }` for a `BodyFixedDirection` on
-a body and owns the deck-drawn rule, which `scene.ts` and the cutscene read
-too. The camera and the feet take the resolver as a port: the body and its
-structures in production, a flat plane, a step and a ridge in tests. The two
-unread snapshot fields go.
-
-**Gate.**
-
-- The camera's boom and step cases run on a synthetic ridge.
-- A test holds the camera, the feet and `World.contactRadius` to one support
-  over the pad.
-- `(5 - altitude)` appears once, and the drawn-offset arithmetic appears once.
-- The two snapshot fields are gone and `pnpm knip` is clean.
-- `supportHeightAt` is checked against the pad's GLB over a grid, with the
-  ray-caster `apps/headless/src/marsPadAsset.test.ts` already has. The relief in
-  `packages/universe/src/structures.ts` is transcribed from the asset by hand,
-  and nothing else holds the transcription.
-
-Rule 53 is the constraint this closes to one seam: the drawn ground and the
-canonical one are read in one module, which says which is which.
+**Start with 5.** The walker's track is the one with the most left on it, and
+5 is where it continues: the camera reads the ground through a port, so what
+is left in the walker's arm of `#step` is the presentation, and 7 waits on it.
 
 ---
 
@@ -168,8 +110,8 @@ canonical one are read in one module, which says which is which.
 
 **Track:** the walker and the frame · **Worth exploring** · in-process
 
-**Builds on:** 4, for a camera that reads the ground through the port. The
-controller already holds only the view. **Unblocks:** 7.
+**Builds on:** nothing left open — the camera reads the ground through a
+port and the controller holds only the view. **Unblocks:** 7.
 
 **Files.** `apps/game/src/engine/GameEngine.ts` — the walker's arm in `#step`
 (`:1466–1577`), the gait choice (`:1553–1570`), `parkedRocinante`

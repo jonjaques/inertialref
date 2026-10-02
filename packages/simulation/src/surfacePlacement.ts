@@ -11,6 +11,7 @@ import {
 import {
   type Body,
   type BodyFixedDirection,
+  formatAddress,
   geodeticDirection,
   type SurfacePlacement,
   supportHeightAt,
@@ -106,6 +107,43 @@ export function surfaceSupportRadius(
   const z = scale * Vec.dot(tangent, basis.south)
   const top = supportHeightAt(asset, x, z)
   return top === null ? null : (datum + top) / cosine
+}
+
+/** What a body-fixed ray stands on, and which placement supplied it. */
+export interface Support {
+  /** Radius from the body's center of the highest top under the ray. */
+  readonly radius: Meters
+  /** The placement whose relief won, or null where the terrain did. */
+  readonly placement: SurfacePlacement | null
+}
+
+/**
+ * The tallest support under a ray: the terrain, or a placement's relief.
+ *
+ * Height wins, never order, so a deck over a hill and a hill through a deck
+ * both answer the higher of the two. Only placements on `body` count — a
+ * caller handing over every structure in the world gets the same answer as
+ * one that filtered, which is what lets the world, the camera and the feet
+ * read one rule rather than each keep the filter.
+ */
+export function supportUnder(
+  placements: Iterable<SurfacePlacement>,
+  body: Body,
+  direction: BodyFixedDirection,
+  terrain: Meters = surfaceRadius(body, direction),
+): Support {
+  const address = formatAddress(body.address)
+  let radius = terrain
+  let winner: SurfacePlacement | null = null
+  for (const placement of placements) {
+    if (placement.bodyAddress !== address) continue
+    const top = surfaceSupportRadius(placement, body, direction)
+    if (top !== null && top > radius) {
+      radius = top
+      winner = placement
+    }
+  }
+  return { radius, placement: winner }
 }
 
 /** Validate before resolving a body, so a rejected placement has no world effects. */
