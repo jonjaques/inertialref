@@ -11080,6 +11080,24 @@ match would have sunk a walker half a meter into a landing drawn where it
 stands. The landing is wound outward now and the model re-exported; an
 upward-only caster over it counts the same 22.
 
+## A cut is one fact, and the walker's frame is a function (2 Oct 2026)
+
+About 110 lines inside `GameEngine.#step` assembled the walker camera's input
+and one view per suit, and `CharacterController.cameraMemory` was a public
+field the frame wrote back into. A cut was two facts: `declareCut()` bumped
+`pictureEpoch`, and the camera's memory was cleared by hand at four sites — so
+a cut the harness made, `ir.view` or a placement's `#handsOff`, reset the
+picture's history and left the eye easing from where it had been.
+`presentOnFoot` (`apps/game/src/engine/onFootPresentation.ts`) is the walker's
+frame as a function of the shot, the view and a memory keyed by the epoch and
+the walker it was made for, so a cut drops it whoever makes it. The view
+switch is the one cut that keeps it — the boom eases out from the head — and
+only when it is the only cut since: the pad fixture steps out in third person
+in the same frame as its teleport, and the step detector, which compares the
+feet's radius with the last frame's, would read that jump as a step. `gaitFor` is the
+17-line clip choice, exported and held by a table; the parked Rocinante finds
+the pad by `MARS_PAD.id` rather than the string.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
