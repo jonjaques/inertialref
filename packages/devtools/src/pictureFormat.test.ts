@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { LENS_PRESETS } from '@inertialref/rendering'
 import { TEST_CATALOG } from '@inertialref/universe'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import { deg } from '@inertialref/shared'
 import { openSession } from './session.ts'
 import {
   decodePictures,
@@ -232,7 +233,11 @@ describe('portable pictures', () => {
       const ir = session.harness
       ir.look('s:SOL/b:2.0', { ease: false })
       ir.observatory.setTime(123456)
-      ir.visit('s:SOL/b:2.0', { latitude: 0.2, longitude: -0.5, height: 2000 })
+      ir.visit('s:SOL/b:2.0', {
+        latitude: deg(0.2),
+        longitude: deg(-0.5),
+        height: 2000,
+      })
       ir.aim(24, -8)
       const pose = ir.observatory.sample(0)
       const hash = session.world.stateHash()

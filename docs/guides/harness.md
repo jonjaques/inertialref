@@ -280,7 +280,7 @@ the clock's side.
 flowchart TB
     subgraph POS["put the ship somewhere"]
         O["ir.orbit(address, altitudeKm)<br/><i>a valid two-body solution —<br/>it stays there</i>"]
-        L["ir.land(address, lat, lon)<br/><i>places on the pad —<br/>landed after one tick</i>"]
+        L["ir.land(address, latDeg, lonDeg)<br/><i>places on the pad —<br/>landed after one tick</i>"]
         G["ir.goToSystem(id, au)"]
     end
     subgraph AIM["aim and burn"]
@@ -312,12 +312,23 @@ Two notes worth internalizing:
 - **`land` does not land you.** It puts the ship on the pad — local `y = 0` in a
   surface frame _is_ the ground — and the contact test makes it landed on the
   next tick, so `ir.land(...).player.landed` is `false` and one `ir.step()`
-  fixes it. `ir.scenario('surface')` hides this because it steps 64 ticks. The
-  previous version asserted landedness directly while sitting three meters up;
-  because `stepFlight` short-circuits for an entity that is already landed, the
-  contact test never ran and the ship hovered there for the whole session while
-  the overlay reported an altitude of zero. Landedness is now only ever a
-  consequence of touching the ground.
+  fixes it. `ir.scenario('surface')` hides this because it steps 64 ticks.
+  Landedness is only ever a consequence of touching the ground: `stepFlight`
+  short-circuits for an entity that is already landed, so a ship declared
+  landed three meters up never meets the contact test and hovers there while
+  the overlay reports an altitude of zero.
+- **Every angle a verb takes is in degrees** — `land`, `visit`, `drop`,
+  `descend` — and every listing prints degrees, so `ir.sites()` output pastes
+  into any of them. Under TypeScript the `Degrees` brand makes the caller say
+  so (`deg(20)` from `@inertialref/shared`); radians begin below the harness.
+  `ir.observatory.stand` is the object itself and takes radians: `ir.visit` is
+  the degree door to it.
+- **The verbs live in `Maneuvers`** (`packages/devtools/src/maneuvers.ts`),
+  which a test can build over a session directly. Each returns what it
+  promises — the state it wrote, the nose, the phase it framed — where the
+  harness returns its status. `ir.status().player` carries the same `heading`
+  and `phase`, so "arrives looking at it" is the dot of `heading` with
+  `-local`.
 - **`ir.flightAssist(enabled)`** exists and is absent from `ir.help()`. It is
   control input and it is in the state hash, so a test comparing hashes has to
   know it is there. `ir.scenarios()` lists the five scenario names.
@@ -331,7 +342,7 @@ walking — the browser keeps pointer lock, the look and the view — so a test 
 `pnpm sim` puts a walker on the ground with no renderer:
 
 ```js
-ir.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+ir.land('g:milky-way/s:SOL/b:3', 20, -63)
 ir.step(1) // landed after one tick
 ir.onFoot.stepOut() // a walker beside the ship, and now the player
 ir.onFoot.status() // active, walker, ship, canFly, grounded, …
@@ -654,9 +665,9 @@ ir.dossier(address) // the record, whose Geology card is the surface grammar
 `ir.descend` runs with no world state changed, no worker used and no frame
 drawn, so it produces the same level churn, peak burst and cache numbers in a
 browser console, in `pnpm sim --terrain-baseline` and in a Node test. It takes
-`latitude` and `longitude` in degrees, the same boundary `ir.visit` states —
-`ir.sites` output pastes straight in, and radians begin below the harness.
-(`ir.land` is the one wart: it takes radians.)
+`latitude` and `longitude` in degrees, the same boundary `ir.visit`, `ir.drop`
+and `ir.land` state — `ir.sites` output pastes straight in, and radians begin
+below the harness.
 `ir.terrain` is the counterpart: what the streamer actually has, which is
 `null` headlessly rather than a zero. Its `patches` counts ground built and
 placed this frame, not the selection's length — a cold arrival reports zero

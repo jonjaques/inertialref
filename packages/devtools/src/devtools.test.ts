@@ -1,28 +1,25 @@
 import { describe, expect, it, vi } from 'vitest'
 import * as universe from '@inertialref/universe'
-import { AU, LIGHT_YEAR, err, ok } from '@inertialref/shared'
+import { AU, LIGHT_YEAR, err, ok, radiansToDegrees } from '@inertialref/shared'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import type { AuthorityPort, ClientHello } from '@inertialref/net'
 import {
-  bodyFrameId,
   formatAddress,
   MARS_PAD,
-  parseAddress,
   partitionForAddress,
   type PartitionKey,
   systemAddress,
-  systemFrameId,
   systemId,
   TEST_CATALOG,
   walkBodies,
-  type EntityId,
 } from '@inertialref/universe'
-import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
+import { Vec, vec3 } from '@inertialref/spatial'
 import { LENS_PRESETS } from '@inertialref/rendering'
 import { runCapabilityChecks, summarizeCapabilities } from './capabilities.ts'
 import { canHoldOrbit, sameTargets } from './travel.ts'
 import type { GameHarness } from './harness.ts'
-import { inspectWorld } from './inspect.ts'
+import { DEBUG_LANDING_SITE } from './maneuvers.ts'
+import { type EntityInspection, inspectWorld } from './inspect.ts'
 import { openSession, type Session } from './session.ts'
 
 function harness(): { harness: GameHarness; session: Session } {
@@ -168,7 +165,7 @@ describe('harness', () => {
     const { harness: ir } = harness()
     const target = ir.bodies().find((b) => b.kind === 'rocky')
     if (target === undefined) throw new Error('no rocky body')
-    ir.land(target.address, 0.3, -0.8)
+    ir.land(target.address, radiansToDegrees(0.3), radiansToDegrees(-0.8))
     ir.step(64 * 30)
     const player = ir.inspect()
     expect(player?.landed).toBe(true)
@@ -370,7 +367,11 @@ describe('landing through the harness', () => {
     const player = session.player()
     if (player === null) throw new Error('no player')
 
-    session.harness.land(formatAddress(session.target.address), 0.35, -1.1)
+    session.harness.land(
+      formatAddress(session.target.address),
+      DEBUG_LANDING_SITE.latitude,
+      DEBUG_LANDING_SITE.longitude,
+    )
     // Not landed yet: the contact test decides, on the next tick.
     expect(session.world.isLanded(player)).toBe(false)
 
@@ -643,8 +644,20 @@ describe('travel targets', () => {
 })
 
 describe('going places', () => {
+  /**
+   * How squarely the nose is on the body whose frame the ship is in. The body
+   * is at that frame's origin, so the way to it is back down the position.
+   */
+  const lookingAtIt = (player: EntityInspection | null): number => {
+    if (player === null) throw new Error('no player')
+    const toBody = Vec.normalize(
+      Vec.negate(vec3(player.local.x, player.local.y, player.local.z)),
+    )
+    return Vec.dot(player.heading, toBody)
+  }
+
   it('sends the ship to a body named relative to the system it is in', () => {
-    const { harness: ir, session } = harness()
+    const { harness: ir } = harness()
     ir.goTo('b:2')
     const player = ir.inspect()
     expect(player?.frame).toBe('b:g:milky-way/s:SOL/b:2')
@@ -652,12 +665,7 @@ describe('going places', () => {
     // And arrives looking at it. `orbit` alone aims along the track, so the
     // planet is off to one side and the screen is empty — which reads as a
     // planet that failed to load rather than as a heading.
-    const entity = session.world.entities.require(session.player() as EntityId)
-    const forward = Q.rotate(entity.state.orientation, vec3(0, 0, -1))
-    // The body is at the origin of its own frame, so the way to it is simply
-    // back down the position vector.
-    const toBody = Vec.normalize(Vec.negate(entity.state.position))
-    expect(Vec.dot(forward, toBody)).toBeCloseTo(1, 6)
+    expect(lookingAtIt(player)).toBeCloseTo(1, 6)
   })
 
   it('composes shots of a moon against the sun, not against its planet', () => {
@@ -671,25 +679,11 @@ describe('going places', () => {
      * geometry happened to put it, tens of degrees off the 90° the bookmark
      * promises.
      */
-    const { harness: ir, session } = harness()
-    ir.shot('half', 'b:2.0')
-    const world = session.world
-    const time = world.clock.time
-    const player = session.player() as EntityId
-    const camera = world.canonicalPositionOf(player)
-    const moon = world.frames.pose(
-      bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2.0')),
-      time,
-    ).position
-    const star = world.frames.pose(
-      systemFrameId(systemId('SOL')),
-      time,
-    ).position
-    const toSun = Vec.normalize(UV.difference(star, moon))
-    const toCamera = Vec.normalize(UV.difference(camera, moon))
-    const phase = (Math.acos(Vec.dot(toSun, toCamera)) * 180) / Math.PI
+    const { harness: ir } = harness()
+    const player = ir.shot('half', 'b:2.0').player
+    expect(player?.frame).toBe('b:g:milky-way/s:SOL/b:2.0')
     // 'half' promises a terminator down the middle: a 90° phase angle.
-    expect(phase).toBeCloseTo(90, 1)
+    expect(player?.phase).toBeCloseTo(90, 1)
   })
 
   it('keeps a framed shot pointing at the body as the orbit proceeds', () => {
@@ -700,17 +694,13 @@ describe('going places', () => {
      * the orbit normal. Twenty minutes of Luna's `gibbous` orbit is ~10° of
      * arc — confirmed to fail before the fix at dot ≈ 0.983.
      */
-    const { harness: ir, session } = harness()
+    const { harness: ir } = harness()
     ir.shot('gibbous', 'b:2.0')
-    ir.step(64 * 1200)
-    const entity = session.world.entities.require(session.player() as EntityId)
-    const forward = Q.rotate(entity.state.orientation, vec3(0, 0, -1))
-    const toBody = Vec.normalize(Vec.negate(entity.state.position))
-    expect(Vec.dot(forward, toBody)).toBeGreaterThan(0.995)
+    expect(lookingAtIt(ir.step(64 * 1200).player)).toBeGreaterThan(0.995)
   })
 
   it('sends the ship to another star system, orbiting the star itself', () => {
-    const { harness: ir, session } = harness()
+    const { harness: ir } = harness()
     expect(ir.status().world.loadedSystems).toHaveLength(1)
     ir.goTo('HIP71683')
     expect(ir.status().world.loadedSystems.map((s) => s.id)).toContain(
@@ -723,21 +713,22 @@ describe('going places', () => {
 
     // In a genuine circular orbit of it, close enough that the disk reads as
     // a sun rather than a bright point...
-    const star = session.world.system(systemId('HIP71683'))?.star
+    const star = ir.world.system(systemId('HIP71683'))?.star
     if (star === undefined) throw new Error('HIP71683 not loaded')
-    const entity = session.world.entities.require(session.player() as EntityId)
-    expect(Vec.length(entity.state.position)).toBeLessThan(star.radius * 12)
-    ir.step(64 * 120)
-    const after = ir.inspect()?.local
-    const radius = Math.hypot(after?.x ?? 0, after?.y ?? 0, after?.z ?? 0)
-    expect(radius / Vec.length(entity.state.position)).toBeCloseTo(1, 2)
+    const distance = (player: EntityInspection | null): number =>
+      Math.hypot(
+        player?.local.x ?? 0,
+        player?.local.y ?? 0,
+        player?.local.z ?? 0,
+      )
+    const arrived = distance(ir.inspect())
+    expect(arrived).toBeLessThan(star.radius * 12)
+    const held = ir.step(64 * 120).player
+    expect(distance(held) / arrived).toBeCloseTo(1, 2)
 
-    // ...and looking at it: the star sits at the frame's origin, so the way
-    // to it is back down the position vector.
-    const held = session.world.entities.require(session.player() as EntityId)
-    const forward = Q.rotate(held.state.orientation, vec3(0, 0, -1))
-    const toStar = Vec.normalize(Vec.negate(held.state.position))
-    expect(Vec.dot(forward, toStar)).toBeGreaterThan(0.99)
+    // ...and looking at it: the star sits at the frame's origin, which is
+    // what `lookingAtIt` measures against.
+    expect(lookingAtIt(held)).toBeGreaterThan(0.99)
   })
 
   it('holds off in the dark only when asked to', () => {
