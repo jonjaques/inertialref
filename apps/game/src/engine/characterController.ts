@@ -28,7 +28,8 @@ export class CharacterController {
   #padWalker: EntityId | null = null
   #pitch = 0
   #yaw = 0
-  #locked = false
+  /** The walker the pointer lock was granted for; another one is not locked. */
+  #lockedWalker: EntityId | null = null
   view: 'first' | 'third' = 'first'
   error: string | null = null
   /** The camera's between-frame filters; null is a cut. Written by the frame. */
@@ -50,10 +51,11 @@ export class CharacterController {
   }
   /**
    * Derived, because a console verb can board the ship under a held lock: a
-   * walker that is gone is not one the pointer still steers.
+   * walker that is gone is not one the pointer still steers, and the next
+   * one to step out is not locked until the browser grants it.
    */
   get locked(): boolean {
-    return this.#locked && this.active
+    return this.#lockedWalker !== null && this.#lockedWalker === this.entity?.id
   }
   get pitch(): number {
     return this.#pitch
@@ -104,8 +106,8 @@ export class CharacterController {
   }
 
   lockChanged(locked: boolean): void {
-    this.#locked = locked && this.active
-    if (!this.#locked) this.stop()
+    this.#lockedWalker = locked ? (this.entity?.id ?? null) : null
+    if (this.#lockedWalker === null) this.stop()
     else this.error = null
   }
 
@@ -168,13 +170,13 @@ export class CharacterController {
   leave(): void {
     if (!this.active) return
     this.stop()
-    this.#locked = false
+    this.#lockedWalker = null
     if (this.#onFoot.board().ok) this.cameraMemory = null
   }
 
   /** Presentation only: a replaced world keeps none of this, and writes nothing. */
   reset(): void {
-    this.#locked = false
+    this.#lockedWalker = null
     this.#padWalker = null
     this.#pitch = 0
     this.#yaw = this.entity?.character?.input.yaw ?? 0

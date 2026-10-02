@@ -109,11 +109,17 @@ describe('character activation', () => {
     const ship = game.character.ship
     game.character.lockChanged(true)
     expect(game.character.locked).toBe(true)
-    game.harness.goTo('b:2')
+    game.harness.onFoot.board()
     expect(game.player()).toBe(ship)
     expect(game.character.active).toBe(false)
     expect(game.character.locked).toBe(false)
     expect(game.character.padPreview).toBe(false)
+    // The next walker out is not locked until the browser grants it again —
+    // without a pointer lock to release, nothing else clears the old grant.
+    expect(game.character.enter()).toBe(true)
+    expect(game.character.locked).toBe(false)
+    game.character.lockChanged(true)
+    expect(game.character.locked).toBe(true)
     game.dispose()
   })
 
