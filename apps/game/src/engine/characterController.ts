@@ -1,24 +1,6 @@
 import { DRAG_RADIANS_PER_PIXEL, clampPitch } from '@inertialref/rendering'
-import {
-  canonicalPosition,
-  Quaternion as Q,
-  UV,
-  Vec,
-  vec3,
-} from '@inertialref/spatial'
-import {
-  bodyFixedDirection,
-  bodyFixedFrameId,
-  directionToGeodetic,
-  type Body,
-  type EntityId,
-  MARS_PAD,
-  systemId,
-} from '@inertialref/universe'
-import {
-  surfacePlacementPose,
-  type CharacterInput,
-} from '@inertialref/simulation'
+import type { EntityId } from '@inertialref/universe'
+import type { Entity, CharacterInput } from '@inertialref/simulation'
 import type { CharacterCameraMemory } from '@inertialref/rendering'
 import type { GameEngine } from './GameEngine.ts'
 
@@ -34,14 +16,20 @@ export interface CharacterStatus {
   readonly error: string | null
 }
 
-/** Input and view policy; World alone moves the character. */
+/**
+ * The browser's half of walking: pointer lock, the look, the view and the
+ * camera's memory. Stepping out, stepping back in and the pad fixture are the
+ * session's (`ir.onFoot`), so a console and a test reach the same walker; the
+ * world alone moves it.
+ */
 export class CharacterController {
   readonly #engine: GameEngine
-  #ship: EntityId | null = null
-  #padPreview = false
+  /** The walker the pad fixture staged, which the scene draws a Rocinante for. */
+  #padWalker: EntityId | null = null
   #pitch = 0
   #yaw = 0
-  locked = false
+  /** The walker the pointer lock was granted for; another one is not locked. */
+  #lockedWalker: EntityId | null = null
   view: 'first' | 'third' = 'first'
   error: string | null = null
   /** The camera's between-frame filters; null is a cut. Written by the frame. */
@@ -51,75 +39,54 @@ export class CharacterController {
     this.#engine = engine
   }
 
-  get entity() {
-    const id = this.#engine.player()
-    return id === null ? null : (this.#engine.world.entities.get(id) ?? null)
+  get #onFoot() {
+    return this.#engine.harness.onFoot
+  }
+
+  get entity(): Entity | null {
+    return this.#onFoot.walker()
   }
   get active(): boolean {
-    return this.entity?.character != null
+    return this.#onFoot.active
+  }
+  /**
+   * Derived, because a console verb can board the ship under a held lock: a
+   * walker that is gone is not one the pointer still steers, and the next
+   * one to step out is not locked until the browser grants it.
+   */
+  get locked(): boolean {
+    return this.#lockedWalker !== null && this.#lockedWalker === this.entity?.id
   }
   get pitch(): number {
     return this.#pitch
   }
+  /** The ship the walker steps back into; see `OnFoot.ship`. */
   get ship(): EntityId | null {
-    return this.#ship
+    return this.#onFoot.ship()
   }
 
   get padPreview(): boolean {
-    return this.#padPreview
+    return this.#padWalker !== null && this.entity?.id === this.#padWalker
   }
 
   /**
-   * Where a walker would step out: beside the landed ship, on its body.
+   * Whether the mode may put a walker down at all.
    *
-   * Only a landed ship. The planetarium's stance is an eye over ground the
-   * world has not been asked to support, and its mode is a promise to leave
-   * the world alone, so it flies free instead of spawning anyone.
+   * The planetarium's stance is an eye over ground the world has not been
+   * asked to support, and its mode is a promise to leave the world alone, so
+   * it flies free instead of spawning anyone; a scene holds the camera.
    */
-  #site(): {
-    body: Body
-    latitude: number
-    longitude: number
-    heading: number
-    pitch: number
-  } | null {
-    const engine = this.#engine
-    if (engine.harness.cutsceneStatus() !== null) return null
-    if (engine.harness.observerStatus()?.target != null) return null
-    const entity = this.entity
-    if (entity === null || !engine.world.landedEntities().includes(entity.id))
-      return null
-    const body = engine.world.bodyAt(entity.state.frame)
-    if (body === null) return null
-    const spin = engine.world.frames.pose(
-      bodyFixedFrameId(body.address),
-      engine.world.clock.time,
+  #mayStepOut(): boolean {
+    const harness = this.#engine.harness
+    return (
+      harness.cutsceneStatus() === null &&
+      harness.observerStatus()?.target == null
     )
-    const position = canonicalPosition(
-      engine.world.frames,
-      entity.state,
-      engine.world.clock.time,
-    )
-    const up = Vec.normalize(UV.difference(position, spin.position))
-    const east = Vec.normalize(
-      Vec.cross(Q.rotate(spin.orientation, vec3(0, 1, 0)), up),
-    )
-    const offset = Vec.scale(
-      east,
-      Math.max(4, (engine.hull?.beamMeters ?? 6) / 2 + 3),
-    )
-    const direction = bodyFixedDirection(spin, UV.translate(position, offset))
-    return { body, ...directionToGeodetic(direction), heading: 0, pitch: 0 }
   }
 
   available(): boolean {
     if (this.active) return true
-    const site = this.#site()
-    return (
-      site !== null &&
-      site.body.kind !== 'gas-giant' &&
-      site.body.kind !== 'ice-giant'
-    )
+    return this.#mayStepOut() && this.#onFoot.available(this.#beam())
   }
 
   enter(): boolean {
@@ -127,42 +94,26 @@ export class CharacterController {
       this.error = null
       return true
     }
-    const site = this.#site()
-    if (site === null || !this.available()) {
+    const stepped = this.#mayStepOut()
+      ? this.#onFoot.stepOut(this.#beam())
+      : null
+    if (stepped === null || !stepped.ok) {
       this.error = 'Land on solid ground to walk.'
       return false
     }
-    this.#ship = this.#engine.player()
-    const character = this.#engine.world.spawnCharacter(
-      site.body,
-      site.latitude,
-      site.longitude,
-      {
-        canFly: this.#engine.session.canFly,
-        heading: site.heading,
-      },
-    )
-    this.#engine.session.controlPlayer(character.id)
-    this.#yaw = site.heading
-    this.#pitch = site.pitch
-    this.view = 'first'
-    this.error = null
-    this.cameraMemory = null
-    this.#engine.world.clock.setTimeScale(1)
-    this.#engine.world.clock.setPaused(false)
-    this.#engine.declareCut()
+    this.#arrive(stepped.value, { pitch: 0, view: 'first', pad: false })
     return true
   }
 
   lockChanged(locked: boolean): void {
-    this.locked = locked && this.active
-    if (!this.locked) this.stop()
+    this.#lockedWalker = locked ? (this.entity?.id ?? null) : null
+    if (this.#lockedWalker === null) this.stop()
     else this.error = null
   }
 
   input(input: Partial<CharacterInput>): void {
     const entity = this.entity
-    if (!this.locked || entity?.character == null) return
+    if (!this.locked || entity === null) return
     this.#engine.world.setCharacterInput(entity.id, input)
   }
 
@@ -170,7 +121,7 @@ export class CharacterController {
     const entity = this.entity
     if (
       !this.locked ||
-      entity?.character == null ||
+      entity === null ||
       !Number.isFinite(dx) ||
       !Number.isFinite(dy)
     )
@@ -204,7 +155,7 @@ export class CharacterController {
 
   stop(): void {
     const entity = this.entity
-    if (entity?.character == null) return
+    if (entity === null) return
     this.#engine.world.setCharacterInput(entity.id, {
       forward: 0,
       right: 0,
@@ -218,94 +169,76 @@ export class CharacterController {
 
   leave(): void {
     if (!this.active) return
-    const character = this.entity
     this.stop()
-    this.locked = false
-    if (this.#ship !== null && this.#engine.world.entities.has(this.#ship))
-      this.#engine.session.controlPlayer(this.#ship)
-    if (character?.character != null && this.#engine.player() !== character.id)
-      this.#engine.world.removeCharacter(character.id)
-    this.#padPreview = false
-    this.cameraMemory = null
-    this.#engine.declareCut()
+    this.#lockedWalker = null
+    if (this.#onFoot.board().ok) this.cameraMemory = null
   }
 
+  /** Presentation only: a replaced world keeps none of this, and writes nothing. */
   reset(): void {
-    this.locked = false
-    this.#ship =
-      this.#engine.world.entities
-        .ordered()
-        .find((entity) => entity.kind === 'ship')?.id ?? null
-    this.#padPreview = false
+    this.#lockedWalker = null
+    this.#padWalker = null
     this.#pitch = 0
     this.#yaw = this.entity?.character?.input.yaw ?? 0
     this.error = null
     this.cameraMemory = null
-    const entity = this.entity
-    if (entity?.character != null) {
-      this.#engine.world.setCharacterFlightPermission(
-        entity.id,
-        this.#engine.session.canFly,
-      )
-      this.stop()
-    }
   }
 
   /** Reproducible scale check beside the cinema's 46 m Rocinante and Mars pad. */
-  atMarsPad(): boolean {
-    if (this.active) this.leave()
-    const engine = this.#engine
-    engine.harness.stopCutscene()
-    engine.harness.observatory.clear()
-    engine.harness.land(
-      MARS_PAD.bodyAddress,
-      MARS_PAD.latitude,
-      MARS_PAD.longitude,
-    )
-    engine.world.runTicks(1)
-    this.#ship = engine.player()
-    const body = engine.world.loadSystem(systemId('SOL')).planets[3]!
-    const spin = engine.world.frames.pose(
-      bodyFixedFrameId(body.address),
-      engine.world.clock.time,
-    )
-    const pad = surfacePlacementPose(MARS_PAD, body, spin)
-    const side = UV.translate(
-      pad.position,
-      Q.rotate(pad.orientation, vec3(22, 0, 0)),
-    )
-    const site = directionToGeodetic(bodyFixedDirection(spin, side))
-    const heading = MARS_PAD.heading - Math.PI / 2
-    const avatar = engine.world.spawnCharacter(
-      body,
-      site.latitude,
-      site.longitude,
-      { canFly: engine.session.canFly, heading },
-    )
-    engine.session.controlPlayer(avatar.id)
-    engine.world.clock.setTimeScale(1)
-    engine.world.clock.setPaused(false)
-    this.#yaw = heading
-    this.#pitch = 0.25
-    this.view = 'third'
-    this.#padPreview = true
-    this.cameraMemory = null
-    engine.declareCut()
-    return true
+  atMarsPad(): void {
+    this.leave()
+    const harness = this.#engine.harness
+    harness.stopCutscene()
+    harness.observatory.clear()
+    this.#arrive(harness.onFoot.atMarsPad(), {
+      pitch: 0.25,
+      view: 'third',
+      pad: true,
+    })
   }
 
   status(): CharacterStatus {
-    const character = this.entity?.character
+    const onFoot = this.#onFoot.status()
     return {
-      active: this.active,
+      active: onFoot.active,
       available: this.available(),
       locked: this.locked,
       view: this.view,
-      flying: character?.flying ?? false,
-      canFly: character?.canFly ?? this.#engine.session.canFly,
-      grounded: character?.grounded ?? false,
-      crouched: character?.crouched ?? false,
+      flying: onFoot.flying,
+      canFly: onFoot.canFly,
+      grounded: onFoot.grounded,
+      crouched: onFoot.crouched,
       error: this.error,
     }
+  }
+
+  /** The drawn hull's beam, which the canonical step-out cannot see. */
+  #beam(): number | undefined {
+    return this.#engine.hull?.beamMeters
+  }
+
+  /**
+   * A walker is out: aim the look where it faces and run time at 1×.
+   *
+   * The clock because a walker under warp covers kilometers a frame. It is
+   * the game's rule about its own controls, so it is written here and not in
+   * the session, which steps out headlessly at whatever rate it was asked.
+   */
+  #arrive(
+    walker: Entity,
+    framing: {
+      readonly pitch: number
+      readonly view: 'first' | 'third'
+      readonly pad: boolean
+    },
+  ): void {
+    this.#yaw = walker.character?.heading ?? 0
+    this.#pitch = framing.pitch
+    this.view = framing.view
+    this.#padWalker = framing.pad ? walker.id : null
+    this.error = null
+    this.cameraMemory = null
+    this.#engine.world.clock.setTimeScale(1)
+    this.#engine.world.clock.setPaused(false)
   }
 }

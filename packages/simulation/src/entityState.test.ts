@@ -1,4 +1,4 @@
-import { createCharacter } from './character.ts'
+import { type CharacterState, createCharacter } from './character.ts'
 import { describe, expect, it } from 'vitest'
 import { NEUTRAL_CONTROL } from '@inertialref/physics'
 import { type FrameId, restState, vec3 } from '@inertialref/spatial'
@@ -64,6 +64,32 @@ describe('the canonical entity', () => {
     for (const key of Object.keys(moved) as (keyof CanonicalEntity)[]) {
       const changed = { ...base, [key]: moved[key] }
       expect(canonicalEntityLine(changed), key).not.toBe(line)
+    }
+  })
+
+  it('moves the hash line with every field of a walker', () => {
+    // The character record is one key above, so the row there proves only
+    // that a walker differs from no walker. Each of its own fields decides a
+    // tick or a reload — the vessel decides which ship stepping in reaches.
+    const walker = createCharacter()
+    const changes: {
+      readonly [K in keyof CharacterState]: CharacterState[K]
+    } = {
+      canFly: true,
+      flying: true,
+      grounded: true,
+      crouched: true,
+      jumpHeld: true,
+      heading: 1,
+      airTicks: 3,
+      jumpBuffer: 2,
+      input: { ...walker.input, forward: 1 },
+      vessel: '#7' as EntityId,
+    }
+    const line = canonicalEntityLine({ ...base, character: walker })
+    for (const key of Object.keys(changes) as (keyof CharacterState)[]) {
+      const character = { ...walker, [key]: changes[key] }
+      expect(canonicalEntityLine({ ...base, character }), key).not.toBe(line)
     }
   })
 

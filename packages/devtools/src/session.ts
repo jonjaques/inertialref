@@ -108,9 +108,6 @@ export interface SessionOptions {
 
 /** A running session: the host the harness is built over, and what came with it. */
 export interface Session extends Host {
-  readonly canFly: boolean
-  /** Transfer control without replacing the world or rebuilding its adapters. */
-  controlPlayer(id: EntityId): void
   readonly harness: GameHarness
   readonly store: SaveStore
   /** The system loaded at open, and the body the ship was placed above. */
@@ -189,11 +186,17 @@ export function openSession(options: SessionOptions = {}): Session {
     options.authority ??
     new LocalAuthority({ world: () => world, player: () => player })
 
+  const canFly = options.canFly ?? options.authority === undefined
   const host: Host = {
     get world() {
       return world
     },
     player: () => player,
+    controlPlayer: (id: EntityId) => {
+      world.entities.require(id)
+      player = id
+    },
+    canFly,
     pool: () => pool,
     // The host's clock, for the measuring verbs. Nothing below `apps/` may
     // reach for one itself, so a session that was given none reports "not
@@ -202,6 +205,13 @@ export function openSession(options: SessionOptions = {}): Session {
     replaceWorld: (next, nextPlayer) => {
       world = next
       player = nextPlayer
+      // A save is a file anyone can edit, and the flight grant is this host's
+      // to give (ADR-0047). Every walker it carries is reconciled here rather
+      // than in a host's derived-state hook, so a headless session that loads
+      // a flying walker refuses flight exactly as the browser does.
+      for (const entity of world.entities.ordered())
+        if (entity.character !== null)
+          world.setCharacterFlightPermission(entity.id, canFly)
       options.onWorldReplaced?.()
     },
     authority: () => authority,
@@ -237,11 +247,6 @@ export function openSession(options: SessionOptions = {}): Session {
   // the `world` getter is written once and there is no second copy of the
   // simulation half to keep in step with it.
   return Object.assign(host, {
-    canFly: options.canFly ?? options.authority === undefined,
-    controlPlayer: (id: EntityId) => {
-      world.entities.require(id)
-      player = id
-    },
     harness,
     store,
     system,
