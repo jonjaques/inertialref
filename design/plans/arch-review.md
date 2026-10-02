@@ -36,6 +36,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The entity store hands out its read half                     | `EntityView` in [`packages/simulation/src/entity.ts`](../../packages/simulation/src/entity.ts), `spawnShip`     |
 | The heightfield request carries the surface                  | `HeightfieldSource.submit(surface, request)` and `WireSurface` in `packages/workers/src/tasks.ts`, ADR-0023 § 3 |
 | A body's visual residency is a policy that runs in Node      | [`apps/game/src/scene/bodyResidency.ts`](../../apps/game/src/scene/bodyResidency.ts) and its test               |
+| On foot is a session verb                                    | [`packages/devtools/src/onFoot.ts`](../../packages/devtools/src/onFoot.ts), ADR-0047                            |
 
 ---
 
@@ -43,14 +44,13 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 1   | [On foot is a session verb](#1-on-foot-is-a-session-verb)                                                                                              | The walker and the frame | —         | Strong          |
-| 2   | [The flying verbs get a module](#2-the-flying-verbs-get-a-module)                                                                                      | The harness              | 1         | Strong          |
-| 3   | [Time has one writer](#3-time-has-one-writer)                                                                                                          | The walker and the frame | 1         | Strong          |
+| 2   | [The flying verbs get a module](#2-the-flying-verbs-get-a-module)                                                                                      | The harness              | —         | Strong          |
+| 3   | [Time has one writer](#3-time-has-one-writer)                                                                                                          | The walker and the frame | —         | Strong          |
 | 4   | [The ground under a walker is one module](#4-the-ground-under-a-walker-is-one-module)                                                                  | The walker and the frame | —         | Strong          |
-| 5   | [The walker's presentation is a function](#5-the-walkers-presentation-is-a-function)                                                                   | The walker and the frame | 1, 4      | Worth exploring |
+| 5   | [The walker's presentation is a function](#5-the-walkers-presentation-is-a-function)                                                                   | The walker and the frame | 4         | Worth exploring |
 | 6   | [Bodies: the uniforms are a pure mapping](#6-bodies-the-uniforms-are-a-pure-mapping)                                                                   | The walker and the frame | —         | Strong          |
-| 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | 1, 5, 6   | Strong          |
-| 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | 1, 7      | Strong          |
+| 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | 5, 6      | Strong          |
+| 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | 7         | Strong          |
 | 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness              | 2         | Strong          |
 | 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide                | —         | Strong          |
 | 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                                                                 | The guide                | 10        | Strong          |
@@ -69,15 +69,12 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 ```mermaid
 flowchart LR
-  P1[1 On foot] --> P2[2 Maneuvers] --> P9[9 Director and booted]
-  P1 --> P3[3 Time]
+  P2[2 Maneuvers] --> P9[9 Director and booted]
+  P3[3 Time]
   P4[4 Ground] --> P5[5 Presentation]
-  P1 --> P5
   P5 --> P7[7 Frame owner]
   P6[6 Bodies uniforms] --> P7
-  P1 --> P7
   P7 --> P8[8 One generation]
-  P1 --> P8
   P10[10 Guide contract] --> P11[11 Guide verdict] --> P12[12 Live channel]
   P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
@@ -85,121 +82,30 @@ flowchart LR
   P17[17 Target layout] --> P18[18 Pixel grid]
   P19[19 Quad-pass runner] --> P20[20 Stage list]
   P19 --> P21[21 One timing instrument]
-  A[A Compass basis] -.-> P1
+  A[A Compass basis]
   P13 -.-> B[B Surface identity]
   P16 -.-> B
 ```
 
 **Every pull request builds only on ones numbered before it, and within a track
 the numbering is the order to take them in. Across tracks the only edges are
-1 → 2 and the two optional items.** So the tracks fan out across worktrees, and
+the two optional items.** So the tracks fan out across worktrees, and
 the numbering is the order for one pair of hands. Where a pull request builds
 on nothing and still has a place in the order, the place is about collision,
 and its section says so. Four files are edited by more than one pull request,
 and the order is what keeps them apart:
 
 - `apps/game/src/engine/GameEngine.ts` — the walker's arm and the derived state
-  in 1–8, and the archive's wiring in 13. Different regions of it: a rebase, not
+  in 3–8, and the archive's wiring in 13. Different regions of it: a rebase, not
   a design dependency.
-- `packages/devtools/src/harness.ts` — 1, then 2, then 9.
+- `packages/devtools/src/harness.ts` — 2, then 9.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 1.** The walker is the one feature that cannot be driven
-headlessly, and asking headlessly is the first move of every verification here.
-Moving it behind the session makes ADR-0047's capability sentence true outside
-the browser. It also takes out of `#invalidateDerived` the one call that writes
-the world, which is the entry 8's premise depends on, and it gives 2's flying
-verbs a walker to step back into the ship before they move it.
-
----
-
-## 1. On foot is a session verb
-
-**Track:** the walker and the frame · **Strong** · in-process
-
-**Builds on:** nothing. **Unblocks:** 2, 3, 5, 7, 8.
-
-**Files.** `apps/game/src/engine/characterController.ts` (`enter`, `leave`,
-`reset`, `atMarsPad`, `#site`, `#ship`),
-`packages/devtools/src/session.ts` (`replaceWorld`, `canFly`),
-`apps/game/src/engine/GameEngine.ts` (`#invalidateDerived`; the player commands
-`setControl` through `toggleFlightAssist`),
-`packages/devtools/src/harness.ts` (`face`, `burnToward`, `#lookAt`),
-`apps/game/src/hud/TargetActions.tsx`, `apps/game/src/hud/HarnessSection.tsx`,
-`packages/simulation/src/world.ts` (`spawnCharacter`, `teleport`,
-`reframeEntity`).
-
-**The friction.**
-
-- **Only the app can make a walker.** `spawnCharacter`'s two callers outside
-  tests are both in `characterController.ts` (`:136`, `:279`), so `openSession`,
-  `pnpm sim` and `ir` cannot step out, and every activation test builds a whole
-  `GameEngine`.
-- **The flight grant holds only in the browser.** The trusted `Session.canFly`
-  is reapplied by `CharacterController.reset()`, which runs from the engine's
-  `#invalidateDerived`. `session.replaceWorld` does not reapply it, so a
-  headless session opened with `canFly: false` that loads a save keeps the
-  save's flight permission.
-  [ADR-0047](../../docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md)
-  says "Loading a character reapplies the host capability", and that sentence
-  is true in one host.
-- **The ship to step back into is not saved.** After a load, `reset()` takes
-  the first ship in entity order.
-- **A ship verb aimed at a walker is answered four ways.** The world's
-  invariant throws in `teleport` and `reframeEntity`. `setControl`,
-  `setThrottle` and `nudgeThrottle` return quietly and `toggleFlightAssist`
-  does not check. The HUD calls `character.leave()` before its three flying
-  verbs. The harness's `face` and `burnToward` check nothing, and `#lookAt`'s
-  `fromUnitVectors(-Z, …)` would tilt a walker off local vertical — read, not
-  run.
-- **The derived-state list writes the world.** `reset()` calls
-  `setCharacterFlightPermission` from inside `#invalidateDerived`, the list of
-  derived state the engine drops when the world is replaced. It is the one
-  entry on that list a generation counter cannot express, which is 8's
-  go/no-go.
-- **Stepping out writes the clock.** `enter()` and `atMarsPad()` set it to 1×
-  and unpaused (`:151–152`, `:286–287`), a third writer beside `App` and
-  `TimePanel`.
-
-**The shape.** A module in `packages/devtools`, built over the `Host` as
-`Observatory` is, that owns stepping out beside a landed ship, stepping back
-in, the parked ship, and the Mars pad fixture. `replaceWorld` reapplies
-`canFly`, so the reconciliation holds wherever a world is replaced. A ship verb
-aimed at a walker has one answer, stated in the module's header. The harness
-exposes the module as `ir.onFoot`, the way it exposes `ir.observatory`.
-`CharacterController` keeps pointer lock, look, view and camera memory, and
-calls the module for the rest.
-
-**Decisions the pull request makes.**
-
-- **Whether the parked ship is saved.** Saving makes it canonical — the state
-  hash, the save schema, a migration — and rule 15 allows it, because nothing
-  regenerates it. Holding it in the module is cheaper and loses it on a reload.
-  The question that decides it: after a reload with two ships landed, does the
-  walker step back into the one it left?
-- **Whether a ship verb on foot steps in first or refuses.** Stepping in keeps
-  `ir.goTo` working from the console while walking. Refusing keeps one verb from
-  doing two things.
-- **Where the real-time rule lives.** In the world, it holds headlessly and is
-  a canonical rule. In the app's step-out command, it stays one of the clock
-  writers 3 counts in `apps/game/src`. Either way the verb stops writing the
-  clock on its own.
-- **Heading.** `#site` steps out at heading 0. If the walker is to face the way
-  the ship faces, [A](#a-one-compass-basis) lands first.
-
-**Gate.**
-
-- An `openSession` test steps out beside a landed ship and back in, with no
-  `GameEngine`.
-- A headless session opened with `canFly: false` that loads a save holding a
-  flight-permitted walker refuses flight.
-- `ir.goTo`, `ir.face` and `ir.burnToward` on foot each have a case, and each
-  gets the one answer the module names.
-- Stepping in after a load with two landed ships reaches the ship the first
-  decision names.
-- `setCharacterFlightPermission` has no caller in `apps/game/src`, so nothing
-  in `#invalidateDerived` writes canonical state.
+**Start with 2.** The walker is a session verb now (`ir.onFoot`), so every
+flying verb already boards a walker before it moves a ship, and what is left in
+the harness is the five hundred lines that move it. 2 is also the first of the
+three pull requests that edit `harness.ts`, and 9 waits on it.
 
 ---
 
@@ -207,8 +113,9 @@ calls the module for the rest.
 
 **Track:** the harness · **Strong** · in-process
 
-**Builds on:** 1 — each verb resolves a walker through the on-foot module
-before it moves a ship. **Unblocks:** 9.
+**Builds on:** nothing left open — each verb boards a walker through
+`OnFoot` (`#requireShip`) before it moves a ship, and keeps doing so from the
+new module. **Unblocks:** 9.
 
 **Files.** `packages/devtools/src/harness.ts` — `orbit`, `#toStar`,
 `#starDirection`, `light`, `#trackOrbit`, `#orbitStar`, `shot`, `land`, `goTo`,
@@ -248,7 +155,7 @@ epoch. The harness forwards to it the way it forwards to the observatory, and
   erased, so the harness→maneuvers value edge is the only runtime one. The verbs
   read the `world` getter, `player()`, `render.framingLens()` — `shot` solves a
   `fill` standoff against the lens the camera is wearing, not the flight
-  default — and 1's on-foot module.
+  default — and `OnFoot`, to board before a verb moves the ship.
 - **The harness verbs keep returning `HarnessStatus`.**
   `ir.land(...).player.landed` and `ir.shot`'s lens-carrying status are
   documented in [`docs/guides/harness.md`](../../docs/guides/harness.md) and read
@@ -304,26 +211,25 @@ epoch. The harness forwards to it the way it forwards to the observatory, and
 
 **Track:** the walker and the frame · **Strong** · in-process
 
-**Builds on:** 1 — the walker's clock writes leave the controller.
-**Unblocks:** nothing.
+**Builds on:** nothing left open — the walker's clock write is one method of
+the app's controller. **Unblocks:** nothing.
 
 **Files.** `apps/game/src/planetarium/TimePanel.tsx` (`:95`, `:128`, `:150`),
 `apps/game/src/App.tsx` (the command table, `:506–516`),
 `apps/game/src/hud/time.ts`, `apps/game/src/planetarium/context.ts`, and
-wherever 1 puts the real-time rule.
+`apps/game/src/engine/characterController.ts` (`#arrive`, the step-out rule).
 
 **The friction.** `App.tsx` says every command exists exactly once.
 `TimePanel` re-implements pause, warp and real time against
-`engine.world.clock` without the flash notice, and `CharacterController` writes
-the same clock when a walker steps out.
+`engine.world.clock` without the flash notice, and `CharacterController.#arrive`
+writes the same clock when a walker steps out — the game's rule, kept out of
+the session so a headless walker steps out at whatever rate it was asked.
 
 **The shape.** `TimePanel` takes `commands: HudCommands` through the
-planetarium context. Stepping out reaches the clock through the command table,
-or through the world if 1 made real time a world rule.
+planetarium context. Stepping out reaches the clock through the command table.
 
 **Gate.** A test holds `setTimeScale` and `setPaused` on `engine.world.clock` to
-one writer in `apps/game/src`, the way rule 34 is held for `localStorage` — plus
-the world, if 1 put the rule there. Writes through `presentationClock` and the
+one writer in `apps/game/src`, the way rule 34 is held for `localStorage`. Writes through `presentationClock` and the
 observatory's own time scale, which the guide's executor drives, are
 presentation and are a separate count.
 
@@ -333,8 +239,7 @@ presentation and are a separate count.
 
 **Track:** the walker and the frame · **Strong** · in-process
 
-**Builds on:** nothing; placed after 1 because both edit the character's half
-of `GameEngine.#step`. **Unblocks:** 5.
+**Builds on:** nothing. **Unblocks:** 5.
 
 **Files.** `packages/simulation/src/world.ts` (`contactRadius`, `:281–292`),
 `packages/simulation/src/surfacePlacement.ts` (`surfaceSupportRadius`),
@@ -393,8 +298,8 @@ canonical one are read in one module, which says which is which.
 
 **Track:** the walker and the frame · **Worth exploring** · in-process
 
-**Builds on:** 1, for a controller left holding only the view; 4, for a camera
-that reads the ground through the port. **Unblocks:** 7.
+**Builds on:** 4, for a camera that reads the ground through the port. The
+controller already holds only the view. **Unblocks:** 7.
 
 **Files.** `apps/game/src/engine/GameEngine.ts` — the walker's arm in `#step`
 (`:1466–1577`), the gait choice (`:1553–1570`), `parkedRocinante`
@@ -469,8 +374,8 @@ is what draws — and one of the three in a generated system.
 
 **Track:** the walker and the frame · **Strong** · in-process
 
-**Builds on:** 5, so each arm is one call; 1, so the parked ship answers "the
-player's ship" on foot; 6, so Bodies' consumer is the new mapping's caller.
+**Builds on:** 5, so each arm is one call; 6, so Bodies' consumer is the new
+mapping's caller. `OnFoot.ship()` already answers "the player's ship" on foot.
 **Unblocks:** 8.
 
 **Files.** `apps/game/src/engine/GameEngine.ts` (`#step`: the `eye`,
@@ -525,8 +430,8 @@ ADR-0047 fixes the precedence; this states the same precedence in one place.
 
 **Track:** the walker and the frame · **Strong** · in-process
 
-**Builds on:** 1, which takes the world write out of `#invalidateDerived`; 7,
-whose `buildScene` already takes an eye. **Unblocks:** nothing.
+**Builds on:** 7, whose `buildScene` already takes an eye. **Unblocks:**
+nothing.
 
 **Files.** `apps/game/src/engine/GameEngine.ts` — the starfield survey
 (`#maybeSurveyStars`, `#starFieldWorld`, the sweep), the orbit-trace cache
@@ -546,9 +451,8 @@ whose interface is `update(generation, eye)` → `StarField` with the hysteresis
 and the in-flight-world guard inside, and `engine/orbitTraces.ts`, keyed on the
 generation and the scope. The engine names the world generation once, bumped
 where the world is replaced, and hands it to both; `#invalidateDerived` becomes
-the bump and the `reset()` calls. `player()` goes only if 1 leaves it with no
-caller outside the engine: `characterController.ts` calls it at `:55`, `:135`,
-`:226` and `:266`. `pool()` stays until `scene/Bodies.tsx` and
+the bump and the `reset()` calls. `player()` has no caller outside the engine
+but the tests, which can read the session, so it goes. `pool()` stays until `scene/Bodies.tsx` and
 `render/preload.ts` read the session for it.
 
 **Gate.** The survey and the cache get unit tests over a fake pool and a fake
@@ -557,9 +461,10 @@ all of them, counted, so the count is the gate — and the starfield does not
 survive the four-light-year jump the comment names. `pnpm knip` is clean.
 
 **Go/no-go.** If an entry keys on something the generation cannot see, the
-list keeps that entry and the test names it. With 1 landed, no entry writes
-the world; this is the pull request that finds out whether that was the only
-one.
+list keeps that entry and the test names it. `reset()` writes no canonical
+state — the flight grant is the session's `replaceWorld`, and the held keys the
+game's `load` — so this is the pull request that finds out whether any entry
+still keys on something the generation cannot see.
 
 ---
 
@@ -1112,14 +1017,14 @@ on every bump of the package.
 
 **Optional** · **Speculative** · in-process
 
-**Slots in:** before 1 if the walker steps out facing the way the ship faces;
-otherwise anywhere.
+**Slots in:** anywhere. `OnFoot.site` steps out at heading 0; a walker that
+steps out facing the way its ship faces needs this first.
 
 **The friction.** "East" at a surface point is derived four ways. `placementBasis`
 (`packages/simulation/src/surfacePlacement.ts`) takes `cross(+Y, up)`;
 `installSurfaceFrame` (`packages/universe/src/frames.ts`) takes
 `(-up.z, 0, up.x)`, its negation; `spawnCharacter` re-derives the basis in
-another closed form; `CharacterController.#site` computes a third; the camera's
+another closed form; `OnFoot.site` computes a third; the camera's
 tests use `localTriad`. Nothing is wrong today, because every heading derived
 this way is 0. It is a trap for the first heading taken from a landed ship.
 
@@ -1254,4 +1159,4 @@ carries the argument.
 - [Perf](perf.md) — the measurement 16 waits on
 - [The upscaler](the-upscaler.md) — the velocity-overlay defect 17 makes one
   change
-- [Harness](../../docs/guides/harness.md) — the surface 1, 2 and 9 reshape
+- [Harness](../../docs/guides/harness.md) — the surface 2 and 9 reshape

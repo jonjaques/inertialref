@@ -10,6 +10,7 @@ import {
   encodeRailsEpoch,
   encodeVec3,
   SAVE_SCHEMA_VERSION,
+  type SaveCharacterState,
   type SaveEntity,
   type SaveSurfacePlacement,
   type SaveThrusterProfile as WireThrusterProfileShape,
@@ -21,6 +22,7 @@ import { type FrameId, vec3 } from '@inertialref/spatial'
 import {
   type CanonicalEntity,
   canonicalEntityInit,
+  type CharacterState,
   type EntityKind,
   type RailsEpoch as SimulationRailsEpoch,
   type SurfacePlacement,
@@ -94,6 +96,14 @@ void _thrustersAgree
  */
 const _entitiesAgree: SameKeys<CanonicalEntity, SaveEntity> = true
 void _entitiesAgree
+
+/*
+ * The walker's record crosses whole, as one object, so the same check one
+ * level down: a field the simulation adds and the wire form lacks is a walker
+ * that reloads into a different tick, and the outer check above cannot see it.
+ */
+const _charactersAgree: SameKeys<CharacterState, SaveCharacterState> = true
+void _charactersAgree
 
 /*
  * Turning a world into a save and back.
@@ -293,13 +303,28 @@ export function restoreSave(
         throttle: entity.control.throttle,
       },
       flightAssist: entity.flightAssist,
-      character: entity.character,
+      character:
+        entity.character === null
+          ? null
+          : {
+              ...entity.character,
+              vessel: entity.character.vessel as EntityId | null,
+            },
       ballisticCoefficient: entity.ballisticCoefficient,
       landed: entity.landed,
       rails: rails.value,
     }
     world.spawn(canonicalEntityInit(canonical))
     if (canonical.landed) landed.push(canonical.id)
+  }
+
+  // After every spawn, because a vessel may sort after its walker. A walker
+  // whose ship is missing, or is another walker, is a save this build would
+  // let step "back in" to nothing.
+  for (const entity of world.entities.ordered()) {
+    const vessel = entity.character?.vessel ?? null
+    if (vessel !== null && world.entities.get(vessel)?.character !== null)
+      return err(`entity ${entity.id}: vessel ${vessel} is not a ship here`)
   }
 
   world.restoreDynamicIdCounter(save.dynamicIdCounter)

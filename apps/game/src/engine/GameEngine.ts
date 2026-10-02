@@ -1901,35 +1901,44 @@ export class GameEngine {
   /* Player commands                                                        */
   /* --------------------------------------------------------------------- */
 
+  /**
+   * The ship the keys fly, or null on foot.
+   *
+   * These commands are the flight keys and the throttle buttons, and the ones
+   * the character context does not claim stay live beside it. A walker who
+   * presses one meant to walk, so on foot they are dropped rather than
+   * boarding the ship the way a harness verb does (`onFoot.ts`).
+   */
+  #pilot(): EntityId | null {
+    return this.harness.onFoot.active ? null : this.session.player()
+  }
+
   setControl(
     translation: [number, number, number],
     rotation: [number, number, number],
   ): void {
-    if (this.character.active) return
-    const player = this.session.player()
+    const player = this.#pilot()
     if (player === null) return
     this.world.setControl(player, vec3(...translation), vec3(...rotation))
   }
 
   /** The main drive, 0..1. Returns the setting the world kept. */
   setThrottle(fraction: number): number {
-    if (this.character.active) return 0
-    const player = this.session.player()
+    const player = this.#pilot()
     if (player === null) return 0
     return this.world.setThrottle(player, fraction).control.throttle
   }
 
   /** Walk the throttle by a step, from wherever it is. */
   nudgeThrottle(delta: number): number {
-    if (this.character.active) return 0
-    const player = this.session.player()
+    const player = this.#pilot()
     if (player === null) return 0
     const held = this.world.entities.require(player).control.throttle
     return this.world.setThrottle(player, held + delta).control.throttle
   }
 
   toggleFlightAssist(): boolean {
-    const player = this.session.player()
+    const player = this.#pilot()
     if (player === null) return false
     return this.world.setFlightAssist(
       player,
@@ -1938,7 +1947,7 @@ export class GameEngine {
   }
 
   killRotation(): void {
-    const player = this.session.player()
+    const player = this.#pilot()
     if (player === null) return
     const entity = this.world.entities.require(player)
     const cue = rotationStopCue(
@@ -1973,7 +1982,11 @@ export class GameEngine {
       return false
     }
     // No `this.origin = null` here: `onWorldReplaced` already dropped every
-    // piece of derived state, which is the point of having one hook.
+    // piece of derived state, which is the point of having one hook. A
+    // walker's held keys are not derived state — they are canonical, and a
+    // headless load replays them — but no key is held in this browser after
+    // a load, so the game's own load lets go of them (ADR-0047).
+    this.character.stop()
     return true
   }
 

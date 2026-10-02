@@ -6,6 +6,7 @@ import {
   type WorldQuery,
 } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
+import { OnFoot } from './onFoot.ts'
 import {
   validateGalaxyJourney,
   type GalaxyView,
@@ -447,6 +448,13 @@ export interface Host {
   readonly world: World
   /** The entity the camera follows. */
   player(): EntityId | null
+  /** Transfer control without replacing the world or rebuilding its adapters. */
+  controlPlayer(id: EntityId): void
+  /**
+   * The trusted host capability: whether this host's walkers may fly. Never
+   * read off a save — a replaced world's walkers are given this one.
+   */
+  readonly canFly: boolean
   pool(): WorkerPool | null
   /** Replace the running world (used by load). */
   replaceWorld(world: World, player: EntityId | null): void
@@ -547,6 +555,7 @@ export class GameHarness {
   readonly #cutscenes: CutsceneDirector
   readonly #observatory: Observatory
   readonly #flightCamera: FlightCamera
+  readonly #onFoot: OnFoot
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
 
@@ -555,6 +564,9 @@ export class GameHarness {
     this.#cutscenes = new CutsceneDirector(host, CUTSCENES)
     this.#observatory = new Observatory(host)
     this.#flightCamera = new FlightCamera(host)
+    this.#onFoot = new OnFoot(host, (address, latitude, longitude) => {
+      this.land(address, latitude, longitude)
+    })
     logHub.addSink(this.#logSink)
   }
 
@@ -993,7 +1005,7 @@ export class GameHarness {
     rotation?: [number, number, number]
     throttle?: number
   }): void {
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
     const entity = this.world.entities.require(player)
     this.world.setControl(
       player,
@@ -1010,7 +1022,7 @@ export class GameHarness {
 
   /** The main drive, 0..1. Returns the setting the world kept. */
   throttle(fraction: number): number {
-    return this.world.setThrottle(this.#requirePlayer(), fraction).control
+    return this.world.setThrottle(this.#requireShip(), fraction).control
       .throttle
   }
 
@@ -1033,7 +1045,7 @@ export class GameHarness {
   }
 
   flightAssist(enabled: boolean): void {
-    this.world.setFlightAssist(this.#requirePlayer(), enabled)
+    this.world.setFlightAssist(this.#requireShip(), enabled)
   }
 
   /**
@@ -1059,7 +1071,7 @@ export class GameHarness {
 
     const radius = body.radius + (altitudeKm ?? 400) * 1000
     const speed = circularSpeed(body.mu, radius)
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
     const frame = bodyFrameId(body.address)
 
     // Placed on the sunward side, and pointing along the orbit. A debug tool
@@ -1264,7 +1276,7 @@ export class GameHarness {
    * it the moment you want to fly rather than film.
    */
   #trackOrbit(): void {
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
     const state = this.world.entities.require(player).state
     const r2 = Vec.lengthSquared(state.position)
     if (r2 < 1) return
@@ -1294,7 +1306,7 @@ export class GameHarness {
     const star = target.star
     const radius = star.radius + (altitudeKm ?? (star.radius * 7) / 1000) * 1000
     const speed = circularSpeed(star.mu, radius)
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
 
     // On +X of the system frame — the same axis goToSystem uses — orbiting in
     // the system's reference plane, prograde like everything else in it.
@@ -1342,7 +1354,7 @@ export class GameHarness {
     )
     if (body === undefined) throw new Error(`No body at ${target.text}`)
 
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
     const frame = bodyFrameId(body.address)
 
     // The sun direction in the body's frame, exactly as `orbit` derives it.
@@ -1402,7 +1414,7 @@ export class GameHarness {
       latitude,
       longitude,
     )
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
     this.world.teleport(player, {
       frame,
       // On the pad, which is what the origin of a surface frame *is*:
@@ -1514,7 +1526,7 @@ export class GameHarness {
   /** Drop the player into interstellar space near a system. */
   goToSystem(system: string, distanceAu = 60): HarnessStatus {
     const target = this.world.loadSystem(systemId(system))
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
     this.world.teleport(player, {
       frame: systemFrameId(target.id),
       position: vec3(distanceAu * AU, 0, 0),
@@ -1541,7 +1553,7 @@ export class GameHarness {
   /** Aim the ship at a body and light the main drive. */
   burnToward(address: string, throttle = 1): HarnessStatus {
     this.#lookAt(this.#bodyPosition(address))
-    this.world.setThrottle(this.#requirePlayer(), throttle)
+    this.world.setThrottle(this.#requireShip(), throttle)
     return this.status()
   }
 
@@ -1855,6 +1867,15 @@ export class GameHarness {
    */
   get flightCamera(): FlightCamera {
     return this.#flightCamera
+  }
+
+  /**
+   * Stepping out of a landed ship and back in: `stepOut`, `board`,
+   * `atMarsPad`, `status`. The object, as the observatory is, so a host's
+   * controls and a console reach the same walker.
+   */
+  get onFoot(): OnFoot {
+    return this.#onFoot
   }
 
   /**
@@ -2557,6 +2578,7 @@ export class GameHarness {
       '  ir.shots()                    the bookmarks, described',
       '  ir.face(address)              point the nose at something',
       '  ir.goToSystem(id, au) / ir.burnToward(address, throttle)',
+      '  ir.onFoot                     step out of a landed ship and back in: stepOut, board, atMarsPad, status',
       '  ir.save() / ir.load(text)',
       '  await ir.selfTest()           the twelve milestone capabilities',
       '  await ir.scenario(name)       ' + this.scenarios().join(', '),
@@ -2655,7 +2677,7 @@ export class GameHarness {
    * change of attitude has to reset the interpolation history with it.
    */
   #lookAt(target: UniverseVector): void {
-    const player = this.#requirePlayer()
+    const player = this.#requireShip()
     const state = this.world.entities.require(player).state
     const framePose = this.world.frames.pose(state.frame, this.world.clock.time)
     const toTarget = Q.rotateInverse(
@@ -2734,5 +2756,15 @@ export class GameHarness {
     const player = this.#host.player()
     if (player === null) throw new Error('No player entity')
     return player
+  }
+
+  /**
+   * The player's ship, boarded: the one answer every ship verb gives a
+   * walker, written in `onFoot.ts`'s header.
+   */
+  #requireShip(): EntityId {
+    const ship = this.#onFoot.board()
+    if (!ship.ok) throw new Error(ship.error)
+    return ship.value
   }
 }

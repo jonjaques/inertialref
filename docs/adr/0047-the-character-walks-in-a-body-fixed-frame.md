@@ -1,6 +1,6 @@
 # ADR-0047: The character walks in a body-fixed frame
 
-Status: accepted · 24 Sep 2026, amended 25 Sep 2026. Extends the player camera arm in
+Status: accepted · 24 Sep 2026, amended 25 Sep and 2 Oct 2026. Extends the player camera arm in
 [ADR-0011](0011-application-shell-and-modes.md), the shared keymap in
 [ADR-0018](0018-the-instrument.md), and surface support in
 [ADR-0040](0040-structures-keep-a-body-fixed-anchor.md).
@@ -30,7 +30,9 @@ fixed-step input; the browser owns pointer capture and the existing player
 camera arm presents the result.**
 
 - `World` owns spawning, character input, flight permission, movement, and
-  removal. The controller consumes intent at 64 Hz in the body's `bf:` frame.
+  removal. A walker carries its `vessel`, the ship it stepped out of and
+  steps back into; nothing regenerates that choice, and with two ships landed
+  side by side entity order names the wrong one. The controller consumes intent at 64 Hz in the body's `bf:` frame.
   It normalizes diagonal input and transports heading with the changing local
   vertical, by an exact rotation between successive verticals rather than the
   shared helper's thresholded one. The motor drives momentum, held in the
@@ -47,21 +49,36 @@ camera arm presents the result.**
   movement, and bounds falling speed. It does not collide with rock scatter,
   hull walls, ceilings, other entities, or arbitrary model meshes. Irregular
   rendered figures do not become collision meshes.
-- Character state, held intent, the consumed jump edge, the ticks airborne
-  and a buffered jump enter the world hash and save schema 4. The schema-3 migration gives existing entities a
-  null character record. Loading through the game clears transient held
-  input and pointer ownership before controls can resume.
+- Character state, held intent, the consumed jump edge, the ticks airborne,
+  a buffered jump and the vessel enter the world hash and save schema 5. The
+  schema-3 migration gives existing entities a null character record; the
+  schema-4 migration names each walker's vessel as the first ship in id
+  order, the rule a v4 load applied. Loading through the game clears
+  transient held input and pointer ownership before controls can resume; a
+  load through the harness is a replay and keeps them.
 - The trusted `Session.canFly` capability determines whether the character
   may toggle flight. The owner of a local solo session receives it by default;
   a host supplying another authority must supply the capability explicitly.
   The browser's double-tap gesture requests a toggle, and the world refuses
-  unauthorized flight. Loading a character reapplies the host capability.
-  This does not implement online administrator authentication.
+  unauthorized flight. Loading a character reapplies the host capability:
+  the session's `replaceWorld` grants it to every walker the replaced world
+  carries, so the rule holds in Node exactly as in the browser. This does
+  not implement online administrator authentication.
 - The single keyboard dispatcher gives the character its own context. Held
   movement and held sprint are independent, so pressing or releasing Shift
   during a stride changes sprint immediately. Jump deliberately takes Space
   from the global pause action while character controls own the keyboard.
   Modal ownership, focus loss, and pointer release clear held intent.
+- Stepping out beside a landed ship, stepping back in and the Mars pad
+  fixture are session verbs (`ir.onFoot`, `packages/devtools/src/onFoot.ts`),
+  so `openSession`, `pnpm sim` and a test put a walker down without a
+  browser. A ship verb aimed at a walker boards first: every harness verb
+  that moves or flies the player's ship steps the walker back into its
+  vessel and then acts. The flight keys the character context leaves live
+  are dropped on foot instead, because a key a walker presses was meant for
+  walking. Stepping out runs the clock at 1× — a walker under warp covers
+  kilometers a frame — and that is the game's rule about its own controls,
+  so the app writes it and the session does not.
 - The pointer-lock adapter waits for the browser's success event before
   entering gameplay, and the only site a walker steps out at is beside a
   landed ship. The planetarium has no walker: its standing stance flies with

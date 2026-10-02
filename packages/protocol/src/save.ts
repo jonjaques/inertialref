@@ -42,7 +42,7 @@ import {
  * than a change of model.
  */
 
-export const SAVE_SCHEMA_VERSION = 4
+export const SAVE_SCHEMA_VERSION = 5
 
 /**
  * A maneuvering entity's drive, as the save carries it.
@@ -131,6 +131,8 @@ export interface SaveCharacterState {
     readonly descend: boolean
     readonly yaw: number
   }
+  /** The entity id of the ship it steps back into; v5. */
+  readonly vessel: string | null
 }
 
 const decodeCharacterAxis = refine(
@@ -163,6 +165,8 @@ export const decodeSaveCharacter: Decoder<SaveCharacterState> = refine(
       descend: decodeBoolean,
       yaw: decodeNumber,
     }),
+    vessel: (value, path) =>
+      value === null ? ok(null) : decodeString(value, path),
   }),
   (value): value is SaveCharacterState =>
     !value.flying || (value.canFly && !value.grounded),

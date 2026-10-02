@@ -111,9 +111,10 @@ over 0.3 s. A grounded chase eye stays above the foot plane, so it cannot
 leave a deck and descend through its rim. Switching from first to third
 person lets the boom ease out from the head.
 
-Save schema 4 records character state and the consumed jump edge. Loading a
-save releases held input and pointer capture, and the host reapplies flight
-permission. A saved camera preference or a pointer-lock flag is not permission
+Save schema 5 records character state, the consumed jump edge and the ship
+the walker steps back into. Loading through the game releases held input and
+pointer capture, and every session — the browser's, a test's, `pnpm sim` —
+reapplies its own flight permission to each walker the save carries. A saved camera preference or a pointer-lock flag is not permission
 to resume moving.
 
 ## The reference set

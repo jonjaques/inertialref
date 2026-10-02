@@ -18,7 +18,9 @@ const DEBUG_LANDING_SITE = { latitude: 0.35, longitude: -1.1 }
  * component: you cannot land on a star system and "generate" means nothing for
  * a planet whose system is already resolved. Every one of them is a harness
  * call, so anything clicked here is reproducible from the console and from a
- * headless test — which is the rule every panel here is written under.
+ * headless test — which is the rule every panel here is written under. On
+ * foot, the verbs board the ship themselves (`onFoot.ts`), so a click and a
+ * console call land the same walker in the same seat.
  */
 export function TargetActions({
   engine,
@@ -30,11 +32,6 @@ export function TargetActions({
   /** The panel's own try/catch-and-report. See `NavigatorPanel`. */
   run: (label: string, action: () => void) => void
 }) {
-  const travel = (label: string, action: () => void): void =>
-    run(label, () => {
-      engine.character.leave()
-      action()
-    })
   if (target.kind === 'system')
     return (
       <>
@@ -43,7 +40,7 @@ export function TargetActions({
           tone="primary"
           title="Orbit this system's star, looking at it"
           onClick={() =>
-            travel(`traveling to ${target.name}`, () =>
+            run(`traveling to ${target.name}`, () =>
               engine.harness.goTo(target.address),
             )
           }
@@ -68,7 +65,7 @@ export function TargetActions({
         tone="primary"
         title="Circular orbit at an altitude that frames the body"
         onClick={() =>
-          travel(`orbiting ${target.name}`, () =>
+          run(`orbiting ${target.name}`, () =>
             engine.harness.goTo(target.address),
           )
         }
@@ -78,7 +75,7 @@ export function TargetActions({
         disabled={!target.landable}
         title={target.landable ? 'Park on the surface' : 'Not solid ground'}
         onClick={() =>
-          travel(`landing on ${target.name}`, () =>
+          run(`landing on ${target.name}`, () =>
             engine.harness.land(
               target.address,
               DEBUG_LANDING_SITE.latitude,
@@ -91,7 +88,7 @@ export function TargetActions({
         label="Face"
         title="Point the nose at it without touching the trajectory"
         onClick={() =>
-          travel(`facing ${target.name}`, () =>
+          run(`facing ${target.name}`, () =>
             engine.harness.face(target.address),
           )
         }
@@ -100,7 +97,7 @@ export function TargetActions({
         label="Burn"
         title="Aim at it and light the main drive"
         onClick={() =>
-          travel(`burning toward ${target.name}`, () =>
+          run(`burning toward ${target.name}`, () =>
             engine.harness.burnToward(target.address),
           )
         }

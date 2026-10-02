@@ -324,6 +324,37 @@ Two notes worth internalizing:
 
 ---
 
+## On foot
+
+The pilot of a landed ship can step out. `ir.onFoot` is the session's half of
+walking — the browser keeps pointer lock, the look and the view — so a test or
+`pnpm sim` puts a walker on the ground with no renderer:
+
+```js
+ir.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+ir.step(1) // landed after one tick
+ir.onFoot.stepOut() // a walker beside the ship, and now the player
+ir.onFoot.status() // active, walker, ship, canFly, grounded, …
+ir.onFoot.board() // back into the ship it stepped out of
+ir.onFoot.atMarsPad() // parked on the Mars pad, standing beside the Rocinante
+```
+
+`stepOut` and `board` answer `{ ok, value }` or `{ ok: false, error }`: a ship
+that has not landed on solid ground has nowhere to put a walker, and a walker
+whose ship is gone has nothing to board.
+
+**A ship verb on foot boards first.** `goTo`, `orbit`, `shot`, `land`, `face`,
+`burnToward`, `goToSystem`, `control`, `throttle`, `hold` and `flightAssist`
+step the walker back into its ship and then act on the ship, as the dock's
+travel buttons do; with no ship to board they throw. The walker records the
+ship it left and the save keeps it, so with two ships landed `board` reaches
+the one it came from after a reload. Every session grants the walkers a loaded
+save carries its own flight permission: `openSession({ canFly: false })`
+refuses flight to a walker the save says may fly. Stepping out headlessly
+leaves the clock alone; the game runs time at 1× when its player steps out.
+
+---
+
 ## Moving only the camera
 
 `ir.look(target, options?)` moves the observatory camera without moving the
