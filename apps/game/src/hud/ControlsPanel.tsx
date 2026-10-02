@@ -98,7 +98,11 @@ export function ControlsPanel({
         </div>
       </Section>
 
-      <HarnessSection engine={engine} onNotice={onNotice} />
+      <HarnessSection
+        engine={engine}
+        onStepOut={commands.walkingPace}
+        onNotice={onNotice}
+      />
     </div>
   )
 }

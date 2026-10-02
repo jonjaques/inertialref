@@ -218,11 +218,9 @@ export class CharacterController {
   }
 
   /**
-   * A walker is out: aim the look where it faces and run time at 1×.
-   *
-   * The clock because a walker under warp covers kilometers a frame. It is
-   * the game's rule about its own controls, so it is written here and not in
-   * the session, which steps out headlessly at whatever rate it was asked.
+   * A walker is out: aim the look where it faces. Time runs at 1× through
+   * the game's `walkingPace` command, which whoever stepped out calls; the
+   * session steps out headlessly at whatever rate it was asked.
    */
   #arrive(
     walker: Entity,
@@ -238,7 +236,5 @@ export class CharacterController {
     this.#padWalker = framing.pad ? walker.id : null
     this.error = null
     this.cameraMemory = null
-    this.#engine.world.clock.setTimeScale(1)
-    this.#engine.world.clock.setPaused(false)
   }
 }

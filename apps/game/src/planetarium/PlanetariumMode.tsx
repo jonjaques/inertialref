@@ -37,6 +37,7 @@ import { QUERY, CATALOG, PRESETS } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
+import { timeCommands } from '../hud/time.ts'
 import { DropHandle } from './DropHandle.tsx'
 import { pick } from './pick.ts'
 import { projectScene } from './project.ts'
@@ -276,6 +277,7 @@ export function PlanetariumMode({
     guide,
     guideAccess,
     engine,
+    time: timeCommands(engine, (text) => setNotice({ text, tone: 'said' })),
     target,
     focus,
     managePresets,
