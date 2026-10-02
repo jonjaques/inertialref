@@ -40,6 +40,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The flying verbs are a module                                | [`packages/devtools/src/maneuvers.ts`](../../packages/devtools/src/maneuvers.ts) and its test                   |
 | Time has one writer                                          | [`apps/game/src/hud/time.ts`](../../apps/game/src/hud/time.ts) and its test                                     |
 | The ground under a walker is one module                      | [`packages/rendering/src/ground.ts`](../../packages/rendering/src/ground.ts), `supportUnder`, rule 53           |
+| The walker's presentation is a function                      | [`apps/game/src/engine/onFootPresentation.ts`](../../apps/game/src/engine/onFootPresentation.ts) and its test   |
 
 ---
 
@@ -47,9 +48,8 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 5   | [The walker's presentation is a function](#5-the-walkers-presentation-is-a-function)                                                                   | The walker and the frame | —         | Worth exploring |
 | 6   | [Bodies: the uniforms are a pure mapping](#6-bodies-the-uniforms-are-a-pure-mapping)                                                                   | The walker and the frame | —         | Strong          |
-| 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | 5, 6      | Strong          |
+| 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | 6         | Strong          |
 | 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | 7         | Strong          |
 | 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness              | —         | Strong          |
 | 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide                | —         | Strong          |
@@ -70,8 +70,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 ```mermaid
 flowchart LR
   P9[9 Director and booted]
-  P5[5 Presentation]
-  P5 --> P7[7 Frame owner]
+  P7[7 Frame owner]
   P6[6 Bodies uniforms] --> P7
   P7 --> P8[8 One generation]
   P10[10 Guide contract] --> P11[11 Guide verdict] --> P12[12 Live channel]
@@ -94,52 +93,15 @@ on nothing and still has a place in the order, the place is about collision,
 and its section says so. Three files are edited by more than one pull request,
 and the order is what keeps them apart:
 
-- `apps/game/src/engine/GameEngine.ts` — the walker's arm and the derived state
-  in 5–8, and the archive's wiring in 13. Different regions of it: a rebase, not
+- `apps/game/src/engine/GameEngine.ts` — the frame's owner and the derived
+  state in 6–8, and the archive's wiring in 13. Different regions of it: a rebase, not
   a design dependency.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 5.** The walker's track is the one with the most left on it, and
-5 is where it continues: the camera reads the ground through a port, so what
-is left in the walker's arm of `#step` is the presentation, and 7 waits on it.
-
----
-
-## 5. The walker's presentation is a function
-
-**Track:** the walker and the frame · **Worth exploring** · in-process
-
-**Builds on:** nothing left open — the camera reads the ground through a
-port and the controller holds only the view. **Unblocks:** 7.
-
-**Files.** `apps/game/src/engine/GameEngine.ts` — the walker's arm in `#step`
-(`:1466–1577`), the gait choice (`:1553–1570`), `parkedRocinante`
-(`:1667–1684`), `declareCut` and `pictureEpoch`;
-`apps/game/src/engine/characterController.ts` (`cameraMemory`);
-`apps/game/src/character/astronaut.test.ts`.
-
-**The friction.**
-
-- About 110 lines inside `#step` assemble the camera's input and one view per
-  suit, and `cameraMemory` is a public field the frame writes back into.
-- **A cut is two facts.** `declareCut()` bumps `pictureEpoch`, and the camera
-  memory is cleared by hand at four `cameraMemory = null` sites. A cut the
-  harness makes — `#handsOff`, `ir.view` — bumps the epoch and never drops the
-  camera's easing.
-- The 17-line choice of which animation plays has no test; `astronaut.test.ts`
-  takes the animation name as given.
-- `parkedRocinante` finds the pad by the string `'mars-basin-pad'` though
-  `MARS_PAD.id` exists.
-
-**The shape.** A pure `presentOnFoot` over the shot, the player, the view, the
-memory and the frame's delta returns the pose, the views and the next memory,
-and the memory drops when `pictureEpoch` changes. `gaitFor(snapshot)` is
-exported. The pad is found by its id.
-
-**Gate.** A table test for `gaitFor`. A test that an epoch change drops the
-memory, including a harness cut. `cameraMemory` is not a public field.
-`'mars-basin-pad'` appears only in `structures.ts`.
+**Start with 6.** The walker's arm of `#step` is one call now, and what is
+left of the track is the frame around it: 6 makes Bodies' uniforms a mapping
+7's consumers can call, and 7 then names the frame's owner once.
 
 ---
 
@@ -186,9 +148,9 @@ is what draws — and one of the three in a generated system.
 
 **Track:** the walker and the frame · **Strong** · in-process
 
-**Builds on:** 5, so each arm is one call; 6, so Bodies' consumer is the new
-mapping's caller. `OnFoot.ship()` already answers "the player's ship" on foot.
-**Unblocks:** 8.
+**Builds on:** 6, so Bodies' consumer is the new mapping's caller. The
+walker's arm is one call, `presentOnFoot`, and `OnFoot.ship()` already answers
+"the player's ship" on foot. **Unblocks:** 8.
 
 **Files.** `apps/game/src/engine/GameEngine.ts` (`#step`: the `eye`,
 `#presentedPose`, the `buildScene` eye argument at `:1662–1664`, the
