@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { supportHeightAt, surfaceAsset } from '@inertialref/universe'
 
 type Accessor = {
   count: number
@@ -175,5 +176,161 @@ describe('the shipped Mars pad', () => {
   it('separates the guidance ring from the deck by ten centimeters', () => {
     // At 200 m with a 0.1 m near plane, millimeter decals share depth bins.
     expect(surfaceHeights(24.95, 0.7)).toEqual([0, 0.1])
+  })
+})
+
+/**
+ * The model's highest upward surface under a vertical ray, and its material.
+ *
+ * Triangles indexed into two-meter cells once, so a meter grid over the whole
+ * pad is twenty milliseconds rather than the half a billion intersections a
+ * scan of every triangle per point costs.
+ */
+function modelTops(): (
+  x: number,
+  z: number,
+) => {
+  height: number
+  material: string
+} | null {
+  const bytes = readFileSync(padPath)
+  const pad = readPad()
+  const binaryStart = 28 + bytes.readUInt32LE(12)
+  const CELL = 2
+  type Triangle = { a: number[]; b: number[]; c: number[]; material: string }
+  const cells = new Map<string, Triangle[]>()
+  const key = (x: number, z: number) =>
+    `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`
+  for (const primitive of pad.meshes.flatMap((mesh) => mesh.primitives)) {
+    const position = pad.accessors[primitive.attributes.POSITION]!
+    const positionView = pad.bufferViews[position.bufferView]!
+    const positionStart =
+      binaryStart + (positionView.byteOffset ?? 0) + (position.byteOffset ?? 0)
+    const indices = pad.accessors[primitive.indices]!
+    const indexView = pad.bufferViews[indices.bufferView]!
+    const indexStart =
+      binaryStart + (indexView.byteOffset ?? 0) + (indices.byteOffset ?? 0)
+    const vertex = (index: number): number[] => {
+      const vertexIndex =
+        indices.componentType === 5123
+          ? bytes.readUInt16LE(indexStart + index * 2)
+          : bytes.readUInt32LE(indexStart + index * 4)
+      const start =
+        positionStart + vertexIndex * (positionView.byteStride ?? 12)
+      return [0, 4, 8].map((offset) => bytes.readFloatLE(start + offset))
+    }
+    const material = pad.materials[primitive.material]?.name ?? ''
+    for (let index = 0; index < indices.count; index += 3) {
+      const [a, b, c] = [vertex(index), vertex(index + 1), vertex(index + 2)]
+      const facing =
+        (b[0]! - a[0]!) * (c[2]! - a[2]!) - (b[2]! - a[2]!) * (c[0]! - a[0]!)
+      if (facing >= -1e-8) continue
+      const xs = [a[0]!, b[0]!, c[0]!]
+      const zs = [a[2]!, b[2]!, c[2]!]
+      for (
+        let x = Math.floor(Math.min(...xs) / CELL);
+        x <= Math.floor(Math.max(...xs) / CELL);
+        x += 1
+      )
+        for (
+          let z = Math.floor(Math.min(...zs) / CELL);
+          z <= Math.floor(Math.max(...zs) / CELL);
+          z += 1
+        ) {
+          const cell = `${x},${z}`
+          const list = cells.get(cell) ?? []
+          list.push({ a, b, c, material })
+          cells.set(cell, list)
+        }
+    }
+  }
+  return (x, z) => {
+    let top: { height: number; material: string } | null = null
+    for (const { a, b, c, material } of cells.get(key(x, z)) ?? []) {
+      const bx = b[0]! - a[0]!,
+        bz = b[2]! - a[2]!
+      const cx = c[0]! - a[0]!,
+        cz = c[2]! - a[2]!
+      const determinant = bx * cz - bz * cx
+      const dx = x - a[0]!,
+        dz = z - a[2]!
+      const u = (dx * cz - dz * cx) / determinant
+      const v = (bx * dz - bz * dx) / determinant
+      if (u < -1e-6 || v < -1e-6 || u + v > 1 + 1e-6) continue
+      const height = a[1]! + u * (b[1]! - a[1]!) + v * (c[1]! - a[1]!)
+      if (top === null || height > top.height) top = { height, material }
+    }
+    return top
+  }
+}
+
+/*
+ * The walkable relief is transcribed from the model by hand
+ * (`packages/universe/src/structures.ts`), and these hold the transcription.
+ *
+ * A meter grid over the pad, offset so no sample lands on a tile seam — the
+ * deck's tiles have open joints on whole meters, and a ray down one finds
+ * nothing. Where both the model and the relief have a top, they agree within
+ * 0.13 m, the largest of the relief's deliberate simplifications: a drain
+ * grille is its 0.145 m frame where the model recesses its center 0.12 m, a
+ * service enclosure is its 2 m wall where the roof is set 0.125 m in, the
+ * guidance decals stand 0.1 m off the deck for depth precision, and the
+ * warning band is a full ring 0.1 m proud where the model's is dashed.
+ *
+ * Twenty-seven of 5,644 samples are farther apart, measured, and each is a
+ * feature the relief leaves out or rounds: the ramp's 0.2 m curbs, the
+ * landing beside the ramp's head, which the relief carries at the apron's
+ * -0.18 m where the model drops to -0.7 m, and the edges of lamp housings and
+ * enclosure fronts. A change to either side that adds to that count is a
+ * transcription to redo, not a bound to raise.
+ */
+describe('the Mars pad relief', () => {
+  const asset = surfaceAsset('mars-pad')!
+  const top = modelTops()
+  const samples: [number, number][] = []
+  for (let x = -56.37; x <= 56; x += 1)
+    for (let z = -56.21; z <= 56; z += 1) samples.push([x, z])
+  const apothem = 44.64 * Math.cos(Math.PI / 8)
+  const inApron = (x: number, z: number): boolean => {
+    const sector = Math.PI / 4
+    const angle = Math.atan2(-z, x)
+    const face = (Math.floor(angle / sector) + 0.5) * sector
+    return Math.hypot(x, z) * Math.cos(angle - face) <= apothem
+  }
+
+  it('puts the deck where the model does', () => {
+    for (const [x, z] of samples) {
+      if (Math.hypot(x, z) >= 25.5) continue
+      expect(supportHeightAt(asset, x, z), `${x}, ${z}`).toBe(0)
+      // The deck, or a guidance decal 0.1 m off it.
+      expect([0, 0.1]).toContain(
+        Math.round((top(x, z)?.height ?? Number.NaN) * 1e6) / 1e6,
+      )
+    }
+  })
+
+  it('leaves no hole inside the apron the model draws a surface over', () => {
+    const holes = samples.filter(
+      ([x, z]) =>
+        inApron(x, z) &&
+        top(x, z) !== null &&
+        supportHeightAt(asset, x, z) === null,
+    )
+    expect(holes).toEqual([])
+  })
+
+  it('agrees with the model within its simplifications', () => {
+    let compared = 0
+    const apart: string[] = []
+    for (const [x, z] of samples) {
+      const model = top(x, z)
+      const relief = supportHeightAt(asset, x, z)
+      if (model === null || relief === null) continue
+      compared += 1
+      if (Math.abs(model.height - relief) > 0.13)
+        apart.push(`${x.toFixed(2)}, ${z.toFixed(2)}: ${model.material}`)
+    }
+    expect(compared).toBe(5_644)
+    expect(apart.length, apart.join('\n')).toBeLessThanOrEqual(27)
   })
 })

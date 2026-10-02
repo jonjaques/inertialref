@@ -11,7 +11,11 @@ import type {
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import { CharacterController } from './characterController.ts'
 import type { CharacterView } from './characterView.ts'
-import { characterCameraPose, characterFeet } from '@inertialref/rendering'
+import {
+  bodyGround,
+  characterCameraPose,
+  characterFeet,
+} from '@inertialref/rendering'
 import {
   DEFAULT_SENSOR_SETTINGS,
   GALAXY_VIEWS,
@@ -1470,11 +1474,8 @@ export class GameEngine {
         : characterCameraPose({
             position: camera!.position,
             orientation: camera!.orientation,
-            body: onFoot.body,
             spin: onFoot.spin,
-            structures: shot.structures.filter(
-              (s) => s.body.id === onFoot.body.id,
-            ),
+            ground: bodyGround(onFoot.body, shot.structures),
             eyeHeight: onFoot.eyeHeight,
             pitch: this.character.pitch,
             view: this.character.view,
@@ -1536,11 +1537,8 @@ export class GameEngine {
           ? characterPose.feet
           : characterFeet({
               position: entity.position,
-              body: walker.body,
               spin: walker.spin,
-              structures: shot.structures.filter(
-                (s) => s.body.id === walker.body.id,
-              ),
+              ground: bodyGround(walker.body, shot.structures),
             })
       views.push({
         id: entity.id,
