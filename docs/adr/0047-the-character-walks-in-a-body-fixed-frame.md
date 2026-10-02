@@ -78,7 +78,8 @@ camera arm presents the result.**
   are dropped on foot instead, because a key a walker presses was meant for
   walking. Stepping out runs the clock at 1× — a walker under warp covers
   kilometers a frame — and that is the game's rule about its own controls,
-  so the app writes it and the session does not.
+  so the app's `walkingPace` time command applies it and the session does
+  not.
 - The pointer-lock adapter waits for the browser's success event before
   entering gameplay, and the only site a walker steps out at is beside a
   landed ship. The planetarium has no walker: its standing stance flies with

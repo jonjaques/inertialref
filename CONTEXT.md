@@ -11011,6 +11011,27 @@ and `visit` is its degree door. The debug landing site is one constant,
 `DEBUG_LANDING_SITE`, which the dock's Land button and the `surface`
 scenario both read; it is the old radians converted, so no landing moved.
 
+## The clock has one writer, and the time panel says what it did (2 Oct 2026)
+
+`App`'s command table said every command exists once, and the planetarium's
+time panel re-implemented pause, warp and real time beside it — the same
+clock, without the notice the same key gives — while the character
+controller set the clock to 1× and running when a walker stepped out. The
+commands are `timeCommands(engine, say)` in `hud/time.ts`; `App` spreads
+them into `HudCommands` with its flash, and the planetarium builds them with
+its own notice surface and hands them to the panel through its context.
+Stepping out reaches the clock through `walkingPace`, which the character
+controls and the dock's Mars pad button call once a walker is out, and which
+says something only when it changed the rate or the pause.
+
+`hud/time.test.ts` holds the world clock to that one writer with a grep over
+`apps/game/src`, comments blanked: the writes are method calls on whatever
+`presentationClock` answers — the world's clock or the observatory's — so no
+import edge can say which file writes which. The guide's executor is the one
+other caller, and every call it makes is on its `eye`, the observatory's own
+clock; the test holds that too. A walker the session steps out headlessly
+keeps whatever rate the session was asked to run at.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

@@ -1,4 +1,4 @@
-import { presentationClock } from './hud/time.ts'
+import { timeCommands } from './hud/time.ts'
 import { Canvas } from '@react-three/fiber'
 import {
   useCallback,
@@ -32,7 +32,6 @@ import {
 import { useAction } from './input/useKeymap.ts'
 import { CharacterControls } from './character/CharacterControls.tsx'
 import { devPanels } from './hud/registry.tsx'
-import { nextWarp } from './hud/warp.ts'
 import { useShipControls } from './hud/useShipControls.ts'
 import {
   type Connection,
@@ -500,22 +499,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
 
   const commands: HudCommands = {
-    togglePause: () => {
-      const clock = presentationClock(engine)
-      const paused = !clock.paused
-      clock.setPaused(paused)
-      flash(paused ? 'paused' : 'running')
-    },
-    warp: (direction: number) => {
-      const clock = presentationClock(engine)
-      const next = nextWarp(clock.timeScale, direction)
-      clock.setTimeScale(next)
-      flash(`time warp ${next}×`)
-    },
-    realTime: () => {
-      presentationClock(engine).setTimeScale(1)
-      flash('time warp 1×')
-    },
+    ...timeCommands(engine, flash),
     toggleAssist: () =>
       flash(`flight assist ${engine.toggleFlightAssist() ? 'on' : 'off'}`),
     killRotation: () => {
@@ -756,7 +740,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           Neither persistent sibling introduces its own stacking context. */}
       <ChromeContext value={chromeHidden}>
         <div className="hud-layer pointer-events-none absolute">
-          <CharacterControls engine={engine} />
+          <CharacterControls engine={engine} onStepOut={commands.walkingPace} />
           {/* Renders nothing at all when no cutscene is running. While one is,
             every other piece of chrome below unmounts — Esc skips, and the
             dock comes straight back. */}
