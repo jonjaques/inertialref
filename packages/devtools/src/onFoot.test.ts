@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { expect as unwrap } from '@inertialref/shared'
+import { expect as unwrap, radiansToDegrees } from '@inertialref/shared'
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 import {
   bodyFrameId,
@@ -7,6 +7,7 @@ import {
   parseAddress,
   TEST_CATALOG,
 } from '@inertialref/universe'
+import { DEBUG_LANDING_SITE } from './maneuvers.ts'
 import { openSession, type SessionOptions } from './session.ts'
 
 const MARS = 'g:milky-way/s:SOL/b:3'
@@ -20,7 +21,11 @@ function parked(options: SessionOptions = {}) {
     ...options,
   })
   const ship = session.player()!
-  session.harness.land(MARS, 0.35, -1.1)
+  session.harness.land(
+    MARS,
+    DEBUG_LANDING_SITE.latitude,
+    DEBUG_LANDING_SITE.longitude,
+  )
   session.harness.step(1)
   return { session, ir: session.harness, ship }
 }
@@ -92,7 +97,7 @@ describe('on foot, headlessly', () => {
       vec3(0, 0, 0),
     ).id
     session.controlPlayer(second)
-    ir.land(MARS, 0.36, -1.1)
+    ir.land(MARS, radiansToDegrees(0.36), DEBUG_LANDING_SITE.longitude)
     ir.step(1)
     expect(session.world.isLanded(first)).toBe(true)
     expect(session.world.isLanded(second)).toBe(true)

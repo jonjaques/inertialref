@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_MAX_PATCHES } from '@inertialref/rendering'
-import { DEFAULT_CACHE, type TerrainReport } from '@inertialref/devtools'
+import {
+  DEBUG_LANDING_SITE,
+  DEFAULT_CACHE,
+  type TerrainReport,
+} from '@inertialref/devtools'
 import {
   FIELD_CACHE,
   GEOMETRY_CACHE,
@@ -118,7 +122,11 @@ describe('the ground, over one descent', () => {
     if (fromOrbit === null) throw new Error('no terrain report from orbit')
     orbit = fromOrbit
 
-    game.harness.land(target.address, 0.35, -1.1)
+    game.harness.land(
+      target.address,
+      DEBUG_LANDING_SITE.latitude,
+      DEBUG_LANDING_SITE.longitude,
+    )
 
     /*
      * Settle until the drawn set stops growing, rather than for a fixed count

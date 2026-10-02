@@ -1,4 +1,9 @@
-import type { Meters, Radians } from '@inertialref/shared'
+import {
+  type Degrees,
+  degreesToRadians,
+  type Meters,
+  type Radians,
+} from '@inertialref/shared'
 import {
   type Body,
   formatAddress,
@@ -59,8 +64,13 @@ import {
 export interface DescentOptions {
   /** A `SurveySite` id. Ignored when `latitude`/`longitude` are given. */
   readonly site?: string
-  readonly latitude?: Radians
-  readonly longitude?: Radians
+  /**
+   * Degrees, what `ir.sites()` prints. `Radians` is a bare `number`, so a
+   * radian field here took a latitude copied out of that listing as radians
+   * and described ground 2,578° away; the brand refuses the copy instead.
+   */
+  readonly latitude?: Degrees
+  readonly longitude?: Degrees
   /** Height above the ground at the top of the descent. Default: the arm's ceiling. */
   readonly fromHeight?: Meters
   /** Height at the bottom. Default: 2 m, where a person stands. */
@@ -351,8 +361,14 @@ export function descentTarget(
     )
   }
   if (options.latitude !== undefined || options.longitude !== undefined) {
-    const latitude = options.latitude ?? site?.latitude ?? 0
-    const longitude = options.longitude ?? site?.longitude ?? 0
+    const latitude =
+      options.latitude === undefined
+        ? (site?.latitude ?? 0)
+        : degreesToRadians(options.latitude)
+    const longitude =
+      options.longitude === undefined
+        ? (site?.longitude ?? 0)
+        : degreesToRadians(options.longitude)
     return {
       latitude,
       longitude,

@@ -1,4 +1,5 @@
 import {
+  type Degrees,
   formatDuration,
   formatReading,
   type Meters,
@@ -24,6 +25,7 @@ import {
   partitionForFrames,
 } from '@inertialref/universe'
 import type { RenderScene } from '@inertialref/rendering'
+import { headingOf, orbitalPhase } from './maneuvers.ts'
 
 /*
  * Inspection (spec §20).
@@ -60,6 +62,20 @@ export interface EntityInspection {
     readonly y: number
     readonly z: number
   }
+  /**
+   * The nose, in the frame's axes like `local`. A ship that arrives looking
+   * at a body in its own frame has this along `-local`.
+   */
+  readonly heading: {
+    readonly x: number
+    readonly y: number
+    readonly z: number
+  }
+  /**
+   * The sun–body–eye angle at the body whose frame this is, degrees: zero is
+   * the full face, 180 the silhouette. Null outside a `b:` frame.
+   */
+  readonly phase: Degrees | null
   /** Speed in universe axes — what an outside observer measures. */
   readonly speed: number
   readonly speedText: string
@@ -176,6 +192,13 @@ export function inspectEntity(
       z: view.localPosition.z,
     },
     velocity: { x: view.velocity.x, y: view.velocity.y, z: view.velocity.z },
+    heading: headingOf(entity.state),
+    phase: orbitalPhase(
+      world,
+      entity.state.frame,
+      world.canonicalPositionOf(id),
+      world.clock.time,
+    ),
     speed: Vec.length(view.velocity),
     speedText: `${Vec.length(view.velocity).toFixed(1)} m/s`,
     localSpeed: Vec.length(view.localVelocity),

@@ -37,6 +37,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The heightfield request carries the surface                  | `HeightfieldSource.submit(surface, request)` and `WireSurface` in `packages/workers/src/tasks.ts`, ADR-0023 § 3 |
 | A body's visual residency is a policy that runs in Node      | [`apps/game/src/scene/bodyResidency.ts`](../../apps/game/src/scene/bodyResidency.ts) and its test               |
 | On foot is a session verb                                    | [`packages/devtools/src/onFoot.ts`](../../packages/devtools/src/onFoot.ts), ADR-0047                            |
+| The flying verbs are a module                                | [`packages/devtools/src/maneuvers.ts`](../../packages/devtools/src/maneuvers.ts) and its test                   |
 
 ---
 
@@ -44,14 +45,13 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 2   | [The flying verbs get a module](#2-the-flying-verbs-get-a-module)                                                                                      | The harness              | —         | Strong          |
 | 3   | [Time has one writer](#3-time-has-one-writer)                                                                                                          | The walker and the frame | —         | Strong          |
 | 4   | [The ground under a walker is one module](#4-the-ground-under-a-walker-is-one-module)                                                                  | The walker and the frame | —         | Strong          |
 | 5   | [The walker's presentation is a function](#5-the-walkers-presentation-is-a-function)                                                                   | The walker and the frame | 4         | Worth exploring |
 | 6   | [Bodies: the uniforms are a pure mapping](#6-bodies-the-uniforms-are-a-pure-mapping)                                                                   | The walker and the frame | —         | Strong          |
 | 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | 5, 6      | Strong          |
 | 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | 7         | Strong          |
-| 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness              | 2         | Strong          |
+| 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness              | —         | Strong          |
 | 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide                | —         | Strong          |
 | 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                                                                 | The guide                | 10        | Strong          |
 | 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                                                               | The guide                | 11        | Worth exploring |
@@ -69,7 +69,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 ```mermaid
 flowchart LR
-  P2[2 Maneuvers] --> P9[9 Director and booted]
+  P9[9 Director and booted]
   P3[3 Time]
   P4[4 Ground] --> P5[5 Presentation]
   P5 --> P7[7 Frame owner]
@@ -92,118 +92,18 @@ the numbering is the order to take them in. Across tracks the only edges are
 the two optional items.** So the tracks fan out across worktrees, and
 the numbering is the order for one pair of hands. Where a pull request builds
 on nothing and still has a place in the order, the place is about collision,
-and its section says so. Four files are edited by more than one pull request,
+and its section says so. Three files are edited by more than one pull request,
 and the order is what keeps them apart:
 
 - `apps/game/src/engine/GameEngine.ts` — the walker's arm and the derived state
   in 3–8, and the archive's wiring in 13. Different regions of it: a rebase, not
   a design dependency.
-- `packages/devtools/src/harness.ts` — 2, then 9.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 2.** The walker is a session verb now (`ir.onFoot`), so every
-flying verb already boards a walker before it moves a ship, and what is left in
-the harness is the five hundred lines that move it. 2 is also the first of the
-three pull requests that edit `harness.ts`, and 9 waits on it.
-
----
-
-## 2. The flying verbs get a module
-
-**Track:** the harness · **Strong** · in-process
-
-**Builds on:** nothing left open — each verb boards a walker through
-`OnFoot` (`#requireShip`) before it moves a ship, and keeps doing so from the
-new module. **Unblocks:** 9.
-
-**Files.** `packages/devtools/src/harness.ts` — `orbit`, `#toStar`,
-`#starDirection`, `light`, `#trackOrbit`, `#orbitStar`, `shot`, `land`, `goTo`,
-`#arriveAt`, `goToSystem`, `face`, `burnToward` (`:1046–1546`), and
-`#currentBodyAddress`, `#bodyPosition`, `#lookAt` (`:2628–2670`);
-`packages/devtools/src/shots.ts`; `packages/devtools/src/inspect.ts`
-(`EntityInspection`); `packages/devtools/src/devtools.test.ts` § "going
-places"; `packages/devtools/src/observatory.ts` (`stand`);
-`packages/shared/src/units.ts`.
-
-**The friction.**
-
-- `harness.ts` is 2,738 lines. The flying group is about five hundred of them —
-  two-body speed, sunward placement, orbit-rate spin, the sphere-of-influence
-  clamp, nose-on-target — inline in a class whose other methods mostly forward.
-- The going-places tests drive through the interface and verify through the
-  world. They read `session.world.entities.require(session.player())` and
-  rebuild the forward vector from `state.orientation` (`devtools.test.ts:656`,
-  `:707`, `:738`), and one recomputes a phase from `frames.pose`, because the
-  interface cannot answer what the verbs promise.
-- `burnToward` and `face` have no test.
-- `light()` computes a sun–body–eye phase inline, and
-  `#starDirection(system, frame, time)` serves both it and `sites()`.
-- `ir.land` takes radians where every other verb takes degrees — `visit`'s own
-  comment calls it a wart — and `Observatory.stand` takes `Radians`, which is a
-  bare `number`, while `Degrees` is a brand.
-
-**The shape.** `packages/devtools/src/maneuvers.ts`, whose interface is the
-flying verbs over the `Host`, each returning what it promises: the state it
-wrote, the heading, the orbital phase, and whether the move dropped a rails
-epoch. The harness forwards to it the way it forwards to the observatory, and
-`EntityInspection` gains heading and phase, so `ir.status().player` answers
-"arrives looking at it".
-
-- **`Maneuvers` is constructed over the whole `Host`**, as
-  `new Observatory(host)` is. `import type { Host } from './harness.ts'` is
-  erased, so the harness→maneuvers value edge is the only runtime one. The verbs
-  read the `world` getter, `player()`, `render.framingLens()` — `shot` solves a
-  `fill` standoff against the lens the camera is wearing, not the flight
-  default — and `OnFoot`, to board before a verb moves the ship.
-- **The harness verbs keep returning `HarnessStatus`.**
-  `ir.land(...).player.landed` and `ir.shot`'s lens-carrying status are
-  documented in [`docs/guides/harness.md`](../../docs/guides/harness.md) and read
-  by the photo-mode metadata seam. Each verb becomes a two-line forward: call
-  the module, then `return this.status()`.
-- **`ManeuverResult` is `{ state, heading, phase, droppedEpoch }`**, reached by
-  testing the module directly (`new Maneuvers(session)`; a `Session` is a
-  `Host`). `droppedEpoch` is always true for these verbs: every bookmark is a
-  `teleport`, and `teleport` drops the epoch by construction
-  ([ADR-0025](../../docs/adr/0025-the-rails.md)). The module's header says so in
-  one sentence.
-- **Moves:** the verbs and privates listed above, `#starDirection`, and
-  `light()`'s phase arithmetic. **Stays:** `shots()`, a listing with no world
-  or player; `sites()`, reading the moved sun direction; and the
-  simulation-control verbs `control`, `hold`, `flightAssist`, `pause`,
-  `resume`, `timeWarp`, `step`, `runSeconds`.
-- **The sun and the phase are functions of a time and an eye, not of an
-  entity.** `light()` asks about an eye that need not be the player's, and the
-  sun direction is evaluated at a time. Two helpers are exported,
-  `sunDirection(world, system, frame, time)` and
-  `orbitalPhase(world, frame, eye, time)`, so `inspect.ts`, `light()` and the
-  module share them. The phase is the
-  sun–body–eye angle in degrees, and `null` outside a `b:` frame: a landing's
-  `sf:`, an interstellar frame and a star orbit's `s:` all yield `null`.
-  `inspect.ts` importing `maneuvers.ts` adds no cycle, because neither
-  `maneuvers.ts` nor `travel.ts` imports `inspect.ts`.
-- **`headingOf(state)`** is `Q.rotate(state.orientation, [0, 0, -1])`, the
-  frame-local forward the tests read today.
-- **The `Degrees` brand reaches the verbs.** `ir.land` takes what every other
-  verb takes, `DescentOptions` takes what `ir.sites` prints, and the harness
-  casts at the structure seam and nowhere else. `ir.observatory` is the
-  `Observatory` itself, so its `stand` either takes `Degrees` at the console or
-  stays in radians with `visit` as the degree door. The pull request picks one
-  and `harness.md` says which in a sentence.
-
-**Gate.**
-
-- No going-places case reads the world or rebuilds a dot or a phase from
-  `frames.pose`. "Arrives looking at it" is
-  `dot(player.heading, normalize(negate(player.local))) ≈ 1`.
-- `burnToward` and `face` go from zero cases to their own, on a ship and on
-  foot.
-- `goToSystem`'s case stops reading the world. `light()`'s test is unchanged
-  and answers through the shared helper.
-- `shots.ts` keeps its placement property tests unchanged and green.
-- `ir.land(...).player.landed` and `ir.shot`'s status still answer.
-- `pnpm graph` reports no cycle. With the brand, a `Radians` value cannot reach
-  `ir.land`, and `pnpm typecheck` is the whole check.
+**Start with 3.** The walker's track is the one with the most left on it, and
+3 is the smallest of it: the step-out's clock write is one method of the app's
+controller, and the planetarium's time panel is the other writer.
 
 ---
 
@@ -472,8 +372,8 @@ still keys on something the generation cannot see.
 
 **Track:** the harness · **Strong** · in-process
 
-**Builds on:** 2 — same file, and exposing a sub-object is the move 2 made for
-`Maneuvers`. **Unblocks:** nothing.
+**Builds on:** nothing left open — exposing a sub-object is the move the
+harness makes for `OnFoot` and `Maneuvers`. **Unblocks:** nothing.
 
 **Files.** `packages/devtools/src/harness.ts` (eight director forwards;
 `new CutsceneDirector(host, CUTSCENES)` at `:555`),
@@ -1159,4 +1059,4 @@ carries the argument.
 - [Perf](perf.md) — the measurement 16 waits on
 - [The upscaler](the-upscaler.md) — the velocity-overlay defect 17 makes one
   change
-- [Harness](../../docs/guides/harness.md) — the surface 2 and 9 reshape
+- [Harness](../../docs/guides/harness.md) — the surface 9 reshapes

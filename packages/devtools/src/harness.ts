@@ -6,7 +6,14 @@ import {
   type WorldQuery,
 } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
-import { OnFoot } from './onFoot.ts'
+import type { OnFoot } from './onFoot.ts'
+import {
+  currentBodyAddress,
+  DEBUG_LANDING_SITE,
+  Maneuvers,
+  orbitalPhase,
+  sunDirection,
+} from './maneuvers.ts'
 import {
   validateGalaxyJourney,
   type GalaxyView,
@@ -25,11 +32,8 @@ import {
   type Result,
   RingBufferSink,
 } from '@inertialref/shared'
-import { circularSpeed } from '@inertialref/physics'
 import { formatSeed } from '@inertialref/procedural'
 import {
-  type FrameId,
-  Quaternion as Q,
   type UniverseVector,
   UV,
   Vec,
@@ -51,10 +55,7 @@ import {
   formatAddress,
   geodeticDirection,
   hasSolidSurface,
-  installSurfaceFrame,
   isLandable,
-  parseAddress,
-  systemFrameId,
   systemId,
   type SystemId,
   type SystemStub,
@@ -125,7 +126,6 @@ import {
   type TravelTarget,
   type TravelTargetOptions,
   travelTargets,
-  viewingAltitudeKm,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
 import {
@@ -133,7 +133,7 @@ import {
   DEFAULT_PICTURE_PROCESSING,
   type PictureProcessing,
 } from './pictureProcessing.ts'
-import { findShot, placeShot, SHOTS } from './shots.ts'
+import { SHOTS } from './shots.ts'
 import {
   CutsceneDirector,
   type CutsceneOutcome,
@@ -555,7 +555,7 @@ export class GameHarness {
   readonly #cutscenes: CutsceneDirector
   readonly #observatory: Observatory
   readonly #flightCamera: FlightCamera
-  readonly #onFoot: OnFoot
+  readonly #maneuvers: Maneuvers
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
 
@@ -564,19 +564,13 @@ export class GameHarness {
     this.#cutscenes = new CutsceneDirector(host, CUTSCENES)
     this.#observatory = new Observatory(host)
     this.#flightCamera = new FlightCamera(host)
-    this.#onFoot = new OnFoot(
-      host,
-      (address, latitude, longitude) => {
-        this.land(address, latitude, longitude)
+    this.#maneuvers = new Maneuvers(host, {
+      playing: () => this.#cutscenes.status() !== null,
+      clear: () => {
+        this.stopCutscene()
+        this.#observatory.clear()
       },
-      {
-        playing: () => this.#cutscenes.status() !== null,
-        clear: () => {
-          this.stopCutscene()
-          this.#observatory.clear()
-        },
-      },
-    )
+    })
     logHub.addSink(this.#logSink)
   }
 
@@ -1041,99 +1035,17 @@ export class GameHarness {
     this.control({ translation: [0, 0, 0], rotation: [0, 0, 0], throttle: 0 })
   }
 
-  /**
-   * Neutral input after a teleport, drive included.
-   *
-   * Every placement verb ends here: a ship put into a circular orbit with
-   * its drive still lit is not in that orbit on the next tick, and a
-   * composition framed with the throttle open drifts out of its own picture.
-   */
-  #handsOff(player: EntityId): void {
-    this.#host.render.declareCut()
-    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
-    this.world.setThrottle(player, 0)
-  }
-
   flightAssist(enabled: boolean): void {
     this.world.setFlightAssist(this.#requireShip(), enabled)
   }
 
   /**
    * Put the player in a circular orbit around a body — or, given a system
-   * address, around its star.
-   *
-   * Named for what it does physically rather than "teleport": it sets a state
-   * that is a valid solution of the two-body problem, so the ship stays there.
+   * address, around its star. `Maneuvers.orbit` holds the placement.
    */
   orbit(address: string, altitudeKm?: number): HarnessStatus {
-    const parsed = parseAddress(address)
-    // A star is somewhere you can orbit too: a system address names one, and
-    // refusing it forced "orbit the star" through goToSystem's hold-off in the
-    // dark. The star lives at its system frame's origin, so this is the same
-    // maneuver with the system frame standing in for a body frame.
-    if (parsed.kind === 'system')
-      return this.#orbitStar(parsed.system, altitudeKm)
-    if (parsed.kind !== 'body')
-      throw new Error(`${address} is not a body address`)
-    const system = this.world.loadSystem(parsed.system)
-    const body = findBody(system, parsed.body)
-    if (body === undefined) throw new Error(`No body at ${address}`)
-
-    const radius = body.radius + (altitudeKm ?? 400) * 1000
-    const speed = circularSpeed(body.mu, radius)
-    const player = this.#requireShip()
-    const frame = bodyFrameId(body.address)
-
-    // Placed on the sunward side, and pointing along the orbit. A debug tool
-    // that drops you on the night side of an unlit world, facing away from
-    // everything, is technically correct and useless.
-    const toStar = this.#toStar(parsed.system, frame)
-    const alongOrbit = Vec.normalize(Vec.cross(vec3(0, 1, 0), toStar))
-
-    this.world.teleport(player, {
-      frame,
-      position: Vec.scale(toStar, radius),
-      // Nose along the direction of travel: forward is −Z.
-      orientation: Q.fromUnitVectors(vec3(0, 0, -1), alongOrbit),
-      velocity: Vec.scale(alongOrbit, speed),
-      angularVelocity: Vec.ZERO,
-    })
-    this.#handsOff(player)
-    log.info('placed in orbit', { address, altitudeKm, speed })
+    this.#maneuvers.orbit(address, altitudeKm)
     return this.status()
-  }
-
-  /**
-   * Unit vector from a frame's origin toward the system's star, in that
-   * frame's axes.
-   *
-   * The *star*, not the frame's parent. For a planet the two agree — its
-   * parent is the system frame, whose origin is the star — and that
-   * coincidence is exactly how the parent version shipped: every shot of a
-   * moon was composed against the direction of its **planet**, so `full-face`
-   * on Luna framed the earthlit side at whatever phase Earth happened to be
-   * in, and `sunset` chased Earth's azimuth instead of the sun's.
-   */
-  #toStar(system: SystemId, frame: FrameId): Vec3 {
-    return this.#starDirection(system, frame, this.world.clock.time)
-  }
-
-  /**
-   * The unit vector toward the star, in the given frame, at a given instant.
-   *
-   * The instant is a parameter because two callers disagree about it: a shot
-   * places the *ship* at the simulation's own time, while the observatory
-   * holds a photographic instant of its own — and the sun over a stance is a
-   * fact about the picture's time, not the clock's.
-   */
-  #starDirection(system: SystemId, frame: FrameId, time: number): Vec3 {
-    const pose = this.world.frames.pose(frame, time)
-    const star = this.world.frames.pose(systemFrameId(system), time).position
-    const offset = UV.difference(star, pose.position)
-    // The star's own frame asking for the star: no direction exists. The +X
-    // convention matches goToSystem's placement axis.
-    if (Vec.length(offset) < 1) return vec3(1, 0, 0)
-    return Vec.normalize(Q.rotateInverse(pose.orientation, offset))
   }
 
   /**
@@ -1194,7 +1106,12 @@ export class GameHarness {
     const onIt = status.surface !== null && status.target?.address === text
     let sun: number | null = null
     if (onIt && status.surface !== null) {
-      const toStar = this.#starDirection(at.system, bodyFixedFrameId(at), time)
+      const toStar = sunDirection(
+        this.world,
+        at.system,
+        bodyFixedFrameId(at),
+        time,
+      )
       const { latitude, longitude } = status.surface.stance
       sun = this.#sunElevation(toStar, latitude, longitude)
     }
@@ -1209,20 +1126,9 @@ export class GameHarness {
      */
     let phase: number | null = null
     if (status.target !== null) {
-      const frame = bodyFrameId(at)
-      const bodyPose = this.world.frames.pose(frame, time)
       const center = this.world.frames.pose(status.target.frame, time).position
       const eye = observerPose(center, status.desired, status.look)
-      const toStar = this.#starDirection(at.system, frame, time)
-      const offset = UV.difference(eye.position, bodyPose.position)
-      if (Vec.length(offset) > 1) {
-        const toEye = Vec.normalize(
-          Q.rotateInverse(bodyPose.orientation, offset),
-        )
-        phase =
-          (Math.acos(Math.max(-1, Math.min(1, Vec.dot(toEye, toStar)))) * 180) /
-          Math.PI
-      }
+      phase = orbitalPhase(this.world, bodyFrameId(at), eye.position, time)
     }
     const lit = sun !== null ? sun > 3 : phase !== null ? phase < 100 : true
     return { address: text, sun, phase, lit }
@@ -1269,138 +1175,9 @@ export class GameHarness {
     }
   }
 
-  /**
-   * Spin the ship at its own orbital rate, so a framed composition *holds*.
-   *
-   * A teleport leaves the angular velocity at zero, which is a ship whose nose
-   * points at a fixed direction in inertial space — so as the orbit proceeds,
-   * the body it was framing slides out of the picture. What a locked-on camera
-   * does is rotate once per revolution about the orbit normal, and that rate is
-   * `ω = r × v / |r|²` exactly — set it and the nose stays on the body while
-   * the terrain turns underneath, which is the whole point of watching a
-   * bookmark with time running.
-   *
-   * Flight assist is switched off with it, deliberately: assist reads any
-   * uncommanded spin as tumble and damps it back to zero within seconds,
-   * un-tracking the shot. `ir.flightAssist(true)` or the keybinding restores
-   * it the moment you want to fly rather than film.
-   */
-  #trackOrbit(): void {
-    const player = this.#requireShip()
-    const state = this.world.entities.require(player).state
-    const r2 = Vec.lengthSquared(state.position)
-    if (r2 < 1) return
-    const omegaFrame = Vec.scale(
-      Vec.cross(state.position, state.velocity),
-      1 / r2,
-    )
-    this.world.setFlightAssist(player, false)
-    this.world.teleport(player, {
-      ...state,
-      // The integrator composes angular velocity in *body* axes.
-      angularVelocity: Q.rotateInverse(state.orientation, omegaFrame),
-    })
-  }
-
-  /**
-   * A circular orbit around the system's star itself.
-   *
-   * The star is not a `Body` — it has no address and no frame of its own; it
-   * *is* the system frame's origin — so none of the body machinery applies.
-   * The default altitude parks eight stellar radii out, where the disk
-   * subtends ~14°: a sun hanging in the sky. The one-radius-up rule planets
-   * use would put a wall of light across the whole view.
-   */
-  #orbitStar(system: SystemId, altitudeKm?: number): HarnessStatus {
-    const target = this.world.loadSystem(systemId(system))
-    const star = target.star
-    const radius = star.radius + (altitudeKm ?? (star.radius * 7) / 1000) * 1000
-    const speed = circularSpeed(star.mu, radius)
-    const player = this.#requireShip()
-
-    // On +X of the system frame — the same axis goToSystem uses — orbiting in
-    // the system's reference plane, prograde like everything else in it.
-    const alongOrbit = Vec.cross(vec3(0, 1, 0), vec3(1, 0, 0))
-    this.world.teleport(player, {
-      frame: systemFrameId(target.id),
-      position: vec3(radius, 0, 0),
-      orientation: Q.fromUnitVectors(vec3(0, 0, -1), alongOrbit),
-      velocity: Vec.scale(alongOrbit, speed),
-      angularVelocity: Vec.ZERO,
-    })
-    this.#handsOff(player)
-    log.info('placed in orbit of the star', { system: target.id, speed })
-    return this.status()
-  }
-
-  /**
-   * Frame a named, repeatable composition of a body — a camera bookmark.
-   *
-   * `orbit` places you for flying; this places you for looking, at the
-   * distances and phase angles the reference photographs were taken from. The
-   * ship is left in a circular orbit through the bookmark position so the
-   * composition holds instead of falling, and the nose — which is the camera —
-   * is aimed by the shot itself: the body's center, the sunward horizon, or
-   * the star's reflection off the surface.
-   *
-   * With no address it re-frames the body whose frame the player is already
-   * in, so `ir.shot('crescent')` after any arrival does what it sounds like.
-   */
+  /** Frame a named composition of a body — a camera bookmark. See `Maneuvers.shot`. */
   shot(name = 'full-face', address?: string): HarnessStatus {
-    const shot = findShot(name)
-    // Lenient like `goTo`, because this is typed at a console: `b:2` relative
-    // to the current system is the way anyone actually names a body.
-    const target = resolveDestination(
-      address ?? this.#currentBodyAddress(),
-      this.world.galaxy,
-      currentSystemOf(this.world, this.#host.player()),
-    )
-    if (target.kind !== 'body')
-      throw new Error(`${address ?? ''} names a system; shots frame a body`)
-    const system = this.world.loadSystem(target.system)
-    const body = findBody(
-      system,
-      target.address.kind === 'body' ? target.address.body : [],
-    )
-    if (body === undefined) throw new Error(`No body at ${target.text}`)
-
-    const player = this.#requireShip()
-    const frame = bodyFrameId(body.address)
-
-    // The sun direction in the body's frame, exactly as `orbit` derives it.
-    const toStar = this.#toStar(target.system, frame)
-
-    // Clamped inside the sphere of influence for the same reason
-    // `viewingAltitudeKm` is: a "parking orbit" outside the SOI is reframed to
-    // the parent and becomes a departure.
-    const placement = placeShot(
-      shot,
-      body.radius,
-      toStar,
-      body.sphereOfInfluence * 0.85,
-      /*
-       * The lens the camera is actually wearing, not the flight default.
-       *
-       * Nine of the sixteen name their standoff as a *fill* of the frame, which
-       * is a claim about an angle — so solved against 65° while the slider sits
-       * at 20°, `close` parks the hull where the disk subtends 61° in a 20°
-       * field and the frame is all ground. `Observatory.compose` passes its own
-       * lens for exactly this reason; a bookmark that framed against a lens
-       * nobody is looking through is the defect `ir.preset` was fixed for.
-       */
-      verticalFovDegrees(this.#host.render.framingLens()),
-    )
-    const distance = Vec.length(placement.position)
-    this.world.teleport(player, {
-      frame,
-      position: placement.position,
-      orientation: placement.orientation,
-      velocity: Vec.scale(placement.along, circularSpeed(body.mu, distance)),
-      angularVelocity: Vec.ZERO,
-    })
-    this.#handsOff(player)
-    this.#trackOrbit()
-    log.info('framed shot', { shot: name, address: target.text, distance })
+    this.#maneuvers.shot(name, address)
     return this.status()
   }
 
@@ -1409,161 +1186,36 @@ export class GameHarness {
     return SHOTS.map(({ id, why }) => ({ name: id, description: why }))
   }
 
-  /** Park the player on the ground at a latitude/longitude, ready to fly. */
-  land(address: string, latitude = 0, longitude = 0): HarnessStatus {
-    const parsed = parseAddress(address)
-    if (parsed.kind !== 'body')
-      throw new Error(`${address} is not a body address`)
-    const system = this.world.loadSystem(parsed.system)
-    const body = findBody(system, parsed.body)
-    if (body === undefined) throw new Error(`No body at ${address}`)
-
-    const frame = installSurfaceFrame(
-      this.world.frames,
-      body,
-      latitude,
-      longitude,
-    )
-    const player = this.#requireShip()
-    this.world.teleport(player, {
-      frame,
-      // On the pad, which is what the origin of a surface frame *is*:
-      // `installSurfaceFrame` derives the frame's elevation from the terrain at
-      // this exact quantized latitude/longitude, so local y = 0 is the ground.
-      //
-      // This used to be `vec3(0, 3, 0)` with `landed = true`, and the two
-      // contradicted each other. `stepFlight` short-circuits to `stepLanded`
-      // when an entity is already landed, so the contact test never ran and the
-      // ship hovered at y = 3 forever while the overlay reported an altitude of
-      // 0. Dropping the flag alone was not enough: 3 m is inside
-      // LANDING_CLEARANCE, so the contact test then registered a landing at 3 m
-      // and `#land`'s `max(0, y)` kept it there.
-      position: Vec.ZERO,
-      orientation: Q.IDENTITY,
-      velocity: Vec.ZERO,
-      angularVelocity: Vec.ZERO,
-    })
-    this.#handsOff(player)
+  /** Park the player on the ground, in degrees like every other verb. */
+  land(address: string, latitude: Degrees, longitude: Degrees): HarnessStatus {
+    this.#maneuvers.land(address, latitude, longitude)
     return this.status()
   }
 
-  /**
-   * Go anywhere, given anything that names it.
-   *
-   * The god-mode front door, and the only travel verb that does not require you
-   * to already know what kind of thing you are naming. A body address arrives
-   * in a circular orbit framing that body; a system designation arrives in a
-   * close orbit of the star itself, looking at it — you asked for the star,
-   * and the star is what fills the view.
-   *
-   * Passing `distanceAu` asks for the other thing — a hold-off in the system
-   * frame, out in the dark, which is where `goToSystem` alone leaves you. That
-   * is a real place to want to be and a terrible place to arrive by default: at
-   * 40 AU a red dwarf is a sub-pixel point, so "travel to Proxima" appeared to
-   * do nothing at all.
-   *
-   * `orbit`, `land`, `goToSystem` and `face` are still the primitives and still
-   * take exactly one kind of argument each — this dispatches to them rather
-   * than reimplementing them, so there is one placement rule per maneuver.
-   */
+  /** Go anywhere, given anything that names it. See `Maneuvers.goTo`. */
   goTo(
     destination: string,
     options: { altitudeKm?: number; distanceAu?: number } = {},
   ): HarnessStatus {
-    const target = resolveDestination(
-      destination,
-      this.world.galaxy,
-      currentSystemOf(this.world, this.#host.player()),
-    )
-    const system = this.world.loadSystem(target.system)
-
-    if (target.kind === 'body') {
-      const body = findBody(
-        system,
-        target.address.kind === 'body' ? target.address.body : [],
-      )
-      if (body === undefined) throw new Error(`No body at ${target.text}`)
-      return this.#arriveAt(target.text, body, options.altitudeKm)
-    }
-
-    // A system designation arrives at the star itself, in a close orbit with
-    // the nose on it. It used to arrive at the first planet, which answered a
-    // question nobody asked: travel to *Proxima* should end with Proxima
-    // filling the view, and its planets are one `ir.targets()` away.
-    if (options.distanceAu === undefined) {
-      this.#orbitStar(target.system, options.altitudeKm)
-      this.#lookAt(
-        this.world.frames.pose(
-          systemFrameId(target.system),
-          this.world.clock.time,
-        ).position,
-      )
-      this.#trackOrbit()
-      return this.status()
-    }
-
-    this.goToSystem(target.system, options.distanceAu)
-    // Arriving with the nose pointed at nothing is how you conclude the game is
-    // broken. `goToSystem` places the ship on the +X axis of the system frame,
-    // whose origin is the star.
-    this.#lookAt(
-      this.world.frames.pose(
-        systemFrameId(target.system),
-        this.world.clock.time,
-      ).position,
-    )
-    return this.status()
-  }
-
-  /**
-   * Circular orbit at a framing altitude, nose on the body.
-   *
-   * The second half is the part that is easy to leave out: `orbit` aims along
-   * the track, which is right for flying and wrong for arriving — you teleport
-   * into orbit and see empty space, which reads as "the planet did not load".
-   * A rotation does not change the orbit, and `GameEngine`'s opening shot has
-   * always done this exact pair for this exact reason.
-   */
-  #arriveAt(address: string, body: Body, altitudeKm?: number): HarnessStatus {
-    this.orbit(address, altitudeKm ?? viewingAltitudeKm(body))
-    this.face(address)
-    // Arrivals are for looking too: hold the body in frame around the orbit
-    // rather than letting it drift out over the next few minutes of warp.
-    this.#trackOrbit()
+    this.#maneuvers.goTo(destination, options)
     return this.status()
   }
 
   /** Drop the player into interstellar space near a system. */
   goToSystem(system: string, distanceAu = 60): HarnessStatus {
-    const target = this.world.loadSystem(systemId(system))
-    const player = this.#requireShip()
-    this.world.teleport(player, {
-      frame: systemFrameId(target.id),
-      position: vec3(distanceAu * AU, 0, 0),
-      orientation: Q.IDENTITY,
-      velocity: Vec.ZERO,
-      angularVelocity: Vec.ZERO,
-    })
-    this.#handsOff(player)
+    this.#maneuvers.goToSystem(system, distanceAu)
     return this.status()
   }
 
-  /**
-   * Point the nose at a body without touching its trajectory.
-   *
-   * Separate from `burnToward` because looking and burning are different acts:
-   * this one is free, and it is what you want when setting up a screenshot or
-   * checking that a body is where the HUD says it is.
-   */
+  /** Point the nose at a body without touching its trajectory. */
   face(address: string): HarnessStatus {
-    this.#lookAt(this.#bodyPosition(address))
+    this.#maneuvers.face(address)
     return this.status()
   }
 
   /** Aim the ship at a body and light the main drive. */
   burnToward(address: string, throttle = 1): HarnessStatus {
-    this.#lookAt(this.#bodyPosition(address))
-    this.world.setThrottle(this.#requireShip(), throttle)
+    this.#maneuvers.burnToward(address, throttle)
     return this.status()
   }
 
@@ -1657,7 +1309,11 @@ export class GameHarness {
       }
       case 'surface': {
         const target = this.#firstSolidBodyAddress()
-        this.land(target, 0.35, -1.1)
+        this.land(
+          target,
+          DEBUG_LANDING_SITE.latitude,
+          DEBUG_LANDING_SITE.longitude,
+        )
         this.step(64)
         return this.#scenarioResult(name, before, `parked on ${target}`)
       }
@@ -1758,14 +1414,18 @@ export class GameHarness {
 
   /** Stand above a structure in the planetarium, looking toward its northern approach. */
   visitStructure(id: string, height = 100): ObserverStatus {
-    const structure = this.structures().find((candidate) => candidate.id === id)
+    const structure = this.world.structures.find(
+      (candidate) => candidate.id === id,
+    )
     if (structure === undefined) throw new Error(`No surface structure ${id}`)
-    return this.visit(structure.bodyAddress, {
+    // The world's own radians, straight to the radian door: through `visit`
+    // they would cross to degrees and back for nothing.
+    return this.observatory.stand(structure.bodyAddress, {
       latitude: structure.latitude,
       longitude: structure.longitude,
       height: height + structure.height,
       heading: structure.heading,
-      pitch: -75,
+      pitch: (-75 * Math.PI) / 180,
     })
   }
 
@@ -1885,7 +1545,7 @@ export class GameHarness {
    * controls and a console reach the same walker.
    */
   get onFoot(): OnFoot {
-    return this.#onFoot
+    return this.#maneuvers.onFoot
   }
 
   /**
@@ -2170,8 +1830,8 @@ export class GameHarness {
     id: string
     name: string
     detail: string
-    latitude: number
-    longitude: number
+    latitude: Degrees
+    longitude: Degrees
     elevation: number
     /** The star's elevation over this place, degrees, at the held instant. */
     sun: number
@@ -2191,7 +1851,8 @@ export class GameHarness {
      */
     const at = body.address
     if (at.kind !== 'body') return []
-    const toStar = this.#starDirection(
+    const toStar = sunDirection(
+      this.world,
       at.system,
       bodyFixedFrameId(body.address),
       this.observatory.time,
@@ -2200,8 +1861,8 @@ export class GameHarness {
       id: site.id,
       name: site.name,
       detail: site.detail,
-      latitude: (site.latitude * 180) / Math.PI,
-      longitude: (site.longitude * 180) / Math.PI,
+      latitude: radiansToDegrees(site.latitude),
+      longitude: radiansToDegrees(site.longitude),
       elevation: site.elevation,
       sun: this.#sunElevation(toStar, site.latitude, site.longitude),
       region: `${site.region.face}.${site.region.level}.${site.region.i}.${site.region.j}`,
@@ -2225,34 +1886,33 @@ export class GameHarness {
     address?: string,
     options: {
       site?: string
-      latitude?: number
-      longitude?: number
+      latitude?: Degrees
+      longitude?: Degrees
       height?: number
-      heading?: number
-      pitch?: number
+      heading?: Degrees
+      pitch?: Degrees
     } = {},
   ): ObserverStatus {
     const target = address ?? this.observatory.target?.address
     if (target === undefined)
       throw new Error('Nothing to visit — pass an address')
-    // Degrees at this boundary, radians below it. Every other harness verb that
-    // takes a latitude does the same, and `ir.land` is the one that does not —
-    // it takes radians, which is a wart this does not copy.
+    // Degrees at this boundary, radians below it, as at every harness verb
+    // that names an angle. `ir.observatory.stand` is the radian door.
     return this.observatory.stand(target, {
       ...(options.site === undefined ? {} : { site: options.site }),
       ...(options.latitude === undefined
         ? {}
-        : { latitude: (options.latitude * Math.PI) / 180 }),
+        : { latitude: degreesToRadians(options.latitude) }),
       ...(options.longitude === undefined
         ? {}
-        : { longitude: (options.longitude * Math.PI) / 180 }),
+        : { longitude: degreesToRadians(options.longitude) }),
       ...(options.height === undefined ? {} : { height: options.height }),
       ...(options.heading === undefined
         ? {}
-        : { heading: (options.heading * Math.PI) / 180 }),
+        : { heading: degreesToRadians(options.heading) }),
       ...(options.pitch === undefined
         ? {}
-        : { pitch: (options.pitch * Math.PI) / 180 }),
+        : { pitch: degreesToRadians(options.pitch) }),
     })
   }
 
@@ -2271,15 +1931,15 @@ export class GameHarness {
    * Degrees at this boundary, radians below it, like `visit`.
    */
   drop(
-    latitude: number,
-    longitude: number,
+    latitude: Degrees,
+    longitude: Degrees,
     options: { address?: string; seconds?: number } = {},
   ): ObserverStatus {
     return this.observatory.drop(
       options.address,
       {
-        latitude: (latitude * Math.PI) / 180,
-        longitude: (longitude * Math.PI) / 180,
+        latitude: degreesToRadians(latitude),
+        longitude: degreesToRadians(longitude),
       },
       options.seconds === undefined ? {} : { seconds: options.seconds },
     )
@@ -2296,25 +1956,8 @@ export class GameHarness {
    */
   descend(
     address?: string,
-    options: Omit<DescentOptions, 'latitude' | 'longitude'> & {
-      /**
-       * Degrees, like every other verb on this object.
-       *
-       * `DescentOptions` below the harness is radians, and `Radians` is a bare
-       * `number` — so a latitude copied out of `ir.sites()`, which prints
-       * degrees, was read as radians and described ground 2,578° away with
-       * nothing to catch it. `visit` converts at exactly this boundary and this
-       * is the same boundary.
-       */
-      readonly latitude?: number
-      readonly longitude?: number
-    } = {},
+    options: DescentOptions = {},
   ): DescentReport & { readonly text: string } {
-    // Degrees here, radians below — the same boundary `visit` states. Passing
-    // the numbers straight through let `ir.sites()` output (degrees) land in
-    // `geodeticDirection` as radians: a report about ground wrapped ~2,578°
-    // from the place the caller named, with no error anywhere.
-    const { latitude, longitude, ...rest } = options
     const body = this.#requireBody(address)
     // The refusal `visit` makes, made here too: a probe that reports a descent
     // onto a giant describes ground the camera declines to stand on, and the
@@ -2339,19 +1982,10 @@ export class GameHarness {
       live === null
         ? {}
         : {
-            lens: rest.lens ?? live.lens,
-            viewport: rest.viewport ?? live.viewport,
+            lens: options.lens ?? live.lens,
+            viewport: options.viewport ?? live.viewport,
           }
-    const report = simulateDescent(body, {
-      ...rest,
-      ...optics,
-      ...(latitude === undefined
-        ? {}
-        : { latitude: (latitude * Math.PI) / 180 }),
-      ...(longitude === undefined
-        ? {}
-        : { longitude: (longitude * Math.PI) / 180 }),
-    })
+    const report = simulateDescent(body, { ...options, ...optics })
     const text = summarizeDescent(report)
     log.info('descent simulated', {
       body: report.body,
@@ -2582,7 +2216,7 @@ export class GameHarness {
       '  ir.goTo(target)               a system id or a body address; does the right thing',
       '  ir.loadSystem(id)             generate a system without traveling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',
-      '  ir.orbit(address, altitudeKm) / ir.land(address, lat, lon)',
+      '  ir.orbit(address, altitudeKm) / ir.land(address, latDeg, lonDeg)',
       '  ir.shot(name, address?)       frame a camera bookmark: ' +
         SHOTS.map((s) => s.id).join(', '),
       '  ir.shots()                    the bookmarks, described',
@@ -2650,57 +2284,6 @@ export class GameHarness {
     return this.world.canonicalPositionOf(player)
   }
 
-  /**
-   * The body whose frame the player is inside, as an address.
-   *
-   * The frame chain, not a stored field, for the same reason
-   * `currentSystemOf` walks it: containment is what makes the player *at* a
-   * body. A surface frame's parent is the body frame, so landing still counts.
-   */
-  #currentBodyAddress(): string {
-    const player = this.#requirePlayer()
-    const entity = this.world.entities.require(player)
-    for (const frame of this.world.frames.chain(entity.state.frame)) {
-      if (frame.startsWith('b:')) return frame.slice(2)
-    }
-    throw new Error(
-      'The player is not at a body — pass an address, e.g. ir.shot("full-face", "b:2")',
-    )
-  }
-
-  #bodyPosition(address: string): UniverseVector {
-    const parsed = parseAddress(address)
-    if (parsed.kind !== 'body')
-      throw new Error(`${address} is not a body address`)
-    return this.world.frames.pose(bodyFrameId(parsed), this.world.clock.time)
-      .position
-  }
-
-  /**
-   * Point the nose at a universe position, changing nothing else.
-   *
-   * One implementation, because `face` and `burnToward` had two: the same
-   * frame-relative rotation written out twice, differing only in whether it
-   * then set the throttle. Forward is −Z, so the orientation that aims at the
-   * target is the rotation taking −Z onto the target direction, and it goes
-   * through `teleport` rather than a raw state write because a discontinuous
-   * change of attitude has to reset the interpolation history with it.
-   */
-  #lookAt(target: UniverseVector): void {
-    const player = this.#requireShip()
-    const state = this.world.entities.require(player).state
-    const framePose = this.world.frames.pose(state.frame, this.world.clock.time)
-    const toTarget = Q.rotateInverse(
-      framePose.orientation,
-      UV.difference(target, this.world.canonicalPositionOf(player)),
-    )
-    this.world.teleport(player, {
-      ...state,
-      orientation: Q.fromUnitVectors(vec3(0, 0, -1), Vec.normalize(toTarget)),
-      angularVelocity: Vec.ZERO,
-    })
-  }
-
   #scenarioResult(
     name: string,
     beforeTick: number,
@@ -2739,7 +2322,7 @@ export class GameHarness {
       address ??
       (looking !== null && looking.kind !== 'star'
         ? looking.address
-        : this.#currentBodyAddress())
+        : currentBodyAddress(this.world, this.#host.player()))
     const resolved = resolveDestination(
       text,
       this.world.galaxy,
@@ -2762,18 +2345,12 @@ export class GameHarness {
     throw new Error('no solid body available')
   }
 
-  #requirePlayer(): EntityId {
-    const player = this.#host.player()
-    if (player === null) throw new Error('No player entity')
-    return player
-  }
-
   /**
    * The player's ship, boarded: the one answer every ship verb gives a
    * walker, written in `onFoot.ts`'s header.
    */
   #requireShip(): EntityId {
-    const ship = this.#onFoot.board()
+    const ship = this.#maneuvers.onFoot.board()
     if (!ship.ok) throw new Error(ship.error)
     return ship.value
   }

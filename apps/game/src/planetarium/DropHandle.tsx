@@ -4,7 +4,7 @@ import { useReducedMotion } from 'motion/react'
 import { ArrowDownToLine, PersonStanding } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Action } from '../hud/Action.tsx'
-import { formatReading } from '@inertialref/shared'
+import { formatReading, radiansToDegrees } from '@inertialref/shared'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { describeCause } from '../hud/notice.ts'
@@ -218,8 +218,8 @@ export function DropHandle({
       // and cannot drift on the degrees/radians boundary — `ir.drop` takes
       // degrees and the arm under it takes radians.
       engine.harness.drop(
-        (held.latitude * 180) / Math.PI,
-        (held.longitude * 180) / Math.PI,
+        radiansToDegrees(held.latitude),
+        radiansToDegrees(held.longitude),
         reducedMotion ? { seconds: 0.1 } : {},
       )
     } catch (cause) {
