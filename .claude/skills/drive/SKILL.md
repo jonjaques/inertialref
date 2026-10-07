@@ -137,7 +137,7 @@ then `--url http://localhost:8787/`.
 
 ## Documents before enhancement
 
-`--document` waits for HTML readiness instead of `engine.gl`.
+`--document` waits for HTML readiness instead of a renderer.
 `--no-javascript` implies document mode and disables scripts before navigation.
 `--block-url '*App*.js'` can keep runtime chunks from arriving while the shell
 hydrates. The flags apply only to the isolated rig and reset on its next call.
@@ -381,8 +381,9 @@ handles the first three — they are here because they explain what it is doing.
     profile on export. `render.hdr` in `localStorage` (`ir.hud.render.hdr`, JSON) is what
     forces the other mode, and it is per Chrome profile, so it is per `--port`.
 
-Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds earlier,
-so a probe on it screenshots an unlit canvas. A canvas readback _after_ the frame is
+Readiness is `ir.status().boot` — `drawing` once a renderer exists, `booted` once the
+cover lifts — not the bare presence of `window.ir`, which appears seconds earlier, so a
+probe on it screenshots an unlit canvas. A canvas readback _after_ the frame is
 transparent black: the renderer is WebGPU and the swap-chain texture is invalidated at
 the end of the task that drew it, which is why the driver uses `Page.captureScreenshot`.
 That composited image is also the only one carrying the DOM HUD. Inside the animation

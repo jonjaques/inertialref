@@ -19,7 +19,7 @@ export function presentationClock(
   engine: Pick<GameEngine, 'harness' | 'world'>,
 ) {
   const observer = engine.harness.observatory
-  if (observer.heldTime === null || engine.harness.cutsceneStatus() !== null)
+  if (observer.heldTime === null || engine.harness.cutscene.status() !== null)
     return engine.world.clock
   return {
     paused: observer.timePaused,

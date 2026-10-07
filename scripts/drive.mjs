@@ -20,8 +20,11 @@
  *    it, so `toDataURL` returns transparent black long before page script can
  *    copy it. The composited screenshot also picks up the DOM HUD, which is the
  *    half a canvas dump could never show.
- *  - Readiness is `window.engine.gl`. `window.ir` is the harness and appears
- *    seconds earlier; a probe on it screenshots an unlit canvas.
+ *  - Readiness is `ir.status().boot`, which the app answers: `drawing` once a
+ *    renderer exists, `booted` once the boot cover has lifted. `window.ir`
+ *    alone appears seconds earlier, and a probe on it screenshots an unlit
+ *    canvas. The driver names no field and no markup of the app's own, so a
+ *    rename there cannot turn a cold boot into twelve silent seconds.
  *  - A real window, not `--headless`. Not for the adapter — headless Chrome keeps
  *    the physical GPU on macOS, measured as `apple` / `metal-3` with and without
  *    a window, because SwiftShader has no macOS build to fall back to — but
@@ -592,9 +595,12 @@ async function clearStorage(send) {
   note('cleared local, session storage and cookies')
 }
 
+/** `ir.status().boot`, or `booting` until the harness is there to ask. */
+const BOOT = "return window.ir?.status?.().boot ?? 'booting'"
+
 const READY = DOCUMENT
   ? "return document.readyState !== 'loading'"
-  : 'return Boolean(window.ir && window.engine && window.engine.gl)'
+  : `return (() => { ${BOOT} })() !== 'booting'`
 
 async function boot(send, { force }) {
   const ready = await evaluate(send, READY).catch(() => false)
@@ -628,7 +634,7 @@ async function boot(send, { force }) {
   }
   // Always a full navigate, never HMR: a WebGPURenderer does not survive a
   // dozen hot reloads, and a tab that has had them draws its HUD with
-  // `engine.gl` null — which reads as a rendering bug and is not one.
+  // no renderer under it — which reads as a rendering bug and is not one.
   const navigation = await send('Page.navigate', { url: URL_ })
   if (navigation.errorText) throw new Error(navigation.errorText)
   const started = Date.now()
@@ -652,15 +658,12 @@ async function boot(send, { force }) {
     return
   }
   // The boot cover lifts on the presentation watchdog, which needs a frame
-  // after `engine.gl` appears. Poll for its removal rather than sleeping a
+  // after the renderer appears. Poll for `booted` rather than sleeping a
   // guessed interval, and give up rather than block: the scene underneath is
   // already rendering, so a stuck cover is a HUD question, not a render one.
   for (let i = 0; i < 24; i += 1) {
-    const covered = await evaluate(
-      send,
-      "return document.querySelector('.hud-bleed.z-50.bg-black') !== null",
-    ).catch(() => false)
-    if (!covered) break
+    const phase = await evaluate(send, BOOT).catch(() => 'booted')
+    if (phase === 'booted') break
     await sleep(500)
   }
   note(`renderer ready in ${((Date.now() - started) / 1000).toFixed(1)} s`)

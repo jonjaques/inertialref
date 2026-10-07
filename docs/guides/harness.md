@@ -748,13 +748,19 @@ when it bites, so raising it is the only way to see what a selection _wanted_.
 ## Scripted scenes
 
 ```js
-ir.cutscenes() // scenes with descriptions and durations
+ir.cutscene.list() // scenes with descriptions and durations
 ir.play('tng-intro')
 ir.pause()
 ir.seekCutscene(1150)
-ir.cutsceneStatus()
+ir.cutscene.status() // the playhead, or null
+ir.cutscene.lastOutcome() // ended, stopped or abandoned
 ir.stopCutscene()
 ```
+
+`ir.cutscene` is the director itself, the way `ir.observatory` is the
+observatory; `play`, `seekCutscene` and `stopCutscene` stay on `ir` as the
+verbs a console types. The scenes it plays are a session option,
+`openSession({ cutscenes })`, defaulting to the shipped ones.
 
 Pause before seeking for a frame-exact still. The browser needs to render
 after the seek before the sampled cinematic state is current; follow the

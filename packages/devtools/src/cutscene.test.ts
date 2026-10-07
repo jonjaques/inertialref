@@ -17,7 +17,7 @@ import {
   lineVelocity,
 } from '@inertialref/rendering'
 import { openSession } from './session.ts'
-import { sampleIsFinite } from './cutscene.ts'
+import { type CutsceneScript, sampleIsFinite } from './cutscene.ts'
 import {
   screenPositionOf,
   TNG_CUTS,
@@ -49,7 +49,7 @@ function playing() {
   const harness = session.harness
   harness.play('tng-intro')
   // Any epoch works — the first sample anchors frame 0 to it.
-  const at = (frame: number) => harness.cutsceneSample(100 + frame / FPS)
+  const at = (frame: number) => harness.cutscene.sample(100 + frame / FPS)
   expect(at(0)).not.toBeNull()
   return { session, harness, at }
 }
@@ -1139,7 +1139,7 @@ describe('cutscene director lifecycle', () => {
     expect(session.world.clock.timeScale).toBe(1)
     // The world keeps ticking underneath the cutscene.
     session.world.runTicks(128)
-    harness.cutsceneSample(session.world.clock.time)
+    harness.cutscene.sample(session.world.clock.time)
     harness.stopCutscene()
 
     const after = session.world.entities.require(player).state
@@ -1154,11 +1154,11 @@ describe('cutscene director lifecycle', () => {
     const session = openSession()
     const harness = session.harness
     harness.play('tng-intro')
-    expect(harness.cutsceneSample(100)).not.toBeNull()
+    expect(harness.cutscene.sample(100)).not.toBeNull()
     expect(
-      harness.cutsceneSample(100 + (TNG_INTRO.durationFrames + 5) / FPS),
+      harness.cutscene.sample(100 + (TNG_INTRO.durationFrames + 5) / FPS),
     ).toBeNull()
-    expect(harness.cutsceneStatus()).toBeNull()
+    expect(harness.cutscene.status()).toBeNull()
   })
 
   it('holds the last frame on stage when asked, and pauses the clock', () => {
@@ -1174,15 +1174,15 @@ describe('cutscene director lifecycle', () => {
     const player = session.player()!
     const before = { ...session.world.entities.require(player).state.position }
     harness.play('tng-intro', { hold: true })
-    const at = (frame: number) => harness.cutsceneSample(100 + frame / FPS)
+    const at = (frame: number) => harness.cutscene.sample(100 + frame / FPS)
     expect(at(0)).not.toBeNull()
 
     const last = TNG_INTRO.durationFrames - 1
     const held = at(TNG_INTRO.durationFrames + 5)
     expect(held).not.toBeNull()
     expect(held!.frame).toBe(last)
-    expect(harness.cutsceneStatus()?.frame).toBeCloseTo(last, 6)
-    expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+    expect(harness.cutscene.status()?.frame).toBeCloseTo(last, 6)
+    expect(harness.cutscene.lastOutcome()?.ending).toBe('ended')
     expect(session.world.clock.paused).toBe(true)
     // Still on stage: the player has not been given back.
     expect(session.world.entities.require(player).state.position).toEqual(
@@ -1190,19 +1190,19 @@ describe('cutscene director lifecycle', () => {
     )
 
     // Every later sample is the same still, and the outcome is written once.
-    const outcome = harness.cutsceneOutcome()
+    const outcome = harness.cutscene.lastOutcome()
     expect(at(TNG_INTRO.durationFrames + 50)!.frame).toBe(last)
-    expect(harness.cutsceneOutcome()).toBe(outcome)
+    expect(harness.cutscene.lastOutcome()).toBe(outcome)
 
     // A seek away is the scene playing again.
     harness.seekCutscene(100)
-    expect(harness.cutsceneOutcome()).toBeNull()
+    expect(harness.cutscene.lastOutcome()).toBeNull()
     expect(at(TNG_INTRO.durationFrames + 50)!.frame).toBeCloseTo(100, 6)
 
     // And a stop restores, as it always does.
     harness.stopCutscene()
-    expect(harness.cutsceneStatus()).toBeNull()
-    expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
+    expect(harness.cutscene.status()).toBeNull()
+    expect(harness.cutscene.lastOutcome()?.ending).toBe('stopped')
     expect(session.world.clock.paused).toBe(false)
   })
 
@@ -1220,20 +1220,20 @@ describe('cutscene director lifecycle', () => {
     const session = openSession()
     const harness = session.harness
     harness.play('tng-intro', { hold: true })
-    expect(harness.cutsceneSample(100)).not.toBeNull()
+    expect(harness.cutscene.sample(100)).not.toBeNull()
     const last = TNG_INTRO.durationFrames - 1
     const parkedAt = 100 + (TNG_INTRO.durationFrames + 5) / FPS
-    expect(harness.cutsceneSample(parkedAt)!.frame).toBe(last)
-    expect(harness.cutsceneStatus()?.frame).toBe(last)
+    expect(harness.cutscene.sample(parkedAt)!.frame).toBe(last)
+    expect(harness.cutscene.status()?.frame).toBe(last)
 
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: TICK_DURATION, noNaN: true }),
         (drop) => {
-          const held = harness.cutsceneSample(parkedAt - drop)
+          const held = harness.cutscene.sample(parkedAt - drop)
           expect(held!.frame).toBe(last)
-          expect(harness.cutsceneStatus()?.frame).toBe(last)
-          expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+          expect(harness.cutscene.status()?.frame).toBe(last)
+          expect(harness.cutscene.lastOutcome()?.ending).toBe('ended')
         },
       ),
     )
@@ -1252,39 +1252,39 @@ describe('cutscene director lifecycle', () => {
     const session = openSession()
     const harness = session.harness
     harness.play('tng-intro', { hold: true })
-    expect(harness.cutsceneSample(100)).not.toBeNull()
+    expect(harness.cutscene.sample(100)).not.toBeNull()
     const last = TNG_INTRO.durationFrames - 1
     const parkedAt = 100 + (TNG_INTRO.durationFrames + 5) / FPS
-    expect(harness.cutsceneSample(parkedAt)!.frame).toBe(last)
+    expect(harness.cutscene.sample(parkedAt)!.frame).toBe(last)
 
     harness.seekCutscene(last)
-    expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+    expect(harness.cutscene.lastOutcome()?.ending).toBe('ended')
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: TICK_DURATION, noNaN: true }),
         (drop) => {
-          expect(harness.cutsceneSample(parkedAt - drop)!.frame).toBe(last)
-          expect(harness.cutsceneStatus()?.frame).toBe(last)
-          expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+          expect(harness.cutscene.sample(parkedAt - drop)!.frame).toBe(last)
+          expect(harness.cutscene.status()?.frame).toBe(last)
+          expect(harness.cutscene.lastOutcome()?.ending).toBe('ended')
         },
       ),
     )
 
     // A seek anchors to the last sampled render time, including a held drop.
     const seekTime = parkedAt - TICK_DURATION
-    expect(harness.cutsceneSample(seekTime)!.frame).toBe(last)
+    expect(harness.cutscene.sample(seekTime)!.frame).toBe(last)
 
     // The contrast: any other frame is a seek away, and the outcome goes.
     harness.seekCutscene(last - 1)
-    expect(harness.cutsceneOutcome()).toBeNull()
-    expect(harness.cutsceneSample(seekTime)!.frame).toBeCloseTo(last - 1, 6)
+    expect(harness.cutscene.lastOutcome()).toBeNull()
+    expect(harness.cutscene.sample(seekTime)!.frame).toBeCloseTo(last - 1, 6)
   })
 
   it('seeks to an exact reference frame', () => {
     const { harness, at } = playing()
     at(500)
     harness.seekCutscene(1150)
-    const sample = harness.cutsceneSample(100 + 500 / FPS)
+    const sample = harness.cutscene.sample(100 + 500 / FPS)
     expect(sample!.frame).toBeCloseTo(1150, 6)
   })
 
@@ -1303,7 +1303,7 @@ describe('cutscene director lifecycle', () => {
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -Infinity]) {
       expect(harness.seekCutscene(bad).frame).toBeCloseTo(1150, 6)
     }
-    const sample = harness.cutsceneSample(100 + 500 / FPS)
+    const sample = harness.cutscene.sample(100 + 500 / FPS)
     expect(sample).not.toBeNull()
     expect(sample!.frame).toBeCloseTo(1150, 6)
   })
@@ -1317,9 +1317,9 @@ describe('cutscene director lifecycle', () => {
     expect(result.ok).toBe(true)
     // The captured state belongs to the discarded world; the next sample must
     // not restore it into the new one — it abandons and goes quiet.
-    expect(harness.cutsceneSample(100)).toBeNull()
-    expect(harness.cutsceneStatus()).toBeNull()
-    expect(harness.cutsceneOutcome()?.ending).toBe('abandoned')
+    expect(harness.cutscene.sample(100)).toBeNull()
+    expect(harness.cutscene.status()).toBeNull()
+    expect(harness.cutscene.lastOutcome()?.ending).toBe('abandoned')
     // And a stop after the abandonment is a harmless no-op.
     harness.stopCutscene()
   })
@@ -1327,7 +1327,7 @@ describe('cutscene director lifecycle', () => {
 
 describe('how a scene left', () => {
   /*
-   * `cutsceneStatus()` goes null for three different reasons and a player has
+   * `cutscene.status()` goes null for three different reasons and a player has
    * to tell them apart: one draws an end card and keeps its transport, the
    * others close it. Before this the only evidence was the null itself, so the
    * cinema player guessed with a half-second window around the final frame —
@@ -1336,17 +1336,17 @@ describe('how a scene left', () => {
    */
 
   it('says nothing before a scene has ever played', () => {
-    expect(openSession().harness.cutsceneOutcome()).toBeNull()
+    expect(openSession().harness.cutscene.lastOutcome()).toBeNull()
   })
 
   it('reports a scene that ran past its last frame as ended', () => {
     const { harness, at } = playing()
     at(0)
-    expect(harness.cutsceneOutcome()).toBeNull()
+    expect(harness.cutscene.lastOutcome()).toBeNull()
     // One sample past the end is what stops it, from inside `sample`.
     expect(at(TNG_INTRO.durationFrames + 1)).toBeNull()
-    expect(harness.cutsceneStatus()).toBeNull()
-    expect(harness.cutsceneOutcome()).toEqual({
+    expect(harness.cutscene.status()).toBeNull()
+    expect(harness.cutscene.lastOutcome()).toEqual({
       id: 'tng-intro',
       ending: 'ended',
       durationFrames: TNG_INTRO.durationFrames,
@@ -1360,24 +1360,24 @@ describe('how a scene left', () => {
     const { harness, at } = playing()
     at(TNG_INTRO.durationFrames - 1)
     harness.stopCutscene()
-    expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
+    expect(harness.cutscene.lastOutcome()?.ending).toBe('stopped')
   })
 
   it('clears the outcome when a new scene starts', () => {
     const { harness, at } = playing()
     at(TNG_INTRO.durationFrames + 1)
-    expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+    expect(harness.cutscene.lastOutcome()?.ending).toBe('ended')
     harness.play('tng-intro')
     // A scene that is playing has not left yet; a stale ending here would draw
     // an end card over a scene that had only just started.
-    expect(harness.cutsceneOutcome()).toBeNull()
+    expect(harness.cutscene.lastOutcome()).toBeNull()
   })
 
   it('keeps saying so until something else happens', () => {
     const { harness } = playing()
     harness.stopCutscene()
     harness.stopCutscene()
-    expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
+    expect(harness.cutscene.lastOutcome()?.ending).toBe('stopped')
   })
 })
 
@@ -1412,7 +1412,7 @@ describe('tng-intro lighting geometry', () => {
     ).position
     session.harness.play('tng-intro')
     const at = (f: number) =>
-      session.harness.cutsceneSample(100 + f / TNG_INTRO.fps)
+      session.harness.cutscene.sample(100 + f / TNG_INTRO.fps)
     at(0)
     return frames.map((frame) => {
       const s = at(frame)!
@@ -1496,4 +1496,44 @@ describe('cinematic atmosphere and lens drive validation', () => {
       }
     },
   )
+})
+
+describe('the director, handed its scripts', () => {
+  it('plays a script given to the session, and only the scripts it was given', () => {
+    // The registry is a session option, so a test can hand the director a
+    // scene of its own instead of registering one in the shipped library.
+    const sampled: number[] = []
+    let prepared = 0
+    const probe: CutsceneScript = {
+      id: 'probe',
+      description: 'twelve frames of the title sequence, counted',
+      fps: FPS,
+      durationFrames: 12,
+      prepare(world) {
+        prepared += 1
+        const inner = TNG_INTRO.prepare(world)
+        return {
+          sample(frame) {
+            sampled.push(frame)
+            return inner.sample(frame)
+          },
+        }
+      },
+    }
+    const session = openSession({ cutscenes: [probe] })
+    const director = session.harness.cutscene
+    expect(director.list().map((scene) => scene.id)).toEqual(['probe'])
+    expect(() => session.harness.play('tng-intro')).toThrow()
+
+    session.harness.play('probe')
+    expect(prepared).toBe(1)
+    const start = session.world.clock.renderTime
+    expect(director.sample(start)).not.toBeNull()
+    expect(director.status()?.id).toBe('probe')
+    expect(director.sample(start + 6 / FPS)!.frame).toBeCloseTo(6, 6)
+    expect(director.sample(start + 20 / FPS)).toBeNull()
+    expect(director.lastOutcome()?.ending).toBe('ended')
+    expect(sampled.length).toBeGreaterThan(0)
+    expect(Math.max(...sampled)).toBeLessThan(12)
+  })
 })

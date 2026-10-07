@@ -27,6 +27,7 @@ import {
   type RenderHost,
   renderHost,
 } from './harness.ts'
+import type { CutsceneScript } from './cutscene.ts'
 
 /*
  * Opening a session.
@@ -94,6 +95,12 @@ export interface SessionOptions {
    * from the cache's point of view nothing had.
    */
   readonly onWorldReplaced?: () => void
+  /**
+   * The scenes the director can play. The shipped ones by default; a test
+   * hands the director a script of its own here rather than registering it
+   * in a module constant.
+   */
+  readonly cutscenes?: readonly CutsceneScript[]
   /**
    * Who owns the part of the simulation this client does not.
    *
@@ -220,7 +227,7 @@ export function openSession(options: SessionOptions = {}): Session {
     render: renderHost(options.render),
   }
 
-  const harness = new GameHarness(host)
+  const harness = new GameHarness(host, options.cutscenes)
 
   const partition = partitionOfEntity(world, player)
   if (partition !== null) {

@@ -34,7 +34,7 @@ const log = getLogger('devtools.cutscene')
  */
 export interface CutsceneScript {
   readonly id: string
-  /** One line for the dock and `ir.cutscenes()`. */
+  /** One line for the dock and `ir.cutscene.list()`. */
   readonly description: string
   /** Frames per second of the reference edit this script is timed against. */
   readonly fps: number

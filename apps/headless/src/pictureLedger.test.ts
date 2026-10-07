@@ -159,7 +159,7 @@ describe('the shipped photographs', () => {
         const taken = session.harness.preset(picture.id)
         const { status } = taken
         expect(status.target?.address, picture.id).toContain(picture.address)
-        expect(session.harness.cutsceneStatus(), picture.id).toBeNull()
+        expect(session.harness.cutscene.status(), picture.id).toBeNull()
         expect(taken.fovDeg, picture.id).toBeGreaterThan(0)
         expect(taken.fovDeg, picture.id).toBeLessThanOrEqual(150)
 
