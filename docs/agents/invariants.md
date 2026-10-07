@@ -341,10 +341,16 @@ is `100dvh` and cannot scroll.
 
 ### Rule 31
 
-**Never add a second producer of the camera.** In `GameEngine.#step` the
-order is **cutscene, then observatory, then the controlled entity.** The player
-arm resolves either a ship or a character. No arm of that order may depend on a
-later one resolving. Only the last needs a player.
+**Never add a second producer of the camera.** The order is **cutscene, then
+observatory, then the walker, then the ship**, written once in
+`engine/frameOwner.ts` and resolved once a frame by `GameEngine.#step`, which
+publishes the result as `engine.owner`: the arm, its eye, and the player's
+ship. No arm of that order may depend on a later one resolving. Only the ship
+arm needs a player, and `buildScene` takes the owner's eye, so a playerless
+observatory frame is drawn like any other. A consumer switches on
+`engine.owner.arm` and names the ship by `engine.owner.ship`; it never
+re-derives either from `engine.cinematic === null` or `isCamera`, which on foot
+is the walker.
 
 ### Rule 32
 

@@ -42,6 +42,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The ground under a walker is one module                      | [`packages/rendering/src/ground.ts`](../../packages/rendering/src/ground.ts), `supportUnder`, rule 53           |
 | The walker's presentation is a function                      | [`apps/game/src/engine/onFootPresentation.ts`](../../apps/game/src/engine/onFootPresentation.ts) and its test   |
 | A body's uniforms are a pure mapping                         | [`apps/game/src/render/bodyUniforms.ts`](../../apps/game/src/render/bodyUniforms.ts) and its test               |
+| The frame's owner is named once                              | [`apps/game/src/engine/frameOwner.ts`](../../apps/game/src/engine/frameOwner.ts), `engine.owner`, rule 31       |
 
 ---
 
@@ -49,8 +50,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | —         | Strong          |
-| 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | 7         | Strong          |
+| 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | —         | Strong          |
 | 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness              | —         | Strong          |
 | 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide                | —         | Strong          |
 | 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                                                                 | The guide                | 10        | Strong          |
@@ -70,8 +70,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 ```mermaid
 flowchart LR
   P9[9 Director and booted]
-  P7[7 Frame owner]
-  P7 --> P8[8 One generation]
+  P8[8 One generation]
   P10[10 Guide contract] --> P11[11 Guide verdict] --> P12[12 Live channel]
   P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
@@ -92,72 +91,13 @@ on nothing and still has a place in the order, the place is about collision,
 and its section says so. Three files are edited by more than one pull request,
 and the order is what keeps them apart:
 
-- `apps/game/src/engine/GameEngine.ts` — the frame's owner and the derived
-  state in 7 and 8, and the archive's wiring in 13. Different regions of it: a rebase, not
+- `apps/game/src/engine/GameEngine.ts` — the derived state in 8, and the archive's wiring in 13. Different regions of it: a rebase, not
   a design dependency.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 7.** The walker's arm of `#step` is one call and Bodies' uniforms
-are a mapping, so what is left of the track is the frame around them: 7 names
-the frame's owner once.
-
----
-
-## 7. The frame's owner is named once
-
-**Track:** the walker and the frame · **Strong** · in-process
-
-**Builds on:** nothing left open. Bodies' consumer is the build-ahead in the
-frame closure, beside `bodyUniforms`'s caller. The walker's arm is one call,
-`presentOnFoot`, and `OnFoot.ship()` already answers "the player's ship" on
-foot. **Unblocks:** 8.
-
-**Files.** `apps/game/src/engine/GameEngine.ts` (`#step`: the `eye`,
-`#presentedPose`, the `buildScene` eye argument at `:1662–1664`, the
-camera-less frame at `:1503–1509`, the no-player return at `:1643`),
-`apps/game/src/scene/CameraRig.tsx` (`:89`), `scene/Bodies.tsx`,
-`scene/ShipModel.tsx`, `scene/SunFlare.tsx`, `scene/ThrusterFx.tsx`,
-`engine/engineStore.ts`, `hud/CutsceneOverlay.tsx`, `hud/NavBall.tsx`,
-`packages/rendering/src/scene.ts` (`buildScene`'s `cameraEntity`).
-
-**The friction.**
-
-- **Four arms, and their order is written four times.** Cutscene, observatory,
-  walker and ship, in the precedence ADR-0047 keeps. `#step` spells it out
-  three times — the eye, `#presentedPose`, the `buildScene` argument — and
-  `CameraRig` a fourth, as
-  `cinematic ?? engine.observer ?? engine.characterCamera`.
-- **Six consumers re-derive ownership** from `engine.cinematic === null`:
-  `Bodies`, `ShipModel`, `SunFlare`, `ThrusterFx`, `engineStore` and
-  `CutsceneOverlay`.
-- **A frame no arm owns clears two of three eyes.** It publishes `cinematic`
-  and `observer` as null and leaves `characterCamera`, which `CameraRig` reads
-  as its third fallback — the stale-eye failure the comment beside the clear
-  names. Not reproduced.
-- **"The player's ship" has two answers.** `ShipModel` uses `character.ship`
-  on foot; `ThrusterFx` and `NavBall` use `isCamera`, which on foot is the
-  walker.
-- **The scene needs an entity it does not use.** `buildScene` requires a camera
-  entity by invariant, though the arms resolve an eye, so `#step` returns
-  before the scene when there is no player and a playerless observatory frame
-  draws a stale one.
-
-**The shape.** `#step` resolves one owner per frame — the arm, its pose and the
-player's ship — and publishes it. `buildScene` takes the owner's eye, with the
-entity optional. `CameraRig` and the six consumers switch on the arm, and a
-frame nobody owns clears every eye.
-[ADR-0010](../../docs/adr/0010-cinematic-director.md) chose the null check and
-ADR-0047 fixes the precedence; this states the same precedence in one place.
-
-**Gate.**
-
-- `cinematic === null` appears only in `GameEngine.ts`, and the precedence is
-  written once.
-- A playerless observatory frame produces a scene (`gameEngine.test.ts`).
-- A camera-less frame leaves every published eye null.
-- With a walker beside a landed ship, `ShipModel`, `ThrusterFx` and `NavBall`
-  name the same ship.
+**Start with 8.** The frame's owner is named once and the scene takes its
+eye, so what is left of the track is the derived state the frame keeps.
 
 ---
 
@@ -165,7 +105,7 @@ ADR-0047 fixes the precedence; this states the same precedence in one place.
 
 **Track:** the walker and the frame · **Strong** · in-process
 
-**Builds on:** 7, whose `buildScene` already takes an eye. **Unblocks:**
+**Builds on:** nothing left open; `buildScene` takes the owner's eye. **Unblocks:**
 nothing.
 
 **Files.** `apps/game/src/engine/GameEngine.ts` — the starfield survey

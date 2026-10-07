@@ -149,7 +149,8 @@ export function NavBall({
     const tick = (): void => {
       handle = window.requestAnimationFrame(tick)
       const scene = engine.scene()
-      const ship = scene?.entities.find((entity) => entity.isCamera)
+      const named = engine.owner?.ship
+      const ship = scene?.entities.find((entity) => entity.id === named)
       if (scene === undefined || scene === null || ship === undefined) {
         context.clearRect(0, 0, node.width, node.height)
         return

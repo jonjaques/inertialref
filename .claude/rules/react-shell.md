@@ -74,11 +74,14 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   survive, so a latch plus a cleanup means the cleanup wins and the effect never fires
   again. Reconcile against the state's actual owner instead —
   `observatory.target?.address === wanted` — which is idempotent by construction.
-- **One producer of the camera**, in `GameEngine.#step`: cutscene, then observatory, then
-  the controlled entity. Its player arm resolves the ship or character camera. Each is a presentation eye handed to `buildScene`. Pushing a camera at the
+- **One producer of the camera**: cutscene, then observatory, then the walker, then the
+  ship, written once in `engine/frameOwner.ts` and published by `#step` as `engine.owner`.
+  Switch on `owner.arm` and name the player's ship by `owner.ship`; never re-derive either
+  from `engine.cinematic === null` or `isCamera`. The owner's eye is handed to
+  `buildScene`. Pushing a camera at the
   Three.js object instead leaves LOD, star brightness, `up` and flare occlusion all told
   about a different viewpoint from the one on screen. **No arm may depend on a later one
-  resolving** — only the player arm needs an entity, and a cutscene sample placed below the
+  resolving** — only the ship arm needs an entity, and a cutscene sample placed below the
   missing-player return latched `engine.cinematic` for the rest of the session.
 - **One producer of the lens, and the field of view is derived from it.** `engine.lens`
   resolves a script's lens, then an active fixed galaxy instrument's declared lens

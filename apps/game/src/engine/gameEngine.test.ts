@@ -232,6 +232,56 @@ describe('the game engine, headless', () => {
     game.dispose()
   })
 
+  it('draws a playerless observatory frame from the observatory', () => {
+    // Only the ship arm needs an entity. The observatory owns this frame with
+    // no player at all, so the scene is built around its eye rather than
+    // left as the last frame that had one.
+    const game = headlessEngine()
+    game.frame(1 / 60)
+    game.harness.observatory.focus('s:SOL/b:2')
+    game.frame(1 / 60)
+    const withPlayer = game.scene()
+    game.session.replaceWorld(game.world, null)
+    game.frame(1 / 60)
+    expect(game.owner?.arm).toBe('observatory')
+    expect(game.owner?.ship).toBeNull()
+    const scene = game.scene()
+    expect(scene).not.toBeNull()
+    expect(scene).not.toBe(withPlayer)
+    expect(scene!.entities.some((entity) => entity.isCamera)).toBe(false)
+    game.dispose()
+  })
+
+  it('publishes no eye at all for a frame nobody owns', () => {
+    const game = headlessEngine()
+    game.character.atMarsPad()
+    game.frame(1 / 60)
+    expect(game.owner?.arm).toBe('walker')
+    expect(game.characterCamera).not.toBeNull()
+    game.session.replaceWorld(game.world, null)
+    game.frame(1 / 60)
+    expect(game.owner).toBeNull()
+    expect(game.cinematic).toBeNull()
+    expect(game.observer).toBeNull()
+    expect(game.characterCamera).toBeNull()
+    game.dispose()
+  })
+
+  it('names one ship for a walker beside it: the one it stepped out of', () => {
+    // `ShipModel`, `ThrusterFx` and the nav ball all read `owner.ship`; on
+    // foot the player's entity is the walker, so `isCamera` names the suit.
+    const game = headlessEngine()
+    game.character.atMarsPad()
+    game.frame(1 / 60)
+    const ship = game.owner?.ship ?? null
+    expect(ship).not.toBeNull()
+    expect(ship).toBe(game.character.ship)
+    expect(ship).not.toBe(game.session.player())
+    const entity = game.scene()!.entities.find((one) => one.id === ship)
+    expect(entity?.kind).toBe('ship')
+    game.dispose()
+  })
+
   it('reads the world through the session rather than a captured reference', async () => {
     const game = headlessEngine()
     game.frame(1 / 60)
