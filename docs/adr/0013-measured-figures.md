@@ -95,7 +95,9 @@ and the geometry it scales cannot drift apart.
 
 **`flattening` must not be applied to a body with a figure.** The mesh already
 carries the polar squash; applying both squashes it twice. This is the one place
-the renderer branches, and it is three lines in `Bodies.tsx`.
+the renderer branches, and it is one line in `render/bodyUniforms.ts`: the mesh
+and every shell around it read the same `shellFlattening`, which is 1 for a body
+with a figure.
 
 **A body may be round and still have a figure.** Haumea is a Jacobi ellipsoid —
 1050 × 840 × 537 km, in hydrostatic equilibrium, and tri-axial because it turns

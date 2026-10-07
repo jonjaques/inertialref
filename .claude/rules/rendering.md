@@ -22,8 +22,9 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
 - **`figure: null` means round, not unknown, and a body that has one must not also be
   flattened.** The mesh from `shapeGeometryFor` already carries all three measured
   half-extents; `flattening` is `polarRadius / radius`, which it has already spent, so
-  applying both squashes the body twice — 26% on Phobos. `Bodies.tsx` branches once on
-  whether it got a mesh. ADR-0013.
+  applying both squashes the body twice — 26% on Phobos. `render/bodyUniforms.ts`
+  branches once, and the cloud and atmosphere shells are on the figure's side of it.
+  ADR-0013.
 
 - **A shape model is a radius grid in Three's own sphere UV layout, and that is
   load-bearing.** It is what lets an equirectangular albedo map fit an asteroid through
