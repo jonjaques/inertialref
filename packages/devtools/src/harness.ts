@@ -569,9 +569,12 @@ export class GameHarness {
       (address, latitude, longitude) => {
         this.land(address, latitude, longitude)
       },
-      () => {
-        this.stopCutscene()
-        this.#observatory.clear()
+      {
+        playing: () => this.#cutscenes.status() !== null,
+        clear: () => {
+          this.stopCutscene()
+          this.#observatory.clear()
+        },
       },
     )
     logHub.addSink(this.#logSink)

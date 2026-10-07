@@ -80,10 +80,22 @@ export interface OnFootStatus {
   readonly crouched: boolean
 }
 
+/** The harness's stage, as the walker sees it. */
+export interface Stage {
+  /** Whether a cutscene holds the picture. */
+  playing(): boolean
+  /**
+   * Stop a cutscene and release the observatory, which the pad fixture does
+   * first: a scene that ends restores the ship it captured to orbit, and an
+   * observatory target outranks the walker's camera.
+   */
+  clear(): void
+}
+
 export class OnFoot {
   readonly #host: Host
   readonly #land: (address: string, latitude: number, longitude: number) => void
-  readonly #clearStage: () => void
+  readonly #stage: Stage
   /**
    * The walker the pad fixture staged, and the world it staged it in: ids
    * are per world, so a loaded save's walker with the same id is not it.
@@ -94,18 +106,17 @@ export class OnFoot {
    * `land` parks the player's ship on a surface, as the harness's verb does:
    * the fixture lands before it steps out, and one placement rule per
    * maneuver means this module asks rather than writing a second one.
-   * `clearStage` stops a cutscene and releases the observatory, which the
-   * fixture does first: a scene that ends restores the ship it captured to
-   * orbit, and an observatory target outranks the walker's camera.
+   * `stage` is the harness's cutscene and observatory, which this module
+   * cannot see from the `Host`.
    */
   constructor(
     host: Host,
     land: (address: string, latitude: number, longitude: number) => void,
-    clearStage: () => void,
+    stage: Stage,
   ) {
     this.#host = host
     this.#land = land
-    this.#clearStage = clearStage
+    this.#stage = stage
   }
 
   /** The player, while the player is a walker. */
@@ -164,13 +175,20 @@ export class OnFoot {
   }
 
   available(beamMeters = DEFAULT_BEAM): boolean {
-    return this.active || this.site(beamMeters) !== null
+    if (this.active) return true
+    return !this.#stage.playing() && this.site(beamMeters) !== null
   }
 
-  /** Step out beside the landed ship. On foot already, the walker answers. */
+  /**
+   * Step out beside the landed ship. On foot already, the walker answers.
+   *
+   * Not while a scene plays: a cutscene is watched, not played, and the ship
+   * it captured is the one it hands back when it ends.
+   */
   stepOut(beamMeters = DEFAULT_BEAM): Result<Entity, string> {
     const walker = this.walker()
     if (walker !== null) return ok(walker)
+    if (this.#stage.playing()) return err('A scene is playing.')
     const site = this.site(beamMeters)
     const vessel = this.#host.player()
     if (site === null || vessel === null)
@@ -204,7 +222,7 @@ export class OnFoot {
    * beside the 46 m Rocinante the cinema stages there.
    */
   atMarsPad(): Entity {
-    this.#clearStage()
+    this.#stage.clear()
     const boarded = this.board()
     if (!boarded.ok) throw new Error(boarded.error)
     this.#land(MARS_PAD.bodyAddress, MARS_PAD.latitude, MARS_PAD.longitude)
