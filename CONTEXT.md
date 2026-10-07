@@ -11064,21 +11064,22 @@ pad's model by hand, and `apps/headless/src/marsPadAsset.test.ts` now holds
 it, over a one-meter grid offset off the deck's open tile joints (a ray down a
 joint finds nothing). Measured: the deck agrees exactly, decals aside; no
 point inside the apron has a model surface and no relief; and of 5,644
-samples where both have a top, 27 differ by more than 0.13 m — the largest of
+samples where both have a top, 22 differ by more than 0.13 m — the largest of
 the deliberate simplifications, the service enclosure's 2 m wall over a roof
-set 0.125 m in. The 27 are the ramp's 0.2 m curbs, which the relief leaves
-out; lamp housing and enclosure edges; and the landing beside the ramp's head
-(below). A 0.2 m warning band, perturbed into a scratch copy, fails the check.
+set 0.125 m in. The 22 are the ramp's 0.2 m curbs, which the relief leaves
+out, and lamp housing and enclosure edges. A 0.2 m warning band, perturbed
+into a scratch copy, fails the check.
+
+The ray-caster reads every face, whichever way it is wound. All ten of the
+pad's materials are `doubleSided` and the game keeps that, and the ramp
+landing's top face is wound downward in `build_mars_pad.py`: a caster that
+kept only upward faces fell through it to the landing's underside at -0.70 m
+and counted five samples where the drawn landing and the relief agree at
+-0.18 m. Correcting the relief to -0.70 m to match would sink a walker half a
+meter into a landing drawn where it stands.
 
 ## Known gaps
 
-- **The pad's relief stands a walker half a meter over the ramp's landing
-  corners.** Beside the ramp's head the relief carries the apron's -0.18 m
-  where the model drops to -0.70 m, over four samples of a meter grid either
-  side of the ramp; a walker there floats over the drawn landing. Measured
-  by `marsPadAsset.test.ts`'s relief check, not yet corrected in
-  `structures.ts`, because the correction is a transcription of the model's
-  landing outline rather than a number.
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
   voices, the introduction's wording aloud, pronunciation, and whether a
   cheaper backend than Astra paces a routine beat well are judged by listening,

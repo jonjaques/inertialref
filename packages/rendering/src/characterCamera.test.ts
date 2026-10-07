@@ -174,11 +174,21 @@ describe('the character eye', () => {
     )
     const feet = characterFeet({ position: deck, spin, ground })
     const drawn = ground.at(anchor)
-    // To the rounding of a universe position at Mars's radius carried through
-    // the relief's datum plane: 33 µm measured, where a millimeter would show.
-    expect(
-      Math.abs(UV.distance(feet, spin.position) - drawn.drawn),
-    ).toBeLessThan(1e-4)
+    // The 2.36 mm the drawn ground stands over the support, measured feet
+    // against the deck they stand on. Both are universe positions with Mars
+    // 2.3e11 m from the Sun inside a 2^40 m sector, so each rounds to an ulp
+    // of that offset — 3.05e-5 m — and the deck alone is 24 µm off its
+    // radius. Measured: 3.28e-5 m, one ulp; the bound is two.
+    const up = Q.rotate(spin.orientation, anchor)
+    const lift = Vec.dot(UV.difference(feet, deck), up)
+    const offset = Math.max(
+      Math.abs(feet.ox),
+      Math.abs(feet.oy),
+      Math.abs(feet.oz),
+    )
+    const ulp = 2 ** (Math.floor(Math.log2(offset)) - 52)
+    expect(drawn.drawn - drawn.support).toBeGreaterThan(0.002)
+    expect(Math.abs(lift - (drawn.drawn - drawn.support))).toBeLessThan(2 * ulp)
   })
 })
 
@@ -284,6 +294,24 @@ describe('the character camera on a ground built for it', () => {
         standing(PLANE, { ...chase, delta: 1 / 60, memory: pose.memory }),
       )
     expect(pose.memory.boom).toBeCloseTo(full, 2)
+  })
+
+  it('keeps the chase eye over the foot plane past the rim of a deck', () => {
+    // A deck 2 m proud that ends 0.6 m behind the walker. Past the rim the
+    // ground is 2 m down, so the boom clears it with room to spare and only
+    // the foot-plane rule stops it sinking below the deck it stands on: at
+    // 3.6 m it would sit 0.35 m under the walker's feet, looking up at the
+    // deck's underside.
+    const RIM = 0.6
+    const DECK = synthetic((direction) => (direction.z * R < RIM ? 2 : 0))
+    const pose = characterCameraPose(
+      standing(DECK, { position: at(2), view: 'third', pitch: 0.6 }),
+    )
+    const up = vec3(0, 1, 0)
+    expect(pose.memory.boom).toBeLessThan(CHASE.boom - 0.5)
+    expect(
+      Vec.dot(UV.difference(pose.position, pose.feet), up),
+    ).toBeGreaterThan(0.19)
   })
 
   it('shortens the boom when looking down would put it underground', () => {

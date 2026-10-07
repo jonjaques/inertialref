@@ -197,6 +197,8 @@ function modelTops(): (
   const pad = readPad()
   const binaryStart = 28 + bytes.readUInt32LE(12)
   const CELL = 2
+  /** Below every walkable top and above the foundation's floor at -2.4 m. */
+  const FOUNDATION_FLOOR = -2
   type Triangle = { a: number[]; b: number[]; c: number[]; material: string }
   const cells = new Map<string, Triangle[]>()
   const key = (x: number, z: number) =>
@@ -222,9 +224,17 @@ function modelTops(): (
     const material = pad.materials[primitive.material]?.name ?? ''
     for (let index = 0; index < indices.count; index += 3) {
       const [a, b, c] = [vertex(index), vertex(index + 1), vertex(index + 2)]
-      const facing =
+      // Every face, whichever way it is wound: all ten materials are
+      // `doubleSided` and `rebuildMaterials` keeps that, so the game draws a
+      // face wound downward — the ramp landing's top is one — and the highest
+      // hit under a vertical ray is a solid's top either way. The foundation's
+      // floor is not ground: a ray down an open deck joint finds it.
+      if (Math.max(a[1]!, b[1]!, c[1]!) < FOUNDATION_FLOOR) continue
+      // A wall has no area seen from above, and its barycentric solve divides
+      // by that area.
+      const area =
         (b[0]! - a[0]!) * (c[2]! - a[2]!) - (b[2]! - a[2]!) * (c[0]! - a[0]!)
-      if (facing >= -1e-8) continue
+      if (Math.abs(area) < 1e-8) continue
       const xs = [a[0]!, b[0]!, c[0]!]
       const zs = [a[2]!, b[2]!, c[2]!]
       for (
@@ -277,12 +287,10 @@ function modelTops(): (
  * guidance decals stand 0.1 m off the deck for depth precision, and the
  * warning band is a full ring 0.1 m proud where the model's is dashed.
  *
- * Twenty-seven of 5,644 samples are farther apart, measured, and each is a
- * feature the relief leaves out or rounds: the ramp's 0.2 m curbs, the
- * landing beside the ramp's head, which the relief carries at the apron's
- * -0.18 m where the model drops to -0.7 m, and the edges of lamp housings and
- * enclosure fronts. A change to either side that adds to that count is a
- * transcription to redo, not a bound to raise.
+ * Twenty-two of 5,644 samples are farther apart, measured, and each is a
+ * feature the relief leaves out or rounds: the ramp's 0.2 m curbs and the
+ * edges of lamp housings and enclosure fronts. A change to either side that
+ * adds to that count is a transcription to redo, not a bound to raise.
  */
 describe('the Mars pad relief', () => {
   const asset = surfaceAsset('mars-pad')!
@@ -331,6 +339,6 @@ describe('the Mars pad relief', () => {
         apart.push(`${x.toFixed(2)}, ${z.toFixed(2)}: ${model.material}`)
     }
     expect(compared).toBe(5_644)
-    expect(apart.length, apart.join('\n')).toBeLessThanOrEqual(27)
+    expect(apart.length, apart.join('\n')).toBeLessThanOrEqual(22)
   })
 })
