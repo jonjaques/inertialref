@@ -1,4 +1,4 @@
-import type { GuideVerdict } from '../tour/capabilities.ts'
+import type { GuideAccess } from '../tour/verdict.ts'
 import type { GuideLifetime } from '../tour/lifetime.ts'
 import type { GuideRuntime } from '../tour/runtime.ts'
 import type { Picture } from '@inertialref/devtools'
@@ -21,11 +21,10 @@ import type { LabelDensity } from './layers.ts'
 export interface PlanetariumContext {
   readonly guide: GuideLifetime<GuideRuntime>
   /**
-   * The Worker's answer about the guide for whoever is signed in, or `null`
-   * while unknown (`tour/access.ts`). `grantsGuide` decides whether the panel
-   * is drawn.
+   * Whether the guide is offered to whoever is signed in: the mode's one
+   * verdict (`tour/verdict.ts`). The panel is drawn only when it is granted.
    */
-  readonly guideAccess: GuideVerdict | null
+  readonly guideAccess: GuideAccess
   readonly engine: GameEngine
   /** Pause, warp and real time, as the keys give them, said where the keys say them. */
   readonly time: TimeCommands

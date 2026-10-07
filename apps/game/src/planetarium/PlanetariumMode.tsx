@@ -1,8 +1,8 @@
 'use no memo'
 import { useGuideActions } from '../tour/useGuideActions.ts'
-import { useGuideAccess } from '../tour/access.ts'
-import { grantsGuide } from '../tour/capabilities.ts'
+import { askWorker, useGuideAccess } from '../tour/access.ts'
 import { createGuide, mountGuide } from '../tour/guide.ts'
+import { createGuideAccess } from '../tour/verdict.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Outlet, useNavigate } from 'react-router'
 import {
@@ -72,8 +72,14 @@ export function PlanetariumMode({
   /** `App`'s notice, which the time keys flash; the buttons say theirs there too. */
   onNotice: (message: string) => void
 }) {
-  const [guide] = useState(() => createGuide(engine))
-  useEffect(() => mountGuide(engine, guide), [engine, guide])
+  // The verdict beside the lifetime it governs: one per mode, keyed on the
+  // user, read by the menu, the panel, the runtime and `ir.guideStatus`.
+  const [guideVerdict] = useState(() => createGuideAccess(askWorker))
+  const [guide] = useState(() => createGuide(engine, guideVerdict))
+  useEffect(
+    () => mountGuide(engine, guide, guideVerdict),
+    [engine, guide, guideVerdict],
+  )
   useGuideActions(guide)
   const [params, setParams] = useSearchParams()
   const requested = params.get(QUERY.at)
@@ -264,18 +270,8 @@ export function PlanetariumMode({
     void navigate({ pathname: CATALOG, search: params.toString() })
   }
 
-  const guideAccess = useGuideAccess()
-  const guideOffered = grantsGuide(guideAccess)
-  /*
-   * Withdrawing the panel withdraws the only Pause and End on screen. A
-   * sign-out, or a switch to another account, while a conversation is running
-   * would otherwise leave the microphone open and the voice talking with
-   * nothing visible to stop either — so losing the grant ends the session.
-   * `end` is a no-op for a runtime that is offline or not loaded.
-   */
-  useEffect(() => {
-    if (!guideOffered) void guide.current?.end()
-  }, [guide, guideOffered])
+  // Losing the grant ends a live session; `mountGuide` holds that rule.
+  const guideAccess = useGuideAccess(guideVerdict)
   const panels = planetariumPanels({
     guide,
     guideAccess,

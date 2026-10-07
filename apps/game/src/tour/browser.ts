@@ -6,10 +6,15 @@ import { textureSetReady } from '../render/planetTextures.ts'
 import { CAMERA_LENS, subscribe } from '../state/preferences.ts'
 import { ViewReadiness } from './readiness.ts'
 import { GuideRuntime } from './runtime.ts'
+import type { GuideAccessOwner } from './verdict.ts'
 
 /** Host clocks and media begin only after an explicit guide action. */
-export function createGuideRuntime(engine: GameEngine): GuideRuntime {
+export function createGuideRuntime(
+  engine: GameEngine,
+  access: GuideAccessOwner,
+): GuideRuntime {
   return new GuideRuntime({
+    access: () => access.current(),
     now: () => Date.now(),
     localTime: () =>
       new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
