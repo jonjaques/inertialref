@@ -39,7 +39,7 @@ export interface Playhead {
 }
 
 /** The director's half of the host: `harness.cutscene`, whole. */
-export type CutsceneDirectorPort = Pick<
+type CutsceneDirectorPort = Pick<
   CutsceneDirector,
   'status' | 'lastOutcome' | 'play' | 'seek' | 'stop'
 >
