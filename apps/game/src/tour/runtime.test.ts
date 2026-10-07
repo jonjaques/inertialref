@@ -10,6 +10,7 @@ import {
 import { GuideExecutor } from './executor.ts'
 import type { LiveServerEvent } from './media.ts'
 import { GuideRuntime, type GuideHost } from './runtime.ts'
+import type { GuideAccess } from './verdict.ts'
 
 function rig() {
   const session = openSession()
@@ -18,6 +19,7 @@ function rig() {
   const sent: Record<string, unknown>[] = []
   let sequence = 0
   let time = 1000
+  let access: GuideAccess = { state: 'granted', voices: ['marin', 'cedar'] }
   let run: (() => void) | null = null
   let visibility: ((visible: boolean) => void) | null = null
   let onEvent: ((event: LiveServerEvent) => void) | null = null
@@ -59,6 +61,7 @@ function rig() {
     stop: vi.fn(),
   }
   const host: GuideHost = {
+    access: () => access,
     now: () => time,
     localTime: () => '21:04',
     request: async (path, body) => {
@@ -172,6 +175,9 @@ function rig() {
   return {
     runtime,
     session,
+    grant: (next: GuideAccess) => {
+      access = next
+    },
     requests,
     sent,
     live,
@@ -230,11 +236,11 @@ function rig() {
 }
 
 describe('the guide runtime', () => {
-  it('adopts the access check’s answer instead of asking the Worker again', async () => {
+  it("reads the mode's verdict and never asks the Worker for one", async () => {
     const f = rig()
-    f.runtime.adopt({ granted: true, voices: ['marin'] })
+    f.grant({ state: 'granted', voices: ['marin'] })
     await f.runtime.start('cedar')
-    // The adopted voices decide the voice, and capabilities were never asked.
+    // The verdict's voices decide the voice, and the verdict was never asked.
     expect(
       f.requests.filter((request) => request.path === GUIDE_VERDICT_PATH),
     ).toHaveLength(0)
@@ -242,19 +248,23 @@ describe('the guide runtime', () => {
     await f.dispose()
   })
 
-  it('refuses to start for an adopted answer without the grant', async () => {
+  it('starts nothing, and says nothing of its own, for a refusal', async () => {
     const f = rig()
-    f.runtime.adopt({ granted: false, reason: 'not-granted' })
-    await f.runtime.start('marin')
-    expect(f.runtime.getSnapshot().message).toBe(
-      'This account does not have the guide.',
-    )
+    for (const access of [
+      { state: 'checking' },
+      { state: 'refused', reason: 'not-granted' },
+    ] as const) {
+      f.grant(access)
+      await f.runtime.start('marin')
+      expect(f.runtime.getSnapshot().connection).toBe('offline')
+      // The panel draws the verdict's sentence; a message here would greet
+      // whoever signs in next.
+      expect(f.runtime.getSnapshot().message).toBeNull()
+      expect(f.runtime.diagnostics().available).toBe(false)
+    }
     expect(
       f.requests.some((request) => request.path === GUIDE_SESSIONS_PATH),
     ).toBe(false)
-    // The next account's answer does not arrive under the last one's refusal.
-    f.runtime.adopt({ granted: true, voices: ['marin'] })
-    expect(f.runtime.getSnapshot().message).toBeNull()
     await f.dispose()
   })
 
