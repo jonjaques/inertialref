@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { GUIDE_REFUSAL_SENTENCES } from '@inertialref/protocol'
 import { Mic, Pause, Play, Square } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
 import { useActionTitle } from '../input/useKeymap.ts'
@@ -33,16 +34,15 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
     state.paused ? 'Resume the guide' : 'Pause the guide',
   )
   const endTitle = useActionTitle('guide.end', 'End the guide')
-  const authorized = state.capabilities?.authorized === true
-  const available = state.capabilities?.available === true
+  const verdict = state.capabilities
   const offline = state.connection === 'offline'
   const connecting = state.connection === 'connecting'
   const closing = state.connection === 'closing'
-  const voices = state.capabilities?.voices ?? []
+  const voices = verdict?.granted === true ? verdict.voices : []
 
   return (
     <div className="flex flex-col gap-3">
-      {authorized && available && (
+      {verdict?.granted === true && (
         <>
           <div className="flex flex-wrap gap-1" aria-label="Guide voice">
             {voices.map((choice) => (
@@ -97,17 +97,13 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
           </p>
         </>
       )}
-      {/* Reachable only in the moment between a sign-out, or a revoked
-          grant, and the panel being withdrawn. */}
-      {available && !authorized && (
+      {/* A signed-out or ungranted refusal is reachable only in the moment
+          between a sign-out, or a revoked grant, and the panel being
+          withdrawn. */}
+      {verdict?.granted === false && (
         <p className="type-ui text-slate-400">
-          {state.capabilities?.signedIn
-            ? 'This account does not have the guide.'
-            : 'Sign in to use the guide.'}
+          {GUIDE_REFUSAL_SENTENCES[verdict.reason]}
         </p>
-      )}
-      {state.capabilities?.reason && (
-        <p className="type-ui text-slate-400">{state.capabilities.reason}</p>
       )}
       {state.message && (
         <p className="type-ui text-pretty text-amber-200" role="status">

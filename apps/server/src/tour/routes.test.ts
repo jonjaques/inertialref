@@ -1,5 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GUIDE_CLIENT_EVENTS, GUIDE_TOOLS } from '@inertialref/protocol'
+import {
+  decode,
+  decodeGuideError,
+  decodeGuideSessionCreated,
+  decodeGuideVerdict,
+  GUIDE_CLIENT_EVENTS,
+  GUIDE_REFUSAL_SENTENCES,
+  GUIDE_SESSIONS_PATH,
+  GUIDE_TOOLS,
+  GUIDE_VERDICT_PATH,
+  type Decoder,
+} from '@inertialref/protocol'
 import { AccountUnavailableError } from '../account.ts'
 import type { GuideAccess } from './access.ts'
 import { serveTour } from './routes.ts'
@@ -26,6 +37,17 @@ const GRANTED: GuideAccess = {
 }
 
 const ORIGIN = 'http://localhost:5173'
+
+/*
+ * Every answer is read through the protocol's own decoder, which is the
+ * contract test across the network: the browser decodes with the same one,
+ * so a field the Worker renames fails here rather than in a visitor's panel.
+ */
+async function read<T>(response: Response, decoder: Decoder<T>): Promise<T> {
+  const decoded = decode(decoder, await response.json())
+  if (!decoded.ok) throw new Error(decoded.error)
+  return decoded.value
+}
 
 function env(overrides: Partial<Env> = {}): Env {
   return {
@@ -56,51 +78,39 @@ describe('the guide Worker', () => {
     vi.restoreAllMocks()
   })
 
-  it('reports availability, the verdict and the voices', async () => {
-    const capabilities = (overrides?: Partial<Env>) =>
+  it('answers a verdict: granted with its voices, or refused with a reason', async () => {
+    const ask = (overrides?: Partial<Env>, origin = ORIGIN) =>
       serveTour(
-        new Request(`${ORIGIN}/api/tour/capabilities`, {
+        new Request(`${origin}${GUIDE_VERDICT_PATH}`, {
           headers: { 'sec-fetch-site': 'same-origin' },
         }),
         env(overrides),
-      )
-    const anonymous = await capabilities()
-    expect(anonymous.status).toBe(200)
-    const body = (await anonymous.json()) as Record<string, unknown>
-    expect(body).toMatchObject({
-      available: true,
-      signedIn: false,
-      authorized: false,
-    })
-    expect(body.voices).toContain('marin')
-    expect(body.voices).toContain('cedar')
+      ).then((response) => {
+        expect(response.status).toBe(200)
+        return read(response, decodeGuideVerdict)
+      })
+    expect(await ask()).toEqual({ granted: false, reason: 'signed-out' })
+    verdict.current = { signedIn: true, authorized: false, userId: 'user_2' }
+    expect(await ask()).toEqual({ granted: false, reason: 'not-granted' })
     verdict.current = GRANTED
-    expect(await (await capabilities()).json()).toMatchObject({
-      signedIn: true,
-      authorized: true,
-    })
+    const granted = await ask()
+    expect(granted.granted && granted.voices).toEqual(
+      expect.arrayContaining(['marin', 'cedar']),
+    )
     // Switched off, or with no way to read a grant, nobody is told they have it.
     for (const overrides of [
       { TOUR_GUIDE_ENABLED: 'false' },
       { CLERK_ENABLED: 'false' },
       { CLERK_SECRET_KEY: undefined },
-    ] as unknown as Partial<Env>[]) {
-      expect(await (await capabilities(overrides)).json()).toMatchObject({
-        available: false,
-        authorized: false,
+    ] as unknown as Partial<Env>[])
+      expect(await ask(overrides)).toEqual({
+        granted: false,
+        reason: 'unavailable',
       })
-    }
     // The production host Clerk does not serve has no accounts, so no guide.
-    const elsewhere = await serveTour(
-      new Request('https://inertialref.jonjaques.com/api/tour/capabilities', {
-        headers: { 'sec-fetch-site': 'same-origin' },
-      }),
-      env(),
-    )
-    expect(await elsewhere.json()).toMatchObject({
-      available: false,
-      signedIn: false,
-      authorized: false,
+    expect(await ask({}, 'https://inertialref.jonjaques.com')).toEqual({
+      granted: false,
+      reason: 'unavailable',
     })
   })
 
@@ -110,7 +120,7 @@ describe('the guide Worker', () => {
     try {
       const ask = () =>
         serveTour(
-          post('/api/tour/sessions', {
+          post(GUIDE_SESSIONS_PATH, {
             voice: 'marin',
             sdp: 'offer',
             scene: 'x',
@@ -119,8 +129,8 @@ describe('the guide Worker', () => {
         )
       const anonymous = await ask()
       expect(anonymous.status).toBe(401)
-      expect(await anonymous.json()).toEqual({
-        error: 'Sign in to use the guide.',
+      expect(await read(anonymous, decodeGuideError)).toEqual({
+        error: GUIDE_REFUSAL_SENTENCES['signed-out'],
       })
       verdict.current = {
         signedIn: true,
@@ -129,8 +139,8 @@ describe('the guide Worker', () => {
       }
       const ungranted = await ask()
       expect(ungranted.status).toBe(403)
-      expect(await ungranted.json()).toEqual({
-        error: 'This account does not have the guide.',
+      expect(await read(ungranted, decodeGuideError)).toEqual({
+        error: GUIDE_REFUSAL_SENTENCES['not-granted'],
       })
       // The provider is never asked on behalf of either.
       expect(fetcher).not.toHaveBeenCalled()
@@ -142,7 +152,7 @@ describe('the guide Worker', () => {
   it('answers 503 when the accounts behind the grant cannot be reached', async () => {
     verdict.current = new AccountUnavailableError('backend-500')
     const response = await serveTour(
-      post('/api/tour/sessions', { voice: 'marin', sdp: 'offer', scene: 'x' }),
+      post(GUIDE_SESSIONS_PATH, { voice: 'marin', sdp: 'offer', scene: 'x' }),
       env(),
     )
     expect(response.status).toBe(503)
@@ -160,7 +170,7 @@ describe('the guide Worker', () => {
     }))
     try {
       const refused = await serveTour(
-        post('/api/tour/sessions', { voice: 'cedar', sdp: 'offer', scene: '' }),
+        post(GUIDE_SESSIONS_PATH, { voice: 'cedar', sdp: 'offer', scene: '' }),
         env({ GUIDE_SESSION_LIMIT: { limit } } as Partial<Env>),
       )
       expect(refused.status).toBe(429)
@@ -188,7 +198,7 @@ describe('the guide Worker', () => {
     vi.stubGlobal('fetch', fetcher)
     try {
       const badVoice = await serveTour(
-        post('/api/tour/sessions', {
+        post(GUIDE_SESSIONS_PATH, {
           voice: 'alloy',
           sdp: 'offer',
           scene: 'x',
@@ -197,7 +207,7 @@ describe('the guide Worker', () => {
       )
       expect(badVoice.status).toBe(400)
       const created = await serveTour(
-        post('/api/tour/sessions', {
+        post(GUIDE_SESSIONS_PATH, {
           voice: 'cedar',
           sdp: 'offer',
           scene: 'Current view: Saturn. Local time 21:04.',
@@ -205,7 +215,7 @@ describe('the guide Worker', () => {
         env(),
       )
       expect(created.status).toBe(200)
-      expect(await created.json()).toEqual({
+      expect(await read(created, decodeGuideSessionCreated)).toEqual({
         sessionId: 'live_1',
         expiresAt: 1_789_367_057_000,
         sdp: 'answer',
@@ -268,7 +278,7 @@ describe('the guide Worker', () => {
     try {
       verdict.current = GRANTED
       const response = await serveTour(
-        post('/api/tour/sessions', {
+        post(GUIDE_SESSIONS_PATH, {
           voice: 'marin',
           sdp: 'offer',
           scene: 'x',
@@ -282,7 +292,7 @@ describe('the guide Worker', () => {
       expect(error.mock.calls[0]![0]).toMatchObject({
         scope: 'server.tour',
         message: 'provider refused the session',
-        path: '/api/tour/sessions',
+        path: GUIDE_SESSIONS_PATH,
         code: 'unavailable',
         status: 500,
       })
@@ -317,7 +327,7 @@ describe('the guide Worker', () => {
     try {
       verdict.current = GRANTED
       const response = await serveTour(
-        post('/api/tour/sessions', {
+        post(GUIDE_SESSIONS_PATH, {
           voice: 'marin',
           sdp: 'offer',
           scene: 'x',
@@ -351,7 +361,7 @@ describe('the guide Worker', () => {
     try {
       verdict.current = GRANTED
       const response = await serveTour(
-        post('/api/tour/sessions', {
+        post(GUIDE_SESSIONS_PATH, {
           voice: 'marin',
           sdp: 'offer',
           scene: 'x',

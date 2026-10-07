@@ -1,7 +1,9 @@
 import {
   GUIDE_CLIENT_EVENTS,
+  GUIDE_SESSION_LIMITS,
   GUIDE_TOOLS,
   isGuideVoice,
+  utf8Bytes,
   type GuideVoice,
 } from '@inertialref/protocol'
 import { BACKEND_PROMPT, LIVE_PROMPT } from './prompts.ts'
@@ -189,10 +191,10 @@ export async function createLiveSession(options: {
 }): Promise<{ id: string; expiresAt: number; sdp: string }> {
   if (
     !options.sdp ||
-    options.sdp.length > 64 * 1024 ||
+    utf8Bytes(options.sdp) > GUIDE_SESSION_LIMITS.sdpBytes ||
     !isGuideVoice(options.voice) ||
     !options.scene ||
-    new TextEncoder().encode(options.scene).byteLength > 1500
+    utf8Bytes(options.scene) > GUIDE_SESSION_LIMITS.sceneBytes
   )
     throw new GuideProviderError('input-limit')
   const timeout = AbortSignal.timeout(12_000)
@@ -241,7 +243,7 @@ export async function createLiveSession(options: {
     id.length > 256 ||
     typeof sdp !== 'string' ||
     !sdp ||
-    sdp.length > 64 * 1024
+    utf8Bytes(sdp) > GUIDE_SESSION_LIMITS.sdpBytes
   )
     throw new GuideProviderError('invalid-output')
   return {
