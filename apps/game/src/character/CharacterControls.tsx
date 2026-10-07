@@ -17,7 +17,14 @@ import { useCharacterControls } from './useCharacterControls.ts'
  * walker. Lock ownership still attaches to the document element, so a
  * mode's drag surface unmounting under a route change cannot release it.
  */
-export function CharacterControls({ engine }: { engine: GameEngine }) {
+export function CharacterControls({
+  engine,
+  onStepOut,
+}: {
+  engine: GameEngine
+  /** The game's rule for a walker that has just stepped out: `walkingPace`. */
+  onStepOut: () => void
+}) {
   const location = useLocation()
   const mode = modeForPath(resolvedLocation(location).pathname)
   const dialog = isOverlayPath(location.pathname)
@@ -39,6 +46,7 @@ export function CharacterControls({ engine }: { engine: GameEngine }) {
     enabled,
     active: state.active,
     locked: state.locked,
+    onStepOut,
   })
   const lockTitle = useActionTitle(
     'character.lock',

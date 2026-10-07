@@ -1,10 +1,7 @@
-import { presentationClock } from '../hud/time.ts'
 import { PictureTime } from './PictureTime.tsx'
 import { FastForward, Pause, Play, Rewind, RotateCcw } from 'lucide-react'
-import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
-import { nextWarp } from '../hud/warp.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { useActionTitle } from '../input/useKeymap.ts'
 import type { PlanetariumContext } from './context.ts'
@@ -12,7 +9,7 @@ import { localZone, simulationInstant } from './simulationTime.ts'
 
 /** The photographic clock follows the simulation until a shot or date holds it. */
 export function TimePanel(context: PlanetariumContext) {
-  const { engine } = context
+  const { engine, time } = context
   const slower = useActionTitle('time.slower', 'Slower')
   const faster = useActionTitle('time.faster', 'Faster')
   const pause = useActionTitle('time.pause', 'Pause')
@@ -83,7 +80,7 @@ export function TimePanel(context: PlanetariumContext) {
           label={slower}
           icon={Rewind}
           onClick={() => {
-            warp(engine, -1)
+            time.warp(-1)
           }}
         />
         <TransportButton
@@ -91,15 +88,14 @@ export function TimePanel(context: PlanetariumContext) {
           icon={world.paused ? Play : Pause}
           primary
           onClick={() => {
-            const clock = presentationClock(engine)
-            clock.setPaused(!clock.paused)
+            time.togglePause()
           }}
         />
         <TransportButton
           label={faster}
           icon={FastForward}
           onClick={() => {
-            warp(engine, 1)
+            time.warp(1)
           }}
         />
         {/*
@@ -125,7 +121,7 @@ export function TimePanel(context: PlanetariumContext) {
               : `${world.timeScale}× — ${realTime.toLowerCase()}`
           }
           onClick={() => {
-            presentationClock(engine).setTimeScale(1)
+            time.realTime()
           }}
         />
       </div>
@@ -143,9 +139,4 @@ export function TimePanel(context: PlanetariumContext) {
       )}
     </div>
   )
-}
-
-const warp = (engine: GameEngine, direction: number): void => {
-  const clock = presentationClock(engine)
-  clock.setTimeScale(nextWarp(clock.timeScale, direction))
 }

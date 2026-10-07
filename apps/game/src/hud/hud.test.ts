@@ -89,6 +89,7 @@ function devContext(
       togglePause: () => {},
       warp: () => {},
       realTime: () => {},
+      walkingPace: () => false,
       toggleAssist: () => {},
       killRotation: () => {},
       save: () => {},

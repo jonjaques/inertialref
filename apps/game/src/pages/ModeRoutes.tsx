@@ -71,9 +71,10 @@ interface ModeRouteProps {
    *
    * The flight mode needs it now that the Catalog is in its workspace: `Orbit`
    * and `Land` are teleports, and a teleport with no word for it is a picture
-   * that changed for a reason nothing on screen gives. The planetarium keeps
-   * its own surface, because it also has failures to report and a failure is
-   * not a confirmation.
+   * that changed for a reason nothing on screen gives. The planetarium says
+   * its time controls' confirmations here, where the keys say them, and
+   * keeps its own surface for the rest, because it also has failures to
+   * report and a failure is not a confirmation.
    */
   readonly onNotice: (message: string) => void
 }
@@ -197,7 +198,11 @@ export function ModeRoutes(props: ModeRouteProps) {
             <Suspense fallback={loading}>
               <LoadedMode
                 load={modeLoaders.planetarium}
-                props={{ engine: props.engine, dev: props.dev }}
+                props={{
+                  engine: props.engine,
+                  dev: props.dev,
+                  onNotice: props.onNotice,
+                }}
               />
             </Suspense>
           )
