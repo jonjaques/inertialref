@@ -76,9 +76,9 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       sunVisibility(scene.camera.position, star.placement.position, occluders),
       // Scripts choose their coating response. The clean default keeps the
       // reference-matched title shots free of ghost chains crossing the type.
-      engine.cinematic === null
-        ? engine.flareArtifacts
-        : (engine.cinematic.effects.lensArtifacts ?? 0.05),
+      engine.owner?.arm === 'cutscene'
+        ? (engine.owner.cinematic.effects.lensArtifacts ?? 0.05)
+        : engine.flareArtifacts,
       // The corona is staging, and only a script stages. Zero everywhere else,
       // which is what keeps a crescent preset in the planetarium from turning
       // into an eclipse nobody asked for.
