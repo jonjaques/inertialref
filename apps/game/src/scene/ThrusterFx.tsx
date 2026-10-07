@@ -105,9 +105,9 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
     // the player's, and the prop's plumes at the entity's pose would be the
     // Rocinante's drive burning beside the Enterprise.
     const hull = engine.hullOnStage
-    const cinematic = engine.cinematic
-    const visible =
-      cinematic === null ? engine.showShip : cinematic.ship.visible
+    const owner = engine.owner
+    const cinematic = owner?.arm === 'cutscene' ? owner.cinematic : null
+    const visible = cinematic?.ship.visible ?? engine.showShip
     if (hull === null || !visible) {
       if (root.visible) {
         for (const held of built.values()) held.plumes.update(null, 0, 10)
@@ -143,7 +143,9 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
       return
     }
 
-    const ship = view.entities.find((entity) => entity.isCamera)
+    // The player's ship as the frame names it — on foot, the one the walker
+    // stepped out of, which is the hull `ShipModel` draws.
+    const ship = view.entities.find((entity) => entity.id === owner?.ship)
     if (ship === undefined) {
       root.visible = false
       return

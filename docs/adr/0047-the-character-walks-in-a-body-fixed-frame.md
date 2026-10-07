@@ -88,9 +88,10 @@ camera arm presents the result.**
   canceled lock request leaves the world untouched and never retries
   automatically. Lock ownership attaches to a persistent document element so
   a mode's drag surface unmounting cannot remove the locked element.
-- Camera precedence remains cinematic, observatory, then player. The player
-  arm resolves a ship or character pose before the render origin and scene
-  are built. First-person and third-person views share that pose producer
+- Camera precedence remains cinematic, observatory, then player, and the
+  player arm is two: the walker, then the ship. `engine/frameOwner.ts` states
+  the order once, and the owner's pose is resolved before the render origin
+  and scene are built. First-person and third-person views share that pose producer
   and the existing lens. Pointer sensitivity derives from the lens and
   viewport; the browser hook does not write the Three.js camera.
 - Near contact, the renderer applies the drawn-versus-canonical ground

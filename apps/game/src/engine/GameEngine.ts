@@ -11,6 +11,7 @@ import type {
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import { CharacterController } from './characterController.ts'
 import type { CharacterView } from './characterView.ts'
+import { resolveFrameOwner } from './frameOwner.ts'
 import { type HeldMemory, presentOnFoot } from './onFootPresentation.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
@@ -260,6 +261,25 @@ export interface ObserverView {
   readonly camera: { readonly position: Vec3; readonly orientation: Quat }
 }
 
+/**
+ * The frame's owner as the scene reads it: the arm, what that arm draws from,
+ * and the player's ship — the walker's ship on foot, the player otherwise —
+ * so the hull, its plumes and the nav ball name one ship whatever holds the
+ * camera.
+ */
+export type PresentedFrame =
+  | {
+      readonly arm: 'cutscene'
+      readonly ship: EntityId | null
+      readonly cinematic: CinematicView
+    }
+  | {
+      readonly arm: 'observatory' | 'walker'
+      readonly ship: EntityId | null
+      readonly view: ObserverView
+    }
+  | { readonly arm: 'ship'; readonly ship: EntityId | null }
+
 export { NO_EFFECTS }
 export type { CinematicEffects, CinematicTextState }
 
@@ -295,7 +315,6 @@ export interface GameEngineOptions {
  */
 export class GameEngine {
   readonly character: CharacterController
-  characterCamera: ObserverView | null = null
   /** The player's own suit, when the player is one; also in `characterViews`. */
   characterView: CharacterView | null = null
   characterViews: readonly CharacterView[] = []
@@ -814,23 +833,35 @@ export class GameEngine {
    * silently resets under Fast Refresh. `null` means no cutscene — the whole
    * system dormant, which is the normal state of the game.
    */
-  cinematic: CinematicView | null = null
+  get cinematic(): CinematicView | null {
+    return this.owner?.arm === 'cutscene' ? this.owner.cinematic : null
+  }
 
   /*
-   * The planetarium's camera, in render space, when the observatory has a
-   * target — the second producer of a presentation eye.
-   *
-   * Structurally identical to `cinematic` and here for the same reasons: the
-   * scene components read it every frame, and module state in an edited render
-   * file resets under Fast Refresh. `null` means the camera belongs to the
-   * ship, which is the flight modes' normal state.
-   *
-   * The precedence in `#step` is cutscene, then observatory, then ship, and it
-   * is that way round because a scripted scene is the one thing that is
-   * allowed to take the camera away from whatever is holding it — that is what
-   * makes `ir.play()` work from inside the planetarium.
+   * The planetarium's camera, in render space, when the observatory owns the
+   * frame — the second producer of a presentation eye. `null` means the
+   * camera belongs to a script, the walker or the ship.
    */
-  observer: ObserverView | null = null
+  get observer(): ObserverView | null {
+    return this.owner?.arm === 'observatory' ? this.owner.view : null
+  }
+
+  /** The walker camera, in render space, when the walker owns the frame. */
+  get characterCamera(): ObserverView | null {
+    return this.owner?.arm === 'walker' ? this.owner.view : null
+  }
+
+  /*
+   * Who owns this frame, published once by `#step` in render space: the arm
+   * `resolveFrameOwner` chose, its eye, and the player's ship. Every consumer
+   * switches on `arm` rather than re-deriving the precedence, and `null` is
+   * a frame no arm could supply an eye for, which publishes no eye at all.
+   *
+   * On the engine rather than in any module for the reason `hull` is: the
+   * scene components read it every frame, and module state in an edited
+   * render file silently resets under Fast Refresh.
+   */
+  owner: PresentedFrame | null = null
 
   /*
    * Whether to trace each body's orbit, and the traces themselves.
@@ -1002,7 +1033,7 @@ export class GameEngine {
         // that reads the field before the next one — the store's sampler, and
         // the player's own exit, which republishes the snapshot as it leaves.
         // The director has stopped; the frame's view of it is over now.
-        this.cinematic = null
+        if (this.owner?.arm === 'cutscene') this.owner = null
       },
     })
     let observerStance = false
@@ -1221,7 +1252,7 @@ export class GameEngine {
     // does that — but derived from the world all the same, so it goes with
     // everything else here.
     this.#onFootMemory = null
-    this.characterCamera = null
+    if (this.owner?.arm === 'walker') this.owner = null
     this.characterView = null
     this.characterViews = []
     this.rotationStop = null
@@ -1462,8 +1493,6 @@ export class GameEngine {
       cinematic === null ? this.harness.observerSample(delta) : null
     this.#phases.step('observatory', ENGINE_PHASE)
 
-    // The one precedence order: cutscene, observatory, then the controlled
-    // ship or character. Only the last arm needs a player.
     const player = this.session.player()
     const camera =
       player === null
@@ -1480,53 +1509,41 @@ export class GameEngine {
       memory: this.#onFootMemory,
     })
     this.#onFootMemory = onFoot.memory
-    const characterPose = onFoot.pose
 
-    const eye =
-      cinematic?.camera.position ??
-      observed?.position ??
-      characterPose?.position ??
-      camera?.position
-    this.#presentedPose =
-      cinematic?.camera ??
-      observed ??
-      characterPose ??
-      (camera === undefined
-        ? null
-        : { position: camera.position, orientation: camera.orientation })
-    if (eye === undefined) {
-      // Nothing owns the camera this frame. Publishing the two presentation
-      // eyes as null anyway is the point: a stale one held across a frame is
-      // what latched the chrome off.
-      this.cinematic = null
-      this.observer = null
+    // The one precedence order, written once in `frameOwner.ts`.
+    const owner = resolveFrameOwner({
+      cutscene: cinematic?.camera ?? null,
+      observatory: observed ?? null,
+      walker: onFoot.pose,
+      player: camera ?? null,
+      walkerShip: this.character.ship,
+      walking: this.character.active,
+    })
+    this.#presentedPose = owner?.pose ?? null
+    if (owner === null) {
+      // Nothing owns the camera this frame. Publishing that is the point: an
+      // eye held across a frame nobody owns is what latched the chrome off,
+      // and the rig reads only the arm that owns the frame.
+      this.owner = null
       return
     }
+    const eye = owner.pose.position
 
     this.origin = originForCamera(this.origin, eye)
-    this.characterCamera =
-      characterPose === null
-        ? null
-        : {
-            camera: {
-              position: toRenderSpace(this.origin, characterPose.position),
-              orientation: orientationToRenderSpace(
-                this.origin,
-                characterPose.orientation,
-              ),
-            },
-          }
+    const origin = this.origin
+    const inRender = (pose: ObserverPose): ObserverView['camera'] => ({
+      position: toRenderSpace(origin, pose.position),
+      orientation: orientationToRenderSpace(origin, pose.orientation),
+    })
     // Every character in the frame gets a view, the player's own drawn only
     // from outside its head. A second player's suit arrives the same way a
     // second ship does: as an entity in the snapshot, not a second producer.
-    const origin = this.origin
     const views: CharacterView[] = onFoot.walkers.map((walker) => ({
       id: walker.id,
       position: toRenderSpace(origin, walker.feet),
       orientation: orientationToRenderSpace(origin, walker.orientation),
       visible:
-        cinematic === null &&
-        observed === null &&
+        (owner.arm === 'walker' || owner.arm === 'ship') &&
         (!walker.own || this.character.view === 'third'),
       animation: walker.animation,
       speed: walker.speed,
@@ -1535,72 +1552,65 @@ export class GameEngine {
     }))
     this.characterViews = views
     this.characterView = views.find((view) => view.id === player) ?? null
-    this.observer =
-      observed === null || observed === undefined
-        ? null
-        : {
-            camera: {
-              position: toRenderSpace(this.origin, observed.position),
-              orientation: orientationToRenderSpace(
-                this.origin,
-                observed.orientation,
-              ),
+    this.owner =
+      owner.arm === 'cutscene' && cinematic !== null
+        ? {
+            arm: 'cutscene',
+            ship: owner.ship,
+            cinematic: {
+              frame: cinematic.frame,
+              presentationTime: cinematic.presentationTime,
+              elapsedSeconds: cinematic.elapsedSeconds,
+              stage:
+                cinematic.stage === undefined
+                  ? undefined
+                  : {
+                      model: cinematic.stage.model,
+                      placementId: cinematic.stage.placementId,
+                      position: toRenderSpace(
+                        this.origin,
+                        cinematic.stage.position,
+                      ),
+                      orientation: orientationToRenderSpace(
+                        this.origin,
+                        cinematic.stage.orientation,
+                      ),
+                    },
+              lens: cinematic.lens,
+              camera: {
+                position: toRenderSpace(this.origin, cinematic.camera.position),
+                orientation: orientationToRenderSpace(
+                  this.origin,
+                  cinematic.camera.orientation,
+                ),
+              },
+              ship: {
+                position: toRenderSpace(this.origin, cinematic.ship.position),
+                orientation: orientationToRenderSpace(
+                  this.origin,
+                  cinematic.ship.orientation,
+                ),
+                visible: cinematic.ship.visible,
+                model: cinematic.ship.model,
+                throttle: cinematic.ship.throttle,
+              },
+              texts: cinematic.texts,
+              effects: cinematic.effects,
             },
           }
-    this.cinematic =
-      cinematic === null
-        ? null
-        : {
-            frame: cinematic.frame,
-            presentationTime: cinematic.presentationTime,
-            elapsedSeconds: cinematic.elapsedSeconds,
-            stage:
-              cinematic.stage === undefined
-                ? undefined
-                : {
-                    model: cinematic.stage.model,
-                    placementId: cinematic.stage.placementId,
-                    position: toRenderSpace(
-                      this.origin,
-                      cinematic.stage.position,
-                    ),
-                    orientation: orientationToRenderSpace(
-                      this.origin,
-                      cinematic.stage.orientation,
-                    ),
-                  },
-            lens: cinematic.lens,
-            camera: {
-              position: toRenderSpace(this.origin, cinematic.camera.position),
-              orientation: orientationToRenderSpace(
-                this.origin,
-                cinematic.camera.orientation,
-              ),
-            },
-            ship: {
-              position: toRenderSpace(this.origin, cinematic.ship.position),
-              orientation: orientationToRenderSpace(
-                this.origin,
-                cinematic.ship.orientation,
-              ),
-              visible: cinematic.ship.visible,
-              model: cinematic.ship.model,
-              throttle: cinematic.ship.throttle,
-            },
-            texts: cinematic.texts,
-            effects: cinematic.effects,
-          }
+        : owner.arm === 'observatory' || owner.arm === 'walker'
+          ? {
+              arm: owner.arm,
+              ship: owner.ship,
+              view: { camera: inRender(owner.pose) },
+            }
+          : { arm: 'ship', ship: owner.ship }
 
     /*
-     * Everything above is camera; everything below needs the ship.
-     *
-     * `buildScene` is built *around* the player's entity, and terrain, the
-     * star survey and the orbit traces all hang off the scene it produces —
-     * so a frame without one leaves them as they were and takes the next
-     * frame's. That was always the behavior; what changed is that the two
-     * presentation eyes are published before it rather than after.
+     * Everything above is camera; everything below is the scene, which takes
+     * the owner's eye and needs no entity. A playerless observatory frame is
+     * drawn from the observatory's eye like any other.
      */
-    if (player === null || camera === undefined) return
 
     // The render-space transforms above belong to no phase — a handful of
     // quaternion multiplies — and charging them to whichever phase happens to
@@ -1618,10 +1628,8 @@ export class GameEngine {
     this.#scene = buildScene(
       shot,
       this.origin,
-      player,
-      cinematic !== null
-        ? cinematic.camera
-        : (observed ?? characterPose ?? undefined),
+      camera === undefined ? null : camera.id,
+      owner.eye,
       view === null ? undefined : lodThresholds(view.lens, view.viewport),
     )
     const pad = this.character.padPreview

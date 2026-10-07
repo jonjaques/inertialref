@@ -561,7 +561,7 @@ export function Bodies({
      * backend's pipeline promises are awaited), so the toggle around it never
      * lets a unit sphere at the origin reach a real frame.
      */
-    if (engine.cinematic === null) {
+    if (engine.owner?.arm !== 'cutscene') {
       const systems = engine.world.loadedSystems()
       const systemsKey = systems.map((system) => system.id).join(',')
       if (systemsKey !== warmedSystems.current) {

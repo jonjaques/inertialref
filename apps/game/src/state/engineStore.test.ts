@@ -55,12 +55,12 @@ const EMPTY: EngineSnapshot = {
 describe('the engine sampler', () => {
   it('publishes what the engine reports, and whether a cutscene is running', () => {
     const store = createEngineStore()
-    const scene = {}
+    const scene = { arm: 'cutscene' }
     let tick = 7
     const source: EngineSource = {
       ...idle,
       harness: { ...idle.harness, status: () => status(tick) },
-      get cinematic() {
+      get owner() {
         return tick > 7 ? scene : null
       },
     }
@@ -84,7 +84,7 @@ describe('the engine sampler', () => {
       // What the real harness does: walk the world and build a description.
       // Nothing is cached and nothing is reused.
       harness: { ...idle.harness, status: () => status(4) },
-      cinematic: null,
+      owner: null,
     }
 
     sampleOnce(store, source)
@@ -126,7 +126,7 @@ describe('the engine sampler', () => {
             return status(reads)
           },
         },
-        cinematic: null,
+        owner: null,
       }
 
       // Not one interval later: a mount that showed the empty snapshot for
@@ -156,7 +156,7 @@ describe('the engine sampler', () => {
     const engine = { showShip: true, showOrbits: false, flareArtifacts: 1 }
     const source: EngineSource = {
       ...idle,
-      cinematic: null,
+      owner: null,
       get showShip() {
         return engine.showShip
       },
@@ -198,7 +198,7 @@ describe('the engine sampler', () => {
     }
     sampleOnce(store, {
       ...idle,
-      cinematic: null,
+      owner: null,
       harness: { ...idle.harness, observerStatus: () => observer },
       cutscene: { sample: () => playhead },
     })
@@ -214,7 +214,7 @@ describe('the engine sampler', () => {
      * however still the world is. A primitive is `Object.is`-stable.
      */
     const store = createEngineStore()
-    const source: EngineSource = { ...idle, cinematic: null }
+    const source: EngineSource = { ...idle, owner: null }
     sampleOnce(store, source)
     const paused = (): boolean => store.getState().presentation.showShip
     const first = paused()
