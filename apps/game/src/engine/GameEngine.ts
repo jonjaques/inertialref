@@ -24,23 +24,15 @@ import {
   type SensorSettings,
   type Exposure,
 } from '@inertialref/rendering'
-import {
-  getLogger,
-  getTimer,
-  LIGHT_YEAR,
-  type Seconds,
-} from '@inertialref/shared'
+import { getLogger, getTimer, type Seconds } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
-import { encodeUniverseVector } from '@inertialref/protocol'
 import {
   orientationToRenderSpace,
   Quaternion as Q,
   type Quat,
   type RenderOrigin,
   toRenderSpace,
-  UV,
   Vec,
-  type UniverseVector,
   type Vec3,
   vec3,
 } from '@inertialref/spatial'
@@ -51,9 +43,6 @@ import {
 } from '@inertialref/simulation'
 import {
   type Body,
-  type CatalogStar,
-  GALAXY_SOLAR_V_MAGNITUDE,
-  populationCoverage,
   type EntityId,
   findBody,
   MARS_PAD,
@@ -94,9 +83,7 @@ import {
   openSession,
   type OrbitPath,
   orbitPaths,
-  orbitScopeKey,
   type Session,
-  visibleOrbits,
 } from '@inertialref/devtools'
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
@@ -110,13 +97,7 @@ import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
-import {
-  EMPTY_STAR_FIELD,
-  STAR_SPRITE_CEILING,
-  selectStars,
-  type StarCandidate,
-  type StarField,
-} from './starSelection.ts'
+import { type StarField } from './starSelection.ts'
 import {
   browserTimingPort,
   onTimingLevel,
@@ -147,6 +128,8 @@ import {
   type SurfaceQuality,
 } from '../render/quality.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
+import { OrbitTraceCache } from './orbitTraces.ts'
+import { StarSurvey, type StarSurveyStatus } from './starSurvey.ts'
 import type { TerrainReport } from '@inertialref/devtools'
 
 /*
@@ -197,26 +180,6 @@ export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
 export const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 
 export type { StarField }
-
-/** How far the player must move before the starfield is surveyed again. */
-const STARFIELD_CELL_CEILING = 2000
-const STARFIELD_CANDIDATE_CEILING = 1000000
-const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
-
-/** A catalog star as the star field's selection sees it. */
-const asCandidate = (star: CatalogStar): StarCandidate => ({
-  id: star.id,
-  name: star.name,
-  position: star.position,
-  color: [star.physical.color.r, star.physical.color.g, star.physical.color.b],
-  solarLuminosities: star.physical.solarLuminosities,
-  visualLuminosities:
-    star.physical.absoluteMagnitude === null
-      ? undefined
-      : 10 **
-        ((GALAXY_SOLAR_V_MAGNITUDE - star.physical.absoluteMagnitude) / 2.5),
-  cataloged: true,
-})
 
 /**
  * A cutscene frame, converted to render space for the scene components.
@@ -687,17 +650,8 @@ export class GameEngine {
     )
   }
 
-  get starSurvey() {
-    return {
-      radiusCells: 2,
-      cellCeiling: STARFIELD_CELL_CEILING,
-      candidateCeiling: STARFIELD_CANDIDATE_CEILING,
-      resolved: this.#starField.resolved,
-      spriteCount: this.#starField.positions.length,
-      spriteCeiling: STAR_SPRITE_CEILING,
-      pending: this.#starFieldPending,
-      center: this.#starFieldCenter,
-    }
+  get starSurvey(): StarSurveyStatus {
+    return this.#survey.status(this.#generation)
   }
 
   /** The resolved external instrument, under the usual camera precedence. */
@@ -877,31 +831,11 @@ export class GameEngine {
   showOrbits = false
   /** Whether a trace is drawn for everything, or only for the subject's context. */
   orbitScope: OrbitScope = 'context'
-  orbits: readonly OrbitPath[] = []
-  #orbitsWorld = -1
-  #orbitsSystems = ''
-  /*
-   * Every trace the loaded systems have, before the scope filter.
-   *
-   * Cached separately because the two halves of a rebuild are invalidated by
-   * different things and only one of them is expensive. Sampling is Kepler's
-   * equation ~97 times for every body in every loaded system — 18.4 ms on a
-   * Sol retarget, 22.2 ms on a Proxima one, on the exact interaction the mode
-   * exists for — and it depends on nothing but the systems. Filtering is a
-   * predicate over ~130 paths and depends on the focus, which is what a
-   * retarget changes. Keyed together, every focus change re-solved every
-   * orbit.
-   *
-   * The anchor is what makes the split legal: a path carries the instant it
-   * was built against and `OrbitTraces` differences the primary's live pose
-   * against it, so an old path follows a moving primary exactly. The one thing
-   * that does age is the *phase* — the sweep starts at the body's own
-   * eccentric anomaly, so where the closed curve's two ends meet drifts away
-   * from the body. It was already ageing between rebuilds, and a full ellipse
-   * looks the same wherever it is cut.
-   */
-  #orbitsAll: readonly OrbitPath[] = []
-  #orbitsAllKey = ''
+  get orbits(): readonly OrbitPath[] {
+    return this.#traces.visible(this.#generation)
+  }
+  /** The traces, sampled and filtered; `orbitTraces.ts` says why in two halves. */
+  readonly #traces = new OrbitTraceCache()
 
   /**
    * URL of an audio track that stands in for a scene's declared soundtrack.
@@ -942,20 +876,20 @@ export class GameEngine {
   #frameMs = 16
   #fps = 60
   #ticksLastFrame = 0
-  #starField: StarField = EMPTY_STAR_FIELD
-  #starFieldKnown: readonly StarCandidate[] | null = null
-  #starFieldCoverage: ReturnType<typeof populationCoverage> | null = null
-  #starFieldCenter: UniverseVector | null = null
-  #starFieldPending = false
   /*
-   * Which world the in-flight survey belongs to. A survey is asynchronous and
-   * the world can be replaced under it; without this, its result landed in the
-   * new world's starfield — a save loaded in another system briefly wore the
-   * old system's stars. Masked for as long as terrain tasks queued ahead of
-   * the survey delayed it past every observer, and surfaced the moment the
-   * streamer stopped requesting patches from orbit.
+   * The world generation: bumped once, in `#invalidateDerived`, wherever the
+   * world is replaced. The star survey and the orbit traces key on it rather
+   * than being cleared field by field, so nothing derived from a world can
+   * outlive it by being left off a list — which is how the starfield once
+   * survived a jump of four light years.
    */
-  #starFieldWorld = 0
+  #generation = 0
+  readonly #survey = new StarSurvey((request) => {
+    const pool = this.pool()
+    return pool === null
+      ? surveySkyTask.run(request, { canceled: () => false })
+      : pool.run(surveySkyTask, request)
+  })
 
   constructor(options: GameEngineOptions = {}) {
     this.session = openSession({
@@ -1130,10 +1064,6 @@ export class GameEngine {
     }
   }
 
-  player(): EntityId | null {
-    return this.session.player()
-  }
-
   pool(): WorkerPool | null {
     return this.session.pool()
   }
@@ -1190,7 +1120,7 @@ export class GameEngine {
   }
 
   get starField(): StarField {
-    return this.#starField
+    return this.#survey.field(this.#generation)
   }
 
   terrainState(): TerrainState {
@@ -1259,15 +1189,7 @@ export class GameEngine {
     this.origin = null
     this.snapshot = null
     this.#scene = null
-    this.#starField = EMPTY_STAR_FIELD
-    this.#starFieldKnown = null
-    this.#starFieldCoverage = null
-    this.#starFieldCenter = null
-    this.#starFieldWorld += 1
-    this.orbits = []
-    this.#orbitsSystems = ''
-    this.#orbitsAll = []
-    this.#orbitsAllKey = ''
+    this.#generation += 1
     this.#terrain.clear()
     log.info('world replaced, derived state dropped', {
       tick: this.world.clock.tick,
@@ -1689,7 +1611,7 @@ export class GameEngine {
      */
     this.#phases.step('terrain', ENGINE_PHASE)
 
-    this.#maybeSurveyStars(eye)
+    this.#survey.update(this.#generation, eye, this.world)
     // A star sweep fires once per 8 ly of hysteresis, so it is rare and large —
     // exactly the shape a mean over 240 frames cannot show and a track can.
     this.#phases.step('survey', ENGINE_PHASE)
@@ -1709,158 +1631,38 @@ export class GameEngine {
    */
   #maybeTraceOrbits(): void {
     if (!this.showOrbits) {
-      if (this.orbits.length > 0) this.orbits = []
-      // Both keys, so "rebuilt when the toggle turns on" means the sampling
-      // too. Clearing only the scope key leaves `#orbitsAllKey` matching, so
-      // turning orbits back on after an hour of warp re-filters paths swept at
-      // the anomaly the body had before it — invisible in a uniform-alpha
-      // ellipse, and a claim the method's own docstring does not make.
-      this.#orbitsSystems = ''
-      this.#orbitsAllKey = ''
+      this.#traces.hide()
       return
     }
     const systems = this.world.loadedSystems()
-    // Once. The scope key and the sampling key are both a function of it, and
-    // two spellings of "the loaded set" is two things a reader has to check
-    // are the same list.
-    const systemIds = systems.map((system) => system.id)
     /*
      * Which traces are worth drawing depends on what is being looked at, so the
-     * focused frame is part of the rebuild key.
+     * focused frame is part of the scope.
      *
      * Everything at once is what the first version drew, and in a system viewed
      * from inside it is a dozen ellipses seen edge-on — a fan of near-straight
      * lines across the frame that says nothing about anything. A planetarium
      * shows the *context* of its subject: the orbits of its siblings, and the
      * orbits of the things going round it. That is two relationships, and both
-     * are one field on the path.
+     * are one field on the path. `visibleOrbits` and `orbitScopeKey`, in
+     * `packages/devtools/src/orbitPaths.ts`, are the rule and its key.
      */
     const focus = this.harness.observatory.target?.frame ?? null
-    /*
-     * Which traces are context is `visibleOrbits`, and the key it is cached
-     * against is `orbitScopeKey` — both in `packages/devtools/src/orbitPaths.ts`
-     * and both tested there. The selection rule used to live in this method,
-     * reachable only through the frame loop, so the one thing it does — turn a
-     * hundred and twenty-nine lines into eight — had no test, and neither did
-     * the key. Both failures are silent: a key that omitted the scope leaves the
-     * View panel's switch looking dead until the reader navigates away and back.
-     */
-    const scope = {
-      focus,
-      // The frame the subject itself orbits, so its siblings can be recognized.
-      grandparent:
-        focus !== null && this.world.frames.has(focus)
-          ? this.world.frames.get(focus).parent
-          : null,
-      subject: this.harness.observatory.target?.address ?? null,
-      scope: this.orbitScope,
-    }
-    const key = orbitScopeKey(systemIds, scope)
-    if (
-      key === this.#orbitsSystems &&
-      this.#orbitsWorld === this.#starFieldWorld
+    this.#traces.update(
+      this.#generation,
+      systems.map((system) => system.id),
+      {
+        focus,
+        // The frame the subject itself orbits, so its siblings can be recognized.
+        grandparent:
+          focus !== null && this.world.frames.has(focus)
+            ? this.world.frames.get(focus).parent
+            : null,
+        subject: this.harness.observatory.target?.address ?? null,
+        scope: this.orbitScope,
+      },
+      () => systems.flatMap((system) => orbitPaths(this.world, system)),
     )
-      return
-    this.#orbitsSystems = key
-    this.#orbitsWorld = this.#starFieldWorld
-
-    // The sampling half, keyed on what it actually reads. A retarget moves
-    // `scope` and nothing here, so it re-filters instead of re-solving.
-    const systemsKey = `${this.#starFieldWorld}|${systemIds.join(',')}`
-    if (systemsKey !== this.#orbitsAllKey) {
-      this.#orbitsAllKey = systemsKey
-      this.#orbitsAll = systems.flatMap((system) =>
-        orbitPaths(this.world, system),
-      )
-      log.info('orbit paths sampled', {
-        paths: this.#orbitsAll.length,
-        systems: systems.length,
-      })
-    }
-    this.orbits = visibleOrbits(this.#orbitsAll, scope)
-    log.info('orbit traces rebuilt', {
-      paths: this.orbits.length,
-      of: this.#orbitsAll.length,
-      focus: focus ?? 'everything',
-    })
-  }
-
-  /** A bounded magnitude survey is independent of the travel query's spatial radius. */
-  #maybeSurveyStars(center: UniverseVector): void {
-    if (this.#starFieldPending) return
-    if (
-      this.#starFieldCenter !== null &&
-      UV.distance(this.#starFieldCenter, center) <= STARFIELD_HYSTERESIS
-    )
-      return
-    this.#starFieldCenter = center
-    this.#starFieldPending = true
-    const world = this.#starFieldWorld
-    const catalog = this.world.catalog
-    const known = (this.#starFieldKnown ??= catalog.stars.map(asCandidate))
-    const payload = {
-      seed: formatSeed(this.world.galaxySeed),
-      origin: encodeUniverseVector(center),
-      coverage: (this.#starFieldCoverage ??= populationCoverage(catalog)),
-      spriteCeiling: STAR_SPRITE_CEILING,
-      cellCeiling: STARFIELD_CELL_CEILING,
-      candidateCeiling: STARFIELD_CANDIDATE_CEILING,
-      apparentMagnitudeLimit: 8,
-    }
-    // The retained sources and their original selection envelope describe the
-    // same light partition during travel. Publishing only the catalog between
-    // replies removes procedural sources and resets their dust and sky history.
-    if (this.#starField.resolved === undefined)
-      this.#starField = selectStars(center, [known])
-    const pool = this.pool()
-    // Inline execution can throw before returning a promise. Start it inside the
-    // chain so it has the same failure and pending-state lifetime as a worker.
-    void Promise.resolve()
-      .then(() =>
-        pool === null
-          ? surveySkyTask.run(payload, { canceled: () => false })
-          : pool.run(surveySkyTask, payload),
-      )
-      .then((selection) => {
-        if (world !== this.#starFieldWorld) return
-        const applying = timer.span('survey.apply', ENGINE_PHASE)
-        const fill: StarCandidate[] = selection.stars.map((star) => ({
-          id: star.id,
-          name: star.name,
-          position: UV.universeVector(...star.position),
-          color: star.color,
-          solarLuminosities: star.solarLuminosities,
-          visualLuminosities: star.visualLuminosities,
-          cataloged: false,
-        }))
-        this.#starField = selectStars(
-          center,
-          [known, fill],
-          STAR_SPRITE_CEILING,
-          {
-            origin: center,
-            apparentMagnitudeLimit: selection.apparentMagnitudeLimit,
-            levelMask: selection.levelMask,
-          },
-        )
-        applying.end()
-        log.info('starfield surveyed', {
-          stars: this.#starField.positions.length,
-          cataloged: known.length,
-          fill: fill.length,
-          cells: selection.cellsVisited,
-          candidates: selection.candidateCount,
-          resolved: this.#starField.resolved,
-        })
-      })
-      .catch((cause: unknown) => {
-        log.warn('starfield survey failed', { cause: String(cause) })
-        // A failed worker must not turn the next frame into another full survey.
-        // Travel beyond the same spatial hysteresis permits a fresh attempt.
-      })
-      .finally(() => {
-        this.#starFieldPending = false
-      })
   }
 
   /* --------------------------------------------------------------------- */

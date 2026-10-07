@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   framingDistance,
   lensForFov,
@@ -183,23 +183,49 @@ describe('the game engine, headless', () => {
 
   it('drops every piece of derived state when the world is replaced', async () => {
     const game = headlessEngine()
+    game.presentation.push({ showOrbits: true })
+    game.character.atMarsPad()
     game.frame(1 / 60)
+    await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
     await game.save('slot-b')
 
-    expect(game.origin).not.toBeNull()
-    expect(game.scene()).not.toBeNull()
+    /*
+     * Every derived field the world replacement drops, as a probe that reads
+     * true when it is cold. The count is the gate: an entry added to
+     * `#invalidateDerived` without a probe here is a field nothing checks.
+     * The star survey and the orbit traces are two of them, cold because they
+     * key on the world generation rather than because anything cleared them.
+     */
+    const cold = {
+      origin: () => game.origin === null,
+      scene: () => game.scene() === null,
+      snapshot: () => game.snapshot === null,
+      walkerEye: () => game.characterCamera === null,
+      characterView: () => game.characterView === null,
+      characterViews: () => game.characterViews.length === 0,
+      rotationStop: () => game.rotationStop === null,
+      terrain: () => game.terrainState().patches.length === 0,
+      starField: () => game.starField.positions.length === 0,
+      starSurvey: () => game.starSurvey.center === null,
+      orbits: () => game.orbits.length === 0,
+    }
+    expect(Object.keys(cold)).toHaveLength(11)
+    const warm = Object.entries(cold).filter(
+      ([name, probe]) =>
+        probe() && name !== 'rotationStop' && name !== 'terrain',
+    )
+    expect(warm.map(([name]) => name)).toEqual([])
 
     await game.load('slot-b')
+    const stale = Object.entries(cold).filter(([, probe]) => !probe())
+    expect(stale.map(([name]) => name)).toEqual([])
 
-    // One hook invalidates all of it. This used to be spread over `replaceWorld`
-    // and `load`, and the starfield was in neither — so loading a save taken in
-    // another system kept the previous system's stars, because the re-survey is
-    // gated on having moved and the cache thought it hadn't.
-    expect(game.origin).toBeNull()
-    expect(game.scene()).toBeNull()
-    expect(game.snapshot).toBeNull()
-    expect(game.starField.positions).toHaveLength(0)
-    expect(game.terrainState().patches).toHaveLength(0)
+    // Loading puts the eye back where it was, inside the hysteresis — and the
+    // sky is surveyed again anyway: a replaced world has moved however near
+    // the eye is. A cache that thought it had not kept the previous system's
+    // stars across a jump of four light years.
+    game.frame(1 / 60)
+    expect(game.starSurvey.center).not.toBeNull()
     game.dispose()
   })
 
