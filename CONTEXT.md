@@ -11086,15 +11086,19 @@ About 110 lines inside `GameEngine.#step` assembled the walker camera's input
 and one view per suit, and `CharacterController.cameraMemory` was a public
 field the frame wrote back into. A cut was two facts: `declareCut()` bumped
 `pictureEpoch`, and the camera's memory was cleared by hand at four sites — so
-a cut the harness made, `ir.view` or a placement's `#handsOff`, reset the
-picture's history and left the eye easing from where it had been.
+a cut made elsewhere — `ir.view`, a cutscene's start or shot change, the
+observatory taking the picture — reset the picture's history and left the eye
+easing from where it had been. A placement's `#handsOff` never reached it:
+every maneuver boards first, so the next frame had no walker pose.
 `presentOnFoot` (`apps/game/src/engine/onFootPresentation.ts`) is the walker's
 frame as a function of the shot, the view and a memory keyed by the epoch and
 the walker it was made for, so a cut drops it whoever makes it. The view
 switch is the one cut that keeps it — the boom eases out from the head — and
-only when it is the only cut since: the pad fixture steps out in third person
-in the same frame as its teleport, and the step detector, which compares the
-feet's radius with the last frame's, would read that jump as a step. `gaitFor` is the
+only when it is the only cut since: a switch in the same frame as `ir.view`
+or a shot change drops it, because the step detector, which compares the
+feet's radius with the last frame's, would read the jump as a step. Stepping
+out and the pad fixture never reach that rule: each spawns a walker with a
+new id, and the walker key drops the memory first. `gaitFor` is the
 17-line clip choice, exported and held by a table; the parked Rocinante finds
 the pad by `MARS_PAD.id` rather than the string.
 

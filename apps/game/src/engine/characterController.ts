@@ -17,9 +17,9 @@ export interface CharacterStatus {
 
 /**
  * The browser's half of walking: pointer lock, the look and the view. The
- * camera's memory is the frame's (`onFootPresentation.ts`). Stepping out, stepping back in and the pad fixture are the
- * session's (`ir.onFoot`), so a console and a test reach the same walker; the
- * world alone moves it.
+ * camera's memory is the frame's (`onFootPresentation.ts`). Stepping out,
+ * stepping back in and the pad fixture are the session's (`ir.onFoot`), so a
+ * console and a test reach the same walker; the world alone moves it.
  */
 export class CharacterController {
   readonly #engine: GameEngine

@@ -111,6 +111,18 @@ describe("the walker camera's memory", () => {
       memory: first.memory,
     })
     expect(eyeOverFeet(cut.pose!)).toBeCloseTo(1.15, 3)
+    // The same frame and epoch, but a memory made for another walker: what
+    // stepping out and the pad fixture rely on, since each spawns a new id.
+    const stranger = presentOnFoot({
+      shot: crouched,
+      player,
+      view: 'first',
+      pitch: 0,
+      delta: 1 / 60,
+      epoch: 0,
+      memory: { ...first.memory!, walker: `${player}-other` as typeof player },
+    })
+    expect(eyeOverFeet(stranger.pose!)).toBeCloseTo(1.15, 3)
     session.dispose()
   })
 

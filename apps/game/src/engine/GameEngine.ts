@@ -1217,6 +1217,9 @@ export class GameEngine {
    */
   #invalidateDerived(): void {
     this.character.reset()
+    // Not how a cut drops it — `harness.load` declares one, and the epoch
+    // does that — but derived from the world all the same, so it goes with
+    // everything else here.
     this.#onFootMemory = null
     this.characterCamera = null
     this.characterView = null

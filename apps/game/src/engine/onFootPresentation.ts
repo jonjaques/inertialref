@@ -19,9 +19,10 @@ import type { CharacterView } from './characterView.ts'
  * render space once it has placed the origin.
  *
  * **A cut drops the camera's memory.** The memory is keyed by the picture
- * epoch it was made in, so every cut — stepping out, a teleport, `ir.view` —
- * starts the eye's filters at their targets without anyone clearing them by
- * hand. Switching between the first- and third-person views is the one cut
+ * epoch it was made in and the walker it was made for, so every cut — a
+ * cutscene starting, the observatory taking the picture, `ir.view` — and
+ * every new walker start the eye's filters at their targets without anyone
+ * clearing them by hand. Switching between the first- and third-person views is the one cut
  * that keeps them: the boom eases out from the head, which is the transition
  * between the two that reads as a camera move rather than a jump.
  */
@@ -83,11 +84,15 @@ export function gaitFor(
 }
 
 /**
- * The memory this frame starts from: none across a cut, unless the one cut
- * since is the view switch itself. A switch that lands in the same frame as
- * another cut — the pad fixture steps out in third person — drops it, because
- * the filters describe a place the walker has left: the step detector would
- * read the jump as a step and hold the eye where the feet used to be.
+ * The memory this frame starts from: none for another walker, and none across
+ * a cut unless the one cut since is the view switch itself.
+ *
+ * The walker key is what covers stepping out and the pad fixture: each spawns
+ * a walker with a fresh id. The epoch rule covers a cut the same walker lives
+ * through — a switch that lands in the same frame as `ir.view` or a cutscene's
+ * shot change, or a second switch — and drops the memory there, because the
+ * filters describe a picture that is gone: the step detector would read the
+ * jump as a step and hold the eye where the feet used to be.
  */
 function carried(
   held: HeldMemory | null,
