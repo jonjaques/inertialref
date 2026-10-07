@@ -76,7 +76,7 @@ JavaScript; request-time rendering can use the same shell when needed.
 [ADR-0039](docs/adr/0039-the-shell-before-the-scene.md) records that boundary.
 
 Surface structures have durable body-fixed anchors, shared by flight,
-planetarium, and Cinema. Save schema 4 carries placements and character state; World verbs place,
+planetarium, and Cinema. Save schema 5 carries placements and character state; World verbs place,
 move, and remove them. Flat support disks participate in surface contact.
 The Blender-authored Mars pad and its sunset Rocinante landing are the first
 consumer. [ADR-0040](docs/adr/0040-structures-keep-a-body-fixed-anchor.md)
@@ -84,9 +84,11 @@ records the boundary; placement controls currently live in the harness.
 
 Characters walk on canonical planetary terrain and flat support disks, with
 local-gravity jumps and first-person or third-person cameras. Explicit pointer
-lock enters gameplay from a landed ship or near-ground observatory stance;
-ordinary browsing remains presentation-only. Trusted session permission gates
-flight. [ADR-0047](docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md)
+lock enters gameplay from a landed ship; the planetarium has no walker.
+Stepping out and back in are session verbs (`ir.onFoot`), so a headless
+session walks too, and a walker steps back into the ship it left, which the
+save records. Trusted session permission gates flight, reapplied by every
+session on load. [ADR-0047](docs/adr/0047-the-character-walks-in-a-body-fixed-frame.md)
 records the controller, save, and camera boundaries.
 
 The application hosts also include `apps/ingest`, which builds committed
@@ -10930,6 +10932,51 @@ production Vite build still reads `apps/game/.env.local`, and the main
 checkout's holds the development instance's `pk_test_` key while
 `apps/game/.env.production` holds no Clerk key. `docs/hosting.md` says to set
 the production values in the environment, which wins over any file.
+
+## A walker steps back into the ship it left, and every session grants its flight (2 Oct 2026)
+
+Stepping out, stepping back in and the Mars pad fixture moved behind the
+session as `ir.onFoot` (`packages/devtools/src/onFoot.ts`). Only the browser
+could make a walker before, so `openSession`, `pnpm sim` and every activation
+test needed a whole `GameEngine`, and ADR-0047's "loading a character
+reapplies the host capability" was true in one host: the reapply ran from
+`CharacterController.reset()` inside the engine's derived-state hook, so a
+headless session opened with `canFly: false` kept a loaded save's flight. The
+grant is now reapplied in the session's `replaceWorld`, to every walker the
+replaced world carries, and the derived-state hook writes nothing canonical.
+
+Three decisions the plan left open:
+
+- **The parked ship is saved.** A walker's `vessel` is canonical, in the hash
+  and in save schema 5. Holding it outside the world was cheaper and lost it
+  on a reload, and the rule it replaced — the first ship in entity order —
+  names the wrong ship whenever two are landed side by side, which a reload
+  is exactly when it has to survive. The v4→v5 migration applies that old
+  rule once, so a v4 save keeps the ship it had.
+- **A ship verb on foot boards first.** Refusing kept one verb from doing two
+  things, but the dock's travel buttons already stepped in by hand before
+  every verb, and `ir.goTo` from the console while walking threw from the
+  world's frame invariant. `face` and `burnToward` checked nothing, and their
+  teleport stays in the walker's own `bf:` frame, which that invariant
+  accepts — read from the code, not run, it points the walker's whole body
+  at the planet. One rule in the harness replaced
+  the dock's three hand-written steps. The flight keys are the exception, and
+  are dropped on foot: the character context claims W, A, S and D but leaves
+  the throttle, assist and kill-rotation keys live, and a walker who presses
+  one meant to walk. `toggleFlightAssist` and `killRotation` had no guard and
+  wrote the walker's entity.
+- **Real time on stepping out is the game's rule.** In the world it would be a
+  canonical rule about a value that is not canonical — the time scale is not
+  saved or hashed, and `runTicks` ignores it — so the app's controller writes
+  it, as one of the clock writers the time pull request counts.
+
+`CharacterController.locked` is a grant keyed to the walker it was granted
+for, because a console verb can now board under a held pointer lock: a stored
+flag left the browser steering an entity that was gone, and a flag derived
+from whether any walker exists locked the next one out before the browser
+granted it. The look is keyed the same way, and the pad fixture's stage
+clearing and its Rocinante belong to `ir.onFoot`, so a walker the console
+makes is the one the dock makes.
 
 ## Known gaps
 

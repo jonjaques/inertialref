@@ -98,10 +98,7 @@ export function HarnessSection({
             title="Stand beside the 46 m Rocinante on Mars, ready to resume on-foot controls"
             onClick={() =>
               awaited('Mars pad walk', async () => {
-                if (!engine.character.atMarsPad())
-                  throw new Error(
-                    engine.character.error ?? 'Could not stage the Mars pad',
-                  )
+                engine.character.atMarsPad()
                 if (mode !== 'flight') await navigate(PLAY_SOLO)
                 return 'On foot beside the Rocinante. Resume controls to walk.'
               })
@@ -119,7 +116,6 @@ export function HarnessSection({
               }
               onClick={() =>
                 awaited(name, async () => {
-                  engine.character.leave()
                   const result = await engine.harness.scenario(name)
                   return result.detail
                 })
@@ -132,7 +128,6 @@ export function HarnessSection({
             title="The twelve milestone capability checks, against this build"
             onClick={() =>
               awaited('self test', async () => {
-                engine.character.leave()
                 const report = await engine.harness.selfTest()
                 console.info(report.report)
                 return `${report.passed}/${report.total} capabilities · report in the console`

@@ -9,6 +9,7 @@ import {
 import {
   type Body,
   type BodyFixedDirection,
+  type EntityId,
   geodeticDirection,
   directionToGeodetic,
   surfaceRadius,
@@ -45,6 +46,15 @@ export interface CharacterState {
   /** Ticks a jump pressed in the air stays armed for the landing; zero when none. */
   readonly jumpBuffer: number
   readonly input: CharacterInput
+  /**
+   * The ship this walker stepped out of, and steps back into.
+   *
+   * Canonical because nothing regenerates it: with two ships landed side by
+   * side, entity order names the wrong one as often as the right one, and a
+   * reload is exactly when the choice has to survive. Null for a walker that
+   * came from nowhere — a test's spawn, or a save that carried none.
+   */
+  readonly vessel: EntityId | null
 }
 
 /*
@@ -95,7 +105,11 @@ export const NEUTRAL_CHARACTER_INPUT: CharacterInput = {
   yaw: 0,
 }
 
-export function createCharacter(canFly = false, heading = 0): CharacterState {
+export function createCharacter(
+  canFly = false,
+  heading = 0,
+  vessel: EntityId | null = null,
+): CharacterState {
   return {
     canFly,
     flying: false,
@@ -106,6 +120,7 @@ export function createCharacter(canFly = false, heading = 0): CharacterState {
     airTicks: 0,
     jumpBuffer: 0,
     input: { ...NEUTRAL_CHARACTER_INPUT, yaw: heading },
+    vessel,
   }
 }
 

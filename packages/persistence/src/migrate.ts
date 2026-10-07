@@ -136,7 +136,50 @@ const v3ToV4: Migration = {
   }),
 }
 
-export const MIGRATIONS: readonly Migration[] = [v0ToV1, v1ToV2, v2ToV3, v3ToV4]
+/*
+ * The walker's vessel, named.
+ *
+ * A v4 walker stepped back into the first ship in entity order, because that
+ * was the rule the game applied on every load. The migration applies it once
+ * more, so a v4 save keeps the ship it had and the rule is written nowhere
+ * else. The save's entity list is already in id order — it is the world's
+ * canonical projection.
+ */
+const v4ToV5: Migration = {
+  from: 4,
+  to: 5,
+  describe: 'name the ship a walker steps back into',
+  migrate: (raw) => {
+    if (!Array.isArray(raw['entities'])) return { ...raw, schemaVersion: 5 }
+    const entities: readonly unknown[] = raw['entities']
+    const ship = entities.find(
+      (entity): entity is Record<string, unknown> =>
+        typeof entity === 'object' &&
+        entity !== null &&
+        (entity as Record<string, unknown>)['kind'] === 'ship',
+    )
+    const vessel = typeof ship?.['id'] === 'string' ? ship['id'] : null
+    return {
+      ...raw,
+      schemaVersion: 5,
+      entities: entities.map((entity) => {
+        if (typeof entity !== 'object' || entity === null) return entity
+        const character = (entity as Record<string, unknown>)['character']
+        return typeof character === 'object' && character !== null
+          ? { ...entity, character: { ...character, vessel } }
+          : entity
+      }),
+    }
+  },
+}
+
+export const MIGRATIONS: readonly Migration[] = [
+  v0ToV1,
+  v1ToV2,
+  v2ToV3,
+  v3ToV4,
+  v4ToV5,
+]
 
 export function migrateSave(
   raw: unknown,

@@ -610,12 +610,19 @@ export class World implements FlightWorld {
     })
   }
 
-  /** Put a suited character's feet on canonical support. Contact earns groundedness. */
+  /**
+   * Put a suited character's feet on canonical support. Contact earns
+   * groundedness. `vessel` is the ship it steps back into, and has to exist.
+   */
   spawnCharacter(
     body: Body,
     latitude: number,
     longitude: number,
-    options: { readonly canFly?: boolean; readonly heading?: number } = {},
+    options: {
+      readonly canFly?: boolean
+      readonly heading?: number
+      readonly vessel?: EntityId
+    } = {},
   ): Entity {
     invariant(hasSolidSurface(body), `${body.name} has no solid surface`)
     invariant(
@@ -629,6 +636,13 @@ export class World implements FlightWorld {
     invariant(
       body.address.kind === 'body',
       'Character surface requires a body address',
+    )
+    const vessel = options.vessel ?? null
+    invariant(
+      vessel === null ||
+        (this.#entities.get(vessel)?.kind === 'ship' &&
+          this.#entities.get(vessel)?.character === null),
+      `${vessel} is not a vessel`,
     )
     this.loadSystem(body.address.system)
     const direction = geodeticDirection(latitude, longitude)
@@ -648,7 +662,7 @@ export class World implements FlightWorld {
         position: Vec.scale(direction, this.contactRadius(body, direction)),
         orientation,
       },
-      character: createCharacter(options.canFly ?? false, heading),
+      character: createCharacter(options.canFly ?? false, heading, vessel),
     })
   }
 
