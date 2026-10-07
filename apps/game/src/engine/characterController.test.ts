@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEBUG_LANDING_SITE } from '@inertialref/devtools'
 import { MemorySaveStore } from '@inertialref/persistence'
+import { deg } from '@inertialref/shared'
 import { GameEngine } from './GameEngine.ts'
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 
@@ -159,7 +160,7 @@ describe('character activation', () => {
 
   it('steps nobody out while a scene plays, from the console or the dock', () => {
     const game = makeEngine()
-    game.harness.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+    game.harness.land('g:milky-way/s:SOL/b:3', deg(20), deg(-63))
     game.frame(1 / 60)
     expect(game.harness.onFoot.available()).toBe(true)
     game.harness.play('tng-intro')
