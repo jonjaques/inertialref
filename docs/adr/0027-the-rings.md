@@ -141,7 +141,7 @@ generator computes and the shader spends. That is the shape this takes if the
 record ever carries a real annulus mean.
 
 **Untinting the rings.** They are already untinted: a mapless strip carries its
-own color and `Bodies.tsx` gives it white. Dyeing it with the body's color is
+own color and `render/bodyUniforms.ts` gives it white. Dyeing it with the body's color is
 how Uranus's charcoal threads came out cyan once. Only a photographed strip
 takes the tint.
 
