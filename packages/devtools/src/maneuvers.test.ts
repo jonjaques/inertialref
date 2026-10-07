@@ -26,6 +26,31 @@ const onTheBody = (result: {
   )
 
 describe('the flying verbs', () => {
+  it('lands at the equator without angles, and refuses a non-finite one unwritten', () => {
+    const { session, verbs } = flying()
+    const before = session.world.stateHash()
+    expect(() => verbs.land(MARS, deg(Number.NaN), deg(0))).toThrow(/finite/)
+    expect(() => verbs.land(MARS, deg(20), deg(Number.NaN))).toThrow(/finite/)
+    expect(session.world.stateHash()).toBe(before)
+    // A console call with no angles: `undefined` reaches the verb untyped.
+    const result = verbs.land(MARS)
+    expect(Number.isFinite(result.state.position.x)).toBe(true)
+    expect(result.state.frame).not.toMatch(/NaN/)
+    session.world.runTicks(1)
+    session.dispose()
+  })
+
+  it('takes a coasting ship off rails, and says so from the world', () => {
+    const { session, verbs } = flying()
+    verbs.orbit(EARTH, 400)
+    const ship = session.player()!
+    session.world.runTicks(600)
+    expect(session.world.entities.require(ship).rails).not.toBeNull()
+    expect(verbs.orbit(MARS, 400).droppedEpoch).toBe(true)
+    expect(session.world.entities.require(ship).rails).toBeNull()
+    session.dispose()
+  })
+
   it('orbits sunward, nose along the track, and says what it wrote', () => {
     const { session, verbs } = flying()
     const result = verbs.orbit(EARTH, 400)

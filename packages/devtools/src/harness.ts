@@ -22,6 +22,7 @@ import {
 import { GalaxyInspector, type GalaxyRenderReport } from './galaxy.ts'
 import {
   AU,
+  deg,
   type Degrees,
   degreesToRadians,
   getLogger,
@@ -1187,7 +1188,11 @@ export class GameHarness {
   }
 
   /** Park the player on the ground, in degrees like every other verb. */
-  land(address: string, latitude: Degrees, longitude: Degrees): HarnessStatus {
+  land(
+    address: string,
+    latitude: Degrees = deg(0),
+    longitude: Degrees = deg(0),
+  ): HarnessStatus {
     this.#maneuvers.land(address, latitude, longitude)
     return this.status()
   }

@@ -66,8 +66,8 @@ export interface DescentOptions {
   readonly site?: string
   /**
    * Degrees, what `ir.sites()` prints. `Radians` is a bare `number`, so a
-   * radian field here took a latitude copied out of that listing as radians
-   * and described ground 2,578° away; the brand refuses the copy instead.
+   * radian field here would read a latitude copied out of that listing as
+   * radians and describe ground 2,578° away; the brand refuses the copy.
    */
   readonly latitude?: Degrees
   readonly longitude?: Degrees

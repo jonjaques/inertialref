@@ -1,4 +1,4 @@
-import { err, ok, type Result } from '@inertialref/shared'
+import { err, ok, type Radians, type Result } from '@inertialref/shared'
 import {
   canonicalPosition,
   Quaternion as Q,
@@ -94,7 +94,11 @@ export interface Stage {
 
 export class OnFoot {
   readonly #host: Host
-  readonly #land: (address: string, latitude: number, longitude: number) => void
+  readonly #land: (
+    address: string,
+    latitude: Radians,
+    longitude: Radians,
+  ) => void
   readonly #stage: Stage
   /**
    * The walker the pad fixture staged, and the world it staged it in: ids
@@ -103,15 +107,15 @@ export class OnFoot {
   #pad: { readonly world: World; readonly walker: EntityId } | null = null
 
   /**
-   * `land` parks the player's ship on a surface, as the harness's verb does:
-   * the fixture lands before it steps out, and one placement rule per
+   * `land` parks the player's ship on a surface, in radians because the pad
+   * is stored in them: the fixture lands before it steps out, and one placement rule per
    * maneuver means this module asks rather than writing a second one.
    * `stage` is the harness's cutscene and observatory, which this module
    * cannot see from the `Host`.
    */
   constructor(
     host: Host,
-    land: (address: string, latitude: number, longitude: number) => void,
+    land: (address: string, latitude: Radians, longitude: Radians) => void,
     stage: Stage,
   ) {
     this.#host = host

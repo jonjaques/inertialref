@@ -76,6 +76,18 @@ export const bodyFrameId = (address: UniverseAddress): FrameId => {
   bodyFrames.set(address, id)
   return id
 }
+/**
+ * Read a body-centered frame id back to its address, or null for any other
+ * kind of frame. The inverse of `bodyFrameId`, beside it for the reason
+ * `systemOfFrameId` is beside its constructor.
+ */
+export function bodyOfFrameId(
+  id: FrameId,
+): Extract<UniverseAddress, { kind: 'body' }> | null {
+  if (!id.startsWith('b:')) return null
+  const address = parseAddress(id.slice(2))
+  return address.kind === 'body' ? address : null
+}
 export const bodyFixedFrameId = (address: UniverseAddress): FrameId => {
   const hit = bodyFixedFrames.get(address)
   if (hit !== undefined) return hit

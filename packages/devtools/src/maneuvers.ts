@@ -1,5 +1,6 @@
 import {
   AU,
+  deg,
   type Degrees,
   degreesToRadians,
   getLogger,
@@ -21,8 +22,10 @@ import type { World } from '@inertialref/simulation'
 import {
   type Body,
   bodyFrameId,
+  bodyOfFrameId,
   type EntityId,
   findBody,
+  formatAddress,
   installSurfaceFrame,
   parseAddress,
   systemFrameId,
@@ -50,7 +53,8 @@ import type { Host } from './harness.ts'
  * with its status, which is what the console and the photo metadata read.
  *
  * Every verb here is a teleport, and `teleport` drops the rails epoch by
- * construction (ADR-0025), so `droppedEpoch` is always true. A walker is
+ * construction (ADR-0025); `droppedEpoch` reads the entity afterward rather
+ * than restating that, so a teleport that kept one would say so. A walker is
  * boarded first: `onFoot.ts` says why that is the one answer.
  */
 
@@ -77,7 +81,7 @@ export interface ManeuverResult {
   readonly heading: Vec3
   /** The sun–body–eye angle; null outside a `b:` frame. */
   readonly phase: Degrees | null
-  /** Whether the move dropped a rails epoch. Every teleport does. */
+  /** Whether the ship is off rails after the move. Every teleport drops them. */
   readonly droppedEpoch: boolean
 }
 
@@ -90,11 +94,10 @@ export function headingOf(state: FrameState): Vec3 {
  * The unit vector toward the star, in the given frame, at a given instant.
  *
  * The *star*, not the frame's parent. For a planet the two agree — its
- * parent is the system frame, whose origin is the star — and that
- * coincidence is exactly how the parent version shipped: every shot of a
- * moon was composed against the direction of its **planet**, so `full-face`
- * on Luna framed the earthlit side at whatever phase Earth happened to be
- * in, and `sunset` chased Earth's azimuth instead of the sun's.
+ * parent is the system frame, whose origin is the star — but a moon's parent
+ * is its **planet**: composed against that, `full-face` on Luna frames the
+ * earthlit side at whatever phase Earth is in, and `sunset` chases Earth's
+ * azimuth instead of the sun's.
  *
  * The instant is a parameter because two callers disagree about it: a shot
  * places the *ship* at the simulation's own time, while the observatory
@@ -131,9 +134,8 @@ export function orbitalPhase(
   eye: UniverseVector,
   time: number,
 ): Degrees | null {
-  if (!frame.startsWith('b:')) return null
-  const address = parseAddress(frame.slice(2))
-  if (address.kind !== 'body') return null
+  const address = bodyOfFrameId(frame)
+  if (address === null) return null
   const body = world.frames.pose(frame, time).position
   const star = world.frames.pose(systemFrameId(address.system), time).position
   const toEye = UV.difference(eye, body)
@@ -154,8 +156,10 @@ export function orbitalPhase(
 export function currentBodyAddress(world: World, id: EntityId | null): string {
   const entity = id === null ? undefined : world.entities.get(id)
   if (entity !== undefined)
-    for (const frame of world.frames.chain(entity.state.frame))
-      if (frame.startsWith('b:')) return frame.slice(2)
+    for (const frame of world.frames.chain(entity.state.frame)) {
+      const body = bodyOfFrameId(frame)
+      if (body !== null) return formatAddress(body)
+    }
   throw new Error(
     'The player is not at a body — pass an address, e.g. ir.shot("full-face", "b:2")',
   )
@@ -304,8 +308,21 @@ export class Maneuvers {
     return this.#result(player)
   }
 
-  /** Park the player on the ground at a latitude and longitude, ready to fly. */
-  land(address: string, latitude: Degrees, longitude: Degrees): ManeuverResult {
+  /**
+   * Park the player on the ground at a latitude and longitude, ready to fly.
+   *
+   * The angles default to the prime meridian at the equator because `ir` is
+   * typed at a console, where the brand checks nothing and a missing angle
+   * is `undefined`. A non-finite angle is refused before the ship is touched:
+   * a surface frame at `NaN` is a world every later step throws in.
+   */
+  land(
+    address: string,
+    latitude: Degrees = deg(0),
+    longitude: Degrees = deg(0),
+  ): ManeuverResult {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
+      throw new Error('A landing needs a finite latitude and longitude')
     return this.#land(
       address,
       degreesToRadians(latitude),
@@ -422,7 +439,8 @@ export class Maneuvers {
 
   #result(player: EntityId): ManeuverResult {
     const world = this.#host.world
-    const state = world.entities.require(player).state
+    const entity = world.entities.require(player)
+    const state = entity.state
     return {
       state,
       heading: headingOf(state),
@@ -432,7 +450,7 @@ export class Maneuvers {
         world.canonicalPositionOf(player),
         world.clock.time,
       ),
-      droppedEpoch: true,
+      droppedEpoch: entity.rails === null,
     }
   }
 
@@ -475,7 +493,7 @@ export class Maneuvers {
       // `stepLanded` for an entity that is already landed, so a ship declared
       // landed above the ground never meets the contact test and hovers there
       // while the overlay reports an altitude of zero; and three meters up is
-      // inside LANDING_CLEARANCE, where `#land`'s `max(0, y)` keeps it. Placed
+      // inside LANDING_CLEARANCE, where `World.#land`'s `max(0, y)` keeps it. Placed
       // at the origin, the contact test lands it on the next tick.
       position: Vec.ZERO,
       orientation: Q.IDENTITY,

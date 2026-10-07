@@ -438,9 +438,9 @@ describe('the observatory on the ground', () => {
   })
 
   it('takes degrees at the harness and radians below it', () => {
-    // `ir.land` takes radians and is the odd one out; every listing verb prints
-    // degrees, so a console that copies a latitude out of `ir.sites()` into
-    // `ir.visit()` has to mean the same thing by it.
+    // Every verb that names a latitude, `ir.land` included, takes degrees, and
+    // every listing verb prints them, so a console that copies a latitude out
+    // of `ir.sites()` into `ir.visit()` means the same thing by it.
     const session = live()
     const { harness } = session
     const entry = terrainZoo(session.world)[0]
@@ -692,9 +692,9 @@ describe('the terrain verbs on a body with no ground', () => {
   })
 
   it('take degrees, like every other verb that names a latitude', () => {
-    // `DescentOptions` below the harness is radians and `Radians` is a bare
-    // `number`, so a latitude copied out of `ir.sites()` — which prints degrees
-    // — was read as radians and described ground 2,578° away.
+    // `DescentOptions` takes what `ir.sites()` prints. `Radians` is a bare
+    // `number`, so a radian field would read a copied latitude as radians and
+    // describe ground 2,578° away; the `Degrees` brand refuses the copy.
     const session = live()
     const report = session.harness.descend('s:SOL/b:2', {
       latitude: deg(45),

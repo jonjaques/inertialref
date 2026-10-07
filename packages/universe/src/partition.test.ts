@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { frameId, UV } from '@inertialref/spatial'
 import {
   bodyAddress,
+  formatAddress,
   galaxyAddress,
   galaxyId,
   systemAddress,
@@ -11,6 +12,7 @@ import {
 import {
   bodyFixedFrameId,
   bodyFrameId,
+  bodyOfFrameId,
   surfaceFrameId,
   systemFrameId,
   systemOfFrameId,
@@ -63,6 +65,34 @@ describe('system frame ids', () => {
       frameId('s:'),
     ]) {
       expect(systemOfFrameId(frame)).toBe(null)
+    }
+  })
+})
+
+describe('body frame ids', () => {
+  it('round-trips every body path', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.nat({ max: 40 }), { minLength: 1, maxLength: 3 }),
+        (path) => {
+          const body = bodyAddress(GALAXY, SOL, path)
+          const parsed = bodyOfFrameId(bodyFrameId(body))
+          expect(parsed === null ? null : formatAddress(parsed)).toBe(
+            formatAddress(body),
+          )
+        },
+      ),
+    )
+  })
+
+  it('rejects every other kind of frame', () => {
+    const planet = bodyAddress(GALAXY, SOL, [2])
+    for (const frame of [
+      bodyFixedFrameId(planet),
+      surfaceFrameId(planet, 0.1, 0.2),
+      systemFrameId(SOL),
+    ]) {
+      expect(bodyOfFrameId(frame)).toBe(null)
     }
   })
 })
