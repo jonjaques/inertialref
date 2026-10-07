@@ -1,6 +1,7 @@
 import {
   ACCOUNT_PATH,
   API_PREFIX,
+  GUIDE_PREFIX,
   HEALTH_PATH,
   MEDIA_PREFIX,
   SOCKET_PATH,
@@ -36,7 +37,7 @@ export type Route =
 const API_ROOT = API_PREFIX.slice(0, -1)
 
 export function routeFor(pathname: string): Route {
-  if (pathname === '/api/tour' || pathname.startsWith('/api/tour/'))
+  if (pathname === GUIDE_PREFIX || pathname.startsWith(`${GUIDE_PREFIX}/`))
     return { kind: 'tour' }
   if (pathname === HEALTH_PATH) return { kind: 'health' }
   if (pathname === ACCOUNT_PATH) return { kind: 'account' }

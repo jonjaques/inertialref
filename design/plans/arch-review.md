@@ -45,6 +45,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The frame's owner is named once                              | [`apps/game/src/engine/frameOwner.ts`](../../apps/game/src/engine/frameOwner.ts), `engine.owner`, rule 31       |
 | The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests     |
 | The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                            |
+| The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                   |
 
 ---
 
@@ -52,8 +53,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
 | --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol) | The guide   | —         | Strong          |
-| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                           | The guide   | 10        | Strong          |
+| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                           | The guide   | —         | Strong          |
 | 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                         | The guide   | 11        | Worth exploring |
 | 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                               | The terrain | —         | Strong          |
 | 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
@@ -69,7 +69,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 ```mermaid
 flowchart LR
-  P10[10 Guide contract] --> P11[11 Guide verdict] --> P12[12 Live channel]
+  P11[11 Guide verdict] --> P12[12 Live channel]
   P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
   P15[15 Water decision]
@@ -92,66 +92,9 @@ and the order is what keeps them apart:
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 10.** The walker-and-frame track and the harness are in the tree:
-the frame's owner is named once, what the engine derives from a world keys on
-the world's generation, the director is `ir.cutscene`, and the driver asks the
-app whether it booted. The guide's wire contract is next by number, and builds
-on nothing.
-
----
-
-## 10. The guide's wire contract lives in `packages/protocol`
-
-**Track:** the guide · **Strong** · ports and adapters (the Worker is remote
-and owned)
-
-**Builds on:** nothing. **Unblocks:** 11.
-
-**Files.** `packages/protocol/src/net.ts` (`ACCOUNT_PATH`,
-`decodeAccountStatus`, `askServer` — the pattern to follow),
-`apps/server/src/tour/routes.ts`, `apps/server/src/tour/openaiLive.ts`,
-`apps/server/src/routes.ts`, `apps/game/src/tour/capabilities.ts`,
-`apps/game/src/tour/access.ts`, `apps/game/src/tour/runtime.ts`,
-`apps/game/src/tour/GuideControls.tsx`, `apps/game/src/tour/scene.ts`
-(`openingLine`), and the three tests that build the wire shape:
-`apps/server/src/tour/routes.test.ts`, `apps/game/src/tour/capabilities.test.ts`,
-`apps/game/src/tour/runtime.test.ts`.
-
-**The friction.**
-
-- `net.ts` says paths live in one place, and `/api/tour/capabilities` is written
-  in `routes.ts`, `runtime.ts` and `access.ts`.
-- The capabilities answer is an object literal on the Worker and a hand-written
-  reader in the game. The Worker sends `voices` from `GUIDE_VOICES`; the game
-  reads `readonly string[]`.
-- The session request and response are checked by hand on each side.
-- **The limits are written twice on the Worker, in two units.** The SDP bound is
-  `65_536` in `routes.ts` and `64 * 1024` in `openaiLive.ts`. The scene bound
-  is 1,500 UTF-16 units in `routes.ts` (`boundedString` compares `.length`) and
-  1,500 encoded bytes in `openaiLive.ts`. `openingLine`, which writes the scene,
-  knows neither.
-- "Sign in to use the guide." and "This account does not have the guide." are
-  each written in `routes.ts`, `runtime.ts` and `GuideControls.tsx`.
-- Three tests each build their own wire shape, so renaming `authorized` on the
-  Worker fails none of them.
-
-**The shape.** `packages/protocol` holds the guide's paths; a verdict decoder —
-granted with its voices, or refused with a reason code — and a table from each
-reason to its sentence; and the session request and response, with their limits
-in one unit, bytes. The Worker's answers `satisfies` those types; the game
-decodes through the same decoders with an injected fetcher. Nothing
-vendor-specific enters the package (rule 20), consistent with
-[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) and
-[ADR-0048](../../docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md).
-
-**Gate.**
-
-- The path and each refusal sentence are written once.
-- `routes.test.ts` decodes its own answers with the protocol decoder, which is
-  the contract test across the network.
-- A test holds `openingLine`'s longest output under the scene limit.
-- `capabilities.test.ts` moves into `packages/protocol`, and `runtime.test.ts`'s
-  fake Worker is built from the protocol types.
+**Start with 11.** The walker-and-frame track and the harness are in the tree,
+and the guide's wire is one module in `packages/protocol`. The verdict that
+wire carries still has two holders in the game, and 11 gives it one.
 
 ---
 
@@ -160,7 +103,8 @@ vendor-specific enters the package (rule 20), consistent with
 **Track:** the guide · **Strong** in the game, **worth exploring** on the
 Worker · in-process
 
-**Builds on:** 10 — the verdict is read through its decoder.
+**Builds on:** nothing left open — the verdict is `GuideVerdict`, read through
+`decodeGuideVerdict`.
 **Unblocks:** 12.
 
 **Files.** `apps/game/src/tour/access.ts`, `apps/game/src/tour/runtime.ts`

@@ -1,16 +1,21 @@
-import { GUIDE_VOICES, isGuideVoice } from '@inertialref/protocol'
+import {
+  decode,
+  decodeGuideSessionRequest,
+  GUIDE_REFUSAL_SENTENCES,
+  GUIDE_SESSIONS_PATH,
+  GUIDE_VERDICT_PATH,
+  GUIDE_VOICES,
+  type GuideError,
+  type GuideSessionCreated,
+  type GuideVerdict,
+  isGuideVoice,
+} from '@inertialref/protocol'
 import { accountKeys, AccountUnavailableError } from '../account.ts'
 import { allowed, RETRY_AFTER } from '../limits.ts'
 import { logger, span } from '../log.ts'
 import { allowedOrigin } from '../origins.ts'
 import { guideAccess } from './access.ts'
-import {
-  boundedString,
-  readJson,
-  record,
-  TourHttpError,
-  tourJson,
-} from './http.ts'
+import { readJson, record, TourHttpError, tourJson } from './http.ts'
 import { createLiveSession, GuideProviderError } from './openaiLive.ts'
 
 const log = logger('server.tour')
@@ -71,27 +76,28 @@ async function handle(
       keys.secretKey &&
       String(env.TOUR_GUIDE_ENABLED) !== 'false',
     )
-    if (path === '/api/tour/capabilities' && request.method === 'GET') {
-      const access = configured
-        ? await guideAccess(request, keys)
-        : { signedIn: false, authorized: false }
-      return tourJson({
-        available: configured,
-        signedIn: access.signedIn,
-        authorized: access.authorized,
-        voices: GUIDE_VOICES,
-        reason: configured ? null : 'The guide is unavailable.',
-      })
+    if (path === GUIDE_VERDICT_PATH && request.method === 'GET') {
+      const access = configured ? await guideAccess(request, keys) : null
+      return tourJson(
+        (access === null
+          ? { granted: false, reason: 'unavailable' }
+          : !access.signedIn
+            ? { granted: false, reason: 'signed-out' }
+            : !access.authorized
+              ? { granted: false, reason: 'not-granted' }
+              : { granted: true, voices: GUIDE_VOICES }) satisfies GuideVerdict,
+      )
     }
     if (!allowedOrigin(request))
       throw new TourHttpError('Use the guide from this site.', 403)
-    if (!configured) throw new TourHttpError('The guide is unavailable.', 503)
+    if (!configured)
+      throw new TourHttpError(GUIDE_REFUSAL_SENTENCES.unavailable, 503)
     const access = await guideAccess(request, keys)
     if (!access.signedIn)
-      throw new TourHttpError('Sign in to use the guide.', 401)
+      throw new TourHttpError(GUIDE_REFUSAL_SENTENCES['signed-out'], 401)
     if (!access.authorized)
-      throw new TourHttpError('This account does not have the guide.', 403)
-    if (path === '/api/tour/sessions' && request.method === 'POST') {
+      throw new TourHttpError(GUIDE_REFUSAL_SENTENCES['not-granted'], 403)
+    if (path === GUIDE_SESSIONS_PATH && request.method === 'POST') {
       /*
        * Per account, after the grant: a session is minutes of the OpenAI
        * project's budget, and a granted account's token in a script is the
@@ -113,11 +119,14 @@ async function handle(
       ])
       if (!isGuideVoice(input.voice))
         throw new TourHttpError('Choose an available voice.')
+      // The protocol's decoder, and its limits in bytes — the unit the
+      // provider counts in, and the one the browser's opening line is held to.
+      const decoded = decode(decodeGuideSessionRequest, input)
+      if (!decoded.ok)
+        throw new TourHttpError('A text field is outside its limits.')
       const created = await createLiveSession({
         apiKey: env.OPENAI_API_KEY,
-        sdp: boundedString(input.sdp, 65_536),
-        voice: input.voice,
-        scene: boundedString(input.scene, 1500),
+        ...decoded.value,
       })
       log('info', 'session created', {
         sessionId: created.id,
@@ -128,7 +137,7 @@ async function handle(
         sessionId: created.id,
         expiresAt: created.expiresAt,
         sdp: created.sdp,
-      })
+      } satisfies GuideSessionCreated)
     }
     throw new TourHttpError('No such guide endpoint.', 404)
   } catch (error) {
@@ -141,14 +150,17 @@ async function handle(
         reason: error.message,
       })
       return tourJson(
-        { error: error.message },
+        { error: error.message } satisfies GuideError,
         error.status,
         error.status === 429 ? { 'retry-after': RETRY_AFTER } : undefined,
       )
     }
     if (error instanceof AccountUnavailableError) {
       // Logged with its reason by the account module.
-      return tourJson({ error: 'The guide is unavailable.' }, 503)
+      return tourJson(
+        { error: GUIDE_REFUSAL_SENTENCES.unavailable } satisfies GuideError,
+        503,
+      )
     }
     if (error instanceof GuideProviderError) {
       log('error', 'provider refused the session', {

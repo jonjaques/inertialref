@@ -5,8 +5,19 @@ import type {
   ViewDescription,
 } from '@inertialref/devtools'
 import { NO_GUIDE_USAGE } from '@inertialref/devtools'
-import type { GuideCall, GuideToolOutput } from '@inertialref/protocol'
-import { type GuideCapabilities, readCapabilities } from './capabilities.ts'
+import {
+  decode,
+  decodeGuideError,
+  decodeGuideSessionCreated,
+  decodeGuideVerdict,
+  GUIDE_REFUSAL_SENTENCES,
+  GUIDE_SESSIONS_PATH,
+  GUIDE_VERDICT_PATH,
+  type GuideCall,
+  type GuideSessionRequest,
+  type GuideToolOutput,
+  type GuideVerdict,
+} from '@inertialref/protocol'
 import { SpeechClock } from './clock.ts'
 import type { GuideArrival, SceneFacts } from './executor.ts'
 import { GuideLoop } from './loop.ts'
@@ -44,7 +55,7 @@ import {
  */
 
 export interface GuideSnapshot {
-  readonly capabilities: GuideCapabilities | null
+  readonly capabilities: GuideVerdict | null
   readonly connection: GuideStatus['connection']
   readonly voice: string | null
   readonly paused: boolean
@@ -223,11 +234,12 @@ export class GuideRuntime {
      * instead, so a `start` already waiting on it reads the verdict that
      * replaced it.
      */
-    const inspection: Promise<void> = this.#request('/api/tour/capabilities')
+    const inspection: Promise<void> = this.#request(GUIDE_VERDICT_PATH)
       .then(async (response) => {
-        const value = readCapabilities(await response.json())
-        if (value === null)
+        const decoded = decode(decodeGuideVerdict, await response.json())
+        if (!decoded.ok)
           throw new Error('Guide availability could not be read.')
+        const value = decoded.value
         if (this.#inspect !== inspection) return this.#inspect ?? undefined
         this.#update({ capabilities: value })
         return undefined
@@ -258,7 +270,7 @@ export class GuideRuntime {
    * previous account's refusal, or a read that failed — and would otherwise
    * greet whoever signed in next.
    */
-  adopt(capabilities: GuideCapabilities): void {
+  adopt(capabilities: GuideVerdict): void {
     if (this.#snapshot.capabilities === capabilities) return
     this.#inspect = Promise.resolve()
     this.#update({ capabilities, message: null })
@@ -271,15 +283,14 @@ export class GuideRuntime {
     this.#ending = false
     try {
       await this.inspect()
-      const capabilities = this.#snapshot.capabilities
-      if (!capabilities?.available)
-        throw new Error(capabilities?.reason ?? 'The guide is unavailable.')
-      if (!capabilities.signedIn) throw new Error('Sign in to use the guide.')
-      if (!capabilities.authorized)
-        throw new Error('This account does not have the guide.')
-      const chosen = capabilities.voices.includes(voice)
-        ? voice
-        : (capabilities.voices[0] ?? 'marin')
+      const verdict = this.#snapshot.capabilities
+      if (verdict === null) throw new Error(GUIDE_REFUSAL_SENTENCES.unavailable)
+      if (!verdict.granted)
+        throw new Error(GUIDE_REFUSAL_SENTENCES[verdict.reason])
+      const chosen =
+        verdict.voices.find((offered) => offered === voice) ??
+        verdict.voices[0] ??
+        'marin'
       this.#update({
         connection: 'connecting',
         voice: chosen,
@@ -322,22 +333,15 @@ export class GuideRuntime {
       this.#executor = executor
       const view = executor.view()
       const facts = executor.facts()
-      const response = await this.#request('/api/tour/sessions', {
+      const response = await this.#request(GUIDE_SESSIONS_PATH, {
         voice: chosen,
         sdp,
         scene: openingLine(view, facts, this.#host.localTime()),
-      })
-      const created = (await response.json()) as {
-        sessionId?: unknown
-        expiresAt?: unknown
-        sdp?: unknown
-      }
-      if (
-        typeof created.sessionId !== 'string' ||
-        typeof created.sdp !== 'string' ||
-        typeof created.expiresAt !== 'number'
-      )
+      } satisfies GuideSessionRequest)
+      const decoded = decode(decodeGuideSessionCreated, await response.json())
+      if (!decoded.ok)
         throw new Error('The guide session response was invalid.')
+      const created = decoded.value
       this.#guard(generation)
       this.#sessionId = created.sessionId
       this.#update({
@@ -754,8 +758,8 @@ export class GuideRuntime {
       if (!response.ok) {
         let detail = 'The guide request could not be completed.'
         try {
-          const error = (await response.json()) as { error?: string }
-          detail = error.error ?? detail
+          const error = decode(decodeGuideError, await response.json())
+          if (error.ok) detail = error.value.error
         } catch {
           /* A proxy failure can return an HTML error page. */
         }

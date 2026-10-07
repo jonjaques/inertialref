@@ -71,10 +71,15 @@ Regenerate host declarations with `pnpm --filter @inertialref/server run types`
 when the compatibility date or flags change; `Env` follows the bindings without
 it. Deployment requires no simulation or D1 migration.
 
-| Endpoint                     | Purpose                                                                          |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| `GET /api/tour/capabilities` | Availability, whether the caller is signed in and granted, and the voices        |
-| `POST /api/tour/sessions`    | Creates one GPT Live session: writes the configuration, exchanges the WebRTC SDP |
+| Endpoint                     | Purpose                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `GET /api/tour/capabilities` | The verdict: granted with its voices, or refused as unavailable, signed out or not granted |
+| `POST /api/tour/sessions`    | Creates one GPT Live session: writes the configuration, exchanges the WebRTC SDP           |
+
+Both shapes, their decoders, the paths, the refusal sentences and the session
+limits — 65,536 bytes of SDP and 1,500 bytes of opening scene, both in UTF-8 —
+are `packages/protocol/src/guideWire.ts`. The Worker's answers satisfy those
+types and the browser decodes them with the same decoders.
 
 The browser holds the session over its own WebRTC peer connection and data
 channel; there is no application socket, no `/speech`, `/close`, `/status`, or

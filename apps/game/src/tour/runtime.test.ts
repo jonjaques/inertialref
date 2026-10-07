@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { openSession } from '@inertialref/devtools'
+import {
+  GUIDE_SESSIONS_PATH,
+  GUIDE_VERDICT_PATH,
+  type GuideError,
+  type GuideSessionCreated,
+  type GuideVerdict,
+} from '@inertialref/protocol'
 import { GuideExecutor } from './executor.ts'
 import type { LiveServerEvent } from './media.ts'
 import { GuideRuntime, type GuideHost } from './runtime.ts'
@@ -56,22 +63,21 @@ function rig() {
     localTime: () => '21:04',
     request: async (path, body) => {
       requests.push({ path, body })
-      if (path.endsWith('/capabilities'))
+      // The fake Worker answers in the protocol's types, so a renamed field
+      // fails here the way it would fail against the real one.
+      if (path === GUIDE_VERDICT_PATH)
         return Response.json({
-          available: true,
-          signedIn: true,
-          authorized: true,
+          granted: true,
           voices: ['marin', 'cedar'],
-          reason: null,
-        })
-      if (path === '/api/tour/sessions')
+        } satisfies GuideVerdict)
+      if (path === GUIDE_SESSIONS_PATH)
         return Response.json({
           sessionId: 'live_1',
           expiresAt: time + 7_200_000,
           sdp: 'answer',
-        })
+        } satisfies GuideSessionCreated)
       return Response.json(
-        { error: 'No such guide endpoint.' },
+        { error: 'No such guide endpoint.' } satisfies GuideError,
         { status: 404 },
       )
     },
@@ -226,18 +232,11 @@ function rig() {
 describe('the guide runtime', () => {
   it('adopts the access check’s answer instead of asking the Worker again', async () => {
     const f = rig()
-    const granted = {
-      available: true,
-      signedIn: true,
-      authorized: true,
-      voices: ['marin'],
-      reason: null,
-    }
-    f.runtime.adopt(granted)
+    f.runtime.adopt({ granted: true, voices: ['marin'] })
     await f.runtime.start('cedar')
     // The adopted voices decide the voice, and capabilities were never asked.
     expect(
-      f.requests.filter((request) => request.path.endsWith('/capabilities')),
+      f.requests.filter((request) => request.path === GUIDE_VERDICT_PATH),
     ).toHaveLength(0)
     expect(f.runtime.getSnapshot().voice).toBe('marin')
     await f.dispose()
@@ -245,28 +244,16 @@ describe('the guide runtime', () => {
 
   it('refuses to start for an adopted answer without the grant', async () => {
     const f = rig()
-    f.runtime.adopt({
-      available: true,
-      signedIn: true,
-      authorized: false,
-      voices: ['marin'],
-      reason: null,
-    })
+    f.runtime.adopt({ granted: false, reason: 'not-granted' })
     await f.runtime.start('marin')
     expect(f.runtime.getSnapshot().message).toBe(
       'This account does not have the guide.',
     )
     expect(
-      f.requests.some((request) => request.path === '/api/tour/sessions'),
+      f.requests.some((request) => request.path === GUIDE_SESSIONS_PATH),
     ).toBe(false)
     // The next account's answer does not arrive under the last one's refusal.
-    f.runtime.adopt({
-      available: true,
-      signedIn: true,
-      authorized: true,
-      voices: ['marin'],
-      reason: null,
-    })
+    f.runtime.adopt({ granted: true, voices: ['marin'] })
     expect(f.runtime.getSnapshot().message).toBeNull()
     await f.dispose()
   })
@@ -275,7 +262,7 @@ describe('the guide runtime', () => {
     const f = rig()
     await f.runtime.start('cedar')
     const creation = f.requests.find(
-      (request) => request.path === '/api/tour/sessions',
+      (request) => request.path === GUIDE_SESSIONS_PATH,
     )!
     expect(creation.body).toMatchObject({ voice: 'cedar', sdp: 'offer' })
     expect(String((creation.body as { scene: string }).scene)).toContain(
