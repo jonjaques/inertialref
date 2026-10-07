@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { LIGHT_YEAR } from '@inertialref/shared'
+import { deg, LIGHT_YEAR } from '@inertialref/shared'
 import { Quaternion as Q, UV, Vec } from '@inertialref/spatial'
 import {
   bodyFixedFrameId,
@@ -438,13 +438,17 @@ describe('the observatory on the ground', () => {
   })
 
   it('takes degrees at the harness and radians below it', () => {
-    // `ir.land` takes radians and is the odd one out; every listing verb prints
-    // degrees, so a console that copies a latitude out of `ir.sites()` into
-    // `ir.visit()` has to mean the same thing by it.
+    // Every verb that names a latitude, `ir.land` included, takes degrees, and
+    // every listing verb prints them, so a console that copies a latitude out
+    // of `ir.sites()` into `ir.visit()` means the same thing by it.
     const session = live()
     const { harness } = session
     const entry = terrainZoo(session.world)[0]
-    harness.visit(entry?.address, { latitude: 45, longitude: -30, height: 10 })
+    harness.visit(entry?.address, {
+      latitude: deg(45),
+      longitude: deg(-30),
+      height: 10,
+    })
     const stance = harness.observerStatus()?.surface?.stance
     expect((stance?.latitude ?? 0) * (180 / Math.PI)).toBeCloseTo(45, 9)
     expect((stance?.longitude ?? 0) * (180 / Math.PI)).toBeCloseTo(-30, 9)
@@ -624,13 +628,17 @@ describe('the observatory on the ground', () => {
     const session = live()
     const { harness } = session
     const entry = terrainZoo(session.world)[0]
-    harness.visit(entry?.address, { latitude: 91, longitude: 0, height: 2 })
+    harness.visit(entry?.address, {
+      latitude: deg(91),
+      longitude: deg(0),
+      height: 2,
+    })
     const stance = harness.observerStatus()?.surface?.stance
     expect(stance?.latitude).toBeCloseTo(LATITUDE_LIMIT, 12)
 
     const flown = harness.descend(entry?.address, {
-      latitude: 91,
-      longitude: 0,
+      latitude: deg(91),
+      longitude: deg(0),
       trackDegrees: 0,
     })
     expect(flown.steps[0]?.latitude).toBeCloseTo(stance?.latitude ?? 0, 12)
@@ -684,13 +692,13 @@ describe('the terrain verbs on a body with no ground', () => {
   })
 
   it('take degrees, like every other verb that names a latitude', () => {
-    // `DescentOptions` below the harness is radians and `Radians` is a bare
-    // `number`, so a latitude copied out of `ir.sites()` — which prints degrees
-    // — was read as radians and described ground 2,578° away.
+    // `DescentOptions` takes what `ir.sites()` prints. `Radians` is a bare
+    // `number`, so a radian field would read a copied latitude as radians and
+    // describe ground 2,578° away; the `Degrees` brand refuses the copy.
     const session = live()
     const report = session.harness.descend('s:SOL/b:2', {
-      latitude: 45,
-      longitude: -30,
+      latitude: deg(45),
+      longitude: deg(-30),
     })
     expect(report.site).toBe('45.00°, -30.00°')
   })

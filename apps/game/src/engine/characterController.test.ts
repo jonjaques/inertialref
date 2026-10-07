@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { DEBUG_LANDING_SITE } from '@inertialref/devtools'
 import { MemorySaveStore } from '@inertialref/persistence'
+import { deg } from '@inertialref/shared'
 import { GameEngine } from './GameEngine.ts'
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 
@@ -158,7 +160,7 @@ describe('character activation', () => {
 
   it('steps nobody out while a scene plays, from the console or the dock', () => {
     const game = makeEngine()
-    game.harness.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+    game.harness.land('g:milky-way/s:SOL/b:3', deg(20), deg(-63))
     game.frame(1 / 60)
     expect(game.harness.onFoot.available()).toBe(true)
     game.harness.play('tng-intro')
@@ -194,7 +196,11 @@ describe('character activation', () => {
     expect(game.character.enter()).toBe(false)
     expect(game.world.stateHash()).toBe(before)
     game.harness.observatory.clear()
-    game.harness.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+    game.harness.land(
+      'g:milky-way/s:SOL/b:3',
+      DEBUG_LANDING_SITE.latitude,
+      DEBUG_LANDING_SITE.longitude,
+    )
     game.world.runTicks(1)
     expect(game.character.available()).toBe(true)
     expect(game.character.enter()).toBe(true)
@@ -204,7 +210,11 @@ describe('character activation', () => {
 
   it('clears held movement on unlock and applies host flight permission', () => {
     const game = makeEngine(false)
-    game.harness.land('g:milky-way/s:SOL/b:3', 0.35, -1.1)
+    game.harness.land(
+      'g:milky-way/s:SOL/b:3',
+      DEBUG_LANDING_SITE.latitude,
+      DEBUG_LANDING_SITE.longitude,
+    )
     game.world.runTicks(1)
     game.character.enter()
     game.character.lockChanged(true)

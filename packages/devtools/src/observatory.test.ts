@@ -1,6 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { AU, type Meters } from '@inertialref/shared'
+import { AU, deg, type Meters } from '@inertialref/shared'
 import {
   bodyFixedFrameId,
   type Body,
@@ -726,7 +726,7 @@ describe('a drop', () => {
       look: { yaw: 0, pitch: 0 },
       surface: null,
     })
-    ir.drop(40.407718790723266, -85.18889809374942, { seconds })
+    ir.drop(deg(40.407718790723266), deg(-85.18889809374942), { seconds })
   }
 
   function turnBetween(a: ObserverPose, b: ObserverPose): number {
@@ -845,7 +845,7 @@ describe('a drop', () => {
     ir.look('s:SOL/b:2')
     ir.observatory.drag(200, 80)
     const before = posed(ir.observerSample(0))
-    ir.drop(12, 34)
+    ir.drop(deg(12), deg(34))
     const first = posed(ir.observerSample(0))
     expect(UV.distance(first.position, before.position)).toBeLessThan(1)
     expect(Q.approxEquals(first.orientation, before.orientation, 1e-9)).toBe(
@@ -856,7 +856,7 @@ describe('a drop', () => {
   it('lands on the coordinates it was given, at eye height', () => {
     const { harness: ir } = harness()
     ir.look('s:SOL/b:2')
-    ir.drop(12, 34, { seconds: 4 })
+    ir.drop(deg(12), deg(34), { seconds: 4 })
     for (let i = 0; i < 300; i += 1) ir.observerSample(1 / 60)
     const status = ir.observerStatus()
     const stance = status?.surface?.stance
@@ -877,7 +877,7 @@ describe('a drop', () => {
      */
     const { harness: ir, session } = harness()
     ir.look('s:SOL/b:2')
-    ir.drop(12, 34, { seconds: 4 })
+    ir.drop(deg(12), deg(34), { seconds: 4 })
     for (let i = 0; i < 300; i += 1) ir.observerSample(1 / 60)
     const pose = posed(ir.observerSample(0))
     const star = originOf(session, systemFrameId(systemId('SOL')))
@@ -917,7 +917,7 @@ describe('a drop', () => {
      */
     const { harness: ir, session } = harness()
     ir.look('s:SOL/b:2')
-    ir.drop(-30, 100, { seconds: 3 })
+    ir.drop(deg(-30), deg(100), { seconds: 3 })
     expect(ir.observatory.standing).toBe(true)
     const system = session.world.system(systemId('SOL'))
     const earth = findBody(system as StarSystem, [2]) as Body
@@ -944,7 +944,7 @@ describe('a drop', () => {
   it('reports how far down it is while it is going', () => {
     const { harness: ir } = harness()
     ir.look('s:SOL/b:2')
-    ir.drop(0, 0, { seconds: 4 })
+    ir.drop(deg(0), deg(0), { seconds: 4 })
     expect(ir.observerStatus()?.descent?.progress).toBe(0)
     expect(ir.observerStatus()?.descent?.remainingSeconds).toBe(4)
     for (let i = 0; i < 120; i += 1) ir.observerSample(1 / 60)
@@ -959,7 +959,7 @@ describe('a drop', () => {
     const { harness: ir } = harness()
     const before = ir.status().world.stateHash
     ir.look('s:SOL/b:2')
-    ir.drop(45, -120, { seconds: 2 })
+    ir.drop(deg(45), deg(-120), { seconds: 2 })
     for (let i = 0; i < 200; i += 1) ir.observerSample(1 / 60)
     expect(ir.status().world.stateHash).toBe(before)
   })
@@ -968,7 +968,7 @@ describe('a drop', () => {
     const { harness: ir } = harness()
     ir.look('s:SOL/b:2')
     const orbit = ir.observerStatus()?.state.distance
-    ir.drop(12, 34)
+    ir.drop(deg(12), deg(34))
     for (let i = 0; i < 60; i += 1) ir.observerSample(1 / 60)
     ir.ascend()
     const status = ir.observerStatus()
@@ -982,13 +982,15 @@ describe('a drop', () => {
     const { harness: ir } = harness()
     ir.look('s:SOL/b:2')
     // A star has no ground; the refusal must not leave the camera on it.
-    expect(() => ir.drop(0, 0, { address: 's:SOL' })).toThrow(/not a body/)
+    expect(() => ir.drop(deg(0), deg(0), { address: 's:SOL' })).toThrow(
+      /not a body/,
+    )
     expect(ir.observatory.target?.address).toBe('g:milky-way/s:SOL/b:2')
-    expect(() => ir.drop(Number.NaN, 0)).toThrow(/finite/)
+    expect(() => ir.drop(deg(Number.NaN), deg(0))).toThrow(/finite/)
     // And a second drop from the ground is a refusal rather than a new arc
     // from an eye that is already standing on the answer.
-    ir.drop(12, 34, { seconds: 1 })
-    expect(() => ir.drop(20, 40)).toThrow(/leave the surface/)
+    ir.drop(deg(12), deg(34), { seconds: 1 })
+    expect(() => ir.drop(deg(20), deg(40))).toThrow(/leave the surface/)
   })
 
   it('finds the ground under a ray, and misses cleanly', () => {

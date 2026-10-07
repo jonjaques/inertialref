@@ -35,7 +35,7 @@ import {
   regionCenterDirection,
   type SurfaceParameters,
 } from '@inertialref/universe'
-import type { Seconds } from '@inertialref/shared'
+import { radiansToDegrees, type Seconds } from '@inertialref/shared'
 import { TerrainStreamer } from './terrainStreamer.ts'
 
 /*
@@ -149,7 +149,7 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
 
 /** Land the ship and read the frame the engine would hand the streamer. */
 function groundView(session: Session, address = EARTH): GroundView {
-  session.harness.land(address, 0.7, -1.49)
+  session.harness.land(address, radiansToDegrees(0.7), radiansToDegrees(-1.49))
   const shot = snapshot(session.world)
   const player = session.player()
   if (player === null) throw new Error('no player')

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { loadCatalog, TEST_VOLUME, TEST_CATALOG } from '@inertialref/universe'
+import { deg } from '@inertialref/shared'
 import { openSession } from './session.ts'
 import { findPicture } from './pictures.ts'
 
@@ -121,7 +122,11 @@ describe('declared camera cuts', () => {
       ir.look('g:milky-way/s:HIP70890/b:1', { ease: true })
       expect(declareCut).toHaveBeenCalled()
       declareCut.mockClear()
-      ir.visit(PROXIMA, { latitude: 10, longitude: 20, height: 50 })
+      ir.visit(PROXIMA, {
+        latitude: deg(10),
+        longitude: deg(20),
+        height: 50,
+      })
       expect(declareCut).toHaveBeenCalled()
       declareCut.mockClear()
       ir.ascend()
