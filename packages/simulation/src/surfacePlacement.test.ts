@@ -15,6 +15,7 @@ import { snapshot } from './snapshot.ts'
 import {
   placementBasis,
   type SurfacePlacement,
+  supportUnder,
   surfacePlacementPose,
   surfaceSupportRadius,
 } from './surfacePlacement.ts'
@@ -181,6 +182,26 @@ describe('body-fixed structures', () => {
     expect(
       surfaceSupportRadius(placement, body, up as BodyFixedDirection),
     ).not.toBeNull()
+  })
+
+  it('stands on the tallest support of the body asked about, and no other', () => {
+    // `surfaceSupportRadius` answers for any body a caller hands it, so the
+    // body check is `supportUnder`'s: a ray from Earth through the pad's
+    // latitude and longitude must not find Mars's deck.
+    const world = create()
+    const planets = world.loadSystem(systemId('SOL')).planets
+    const mars = planets[3]!
+    const earth = planets[2]!
+    const up = geodeticDirection(placement.latitude, placement.longitude)
+    const onMars = supportUnder([placement], mars, up)
+    expect(onMars.placement).toBe(placement)
+    expect(onMars.radius).toBe(surfaceSupportRadius(placement, mars, up))
+    const onEarth = supportUnder([placement], earth, up)
+    expect(onEarth.placement).toBeNull()
+    expect(onEarth.radius).toBe(surfaceRadius(earth, up))
+    // And the world reads the same rule.
+    world.placeStructure(placement)
+    expect(world.contactRadius(mars, up)).toBe(onMars.radius)
   })
 
   it('turns the relief with the heading, so the ramp leaves the pad where it is drawn', () => {

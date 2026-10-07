@@ -21,12 +21,8 @@ import type {
   WorldSnapshot,
 } from '@inertialref/simulation'
 import { surfacePlacementPose } from '@inertialref/simulation'
-import {
-  type BodyAppearance,
-  type EntityId,
-  drawnSurfaceRadius,
-  geodeticDirection,
-} from '@inertialref/universe'
+import { type BodyAppearance, type EntityId } from '@inertialref/universe'
+import { drawnAnchorRadius } from './ground.ts'
 import { atmosphereShellRatio, ringScales, sunkSphereRadius } from './datum.ts'
 import { terminatorFor } from './terrainPalette.ts'
 import {
@@ -419,10 +415,7 @@ export function buildScene(
       structure,
       structure.body,
       structure.spin,
-      drawnSurfaceRadius(
-        structure.body,
-        geodeticDirection(structure.latitude, structure.longitude),
-      ),
+      drawnAnchorRadius(structure, structure.body),
     )
     if (
       UV.distance(camera.position, pose.position) > STRUCTURE_VISIBILITY_METERS

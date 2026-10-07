@@ -1,13 +1,8 @@
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 import { surfacePlacementPose } from '@inertialref/simulation'
+import { bodyFixedFrameId, MARS_PAD, systemId } from '@inertialref/universe'
 import {
-  bodyFixedFrameId,
-  drawnSurfaceRadius,
-  geodeticDirection,
-  MARS_PAD,
-  systemId,
-} from '@inertialref/universe'
-import {
+  drawnAnchorRadius,
   lensForFov,
   lookAlong,
   NO_EFFECTS,
@@ -60,7 +55,6 @@ export const MARS_LANDING: CutsceneScript = {
     )
     const placement = MARS_PAD
     const { presentationTime } = MARS_PAD_SITE
-    const up = geodeticDirection(placement.latitude, placement.longitude)
     const spin = world.frames.pose(
       bodyFixedFrameId(mars.address),
       presentationTime,
@@ -69,7 +63,7 @@ export const MARS_LANDING: CutsceneScript = {
       placement,
       mars,
       spin,
-      drawnSurfaceRadius(mars, up),
+      drawnAnchorRadius(placement, mars),
     )
     const at = (offset: ReturnType<typeof vec3>) =>
       UV.translate(position, Q.rotate(orientation, offset))
