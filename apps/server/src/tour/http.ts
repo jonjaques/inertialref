@@ -82,9 +82,3 @@ export function record(
     throw new TourHttpError('Unexpected or missing fields.')
   return result
 }
-
-export function boundedString(value: unknown, max: number, min = 1): string {
-  if (typeof value !== 'string' || value.length < min || value.length > max)
-    throw new TourHttpError('A text field is outside its limits.')
-  return value
-}

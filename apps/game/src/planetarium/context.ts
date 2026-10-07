@@ -1,4 +1,4 @@
-import type { GuideCapabilities } from '../tour/capabilities.ts'
+import type { GuideVerdict } from '../tour/capabilities.ts'
 import type { GuideLifetime } from '../tour/lifetime.ts'
 import type { GuideRuntime } from '../tour/runtime.ts'
 import type { Picture } from '@inertialref/devtools'
@@ -25,7 +25,7 @@ export interface PlanetariumContext {
    * while unknown (`tour/access.ts`). `grantsGuide` decides whether the panel
    * is drawn.
    */
-  readonly guideAccess: GuideCapabilities | null
+  readonly guideAccess: GuideVerdict | null
   readonly engine: GameEngine
   /** Pause, warp and real time, as the keys give them, said where the keys say them. */
   readonly time: TimeCommands
