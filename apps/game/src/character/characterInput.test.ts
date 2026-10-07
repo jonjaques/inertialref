@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CharacterInput } from './characterInput.ts'
+import { CharacterInput, enterForLock } from './characterInput.ts'
 
 function fixture() {
   let time = 0
@@ -95,5 +95,48 @@ describe('character input intent', () => {
       expect.objectContaining({ forward: 0, right: 0 }),
     )
     expect(f.controller.stop).toHaveBeenCalledOnce()
+  })
+})
+
+describe('a pointer lock over a walker', () => {
+  it('steps out once, and does not pace the clock on a lock that re-takes one', () => {
+    const controller = {
+      active: false,
+      error: null,
+      enter: vi.fn(() => {
+        controller.active = true
+        return true
+      }),
+    }
+    const onStepOut = vi.fn()
+    const fail = vi.fn()
+    expect(enterForLock(controller, { enabled: true, onStepOut }, fail)).toBe(
+      true,
+    )
+    expect(enterForLock(controller, { enabled: true, onStepOut }, fail)).toBe(
+      true,
+    )
+    expect(controller.enter).toHaveBeenCalledTimes(1)
+    expect(onStepOut).toHaveBeenCalledTimes(1)
+    expect(fail).not.toHaveBeenCalled()
+  })
+
+  it('says why, and paces nothing, when no walker can step out', () => {
+    const controller = {
+      active: false,
+      error: 'Land on solid ground to walk.',
+      enter: () => false,
+    }
+    const onStepOut = vi.fn()
+    const fail = vi.fn()
+    expect(enterForLock(controller, { enabled: true, onStepOut }, fail)).toBe(
+      false,
+    )
+    expect(enterForLock(controller, { enabled: false, onStepOut }, fail)).toBe(
+      false,
+    )
+    expect(fail).toHaveBeenCalledOnce()
+    expect(fail).toHaveBeenCalledWith('Land on solid ground to walk.')
+    expect(onStepOut).not.toHaveBeenCalled()
   })
 })

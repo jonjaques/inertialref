@@ -67,3 +67,29 @@ export class CharacterInput {
     this.#controller.stop()
   }
 }
+
+/**
+ * What a pointer-lock request does to the walker: take the one that is out,
+ * or step one out and say so once.
+ *
+ * Apart from the hook so the "once" is testable without a document: a lock
+ * the browser takes again over a walker already out is not a step out, and
+ * running `onStepOut` there would knock a warp the player set back to 1×.
+ */
+export function enterForLock(
+  controller: Pick<CharacterController, 'active' | 'enter' | 'error'>,
+  options: { readonly enabled: boolean; readonly onStepOut: () => void },
+  fail: (message: string) => void,
+): boolean {
+  if (!options.enabled) return false
+  if (controller.active) return true
+  if (!controller.enter()) {
+    fail(
+      controller.error ??
+        'Land on a solid surface before entering character controls.',
+    )
+    return false
+  }
+  options.onStepOut()
+  return true
+}

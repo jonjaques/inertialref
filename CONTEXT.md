@@ -11019,17 +11019,24 @@ clock, without the notice the same key gives — while the character
 controller set the clock to 1× and running when a walker stepped out. The
 commands are `timeCommands(engine, say)` in `hud/time.ts`; `App` spreads
 them into `HudCommands` with its flash, and the planetarium builds them with
-its own notice surface and hands them to the panel through its context.
+the same flash, which `ModeRoutes` hands it, and gives them to the panel
+through its context: its own notice has no timer and no `role="status"`, so a
+button saying "paused" there stayed up after Space had resumed the clock.
 Stepping out reaches the clock through `walkingPace`, which the character
 controls and the dock's Mars pad button call once a walker is out, and which
 says something only when it changed the rate or the pause.
 
 `hud/time.test.ts` holds the world clock to that one writer with a grep over
-`apps/game/src`, comments blanked: the writes are method calls on whatever
-`presentationClock` answers — the world's clock or the observatory's — so no
-import edge can say which file writes which. The guide's executor is the one
-other caller, and every call it makes is on its `eye`, the observatory's own
-clock; the test holds that too. A walker the session steps out headlessly
+`apps/game/src`, comments, strings and templates blanked in one pass: the
+writes are method calls on whatever `presentationClock` answers — the world's
+clock or the observatory's — so no import edge can say which file writes
+which. A comment-only blanker read the `/*` in `` `${DOCS}/*` `` and in every
+`import.meta.glob('…/*.glb')` as an opening comment and hid 9 to 33 lines of
+code after each. The harness's `pause`, `resume` and `timeWarp` count as
+writes; `GameEngine` hands the first two to the cinema's transport, which
+owns the clock while a scene plays, and is the one sanctioned exception. The
+guide's executor calls only its `eye`, the observatory's own clock; the test
+holds that too. A walker the session steps out headlessly
 keeps whatever rate the session was asked to run at.
 
 ## Known gaps

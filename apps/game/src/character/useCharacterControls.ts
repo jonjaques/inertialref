@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CharacterController } from '../engine/characterController.ts'
 import { useActions, useKeyContext, useKeymap } from '../input/useKeymap.ts'
-import { CharacterInput, CHARACTER_HELD_ACTIONS } from './characterInput.ts'
+import {
+  CharacterInput,
+  CHARACTER_HELD_ACTIONS,
+  enterForLock,
+} from './characterInput.ts'
 import { PointerLock } from './pointerLock.ts'
 
 export function useCharacterControls(
@@ -25,19 +29,7 @@ export function useCharacterControls(
   const [lock] = useState(
     () =>
       new PointerLock({
-        enter: () => {
-          if (!latest.current.enabled) return false
-          if (controller.active) return true
-          if (!controller.enter()) {
-            setError(
-              controller.error ??
-                'Land on a solid surface before entering character controls.',
-            )
-            return false
-          }
-          latest.current.onStepOut()
-          return true
-        },
+        enter: () => enterForLock(controller, latest.current, setError),
         changed: (value) => {
           controller.lockChanged(value)
           if (!value) input.stop()

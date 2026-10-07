@@ -56,38 +56,59 @@ describe('the time commands', () => {
 })
 
 /*
- * One writer of the world clock in the app.
+ * One writer of the world clock in the app, and one sanctioned exception.
  *
  * A grep, because the writes are method calls on a value — `presentationClock`
  * answers the world clock or the observatory's — and no import edge says which.
- * Comments and tests are blanked first: this file names the calls it forbids.
- * `tour/executor.ts` is the one other caller, and every call it makes is on the
- * guide's `eye`, the observatory's own clock, which is presentation.
+ * The harness's `pause`, `resume` and `timeWarp` write the world clock too, so
+ * they count. Comments, strings and templates are blanked first, in one pass:
+ * this file names the calls it forbids, and a `/*` inside a glob pattern or a
+ * `//` inside a URL is not a comment, which a comment-only pass treats as one
+ * and so hides the code after it. A write inside a template's `${}` is blanked
+ * with the template; nothing writes the clock from one.
+ *
+ * `tour/executor.ts` calls only the guide's `eye`, the observatory's own
+ * clock, which is presentation. `engine/GameEngine.ts` hands the cinema's
+ * transport `harness.pause` and `harness.resume`: a playing scene owns the
+ * clock, and the cutscene restores it on exit.
  */
 describe('the world clock', () => {
   const root = fileURLToPath(new URL('../', import.meta.url))
   // No `g`: `test` on a global pattern resumes at `lastIndex`, file to file.
-  const WRITE = /\.\s*set(?:TimeScale|Paused)\s*\(/
-  const withoutComments = (source: string): string =>
-    source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (match) =>
-      match.replace(/[^\n]/g, ' '),
+  const WRITE =
+    /\.\s*set(?:TimeScale|Paused)\s*\(|harness\s*\.\s*(?:pause|resume|timeWarp)\s*\(/
+  const blanked = (source: string): string =>
+    source.replace(
+      /\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\[\s\S]|[^`\\])*`/g,
+      (match) => match.replace(/[^\n]/g, ' '),
     )
 
-  it('is paused and warped from hud/time.ts alone', () => {
+  it('reads a glob or a URL as a string, not as a comment', () => {
+    const source = blanked(
+      "const a = import.meta.glob('./*.glb')\nclock.setPaused(true)\n" +
+        "const b = 'https://x' ; clock.setTimeScale(2) /* */",
+    )
+    expect(source).toContain('clock.setPaused(true)')
+    expect(source).toContain('clock.setTimeScale(2)')
+  })
+
+  it('is paused and warped from hud/time.ts alone, and the cinema', () => {
     const writers = globSync('**/*.{ts,tsx}', { cwd: root })
       .filter((file) => !/\.test\.tsx?$/.test(file))
       .filter((file) => {
-        const source = withoutComments(readFileSync(root + file, 'utf8'))
+        const source = blanked(readFileSync(root + file, 'utf8'))
         return WRITE.test(source)
       })
       .sort()
-    expect(writers).toEqual(['hud/time.ts', 'tour/executor.ts'])
+    expect(writers).toEqual([
+      'engine/GameEngine.ts',
+      'hud/time.ts',
+      'tour/executor.ts',
+    ])
   })
 
   it('is not what the guide turns', () => {
-    const source = withoutComments(
-      readFileSync(root + 'tour/executor.ts', 'utf8'),
-    )
+    const source = blanked(readFileSync(root + 'tour/executor.ts', 'utf8'))
     const calls = [
       ...source.matchAll(/(\w+)\s*\.\s*set(?:TimeScale|Paused)\s*\(/g),
     ]

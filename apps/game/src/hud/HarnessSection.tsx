@@ -26,7 +26,7 @@ export function HarnessSection({
 }: {
   readonly engine: GameEngine
   /** The game's rule for a walker that has just stepped out: `walkingPace`. */
-  readonly onStepOut: () => void
+  readonly onStepOut: () => boolean
   readonly onNotice: (message: string) => void
 }) {
   const navigate = useNavigate()
@@ -102,9 +102,11 @@ export function HarnessSection({
             onClick={() =>
               awaited('Mars pad walk', async () => {
                 engine.character.atMarsPad()
-                onStepOut()
+                // This sentence replaces the pace's own notice a tick later,
+                // so it carries the change itself.
+                const paced = onStepOut()
                 if (mode !== 'flight') await navigate(PLAY_SOLO)
-                return 'On foot beside the Rocinante. Resume controls to walk.'
+                return `On foot beside the Rocinante${paced ? ', in real time' : ''}. Resume controls to walk.`
               })
             }
           />

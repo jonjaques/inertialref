@@ -27,7 +27,7 @@ export interface PlanetariumContext {
    */
   readonly guideAccess: GuideCapabilities | null
   readonly engine: GameEngine
-  /** Pause, warp and real time, as the keys give them, said on this mode's surface. */
+  /** Pause, warp and real time, as the keys give them, said where the keys say them. */
   readonly time: TimeCommands
   /** The address the observatory is on, refreshed by the mode at panel rate. */
   readonly target: string | null

@@ -7,7 +7,8 @@ import { nextWarp } from './warp.ts'
  * Every pause, warp and return to real time in the game — the keys, the
  * dock's transport, the planetarium's time panel, a walker stepping out —
  * goes through `timeCommands`, and this is the one file in `apps/game/src`
- * that sets the world clock's rate or pause (`time.test.ts` holds that). A
+ * that sets the world clock's rate or pause, beside the cinema's transport,
+ * which owns the clock while a scene plays (`time.test.ts` holds both). A
  * second writer is a button that changes the clock without the notice the
  * same key gives. The guide's executor turns the observatory's own clock,
  * which is presentation and is not this one.
@@ -42,9 +43,10 @@ export interface TimeCommands {
    * The world clock at 1× and running, for a walker that has just stepped
    * out: the walk is tuned for real time, and under warp a walker covers
    * kilometers a frame. The world's clock rather than the picture's, because
-   * the walker is the world's. Says so only when it changed something.
+   * the walker is the world's. Says so, and answers true, only when it
+   * changed something — a caller about to say more can fold it into that.
    */
-  readonly walkingPace: () => void
+  readonly walkingPace: () => boolean
 }
 
 /** The commands, saying what each did through `say`. */
@@ -71,10 +73,11 @@ export function timeCommands(
     },
     walkingPace: () => {
       const clock = engine.world.clock
-      if (clock.timeScale === 1 && !clock.paused) return
+      if (clock.timeScale === 1 && !clock.paused) return false
       clock.setTimeScale(1)
       clock.setPaused(false)
       say('real time, on foot')
+      return true
     },
   }
 }

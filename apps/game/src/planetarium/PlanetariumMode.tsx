@@ -65,9 +65,12 @@ const DEFAULT_TARGET = 's:SOL/b:2'
 export function PlanetariumMode({
   engine,
   dev,
+  onNotice,
 }: {
   engine: GameEngine
   dev: DevWorkspace
+  /** `App`'s notice, which the time keys flash; the buttons say theirs there too. */
+  onNotice: (message: string) => void
 }) {
   const [guide] = useState(() => createGuide(engine))
   useEffect(() => mountGuide(engine, guide), [engine, guide])
@@ -277,7 +280,7 @@ export function PlanetariumMode({
     guide,
     guideAccess,
     engine,
-    time: timeCommands(engine, (text) => setNotice({ text, tone: 'said' })),
+    time: timeCommands(engine, onNotice),
     target,
     focus,
     managePresets,
