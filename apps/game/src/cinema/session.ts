@@ -1,4 +1,4 @@
-import type { CutsceneOutcome, CutsceneStatus } from '@inertialref/devtools'
+import type { CutsceneDirector } from '@inertialref/devtools'
 
 /*
  * Watching a cutscene, as one module.
@@ -12,9 +12,8 @@ import type { CutsceneOutcome, CutsceneStatus } from '@inertialref/devtools'
  * return value that said which.
  *
  * It has one now (`lastOutcome`), so the guessing is gone. What is left here is
- * a session over the seam the harness already had — `play` / `pause` /
- * `seekCutscene` / `stopCutscene` / `cutsceneStatus` — publishing one playhead
- * and offering one set of verbs. It holds no timer: `sample()` is called by the
+ * a session over the director itself — the harness's `cutscene` — and the
+ * clock's pause, publishing one playhead and offering one set of verbs. It holds no timer: `sample()` is called by the
  * engine store's sampler, which is already running.
  *
  * ADR-0010's director is untouched by this. A session *reading* it contradicts
@@ -39,8 +38,14 @@ export interface Playhead {
   readonly ended: boolean
 }
 
+/** The director's half of the host: `harness.cutscene`, whole. */
+export type CutsceneDirectorPort = Pick<
+  CutsceneDirector,
+  'status' | 'lastOutcome' | 'play' | 'seek' | 'stop'
+>
+
 /**
- * What a session needs of the harness.
+ * What a session needs of the harness: the director, and the clock's pause.
  *
  * A port rather than an import of `GameEngine`, the pattern
  * `packages/workers/src/transport.ts` uses — so the tests drive this with a
@@ -48,30 +53,15 @@ export interface Playhead {
  * one reader in this half of the application.
  */
 export interface CutsceneHost {
-  status(): CutsceneStatus | null
-  outcome(): CutsceneOutcome | null
+  readonly director: CutsceneDirectorPort
   paused(): boolean
-  /**
-   * Open a scene held at its end: on the last frame the director parks the
-   * playhead, pauses the clock and reports `ended` while the scene stays on
-   * stage, rather than restoring the player and going dark.
-   *
-   * That is the whole difference between watching a scene and measuring
-   * one. A director that restores on the final frame hands the camera back
-   * to the ship for a frame — wherever the ship is, which for a player who
-   * opened the library from the menu is Earth orbit — and the terrain
-   * streamer, which follows the eye, drops every patch it holds for the body
-   * it was drawing. Reopening the scene a frame later put the camera back
-   * over an empty cache, and the ground under the end card rebuilt itself
-   * from the cube faces up at eight patches a frame: measured at 3200×1800,
-   * the hover's 2,170 patches went to zero on the ending frame and were at
-   * 221, level 6 of 16, two seconds later.
-   */
-  play(id: string): CutsceneStatus
-  seek(frame: number): void
   pause(): void
   resume(): void
-  stop(): void
+  /**
+   * Told once the director has stopped, so a host that publishes the frame's
+   * view of the scene can end it now rather than on its next frame.
+   */
+  stopped?(): void
 }
 
 export interface CutsceneSession {
@@ -151,7 +141,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
    * A scene can be replaced under an open session without going through it —
    * `ir.play` from the console, `cutscene.skip` calling `stopCutscene`
    * directly — and a flag left standing from the last `open` claims whatever
-   * ends next. Cleared before `host.play` for the same reason: an `open` that
+   * ends next. Cleared before `host.director.play` for the same reason: an `open` that
    * throws must not leave the previous scene's claim behind it.
    */
   let mine: string | null = null
@@ -167,9 +157,24 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     // open, and a claim on the one that was is a claim on somebody else's.
     mine = null
     try {
-      const status = host.play(id)
+      /*
+       * Held, because this is watching: on the last frame the director parks
+       * the playhead, pauses the clock and reports `ended` while the scene
+       * stays on stage, rather than restoring the player and going dark.
+       *
+       * A director that restores on the final frame hands the camera back to
+       * the ship for a frame — wherever the ship is, which for a player who
+       * opened the library from the menu is Earth orbit — and the terrain
+       * streamer, which follows the eye, drops every patch it holds for the
+       * body it was drawing. Reopening the scene a frame later put the camera
+       * back over an empty cache, and the ground under the end card rebuilt
+       * itself from the cube faces up at eight patches a frame: measured at
+       * 3200×1800, the hover's 2,170 patches went to zero on the ending frame
+       * and were at 221, level 6 of 16, two seconds later.
+       */
+      const status = host.director.play(id, { hold: true })
       const at = Math.min(frame, Math.max(0, status.durationFrames - 1))
-      if (at > 0) host.seek(at)
+      if (at > 0) host.director.seek(at)
       // Pausing *after* seeking rather than before: `play` un-pauses the clock
       // as part of anchoring the reference timing and would otherwise undo it.
       if (!autoplay) host.pause()
@@ -185,7 +190,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
   return {
     sample() {
       if (held) return last
-      const status = host.status()
+      const status = host.director.status()
       if (status === null) {
         // Stopped, abandoned, never opened, or a scene somebody else played
         // to its end without a hold: there is no playhead, and that is the
@@ -195,7 +200,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
         carded = false
         return null
       }
-      const outcome = host.outcome()
+      const outcome = host.director.lastOutcome()
       if (outcome === null) {
         handled = false
       } else if (
@@ -244,9 +249,9 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // the clock pauses on parking, its alpha drops to 0 and the next
       // `renderTime` is lower than the parking one — and a fractional frame
       // here is a Play that only resumes, walks off the end and parks again.
-      const status = host.status()
+      const status = host.director.status()
       if (status !== null && status.frame >= status.durationFrames - 1) {
-        host.seek(0)
+        host.director.seek(0)
       }
       host.resume()
     },
@@ -255,11 +260,11 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // Using the transport is how somebody stops reading the end card. Without
       // this the card sat over a scene that was visibly somewhere else.
       carded = false
-      host.seek(frame)
+      host.director.seek(frame)
     },
 
     replay() {
-      const id = host.status()?.id ?? host.outcome()?.id
+      const id = host.director.status()?.id ?? host.director.lastOutcome()?.id
       if (id === undefined) return
       open(id, 0, true)
     },
@@ -267,10 +272,11 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     stop() {
       carded = false
       handled = false
-      // Before `host.stop()`, so an ending that arrives in the same sample the
+      // Before `host.director.stop()`, so an ending that arrives in the same sample the
       // player unmounts in cannot be reacted to on the way out.
       mine = null
-      host.stop()
+      host.director.stop()
+      host.stopped?.()
     },
   }
 }

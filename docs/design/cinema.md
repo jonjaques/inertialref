@@ -87,7 +87,7 @@ disagree with is worse than none.
 
 ## What it plays
 
-Scenes come from the same registry `ir.cutscenes()` lists, so the library and
+Scenes come from the same registry `ir.cutscene.list()` lists, so the library and
 the console cannot disagree about what exists. There is one today:
 `tng-intro` — a shot-for-shot study of the 1987 title sequence, staged in Sol
 over the live world.

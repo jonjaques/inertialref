@@ -137,7 +137,7 @@ import {
 import { SHOTS } from './shots.ts'
 import {
   CutsceneDirector,
-  type CutsceneOutcome,
+  type CutsceneScript,
   type CutsceneStatus,
   type PlayOptions,
 } from './cutscene.ts'
@@ -169,7 +169,6 @@ import {
 } from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
 import { CUTSCENES } from './cutscenes/index.ts'
-import type { CinematicSample } from '@inertialref/rendering'
 
 /*
  * The scriptable harness.
@@ -274,6 +273,9 @@ export interface TerrainCacheReport {
   readonly storage: HeightfieldStoreStats | null
 }
 
+/** `RenderHost.boot`: renderer absent, drawing under the cover, or up. */
+export type BootPhase = 'booting' | 'drawing' | 'booted'
+
 export interface RenderHost {
   /** Discontinuous camera placement invalidates presentation history only. */
   declareCut(): void
@@ -285,6 +287,12 @@ export interface RenderHost {
   guide?(): GuideHostPort | null
   scene(): RenderScene | null
   frameStats(): FrameStats | null
+  /**
+   * How far the presentation has come up: no renderer yet, a renderer
+   * drawing under the boot cover, or the cover lifted. A host with nothing to
+   * present — Node, the headless runner — is booted from the start.
+   */
+  boot(): BootPhase
   /**
    * What the terrain streamer is doing this frame.
    *
@@ -415,6 +423,7 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
     guide: overrides.guide ?? (() => null),
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
+    boot: overrides.boot ?? (() => 'booted'),
     galaxyRender: overrides.galaxyRender ?? (() => null),
     terrain: overrides.terrain ?? (() => null),
     lensView: overrides.lensView ?? (() => null),
@@ -501,6 +510,13 @@ export interface HarnessStatus {
    * optics.
    */
   readonly flightCamera: FlightCameraStatus
+  /**
+   * Whether the app has booted, from the presentation host. A driver waits
+   * on this rather than on the app's own fields or the boot cover's markup,
+   * which it would otherwise have to name — and a rename of either cost a
+   * cold boot twelve silent seconds.
+   */
+  readonly boot: BootPhase
 }
 
 export interface ScenarioResult {
@@ -553,20 +569,27 @@ function boundedTravelRadius(lightYears: number): number {
 export class GameHarness {
   readonly #host: Host
   readonly #logSink = new RingBufferSink(256)
-  readonly #cutscenes: CutsceneDirector
+  /**
+   * The cutscene director, the way `observatory` is the observatory: the
+   * object itself rather than a forward per verb. `ir.cutscene.status()`,
+   * `.lastOutcome()`, `.list()`, `.sample()` and `.peek()` are its reads;
+   * `play`, `stopCutscene` and `seekCutscene` stay on the harness as the
+   * three verbs a console types.
+   */
+  readonly cutscene: CutsceneDirector
   readonly #observatory: Observatory
   readonly #flightCamera: FlightCamera
   readonly #maneuvers: Maneuvers
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
 
-  constructor(host: Host) {
+  constructor(host: Host, scripts: readonly CutsceneScript[] = CUTSCENES) {
     this.#host = host
-    this.#cutscenes = new CutsceneDirector(host, CUTSCENES)
+    this.cutscene = new CutsceneDirector(host, scripts)
     this.#observatory = new Observatory(host)
     this.#flightCamera = new FlightCamera(host)
     this.#maneuvers = new Maneuvers(host, {
-      playing: () => this.#cutscenes.status() !== null,
+      playing: () => this.cutscene.status() !== null,
       clear: () => {
         this.stopCutscene()
         this.#observatory.clear()
@@ -596,6 +619,7 @@ export class GameHarness {
       authority: this.#host.authority().status(),
       lens: this.lens(),
       flightCamera: this.#flightCamera.status(),
+      boot: this.#host.render.boot(),
     }
   }
 
@@ -1385,12 +1409,12 @@ export class GameHarness {
    * watching; a measurement wants the default.
    */
   play(id = 'tng-intro', options?: PlayOptions): CutsceneStatus {
-    return this.#cutscenes.play(id, options)
+    return this.cutscene.play(id, options)
   }
 
   /** Stop the running cutscene and restore the player. Safe when idle. */
   stopCutscene(): void {
-    this.#cutscenes.stop()
+    this.cutscene.stop()
   }
 
   /** Surface anchors, in degrees and meters at the harness boundary. */
@@ -1439,54 +1463,7 @@ export class GameHarness {
    * still — that pairing is the verification pipeline's capture loop.
    */
   seekCutscene(frame: number): CutsceneStatus {
-    return this.#cutscenes.seek(frame)
-  }
-
-  /** The scripted scenes `play` accepts, described. */
-  cutscenes(): readonly {
-    id: string
-    description: string
-    seconds: number
-    /** The track the scene is cut to, by name under `/media/`, or null. */
-    soundtrack: string | null
-  }[] {
-    return this.#cutscenes.list()
-  }
-
-  /** The running cutscene's playhead, or null when idle. */
-  cutsceneStatus(): CutsceneStatus | null {
-    return this.#cutscenes.status()
-  }
-
-  /**
-   * How the last cutscene left — ran out, was stopped, or lost its world.
-   *
-   * `cutsceneStatus()` goes null for all three, so this is what distinguishes
-   * an end card from a closed transport.
-   */
-  cutsceneOutcome(): CutsceneOutcome | null {
-    return this.#cutscenes.lastOutcome()
-  }
-
-  /**
-   * The frame's cinematic state, for the rendering host. Called once per
-   * rendered frame with the snapshot's `renderTime`; null when idle.
-   */
-  cutsceneSample(renderTime: number): CinematicSample | null {
-    return this.#cutscenes.sample(renderTime)
-  }
-
-  /**
-   * The cinematic state at a reference frame, without moving the playhead.
-   *
-   * For anything that needs a *neighboring* frame rather than the one on
-   * screen — the track overlay finite-differences the hull's camera-relative
-   * offset either side of it to get a velocity. `cutsceneSample` cannot serve
-   * that: it is the host's per-frame ask and re-bases the playhead on every
-   * call. `CutsceneDirector.peek` carries the rest of the reasoning.
-   */
-  cutscenePeek(frame: number): CinematicSample | null {
-    return this.#cutscenes.peek(frame)
+    return this.cutscene.seek(frame)
   }
 
   /**
@@ -1668,7 +1645,7 @@ export class GameHarness {
   }
 
   capturePicture(id: string, label: string, why = ''): Picture {
-    if (this.cutsceneStatus() !== null)
+    if (this.cutscene.status() !== null)
       throw new Error('Stop the cinematic before saving a camera shot.')
     const framing = this.#observatory.capture()
     const lens = this.#host.render.framingLens()
@@ -2232,10 +2209,12 @@ export class GameHarness {
       '  await ir.selfTest()           the twelve milestone capabilities',
       '  await ir.scenario(name)       ' + this.scenarios().join(', '),
       '  ir.play(id?)                  run a scripted scene: ' +
-        this.cutscenes()
+        this.cutscene
+          .list()
           .map((c) => c.id)
           .join(', '),
-      '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
+      '  ir.stopCutscene() / ir.seekCutscene(frame)',
+      '  ir.cutscene                   the director: status(), lastOutcome(), list(), peek(frame)',
       '  ir.structures() / ir.placeStructure(record) / ir.removeStructure(id)',
       '  ir.moveStructure(record)      replace an existing anchor atomically',
       '  ir.visitStructure(id, height?) surface anchors; angles in degrees, heights in meters',

@@ -65,7 +65,7 @@ export function CinemaPlayer({
    * it end or was it stopped?" from a `null` and a half-second window around
    * the final frame — a heuristic that read `stopCutscene` from the console as
    * an ending, because it produced identical evidence. The director says which
-   * now (`cutsceneOutcome`), and `cinema/session.ts` is the one place that
+   * now (`cutscene.lastOutcome()`), and `cinema/session.ts` is the one place that
    * reads it. Two other components asked the same question at two other rates;
    * all three read this.
    */

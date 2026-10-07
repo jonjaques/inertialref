@@ -149,7 +149,7 @@ describe('character activation', () => {
     const game = makeEngine()
     game.harness.play('tng-intro')
     const walker = game.harness.onFoot.atMarsPad()
-    expect(game.harness.cutsceneStatus()).toBeNull()
+    expect(game.harness.cutscene.status()).toBeNull()
     game.frame(1 / 60)
     expect(game.session.player()).toBe(walker.id)
     expect(game.scene()?.camera.position).toEqual(
@@ -178,7 +178,7 @@ describe('character activation', () => {
     game.harness.play('tng-intro')
     game.harness.onFoot.board()
     expect(() => game.harness.stopCutscene()).not.toThrow()
-    expect(game.harness.cutsceneOutcome()?.ending).toBe('abandoned')
+    expect(game.harness.cutscene.lastOutcome()?.ending).toBe('abandoned')
     game.dispose()
   })
 

@@ -66,7 +66,7 @@ second scene** — the traps below are the index, not the explanation.
 - **The reference audio and any full-sequence render carry third-party rights.** The track
   is never committed: it lives in R2 and `pnpm media:pull` fetches it into the gitignored
   `apps/game/public/media/`. Publishing a render needs a rights check first.
-- **`cutsceneStatus()` goes null for three reasons; ask `cutsceneOutcome()` which.**
+- **`cutscene.status()` goes null for three reasons; ask `cutscene.lastOutcome()` which.**
   `ended`, `stopped` and `abandoned` are different things to a player — one draws an end
   card and keeps its transport, the others close it. Never reconstruct the answer from a
   remembered playhead: a stop near the final frame produces identical evidence, which is

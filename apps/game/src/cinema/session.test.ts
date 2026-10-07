@@ -23,12 +23,19 @@ function fake(): { host: CutsceneHost; calls: string[]; director: Director } {
     calls,
     director,
     host: {
-      status: () => director.status,
-      outcome: () => director.outcome,
+      director: {
+        status: () => director.status,
+        lastOutcome: () => director.outcome,
+        // Whatever the session asks for: its play is a held one, and the
+        // fake records whether it asked.
+        play: (id, options) => director.play(id, options?.hold ?? false),
+        seek: (frame) => {
+          director.seek(frame)
+          return director.status as CutsceneStatus
+        },
+        stop: () => director.finish('stopped'),
+      },
       paused: () => director.paused,
-      // The session's play is a held one; see `CutsceneHost.play`.
-      play: (id) => director.play(id, true),
-      seek: (frame) => director.seek(frame),
       pause: () => {
         calls.push('pause')
         director.paused = true
@@ -37,7 +44,6 @@ function fake(): { host: CutsceneHost; calls: string[]; director: Director } {
         calls.push('resume')
         director.paused = false
       },
-      stop: () => director.finish('stopped'),
     },
   }
 }
