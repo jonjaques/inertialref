@@ -8,10 +8,11 @@ import {
   usePersistentState,
 } from '../state/preferences.ts'
 import type { GuideRuntime } from './runtime.ts'
+import type { GuideAccess } from './verdict.ts'
 
 /*
  * The Guide panel: a voice picker and three controls, for an account the
- * guide is granted to. The panel is only offered to one (`useGuideAccess`),
+ * guide is granted to. The panel is only offered to one (`verdict.ts`),
  * and the Worker refuses a session to anybody else whatever this draws.
  *
  * Start requests the microphone, posts the offer and shows Connecting until
@@ -22,7 +23,13 @@ import type { GuideRuntime } from './runtime.ts'
  * through `ir.guideAsk`.
  */
 
-export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
+export function GuideControls({
+  runtime,
+  access,
+}: {
+  runtime: GuideRuntime
+  access: GuideAccess
+}) {
   const state = useSyncExternalStore(
     runtime.subscribe,
     runtime.getSnapshot,
@@ -34,15 +41,14 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
     state.paused ? 'Resume the guide' : 'Pause the guide',
   )
   const endTitle = useActionTitle('guide.end', 'End the guide')
-  const verdict = state.capabilities
   const offline = state.connection === 'offline'
   const connecting = state.connection === 'connecting'
   const closing = state.connection === 'closing'
-  const voices = verdict?.granted === true ? verdict.voices : []
+  const voices = access.state === 'granted' ? access.voices : []
 
   return (
     <div className="flex flex-col gap-3">
-      {verdict?.granted === true && (
+      {access.state === 'granted' && (
         <>
           <div className="flex flex-wrap gap-1" aria-label="Guide voice">
             {voices.map((choice) => (
@@ -100,9 +106,9 @@ export function GuideControls({ runtime }: { runtime: GuideRuntime }) {
       {/* A signed-out or ungranted refusal is reachable only in the moment
           between a sign-out, or a revoked grant, and the panel being
           withdrawn. */}
-      {verdict?.granted === false && (
+      {access.state === 'refused' && (
         <p className="type-ui text-slate-400">
-          {GUIDE_REFUSAL_SENTENCES[verdict.reason]}
+          {GUIDE_REFUSAL_SENTENCES[access.reason]}
         </p>
       )}
       {state.message && (

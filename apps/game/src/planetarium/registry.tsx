@@ -1,5 +1,4 @@
 import { Suspense } from 'react'
-import { grantsGuide } from '../tour/capabilities.ts'
 import { LazyGuidePanel as GuidePanel } from '../tour/LazyGuidePanel.tsx'
 import { Aperture, Eye, Image, Sun, AudioLines } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
@@ -129,7 +128,7 @@ export function planetariumPanels(
 function guidePanel(context: PlanetariumContext): DockPanelDefinition {
   return {
     id: 'guide',
-    suppressed: !grantsGuide(context.guideAccess),
+    suppressed: context.guideAccess.state !== 'granted',
     title: 'Guide',
     icon: AudioLines,
     zone: 'right',

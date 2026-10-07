@@ -46,6 +46,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests     |
 | The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                            |
 | The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                   |
+| The game holds one guide verdict per mode                    | [`apps/game/src/tour/verdict.ts`](../../apps/game/src/tour/verdict.ts), `mountGuide`, and their tests           |
 
 ---
 
@@ -53,7 +54,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
 | --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                           | The guide   | —         | Strong          |
+| 11  | [One owner for the guide verdict, on the Worker](#11-one-owner-for-the-guide-verdict-on-the-worker)              | The guide   | —         | Worth exploring |
 | 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                         | The guide   | 11        | Worth exploring |
 | 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                               | The terrain | —         | Strong          |
 | 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
@@ -93,55 +94,31 @@ and the order is what keeps them apart:
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
 **Start with 11.** The walker-and-frame track and the harness are in the tree,
-and the guide's wire is one module in `packages/protocol`. The verdict that
-wire carries still has two holders in the game, and 11 gives it one.
+the guide's wire is one module in `packages/protocol`, and the game holds one
+verdict per mode. What is left of 11 is the Worker deciding "configured" once.
 
 ---
 
-## 11. One owner for the guide verdict
+## 11. One owner for the guide verdict, on the Worker
 
-**Track:** the guide · **Strong** in the game, **worth exploring** on the
-Worker · in-process
+**Track:** the guide · **Worth exploring** · in-process
 
-**Builds on:** nothing left open — the verdict is `GuideVerdict`, read through
-`decodeGuideVerdict`.
-**Unblocks:** 12.
+**Builds on:** nothing left open — the game half is in the tree
+(`apps/game/src/tour/verdict.ts`). **Unblocks:** 12.
 
-**Files.** `apps/game/src/tour/access.ts`, `apps/game/src/tour/runtime.ts`
-(`inspect`, `adopt`, `:214–265`), `apps/game/src/planetarium/PlanetariumMode.tsx`
-(`:263–274`), `apps/game/src/planetarium/registry.tsx` (`:132`),
-`apps/game/src/tour/GuidePanel.tsx`, `apps/game/src/tour/GuideControls.tsx`,
-`apps/game/src/tour/guide.ts`; on the Worker, `apps/server/src/tour/routes.ts`,
-`apps/server/src/tour/access.ts`, `apps/server/src/account.ts`.
+**Files.** `apps/server/src/tour/routes.ts`, `apps/server/src/tour/access.ts`,
+`apps/server/src/account.ts`, `apps/server/src/tour/routes.test.ts`.
 
-**The friction.**
+**The friction.** The Worker decides "configured" in three places: `routes.ts`,
+`tour/access.ts` and `account.ts`. `routes.test.ts` mocks `access.ts` even for
+the configuration cases, so what decides "configured" is not under test there.
 
-- **The game holds the verdict twice:** the access hook's copy and the runtime's
-  snapshot. `inspect()` and `adopt()`, about fifty lines, keep the two in step,
-  including a read a newer one replaced.
-- `grantsGuide` is evaluated twice, in `PlanetariumMode` and in the registry.
-- **The harness cannot see a refusal.** With no runtime loaded, `ir.guideStatus`
-  reports `available: true, state: 'idle'`, so a visitor without the grant reads
-  as available.
-- Two behaviors have no test: the per-user guard that discards an answer for a
-  previous account, and ending a live session when the grant disappears.
-- The Worker decides "configured" in three places: `routes.ts`,
-  `tour/access.ts` and `account.ts`.
+**The shape.** `guideAccess(request, env)` returns the protocol's verdict union,
+with `unavailable` as the reason for a deployment that is not configured, and
+the route maps each reason to a status code.
 
-**The shape.** In the game, one verdict per mode, keyed on the user and created
-beside `GuideLifetime`. It asks through 10's decoder and answers in one of
-three states: checking, granted with voices, or refused with a reason. The
-registry, the end-on-loss effect, the controls, `runtime.start` (through
-`GuideHost`) and `ir.guideStatus` read it, and the runtime loses its
-`capabilities`, `adopt` and `inspect`. On the Worker,
-`guideAccess(request, env)` returns the same union with "not configured" as one
-of the reasons, and the route maps each reason to a status code. The Worker half can be a pull
-request of its own.
-
-**Gate.** `runtime.ts` has no `inspect` or `adopt`, and `grantsGuide` is called
-once. New cases: an account switch discards the old answer; losing the grant
-ends a live runtime; `ir.guideStatus` reports a refusal. `routes.test.ts` stops
-mocking `access.ts` for the configuration cases.
+**Gate.** "Configured" is decided once. `routes.test.ts` stops mocking
+`access.ts` for the configuration cases.
 
 ---
 

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { useAccount } from '../account/accounts.ts'
 import { sessionHeaders } from '../account/token.ts'
 import { askGuideVerdict, type GuideVerdict } from './capabilities.ts'
+import type { GuideAccess, GuideAccessOwner } from './verdict.ts'
 
 /*
  * Whether the planetarium offers the guide to whoever is signed in.
@@ -20,35 +21,15 @@ import { askGuideVerdict, type GuideVerdict } from './capabilities.ts'
  * and the runtime, its media and its timers load only when the panel opens.
  */
 
-/**
- * The Worker's answer for whoever is signed in, or `null` while there is
- * nobody to ask about or no answer yet. `grantsGuide` reads it; the guide's
- * runtime adopts it rather than asking again.
- */
-export function useGuideAccess(): GuideVerdict | null {
+/** The mode's verdict, kept in step with whoever is signed in. */
+export function useGuideAccess(owner: GuideAccessOwner): GuideAccess {
   const { userId } = useAccount()
-  const [answer, setAnswer] = useState<{
-    readonly userId: string
-    readonly capabilities: GuideVerdict | null
-  } | null>(null)
-  useEffect(() => {
-    if (userId === null) return
-    let live = true
-    void askWorker().then((capabilities) => {
-      if (live) setAnswer({ userId, capabilities })
-    })
-    return () => {
-      live = false
-    }
-  }, [userId])
-  // Compared rather than cleared, so an answer about the previous account is
-  // never read as one about this one.
-  return userId !== null && answer?.userId === userId
-    ? answer.capabilities
-    : null
+  useEffect(() => owner.forUser(userId), [owner, userId])
+  return useSyncExternalStore(owner.subscribe, owner.current, owner.current)
 }
 
-async function askWorker(): Promise<GuideVerdict | null> {
+/** The Worker's verdict for whoever the session token names. */
+export async function askWorker(): Promise<GuideVerdict | null> {
   try {
     const headers = await sessionHeaders()
     if (!headers.has('Authorization')) return null
