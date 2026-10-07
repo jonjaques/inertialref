@@ -11,11 +11,7 @@ import type {
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import { CharacterController } from './characterController.ts'
 import type { CharacterView } from './characterView.ts'
-import {
-  bodyGround,
-  characterCameraPose,
-  characterFeet,
-} from '@inertialref/rendering'
+import { type HeldMemory, presentOnFoot } from './onFootPresentation.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
   GALAXY_VIEWS,
@@ -59,6 +55,7 @@ import {
   populationCoverage,
   type EntityId,
   findBody,
+  MARS_PAD,
   parseAddress,
   type StarCatalog,
   type SystemId,
@@ -302,6 +299,8 @@ export class GameEngine {
   /** The player's own suit, when the player is one; also in `characterViews`. */
   characterView: CharacterView | null = null
   characterViews: readonly CharacterView[] = []
+  /** The walker camera's filters, keyed by the cut they were made in. */
+  #onFootMemory: HeldMemory | null = null
   parkedRocinante: ObserverView['camera'] | null = null
   readonly session: Session
   readonly harness: GameHarness
@@ -1218,6 +1217,10 @@ export class GameEngine {
    */
   #invalidateDerived(): void {
     this.character.reset()
+    // Not how a cut drops it — `harness.load` declares one, and the epoch
+    // does that — but derived from the world all the same, so it goes with
+    // everything else here.
+    this.#onFootMemory = null
     this.characterCamera = null
     this.characterView = null
     this.characterViews = []
@@ -1467,27 +1470,17 @@ export class GameEngine {
         ? undefined
         : shot.entities.find((entity) => entity.id === player)
 
-    const onFoot = camera?.character
-    const characterPose =
-      onFoot == null
-        ? null
-        : characterCameraPose({
-            position: camera!.position,
-            orientation: camera!.orientation,
-            spin: onFoot.spin,
-            ground: bodyGround(onFoot.body, shot.structures),
-            eyeHeight: onFoot.eyeHeight,
-            pitch: this.character.pitch,
-            view: this.character.view,
-            grounded: onFoot.grounded,
-            verticalSpeed: Vec.dot(
-              camera!.localVelocity,
-              Vec.normalize(camera!.localPosition),
-            ),
-            delta,
-            memory: this.character.cameraMemory,
-          })
-    this.character.cameraMemory = characterPose?.memory ?? null
+    const onFoot = presentOnFoot({
+      shot,
+      player,
+      view: this.character.view,
+      pitch: this.character.pitch,
+      delta,
+      epoch: this.pictureEpoch,
+      memory: this.#onFootMemory,
+    })
+    this.#onFootMemory = onFoot.memory
+    const characterPose = onFoot.pose
 
     const eye =
       cinematic?.camera.position ??
@@ -1527,50 +1520,19 @@ export class GameEngine {
     // from outside its head. A second player's suit arrives the same way a
     // second ship does: as an entity in the snapshot, not a second producer.
     const origin = this.origin
-    const views: CharacterView[] = []
-    for (const entity of shot.entities) {
-      const walker = entity.character
-      if (walker == null) continue
-      const own = entity.id === player
-      const feet =
-        own && characterPose !== null
-          ? characterPose.feet
-          : characterFeet({
-              position: entity.position,
-              spin: walker.spin,
-              ground: bodyGround(walker.body, shot.structures),
-            })
-      views.push({
-        id: entity.id,
-        position: toRenderSpace(origin, feet),
-        orientation: orientationToRenderSpace(origin, entity.orientation),
-        visible:
-          cinematic === null &&
-          observed === null &&
-          (!own || this.character.view === 'third'),
-        animation: walker.flying
-          ? 'fly'
-          : !walker.grounded
-            ? Vec.dot(
-                entity.localVelocity,
-                Vec.normalize(entity.localPosition),
-              ) > 0
-              ? 'jump'
-              : 'fall'
-            : walker.crouched
-              ? walker.speed > 0.1
-                ? 'crouchWalk'
-                : 'crouch'
-              : walker.speed < 0.1
-                ? 'idle'
-                : walker.input.sprint
-                  ? 'run'
-                  : 'walk',
-        speed: walker.speed,
-        forward: walker.input.forward,
-        right: walker.input.right,
-      })
-    }
+    const views: CharacterView[] = onFoot.walkers.map((walker) => ({
+      id: walker.id,
+      position: toRenderSpace(origin, walker.feet),
+      orientation: orientationToRenderSpace(origin, walker.orientation),
+      visible:
+        cinematic === null &&
+        observed === null &&
+        (!walker.own || this.character.view === 'third'),
+      animation: walker.animation,
+      speed: walker.speed,
+      forward: walker.forward,
+      right: walker.right,
+    }))
     this.characterViews = views
     this.characterView = views.find((view) => view.id === player) ?? null
     this.observer =
@@ -1663,9 +1625,7 @@ export class GameEngine {
       view === null ? undefined : lodThresholds(view.lens, view.viewport),
     )
     const pad = this.character.padPreview
-      ? this.#scene.structures.find(
-          (structure) => structure.id === 'mars-basin-pad',
-        )
+      ? this.#scene.structures.find((structure) => structure.id === MARS_PAD.id)
       : undefined
     this.parkedRocinante =
       pad === undefined
