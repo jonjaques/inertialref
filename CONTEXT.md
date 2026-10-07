@@ -11070,13 +11070,15 @@ set 0.125 m in. The 22 are the ramp's 0.2 m curbs, which the relief leaves
 out, and lamp housing and enclosure edges. A 0.2 m warning band, perturbed
 into a scratch copy, fails the check.
 
-The ray-caster reads every face, whichever way it is wound. All ten of the
-pad's materials are `doubleSided` and the game keeps that, and the ramp
-landing's top face is wound downward in `build_mars_pad.py`: a caster that
-kept only upward faces fell through it to the landing's underside at -0.70 m
-and counted five samples where the drawn landing and the relief agree at
--0.18 m. Correcting the relief to -0.70 m to match would sink a walker half a
-meter into a landing drawn where it stands.
+The ray-caster reads every face, whichever way it is wound, because all ten
+of the pad's materials are `doubleSided` and the game keeps that. The ramp
+landing was an inside-out solid in `build_mars_pad.py`, its top wound
+downward: a caster that kept only upward faces fell through it to the
+landing's underside at -0.70 m and counted five samples where the drawn
+landing and the relief agree at -0.18 m. Correcting the relief to -0.70 m to
+match would have sunk a walker half a meter into a landing drawn where it
+stands. The landing is wound outward now and the model re-exported; an
+upward-only caster over it counts the same 22.
 
 ## Known gaps
 

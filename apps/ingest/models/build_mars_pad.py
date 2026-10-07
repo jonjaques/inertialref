@@ -432,14 +432,16 @@ def build():
             (-4.6, -44.7, -0.7),
         ],
         [],
+        # Wound counterclockwise from outside: the top's vertices run
+        # clockwise seen from above, so each face lists them in reverse.
         [
-            (0, 1, 2, 3, 4),
-            (9, 8, 7, 6, 5),
-            (0, 5, 6, 1),
-            (1, 6, 7, 2),
-            (2, 7, 8, 3),
-            (3, 8, 9, 4),
-            (4, 9, 5, 0),
+            (4, 3, 2, 1, 0),
+            (5, 6, 7, 8, 9),
+            (1, 6, 5, 0),
+            (2, 7, 6, 1),
+            (3, 8, 7, 2),
+            (4, 9, 8, 3),
+            (0, 5, 9, 4),
         ],
     )
     landing.update()
