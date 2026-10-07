@@ -44,32 +44,31 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | A body's uniforms are a pure mapping                         | [`apps/game/src/render/bodyUniforms.ts`](../../apps/game/src/render/bodyUniforms.ts) and its test               |
 | The frame's owner is named once                              | [`apps/game/src/engine/frameOwner.ts`](../../apps/game/src/engine/frameOwner.ts), `engine.owner`, rule 31       |
 | The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests     |
+| The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                            |
 
 ---
 
 ## The order
 
-| #   | Pull request                                                                                                                                           | Track       | Builds on | Strength        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --------- | --------------- |
-| 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness | —         | Strong          |
-| 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide   | —         | Strong          |
-| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                                                                 | The guide   | 10        | Strong          |
-| 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                                                               | The guide   | 11        | Worth exploring |
-| 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                                                                     | The terrain | —         | Strong          |
-| 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone)                                       | The terrain | —         | Strong          |
-| 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                                                       | The terrain | —         | Worth exploring |
-| 16  | [The drainage graph is prepared off the draw thread](#16-the-drainage-graph-is-prepared-off-the-draw-thread)                                           | The terrain | 14        | Worth exploring |
-| 17  | [The scene target's layout is one table](#17-the-scene-targets-layout-is-one-table)                                                                    | The picture | —         | Strong          |
-| 18  | [The sensor publishes the frame's pixel grid](#18-the-sensor-publishes-the-frames-pixel-grid)                                                          | The picture | 17        | Worth exploring |
-| 19  | [One quad-pass runner](#19-one-quad-pass-runner)                                                                                                       | The picture | —         | Strong          |
-| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)                                                                     | The picture | 19        | Worth exploring |
-| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                                                                                       | The picture | 19        | Worth exploring |
-| A   | [One compass basis](#a-one-compass-basis)                                                                                                              | Optional    | —         | Speculative     |
-| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                                                                  | Optional    | 13, 16    | Speculative     |
+| #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
+| --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
+| 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol) | The guide   | —         | Strong          |
+| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                           | The guide   | 10        | Strong          |
+| 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                         | The guide   | 11        | Worth exploring |
+| 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                               | The terrain | —         | Strong          |
+| 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
+| 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                 | The terrain | —         | Worth exploring |
+| 16  | [The drainage graph is prepared off the draw thread](#16-the-drainage-graph-is-prepared-off-the-draw-thread)     | The terrain | 14        | Worth exploring |
+| 17  | [The scene target's layout is one table](#17-the-scene-targets-layout-is-one-table)                              | The picture | —         | Strong          |
+| 18  | [The sensor publishes the frame's pixel grid](#18-the-sensor-publishes-the-frames-pixel-grid)                    | The picture | 17        | Worth exploring |
+| 19  | [One quad-pass runner](#19-one-quad-pass-runner)                                                                 | The picture | —         | Strong          |
+| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)                               | The picture | 19        | Worth exploring |
+| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                                                 | The picture | 19        | Worth exploring |
+| A   | [One compass basis](#a-one-compass-basis)                                                                        | Optional    | —         | Speculative     |
+| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                            | Optional    | 13, 16    | Speculative     |
 
 ```mermaid
 flowchart LR
-  P9[9 Director and booted]
   P10[10 Guide contract] --> P11[11 Guide verdict] --> P12[12 Live channel]
   P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
@@ -93,50 +92,11 @@ and the order is what keeps them apart:
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 9.** The walker-and-frame track is in the tree: the frame's
-owner is named once, the scene takes its eye, and what the engine derives from
-a world keys on the world's generation. The harness is next by number, and
-builds on nothing.
-
----
-
-## 9. The director is a sub-object, and the driver asks whether the app booted
-
-**Track:** the harness · **Strong** · in-process
-
-**Builds on:** nothing left open — exposing a sub-object is the move the
-harness makes for `OnFoot` and `Maneuvers`. **Unblocks:** nothing.
-
-**Files.** `packages/devtools/src/harness.ts` (eight director forwards;
-`new CutsceneDirector(host, CUTSCENES)` at `:555`),
-`apps/game/src/engine/GameEngine.ts` (the eight `CutsceneHost` closures),
-`apps/game/src/cinema/session.ts` (the interface at `:50`, the playhead's `mine`
-guard at `:157`), `packages/devtools/src/cutscenes/index.ts`,
-`scripts/drive.mjs` (`:597`, `:661`).
-
-**The friction.**
-
-- **The director is reached through three seams of the same eight verbs:**
-  eight harness forwards, eight `CutsceneHost` closures, and the playhead's
-  `mine` guard defending against the console it sits on. The script registry is
-  `CUTSCENES`, a module constant the harness constructor imports, so no test
-  can hand the director a script of its own. The director also calls
-  `host.render.declareCut()`.
-- **The driver holds two app facts as strings.** Readiness is
-  `window.engine.gl`, and the boot cover is the selector
-  `.hud-bleed.z-50.bg-black`. A rename costs twelve silent seconds on a cold
-  boot.
-
-**The shape.** The director is exposed as `ir.cutscene`, the way
-`ir.observatory` is; `CutsceneHost` takes it; the scripts are a session option.
-`ir.status()` gains a `booted` answer from the presentation host, which has
-`firstLight`'s phase, and the driver reads it the way `--settle` already reads
-`ir.settled()`.
-
-**Gate.** A cutscene test drives a fake script through a session option.
-`tngIntro` plays to the same beats. Neither string appears in
-`scripts/drive.mjs`, and a cold `--status` boot reports ready no later than it
-does today — measured, not assumed.
+**Start with 10.** The walker-and-frame track and the harness are in the tree:
+the frame's owner is named once, what the engine derives from a world keys on
+the world's generation, the director is `ir.cutscene`, and the driver asks the
+app whether it booted. The guide's wire contract is next by number, and builds
+on nothing.
 
 ---
 

@@ -6,7 +6,7 @@ it('holds the stage ephemeris while the director keeps advancing', () => {
   const game = headlessEngine()
   game.frame(1 / 60)
   game.harness.play('tng-intro')
-  const sample = game.harness.cutsceneSample(game.world.clock.renderTime)!
+  const sample = game.harness.cutscene.sample(game.world.clock.renderTime)!
   const held = game.world.clock.renderTime
   const stage = {
     model: 'mars-pad' as const,
@@ -14,7 +14,7 @@ it('holds the stage ephemeris while the director keeps advancing', () => {
     orientation: Quaternion.IDENTITY,
   }
   const sampleCutscene = vi
-    .spyOn(game.harness, 'cutsceneSample')
+    .spyOn(game.harness.cutscene, 'sample')
     .mockReturnValue({
       ...sample,
       presentationTime: held,

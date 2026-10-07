@@ -120,7 +120,7 @@ describe('the cutscene', () => {
     harness.play('tng-intro')
     const fps = TNG_INTRO.fps
     for (let frame = 0; frame < TNG_INTRO.durationFrames; frame += 37) {
-      const sample = harness.cutsceneSample(100 + frame / fps)
+      const sample = harness.cutscene.sample(100 + frame / fps)
       expect(sample).not.toBeNull()
       expect(verticalFovDegrees(sample!.lens)).toBe(TNG_LENS.fov)
     }

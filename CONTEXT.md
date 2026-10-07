@@ -11156,6 +11156,24 @@ the traces come back warm with the bump removed. `engine.player()` had no
 caller outside the engine but tests; it is gone. `pool()` stays for
 `Bodies.tsx` and `render/preload.ts`.
 
+## The director is a sub-object, and the driver asks whether the app booted (7 Oct 2026)
+
+The director was reached through eight harness forwards and eight
+`CutsceneHost` closures in the engine, and its scripts were `CUTSCENES`, a
+module constant the harness constructor imported, so no test could hand it a
+scene of its own. It is `ir.cutscene` now, the way `ir.observatory` is;
+`status`, `lastOutcome`, `list`, `sample` and `peek` are read on it, and
+`play`, `seekCutscene` and `stopCutscene` stay on `ir` as the three verbs a
+console types. The scripts are `openSession({ cutscenes })`. The cinema
+session's host takes the director whole, with the clock's pause beside it,
+and the session asks for the `hold` itself — the reason for it now sits where
+it is spent. The driver held two app facts as strings, `window.engine.gl` for
+readiness and `.hud-bleed.z-50.bg-black` for the boot cover; a rename of
+either costs a cold boot twelve silent seconds. `ir.status().boot` answers
+both from the presentation host — `booting`, `drawing` under the cover,
+`booted` — and neither string is in `scripts/drive.mjs`. A fresh boot on a
+warm dev server read 3.2 s ready before and 3.1–3.2 s after, four runs each.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

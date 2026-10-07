@@ -95,7 +95,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    * component re-renders at the sampler's 8 Hz while a scene is open; hand-
    * written because `'use no memo'` keeps the compiler out of this file.
    */
-  const scenes = useMemo(() => engine.harness.cutscenes(), [engine])
+  const scenes = useMemo(() => engine.harness.cutscene.list(), [engine])
 
   /*
    * The text list, which is structure rather than a readout.
@@ -296,7 +296,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
         if (view === null || playing.current === null) {
           if (!element.paused) element.pause()
         } else {
-          const status = engine.harness.cutsceneStatus()
+          const status = engine.harness.cutscene.status()
           if (status !== null) {
             const target = view.frame / status.fps
             if (Math.abs(element.currentTime - target) > AUDIO_TOLERANCE) {

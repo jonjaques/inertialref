@@ -87,6 +87,7 @@ import {
 } from '@inertialref/devtools'
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
+import type { FirstLightPhase } from '../render/bootState.ts'
 import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
 import {
   passTimelineOf,
@@ -736,6 +737,13 @@ export class GameEngine {
    */
   gl: RendererHandle | null = null
 
+  /**
+   * Where the boot cover is, supplied by the app that owns `firstLight`. A
+   * driver asks `ir.status().boot` rather than reading the cover's markup.
+   * An engine with no app around it has no cover to lift.
+   */
+  bootPhase: () => FirstLightPhase = () => 'done'
+
   /*
    * The modeled hull the player is flying, once its glTF resolves.
    *
@@ -920,6 +928,13 @@ export class GameEngine {
         guide: () => this.guide,
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
+        // No renderer, a renderer under the boot cover, or the cover lifted.
+        boot: () =>
+          this.gl === null
+            ? 'booting'
+            : this.bootPhase() === 'done'
+              ? 'booted'
+              : 'drawing',
         terrain: () => this.terrain(),
         terrainCache: () => this.terrainCache(),
         clearTerrainCache: () => this.clearTerrainCache(),
@@ -948,25 +963,16 @@ export class GameEngine {
     this.harness = this.session.harness
     this.character = new CharacterController(this)
     this.cutscene = createCutsceneSession({
-      status: () => this.harness.cutsceneStatus(),
-      outcome: () => this.harness.cutsceneOutcome(),
+      director: this.harness.cutscene,
       // The one reader of this field on the presentation side. It used to have
       // three, in three components, answering the same question.
       paused: () => this.world.clock.paused,
-      // Held, because this is watching: the last frame stays on stage under
-      // the end card. Without it the ending frame hands the camera to the
-      // ship and the streamer drops the ground — `cinema/session.ts` has the
-      // measurement.
-      play: (id) => this.harness.play(id, { hold: true }),
-      seek: (frame) => void this.harness.seekCutscene(frame),
       pause: () => this.harness.pause(),
       resume: () => this.harness.resume(),
-      stop: () => {
-        this.harness.stopCutscene()
-        // `#step` writes this once a frame, so a stop is invisible to anything
-        // that reads the field before the next one — the store's sampler, and
-        // the player's own exit, which republishes the snapshot as it leaves.
-        // The director has stopped; the frame's view of it is over now.
+      // `#step` writes the owner once a frame, so a stop is invisible to
+      // anything that reads it before the next one — the store's sampler, and
+      // the player's own exit, which republishes the snapshot as it leaves.
+      stopped: () => {
         if (this.owner?.arm === 'cutscene') this.owner = null
       },
     })
@@ -1382,14 +1388,14 @@ export class GameEngine {
     )
 
     if (
-      this.harness.cutsceneStatus() === null &&
+      this.harness.cutscene.status() === null &&
       this.harness.observatory.target !== null
     )
       this.harness.observatory.advanceTime(delta)
     // A surface stage holds its ephemeris epoch while the director samples
     // live render time. Feeding the held snapshot time back freezes the playhead.
     // Sampling before the player lookup also lets a scene end during a hand-off.
-    const cinematic = this.harness.cutsceneSample(this.world.clock.renderTime)
+    const cinematic = this.harness.cutscene.sample(this.world.clock.renderTime)
     this.#phases.step('cutscene', ENGINE_PHASE)
     const shot = snapshot(
       this.world,

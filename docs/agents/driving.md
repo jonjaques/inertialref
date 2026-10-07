@@ -124,7 +124,7 @@ storage.
 ### Public HTML before the scene
 
 Use `--document` to wait for the document to become readable without waiting
-for `window.engine.gl`. `--no-javascript` implies this mode and disables page
+for a renderer. `--no-javascript` implies this mode and disables page
 scripts before navigation, including the first navigation of a new rig.
 Inspection expressions passed through `--js` still run through DevTools.
 
@@ -239,8 +239,9 @@ three; they are here because they explain what it is doing:
    `cf dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
    or build once. [development](../guides/development.md) § Commands.
 
-Default readiness is `window.engine.gl`, not `window.ir`. The harness appears
-seconds earlier, so a probe on it captures an unlit canvas. `--document` uses
+Default readiness is `ir.status().boot`: `drawing` once a renderer exists,
+`booted` once the boot cover lifts. The bare harness appears seconds earlier,
+so a probe on its presence alone captures an unlit canvas. `--document` uses
 the committed document's readiness for public HTML checks.
 
 **Terrain streams only below the eight-pixel relief gate, and above it

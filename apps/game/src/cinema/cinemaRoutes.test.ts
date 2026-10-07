@@ -5,7 +5,7 @@ import { cinemaScene } from '../pages/paths.ts'
 
 it('serves a cold URL for every scene the Cinema director offers', () => {
   const session = openSession()
-  for (const script of session.harness.cutscenes())
+  for (const script of session.harness.cutscene.list())
     expect(shellPaths).toContain(cinemaScene(script.id))
   session.dispose()
 })

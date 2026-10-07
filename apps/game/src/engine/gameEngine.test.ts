@@ -253,7 +253,7 @@ describe('the game engine, headless', () => {
     game.session.replaceWorld(game.world, null)
     for (let i = 0; i < 12; i += 1) game.frame(1 / 60)
 
-    expect(game.harness.cutsceneStatus()).toBeNull()
+    expect(game.harness.cutscene.status()).toBeNull()
     expect(game.cinematic).toBeNull()
     game.dispose()
   })
@@ -305,6 +305,18 @@ describe('the game engine, headless', () => {
     expect(ship).not.toBe(game.session.player())
     const entity = game.scene()!.entities.find((one) => one.id === ship)
     expect(entity?.kind).toBe('ship')
+    game.dispose()
+  })
+
+  it('says whether it has booted, so a driver need name nothing of its own', () => {
+    const game = headlessEngine()
+    expect(game.harness.status().boot).toBe('booting')
+    game.gl = {} as NonNullable<typeof game.gl>
+    game.bootPhase = () => 'revealing'
+    expect(game.harness.status().boot).toBe('drawing')
+    game.bootPhase = () => 'done'
+    expect(game.harness.status().boot).toBe('booted')
+    game.gl = null
     game.dispose()
   })
 
