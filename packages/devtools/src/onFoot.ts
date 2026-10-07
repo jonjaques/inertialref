@@ -6,7 +6,11 @@ import {
   Vec,
   vec3,
 } from '@inertialref/spatial'
-import { type Entity, surfacePlacementPose } from '@inertialref/simulation'
+import {
+  type Entity,
+  surfacePlacementPose,
+  type World,
+} from '@inertialref/simulation'
 import {
   type Body,
   bodyFixedDirection,
@@ -79,18 +83,29 @@ export interface OnFootStatus {
 export class OnFoot {
   readonly #host: Host
   readonly #land: (address: string, latitude: number, longitude: number) => void
+  readonly #clearStage: () => void
+  /**
+   * The walker the pad fixture staged, and the world it staged it in: ids
+   * are per world, so a loaded save's walker with the same id is not it.
+   */
+  #pad: { readonly world: World; readonly walker: EntityId } | null = null
 
   /**
    * `land` parks the player's ship on a surface, as the harness's verb does:
    * the fixture lands before it steps out, and one placement rule per
    * maneuver means this module asks rather than writing a second one.
+   * `clearStage` stops a cutscene and releases the observatory, which the
+   * fixture does first: a scene that ends restores the ship it captured to
+   * orbit, and an observatory target outranks the walker's camera.
    */
   constructor(
     host: Host,
     land: (address: string, latitude: number, longitude: number) => void,
+    clearStage: () => void,
   ) {
     this.#host = host
     this.#land = land
+    this.#clearStage = clearStage
   }
 
   /** The player, while the player is a walker. */
@@ -189,6 +204,7 @@ export class OnFoot {
    * beside the 46 m Rocinante the cinema stages there.
    */
   atMarsPad(): Entity {
+    this.#clearStage()
     const boarded = this.board()
     if (!boarded.ok) throw new Error(boarded.error)
     this.#land(MARS_PAD.bodyAddress, MARS_PAD.latitude, MARS_PAD.longitude)
@@ -211,10 +227,19 @@ export class OnFoot {
       Q.rotate(pad.orientation, vec3(PAD_SIDE, 0, 0)),
     )
     const site = directionToGeodetic(bodyFixedDirection(spin, side))
-    return this.#spawn(
+    const walker = this.#spawn(
       { body, ...site, heading: MARS_PAD.heading - Math.PI / 2 },
       vessel,
     )
+    this.#pad = { world, walker: walker.id }
+    return walker
+  }
+
+  /** The walker the pad fixture staged, while it is still the player. */
+  padWalker(): EntityId | null {
+    const pad = this.#pad
+    if (pad === null || pad.world !== this.#host.world) return null
+    return this.walker()?.id === pad.walker ? pad.walker : null
   }
 
   status(): OnFootStatus {

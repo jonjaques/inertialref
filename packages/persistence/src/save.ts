@@ -319,11 +319,12 @@ export function restoreSave(
   }
 
   // After every spawn, because a vessel may sort after its walker. A walker
-  // whose ship is missing, or is another walker, is a save this build would
-  // let step "back in" to nothing.
+  // whose vessel is missing, another walker, or a probe or a marker is a save
+  // this build would let step "back in" to something that is not a ship.
   for (const entity of world.entities.ordered()) {
     const vessel = entity.character?.vessel ?? null
-    if (vessel !== null && world.entities.get(vessel)?.character !== null)
+    const ship = vessel === null ? undefined : world.entities.get(vessel)
+    if (vessel !== null && (ship?.kind !== 'ship' || ship.character !== null))
       return err(`entity ${entity.id}: vessel ${vessel} is not a ship here`)
   }
 

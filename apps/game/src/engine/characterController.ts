@@ -24,8 +24,12 @@ export interface CharacterStatus {
  */
 export class CharacterController {
   readonly #engine: GameEngine
-  /** The walker the pad fixture staged, which the scene draws a Rocinante for. */
-  #padWalker: EntityId | null = null
+  /**
+   * The walker the look was aimed for. A console can step a walker out
+   * without passing through here, so the look re-aims at whichever walker it
+   * finds rather than turning a new one by the last one's running yaw.
+   */
+  #looking: EntityId | null = null
   #pitch = 0
   #yaw = 0
   /** The walker the pointer lock was granted for; another one is not locked. */
@@ -58,15 +62,16 @@ export class CharacterController {
     return this.#lockedWalker !== null && this.#lockedWalker === this.entity?.id
   }
   get pitch(): number {
-    return this.#pitch
+    return this.#looking === this.entity?.id ? this.#pitch : 0
   }
   /** The ship the walker steps back into; see `OnFoot.ship`. */
   get ship(): EntityId | null {
     return this.#onFoot.ship()
   }
 
+  /** Whether the walker is the pad fixture's, which the scene draws a Rocinante for. */
   get padPreview(): boolean {
-    return this.#padWalker !== null && this.entity?.id === this.#padWalker
+    return this.#onFoot.padWalker() !== null
   }
 
   /**
@@ -101,7 +106,7 @@ export class CharacterController {
       this.error = 'Land on solid ground to walk.'
       return false
     }
-    this.#arrive(stepped.value, { pitch: 0, view: 'first', pad: false })
+    this.#arrive(stepped.value, { pitch: 0, view: 'first' })
     return true
   }
 
@@ -126,6 +131,7 @@ export class CharacterController {
       !Number.isFinite(dy)
     )
       return
+    if (this.#looking !== entity.id) this.#aim(entity, 0)
     const angle =
       DRAG_RADIANS_PER_PIXEL *
       this.#engine.harness.flightCamera.dragSensitivity()
@@ -177,9 +183,7 @@ export class CharacterController {
   /** Presentation only: a replaced world keeps none of this, and writes nothing. */
   reset(): void {
     this.#lockedWalker = null
-    this.#padWalker = null
-    this.#pitch = 0
-    this.#yaw = this.entity?.character?.input.yaw ?? 0
+    this.#looking = null
     this.error = null
     this.cameraMemory = null
   }
@@ -187,14 +191,7 @@ export class CharacterController {
   /** Reproducible scale check beside the cinema's 46 m Rocinante and Mars pad. */
   atMarsPad(): void {
     this.leave()
-    const harness = this.#engine.harness
-    harness.stopCutscene()
-    harness.observatory.clear()
-    this.#arrive(harness.onFoot.atMarsPad(), {
-      pitch: 0.25,
-      view: 'third',
-      pad: true,
-    })
+    this.#arrive(this.#onFoot.atMarsPad(), { pitch: 0.25, view: 'third' })
   }
 
   status(): CharacterStatus {
@@ -226,19 +223,20 @@ export class CharacterController {
    */
   #arrive(
     walker: Entity,
-    framing: {
-      readonly pitch: number
-      readonly view: 'first' | 'third'
-      readonly pad: boolean
-    },
+    framing: { readonly pitch: number; readonly view: 'first' | 'third' },
   ): void {
-    this.#yaw = walker.character?.heading ?? 0
-    this.#pitch = framing.pitch
+    this.#aim(walker, framing.pitch)
     this.view = framing.view
-    this.#padWalker = framing.pad ? walker.id : null
     this.error = null
     this.cameraMemory = null
     this.#engine.world.clock.setTimeScale(1)
     this.#engine.world.clock.setPaused(false)
+  }
+
+  /** Aim the look along the yaw the world last took for this walker. */
+  #aim(walker: Entity, pitch: number): void {
+    this.#looking = walker.id
+    this.#yaw = walker.character?.input.yaw ?? 0
+    this.#pitch = pitch
   }
 }

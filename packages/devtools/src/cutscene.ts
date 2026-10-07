@@ -112,8 +112,8 @@ interface ActiveCutscene {
  * How a scene left the director.
  *
  * `ended` ran to its final frame; `stopped` was stopped by somebody; and
- * `abandoned` lost the world it was playing in — a save loaded from the
- * console, say.
+ * `abandoned` lost the world or the player it was playing with — a save
+ * loaded from the console, or a captured walker that boarded its ship.
  */
 export type CutsceneEnding = 'ended' | 'stopped' | 'abandoned'
 
@@ -265,10 +265,15 @@ export class CutsceneDirector {
 
     // The world can be replaced under a running cutscene (a save loaded from
     // the console). The captured state belongs to the discarded world;
-    // restoring it into the new one would teleport a stranger.
-    if (active.world !== this.#host.world) {
+    // restoring it into the new one would teleport a stranger. The captured
+    // entity can also be gone from this world: a walker the scene captured
+    // is removed when a ship verb boards its vessel.
+    if (
+      active.world !== this.#host.world ||
+      !active.world.entities.has(active.player)
+    ) {
       this.#last = { ...this.#last, ending: 'abandoned' }
-      log.warn('cutscene abandoned: the world it was playing in is gone', {
+      log.warn('cutscene abandoned: the world or player it captured is gone', {
         id: active.script.id,
       })
       return

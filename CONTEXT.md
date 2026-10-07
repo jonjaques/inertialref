@@ -10970,9 +10970,13 @@ Three decisions the plan left open:
   saved or hashed, and `runTicks` ignores it — so the app's controller writes
   it, as one of the clock writers the time pull request counts.
 
-`CharacterController.locked` is derived from whether a walker exists, because
-a console verb can now board under a held pointer lock, and a stored flag left
-the browser steering an entity that was gone.
+`CharacterController.locked` is a grant keyed to the walker it was granted
+for, because a console verb can now board under a held pointer lock: a stored
+flag left the browser steering an entity that was gone, and a flag derived
+from whether any walker exists locked the next one out before the browser
+granted it. The look is keyed the same way, and the pad fixture's stage
+clearing and its Rocinante belong to `ir.onFoot`, so a walker the console
+makes is the one the dock makes.
 
 ## Known gaps
 

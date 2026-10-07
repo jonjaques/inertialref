@@ -564,9 +564,16 @@ export class GameHarness {
     this.#cutscenes = new CutsceneDirector(host, CUTSCENES)
     this.#observatory = new Observatory(host)
     this.#flightCamera = new FlightCamera(host)
-    this.#onFoot = new OnFoot(host, (address, latitude, longitude) => {
-      this.land(address, latitude, longitude)
-    })
+    this.#onFoot = new OnFoot(
+      host,
+      (address, latitude, longitude) => {
+        this.land(address, latitude, longitude)
+      },
+      () => {
+        this.stopCutscene()
+        this.#observatory.clear()
+      },
+    )
     logHub.addSink(this.#logSink)
   }
 

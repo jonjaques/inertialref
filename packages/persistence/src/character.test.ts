@@ -112,6 +112,21 @@ describe('character persistence', () => {
     expect(restoreSave(pointing(walker.id)).ok).toBe(false)
   })
 
+  it('refuses a walker whose vessel is a marker rather than a ship', () => {
+    const { world, second, walker } = twoShips()
+    const save = captureSave(world, walker.id)
+    const marked = {
+      ...save,
+      entities: save.entities.map((entity) =>
+        entity.id === second.id
+          ? { ...entity, kind: 'marker' as const }
+          : entity,
+      ),
+    }
+    expect(restoreSave(save).ok).toBe(true)
+    expect(restoreSave(marked).ok).toBe(false)
+  })
+
   it('refuses flight without its capability and character/flight frame mismatches', () => {
     const world = new World({ seed: 'inertialref' })
     const body = world

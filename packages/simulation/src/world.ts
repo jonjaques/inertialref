@@ -639,7 +639,9 @@ export class World implements FlightWorld {
     )
     const vessel = options.vessel ?? null
     invariant(
-      vessel === null || this.#entities.get(vessel)?.character === null,
+      vessel === null ||
+        (this.#entities.get(vessel)?.kind === 'ship' &&
+          this.#entities.get(vessel)?.character === null),
       `${vessel} is not a vessel`,
     )
     this.loadSystem(body.address.system)

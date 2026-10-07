@@ -32,8 +32,8 @@ camera arm presents the result.**
 - `World` owns spawning, character input, flight permission, movement, and
   removal. A walker carries its `vessel`, the ship it stepped out of and
   steps back into; nothing regenerates that choice, and with two ships landed
-  side by side entity order names the wrong one. The controller consumes intent at 64 Hz in the body's `bf:` frame.
-  It normalizes diagonal input and transports heading with the changing local
+  side by side entity order names the wrong one. The controller consumes
+  intent at 64 Hz in the body's `bf:` frame. It normalizes diagonal input and transports heading with the changing local
   vertical, by an exact rotation between successive verticals rather than the
   shared helper's thresholded one. The motor drives momentum, held in the
   entity's velocity, toward what the keys ask: fast on the ground, faintly in
@@ -55,7 +55,7 @@ camera arm presents the result.**
   schema-4 migration names each walker's vessel as the first ship in id
   order, the rule a v4 load applied. Loading through the game clears
   transient held input and pointer ownership before controls can resume; a
-  load through the harness is a replay and keeps them.
+  load through the harness is a replay and keeps the held input.
 - The trusted `Session.canFly` capability determines whether the character
   may toggle flight. The owner of a local solo session receives it by default;
   a host supplying another authority must supply the capability explicitly.

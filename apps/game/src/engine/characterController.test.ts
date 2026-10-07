@@ -123,6 +123,49 @@ describe('character activation', () => {
     game.dispose()
   })
 
+  it('aims the look at a walker the console stepped out, not the last one', () => {
+    const game = makeEngine()
+    game.character.atMarsPad()
+    game.character.lockChanged(true)
+    game.character.look(400, 0)
+    game.character.leave()
+    const walker = game.harness.onFoot.atMarsPad()
+    const heading = walker.character!.input.yaw
+    game.character.lockChanged(true)
+    expect(game.character.padPreview).toBe(true)
+    expect(game.character.pitch).toBe(0)
+    game.character.look(1, 0)
+    const yaw = game.world.entities.require(walker.id).character!.input.yaw
+    const pixel = Math.abs(yaw - heading)
+    // One pixel's angle, where the last walker's running yaw is 400 of them.
+    expect(pixel).toBeGreaterThan(0)
+    expect(pixel).toBeLessThan(0.01)
+    game.dispose()
+  })
+
+  it('stops a scene before the console stages the pad, so its end restores nothing', () => {
+    const game = makeEngine()
+    game.harness.play('tng-intro')
+    const walker = game.harness.onFoot.atMarsPad()
+    expect(game.harness.cutsceneStatus()).toBeNull()
+    game.frame(1 / 60)
+    expect(game.player()).toBe(walker.id)
+    expect(game.scene()?.camera.position).toEqual(
+      game.characterCamera?.camera.position,
+    )
+    game.dispose()
+  })
+
+  it('abandons a scene whose captured walker boarded, rather than throwing', () => {
+    const game = makeEngine()
+    game.character.atMarsPad()
+    game.harness.play('tng-intro')
+    game.harness.onFoot.board()
+    expect(() => game.harness.stopCutscene()).not.toThrow()
+    expect(game.harness.cutsceneOutcome()?.ending).toBe('abandoned')
+    game.dispose()
+  })
+
   it('keeps the planetarium passive and steps out beside a landed ship', () => {
     const game = makeEngine()
     const before = game.world.stateHash()
