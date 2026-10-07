@@ -11137,6 +11137,25 @@ and a playerless observatory frame drew the last frame's scene; it takes the
 owner's eye now, with the entity optional. `gameEngine.test.ts` holds all
 three, and the playerless case fails with the early return put back.
 
+## The engine's derived state keys on one generation (7 Oct 2026)
+
+`#invalidateDerived` cleared seventeen fields by hand and bumped a counter
+named for the starfield, `#starFieldWorld`, which the orbit-trace cache then
+keyed on too. The star survey and the orbit traces are modules with one
+consumer each, `engine/starSurvey.ts` and `engine/orbitTraces.ts`, and both
+key on `#generation`, the one counter the engine bumps where a world is
+replaced: a field read at a generation it was not built in is empty, and a
+survey that lands after a replacement is discarded inside the module. The
+nine lines that cleared them went, and the counter with them. What stays in the list — the origin, the
+snapshot, the scene, the walker's views and memory, the rotation-stop cue, the
+streamer and the character — is per-frame product rather than a cache, each
+overwritten on the next frame, and the go/no-go found none keyed on something
+the generation cannot see. `gameEngine.test.ts` probes all eleven observable
+fields cold after a load, counted, and the starfield, the survey center and
+the traces come back warm with the bump removed. `engine.player()` had no
+caller outside the engine but tests; it is gone. `pool()` stays for
+`Bodies.tsx` and `render/preload.ts`.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
