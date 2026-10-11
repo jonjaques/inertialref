@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAccount } from '../account/accounts.ts'
 import { sessionHeaders } from '../account/token.ts'
-import { type GuideCapabilities, readCapabilities } from './capabilities.ts'
+import { askGuideVerdict, type GuideVerdict } from './capabilities.ts'
 
 /*
  * Whether the planetarium offers the guide to whoever is signed in.
@@ -25,11 +25,11 @@ import { type GuideCapabilities, readCapabilities } from './capabilities.ts'
  * nobody to ask about or no answer yet. `grantsGuide` reads it; the guide's
  * runtime adopts it rather than asking again.
  */
-export function useGuideAccess(): GuideCapabilities | null {
+export function useGuideAccess(): GuideVerdict | null {
   const { userId } = useAccount()
   const [answer, setAnswer] = useState<{
     readonly userId: string
-    readonly capabilities: GuideCapabilities | null
+    readonly capabilities: GuideVerdict | null
   } | null>(null)
   useEffect(() => {
     if (userId === null) return
@@ -48,15 +48,11 @@ export function useGuideAccess(): GuideCapabilities | null {
     : null
 }
 
-async function askWorker(): Promise<GuideCapabilities | null> {
+async function askWorker(): Promise<GuideVerdict | null> {
   try {
     const headers = await sessionHeaders()
     if (!headers.has('Authorization')) return null
-    const response = await fetch('/api/tour/capabilities', {
-      headers,
-      cache: 'no-store',
-    })
-    return response.ok ? readCapabilities(await response.json()) : null
+    return await askGuideVerdict(headers)
   } catch {
     return null
   }

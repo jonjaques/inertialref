@@ -11174,6 +11174,27 @@ both from the presentation host — `booting`, `drawing` under the cover,
 `booted` — and neither string is in `scripts/drive.mjs`. A fresh boot on a
 warm dev server read 3.2 s ready before and 3.1–3.2 s after, four runs each.
 
+## The guide's wire contract is one module (7 Oct 2026)
+
+`net.ts` says paths live in one place, and `/api/tour/capabilities` was written
+in the Worker's routes, the runtime and the access hook. The answer was an
+object literal on the Worker and a hand-written reader in the game; three tests
+each built their own copy of it, so renaming `authorized` on the Worker failed
+none of them. The limits were written twice on the Worker in two units: the
+SDP bound was `65_536` in `routes.ts` and `64 * 1024` in `openaiLive.ts`, and
+the scene bound was 1,500 UTF-16 units in one (`boundedString` compared
+`.length`) and 1,500 encoded bytes in the other — so 600 ellipses, 600 units
+and 1,800 bytes, passed the route and failed in the adapter. The refusal
+sentences were each typed in three files. `packages/protocol/src/guideWire.ts`
+holds the paths, the verdict — granted with its voices, or refused with a
+reason code — the sentence for each reason, the session request and response
+with their limits in UTF-8 bytes, and the decoders; `utf8Bytes` counts without
+`TextEncoder`, which the package cannot name, and a property holds it to
+`encodeURIComponent`. The Worker's answers `satisfies` the types and its route
+test reads them through the protocol's decoders; the runtime's fake Worker is
+built from the same types; the opening line is held under the scene limit with
+twelve objects named after the system's longest name.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

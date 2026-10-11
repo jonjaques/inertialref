@@ -1,40 +1,46 @@
 import { describe, expect, it } from 'vitest'
-import { grantsGuide, readCapabilities } from './capabilities.ts'
+import { askGuideVerdict, grantsGuide } from './capabilities.ts'
 
-const ANSWER = {
-  available: true,
-  signedIn: true,
-  authorized: true,
-  voices: ['marin', 'cedar'],
-  reason: null,
-}
+/*
+ * The reader of the Worker's verdict, over an injected fetcher: anything that
+ * is not a verdict reads as "not offered", never as an error on screen.
+ */
 
-describe('readCapabilities', () => {
-  it('reads the Worker’s answer', () => {
-    expect(readCapabilities(ANSWER)).toEqual(ANSWER)
-    expect(
-      readCapabilities({ ...ANSWER, available: false, reason: 'off' }),
-    ).toEqual({ ...ANSWER, available: false, reason: 'off' })
+const answering =
+  (respond: () => Response | Promise<Response>): typeof fetch =>
+  async () =>
+    respond()
+
+describe('askGuideVerdict', () => {
+  it('reads a grant', async () => {
+    const fetcher = answering(() =>
+      Response.json({ granted: true, voices: ['cedar'] }),
+    )
+    expect(await askGuideVerdict(new Headers(), fetcher)).toEqual({
+      granted: true,
+      voices: ['cedar'],
+    })
   })
 
-  it('refuses anything that is not that answer', () => {
-    for (const value of [
-      null,
-      '<!doctype html>',
-      { ...ANSWER, authorized: 'true' },
-      { ...ANSWER, voices: [1] },
-      // The password-era shape.
-      { available: true, authenticated: true, voices: [], reason: null },
-    ])
-      expect(readCapabilities(value)).toBeNull()
+  it('reads no answer, an error status and a proxy page as nothing', async () => {
+    const thrown = answering(() => {
+      throw new TypeError('Failed to fetch')
+    })
+    const unavailable = answering(
+      () => new Response('{"granted":true,"voices":[]}', { status: 503 }),
+    )
+    const page = answering(
+      () => new Response('<html>Bad gateway</html>', { status: 200 }),
+    )
+    for (const fetcher of [thrown, unavailable, page])
+      expect(await askGuideVerdict(new Headers(), fetcher)).toBeNull()
   })
 })
 
 describe('grantsGuide', () => {
-  it('grants only an available guide to an authorized account', () => {
-    expect(grantsGuide(ANSWER)).toBe(true)
-    expect(grantsGuide({ ...ANSWER, authorized: false })).toBe(false)
-    expect(grantsGuide({ ...ANSWER, available: false })).toBe(false)
+  it('grants only a granted verdict', () => {
+    expect(grantsGuide({ granted: true, voices: [] })).toBe(true)
+    expect(grantsGuide({ granted: false, reason: 'signed-out' })).toBe(false)
     expect(grantsGuide(null)).toBe(false)
   })
 })
