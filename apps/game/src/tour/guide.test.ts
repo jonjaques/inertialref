@@ -109,6 +109,7 @@ describe('the guide diagnostic adapter', () => {
     const runtime = {
       diagnostics: () => UNAVAILABLE_GUIDE,
       end: vi.fn(),
+      forgetMessage: vi.fn(),
     }
     const guide = new GuideLifetime(
       async () => runtime as unknown as GuideRuntime,
@@ -123,6 +124,27 @@ describe('the guide diagnostic adapter', () => {
     // nothing on screen to stop it.
     access.forUser(null)
     expect(runtime.end).toHaveBeenCalledOnce()
+    release()
+  })
+
+  it('drops a message written for the last account when the account changes', async () => {
+    const runtime = {
+      diagnostics: () => UNAVAILABLE_GUIDE,
+      end: vi.fn(),
+      forgetMessage: vi.fn(),
+    }
+    const guide = new GuideLifetime(
+      async () => runtime as unknown as GuideRuntime,
+    )
+    const access = granted()
+    await Promise.resolve()
+    const engine = { guide: null } as unknown as GameEngine
+    const release = mountGuide(engine, guide, access)
+    await guide.load()
+    // The runtime outlives the panel: "the guide ended after three minutes
+    // paused" for one account is not what the next one is greeted with.
+    access.forUser('user_2')
+    expect(runtime.forgetMessage).toHaveBeenCalled()
     release()
   })
 })

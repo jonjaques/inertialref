@@ -8,11 +8,8 @@ import type {
  * Whether the guide is offered, held in one place for one mode.
  *
  * The planetarium's menu, the panel's controls, the end-on-loss rule, the
- * runtime's `start` and `ir.guideStatus` all read this. Each used to hold its
- * own copy or derive one: the access hook kept the Worker's answer, the
- * runtime kept a snapshot of it and fifty lines of `inspect` and `adopt` kept
- * the two in step, and with no runtime loaded the harness reported a visitor
- * without the grant as available.
+ * runtime's `start` and `ir.guideStatus` all read this, and none of them
+ * holds a copy to fall out of step with it.
  *
  * Keyed on the user. An answer is about whoever was signed in when it was
  * asked, so an answer that lands after a sign-out or an account switch is
@@ -33,6 +30,17 @@ export interface GuideAccessOwner {
    */
   forUser(userId: string | null): void
 }
+
+/**
+ * The verdict as `ir.guideStatus` names an idle guide's state: `idle` when
+ * granted, otherwise `checking` or the refusal's reason.
+ */
+export const accessState = (access: GuideAccess): string =>
+  access.state === 'granted'
+    ? 'idle'
+    : access.state === 'checking'
+      ? 'checking'
+      : access.reason
 
 const SIGNED_OUT: GuideAccess = { state: 'refused', reason: 'signed-out' }
 const CHECKING: GuideAccess = { state: 'checking' }

@@ -23,8 +23,13 @@ import type { GuideAccess, GuideAccessOwner } from './verdict.ts'
 
 /** The mode's verdict, kept in step with whoever is signed in. */
 export function useGuideAccess(owner: GuideAccessOwner): GuideAccess {
-  const { userId } = useAccount()
-  useEffect(() => owner.forUser(userId), [owner, userId])
+  // `userId` is null until the account provider loads as well as when nobody
+  // is signed in; settling on the first would read a signed-in visitor as
+  // signed out for the length of the boot, so the verdict stays `checking`.
+  const { loaded, userId } = useAccount()
+  useEffect(() => {
+    if (loaded) owner.forUser(userId)
+  }, [owner, loaded, userId])
   return useSyncExternalStore(owner.subscribe, owner.current, owner.current)
 }
 

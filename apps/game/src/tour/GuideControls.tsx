@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from 'react'
-import { GUIDE_REFUSAL_SENTENCES } from '@inertialref/protocol'
 import { Mic, Pause, Play, Square } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
 import { useActionTitle } from '../input/useKeymap.ts'
@@ -102,14 +101,6 @@ export function GuideControls({
             which holds the conversation and moves the camera through this app.
           </p>
         </>
-      )}
-      {/* A signed-out or ungranted refusal is reachable only in the moment
-          between a sign-out, or a revoked grant, and the panel being
-          withdrawn. */}
-      {access.state === 'refused' && (
-        <p className="type-ui text-slate-400">
-          {GUIDE_REFUSAL_SENTENCES[access.reason]}
-        </p>
       )}
       {state.message && (
         <p className="type-ui text-pretty text-amber-200" role="status">

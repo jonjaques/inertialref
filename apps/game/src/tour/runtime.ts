@@ -15,7 +15,7 @@ import {
   type GuideToolOutput,
 } from '@inertialref/protocol'
 import { SpeechClock } from './clock.ts'
-import type { GuideAccess } from './verdict.ts'
+import { accessState, type GuideAccess } from './verdict.ts'
 import type { GuideArrival, SceneFacts } from './executor.ts'
 import { GuideLoop } from './loop.ts'
 import type { LiveServerEvent } from './media.ts'
@@ -193,10 +193,16 @@ export class GuideRuntime {
 
   diagnostics(): GuideStatus {
     const state = this.#snapshot
+    const access = this.#host.access()
     return {
-      available: this.#host.access().state === 'granted',
+      available: access.state === 'granted',
       loaded: true,
-      state: state.status.toLowerCase() || 'idle',
+      // An offline runtime is as available as the verdict says, so a refused
+      // visitor reads as refused, not as an idle guide, once it has loaded.
+      state:
+        state.connection === 'offline'
+          ? accessState(access)
+          : state.status.toLowerCase() || 'idle',
       connection: state.connection,
       sessionId: this.#sessionId,
       viewRevision: this.#executor?.viewRevision ?? null,
@@ -224,9 +230,8 @@ export class GuideRuntime {
     /*
      * The mode's verdict, read rather than kept: there is one per mode, keyed
      * on the user, and the runtime holds no copy to fall out of step with it.
-     * Nothing is written for a refusal — the panel draws the verdict's own
-     * sentence and `ir.guideStatus` reports it — so a message about the last
-     * account never greets the next one.
+     * Nothing is written for a refusal: the panel is only offered under a
+     * grant, and `ir.guideStatus` reports the verdict's reason.
      */
     const verdict = this.#host.access()
     if (verdict.state !== 'granted') return
@@ -398,6 +403,11 @@ export class GuideRuntime {
       voice: null,
       expiresAt: null,
     })
+  }
+
+  /** Drop the message: it was written for an account that is not this one. */
+  forgetMessage(): void {
+    if (this.#snapshot.message !== null) this.#update({ message: null })
   }
 
   /** A typed request, as the visitor's own words. */
@@ -582,17 +592,15 @@ export class GuideRuntime {
     }
     const expiresAt = this.#snapshot.expiresAt
     if (expiresAt !== null && now >= expiresAt) {
-      void this.end().then(() =>
-        this.#update({ message: 'The guide session reached its time limit.' }),
-      )
+      // Written before the session closes rather than after, so a verdict
+      // that drops the message while it closes is not followed by one.
+      this.#update({ message: 'The guide session reached its time limit.' })
+      void this.end()
       return
     }
     if (this.#pausedAt !== null && now - this.#pausedAt >= PAUSE_LIMIT_MS) {
-      void this.end().then(() =>
-        this.#update({
-          message: 'The guide ended after three minutes paused.',
-        }),
-      )
+      this.#update({ message: 'The guide ended after three minutes paused.' })
+      void this.end()
       return
     }
     this.#tickLinger(now)

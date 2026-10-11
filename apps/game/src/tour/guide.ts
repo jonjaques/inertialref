@@ -2,7 +2,7 @@ import { UNAVAILABLE_GUIDE, type GuideHostPort } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { GuideRuntime } from './runtime.ts'
 import { GuideLifetime } from './lifetime.ts'
-import type { GuideAccessOwner } from './verdict.ts'
+import { accessState, type GuideAccessOwner } from './verdict.ts'
 
 /** Importing the mode admits no guide code, media, timer, or network request. */
 export function createGuide(
@@ -24,6 +24,12 @@ export function createGuide(
  * while a conversation is running would otherwise leave the microphone open
  * and the voice talking with nothing visible to stop either. `end` is a no-op
  * for a runtime that is offline or not loaded.
+ *
+ * And every new verdict drops the runtime's message. The verdict publishes
+ * only when the user changes and when its answer lands, and a message — a
+ * session that ended, a microphone refused — is about the account it was
+ * written for; the runtime outlives the panel, so it would otherwise greet
+ * whoever signs in next.
  */
 export function mountGuide(
   engine: GameEngine,
@@ -32,7 +38,10 @@ export function mountGuide(
 ): () => void {
   const release = guide.acquire()
   const unsubscribe = access.subscribe(() => {
-    if (access.current().state !== 'granted') void guide.current?.end()
+    const runtime = guide.current
+    if (runtime === null) return
+    runtime.forgetMessage()
+    if (access.current().state !== 'granted') void runtime.end()
   })
   let tracing = false
   const port: GuideHostPort = {
@@ -44,12 +53,7 @@ export function mountGuide(
       return {
         ...UNAVAILABLE_GUIDE,
         available: verdict.state === 'granted',
-        state:
-          verdict.state === 'granted'
-            ? 'idle'
-            : verdict.state === 'checking'
-              ? 'checking'
-              : verdict.reason,
+        state: accessState(verdict),
       }
     },
     ask: async (text) => {

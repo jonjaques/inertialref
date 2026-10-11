@@ -257,10 +257,14 @@ describe('the guide runtime', () => {
       f.grant(access)
       await f.runtime.start('marin')
       expect(f.runtime.getSnapshot().connection).toBe('offline')
-      // The panel draws the verdict's sentence; a message here would greet
-      // whoever signs in next.
+      // A message here would greet whoever signs in next.
       expect(f.runtime.getSnapshot().message).toBeNull()
-      expect(f.runtime.diagnostics().available).toBe(false)
+      // Loaded, it reports the verdict rather than an idle guide.
+      expect(f.runtime.diagnostics()).toMatchObject({
+        available: false,
+        loaded: true,
+        state: access.state === 'checking' ? 'checking' : access.reason,
+      })
     }
     expect(
       f.requests.some((request) => request.path === GUIDE_SESSIONS_PATH),
@@ -514,6 +518,9 @@ describe('the guide runtime', () => {
     expect(f.runtime.getSnapshot().connection).toBe('offline')
     expect(f.runtime.getSnapshot().message).toMatch(/three minutes paused/)
     expect(f.live.close).toHaveBeenCalledOnce()
+    // Another account signing in drops it rather than being greeted by it.
+    f.runtime.forgetMessage()
+    expect(f.runtime.getSnapshot().message).toBeNull()
     f.session.dispose()
   })
 
