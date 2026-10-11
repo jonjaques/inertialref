@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { openSession, type Session } from '@inertialref/devtools'
+import { InvariantError } from '@inertialref/shared'
 import { vec3 } from '@inertialref/spatial'
 import {
   type Body,
@@ -33,17 +34,21 @@ import { createTileProducer, type TileProducer } from './terrainProducer.ts'
 
 /*
  * A body the kernel cannot pack. No real graph exceeds the node cap — the
- * lattice is the cap — so the refusal is the packer's own throw, delivered
- * for the surfaces a test names and for no other.
+ * lattice is the cap — so the refusal is the packer's own invariant throw,
+ * delivered for the surfaces a test names and for no other. A `broken`
+ * surface throws what a defect in the packing code would.
  */
 const unpackable = vi.hoisted(() => new WeakSet<object>())
+const broken = vi.hoisted(() => new WeakSet<object>())
 vi.mock('@inertialref/universe', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@inertialref/universe')>()
   return {
     ...actual,
     surfaceKernel: (surface: object, seabed?: boolean) => {
       if (unpackable.has(surface))
-        throw new Error('8000000 drainage nodes exceed the kernel cap')
+        throw new InvariantError('8000000 drainage nodes exceed the kernel cap')
+      if (broken.has(surface))
+        throw new TypeError('cannot read properties of undefined')
       return actual.surfaceKernel(
         surface as Parameters<typeof actual.surfaceKernel>[0],
         seabed,
@@ -273,6 +278,72 @@ describe('the tile producer', () => {
     expect(after.available).toBe(true)
     expect(after.refused).toBe(before.refused + 1)
     expect(after.tiles).toBe(before.tiles + 1)
+  })
+
+  it("settles the refused body's jobs left queued behind the batch", async () => {
+    /*
+     * A batch of one takes the first tile; the other two are still on the
+     * queue when the pack throws, and `refuse` has to find them there.
+     */
+    const surface = { ...solBody('Mars').surface }
+    unpackable.add(surface)
+    let pooled = 0
+    const pool: HeightfieldSource = {
+      kind: 'pool',
+      available: true,
+      submit: (s, request) => {
+        pooled += 1
+        return {
+          id: 0,
+          result: Promise.resolve(generateHeightfield(s, request)),
+          cancel() {},
+        }
+      },
+    }
+    const single = createTileProducer(gpu.renderer, { batch: 1 })
+    try {
+      const router = new Heightfields(pool)
+      router.preferred = single
+      const fields = await Promise.all(
+        regions(9, 3).map(
+          (region) => router.submit(surface, requestFor(region))!.result,
+        ),
+      )
+      expect(fields.every((field) => field !== null)).toBe(true)
+      expect(pooled).toBe(3)
+      expect(single.stats()).toMatchObject({
+        available: true,
+        queued: 0,
+        refused: 1,
+      })
+    } finally {
+      single.dispose()
+    }
+  })
+
+  it('retires on a throw from packing that is not a packer invariant', async () => {
+    const surface = { ...solBody('Mars').surface }
+    broken.add(surface)
+    const pool: HeightfieldSource = {
+      kind: 'pool',
+      available: true,
+      submit: (s, request) => ({
+        id: 0,
+        result: Promise.resolve(generateHeightfield(s, request)),
+        cancel() {},
+      }),
+    }
+    const own = createTileProducer(gpu.renderer)
+    try {
+      const router = new Heightfields(pool)
+      router.preferred = own
+      const [region] = regions(9, 1) as [RegionAddress]
+      const field = await router.submit(surface, requestFor(region))!.result
+      expect(field).not.toBeNull()
+      expect(own.stats()).toMatchObject({ available: false, refused: 0 })
+    } finally {
+      own.dispose()
+    }
   })
 
   it('refuses a request shaped for another kernel rather than answering it wrong', async () => {

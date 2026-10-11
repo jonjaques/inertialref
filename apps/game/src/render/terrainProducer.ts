@@ -1,5 +1,11 @@
 import type { WebGPURenderer } from 'three/webgpu'
-import { getLogger, getTimer, type TimingDetail } from '@inertialref/shared'
+import {
+  getLogger,
+  getTimer,
+  InvariantError,
+  type TimingDetail,
+} from '@inertialref/shared'
+import { formatSeed } from '@inertialref/procedural'
 import type { JobId } from '@inertialref/protocol'
 import {
   COVER_CHANNELS,
@@ -222,6 +228,7 @@ export function createTileProducer(
     refused.add(surface)
     refusals += 1
     log.warn('the GPU tile producer cannot pack this body; the pool takes it', {
+      seed: formatSeed(surface.seed),
       cause: String(cause),
     })
     for (const job of taken) job.reject(new HeightfieldUnavailable())
@@ -279,17 +286,23 @@ export function createTileProducer(
     const started = performance.now()
     /*
      * Packed apart from the dispatch, because the two fail for different
-     * reasons. Packing is arithmetic on the CPU about one body; a throw there
-     * says nothing about the device, and retiring the producer for it sent
-     * every later body to the pool for the session.
+     * reasons. A packer invariant is about one body and says nothing about
+     * the device. Anything else thrown here is a defect in the packing code,
+     * which would refuse every body in turn while `ir.terrain()` still
+     * reported the GPU, so it retires the producer as loudly as a lost device.
      */
     let packed: KernelSurface
     try {
       packed = surfaceKernel(head.surface, head.request.seabed)
     } catch (cause) {
       inFlight = 0
-      refuse(head.surface, taken, cause)
-      schedule()
+      if (cause instanceof InvariantError) {
+        refuse(head.surface, taken, cause)
+        schedule()
+      } else {
+        fail(cause)
+        for (const job of taken) job.reject(new HeightfieldUnavailable())
+      }
       return
     }
     try {
