@@ -120,7 +120,8 @@ async function handle(
       if (!isGuideVoice(input.voice))
         throw new TourHttpError('Choose an available voice.')
       // The protocol's decoder, and its limits in bytes — the unit the
-      // provider counts in, and the one the browser's opening line is held to.
+      // adapter holds the request to, and the one the browser's opening line
+      // is written under.
       const decoded = decode(decodeGuideSessionRequest, input)
       if (!decoded.ok)
         throw new TourHttpError('A text field is outside its limits.')

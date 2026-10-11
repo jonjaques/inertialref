@@ -1,6 +1,7 @@
 import { err, ok } from '@inertialref/shared'
 import {
   decodeArray,
+  decodeEnum,
   decodeNumber,
   decodeObject,
   decodeString,
@@ -67,12 +68,7 @@ const decodeVoice: Decoder<GuideVoice> = refine(
   'a guide voice',
 )
 
-const decodeRefusal: Decoder<GuideRefusal> = refine(
-  decodeString,
-  (value): value is GuideRefusal =>
-    (GUIDE_REFUSALS as readonly string[]).includes(value),
-  `one of ${GUIDE_REFUSALS.join(' | ')}`,
-)
+const decodeRefusal: Decoder<GuideRefusal> = decodeEnum(...GUIDE_REFUSALS)
 
 /** The verdict, if it is one; a proxy's error page or a stale shape is not. */
 export const decodeGuideVerdict: Decoder<GuideVerdict> = (value, path) => {
@@ -98,9 +94,10 @@ export const decodeGuideVerdict: Decoder<GuideVerdict> = (value, path) => {
 }
 
 /**
- * The bounds of a session request, both in UTF-8 bytes — the unit the
- * provider counts in. The Worker refuses past them before it spends a provider
- * call, and the browser's opening line is written to fit under them.
+ * The bounds of a session request, both in UTF-8 bytes: the request goes to
+ * the provider as an encoded body, so bytes are what the adapter holds it to.
+ * The Worker refuses past them before it spends a provider call, and the
+ * browser's opening line is written to fit under them.
  */
 export const GUIDE_SESSION_LIMITS = {
   /** The browser's SDP offer, and the provider's answer. */

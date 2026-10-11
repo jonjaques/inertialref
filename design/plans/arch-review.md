@@ -129,7 +129,7 @@ Worker · in-process
   `tour/access.ts` and `account.ts`.
 
 **The shape.** In the game, one verdict per mode, keyed on the user and created
-beside `GuideLifetime`. It asks through 10's decoder and answers in one of
+beside `GuideLifetime`. It asks through `decodeGuideVerdict` and answers in one of
 three states: checking, granted with voices, or refused with a reason. The
 registry, the end-on-loss effect, the controls, `runtime.start` (through
 `GuideHost`) and `ir.guideStatus` read it, and the runtime loses its

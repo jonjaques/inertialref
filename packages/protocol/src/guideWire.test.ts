@@ -61,7 +61,7 @@ describe('the session request', () => {
   it('bounds the scene in bytes, not in UTF-16 units', () => {
     // Three bytes a character in UTF-8, one unit in UTF-16: 600 of them are
     // 600 units, inside a bound counted in units, and 1,800 bytes, outside
-    // the provider's.
+    // the adapter's.
     const scene = '…'.repeat(600)
     expect(scene.length).toBeLessThan(GUIDE_SESSION_LIMITS.sceneBytes)
     expect(decode(decodeGuideSessionRequest, { ...request, scene }).ok).toBe(
@@ -109,5 +109,13 @@ describe('utf8Bytes', () => {
         expect(utf8Bytes(text)).toBe(reference(text))
       }),
     )
+  })
+
+  it('counts an astral character as four and a lone surrogate as three', () => {
+    // `encodeURIComponent` throws on a lone surrogate, so the property above
+    // never draws one; `TextEncoder` writes U+FFFD for it, three bytes.
+    expect(utf8Bytes('')).toBe(0)
+    expect(utf8Bytes('🪐')).toBe(4)
+    expect(utf8Bytes('\uD800')).toBe(3)
   })
 })
