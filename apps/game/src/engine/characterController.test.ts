@@ -34,10 +34,10 @@ describe('character activation', () => {
 
   it('stages a character beside the landed Rocinante and shares one camera eye', () => {
     const game = makeEngine()
-    const ship = game.player()
+    const ship = game.session.player()
     game.character.atMarsPad()
     game.frame(1 / 60)
-    const id = game.player()!
+    const id = game.session.player()!
     expect(game.world.isLanded(ship!)).toBe(true)
     expect(game.character.status().grounded).toBe(true)
     expect(game.parkedRocinante).not.toBeNull()
@@ -55,7 +55,7 @@ describe('character activation', () => {
     game.frame(1 / 60)
     expect(game.characterView?.visible).toBe(false)
     game.character.leave()
-    expect(game.player()).toBe(ship)
+    expect(game.session.player()).toBe(ship)
     expect(game.world.entities.has(id)).toBe(false)
     game.dispose()
   })
@@ -72,7 +72,7 @@ describe('character activation', () => {
     expect(game.character.locked).toBe(false)
     expect(game.character.entity!.character!.input.forward).toBe(0)
     game.character.leave()
-    expect(game.player()).toBe(ship)
+    expect(game.session.player()).toBe(ship)
     game.dispose()
   })
   it('replaces the world without writing it, so a console load replays held keys', () => {
@@ -81,7 +81,7 @@ describe('character activation', () => {
     // replay that rewrote the walker's intent would not be one.
     const game = makeEngine()
     game.character.atMarsPad()
-    const id = game.player()!
+    const id = game.session.player()!
     game.character.lockChanged(true)
     game.character.input({ forward: 1 })
     expect(game.harness.load(game.harness.save()).ok).toBe(true)
@@ -93,7 +93,7 @@ describe('character activation', () => {
   it('drops the flight keys on foot rather than flying the walker or boarding', () => {
     const game = makeEngine()
     game.character.atMarsPad()
-    const walker = game.player()
+    const walker = game.session.player()
     const before = game.world.stateHash()
     expect(game.setThrottle(1)).toBe(0)
     expect(game.nudgeThrottle(0.05)).toBe(0)
@@ -101,7 +101,7 @@ describe('character activation', () => {
     game.killRotation()
     game.setControl([0, 0, 1], [0, 1, 0])
     expect(game.world.stateHash()).toBe(before)
-    expect(game.player()).toBe(walker)
+    expect(game.session.player()).toBe(walker)
     game.dispose()
   })
 
@@ -112,7 +112,7 @@ describe('character activation', () => {
     game.character.lockChanged(true)
     expect(game.character.locked).toBe(true)
     game.harness.onFoot.board()
-    expect(game.player()).toBe(ship)
+    expect(game.session.player()).toBe(ship)
     expect(game.character.active).toBe(false)
     expect(game.character.locked).toBe(false)
     expect(game.character.padPreview).toBe(false)
@@ -151,7 +151,7 @@ describe('character activation', () => {
     const walker = game.harness.onFoot.atMarsPad()
     expect(game.harness.cutsceneStatus()).toBeNull()
     game.frame(1 / 60)
-    expect(game.player()).toBe(walker.id)
+    expect(game.session.player()).toBe(walker.id)
     expect(game.scene()?.camera.position).toEqual(
       game.characterCamera?.camera.position,
     )
@@ -164,11 +164,11 @@ describe('character activation', () => {
     game.frame(1 / 60)
     expect(game.harness.onFoot.available()).toBe(true)
     game.harness.play('tng-intro')
-    const ship = game.player()
+    const ship = game.session.player()
     expect(game.harness.onFoot.available()).toBe(false)
     expect(game.harness.onFoot.stepOut().ok).toBe(false)
     expect(game.character.enter()).toBe(false)
-    expect(game.player()).toBe(ship)
+    expect(game.session.player()).toBe(ship)
     game.dispose()
   })
 
@@ -204,7 +204,9 @@ describe('character activation', () => {
     game.world.runTicks(1)
     expect(game.character.available()).toBe(true)
     expect(game.character.enter()).toBe(true)
-    expect(game.world.entities.require(game.player()!).kind).toBe('character')
+    expect(game.world.entities.require(game.session.player()!).kind).toBe(
+      'character',
+    )
     game.dispose()
   })
 
@@ -221,7 +223,8 @@ describe('character activation', () => {
     game.character.input({ forward: 1, sprint: true, jump: true })
     expect(game.character.toggleFlight()).toBe(false)
     game.character.lockChanged(false)
-    const input = game.world.entities.require(game.player()!).character!.input
+    const input = game.world.entities.require(game.session.player()!).character!
+      .input
     expect(input.forward).toBe(0)
     expect(input.jump).toBe(false)
     expect(input.sprint).toBe(false)

@@ -174,7 +174,7 @@ describe("the walker camera's memory", () => {
       const feet = game.characterView!.position
       return Math.hypot(eye.x - feet.x, eye.y - feet.y, eye.z - feet.z)
     }
-    game.world.setCharacterInput(game.player()!, { crouch: true })
+    game.world.setCharacterInput(game.session.player()!, { crouch: true })
     game.world.runTicks(8)
     game.frame(1 / 60)
     expect(height()).toBeGreaterThan(1.5)

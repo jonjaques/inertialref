@@ -43,34 +43,33 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The walker's presentation is a function                      | [`apps/game/src/engine/onFootPresentation.ts`](../../apps/game/src/engine/onFootPresentation.ts) and its test   |
 | A body's uniforms are a pure mapping                         | [`apps/game/src/render/bodyUniforms.ts`](../../apps/game/src/render/bodyUniforms.ts) and its test               |
 | The frame's owner is named once                              | [`apps/game/src/engine/frameOwner.ts`](../../apps/game/src/engine/frameOwner.ts), `engine.owner`, rule 31       |
+| The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests     |
 
 ---
 
 ## The order
 
-| #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | —         | Strong          |
-| 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness              | —         | Strong          |
-| 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide                | —         | Strong          |
-| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                                                                 | The guide                | 10        | Strong          |
-| 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                                                               | The guide                | 11        | Worth exploring |
-| 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                                                                     | The terrain              | —         | Strong          |
-| 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone)                                       | The terrain              | —         | Strong          |
-| 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                                                       | The terrain              | —         | Worth exploring |
-| 16  | [The drainage graph is prepared off the draw thread](#16-the-drainage-graph-is-prepared-off-the-draw-thread)                                           | The terrain              | 14        | Worth exploring |
-| 17  | [The scene target's layout is one table](#17-the-scene-targets-layout-is-one-table)                                                                    | The picture              | —         | Strong          |
-| 18  | [The sensor publishes the frame's pixel grid](#18-the-sensor-publishes-the-frames-pixel-grid)                                                          | The picture              | 17        | Worth exploring |
-| 19  | [One quad-pass runner](#19-one-quad-pass-runner)                                                                                                       | The picture              | —         | Strong          |
-| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)                                                                     | The picture              | 19        | Worth exploring |
-| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                                                                                       | The picture              | 19        | Worth exploring |
-| A   | [One compass basis](#a-one-compass-basis)                                                                                                              | Optional                 | —         | Speculative     |
-| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                                                                  | Optional                 | 13, 16    | Speculative     |
+| #   | Pull request                                                                                                                                           | Track       | Builds on | Strength        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --------- | --------------- |
+| 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness | —         | Strong          |
+| 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide   | —         | Strong          |
+| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                                                                 | The guide   | 10        | Strong          |
+| 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                                                               | The guide   | 11        | Worth exploring |
+| 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                                                                     | The terrain | —         | Strong          |
+| 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone)                                       | The terrain | —         | Strong          |
+| 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                                                       | The terrain | —         | Worth exploring |
+| 16  | [The drainage graph is prepared off the draw thread](#16-the-drainage-graph-is-prepared-off-the-draw-thread)                                           | The terrain | 14        | Worth exploring |
+| 17  | [The scene target's layout is one table](#17-the-scene-targets-layout-is-one-table)                                                                    | The picture | —         | Strong          |
+| 18  | [The sensor publishes the frame's pixel grid](#18-the-sensor-publishes-the-frames-pixel-grid)                                                          | The picture | 17        | Worth exploring |
+| 19  | [One quad-pass runner](#19-one-quad-pass-runner)                                                                                                       | The picture | —         | Strong          |
+| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)                                                                     | The picture | 19        | Worth exploring |
+| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                                                                                       | The picture | 19        | Worth exploring |
+| A   | [One compass basis](#a-one-compass-basis)                                                                                                              | Optional    | —         | Speculative     |
+| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                                                                  | Optional    | 13, 16    | Speculative     |
 
 ```mermaid
 flowchart LR
   P9[9 Director and booted]
-  P8[8 One generation]
   P10[10 Guide contract] --> P11[11 Guide verdict] --> P12[12 Live channel]
   P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
@@ -88,58 +87,16 @@ the numbering is the order to take them in. Across tracks the only edges are
 the two optional items.** So the tracks fan out across worktrees, and
 the numbering is the order for one pair of hands. Where a pull request builds
 on nothing and still has a place in the order, the place is about collision,
-and its section says so. Three files are edited by more than one pull request,
+and its section says so. Two files are edited by more than one pull request,
 and the order is what keeps them apart:
 
-- `apps/game/src/engine/GameEngine.ts` — the derived state in 8, and the archive's wiring in 13. Different regions of it: a rebase, not
-  a design dependency.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 8.** The frame's owner is named once and the scene takes its
-eye, so what is left of the track is the derived state the frame keeps.
-
----
-
-## 8. The engine's derived state keys on one generation
-
-**Track:** the walker and the frame · **Strong** · in-process
-
-**Builds on:** nothing left open; `buildScene` takes the owner's eye. **Unblocks:**
-nothing.
-
-**Files.** `apps/game/src/engine/GameEngine.ts` — the starfield survey
-(`#maybeSurveyStars`, `#starFieldWorld`, the sweep), the orbit-trace cache
-(`#maybeTraceOrbits`) and `#invalidateDerived`;
-`apps/game/src/scene/Starfield.tsx` and `OrbitTraces.tsx`, one consumer each;
-`packages/devtools/src/session.ts` (`onWorldReplaced`).
-
-**The friction.** `#invalidateDerived` clears seventeen fields by hand and bumps
-a counter beside them. Its own comment says why the list is one method: split
-across `replaceWorld` and `load`, the starfield survives a jump of four light
-years. The orbit-trace cache keys on `#starFieldWorld`, a counter named for the
-starfield. The survey and the cache are private methods of a 1,995-line class
-with one consumer apiece, so neither can be tested alone.
-
-**The shape.** Two modules with one consumer each: `engine/starSurvey.ts`,
-whose interface is `update(generation, eye)` → `StarField` with the hysteresis
-and the in-flight-world guard inside, and `engine/orbitTraces.ts`, keyed on the
-generation and the scope. The engine names the world generation once, bumped
-where the world is replaced, and hands it to both; `#invalidateDerived` becomes
-the bump and the `reset()` calls. `player()` has no caller outside the engine
-but the tests, which can read the session, so it goes. `pool()` stays until `scene/Bodies.tsx` and
-`render/preload.ts` read the session for it.
-
-**Gate.** The survey and the cache get unit tests over a fake pool and a fake
-generation. A test replaces the world and asserts every derived field cold —
-all of them, counted, so the count is the gate — and the starfield does not
-survive the four-light-year jump the comment names. `pnpm knip` is clean.
-
-**Go/no-go.** If an entry keys on something the generation cannot see, the
-list keeps that entry and the test names it. `reset()` writes no canonical
-state — the flight grant is the session's `replaceWorld`, and the held keys the
-game's `load` — so this is the pull request that finds out whether any entry
-still keys on something the generation cannot see.
+**Start with 9.** The walker-and-frame track is in the tree: the frame's
+owner is named once, the scene takes its eye, and what the engine derives from
+a world keys on the world's generation. The harness is next by number, and
+builds on nothing.
 
 ---
 
@@ -742,7 +699,7 @@ the identity — replaces the hand-written key cases in
   answer a different consequence of the same event, and each is correct
   locally. The session's `onWorldReplaced` option is the engine's subscription;
   letting the director and the observatory register on it instead of checking
-  is a separate design, built on the generation 8 names.
+  is a separate design, built on the world generation the engine names.
 - **`RENDER_HDR` and `RENDER_AA` stay in `App`.** Both are facts about the
   renderer it builds — a constructor argument and the drawing buffer's ratio —
   and the canvas key reads them. `RENDER_AA` is also bound by the registry, for
