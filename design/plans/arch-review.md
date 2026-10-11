@@ -48,6 +48,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                            |
 | The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                   |
 | The game holds one guide verdict per mode                    | [`apps/game/src/tour/verdict.ts`](../../apps/game/src/tour/verdict.ts), `mountGuide`, and their tests           |
+| The Worker decides "configured" once                         | `guideAccess` in [`apps/server/src/tour/access.ts`](../../apps/server/src/tour/access.ts), ADR-0048             |
 
 ---
 
@@ -55,8 +56,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
 | --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 11  | [One owner for the guide verdict, on the Worker](#11-one-owner-for-the-guide-verdict-on-the-worker)              | The guide   | —         | Worth exploring |
-| 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                         | The guide   | 11        | Worth exploring |
+| 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                         | The guide   | —         | Worth exploring |
 | 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                               | The terrain | —         | Strong          |
 | 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
 | 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                 | The terrain | —         | Worth exploring |
@@ -71,7 +71,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 ```mermaid
 flowchart LR
-  P11[11 Guide verdict] --> P12[12 Live channel]
+  P12[12 Live channel]
   P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
   P15[15 Water decision]
@@ -94,36 +94,12 @@ and the order is what keeps them apart:
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 11.** The walker-and-frame track and the harness are in the tree,
-the guide's wire is one module in `packages/protocol`, and the game holds one
-verdict per mode. What is left of 11 is the Worker deciding "configured" once.
-The terrain and picture tracks build on nothing left open and can start in
-parallel. [Open from the review of 6–11](#open-from-the-review-of-611) holds
-the smaller follow-ups those pull requests left, none of them a pull request of
-its own.
-
----
-
-## 11. One owner for the guide verdict, on the Worker
-
-**Track:** the guide · **Worth exploring** · in-process
-
-**Builds on:** nothing left open — the game half is in the tree
-(`apps/game/src/tour/verdict.ts`). **Unblocks:** 12.
-
-**Files.** `apps/server/src/tour/routes.ts`, `apps/server/src/tour/access.ts`,
-`apps/server/src/account.ts`, `apps/server/src/tour/routes.test.ts`.
-
-**The friction.** The Worker decides "configured" in three places: `routes.ts`,
-`tour/access.ts` and `account.ts`. `routes.test.ts` mocks `access.ts` even for
-the configuration cases, so what decides "configured" is not under test there.
-
-**The shape.** `guideAccess(request, env)` returns the protocol's verdict union,
-with `unavailable` as the reason for a deployment that is not configured, and
-the route maps each reason to a status code.
-
-**Gate.** "Configured" is decided once. `routes.test.ts` stops mocking
-`access.ts` for the configuration cases.
+**Start with 12.** The guide's wire is one module in `packages/protocol`, the
+game holds one verdict per mode and the Worker decides it once, so what is left
+of the guide is the Live channel. The terrain and picture tracks build on
+nothing left open and can start in parallel.
+[Open from the review of 6–11](#open-from-the-review-of-611) holds the smaller
+follow-ups those pull requests left, none of them a pull request of its own.
 
 ---
 
@@ -132,7 +108,8 @@ the route maps each reason to a status code.
 **Track:** the guide · **Worth exploring** · true external (the provider),
 mocked at the adapter
 
-**Builds on:** 11 — the runtime has lost the verdict, and what is left is the
+**Builds on:** nothing left open — the runtime has lost the verdict to
+`tour/verdict.ts` and the Worker decides it once, so what is left is the
 channel and the lifecycle. **Unblocks:** nothing.
 
 **Files.** `apps/game/src/tour/runtime.ts` (`send`, pause and resume, the
