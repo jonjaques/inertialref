@@ -24,7 +24,6 @@ import {
   type RegionAddress,
   regionChildren,
   regionParent,
-  standingWaterIsSampled,
   surfaceDetailFloor,
 } from '@inertialref/universe'
 import {
@@ -45,7 +44,8 @@ import {
   selectTerrain,
   type TerrainEye,
   type TerrainPalette,
-  seaSheetDatum,
+  patchWater,
+  sheetInput,
   terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
@@ -1492,15 +1492,9 @@ export class TerrainStreamer {
           border: field.border,
           elevations: field.elevations,
           cover: field.cover,
-          water: field.water,
           bodyRadius: body.radius,
-          // The sheet's datum, where one is drawn at all — the same answer
-          // the palette gives the material, from the same function — unless
-          // the field sampled the water itself, in which case the sea is in
-          // `water` where the sea reaches and nowhere else.
-          seaLevel: standingWaterIsSampled(body.surface)
-            ? null
-            : seaSheetDatum(body),
+          // The build half of the decision the request was made under.
+          ...sheetInput(patchWater(body), field.water),
         }),
       )
       built += 1
@@ -1552,8 +1546,8 @@ export class TerrainStreamer {
         region,
         resolution: HEIGHTFIELD_RESOLUTION,
         border: HEIGHTFIELD_BORDER,
-        // The seabed only where `buildPatch` is handed a sheet to lay over it.
-        seabed: seaSheetDatum(body) !== null,
+        // The request half: the seabed only where a sheet is laid over it.
+        seabed: patchWater(body).seabed,
       })
       if (handle === null) continue
       this.#inFlight.set(key, handle)

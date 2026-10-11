@@ -22,13 +22,13 @@ import {
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
   regionAddress,
-  standingWaterIsSampled,
 } from '@inertialref/universe'
 import {
   buildPatch,
   patchIndices,
   type RenderPatch,
-  seaSheetDatum,
+  patchWater,
+  sheetInput,
   terrainPalette,
 } from '@inertialref/rendering'
 import type { TerrainMaterial } from './terrain.ts'
@@ -267,16 +267,15 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
 
   async function run(body: Body, bake: Bake): Promise<void> {
     const regions = bakeRegions()
-    // The sheet's datum, where one is drawn — the same answer the streamer
-    // gives `buildPatch`, and the same flag it sends the producer.
-    const sheet = seaSheetDatum(body)
+    // The streamer's decision: the same request half, the same build half.
+    const water = patchWater(body)
     const fields = await Promise.all(
       regions.map((region) => {
         const job = host.heightfields.submit(body.surface, {
           region,
           resolution: HEIGHTFIELD_RESOLUTION,
           border: HEIGHTFIELD_BORDER,
-          seabed: sheet !== null,
+          seabed: water.seabed,
         })
         if (job === null) return null
         bake.jobs.push(job)
@@ -298,9 +297,8 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
         border: field.border,
         elevations: field.elevations,
         cover: field.cover,
-        water: field.water,
         bodyRadius: body.radius,
-        seaLevel: standingWaterIsSampled(body.surface) ? null : sheet,
+        ...sheetInput(water, field.water),
       }),
     )
     render(body, patches, bake)

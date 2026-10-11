@@ -206,13 +206,7 @@ reference: the WebGPU frame is the one the target applies to.
    which ends the 4% deposit step at a level boundary and the rock seat's
    0.70 m tail. The two bytes travel in the second cover word's high
    sixteen bits, so defect 2 does not block it.
-6. **Nothing tests the sheet `buildPatch` builds.** No test in
-   `terrainPatch.test.ts` or `rendering.test.ts` reads `RenderPatch.water`,
-   and the four heightfield fixtures that reach it hand it a dry field. The
-   sheet is proven by plates alone, which means a regression in the vertex
-   levels, the border or the `anyUnderWater` gate lands green. A fixture with
-   a lake over part of the grid and a river across it is the missing case.
-7. **A sample within reach of two water bodies gets a level belonging to
+6. **A sample within reach of two water bodies gets a level belonging to
    neither.** `lakeLevelAt` is a kernel-weighted mean over the lake nodes in
    `lakeReach`, so a sample between two lakes at different spills — or between
    a lake and the sea — reads a smooth interpolation of the two, and the
@@ -221,7 +215,7 @@ reference: the WebGPU frame is the one the target applies to.
    can share a ring") against a budget in kilometers, and nothing bounds the
    blend. The fix is to weight one body — the nearest by node count, or the
    one the sample's own receiver drains to — rather than to mix them.
-8. **A sea inlet under two cells wide loses both its sheet and its clamp.**
+7. **A sea inlet under two cells wide loses both its sheet and its clamp.**
    On a body with a graph the sea is applied only where `lakeLevelAt` finds a
    sea node within 1.2 lattice cells, and a cell is 156 km on Earth. A bay or
    fjord whose nodes all sit above the macro datum reads NaN, so
@@ -232,17 +226,17 @@ reference: the WebGPU frame is the one the target applies to.
    visibly dry hole where the field still says the ground is under the datum.
    The lattice at 128² (phase 3) halves the width that vanishes rather than
    ending it.
-9. **The network's sources.** Eight-neighbor steepest descent on a smooth
+8. **The network's sources.** Eight-neighbor steepest descent on a smooth
    landform leaves seven nodes in ten as sources, so `N₁/N₂` sits near seven
    where a mapped network reads four; the tests hold Horton's ratio at 3–9
    and Hack's exponent at 0.45–0.75 for it. The refinement is what fills the
    headwaters in, and the statistic is re-measured when it lands.
-10. **The foam is static and the shore does not break.** A wave band that moves
-    with the swell's phase is the cheap half; a breaker is a phase.
-11. **Plate worlds carry the liquid with less shoreline variety.** The fixture
+9. **The foam is static and the shore does not break.** A wave band that moves
+   with the swell's phase is the cheap half; a breaker is a phase.
+10. **Plate worlds carry the liquid with less shoreline variety.** The fixture
     lost its plate world, and the shore was judged on a stagnant lid. Measure
     at the most-plated body before believing the coast.
-12. **The macro band tiles.** Every detail octave is one baked texture, and
+11. **The macro band tiles.** Every detail octave is one baked texture, and
     the macro band is fetched from it with the others: it repeats every
     `NOISE_CELLS` — 32 — cells, about 20 km of ground, at full strength for
     any footprint under a kilometer a pixel — sixteen identical tiles across
@@ -253,16 +247,16 @@ reference: the WebGPU frame is the one the target applies to.
     band goes to an aperiodic evaluation, or the period is fixed at a real
     4 km cell and the bake's detail bands are set flat; both change the look,
     so a plate decides.
-13. **A lava sea glows on the ground and not on the sphere.** The sheet emits
+12. **A lava sea glows on the ground and not on the sphere.** The sheet emits
     the liquid's glow and the sphere takes only the liquid's color
     (`planet.oceanColor`), so a magma world is red at the gate and dark from
     orbit at night. One uniform, and the boot warm-up graph with it.
-14. **The bake's ninety-six tiles queue ahead of the streamer.** On the pool
+13. **The bake's ninety-six tiles queue ahead of the streamer.** On the pool
     path the source is a FIFO the two share, so a bake starting on a descent
     delays the ground the descent is about to need. A priority lane in the
     producer and the pool is the fix; residency stops the thrash, not the
     ordering.
-15. **A dry body keeps the previous one's drainage buffers.** `uploadSurface`
+14. **A dry body keeps the previous one's drainage buffers.** `uploadSurface`
     returns early when the new surface has no graph, so `drainageRecords` and
     `drainageWords` still hold the last wet body's nodes, segments and cell
     lists with `needsUpdate` false. Nothing reads them because two independent
@@ -271,12 +265,12 @@ reference: the WebGPU frame is the one the target applies to.
     planet's rivers into this one. Clearing costs 4.4 MB of writes per body
     switch, which is why it is a decision and not an edit; the cheaper answer
     is one gate rather than two.
-16. **`riverSites` drops the lake when there is no river.** The `mouth < 0`
+15. **`riverSites` drops the lake when there is no river.** The `mouth < 0`
     return sits a hundred lines above the lake selection, so a body whose
     drainable nodes are all lake or sea gets none of the four sites rather
     than the one that applies. It wants the function split — the lake site
     does not depend on the mouth.
-17. **`evaluate` returns the sampled water level through a module global.**
+16. **`evaluate` returns the sampled water level through a module global.**
     `sampledLevel` is written by `surfaceCoverAt`, `elevationAt` and
     `waterLevelAt` and read by `waterSurface`, which is correct only because
     every reader is in `terrain.ts` and reads immediately. The `water:

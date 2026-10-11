@@ -4,6 +4,7 @@ import {
   type LinearRgb,
   type LiquidAppearance,
   seaDatumElevation,
+  standingWaterIsSampled,
 } from '@inertialref/universe'
 import { surfaceColor } from './surfaceColor.ts'
 
@@ -285,6 +286,64 @@ export function seaSheetDatum(body: Body): Meters | null {
 }
 
 /**
+ * Whether a patch of this body is drawn with water over it, and from what —
+ * rule 53's "a sheet is drawn" and "this tile is the seabed", as one answer.
+ *
+ * Two halves that must agree, for two callers that must agree: the request
+ * the streamer and the orbital bake send the producer, and the input they
+ * hand `buildPatch` when the tile comes back. A seabed asked for with no
+ * sheet laid over it is a sea drawn as a hole.
+ *
+ * The sea clamp is what decides the rest, and it exists only where there is
+ * a sea datum to clamp to (`groundCoverAt`). Three cases, and this is where
+ * each is stated:
+ *
+ * - **A sea drawn as a sheet** — a datum, a liquid, no photograph. The tile is
+ *   the seabed, and the sheet stands at the datum, or at the field's own
+ *   water where a drainage graph samples it: the sea where the sea reaches,
+ *   and the lakes and rivers inland.
+ * - **No sea datum** — a dry world, or one whose liquid stands only inland,
+ *   such as Titan. There is no clamp, so the ground keeps its lake beds, and
+ *   where a graph samples water the sheet is that water and nothing else.
+ * - **A clamped sea** — a datum with a photograph, such as Earth, or with no
+ *   liquid to stand at it. The tile keeps the clamp, so the ground is never
+ *   below the water, and no sheet is drawn: the field's sampled rivers and
+ *   lakes are not handed over, rather than handed over to a gate that could
+ *   never pass.
+ */
+export interface PatchWater {
+  /** The request half: the tile without the sea clamp, because a sheet lies over it. */
+  readonly seabed: boolean
+  /** The build half: the sheet's one datum, where the sea is one datum. */
+  readonly seaLevel: Meters | null
+  /** The build half: whether the sheet is the field's own sampled water. */
+  readonly sampled: boolean
+}
+
+export function patchWater(body: Body): PatchWater {
+  const sampled = standingWaterIsSampled(body.surface)
+  const sheet = seaSheetDatum(body)
+  if (sheet !== null)
+    return sampled
+      ? { seabed: true, seaLevel: null, sampled: true }
+      : { seabed: true, seaLevel: sheet, sampled: false }
+  return seaDatumElevation(body.surface) === null
+    ? { seabed: false, seaLevel: null, sampled }
+    : { seabed: false, seaLevel: null, sampled: false }
+}
+
+/** `buildPatch`'s two water inputs for one returned tile, from the decision. */
+export function sheetInput(
+  decision: PatchWater,
+  water: Float32Array,
+): { readonly seaLevel: Meters | null; readonly water: Float32Array | null } {
+  return {
+    seaLevel: decision.seaLevel,
+    water: decision.sampled ? water : null,
+  }
+}
+
+/**
  * Open-ocean reflectance in linear sRGB — a few percent, blue. Measured off
  * the mid-Pacific in orbital photographs, not off the albedo map, whose
  * "ocean" is bathymetry data wearing water's color. The one number the
@@ -452,7 +511,7 @@ export function terrainPalette(body: Body): TerrainPalette {
     // what orbit shows is water, not the bathymetry underneath it.
     oceanColor: body.appearance.liquid?.color ?? OPEN_OCEAN,
     liquid: body.appearance.liquid,
-    sheet: seaSheetDatum(body) === null ? 0 : 1,
+    sheet: patchWater(body).seabed ? 1 : 0,
 
     sunsetTint: body.appearance.haze?.limb ?? { r: 1, g: 1, b: 1 },
     airThickness: body.appearance.haze?.thickness ?? 0,
