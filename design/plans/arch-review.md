@@ -17,9 +17,10 @@ buys callers **leverage** and maintainers **locality**. The deletion test —
 does deleting the module concentrate complexity, or just move it — is what
 separates a candidate from a pass-through.
 
-Every figure and line reference below is read from the tree at `96bdc2fd`, and
-nothing was run unless the section says so. Line numbers drift; the symbol
-beside each one is the reference.
+Every figure and line reference below is read from the tree at `96bdc2fd`,
+except in 12 and 13, which are re-read with 6–11 in the tree; nothing was run
+unless the section says so. Line numbers drift; the symbol beside each one is
+the reference.
 
 ---
 
@@ -46,6 +47,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests     |
 | The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                            |
 | The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                   |
+| The game holds one guide verdict per mode                    | [`apps/game/src/tour/verdict.ts`](../../apps/game/src/tour/verdict.ts), `mountGuide`, and their tests           |
 
 ---
 
@@ -53,7 +55,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
 | --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 11  | [One owner for the guide verdict](#11-one-owner-for-the-guide-verdict)                                           | The guide   | —         | Strong          |
+| 11  | [One owner for the guide verdict, on the Worker](#11-one-owner-for-the-guide-verdict-on-the-worker)              | The guide   | —         | Worth exploring |
 | 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                         | The guide   | 11        | Worth exploring |
 | 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                               | The terrain | —         | Strong          |
 | 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
@@ -93,55 +95,35 @@ and the order is what keeps them apart:
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
 **Start with 11.** The walker-and-frame track and the harness are in the tree,
-and the guide's wire is one module in `packages/protocol`. The verdict that
-wire carries still has two holders in the game, and 11 gives it one.
+the guide's wire is one module in `packages/protocol`, and the game holds one
+verdict per mode. What is left of 11 is the Worker deciding "configured" once.
+The terrain and picture tracks build on nothing left open and can start in
+parallel. [Open from the review of 6–11](#open-from-the-review-of-611) holds
+the smaller follow-ups those pull requests left, none of them a pull request of
+its own.
 
 ---
 
-## 11. One owner for the guide verdict
+## 11. One owner for the guide verdict, on the Worker
 
-**Track:** the guide · **Strong** in the game, **worth exploring** on the
-Worker · in-process
+**Track:** the guide · **Worth exploring** · in-process
 
-**Builds on:** nothing left open — the verdict is `GuideVerdict`, read through
-`decodeGuideVerdict`.
-**Unblocks:** 12.
+**Builds on:** nothing left open — the game half is in the tree
+(`apps/game/src/tour/verdict.ts`). **Unblocks:** 12.
 
-**Files.** `apps/game/src/tour/access.ts`, `apps/game/src/tour/runtime.ts`
-(`inspect`, `adopt`, `:214–265`), `apps/game/src/planetarium/PlanetariumMode.tsx`
-(`:263–274`), `apps/game/src/planetarium/registry.tsx` (`:132`),
-`apps/game/src/tour/GuidePanel.tsx`, `apps/game/src/tour/GuideControls.tsx`,
-`apps/game/src/tour/guide.ts`; on the Worker, `apps/server/src/tour/routes.ts`,
-`apps/server/src/tour/access.ts`, `apps/server/src/account.ts`.
+**Files.** `apps/server/src/tour/routes.ts`, `apps/server/src/tour/access.ts`,
+`apps/server/src/account.ts`, `apps/server/src/tour/routes.test.ts`.
 
-**The friction.**
+**The friction.** The Worker decides "configured" in three places: `routes.ts`,
+`tour/access.ts` and `account.ts`. `routes.test.ts` mocks `access.ts` even for
+the configuration cases, so what decides "configured" is not under test there.
 
-- **The game holds the verdict twice:** the access hook's copy and the runtime's
-  snapshot. `inspect()` and `adopt()`, about fifty lines, keep the two in step,
-  including a read a newer one replaced.
-- `grantsGuide` is evaluated twice, in `PlanetariumMode` and in the registry.
-- **The harness cannot see a refusal.** With no runtime loaded, `ir.guideStatus`
-  reports `available: true, state: 'idle'`, so a visitor without the grant reads
-  as available.
-- Two behaviors have no test: the per-user guard that discards an answer for a
-  previous account, and ending a live session when the grant disappears.
-- The Worker decides "configured" in three places: `routes.ts`,
-  `tour/access.ts` and `account.ts`.
+**The shape.** `guideAccess(request, env)` returns the protocol's verdict union,
+with `unavailable` as the reason for a deployment that is not configured, and
+the route maps each reason to a status code.
 
-**The shape.** In the game, one verdict per mode, keyed on the user and created
-beside `GuideLifetime`. It asks through `decodeGuideVerdict` and answers in one of
-three states: checking, granted with voices, or refused with a reason. The
-registry, the end-on-loss effect, the controls, `runtime.start` (through
-`GuideHost`) and `ir.guideStatus` read it, and the runtime loses its
-`capabilities`, `adopt` and `inspect`. On the Worker,
-`guideAccess(request, env)` returns the same union with "not configured" as one
-of the reasons, and the route maps each reason to a status code. The Worker half can be a pull
-request of its own.
-
-**Gate.** `runtime.ts` has no `inspect` or `adopt`, and `grantsGuide` is called
-once. New cases: an account switch discards the old answer; losing the grant
-ends a live runtime; `ir.guideStatus` reports a refusal. `routes.test.ts` stops
-mocking `access.ts` for the configuration cases.
+**Gate.** "Configured" is decided once. `routes.test.ts` stops mocking
+`access.ts` for the configuration cases.
 
 ---
 
@@ -154,7 +136,7 @@ mocked at the adapter
 channel and the lifecycle. **Unblocks:** nothing.
 
 **Files.** `apps/game/src/tour/runtime.ts` (`send`, pause and resume, the
-status line, the list of moves at `:527–531`), `apps/game/src/tour/loop.ts`
+status line, the list of moves in `#executed` at `:486–492`), `apps/game/src/tour/loop.ts`
 (`send` at `:39`), `apps/game/src/tour/media.ts` (`LiveConnection`'s allow
 list), and `runtime.test.ts`, `loop.test.ts`, `media.test.ts`.
 
@@ -169,8 +151,12 @@ list), and `runtime.test.ts`, `loop.test.ts`, `media.test.ts`.
 - Pause and resume are each four calls across two interfaces.
 - Each test file rebuilds the provider's event envelope.
 - **State is held as display text.** `snapshot.status === 'You have the camera'`
-  is read back as state, and the diagnostics' `state` is the lowercased label,
-  so a wording change changes what the harness reports.
+  is read back as state, and while a session runs the diagnostics' `state` is
+  the lowercased label, so a wording change changes what the harness reports.
+  Offline it is the verdict's (`accessState` in `tour/verdict.ts`), and there
+  `unavailable` names two things: the verdict's reason — the Worker gave no
+  answer — and `UNAVAILABLE_GUIDE.state` — no guide port, outside the
+  planetarium. A script cannot tell them apart.
 - **Which tools count as moves is a third classification**, beside
   `GUIDE_CAMERA_TOOLS` and `GuideArrival['tool']`, and whether `adjust_view` or
   `set_time` cancels a linger is stated nowhere.
@@ -185,7 +171,8 @@ already has two adapters — `media.ts` and the fakes — so it is real.
 
 **Gate.** No provider event literal outside the adapter. The fake refuses an
 event off the allow list, and a test proves it. The diagnostics' state survives
-a label change. The move classification is written once.
+a label change, and each of its values names one thing. The move
+classification is written once.
 
 ---
 
@@ -199,7 +186,7 @@ are the two real adapters)
 **Files.** `packages/workers/src/heightfieldCache.ts`
 (`HEIGHTFIELD_CACHE_REVISION`, `HEIGHTFIELD_CACHE_VERSION`, the module-level
 `WeakMap` at `:204`), `apps/game/src/engine/GameEngine.ts` (the cache wiring at
-`:1021–1033`; `#archive` and the `'terrain-tsl@1'` namespace at `:1115–1156`),
+`:995–1006`; `#archive` and the `'terrain-tsl@1'` namespace at `:1076–1127`),
 `apps/headless/src/main.ts` (`:150–164`),
 `apps/game/src/render/terrainProducer.ts`, `.github/workflows/check.yml` (the
 `.data/heightfields` cache), `scripts/terrainArchive.mjs`.
@@ -592,6 +579,61 @@ the identity — replaces the hand-written key cases in
 
 ---
 
+## Open from the review of 6–11
+
+What the reviews of 6–11 found and did not fix, by track. None is a pull
+request of its own; each belongs to the next change that opens its file.
+
+**The walker and the frame.**
+
+- **Observatory ownership is still spelled out twice in `GameEngine.ts`.**
+  `galaxyInstrument` and `galaxyView` test `cinematic === null` and
+  `observer !== null` together, which is `owner?.arm === 'observatory'`.
+  Correct, and allowed inside the engine; `owner.arm` says it once.
+- **The plumes and the parked hull can part.** On foot `ThrusterFx` roots its
+  plumes at the vessel entity's pose; `ShipModel` draws a parked Rocinante at
+  the raised, upright pad pose. They differ only if a parked hull reports a
+  thrust demand, and nothing shows one never does. Either root the plumes at
+  `engine.parkedRocinante`, or hold a parked hull's demand at zero in a test.
+- **The derived-state test counts its own probes, not the fields.** Its count
+  makes a deleted probe loud and cannot see a field added to
+  `#invalidateDerived` without one; `rotationStop` and `terrain` are never warm
+  at the pad, so their cold read proves only that they do not throw.
+- **6's gate is short two plates.** No plate was taken of a figured body or of
+  the star filling the frame; the figured path is equivalent in code and the
+  star's exposure is held by `bodyUniforms.test.ts`. The per-body records it
+  builds every frame are a GC producer in [perf](perf.md#garbage-collection-eats-35-of-the-main-thread-at-idle),
+  unmeasured.
+
+**The harness.**
+
+- **The driver cannot tell a reload from the page it left.** In app mode the
+  post-navigate poll does not check that the new document committed, so a
+  booted page the navigation has not yet replaced can read ready. Matching the
+  navigation's loader, as document mode does, times out a cold boot: Vite
+  reloads the page once after optimizing its dependencies, and the loader
+  changes. The check is "the loader is not the one before the navigation". The
+  one unexplained cold `engine is not defined` 9 recorded may be this; it is
+  not reproduced.
+- **A baseline from before `ir.status().boot` costs twelve seconds a plate.**
+  The driver reads such a build as `drawing` and the cover wait gives up after
+  twelve seconds, which is correct and slow; it ages out as baselines move past 9.
+- **The director still calls `host.render.declareCut()`.** 9's shape did not
+  move it.
+
+**The guide.**
+
+- **A voice added to `GUIDE_VOICES` refuses the whole verdict on a stale page.**
+  The decoder is strict, so a page loaded before the deploy reads the new
+  answer as not offered until it reloads — the same skew 10 accepted for the
+  shape change.
+- **`useGuideAccess` waiting for the account provider has no test.** It is a
+  hook and the suite runs in Node; the verdict it feeds is tested.
+- **The 1,500-byte scene bound is the adapter's own.** No provider limit is
+  documented in `openaiLive.ts` or ADR-0042; if one exists, cite it there.
+
+---
+
 ## What the landed deepenings left, deliberately
 
 - **The band stack's bodies are still two.** The kernel does not walk
@@ -613,6 +655,11 @@ the identity — replaces the hand-written key cases in
   carries `palette`, `datumRadius`, `orientation`, `center` and `lens` so the
   renderer has them in the frame the drawn set is empty. Small, and its home is
   `TerrainPatches` reading the body.
+- **`engine.pool()` stays.** `scene/Bodies.tsx` and `render/preload.ts` read
+  the pool through it; when both read the session it goes, as `player()` did.
+- **The cinema playhead keeps its `mine` guard.** With the director on
+  `ir.cutscene` a console `ir.play` can still replace a scene the session
+  opened, and the guard is what keeps the session from claiming that ending.
 - **The Saturn frame-spike figure is not re-measured:** worst main-thread frame
   2.3 ms across a warm Saturn approach, zero over 8 ms. `ir.profile` over a
   Saturn approach with `?presentation=occluded` reads it, and the caveats in
@@ -638,7 +685,7 @@ complexity rather than concentrate it.
 - **`stepCharacter` behind `CharacterGround`** — deep, with two real adapters,
   the world and the motion tests' fakes. The motor stays one module.
 - **The relief table and `surfaceSupportRadius`'s two-stage miss** — pure and
-  well placed; 4 adds only the GLB cross-check.
+  well placed, and the relief check holds the table to the pad's model.
 - **`CharacterInput` and `PointerLock`** — small, and each holds real behavior:
   the held set, the double tap, lock ownership.
 - **`render/rendererLifetime.ts`** — the teardown order is the module, its
@@ -695,4 +742,5 @@ carries the argument.
 - [Perf](perf.md) — the measurement 16 waits on
 - [The upscaler](the-upscaler.md) — the velocity-overlay defect 17 makes one
   change
-- [Harness](../../docs/guides/harness.md) — the surface 9 reshapes
+- [Harness](../../docs/guides/harness.md) — the console surface, with
+  `ir.cutscene` and `ir.status().boot`

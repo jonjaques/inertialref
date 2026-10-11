@@ -11195,6 +11195,24 @@ test reads them through the protocol's decoders; the runtime's fake Worker is
 built from the same types; the opening line is held under the scene limit with
 twelve objects named after the system's longest name.
 
+## The game holds one guide verdict per mode (7 Oct 2026)
+
+The game held the guide's verdict twice — the access hook's copy and the
+runtime's snapshot — and fifty lines of `inspect` and `adopt` kept them in
+step, including a read that a newer one replaced. `grantsGuide` was evaluated
+in the mode and again in the registry, and with no runtime loaded
+`ir.guideStatus` reported `available: true, state: 'idle'`, so a visitor
+without the grant read as available. `tour/verdict.ts` is the one verdict per
+mode, created beside `GuideLifetime` and keyed on the user: checking, granted
+with voices, or refused with a reason, and an answer that lands after an
+account switch is discarded. The menu, the panel, `runtime.start` through
+`GuideHost`, and `ir.guideStatus` read it; `mountGuide` subscribes to it and
+ends a live session when the grant goes, the rule that was an effect in the
+mode. A refused `start` writes no message of its own — the panel draws the
+verdict's sentence — so nothing about the last account greets the next. The
+account-switch guard and the end-on-loss rule each fail their new case with
+the guard removed; neither had a test.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

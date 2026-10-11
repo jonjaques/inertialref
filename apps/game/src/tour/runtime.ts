@@ -9,16 +9,13 @@ import {
   decode,
   decodeGuideError,
   decodeGuideSessionCreated,
-  decodeGuideVerdict,
-  GUIDE_REFUSAL_SENTENCES,
   GUIDE_SESSIONS_PATH,
-  GUIDE_VERDICT_PATH,
   type GuideCall,
   type GuideSessionRequest,
   type GuideToolOutput,
-  type GuideVerdict,
 } from '@inertialref/protocol'
 import { SpeechClock } from './clock.ts'
+import { accessState, type GuideAccess } from './verdict.ts'
 import type { GuideArrival, SceneFacts } from './executor.ts'
 import { GuideLoop } from './loop.ts'
 import type { LiveServerEvent } from './media.ts'
@@ -55,7 +52,6 @@ import {
  */
 
 export interface GuideSnapshot {
-  readonly capabilities: GuideVerdict | null
   readonly connection: GuideStatus['connection']
   readonly voice: string | null
   readonly paused: boolean
@@ -93,6 +89,8 @@ export interface LiveConnectionPort {
 }
 
 export interface GuideHost {
+  /** The mode's verdict on whoever is signed in (`verdict.ts`). */
+  access(): GuideAccess
   now(): number
   request(path: string, body?: unknown, signal?: AbortSignal): Promise<Response>
   executor(events: {
@@ -129,7 +127,6 @@ export class GuideRuntime {
   readonly #listeners = new Set<() => void>()
   readonly #clock: SpeechClock
   #snapshot: GuideSnapshot = {
-    capabilities: null,
     connection: 'offline',
     voice: null,
     paused: false,
@@ -143,7 +140,6 @@ export class GuideRuntime {
   #loop: GuideLoop | null = null
   #sessionId: string | null = null
   #generation = 0
-  #inspect: Promise<void> | null = null
   #pending = new Set<AbortController>()
   #pollRelease: (() => void) | null = null
   #visibilityRelease: (() => void) | null = null
@@ -197,10 +193,16 @@ export class GuideRuntime {
 
   diagnostics(): GuideStatus {
     const state = this.#snapshot
+    const access = this.#host.access()
     return {
-      available: true,
+      available: access.state === 'granted',
       loaded: true,
-      state: state.status.toLowerCase() || 'idle',
+      // An offline runtime is as available as the verdict says, so a refused
+      // visitor reads as refused, not as an idle guide, once it has loaded.
+      state:
+        state.connection === 'offline'
+          ? accessState(access)
+          : state.status.toLowerCase() || 'idle',
       connection: state.connection,
       sessionId: this.#sessionId,
       viewRevision: this.#executor?.viewRevision ?? null,
@@ -222,71 +224,20 @@ export class GuideRuntime {
     for (const listener of this.#listeners) listener()
   }
 
-  inspect(): Promise<void> {
-    if (this.#inspect !== null) return this.#inspect
-    /*
-     * Every write below first checks that this is still the current read. An
-     * `adopt` replaces it — the planetarium's access check answered for
-     * somebody who signed in, out, or as somebody else — and the read it
-     * replaced is about whoever was asking then: landing late, it would put
-     * their verdict back over the new one, and failing late it would drop the
-     * new read from `#inspect`. A superseded read settles with the current one
-     * instead, so a `start` already waiting on it reads the verdict that
-     * replaced it.
-     */
-    const inspection: Promise<void> = this.#request(GUIDE_VERDICT_PATH)
-      .then(async (response) => {
-        const decoded = decode(decodeGuideVerdict, await response.json())
-        if (!decoded.ok)
-          throw new Error('Guide availability could not be read.')
-        const value = decoded.value
-        if (this.#inspect !== inspection) return this.#inspect ?? undefined
-        this.#update({ capabilities: value })
-        return undefined
-      })
-      .catch((cause: unknown) => {
-        if (this.#inspect !== inspection) return this.#inspect ?? undefined
-        // A failed read is not an answer. Keeping the settled promise would
-        // leave `capabilities` null for the life of the page, and the panel
-        // draws no Start without it — so "close and reopen it to try again",
-        // which is what the panel says, would do nothing.
-        this.#inspect = null
-        this.#update({ message: message(cause) })
-        return undefined
-      })
-    this.#inspect = inspection
-    return inspection
-  }
-
-  /**
-   * Take an answer the planetarium's access check already has, instead of
-   * asking the Worker again.
-   *
-   * The check asks once per signed-in user, and the panel mounts every time it
-   * is opened, docked or floated; asking again on each of those costs the
-   * Worker a user lookup for an answer that has not changed, and an identical
-   * answer is left alone so a message on screen survives a remount. A new
-   * answer clears the message: it was about the answer it replaces — the
-   * previous account's refusal, or a read that failed — and would otherwise
-   * greet whoever signed in next.
-   */
-  adopt(capabilities: GuideVerdict): void {
-    if (this.#snapshot.capabilities === capabilities) return
-    this.#inspect = Promise.resolve()
-    this.#update({ capabilities, message: null })
-  }
-
   /** Request the microphone, post the offer, greet. */
   async start(voice: string): Promise<void> {
     if (this.#snapshot.connection !== 'offline') return
+    /*
+     * The mode's verdict, read rather than kept: there is one per mode, keyed
+     * on the user, and the runtime holds no copy to fall out of step with it.
+     * Nothing is written for a refusal: the panel is only offered under a
+     * grant, and `ir.guideStatus` reports the verdict's reason.
+     */
+    const verdict = this.#host.access()
+    if (verdict.state !== 'granted') return
     const generation = ++this.#generation
     this.#ending = false
     try {
-      await this.inspect()
-      const verdict = this.#snapshot.capabilities
-      if (verdict === null) throw new Error(GUIDE_REFUSAL_SENTENCES.unavailable)
-      if (!verdict.granted)
-        throw new Error(GUIDE_REFUSAL_SENTENCES[verdict.reason])
       const chosen =
         verdict.voices.find((offered) => offered === voice) ??
         verdict.voices[0] ??
@@ -452,6 +403,11 @@ export class GuideRuntime {
       voice: null,
       expiresAt: null,
     })
+  }
+
+  /** Drop the message: it was written for an account that is not this one. */
+  forgetMessage(): void {
+    if (this.#snapshot.message !== null) this.#update({ message: null })
   }
 
   /** A typed request, as the visitor's own words. */
@@ -636,17 +592,15 @@ export class GuideRuntime {
     }
     const expiresAt = this.#snapshot.expiresAt
     if (expiresAt !== null && now >= expiresAt) {
-      void this.end().then(() =>
-        this.#update({ message: 'The guide session reached its time limit.' }),
-      )
+      // Written before the session closes rather than after, so a verdict
+      // that drops the message while it closes is not followed by one.
+      this.#update({ message: 'The guide session reached its time limit.' })
+      void this.end()
       return
     }
     if (this.#pausedAt !== null && now - this.#pausedAt >= PAUSE_LIMIT_MS) {
-      void this.end().then(() =>
-        this.#update({
-          message: 'The guide ended after three minutes paused.',
-        }),
-      )
+      this.#update({ message: 'The guide ended after three minutes paused.' })
+      void this.end()
       return
     }
     this.#tickLinger(now)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { askGuideVerdict, grantsGuide } from './capabilities.ts'
+import { askGuideVerdict } from './capabilities.ts'
 
 /*
  * The reader of the Worker's verdict, over an injected fetcher: anything that
@@ -34,13 +34,5 @@ describe('askGuideVerdict', () => {
     )
     for (const fetcher of [thrown, unavailable, page])
       expect(await askGuideVerdict(new Headers(), fetcher)).toBeNull()
-  })
-})
-
-describe('grantsGuide', () => {
-  it('grants only a granted verdict', () => {
-    expect(grantsGuide({ granted: true, voices: [] })).toBe(true)
-    expect(grantsGuide({ granted: false, reason: 'signed-out' })).toBe(false)
-    expect(grantsGuide(null)).toBe(false)
   })
 })

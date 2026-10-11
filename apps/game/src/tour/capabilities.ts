@@ -37,7 +37,3 @@ export async function askGuideVerdict(
     return null
   }
 }
-
-/** Whether the verdict grants the guide to whoever asked. */
-export const grantsGuide = (verdict: GuideVerdict | null): boolean =>
-  verdict?.granted === true
