@@ -595,8 +595,19 @@ async function clearStorage(send) {
   note('cleared local, session storage and cookies')
 }
 
-/** `ir.status().boot`, or `booting` until the harness is there to ask. */
-const BOOT = "return window.ir?.status?.().boot ?? 'booting'"
+/**
+ * `ir.status().boot`, or `booting` until the harness is there to ask.
+ *
+ * A build without the field — the baseline `presets:compare --base` serves
+ * from an older commit, driven by this tree's driver — reads `drawing` once it
+ * has a renderer, never `booted`: reading `booting` would wait out the
+ * renderer timeout on every plate, and `booted` would photograph the cover.
+ * The cover wait gives up after its twelve seconds there, by which time the
+ * cover has lifted.
+ */
+const BOOT = `const status = window.ir?.status?.()
+  if (status === undefined) return 'booting'
+  return status.boot ?? (window.engine?.gl ? 'drawing' : 'booting')`
 
 const READY = DOCUMENT
   ? "return document.readyState !== 'loading'"

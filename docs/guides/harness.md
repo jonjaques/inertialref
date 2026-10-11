@@ -65,6 +65,12 @@ a `pending` reason, and `pendingCount` is how many
 input in the same way `ir.look` is, through the same resolver, and returns `null`
 for an address that names nothing.
 
+**`ir.status().boot` says whether the app has booted**: `booting` before
+there is a renderer, `drawing` while the boot cover is still up over a scene
+that already renders, and `booted` once the cover is gone. It is answered by
+the presentation host, so the driver waits on it rather than on a DOM selector
+or an engine field a rename would silently break. Headlessly it is `booted`.
+
 **`ir.lens()` is the optics, and `ir.status().lens` is the same object.** Focal
 length, gauge and zoom are what the camera is set to; the field of view, the
 sharp band, the blur circle against the pixel it has to hide inside, the Airy

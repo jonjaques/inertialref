@@ -572,9 +572,10 @@ export class GameHarness {
   /**
    * The cutscene director, the way `observatory` is the observatory: the
    * object itself rather than a forward per verb. `ir.cutscene.status()`,
-   * `.lastOutcome()`, `.list()`, `.sample()` and `.peek()` are its reads;
-   * `play`, `stopCutscene` and `seekCutscene` stay on the harness as the
-   * three verbs a console types.
+   * `.lastOutcome()`, `.list()` and `.peek()` are its reads; `.sample()` is
+   * the host's per-frame call, which moves the playhead and can end the
+   * scene, not a read. `play`, `stopCutscene` and `seekCutscene` stay on the
+   * harness as the three verbs a console types.
    */
   readonly cutscene: CutsceneDirector
   readonly #observatory: Observatory

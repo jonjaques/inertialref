@@ -13,8 +13,9 @@ import type { CutsceneDirector } from '@inertialref/devtools'
  *
  * It has one now (`lastOutcome`), so the guessing is gone. What is left here is
  * a session over the director itself — the harness's `cutscene` — and the
- * clock's pause, publishing one playhead and offering one set of verbs. It holds no timer: `sample()` is called by the
- * engine store's sampler, which is already running.
+ * clock's pause, publishing one playhead and offering one set of verbs. It
+ * holds no timer: `sample()` is called by the engine store's sampler, which is
+ * already running.
  *
  * ADR-0010's director is untouched by this. A session *reading* it contradicts
  * nothing; the two things this needed from it are additive — a richer status,
@@ -141,8 +142,8 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
    * A scene can be replaced under an open session without going through it —
    * `ir.play` from the console, `cutscene.skip` calling `stopCutscene`
    * directly — and a flag left standing from the last `open` claims whatever
-   * ends next. Cleared before `host.director.play` for the same reason: an `open` that
-   * throws must not leave the previous scene's claim behind it.
+   * ends next. Cleared before `host.director.play` for the same reason: an
+   * `open` that throws must not leave the previous scene's claim behind it.
    */
   let mine: string | null = null
   /** The last playhead published, which is what a hold freezes. */
@@ -272,8 +273,8 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     stop() {
       carded = false
       handled = false
-      // Before `host.director.stop()`, so an ending that arrives in the same sample the
-      // player unmounts in cannot be reacted to on the way out.
+      // Before `host.director.stop()`, so an ending that arrives in the same
+      // sample the player unmounts in cannot be reacted to on the way out.
       mine = null
       host.director.stop()
       host.stopped?.()
