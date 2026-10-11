@@ -473,6 +473,25 @@ describe('the guide runtime', () => {
     f.session.dispose()
   })
 
+  it('keeps the seconds the closing event carries, whoever ends the session', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.receive(provider.usage(41))
+    f.receive(provider.closed('expired', 60))
+    expect(connection(f.runtime)).toBe('offline')
+    expect(f.runtime.getSnapshot().usage.voiceSeconds).toBe(60)
+    expect(f.runtime.getSnapshot().message).toMatch(/time limit/)
+    f.session.dispose()
+
+    const g = rig()
+    await g.runtime.start('marin')
+    g.receive(provider.usage(12))
+    // The fake answers `session.close` with 42 seconds.
+    await g.runtime.end()
+    expect(g.runtime.getSnapshot().usage.voiceSeconds).toBe(42)
+    g.session.dispose()
+  })
+
   it('records an opt-in trace of the channel, bounded and detached', async () => {
     const f = rig()
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})

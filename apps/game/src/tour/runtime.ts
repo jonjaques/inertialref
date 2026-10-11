@@ -446,8 +446,12 @@ export class GuideRuntime {
     this.#update({ activity: { state: 'ending' } })
     const live = this.#live
     if (live !== null) await live.close()
+    // Read before the teardown drops the loop: the provider's closing event
+    // carries the billed seconds, and `#refresh` stops reading once the
+    // session ends.
+    const usage = this.#loop?.usage ?? this.#snapshot.usage
     this.#teardown()
-    this.#update({ activity: OFFLINE, voice: null, expiresAt: null })
+    this.#update({ activity: OFFLINE, voice: null, expiresAt: null, usage })
   }
 
   /** Drop the message: it was written for an account that is not this one. */
@@ -475,10 +479,13 @@ export class GuideRuntime {
   /** The provider ended the session; an end the visitor asked for is `end`'s. */
   #closed(reason: string): void {
     if (this.#ending) return
+    // The closing event's seconds, which the loop has and the snapshot not yet.
+    const usage = this.#loop?.usage ?? this.#snapshot.usage
     this.#teardown()
     this.#update({
       activity: OFFLINE,
       voice: null,
+      usage,
       message:
         reason === 'expired'
           ? 'The guide session reached its time limit.'

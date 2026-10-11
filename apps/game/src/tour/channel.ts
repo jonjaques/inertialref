@@ -4,13 +4,16 @@ import type { LiveServerEvent } from './media.ts'
 /*
  * The provider's vocabulary, spoken in verbs.
  *
- * Everything the guide sends over the data channel goes out through here, and
- * the runtime and the loop say what they mean — note this, answer that call,
- * mute both directions — rather than which provider event carries it. The
- * transport's `send` is typed on the protocol's `GuideClientEvent`, so a
- * misspelled event fails `tsc`; the transport also refuses anything off the
- * allow list at run time (`media.ts`, and the fake in `liveFake.ts`), because
- * a cast reaches the wire as surely as a typo does.
+ * Everything the guide sends over the data channel goes out through here but
+ * one: the close `end()` waits on is `LiveConnection.close`'s, because waiting
+ * for the provider's answer under a bound is the transport's job, so the
+ * trace shows that answer without its request. The runtime and the loop say
+ * what they mean — note this, answer that call, mute both directions — rather
+ * than which provider event carries it. The transport's `send` is typed on
+ * the protocol's `GuideClientEvent`, so a misspelled event fails `tsc`; the
+ * transport also refuses anything off the allow list at run time (`media.ts`,
+ * and the fake in `liveFake.ts`), because a cast reaches the wire as surely
+ * as a typo does.
  *
  * Three files make the adapter: this one, `loop.ts` (the tool loop over the
  * provider's response events) and `media.ts` (the peer connection). No other

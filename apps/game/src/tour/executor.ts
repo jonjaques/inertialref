@@ -12,6 +12,7 @@ import {
   GUIDE_LIMITS,
   isGuideCameraTool,
   type GuideCall,
+  type GuideStopStatus,
   type GuideToolOutput,
   type TourCameraMotion,
 } from '@inertialref/protocol'
@@ -391,7 +392,7 @@ export class GuideExecutor {
     this.#pending = pending
     this.#seenRevision = this.viewRevision
     return {
-      status: 'moving',
+      status: 'moving' satisfies GuideStopStatus,
       subject: pending.subject,
       framing: pending.framing ?? 'default',
       estimated_seconds: ESTIMATED_TRAVEL_SECONDS,
@@ -420,7 +421,28 @@ export class GuideExecutor {
     } else {
       if (eye.target?.address !== candidate.address)
         eye.focus(candidate.address)
-      eye.compose(framing)
+      try {
+        eye.compose(framing)
+      } catch (cause) {
+        /*
+         * `compose` lets go of the camera before it can know whether it has a
+         * star to compose against, so a refusal here has already moved it.
+         * Answered as the default framing it now is: a rejection would say
+         * nothing changed and leave the previous stop's linger running.
+         */
+        eye.focus(candidate.address)
+        this.#framing = null
+        return {
+          ...this.#startMove({
+            tool: 'go_to',
+            subject: candidate.name,
+            address: candidate.address,
+            framing: null,
+            motion: motionRecipe(call.motion),
+          }),
+          note: `${cause instanceof Error ? cause.message : String(cause)}; framed by default instead.`,
+        }
+      }
     }
     this.#framing = framing
     return this.#startMove({
@@ -580,7 +602,7 @@ export class GuideExecutor {
     this.#seenRevision = this.viewRevision
     const view = this.view()
     return {
-      status: 'held',
+      status: 'held' satisfies GuideStopStatus,
       subject: view.subject?.name ?? null,
       distance_radii: view.distanceRadii,
     }

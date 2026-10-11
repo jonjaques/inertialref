@@ -82,11 +82,21 @@ export function liveFake(): LiveFake {
     muteGuide: (muted) => {
       guideAudio.push(muted)
     },
+    // As `LiveConnection.close`: a stopped connection answers without
+    // sending, a send that fails is not a throw, and the connection is
+    // stopped once it returns.
     close: async () => {
       closes++
-      live.send({ type: 'session.close' })
+      if (stopped) return { closed: false }
+      let sent = true
+      try {
+        live.send({ type: 'session.close' })
+      } catch {
+        sent = false
+      }
       await Promise.resolve()
-      return { closed: true }
+      stopped = true
+      return { closed: sent }
     },
     stop: () => {
       stopped = true
