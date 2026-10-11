@@ -12,8 +12,10 @@ import { accountKeys, identify, privateMetadata } from '../account.ts'
  *
  * The account module answers who is asking and hands over the flags; what the
  * flags mean for the guide, and whether this deployment offers the guide at
- * all, is decided here and nowhere else. The route maps the answer to a status
- * code and a sentence and decides nothing of its own.
+ * all, is decided here and nowhere else. The routes map the answer to a
+ * status code and a sentence; what they decide on their own — the origin
+ * check, the allowance, a Clerk outage as a 503 — is about the request, never
+ * about who is asking.
  */
 
 /**

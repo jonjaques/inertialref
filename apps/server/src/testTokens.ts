@@ -107,7 +107,9 @@ export function fakeClerk(
     if (!url.startsWith(CLERK_API)) return null
     state.calls.push({
       url,
-      authorization: new Headers(init?.headers).get('authorization'),
+      authorization: new Headers(
+        input instanceof Request ? input.headers : init?.headers,
+      ).get('authorization'),
     })
     if (url === `${CLERK_API}/jwks`)
       return Response.json({ keys: [issuer.jwk] })
