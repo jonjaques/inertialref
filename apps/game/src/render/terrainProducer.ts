@@ -19,6 +19,7 @@ import {
   type ArchivedSource,
   HeightfieldUnavailable,
   type HeightfieldResponse,
+  POOL_ARCHIVE,
 } from '@inertialref/workers'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { QUERY } from '../pages/paths.ts'
@@ -66,7 +67,10 @@ import {
  * here moves a canonical version, because the divergence from the CPU tile is
  * a measured bound (`terrainKernel.gpu.test.ts`) rather than a change to the
  * ground. What the archive keeps its tiles under is the kernel's own
- * revision, `TERRAIN_KERNEL_REVISION`, beside the graph it describes.
+ * revision, `TERRAIN_KERNEL_REVISION`, beside the graph it describes, joined
+ * to the pool's: the kernel's records are packed on the CPU from the same
+ * sketch, micro levels and drainage graph the pool's tile reads, so a change
+ * there that spends the pool a version retires the GPU's tiles with it.
  */
 
 const log = getLogger('game.terrain.gpu')
@@ -354,7 +358,7 @@ export function createTileProducer(
 
   return {
     kind: 'gpu',
-    archive: `gpu:terrain-tsl@${TERRAIN_KERNEL_REVISION}`,
+    archive: `gpu:terrain-tsl@${TERRAIN_KERNEL_REVISION}+${POOL_ARCHIVE}`,
     maxLevel: MAX_TILE_LEVEL,
     get available() {
       return available

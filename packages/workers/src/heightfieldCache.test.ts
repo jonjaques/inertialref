@@ -279,6 +279,10 @@ describe('the archive', () => {
     expect(f.source.submit).toHaveBeenCalledTimes(2)
     await f.archive.close()
     expect(f.store.close).toHaveBeenCalledOnce()
+    // Nor does a clear or a storage query, either of which reopens a disk store.
+    await expect(f.archive.clear()).rejects.toThrow('closed')
+    await expect(f.archive.storage()).rejects.toThrow('closed')
+    expect(f.store.clear).not.toHaveBeenCalled()
   })
 })
 

@@ -6,6 +6,7 @@ import {
   regionAddress,
   type SurfaceParameters,
   surfaceGrammar,
+  TERRAIN_ALGORITHM,
 } from '@inertialref/universe'
 import { heightfieldCacheRecord } from './heightfieldCache.ts'
 import { runInline } from './task.ts'
@@ -30,6 +31,12 @@ import { encodeSurface, generateHeightfieldTask } from './tasks.ts'
 
 const PINNED = {
   version: 7,
+  /*
+   * A canonical terrain bump moves every key already, so it re-pins the
+   * tiles without spending a task version; this is how the test tells the two
+   * apart.
+   */
+  terrain: 5,
   tiles: {
     'dry/2': '955add4b -3856.736083984375 1290.2174072265625',
     'dry/10': 'e8aef271 -4264.93359375 -4108.31689453125',
@@ -129,6 +136,15 @@ describe('the CPU tile fingerprint', () => {
     ).toBe(PINNED.version)
   })
 
+  it('is pinned for the current canonical terrain version', () => {
+    expect(
+      TERRAIN_ALGORITHM.version,
+      'TERRAIN_ALGORITHM.version moved, which moves every archive key with ' +
+        'it: re-pin PINNED.tiles and PINNED.terrain without spending a ' +
+        'version of generateHeightfieldTask.',
+    ).toBe(PINNED.terrain)
+  })
+
   it('matches the tiles the current version produces', async () => {
     const now = Object.fromEntries(
       await Promise.all(
@@ -140,10 +156,14 @@ describe('the CPU tile fingerprint', () => {
     )
     expect(
       now,
-      'The CPU tile arithmetic changed without a version, so the archive ' +
-        'would answer it with stale tiles. Spend a version: bump ' +
-        'generateHeightfieldTask.version in packages/workers/src/tasks.ts ' +
-        'and re-pin PINNED here to the fingerprints below.',
+      TERRAIN_ALGORITHM.version === PINNED.terrain
+        ? 'The CPU tile arithmetic changed without a version, so the archive ' +
+            'would answer it with stale tiles. Spend a version: bump ' +
+            'generateHeightfieldTask.version in packages/workers/src/tasks.ts ' +
+            'and re-pin PINNED here to the fingerprints below.'
+        : 'The canonical terrain version moved, and every key with it: ' +
+            're-pin PINNED.tiles to the fingerprints below and PINNED.terrain ' +
+            'to TERRAIN_ALGORITHM.version, without spending a task version.',
     ).toEqual(PINNED.tiles)
   })
 })

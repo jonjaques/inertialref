@@ -28,7 +28,8 @@ source with `archive.wrap(source)`. Its key contains the complete encoded
 version and the namespace the source declares beside its own arithmetic: the
 pool's is `cpu@` and its task's version (`POOL_ARCHIVE`), and the GPU
 producer's is `gpu:terrain-tsl@` and `TERRAIN_KERNEL_REVISION`, in the kernel's
-module. Adding a request field therefore changes identity without relying on a
+module, joined to the pool's, because the kernel reads records the CPU packs
+from the same sketch and drainage graph. Adding a request field therefore changes identity without relying on a
 separate hand-maintained list of key fields.
 
 Host stores index the stable input serialization by its SHA-256 digest and
@@ -38,16 +39,19 @@ finite elevations, the water field's finite-or-NaN convention, extrema and a
 checksum of the payload. A malformed or corrupt entry is removed and generated
 again. A digest match alone never makes a tile valid.
 
-The CPU revision is enforced, not remembered. When drawn-field arithmetic or
-the cached payload changes without a canonical terrain bump, the pool's task
-spends a version, and `heightfieldFingerprint.test.ts` fails until it does: it
+The CPU revision is enforced, not remembered. When drawn-field arithmetic
+changes without a canonical terrain bump, the pool's task spends a version,
+and `heightfieldFingerprint.test.ts` fails until it does: it
 hashes tiles from a dry body and a wet one with a drainage graph against
 fingerprints pinned beside the version, and its failure message says to spend
 the revision. The fingerprint is a golden vector on purpose — going stale is
 the signal. The GPU revision stays a maintenance obligation, because the
 kernel's output varies by adapter within its measured bound and no golden tile
-can pin it. Old versions can remain on disk until bounded eviction reclaims
-them; they cannot match a request from the new version.
+can pin it. A change to the record's shape is neither: the fingerprint hashes
+the arrays and extremes, and validation ignores a field it does not know, so a
+new field in `HeightfieldResponse` spends the pool's version by hand, which
+retires both namespaces. Old versions can remain on disk until bounded
+eviction reclaims them; they cannot match a request from the new version.
 
 The browser uses IndexedDB database `inertialref-terrain`, separate from saves.
 It defaults to 8,192 entries and 256 MiB of estimated record bytes. Tile writes,

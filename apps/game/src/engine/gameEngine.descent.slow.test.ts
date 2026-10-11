@@ -271,7 +271,7 @@ describe('the ground, over one descent', () => {
       console.info('terrain archive', await game.terrainCache())
     game.dispose()
     // Through the archive, which lands the writes still in flight before it
-    // releases the store: a write after the store closed reopened it.
+    // releases the store: a write after the store closes reopens it.
     await archive.close()
   })
 

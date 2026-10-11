@@ -261,8 +261,13 @@ export class HeightfieldArchive {
     return { ...this.#state.counts, pendingWrites: this.#state.writes.size }
   }
 
-  /** The host's retained entries and bytes. */
+  /**
+   * The host's retained entries and bytes. Refused after `close`, as `clear`
+   * is: a disk store reopens its handle for any call.
+   */
   storage(): Promise<HeightfieldStoreStats> {
+    if (this.#state.closed)
+      return Promise.reject(new Error('the heightfield archive is closed'))
     return this.#state.store.stats()
   }
 
@@ -273,6 +278,7 @@ export class HeightfieldArchive {
 
   /** In-flight lookups cannot repopulate a cache the caller just cleared. */
   async clear(): Promise<void> {
+    if (this.#state.closed) throw new Error('the heightfield archive is closed')
     this.#state.epoch++
     await this.flush()
     await this.#state.store.clear()
@@ -347,10 +353,14 @@ class ArchivedHeightfieldSource implements HeightfieldSource {
         }
         if (value !== null && value !== undefined) {
           counts.invalid++
-          try {
-            await store.remove(key)
-          } catch {
-            counts.writeErrors++
+          // A lookup that outlives `close` leaves the row to the next run:
+          // removing it would reopen the store.
+          if (!state.closed) {
+            try {
+              await store.remove(key)
+            } catch {
+              counts.writeErrors++
+            }
           }
           if (canceled) return
         }
