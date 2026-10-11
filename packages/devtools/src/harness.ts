@@ -97,6 +97,7 @@ import {
   describeDrift,
   TOUR_LIMITS,
   encodeUniverseVector,
+  type GuideRefusal,
   type VersionDrift,
 } from '@inertialref/protocol'
 import {
@@ -203,12 +204,35 @@ export interface FrameStats {
  * not a set of `?.` calls, a test can supply the two members it is about and
  * no reader ever asks whether a member is there.
  */
+/**
+ * What the guide is doing, as one code a script can compare against. Each
+ * names one thing: the panel's status line is derived from these, so a change
+ * to its wording does not change what a script reads.
+ */
+export type GuideState =
+  /** No guide in this mode: there is a guide only in the Planetarium. */
+  | 'absent'
+  /** Offline, by the mode's verdict: still asking, refused with its reason, or ready. */
+  | 'checking'
+  | GuideRefusal
+  | 'idle'
+  /** A session, from the offer to the close. */
+  | 'connecting'
+  | 'listening'
+  | 'speaking'
+  | 'thinking'
+  | 'searching'
+  | 'moving'
+  /** The visitor took the camera and the guide has not acted since. */
+  | 'visitor-camera'
+  | 'paused'
+  | 'ending'
+
 /** Conversation diagnostics exclude transcript and provider credentials. */
 export interface GuideStatus {
   readonly available: boolean
   readonly loaded: boolean
-  /** One word the panel also shows: listening, speaking, moving, paused. */
-  readonly state: string
+  readonly state: GuideState
   readonly connection: 'offline' | 'connecting' | 'connected' | 'closing'
   readonly sessionId: string | null
   readonly viewRevision: number | null
@@ -256,7 +280,7 @@ export const NO_GUIDE_USAGE: GuideUsage = Object.freeze({
 export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
   available: false,
   loaded: false,
-  state: 'unavailable',
+  state: 'absent',
   connection: 'offline',
   sessionId: null,
   viewRevision: null,

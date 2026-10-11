@@ -2,6 +2,7 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import {
   decodeGuideCall,
+  endsStop,
   GUIDE_CLIENT_EVENTS,
   GUIDE_LIMITS,
   GUIDE_TOOL_NAMES,
@@ -26,6 +27,12 @@ describe('the guide tool inventory', () => {
     expect(JSON.stringify(GUIDE_TOOLS)).not.toMatch(
       /"(maxLength|minLength|maxItems|minItems|minimum|maximum)"/,
     )
+  })
+  it('ends a stop on a move that travels or a hold, and on nothing else', () => {
+    expect(endsStop({ status: 'moving', subject: 'Saturn' })).toBe(true)
+    expect(endsStop({ status: 'held' })).toBe(true)
+    for (const status of ['ok', 'rejected', 'canceled', 'error', 'scheduled'])
+      expect(endsStop({ status })).toBe(false)
   })
   it('never lets the browser change the session', () => {
     expect(GUIDE_CLIENT_EVENTS).not.toContain('session.update')

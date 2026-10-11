@@ -5,7 +5,12 @@ import { NO_GUIDE_USAGE, type GuideStatus } from '../harness.ts'
 describe('the optional guide host', () => {
   it('is unavailable headlessly and never constructs a conversation', async () => {
     const session = openSession()
-    expect(session.harness.guideStatus().available).toBe(false)
+    // `absent`, not `unavailable`: no guide in this mode is not a deployment
+    // that does not offer one, and a script can tell the two apart.
+    expect(session.harness.guideStatus()).toMatchObject({
+      available: false,
+      state: 'absent',
+    })
     expect(session.harness.guideTrace()).toEqual([])
     expect(session.harness.guideTrace(true)).toEqual([])
     expect((await session.harness.guideAsk('Saturn')).available).toBe(false)

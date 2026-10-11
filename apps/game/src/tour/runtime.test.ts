@@ -8,58 +8,25 @@ import {
   type GuideVerdict,
 } from '@inertialref/protocol'
 import { GuideExecutor } from './executor.ts'
-import type { LiveServerEvent } from './media.ts'
-import { GuideRuntime, type GuideHost } from './runtime.ts'
+import { liveFake, provider, read } from './liveFake.ts'
+import {
+  connectionOf,
+  GuideRuntime,
+  type GuideHost,
+  statusLine,
+} from './runtime.ts'
 import type { GuideAccess } from './verdict.ts'
 
 function rig() {
   const session = openSession()
   session.harness.look('s:SOL/b:2', { ease: false })
   const requests: { path: string; body: unknown }[] = []
-  const sent: Record<string, unknown>[] = []
-  let sequence = 0
+  const fake = liveFake()
   let time = 1000
   let access: GuideAccess = { state: 'granted', voices: ['marin', 'cedar'] }
   let run: (() => void) | null = null
   let visibility: ((visible: boolean) => void) | null = null
-  let onEvent: ((event: LiveServerEvent) => void) | null = null
-  let level = 0
   let executor: GuideExecutor | null = null
-  const live = {
-    prepare: vi.fn(async () => 'offer'),
-    accept: vi.fn(async () => {
-      onEvent?.({ type: 'session.started', session: { id: 'live_1' } })
-    }),
-    send: vi.fn((event: Record<string, unknown>) => {
-      const id = `guide-${++sequence}`
-      sent.push({ ...event, event_id: id })
-      if (/\.append$/.test(String(event.type)))
-        queueMicrotask(() =>
-          onEvent?.({
-            type: `${String(event.type)}ed`,
-            client_event_id: id,
-          }),
-        )
-      if (event.type === 'session.close')
-        queueMicrotask(() =>
-          onEvent?.({
-            type: 'session.closed',
-            reason: 'close_requested',
-            usage: { seconds: 42 },
-          }),
-        )
-      return id
-    }),
-    level: () => level,
-    muteMicrophone: vi.fn(async () => {}),
-    muteGuide: vi.fn(),
-    close: vi.fn(async () => {
-      live.send({ type: 'session.close' })
-      await Promise.resolve()
-      return { closed: true }
-    }),
-    stop: vi.fn(),
-  }
   const host: GuideHost = {
     access: () => access,
     now: () => time,
@@ -91,9 +58,9 @@ function rig() {
       })
       return executor
     },
-    live: (event) => {
-      onEvent = event
-      return live
+    live: (onEvent) => {
+      fake.listen(onEvent)
+      return fake.live
     },
     poll: (tick) => {
       run = tick
@@ -109,65 +76,26 @@ function rig() {
     },
   }
   const runtime = new GuideRuntime(host)
-  const receive = (event: LiveServerEvent) => onEvent?.(event)
   let responses = 0
   const delegated = (name: string, args: Record<string, unknown>) => {
     const id = `resp_${++responses}`
-    receive({
-      type: 'response.event',
-      delegation_id: 'item_1',
-      event: { type: 'response.created', response: { id } },
-    })
-    receive({
-      type: 'response.event',
-      delegation_id: 'item_1',
-      event: {
-        type: 'response.output_item.done',
-        item: {
-          type: 'function_call',
-          call_id: `call_${responses}`,
-          name,
-          arguments: JSON.stringify(args),
-        },
-      },
-    })
-    receive({
-      type: 'response.event',
-      delegation_id: 'item_1',
-      event: { type: 'response.completed', response: { id, usage: null } },
-    })
-    return `call_${responses}`
+    const callId = `call_${responses}`
+    fake.emit(provider.responseCreated(id))
+    fake.emit(provider.functionCall(callId, name, JSON.stringify(args)))
+    fake.emit(provider.responseCompleted(id))
+    return callId
   }
   const terminal = (text: string) => {
     const id = `resp_${++responses}`
-    receive({
-      type: 'response.event',
-      delegation_id: 'item_1',
-      event: { type: 'response.created', response: { id } },
-    })
-    receive({
-      type: 'response.event',
-      delegation_id: 'item_1',
-      event: {
-        type: 'response.output_item.done',
-        item: { type: 'message', content: [{ type: 'output_text', text }] },
-      },
-    })
-    receive({
-      type: 'response.event',
-      delegation_id: 'item_1',
-      event: {
-        type: 'response.completed',
-        response: {
-          id,
-          usage: {
-            input_tokens: 2000,
-            input_tokens_details: { cached_tokens: 1900 },
-            output_tokens: 30,
-          },
-        },
-      },
-    })
+    fake.emit(provider.responseCreated(id))
+    fake.emit(provider.message(text))
+    fake.emit(
+      provider.responseCompleted(id, {
+        input_tokens: 2000,
+        input_tokens_details: { cached_tokens: 1900 },
+        output_tokens: 30,
+      }),
+    )
   }
   const settle = async () => {
     for (let i = 0; i < 20; i++) await Promise.resolve()
@@ -179,16 +107,14 @@ function rig() {
       access = next
     },
     requests,
-    sent,
-    live,
-    receive,
+    fake,
+    sent: fake.sent,
+    receive: fake.emit,
     delegated,
     terminal,
     settle,
     executor: () => executor!,
-    speak: (value: number) => {
-      level = value
-    },
+    speak: fake.speak,
     tick: () => run?.(),
     advance: (ms: number, ticks = 1) => {
       for (let i = 0; i < ticks; i++) {
@@ -201,39 +127,23 @@ function rig() {
       run?.()
     },
     hide: () => visibility?.(false),
-    developer: () =>
-      sent
-        .filter(
-          (event) =>
-            event.type === 'response.item.create' &&
-            (event.item as { role?: string }).role === 'developer',
-        )
-        .map(
-          (event) =>
-            (event.item as { content: { text: string }[] }).content[0]!.text,
-        ),
-    outputs: () =>
-      sent
-        .filter(
-          (event) =>
-            event.type === 'response.item.create' &&
-            (event.item as { type: string }).type === 'function_call_output',
-        )
-        .map((event) => {
-          const item = event.item as { call_id: string; output: string }
-          return { callId: item.call_id, output: JSON.parse(item.output) }
-        }),
-    creates: () => sent.filter((event) => event.type === 'response.create'),
-    appends: (kind: string) =>
-      sent
-        .filter((event) => event.type === `session.${kind}.append`)
-        .map((event) => String(event.content)),
+    activity: () => runtime.getSnapshot().activity,
+    developer: () => read.developer(fake.sent),
+    outputs: () => read.outputs(fake.sent),
+    creates: () => read.creates(fake.sent),
+    appends: (kind: 'thinking' | 'instructions' | 'commentary') =>
+      read.appends(fake.sent, kind),
     dispose: async () => {
       await runtime.end()
       session.dispose()
     },
   }
 }
+
+const status = (runtime: GuideRuntime) =>
+  statusLine(runtime.getSnapshot().activity)
+const connection = (runtime: GuideRuntime) =>
+  connectionOf(runtime.getSnapshot().activity)
 
 describe('the guide runtime', () => {
   it("reads the mode's verdict and never asks the Worker for one", async () => {
@@ -256,7 +166,7 @@ describe('the guide runtime', () => {
     ] as const) {
       f.grant(access)
       await f.runtime.start('marin')
-      expect(f.runtime.getSnapshot().connection).toBe('offline')
+      expect(connection(f.runtime)).toBe('offline')
       // A message here would greet whoever signs in next.
       expect(f.runtime.getSnapshot().message).toBeNull()
       // Loaded, it reports the verdict rather than an idle guide.
@@ -282,20 +192,17 @@ describe('the guide runtime', () => {
     expect(String((creation.body as { scene: string }).scene)).toContain(
       'local time is 21:04',
     )
-    expect(f.live.accept).toHaveBeenCalledWith('answer')
+    expect(f.fake.accepted).toEqual(['answer'])
     expect(f.appends('instructions')[0]).toMatch(
       /^Introduce yourself as Cedar, the guide here/,
     )
     expect(f.appends('commentary')[0]).toMatch(/^Begin the conversation now/)
-    expect(
-      f.sent.findIndex((e) => e.type === 'session.commentary.append'),
-    ).toBeGreaterThan(
-      f.sent.findIndex((e) => e.type === 'session.instructions.append'),
+    expect(read.indexOf(f.sent, 'session.commentary.append')).toBeGreaterThan(
+      read.indexOf(f.sent, 'session.instructions.append'),
     )
-    const snapshot = f.runtime.getSnapshot()
-    expect(snapshot.connection).toBe('connected')
-    expect(snapshot.voice).toBe('cedar')
-    expect(snapshot.status).toBe('Listening')
+    expect(connection(f.runtime)).toBe('connected')
+    expect(f.runtime.getSnapshot().voice).toBe('cedar')
+    expect(f.activity()).toEqual({ state: 'listening' })
     expect(f.runtime.diagnostics().sessionId).toBe('live_1')
     await f.dispose()
   })
@@ -318,9 +225,11 @@ describe('the guide runtime', () => {
         }),
       },
     ])
-    expect(f.creates()).toHaveLength(1)
+    expect(f.creates()).toBe(1)
     f.tick()
-    expect(f.runtime.getSnapshot().status).toBe('Moving to Saturn')
+    expect(status(f.runtime)).toBe('Moving to Saturn')
+    // The harness reads the code, which no rewording of the line moves.
+    expect(f.runtime.diagnostics().state).toBe('moving')
     // The continuation ends the chain with words; only then may an arrival prompt.
     f.terminal('Heading over to Saturn.')
     f.arrive()
@@ -328,7 +237,7 @@ describe('the guide runtime', () => {
       .developer()
       .find((text) => text.startsWith('Arrived: Saturn'))
     expect(arrival).toContain('Narrate this stop now.')
-    expect(f.creates()).toHaveLength(2)
+    expect(f.creates()).toBe(2)
     expect(f.appends('thinking').at(-1)).toMatch(/looking at Saturn/)
     expect(f.runtime.getSnapshot().usage.responses).toBe(1)
     expect(f.runtime.getSnapshot().usage.cachedTokens).toBe(1900)
@@ -368,23 +277,23 @@ describe('the guide runtime', () => {
     await f.runtime.start('marin')
     f.delegated('stand_at', { subject: 'Earth', site: 'summit' })
     await f.settle()
-    const before = f.creates().length
+    const before = f.creates()
     // The stand completes before the backend has written its travel line.
     f.arrive()
     const arrivals = f.developer().filter((text) => text.startsWith('Arrived:'))
     expect(arrivals).toHaveLength(1)
-    expect(f.creates()).toHaveLength(before)
+    expect(f.creates()).toBe(before)
     f.terminal('Down to the summit.')
-    f.receive({ type: 'session.input_transcript.delta', delta: 'wait' })
+    f.receive(provider.visitorSaid('wait'))
     f.tick()
-    expect(f.creates()).toHaveLength(before)
+    expect(f.creates()).toBe(before)
     f.advance(1100, 2)
-    expect(f.creates()).toHaveLength(before + 1)
+    expect(f.creates()).toBe(before + 1)
     expect(
       f.developer().filter((text) => text.startsWith('Arrived:')),
     ).toHaveLength(1)
     f.advance(1000, 5)
-    expect(f.creates()).toHaveLength(before + 1)
+    expect(f.creates()).toBe(before + 1)
     await f.dispose()
   })
 
@@ -416,22 +325,10 @@ describe('the guide runtime', () => {
     const f = rig()
     await f.runtime.start('marin')
     f.delegated('describe_view', {})
-    f.receive({
-      type: 'response.event',
-      delegation_id: 'item_1',
-      event: {
-        type: 'response.output_item.done',
-        item: {
-          type: 'function_call',
-          call_id: 'call_1',
-          name: 'describe_view',
-          arguments: '{}',
-        },
-      },
-    })
+    f.receive(provider.functionCall('call_1', 'describe_view', '{}'))
     await f.settle()
     expect(f.outputs()).toHaveLength(1)
-    expect(f.creates()).toHaveLength(1)
+    expect(f.creates()).toBe(1)
     await f.dispose()
   })
 
@@ -443,7 +340,8 @@ describe('the guide runtime', () => {
     f.terminal('Heading to Titan.')
     f.session.harness.observatory.zoom(2)
     f.tick()
-    expect(f.runtime.getSnapshot().status).toBe('You have the camera')
+    expect(status(f.runtime)).toBe('You have the camera')
+    expect(f.runtime.diagnostics().state).toBe('visitor-camera')
     expect(f.appends('thinking').at(-1)).toMatch(
       /^The visitor has taken the camera/,
     )
@@ -471,7 +369,7 @@ describe('the guide runtime', () => {
       seconds: 5,
     })
     f.terminal('Those rings are countless pieces of ice.')
-    const before = f.creates().length
+    const before = f.creates()
     f.tick()
     f.speak(0.05)
     f.advance(2000, 20)
@@ -481,43 +379,94 @@ describe('the guide runtime', () => {
     // The declared quiet counts from the last word, not from the moment the
     // clock was sure the words had ended.
     f.advance(2000, 20)
-    expect(f.creates()).toHaveLength(before)
+    expect(f.creates()).toBe(before)
     f.advance(700, 7)
     expect(f.developer().at(-1)).toMatch(
       /^The visitor has looked quietly for 5 seconds/,
     )
-    expect(f.creates()).toHaveLength(before + 1)
+    expect(f.creates()).toBe(before + 1)
     await f.dispose()
   })
+
+  it.each([
+    [
+      'a refinement of the stop',
+      'adjust_view',
+      {
+        azimuth_deg: 40,
+        elevation_deg: null,
+        distance_radii: null,
+        zoom_factor: null,
+      },
+      true,
+    ],
+    [
+      'a refused move',
+      'go_to',
+      { subject: 'No such world', framing: null, motion: null },
+      true,
+    ],
+    ['a hold, which declares a new stop', 'hold_view', {}, false],
+  ] as const)(
+    'keeps a declared linger through %s only if it does not end the stop',
+    async (_, name, args, keeps) => {
+      const f = rig()
+      await f.runtime.start('marin')
+      f.delegated('go_to', { subject: 'Saturn', framing: null, motion: null })
+      await f.settle()
+      f.terminal('Heading to Saturn.')
+      f.arrive()
+      f.delegated('linger', { seconds: 5, reason: 'the rings' })
+      await f.settle()
+      f.delegated(name, args)
+      await f.settle()
+      f.terminal('There.')
+      f.tick()
+      f.speak(0.05)
+      f.advance(2000, 20)
+      f.speak(0)
+      f.advance(2600, 26)
+      await f.settle()
+      f.advance(3000, 30)
+      expect(
+        f
+          .developer()
+          .some((text) => text.startsWith('The visitor has looked quietly')),
+      ).toBe(keeps)
+      await f.dispose()
+    },
+  )
 
   it('pauses both directions and holds the camera, then resumes, then ends cleanly', async () => {
     const f = rig()
     await f.runtime.start('marin')
     f.runtime.pause()
-    expect(f.runtime.getSnapshot()).toMatchObject({
+    expect(f.activity()).toEqual({ state: 'paused' })
+    expect(status(f.runtime)).toBe('Paused')
+    expect(f.runtime.diagnostics()).toMatchObject({
+      state: 'paused',
       paused: true,
-      status: 'Paused',
+      microphone: 'muted',
     })
-    expect(f.live.muteMicrophone).toHaveBeenLastCalledWith(true)
-    expect(f.live.muteGuide).toHaveBeenLastCalledWith(true)
-    expect(
-      f.sent.some((event) => event.type === 'session.input_audio.mute'),
-    ).toBe(true)
+    expect(f.fake.microphone.at(-1)).toBe(true)
+    expect(f.fake.guideAudio.at(-1)).toBe(true)
+    expect(read.indexOf(f.sent, 'session.input_audio.mute')).toBeGreaterThan(-1)
     expect(f.appends('instructions').at(-1)).toMatch(/^The visitor paused/)
     f.runtime.resume()
-    expect(f.runtime.getSnapshot().paused).toBe(false)
-    expect(
-      f.sent.some((event) => event.type === 'session.input_audio.unmute'),
-    ).toBe(true)
+    expect(f.activity()).toEqual({ state: 'listening' })
+    expect(f.fake.microphone.at(-1)).toBe(false)
+    expect(read.indexOf(f.sent, 'session.input_audio.unmute')).toBeGreaterThan(
+      -1,
+    )
     f.hide()
-    expect(f.runtime.getSnapshot().paused).toBe(true)
+    expect(f.activity()).toEqual({ state: 'paused' })
     f.runtime.resume()
     f.runtime.pause()
     f.advance(180_000, 2)
     await f.settle()
-    expect(f.runtime.getSnapshot().connection).toBe('offline')
+    expect(connection(f.runtime)).toBe('offline')
     expect(f.runtime.getSnapshot().message).toMatch(/three minutes paused/)
-    expect(f.live.close).toHaveBeenCalledOnce()
+    expect(f.fake.closes()).toBe(1)
     // Another account signing in drops it rather than being greeted by it.
     f.runtime.forgetMessage()
     expect(f.runtime.getSnapshot().message).toBeNull()
@@ -531,17 +480,19 @@ describe('the guide runtime', () => {
       expect(f.runtime.trace()).toEqual([])
       f.runtime.trace(true)
       await f.runtime.start('marin')
-      for (let i = 0; i < 210; i++)
-        f.receive({ type: 'session.usage.updated', usage: { seconds: i } })
+      for (let i = 0; i < 210; i++) f.receive(provider.usage(i))
+      // The guide's words arrive a fragment at a time and are not recorded.
+      f.receive(provider.guideSaid('Those rings'))
       const entries = f.runtime.trace()
       expect(entries).toHaveLength(200)
+      expect(JSON.stringify(entries)).not.toContain('Those rings')
       ;(entries[0] as unknown as { message: { type: string } }).message.type =
         'changed'
       expect(JSON.stringify(f.runtime.trace())).not.toContain('changed')
       expect(debug).toHaveBeenCalledWith('[guide]', expect.any(Object))
       f.runtime.trace(false)
       debug.mockClear()
-      f.receive({ type: 'session.usage.updated', usage: { seconds: 999 } })
+      f.receive(provider.usage(999))
       expect(debug).not.toHaveBeenCalled()
     } finally {
       debug.mockRestore()

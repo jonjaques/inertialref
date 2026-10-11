@@ -148,10 +148,14 @@ and the controlling-tab application socket are gone.
 
 ## Consequences
 
-The pure loop, executor, and clock are tested with a fake data channel that
-replays the phase-0 event shapes, so the beat, the correction, the deferred
-arrival, the one-move-per-turn guard, pause, and end are covered without a
-provider. Determinism is unchanged: the executor moves only the observatory,
+The pure loop, executor, and clock are tested with one fake data channel
+(`apps/game/src/tour/liveFake.ts`) that replays the phase-0 event shapes and
+refuses an event off the allow list as the real connection does, so the beat,
+the correction, the deferred arrival, the one-move-per-turn guard, pause, and
+end are covered without a provider, and a misspelled event fails a test
+rather than a session. The browser names provider events only in its adapter
+— `channel.ts`, `loop.ts` and `media.ts` — and the runtime speaks in verbs
+over a `send` typed on the protocol's `GuideClientEvent`. Determinism is unchanged: the executor moves only the observatory,
 and headless checks preserve identical canonical hashes.
 
 What deployed verification still needs is a real listen. The clock's numbers

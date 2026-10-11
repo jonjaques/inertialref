@@ -18,7 +18,7 @@ does deleting the module concentrate complexity, or just move it — is what
 separates a candidate from a pass-through.
 
 Every figure and line reference below is read from the tree at `96bdc2fd`,
-except in 12 and 13, which are re-read with 6–11 in the tree; nothing was run
+except in 13, which is re-read with 6–11 in the tree; nothing was run
 unless the section says so. Line numbers drift; the symbol beside each one is
 the reference.
 
@@ -49,6 +49,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                   |
 | The game holds one guide verdict per mode                    | [`apps/game/src/tour/verdict.ts`](../../apps/game/src/tour/verdict.ts), `mountGuide`, and their tests           |
 | The Worker decides "configured" once                         | `guideAccess` in [`apps/server/src/tour/access.ts`](../../apps/server/src/tour/access.ts), ADR-0048             |
+| The Live channel speaks in verbs                             | [`apps/game/src/tour/channel.ts`](../../apps/game/src/tour/channel.ts), `liveFake.ts`, `endsStop`, ADR-0042     |
 
 ---
 
@@ -56,7 +57,6 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
 | --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 12  | [The Live channel speaks in verbs](#12-the-live-channel-speaks-in-verbs)                                         | The guide   | —         | Worth exploring |
 | 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                               | The terrain | —         | Strong          |
 | 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
 | 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                 | The terrain | —         | Worth exploring |
@@ -71,7 +71,6 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 ```mermaid
 flowchart LR
-  P12[12 Live channel]
   P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
   P15[15 Water decision]
@@ -94,62 +93,12 @@ and the order is what keeps them apart:
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 12.** The guide's wire is one module in `packages/protocol`, the
-game holds one verdict per mode and the Worker decides it once, so what is left
-of the guide is the Live channel. The terrain and picture tracks build on
-nothing left open and can start in parallel.
+**Start with 13.** The guide track is in the tree. The terrain and picture
+tracks build on nothing left open and can start in parallel; 13 opens the
+terrain track and is the first of the three pull requests that edit
+`terrainProducer.ts`.
 [Open from the review of 6–11](#open-from-the-review-of-611) holds the smaller
 follow-ups those pull requests left, none of them a pull request of its own.
-
----
-
-## 12. The Live channel speaks in verbs
-
-**Track:** the guide · **Worth exploring** · true external (the provider),
-mocked at the adapter
-
-**Builds on:** nothing left open — the runtime has lost the verdict to
-`tour/verdict.ts` and the Worker decides it once, so what is left is the
-channel and the lifecycle. **Unblocks:** nothing.
-
-**Files.** `apps/game/src/tour/runtime.ts` (`send`, pause and resume, the
-status line, the list of moves in `#executed` at `:486–492`), `apps/game/src/tour/loop.ts`
-(`send` at `:39`), `apps/game/src/tour/media.ts` (`LiveConnection`'s allow
-list), and `runtime.test.ts`, `loop.test.ts`, `media.test.ts`.
-
-**The friction.**
-
-- **Provider events are sent by name through an untyped
-  `send(event: Record<string, unknown>)`** — eight literals in `runtime.ts`
-  alone. The allow list is enforced only inside `LiveConnection`, and both test
-  fakes accept any event, so a misspelled event passes `tsc` and
-  `runtime.test.ts` and then fails as `event_not_allowed` in a live, billed
-  session.
-- Pause and resume are each four calls across two interfaces.
-- Each test file rebuilds the provider's event envelope.
-- **State is held as display text.** `snapshot.status === 'You have the camera'`
-  is read back as state, and while a session runs the diagnostics' `state` is
-  the lowercased label, so a wording change changes what the harness reports.
-  Offline it is the verdict's (`accessState` in `tour/verdict.ts`), and there
-  `unavailable` names two things: the verdict's reason — the Worker gave no
-  answer — and `UNAVAILABLE_GUIDE.state` — no guide port, outside the
-  planetarium. A script cannot tell them apart.
-- **Which tools count as moves is a third classification**, beside
-  `GUIDE_CAMERA_TOOLS` and `GuideArrival['tool']`, and whether `adjust_view` or
-  `set_time` cancels a linger is stated nowhere.
-
-**The shape.** A channel adapter owns the provider's vocabulary and offers
-verbs — instruct, think, comment, mute input, close — with `send` typed on
-`GuideClientEvent`. One shared in-memory fake enforces the allow list and emits
-the event shapes recorded in ADR-0042's probe sessions. The session lifecycle
-is a discriminated union, and the status line is derived from it. Each tool's
-output states its effect, so the runtime stops matching on tool names. The seam
-already has two adapters — `media.ts` and the fakes — so it is real.
-
-**Gate.** No provider event literal outside the adapter. The fake refuses an
-event off the allow list, and a test proves it. The diagnostics' state survives
-a label change, and each of its values names one thing. The move
-classification is written once.
 
 ---
 

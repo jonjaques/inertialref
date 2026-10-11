@@ -6,7 +6,7 @@ import {
   PLANETARIUM_GUIDE_VOICE,
   usePersistentState,
 } from '../state/preferences.ts'
-import type { GuideRuntime } from './runtime.ts'
+import { connectionOf, type GuideRuntime, statusLine } from './runtime.ts'
 import type { GuideAccess } from './verdict.ts'
 
 /*
@@ -35,14 +35,16 @@ export function GuideControls({
     runtime.getSnapshot,
   )
   const [voice, setVoice] = usePersistentState(PLANETARIUM_GUIDE_VOICE)
+  const paused = state.activity.state === 'paused'
   const pauseTitle = useActionTitle(
     'guide.pause',
-    state.paused ? 'Resume the guide' : 'Pause the guide',
+    paused ? 'Resume the guide' : 'Pause the guide',
   )
   const endTitle = useActionTitle('guide.end', 'End the guide')
-  const offline = state.connection === 'offline'
-  const connecting = state.connection === 'connecting'
-  const closing = state.connection === 'closing'
+  const connection = connectionOf(state.activity)
+  const offline = connection === 'offline'
+  const connecting = connection === 'connecting'
+  const closing = connection === 'closing'
   const voices = access.state === 'granted' ? access.voices : []
 
   return (
@@ -73,13 +75,11 @@ export function GuideControls({
             ) : (
               <>
                 <Action
-                  label={state.paused ? 'Resume' : 'Pause'}
-                  icon={state.paused ? Play : Pause}
+                  label={paused ? 'Resume' : 'Pause'}
+                  icon={paused ? Play : Pause}
                   title={pauseTitle}
                   disabled={connecting || closing}
-                  onClick={() =>
-                    state.paused ? runtime.resume() : runtime.pause()
-                  }
+                  onClick={() => (paused ? runtime.resume() : runtime.pause())}
                 />
                 <Action
                   label="End"
@@ -94,7 +94,7 @@ export function GuideControls({
             )}
           </div>
           <p className="type-readout text-slate-400" role="status">
-            {offline ? 'Ready' : state.status}
+            {statusLine(state.activity)}
           </p>
           <p className="type-micro text-pretty text-slate-400">
             The guide is an AI voice. Starting sends your microphone to OpenAI,

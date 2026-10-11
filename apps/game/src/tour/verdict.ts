@@ -1,3 +1,4 @@
+import type { GuideState } from '@inertialref/devtools'
 import type {
   GuideRefusal,
   GuideVerdict,
@@ -35,7 +36,7 @@ export interface GuideAccessOwner {
  * The verdict as `ir.guideStatus` names an idle guide's state: `idle` when
  * granted, otherwise `checking` or the refusal's reason.
  */
-export const accessState = (access: GuideAccess): string =>
+export const accessState = (access: GuideAccess): GuideState =>
   access.state === 'granted'
     ? 'idle'
     : access.state === 'checking'

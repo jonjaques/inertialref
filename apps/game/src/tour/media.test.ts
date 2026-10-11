@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { GuideClientEvent } from '@inertialref/protocol'
 import { LiveConnection } from './media.ts'
 
 function audioFake() {
@@ -65,9 +66,13 @@ describe('the voice connection', () => {
     expect(await f.live.prepare()).toBe('offer')
     expect(() => f.live.send({ type: 'response.create' })).toThrow(/not open/)
     f.channel.readyState = 'open'
-    expect(() => f.live.send({ type: 'session.update', session: {} })).toThrow(
-      /may not send/,
-    )
+    // The type refuses it; a cast does not, and the wire is where a cast lands.
+    expect(() =>
+      f.live.send({
+        type: 'session.update',
+        session: {},
+      } as unknown as GuideClientEvent),
+    ).toThrow(/may not send/)
     expect(f.live.send({ type: 'response.create' })).toBe('guide-1')
     expect(
       f.live.send({
