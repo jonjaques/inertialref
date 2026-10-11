@@ -345,8 +345,9 @@ is `100dvh` and cannot scroll.
 observatory, then the walker, then the ship**, written once in
 `engine/frameOwner.ts` and resolved once a frame by `GameEngine.#step`, which
 publishes the result as `engine.owner`: the arm, its eye, and the player's
-ship. No arm of that order may depend on a later one resolving. Only the ship
-arm needs a player, and `buildScene` takes the owner's eye, so a playerless
+ship. No arm of that order may depend on a later one resolving. Only the
+walker and ship arms need a player, only the ship arm hands `buildScene` an
+entity as its eye, and `buildScene` takes the owner's eye, so a playerless
 observatory frame is drawn like any other. A consumer switches on
 `engine.owner.arm` and names the ship by `engine.owner.ship`; it never
 re-derives either from `engine.cinematic === null` or `isCamera`, which on foot

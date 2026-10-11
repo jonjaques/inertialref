@@ -144,7 +144,8 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
     }
 
     // The player's ship as the frame names it — on foot, the one the walker
-    // stepped out of, which is the hull `ShipModel` draws.
+    // stepped out of. Its entity pose, not the raised pad pose `ShipModel`
+    // draws a parked Rocinante at; the two part only if a parked hull thrusts.
     const ship = view.entities.find((entity) => entity.id === owner?.ship)
     if (ship === undefined) {
       root.visible = false

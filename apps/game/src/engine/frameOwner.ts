@@ -7,14 +7,14 @@ import type { EntityId } from '@inertialref/universe'
  * Four arms, in the precedence ADR-0047 keeps: a cutscene, then the
  * observatory, then the walker, then the ship. A scripted scene is the one
  * thing allowed to take the camera from whatever holds it — that is what makes
- * `ir.play()` work from inside the planetarium — and only the last arm needs
- * an entity, so no arm may depend on a later one resolving.
+ * `ir.play()` work from inside the planetarium. Only the walker and the ship
+ * need a player, and only the ship hands `buildScene` an entity as its eye, so
+ * no arm may depend on a later one resolving.
  *
  * The eye, the pose the galaxy reads, the eye `buildScene` is handed and the
- * camera rig's choice were each a separate spelling of this order, and a
- * consumer that wanted to know whether a script held the camera asked
- * `engine.cinematic === null` for itself. Everything now reads the arm this
- * returns.
+ * camera rig's choice all come from the arm this returns; a consumer that
+ * wants to know whether a script holds the camera switches on that arm rather
+ * than asking `engine.cinematic === null`.
  */
 
 type FrameArm = 'cutscene' | 'observatory' | 'walker' | 'ship'

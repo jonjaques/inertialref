@@ -258,7 +258,10 @@ describe('the game engine, headless', () => {
     game.frame(1 / 60)
     expect(game.owner?.arm).toBe('walker')
     expect(game.characterCamera).not.toBeNull()
-    game.session.replaceWorld(game.world, null)
+    // The walker goes without the world being replaced: a replacement drops
+    // the walker's eye in `#invalidateDerived` before `#step` runs, so it
+    // would pass whatever the null branch of `#step` publishes.
+    game.world.removeCharacter(game.session.player()!)
     game.frame(1 / 60)
     expect(game.owner).toBeNull()
     expect(game.cinematic).toBeNull()

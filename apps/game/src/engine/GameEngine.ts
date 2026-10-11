@@ -506,7 +506,7 @@ export class GameEngine {
    * A fixed galaxy instrument supplies its declared lens only while that
    * instrument is active; entering and leaving it preserves the flight lens.
    *
-   * A getter rather than a field: `this.cinematic` is written once per frame by
+   * A getter rather than a field: `this.owner` is written once per frame by
    * `#step`, and a mirrored copy would be a second thing to keep in step.
    */
   get lens(): Lens {

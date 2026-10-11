@@ -81,7 +81,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   `buildScene`. Pushing a camera at the
   Three.js object instead leaves LOD, star brightness, `up` and flare occlusion all told
   about a different viewpoint from the one on screen. **No arm may depend on a later one
-  resolving** — only the ship arm needs an entity, and a cutscene sample placed below the
+  resolving** — only the walker and ship arms need a player, and a cutscene sample placed below the
   missing-player return latched `engine.cinematic` for the rest of the session.
 - **One producer of the lens, and the field of view is derived from it.** `engine.lens`
   resolves a script's lens, then an active fixed galaxy instrument's declared lens
