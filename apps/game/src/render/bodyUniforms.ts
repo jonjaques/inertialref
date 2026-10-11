@@ -13,11 +13,11 @@ import { Quaternion, Vec, type Vec3 } from '@inertialref/spatial'
  * What a body's materials are told each frame, as a function of the body and
  * the frame.
  *
- * Every number the sphere, its cloud deck, its rings and its atmosphere shell
- * read is decided here, in Node, with no Three object in reach — so the rules
+ * Every per-frame number the sphere, its cloud deck, its rings and its
+ * atmosphere shell read is decided here, in Node, with no Three object in reach — so the rules
  * the picture depends on are testable where the rest of the scene's arithmetic
- * is. `scene/Bodies.tsx` owns the meshes and the textures and applies these
- * records to them; what it applies is decided here.
+ * is. `scene/Bodies.tsx` owns the meshes, the textures and the atmosphere's
+ * scattering tables, and applies these records to them.
  *
  * The one decision taken here that the frame closure must not take again is
  * the figure branch. A body with a measured figure is drawn from a mesh that

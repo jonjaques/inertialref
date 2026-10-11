@@ -67,6 +67,13 @@ inside frames, the next candidates are the selection's per-walk node objects and
 `pyramid`'s per-level string maps, both inside the re-walk path that a stance
 does not pay.
 
+`render/bodyUniforms.ts` is a producer every stance pays, unmeasured: each body
+drawn builds its records fresh each frame — about a dozen short-lived objects,
+the sun direction, the spin axis, three `oblate` vectors and four material
+records among them, some built for a shell the body does not have. Small
+beside the scene's own churn on the count of bodies drawn; it belongs in the
+attributed trace above before anyone pools it.
+
 ### The balance pass has one idea worth taking and one that is not
 
 `balance` in `packages/rendering/src/terrainSelect.ts` is 56% of a selection

@@ -184,8 +184,8 @@ export interface PlanetMaterial {
    * A multiplier on the sampled albedo, for the eye a photograph implies.
    *
    * 1 for everything the renderer draws at a distance, and for every body
-   * bright enough that the scene's own exposure already suits it. `Bodies.tsx`
-   * raises it only for a dark body filling the frame in Enhanced or explicit
+   * bright enough that the scene's own exposure already suits it.
+   * `bodyUniforms.ts` raises it only for a dark body filling the frame in Enhanced or explicit
    * calibrated staging. `surfaceVisibilityGain` supplies both sphere and ground.
    */
   readonly albedoScale: { value: number }
