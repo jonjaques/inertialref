@@ -14,7 +14,7 @@ import { secondsText } from './timecode.ts'
  * So the page says it, once, under the title, and then gets out of the way.
  */
 export function CinemaLibrary({ engine }: { engine: GameEngine }) {
-  const scenes = engine.harness.cutscenes()
+  const scenes = engine.harness.cutscene.list()
   return (
     // A scrim, because the library sits over whatever the world is showing and
     // that is very often a sunlit planet. `docs/design/ux.md` measured 70% in

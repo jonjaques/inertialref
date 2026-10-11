@@ -218,15 +218,15 @@ describe('the hull against the live script', () => {
   harness.play('tng-intro')
   // The first sample anchors frame 0 to its epoch; ask for it before anything
   // else or every later frame is offset by the one that was asked for first.
-  harness.cutsceneSample(harness.world.clock.renderTime)
+  harness.cutscene.sample(harness.world.clock.renderTime)
 
   const at = (frame: number) => {
-    const sample = harness.cutscenePeek(frame)
+    const sample = harness.cutscene.peek(frame)
     if (sample === null) throw new Error(`no sample at f${frame}`)
     const offset = offsetOfSample(sample)
     const difference = (half: number) => {
-      const before = harness.cutscenePeek(frame - half)
-      const after = harness.cutscenePeek(frame + half)
+      const before = harness.cutscene.peek(frame - half)
+      const after = harness.cutscene.peek(frame + half)
       if (before === null || after === null) throw new Error('no neighbors')
       return Vec.scale(
         Vec.sub(offsetOfSample(after), offsetOfSample(before)),
@@ -243,10 +243,10 @@ describe('the hull against the live script', () => {
   }
 
   it('peeking never moves the playhead', () => {
-    const before = harness.cutsceneStatus()?.frame
-    harness.cutscenePeek(2100)
-    harness.cutscenePeek(400)
-    expect(harness.cutsceneStatus()?.frame).toBe(before)
+    const before = harness.cutscene.status()?.frame
+    harness.cutscene.peek(2100)
+    harness.cutscene.peek(400)
+    expect(harness.cutscene.status()?.frame).toBe(before)
   })
 
   it('places the hull inside the frame through the credit run', () => {
@@ -270,7 +270,7 @@ describe('the hull against the live script', () => {
      */
     const still = at(1440).velocity
     harness.seekCutscene(120)
-    harness.cutsceneSample(harness.world.clock.renderTime)
+    harness.cutscene.sample(harness.world.clock.renderTime)
     const seeked = at(1440).velocity
     expect(seeked.x).toBe(still.x)
     expect(seeked.y).toBe(still.y)
@@ -339,7 +339,7 @@ describe('the hull against the live script', () => {
      * subtraction — which is what this asserts, with the origin standing in as
      * an arbitrary rebase.
      */
-    const sample = harness.cutscenePeek(1440)
+    const sample = harness.cutscene.peek(1440)
     if (sample === null) throw new Error('no sample at f1440')
     const universe = offsetOfSample(sample)
     const rebase = vec3(4096, -8192, 65536)

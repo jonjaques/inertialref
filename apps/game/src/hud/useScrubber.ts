@@ -91,7 +91,7 @@ export function useScrubber(engine: GameEngine): Scrubber {
    */
   const seek = useCallback(
     (frame: number): boolean => {
-      if (engine.harness.cutsceneStatus() === null) return false
+      if (engine.harness.cutscene.status() === null) return false
       engine.harness.seekCutscene(frame)
       return true
     },

@@ -110,7 +110,7 @@ describe('cutscene camera against the hero hull', () => {
     const session = openSession()
     session.harness.play('tng-intro')
     const at = (frame: number) =>
-      session.harness.cutsceneSample(100 + frame / TNG_INTRO.fps)
+      session.harness.cutscene.sample(100 + frame / TNG_INTRO.fps)
     // The first sample anchors frame 0 to its epoch.
     at(0)
 

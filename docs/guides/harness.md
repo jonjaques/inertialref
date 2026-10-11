@@ -65,6 +65,12 @@ a `pending` reason, and `pendingCount` is how many
 input in the same way `ir.look` is, through the same resolver, and returns `null`
 for an address that names nothing.
 
+**`ir.status().boot` says whether the app has booted**: `booting` before
+there is a renderer, `drawing` while the boot cover is still up over a scene
+that already renders, and `booted` once the cover is gone. It is answered by
+the presentation host, so the driver waits on it rather than on a DOM selector
+or an engine field a rename would silently break. Headlessly it is `booted`.
+
 **`ir.lens()` is the optics, and `ir.status().lens` is the same object.** Focal
 length, gauge and zoom are what the camera is set to; the field of view, the
 sharp band, the blur circle against the pixel it has to hide inside, the Airy
@@ -748,13 +754,19 @@ when it bites, so raising it is the only way to see what a selection _wanted_.
 ## Scripted scenes
 
 ```js
-ir.cutscenes() // scenes with descriptions and durations
+ir.cutscene.list() // scenes with descriptions and durations
 ir.play('tng-intro')
 ir.pause()
 ir.seekCutscene(1150)
-ir.cutsceneStatus()
+ir.cutscene.status() // the playhead, or null
+ir.cutscene.lastOutcome() // ended, stopped or abandoned
 ir.stopCutscene()
 ```
+
+`ir.cutscene` is the director itself, the way `ir.observatory` is the
+observatory; `play`, `seekCutscene` and `stopCutscene` stay on `ir` as the
+verbs a console types. The scenes it plays are a session option,
+`openSession({ cutscenes })`, defaulting to the shipped ones.
 
 Pause before seeking for a frame-exact still. The browser needs to render
 after the seek before the sampled cinematic state is current; follow the

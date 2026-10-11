@@ -81,7 +81,7 @@ export class CharacterController {
   #mayStepOut(): boolean {
     const harness = this.#engine.harness
     return (
-      harness.cutsceneStatus() === null &&
+      harness.cutscene.status() === null &&
       harness.observerStatus()?.target == null
     )
   }

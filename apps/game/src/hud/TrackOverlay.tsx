@@ -175,7 +175,7 @@ export function TrackOverlay({ engine }: { engine: GameEngine }) {
       }
 
       const view = engine.cinematic
-      const status = engine.harness.cutsceneStatus()
+      const status = engine.harness.cutscene.status()
       const line = numbers.current
       if (view === null || status === null) {
         show(referenceGroup.current, false)
@@ -230,8 +230,8 @@ export function TrackOverlay({ engine }: { engine: GameEngine }) {
       const difference = (half: number) => {
         const from = Math.max(lo, Math.min(frame - half, hi))
         const to = Math.max(lo, Math.min(frame + half, hi))
-        const before = engine.harness.cutscenePeek(from)
-        const after = engine.harness.cutscenePeek(to)
+        const before = engine.harness.cutscene.peek(from)
+        const after = engine.harness.cutscene.peek(to)
         const span = to - from
         if (before === null || after === null || span < 1e-6) return Vec.ZERO
         return Vec.scale(

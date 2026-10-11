@@ -99,7 +99,7 @@ Two rungs, and the cheap one answers most questions.
 
 **Sample the director in Node.** `openSession()` builds the world,
 `harness.play('tng-intro')` prepares the script, and
-`harness.cutsceneSample(epoch + frame / fps)` returns the frame — camera pose,
+`harness.cutscene.sample(epoch + frame / fps)` returns the frame — camera pose,
 lens, hull pose, texts, effects — with no browser and no dev server. A
 throwaway
 script in a git-ignored `.scratch/` that prints a body's standoff in radii, its

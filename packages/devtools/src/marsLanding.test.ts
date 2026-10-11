@@ -22,11 +22,11 @@ import { openSession } from './session.ts'
 describe('Mars landing', () => {
   it('is available through the Cinema director', () => {
     const { harness } = openSession()
-    expect(harness.cutscenes().map((scene) => scene.id)).toContain(
+    expect(harness.cutscene.list().map((scene) => scene.id)).toContain(
       'mars-landing',
     )
     harness.play('mars-landing')
-    expect(harness.cutsceneSample(0)?.ship.visible).toBe(true)
+    expect(harness.cutscene.sample(0)?.ship.visible).toBe(true)
   })
 
   it('keeps the whole descent and its held ephemeris independent of seek order', () => {
@@ -131,7 +131,7 @@ describe('Mars landing', () => {
     world.clock.setPaused(true)
     const before = world.entities.require(id).state
     harness.play('mars-landing')
-    harness.cutsceneSample(0)
+    harness.cutscene.sample(0)
     harness.stopCutscene()
     expect(world.entities.require(id).state).toEqual(before)
     expect(world.clock.timeScale).toBe(4)

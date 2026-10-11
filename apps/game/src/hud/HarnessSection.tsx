@@ -65,16 +65,18 @@ export function HarnessSection({
          * skips a running scene, restoring the ship where it was.
          */}
         <div className="flex flex-wrap gap-1">
-          {engine.harness.cutscenes().map(({ id, description, seconds }) => (
-            <Action
-              key={id}
-              label={`▶ ${id}`}
-              title={`${description} — ${Math.round(seconds)} s`}
-              onClick={() =>
-                run(`playing ${id}`, () => engine.harness.play(id))
-              }
-            />
-          ))}
+          {engine.harness.cutscene
+            .list()
+            .map(({ id, description, seconds }) => (
+              <Action
+                key={id}
+                label={`▶ ${id}`}
+                title={`${description} — ${Math.round(seconds)} s`}
+                onClick={() =>
+                  run(`playing ${id}`, () => engine.harness.play(id))
+                }
+              />
+            ))}
           <Action
             label="Stop"
             title="Stop the running cutscene and restore the ship"

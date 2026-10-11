@@ -296,6 +296,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // double-invoked under StrictMode and a factory with side effects in it leaks
   // one of every two. It returns its own teardown.
   useEffect(() => firstLight.start(), [firstLight])
+  // The phase the harness reports as `ir.status().boot`, read live from the
+  // store so a driver polling it sees the cover lift on the frame it does.
+  useEffect(() => {
+    engine.bootPhase = () => firstLight.store.getState().phase
+    return () => {
+      engine.bootPhase = () => 'done'
+    }
+  }, [engine, firstLight])
 
   /*
    * The renderer, the ground producer that rides on its device, and the
