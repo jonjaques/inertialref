@@ -14,7 +14,7 @@ import {
  * interaction the planetarium exists for — and it depends on nothing but the
  * world and its loaded systems. Filtering is a predicate over ~130 paths and
  * depends on the focus, which is what a retarget changes. Keyed together,
- * every focus change re-solved every orbit.
+ * every focus change re-solves every orbit.
  *
  * Both halves key on the engine's world generation, so a replaced world
  * re-samples without anyone clearing this by hand. The anchor is what makes
@@ -28,6 +28,9 @@ import {
 
 const log = getLogger('game.engine')
 
+// `hide()` runs every frame the traces are off; one empty list, not one each.
+const NONE: readonly OrbitPath[] = []
+
 export class OrbitTraceCache {
   #generation = -1
   #scopeKey = ''
@@ -37,7 +40,7 @@ export class OrbitTraceCache {
 
   /** The traces to draw for this generation; none until one is built in it. */
   visible(generation: number): readonly OrbitPath[] {
-    return generation === this.#generation ? this.#visible : []
+    return generation === this.#generation ? this.#visible : NONE
   }
 
   /**
@@ -46,7 +49,7 @@ export class OrbitTraceCache {
    * swept at the anomaly each body had before it.
    */
   hide(): void {
-    this.#visible = []
+    this.#visible = NONE
     this.#scopeKey = ''
     this.#allKey = ''
   }

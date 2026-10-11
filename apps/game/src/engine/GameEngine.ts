@@ -880,8 +880,7 @@ export class GameEngine {
    * The world generation: bumped once, in `#invalidateDerived`, wherever the
    * world is replaced. The star survey and the orbit traces key on it rather
    * than being cleared field by field, so nothing derived from a world can
-   * outlive it by being left off a list — which is how the starfield once
-   * survived a jump of four light years.
+   * outlive it by being left off a list.
    */
   #generation = 0
   readonly #survey = new StarSurvey((request) => {
@@ -1173,8 +1172,9 @@ export class GameEngine {
   /**
    * Everything derived from the world, dropped in one place.
    *
-   * Called whenever the world is replaced. Splitting this across `replaceWorld`
-   * and `load` is how the starfield came to survive a jump of four light years.
+   * Called whenever the world is replaced. Split across `replaceWorld` and
+   * `load`, whichever path missed a field kept the previous world's — the
+   * starfield across a jump of four light years.
    */
   #invalidateDerived(): void {
     this.character.reset()

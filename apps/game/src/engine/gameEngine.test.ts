@@ -191,9 +191,10 @@ describe('the game engine, headless', () => {
 
     /*
      * Every derived field the world replacement drops, as a probe that reads
-     * true when it is cold. The count is the gate: an entry added to
-     * `#invalidateDerived` without a probe here is a field nothing checks.
-     * The star survey and the orbit traces are two of them, cold because they
+     * true when it is cold. The count makes a deleted probe loud; it cannot
+     * see a field added to `#invalidateDerived` without one. The rotation
+     * cue and the terrain are not warm at the pad, so their cold read after
+     * the load proves nothing beyond not throwing. The star survey and the orbit traces are two of them, cold because they
      * key on the world generation rather than because anything cleared them.
      */
     const cold = {

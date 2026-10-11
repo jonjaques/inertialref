@@ -26,10 +26,10 @@ import {
  * engine's world generation rather than cleared field by field: a field read
  * at a generation it was not surveyed in is the empty one, and an asynchronous
  * survey that lands after the world was replaced is discarded rather than
- * hung in the new world's sky. That guard is what kept a save loaded in
- * another system from briefly wearing the old system's stars; it was masked
- * for as long as terrain tasks queued ahead of the survey delayed it past
- * every observer.
+ * hung in the new world's sky. Without that guard a save loaded in another
+ * system briefly wears the old system's stars — and only when the survey
+ * lands promptly, since terrain tasks queued ahead of it can delay it past
+ * every observer and hide the defect.
  */
 
 const log = getLogger('game.engine')

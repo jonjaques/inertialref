@@ -10,7 +10,12 @@ import { OrbitTraceCache } from './orbitTraces.ts'
 const path = (address: string, parent: string): OrbitPath =>
   ({ address, parent }) as unknown as OrbitPath
 
-const PATHS = [path('a', 'sun'), path('b', 'sun'), path('a1', 'a')]
+const PATHS = [
+  path('a', 'sun'),
+  path('b', 'sun'),
+  path('a1', 'a'),
+  path('b1', 'b'),
+]
 
 const scope = (focus: string | null): OrbitScopeContext =>
   ({
@@ -38,9 +43,13 @@ describe('the orbit trace cache', () => {
     const cache = new OrbitTraceCache()
     const sampler = counted()
     cache.update(0, ['sol'], scope(null), sampler.sample)
-    expect(cache.visible(0)).toHaveLength(3)
+    expect(cache.visible(0)).toHaveLength(4)
+    // Focused on `a`, the moon of its sibling `b` is out of scope.
     cache.update(0, ['sol'], scope('a'), sampler.sample)
+    const focused = cache.visible(0)
+    expect(focused.map((p) => p.address)).toEqual(['a', 'b', 'a1'])
     cache.update(0, ['sol'], scope('a'), sampler.sample)
+    expect(cache.visible(0)).toBe(focused)
     expect(sampler.samples).toBe(1)
   })
 
@@ -59,7 +68,7 @@ describe('the orbit trace cache', () => {
     expect(cache.visible(1)).toHaveLength(0)
     cache.update(1, ['sol'], scope(null), sampler.sample)
     expect(sampler.samples).toBe(2)
-    expect(cache.visible(1)).toHaveLength(3)
+    expect(cache.visible(1)).toHaveLength(4)
   })
 
   it('re-samples when the traces come back on', () => {
