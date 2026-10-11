@@ -230,7 +230,8 @@ export const WORD = {
  * rasterizer's, measured at a mean of two to nine entries a cell and a peak
  * near thirty, so sixteen a cell over the whole lattice holds every body
  * seen with room, and the packer checks. A body over it fails at pack time
- * rather than overrunning a buffer, and the producer falls back to the pool.
+ * rather than overrunning a buffer, and the producer sends that body — and
+ * only that body — to the pool.
  */
 export const MAX_KERNEL_DRAINAGE_NODES = 6 * DRAINAGE_SHAPE.lattice ** 2
 export const MAX_KERNEL_DRAINAGE_LISTS = 16 * MAX_KERNEL_DRAINAGE_NODES

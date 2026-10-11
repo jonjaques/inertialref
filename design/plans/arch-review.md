@@ -54,22 +54,21 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 ## The order
 
-| #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
-| --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
-| 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                 | The terrain | —         | Worth exploring |
-| 16  | [The drainage graph is prepared off the draw thread](#16-the-drainage-graph-is-prepared-off-the-draw-thread)     | The terrain | 14        | Worth exploring |
-| 17  | [The scene target's layout is one table](#17-the-scene-targets-layout-is-one-table)                              | The picture | —         | Strong          |
-| 18  | [The sensor publishes the frame's pixel grid](#18-the-sensor-publishes-the-frames-pixel-grid)                    | The picture | 17        | Worth exploring |
-| 19  | [One quad-pass runner](#19-one-quad-pass-runner)                                                                 | The picture | —         | Strong          |
-| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)                               | The picture | 19        | Worth exploring |
-| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                                                 | The picture | 19        | Worth exploring |
-| A   | [One compass basis](#a-one-compass-basis)                                                                        | Optional    | —         | Speculative     |
-| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                            | Optional    | 16        | Speculative     |
+| #   | Pull request                                                                                                 | Track       | Builds on | Strength        |
+| --- | ------------------------------------------------------------------------------------------------------------ | ----------- | --------- | --------------- |
+| 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                             | The terrain | —         | Worth exploring |
+| 16  | [The drainage graph is prepared off the draw thread](#16-the-drainage-graph-is-prepared-off-the-draw-thread) | The terrain | —         | Worth exploring |
+| 17  | [The scene target's layout is one table](#17-the-scene-targets-layout-is-one-table)                          | The picture | —         | Strong          |
+| 18  | [The sensor publishes the frame's pixel grid](#18-the-sensor-publishes-the-frames-pixel-grid)                | The picture | 17        | Worth exploring |
+| 19  | [One quad-pass runner](#19-one-quad-pass-runner)                                                             | The picture | —         | Strong          |
+| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)                           | The picture | 19        | Worth exploring |
+| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                                             | The picture | 19        | Worth exploring |
+| A   | [One compass basis](#a-one-compass-basis)                                                                    | Optional    | —         | Speculative     |
+| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                        | Optional    | 16        | Speculative     |
 
 ```mermaid
 flowchart LR
-  P14[14 Per-body refusal] --> P16[16 Prepared graph]
+  P16[16 Prepared graph]
   P15[15 Water decision]
   P17[17 Target layout] --> P18[18 Pixel grid]
   P19[19 Quad-pass runner] --> P20[20 Stage list]
@@ -83,46 +82,16 @@ the numbering is the order to take them in. Across tracks the only edges are
 the two optional items.** So the tracks fan out across worktrees, and
 the numbering is the order for one pair of hands. Where a pull request builds
 on nothing and still has a place in the order, the place is about collision,
-and its section says so. Two files are edited by more than one pull request,
+and its section says so. One file is edited by more than one pull request,
 and the order is what keeps them apart:
 
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
-- `apps/game/src/render/terrainProducer.ts` — 14 and 16.
 
-**Start with 14.** The guide track is in the tree, and so is the archive. The
-terrain and picture tracks build on nothing left open and can start in
-parallel.
+**Start with 15.** The guide track is in the tree, and so are the archive and
+the per-body refusal. The terrain and picture tracks build on nothing left
+open and can start in parallel.
 [Open from the review of 6–11](#open-from-the-review-of-611) holds the smaller
 follow-ups those pull requests left, none of them a pull request of its own.
-
----
-
-## 14. A body the kernel cannot pack goes to the pool alone
-
-**Track:** the terrain · **Strong** · in-process, with Dawn for the kernel
-
-**Builds on:** nothing. **Unblocks:** 16.
-
-**Files.** `apps/game/src/render/terrainProducer.ts` (`pump`, `fail`),
-`packages/universe/src/terrainKernel.ts` (`packDrainage`'s invariants against
-`MAX_KERNEL_DRAINAGE_NODES` and `MAX_KERNEL_DRAINAGE_LISTS`).
-
-**The friction.** A graph over either cap throws inside `packDrainage`; `pump`
-catches it and calls `fail()`, which marks the producer unavailable for the
-session, so every body after it goes to the pool. The kernel's own comment says
-a body over the cap "fails at pack time … and the producer falls back to the
-pool", which describes one body, not the session. A body the kernel cannot pack
-is not a device that cannot run. [Erosion](erosion.md#4-the-defects-ranked)
-defect 2's ninth binding is a device failure, and retiring the producer is
-right for that one.
-
-**The shape.** The producer tells the two apart. A body it cannot pack sends
-that surface's requests to the pool and keeps the GPU for every other body; a
-device or pipeline failure retires the producer, which is the right answer to a
-device that cannot run.
-
-**Gate.** A producer test with a surface whose graph exceeds the node cap: that
-body's tiles come from the pool, and the next dry body's come from the GPU.
 
 ---
 
@@ -161,8 +130,9 @@ graph, mapped wet, mapped dry. The erosion plan loses defect 6.
 **Track:** the terrain · **Worth exploring**, **measure first** ·
 local-substitutable (the inline pool)
 
-**Builds on:** 14 — a surface the kernel cannot pack is already a per-body
-answer, and preparation is what gives it. **Unblocks:**
+**Builds on:** nothing left open — a surface the kernel cannot pack is already
+a per-body answer in the producer (`refuse`), and preparation is what gives
+it. **Unblocks:**
 [B](#b-surface-identity-is-stated-once).
 
 **Precondition.** [Perf](perf.md#the-first-tile-of-a-wet-body-builds-its-drainage-graph-on-the-draw-thread-unmeasured)

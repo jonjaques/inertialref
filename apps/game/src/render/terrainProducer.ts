@@ -62,7 +62,9 @@ import {
  * **The pool stays canonical and stays the fallback.** A kernel that will not
  * build, a device the browser loses: `available` goes false, everything
  * queued or in flight rejects with `HeightfieldUnavailable`, and `Heightfields`
- * retries those requests on the pool. Nothing here is the field the contact
+ * retries those requests on the pool. A body the kernel cannot pack is that
+ * body's alone: its requests go to the pool and the GPU keeps every other
+ * body's. Nothing here is the field the contact
  * test integrates — that is `elevationAt` on the CPU, always — and nothing
  * here moves a canonical version, because the divergence from the CPU tile is
  * a measured bound (`terrainKernel.gpu.test.ts`) rather than a change to the
@@ -110,6 +112,8 @@ export interface TileProducerStats {
   readonly batches: number
   /** Tiles delivered since it was made. */
   readonly tiles: number
+  /** Bodies the kernel could not pack, whose tiles the pool makes instead. */
+  readonly refused: number
   /** Rolling mean, dispatch to readback in hand, milliseconds. */
   readonly meanBatchMs: number
 }
@@ -181,6 +185,14 @@ export function createTileProducer(
    */
   let uploaded: KernelSurface | null = null
   /*
+   * Bodies the kernel cannot pack — a drainage graph past the buffers' caps,
+   * or any other invariant the packer holds. A refusal is about the body, not
+   * the device: that body's requests go to the pool, and every other body's
+   * keep the GPU. Weak, because the surface object is the body's identity
+   * (`surfaceKernel` memoizes on it) and a reseed makes a new one.
+   */
+  const refused = new WeakSet<SurfaceParameters>()
+  /*
    * The one switch. `fail` turns it off for a device that stopped answering
    * and `dispose` for a producer that is being retired, and every guard
    * below reads it alone; `disposed` only keeps the retirement from running
@@ -194,8 +206,38 @@ export function createTileProducer(
   let inFlight = 0
   let batches = 0
   let tiles = 0
+  let refusals = 0
   const batchMs: number[] = []
 
+  /**
+   * The kernel cannot pack this body. Its jobs, taken and queued, go back to
+   * `Heightfields` as unavailable, which retries each on the pool; the
+   * producer stays available for every other body.
+   */
+  function refuse(
+    surface: SurfaceParameters,
+    taken: readonly Queued[],
+    cause: unknown,
+  ): void {
+    refused.add(surface)
+    refusals += 1
+    log.warn('the GPU tile producer cannot pack this body; the pool takes it', {
+      cause: String(cause),
+    })
+    for (const job of taken) job.reject(new HeightfieldUnavailable())
+    for (let i = queue.length - 1; i >= 0; i -= 1) {
+      const job = queue[i] as Queued
+      if (job.surface !== surface) continue
+      queue.splice(i, 1)
+      job.reject(new HeightfieldUnavailable())
+    }
+  }
+
+  /**
+   * The device or the pipeline stopped answering: nothing it runs can be
+   * trusted, so the producer retires for the session and the pool takes
+   * everything.
+   */
   function fail(cause: unknown): void {
     if (!available) return
     available = false
@@ -235,8 +277,22 @@ export function createTileProducer(
     }
     inFlight = taken.length
     const started = performance.now()
+    /*
+     * Packed apart from the dispatch, because the two fail for different
+     * reasons. Packing is arithmetic on the CPU about one body; a throw there
+     * says nothing about the device, and retiring the producer for it sent
+     * every later body to the pool for the session.
+     */
+    let packed: KernelSurface
     try {
-      const packed = surfaceKernel(head.surface, head.request.seabed)
+      packed = surfaceKernel(head.surface, head.request.seabed)
+    } catch (cause) {
+      inFlight = 0
+      refuse(head.surface, taken, cause)
+      schedule()
+      return
+    }
+    try {
       if (packed !== uploaded) {
         uploadSurface(kernel, packed)
         uploaded = packed
@@ -393,7 +449,7 @@ export function createTileProducer(
         reject(new RangeError('unsupported heightfield request'))
         return { id, result, cancel() {} }
       }
-      if (!available) {
+      if (!available || refused.has(surface)) {
         reject(new HeightfieldUnavailable())
         return { id, result, cancel() {} }
       }
@@ -424,6 +480,7 @@ export function createTileProducer(
         inFlight,
         batches,
         tiles,
+        refused: refusals,
         meanBatchMs: batchMs.length === 0 ? 0 : total / batchMs.length,
       }
     },

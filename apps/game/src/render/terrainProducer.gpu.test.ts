@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { openSession, type Session } from '@inertialref/devtools'
 import { vec3 } from '@inertialref/spatial'
 import {
@@ -13,7 +13,11 @@ import {
   SOL,
   walkBodies,
 } from '@inertialref/universe'
-import type { HeightfieldResponse } from '@inertialref/workers'
+import {
+  type HeightfieldResponse,
+  Heightfields,
+  type HeightfieldSource,
+} from '@inertialref/workers'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createTileProducer, type TileProducer } from './terrainProducer.ts'
 
@@ -26,6 +30,27 @@ import { createTileProducer, type TileProducer } from './terrainProducer.ts'
  * in another tile's slot, a body's records left over from the previous batch,
  * a canceled job resolving, a queued job outliving a failure.
  */
+
+/*
+ * A body the kernel cannot pack. No real graph exceeds the node cap — the
+ * lattice is the cap — so the refusal is the packer's own throw, delivered
+ * for the surfaces a test names and for no other.
+ */
+const unpackable = vi.hoisted(() => new WeakSet<object>())
+vi.mock('@inertialref/universe', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@inertialref/universe')>()
+  return {
+    ...actual,
+    surfaceKernel: (surface: object, seabed?: boolean) => {
+      if (unpackable.has(surface))
+        throw new Error('8000000 drainage nodes exceed the kernel cap')
+      return actual.surfaceKernel(
+        surface as Parameters<typeof actual.surfaceKernel>[0],
+        seabed,
+      )
+    },
+  }
+})
 
 let gpu: GpuSession
 let session: Session
@@ -206,6 +231,48 @@ describe('the tile producer', () => {
     expect(delivered).toBe(16)
     expect(canceled).toBe(24)
     expect(producer.stats().queued).toBe(0)
+  })
+
+  it('sends a body it cannot pack to the pool, and keeps the GPU for the next body', async () => {
+    const mars = solBody('Mars')
+    const luna = solBody('Luna')
+    const surface = { ...mars.surface }
+    unpackable.add(surface)
+    const pooled: string[] = []
+    const pool: HeightfieldSource = {
+      kind: 'pool',
+      available: true,
+      submit: (s, request) => {
+        pooled.push(s === surface ? 'unpackable' : 'other')
+        return {
+          id: 0,
+          result: Promise.resolve(generateHeightfield(s, request)),
+          cancel() {},
+        }
+      },
+    }
+    const router = new Heightfields(pool)
+    router.preferred = producer
+    const before = producer.stats()
+    const [region] = regions(9, 1) as [RegionAddress]
+    // Both of the body's tiles queued in one batch go to the pool.
+    const refused = await Promise.all([
+      router.submit(surface, requestFor(region))!.result,
+      router.submit(surface, requestFor(regions(9, 2)[1]!))!.result,
+    ])
+    expect(refused.every((field) => field !== null)).toBe(true)
+    expect(pooled).toEqual(['unpackable', 'unpackable'])
+    // A later request for it never queues on the GPU.
+    await router.submit(surface, requestFor(region))!.result
+    expect(pooled).toHaveLength(3)
+    // The producer is still the GPU for every other body.
+    const tile = await router.submit(luna.surface, requestFor(region))!.result
+    expect(tile).not.toBeNull()
+    expect(pooled).toHaveLength(3)
+    const after = producer.stats()
+    expect(after.available).toBe(true)
+    expect(after.refused).toBe(before.refused + 1)
+    expect(after.tiles).toBe(before.tiles + 1)
   })
 
   it('refuses a request shaped for another kernel rather than answering it wrong', async () => {
