@@ -28,7 +28,6 @@ import {
   patchIndices,
   type RenderPatch,
   patchWater,
-  sheetInput,
   terrainPalette,
 } from '@inertialref/rendering'
 import type { TerrainMaterial } from './terrain.ts'
@@ -267,15 +266,15 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
 
   async function run(body: Body, bake: Bake): Promise<void> {
     const regions = bakeRegions()
-    // The streamer's decision: the same request half, the same build half.
-    const water = patchWater(body)
+    // The streamer's request half, so the bake's ground is the streamer's.
+    const { seabed } = patchWater(body)
     const fields = await Promise.all(
       regions.map((region) => {
         const job = host.heightfields.submit(body.surface, {
           region,
           resolution: HEIGHTFIELD_RESOLUTION,
           border: HEIGHTFIELD_BORDER,
-          seabed: water.seabed,
+          seabed,
         })
         if (job === null) return null
         bake.jobs.push(job)
@@ -298,7 +297,9 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
         elevations: field.elevations,
         cover: field.cover,
         bodyRadius: body.radius,
-        ...sheetInput(water, field.water),
+        // The bake draws ground only, so no sheet is built for it to drop.
+        seaLevel: null,
+        water: null,
       }),
     )
     render(body, patches, bake)

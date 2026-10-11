@@ -269,16 +269,12 @@ export function terminatorFor(
 
 /**
  * The datum the sea sheet is built on for this body, meters, or null where
- * no sheet is drawn.
- *
- * One function for the two readers that have to agree — the streamer, which
- * builds the sheet into every patch the sea reaches, and the palette, which
- * tells the ground material whether it is a seabed. A sheet exists where the
- * generator's sea is the only sea there is: a dry world has none, a mapped
- * one has a photograph, and a body whose grammar admits no liquid has a
- * datum with nothing to stand at it.
+ * no sheet is drawn. A sheet exists where the generator's sea is the only sea
+ * there is: a dry world has none, a mapped one has a photograph, and a body
+ * whose grammar admits no liquid has a datum with nothing to stand at it.
+ * `patchWater` is its one reader.
  */
-export function seaSheetDatum(body: Body): Meters | null {
+function seaSheetDatum(body: Body): Meters | null {
   if (body.appearance.texture !== null || body.appearance.liquid === null) {
     return null
   }
@@ -294,22 +290,17 @@ export function seaSheetDatum(body: Body): Meters | null {
  * hand `buildPatch` when the tile comes back. A seabed asked for with no
  * sheet laid over it is a sea drawn as a hole.
  *
- * The sea clamp is what decides the rest, and it exists only where there is
- * a sea datum to clamp to (`groundCoverAt`). Three cases, and this is where
- * each is stated:
+ * A sheet is drawn only over a sea the sheet datum admits — a datum, a
+ * liquid, no photograph — because the palette's `sheet` flag, which
+ * `WaterPatches` gates every sheet on, is this decision's `seabed`. There
+ * the tile is the seabed, and the sheet stands at the datum, or at the
+ * field's own water where a drainage graph samples it: the sea where the sea
+ * reaches, and the lakes and rivers inland.
  *
- * - **A sea drawn as a sheet** — a datum, a liquid, no photograph. The tile is
- *   the seabed, and the sheet stands at the datum, or at the field's own
- *   water where a drainage graph samples it: the sea where the sea reaches,
- *   and the lakes and rivers inland.
- * - **No sea datum** — a dry world, or one whose liquid stands only inland,
- *   such as Titan. There is no clamp, so the ground keeps its lake beds, and
- *   where a graph samples water the sheet is that water and nothing else.
- * - **A clamped sea** — a datum with a photograph, such as Earth, or with no
- *   liquid to stand at it. The tile keeps the clamp, so the ground is never
- *   below the water, and no sheet is drawn: the field's sampled rivers and
- *   lakes are not handed over, rather than handed over to a gate that could
- *   never pass.
+ * Everywhere else no sheet is built, whatever the field samples. That
+ * includes a world whose liquid stands only inland, such as Titan: its
+ * graph samples lakes, but with no sea datum the palette draws no sheet, so
+ * a sheet built from them would be geometry nothing draws.
  */
 export interface PatchWater {
   /** The request half: the tile without the sea clamp, because a sheet lies over it. */
@@ -321,15 +312,11 @@ export interface PatchWater {
 }
 
 export function patchWater(body: Body): PatchWater {
-  const sampled = standingWaterIsSampled(body.surface)
   const sheet = seaSheetDatum(body)
-  if (sheet !== null)
-    return sampled
-      ? { seabed: true, seaLevel: null, sampled: true }
-      : { seabed: true, seaLevel: sheet, sampled: false }
-  return seaDatumElevation(body.surface) === null
-    ? { seabed: false, seaLevel: null, sampled }
-    : { seabed: false, seaLevel: null, sampled: false }
+  if (sheet === null) return { seabed: false, seaLevel: null, sampled: false }
+  return standingWaterIsSampled(body.surface)
+    ? { seabed: true, seaLevel: null, sampled: true }
+    : { seabed: true, seaLevel: sheet, sampled: false }
 }
 
 /** `buildPatch`'s two water inputs for one returned tile, from the decision. */

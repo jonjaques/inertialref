@@ -10,7 +10,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { buildPatch, type RenderPatch } from './terrainMesh.ts'
-import { patchWater, sheetInput } from './terrainPalette.ts'
+import { patchWater, sheetInput, terrainPalette } from './terrainPalette.ts'
 
 /*
  * The sheet `buildPatch` builds, under the decision `patchWater` makes.
@@ -127,14 +127,16 @@ describe('the water decision for a patch', () => {
   it('finds a body of each class', () => {
     expect(MAPPED_WET.appearance.texture).not.toBeNull()
     expect(MAPPED_WET.appearance.liquid).not.toBeNull()
+    // A clamped sea with a graph: the field samples water no sheet is built from.
+    expect(drains(MAPPED_WET.surface)).toBe(true)
     expect(MAPPED_DRY.appearance.texture).not.toBeNull()
     expect(GENERATED_DRY.appearance.liquid).toBeNull()
     expect(drains(GENERATED_WET.surface)).toBe(true)
     expect(LAKES_ONLY.surface.seaLevel).toBeNull()
   })
 
-  it('draws no sheet where the sea is clamped or there is no water, whatever the field holds', () => {
-    for (const body of [MAPPED_WET, MAPPED_DRY, GENERATED_DRY]) {
+  it('draws no sheet where the palette draws none, whatever the field holds', () => {
+    for (const body of [MAPPED_WET, MAPPED_DRY, GENERATED_DRY, LAKES_ONLY]) {
       expect(patchWater(body)).toEqual({
         seabed: false,
         seaLevel: null,
@@ -173,15 +175,15 @@ describe('the water decision for a patch', () => {
       }
   })
 
-  it('draws the lakes of a world with no sea, whose ground has no clamp', () => {
-    expect(patchWater(LAKES_ONLY)).toEqual({
-      seabed: false,
-      seaLevel: null,
-      sampled: true,
-    })
-    const patch = patchFor(LAKES_ONLY)
-    expect(patch.water).not.toBeNull()
-    expect(levelOf(patch, LAKES_ONLY, 2 * RESOLUTION + 2)).toBeCloseTo(LAKE, 2)
+  it('agrees with the palette, which gates every sheet on the seabed', () => {
+    for (const body of [
+      MAPPED_WET,
+      MAPPED_DRY,
+      GENERATED_DRY,
+      LAKES_ONLY,
+      GENERATED_WET,
+    ])
+      expect(terrainPalette(body).sheet > 0).toBe(patchFor(body).water !== null)
   })
 
   it('draws a sheet for a river half a meter deep and nothing else', () => {

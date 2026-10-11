@@ -1473,6 +1473,9 @@ export class TerrainStreamer {
   /** Build geometry for the regions that need it next, under budget. */
   #build(wanted: readonly RegionAddress[], body: Body): void {
     let built = 0
+    // The body's decision, which the request was made under too: one surface
+    // per body, and `#epoch` drops a field that outlives it.
+    const water = patchWater(body)
     for (const region of wanted) {
       if (built >= BUILDS_PER_FRAME) return
       const key = regionKey(region)
@@ -1493,8 +1496,7 @@ export class TerrainStreamer {
           elevations: field.elevations,
           cover: field.cover,
           bodyRadius: body.radius,
-          // The build half of the decision the request was made under.
-          ...sheetInput(patchWater(body), field.water),
+          ...sheetInput(water, field.water),
         }),
       )
       built += 1
@@ -1536,6 +1538,7 @@ export class TerrainStreamer {
       })
       .slice(0, budget)
 
+    const { seabed } = patchWater(body)
     for (const region of missing) {
       const key = regionKey(region)
       // Captured beside the key: a result that outlives its world is dropped
@@ -1547,7 +1550,7 @@ export class TerrainStreamer {
         resolution: HEIGHTFIELD_RESOLUTION,
         border: HEIGHTFIELD_BORDER,
         // The request half: the seabed only where a sheet is laid over it.
-        seabed: patchWater(body).seabed,
+        seabed,
       })
       if (handle === null) continue
       this.#inFlight.set(key, handle)
