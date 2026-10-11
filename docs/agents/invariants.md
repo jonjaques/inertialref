@@ -276,9 +276,11 @@ close one, go through `pages/useOverlay.ts`.
 present exactly when a body is not a spheroid, and its mesh already carries
 all three measured half-extents. `flattening` is `polarRadius / radius`, which
 the mesh has already spent — applying it as well squashes the body a second
-time by the same ratio, which on Phobos is 26%. `Bodies.tsx` branches once, on
-whether `shapeGeometryFor` returned a mesh, and everything downstream of that
-branch belongs on one side of it.
+time by the same ratio, which on Phobos is 26%. `render/bodyUniforms.ts`
+branches once, on whether the body has a figure, and everything downstream of
+that branch is on one side of it: the mesh's scale, and the cloud deck's and
+the atmosphere's shells, which are round about a figured body.
+`bodyUniforms.test.ts` holds all three.
 [ADR-0013](../adr/0013-measured-figures.md).
 
 ### Rule 26

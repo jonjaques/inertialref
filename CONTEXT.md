@@ -11102,6 +11102,22 @@ new id, and the walker key drops the memory first. `gaitFor` is the
 17-line clip choice, exported and held by a table; the parked Rocinante finds
 the pad by `MARS_PAD.id` rather than the string.
 
+## A body's uniforms are a mapping, and a figured body's shells are round (7 Oct 2026)
+
+The frame closure in `scene/Bodies.tsx` decided every number the sphere, the
+cloud deck, the rings and the atmosphere read, so none of it was reachable from
+Node. `render/bodyUniforms.ts` is that decision as a function of the body, the
+frame's light and eye, and which of the body's images exist; the closure keeps
+the meshes and the textures and applies the records, comparing before each
+write. The figure branch is taken there once. The mesh honored rule 25, but the
+cloud shell, its eye altitude and the atmosphere shell each read
+`body.flattening` outside it, so a figured body with clouds or air would wear
+shells squashed by a ratio its surface had already spent. No picture in the set
+moved: `pnpm presets:compare --base` over the seven lit pictures is zero pixels
+at every one, three of them outside Sol, so no shipped figured body carries a
+deck or a shell that reaches a plate. `bodyUniforms.test.ts` fails two cases
+with the shells back on `body.flattening`.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

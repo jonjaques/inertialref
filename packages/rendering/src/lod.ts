@@ -87,7 +87,8 @@ export const lodThresholds = (
    * Never above `sphere`, because `selectLod` tests the three in order and a
    * billboard threshold that overtook the sphere one would delete the tier
    * rather than widen it — every body under 0.12 rad would answer `point`, and
-   * `Bodies.tsx` gates clouds, rings and the atmosphere shell on not being one.
+   * `bodyUniforms.ts` gates clouds, rings and the atmosphere shell on not
+   * being one.
    * A pixel is 1.07 mrad at the flight lens over 1080 px and the crossing is at
    * a viewport 106 px tall, which a window can be dragged to and a canvas
    * measures while it is laying out.

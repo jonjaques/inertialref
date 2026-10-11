@@ -1,26 +1,30 @@
-import {
-  SURFACE_LUMINANCE,
-  cloudShellAltitude,
-  surfaceColor,
-  surfaceVisibilityGain,
-} from '@inertialref/rendering'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BufferAttribute,
   BufferGeometry,
+  type Color,
   type Group,
   Mesh,
   type Scene,
   SphereGeometry,
-  Vector3,
+  type Texture,
+  type Vector3,
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
-import { Vec } from '@inertialref/spatial'
-import { OPEN_OCEAN, type RenderBody } from '@inertialref/rendering'
+import type { Vec3 } from '@inertialref/spatial'
+import type { RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import {
+  type BodyFrame,
+  bodyUniforms,
+  type Rgb,
+  starAsBody,
+  starKey,
+  wantsBake,
+} from '../render/bodyUniforms.ts'
 import { createOrbitalBaker, type OrbitalBaker } from '../render/orbitalBake.ts'
 import type { TerrainMaterial } from '../render/terrain.ts'
 import { trackAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
@@ -175,95 +179,6 @@ function ringGeometry(): BufferGeometry {
   return geometry
 }
 
-/*
- * Per-body shading parameters, from what the body is.
- *
- * The one number worth explaining is `lunarLambert`, the weight between Lambert
- * and Lommel-Seeliger in `planet.ts`. It is not a style knob: it is how much the
- * surface backscatters, it is measured for real bodies, and it is the difference
- * between a Moon that looks like a photograph and one that looks like a
- * billiard ball. Airless regolith is around 0.9; a thick atmosphere scatters its
- * way to something much closer to Lambert.
- */
-interface PlanetTuning {
-  readonly lunarLambert: number
-  readonly terminator: number
-  readonly reliefScale: number
-  readonly specular: number
-  readonly night: number
-  readonly limbDarkening: number
-  readonly saturation: number
-  /** Equatorial jet, UV turns per second. Real magnitudes; see `planet.ts`. */
-  readonly flowRate: number
-}
-
-/**
- * The calibrated star disk, in multiples of diffuse white: the radiance the
- * tone curve's ceiling and the granulation are tuned against. `materials.ts`
- * draws the disk at unit radiance and takes this through `exposure`.
- */
-const CALIBRATED_STAR_RADIANCE = 8
-
-function tuningFor(body: RenderBody): PlanetTuning {
-  const air = body.hasAtmosphere
-  const giant = giantKind(body.kind)
-  if (giant)
-    return {
-      // A cloud deck kilometers thick is as close to Lambert as anything gets,
-      // and its terminator is soft because there is no surface to end at.
-      lunarLambert: 0.1,
-      terminator: 0.22,
-      reliefScale: 0,
-      specular: 0,
-      night: 0,
-      // The two knobs that separate a decal from a photograph of a giant:
-      // the disk rolls off toward the limb, and the published near-true-color
-      // maps get the chroma stretch every released image has had.
-      limbDarkening: 0.72,
-      saturation: body.kind === 'gas-giant' ? 1.3 : 1.15,
-      // ~110 m/s of equatorial jet for a gas giant, ~400 m/s for an ice
-      // giant (Neptune's winds are the fastest in the system), as a fraction
-      // of a typical circumference per second.
-      flowRate: body.kind === 'gas-giant' ? 2.5e-7 : 2.5e-6,
-    }
-  return {
-    // Closer to Lambert than it was: the aerial veil now brightens the limb
-    // on top of this, and 0.45 under the veil left the disk reading flat.
-    lunarLambert: air ? 0.3 : 0.92,
-    /*
-     * The same number the ground uses, from the same producer.
-     *
-     * A disk and the terrain streamed in front of it are one body, and a
-     * descent crosses between them at the eight-pixel relief gate — so a
-     * terminator each of them derived for itself is a step at the switch. It
-     * was: 4.2× on Luna and 6.6× on Iapetus, because the ground widened its
-     * band by the body's own relief and the disk did not. `terminatorFor` is
-     * where the widening lives now; `buildScene` spends it once and both the
-     * disk and the ground read the result.
-     */
-    terminator: body.terminator,
-    limbDarkening: 0,
-    saturation: 1,
-    flowRate: 0,
-    /*
-     * Normal-map exaggeration, and the honest name for it.
-     *
-     * At 4096 across, one texel of Earth is ten kilometers, and the real slope
-     * across ten kilometers is a fraction of a degree — measured: the normal map
-     * has a standard deviation of 2.4 out of 255. Rendered at unity it is
-     * invisible. `docs/design/art.md` licenses exactly this ("roughness and
-     * detail are art") and forbids the thing next door to it: the *elevation* is
-     * the published one, the terrain is where it really is, and only how sharply
-     * it catches the light is turned up.
-     *
-     * The Moon needs far less because its craters are genuinely steep.
-     */
-    reliefScale: air ? 6 : 2.2,
-    specular: 1,
-    night: 1,
-  }
-}
-
 /**
  * A body visual waiting to be built ahead of need. Everything the creation
  * block reads, captured at enqueue time so the frame loop never walks a
@@ -347,11 +262,6 @@ export function Bodies({
     }
   }, [gl, terrain, engine])
 
-  const scratch = useMemo(
-    () => ({ axis: new Vector3(), sun: new Vector3(), center: new Vector3() }),
-    [],
-  )
-
   /*
    * Take the meshes with us when this component goes.
    *
@@ -378,12 +288,6 @@ export function Bodies({
     const visibility = engine.visibilityProcessing
     if (scene === null || container === null) return
     residency.begin()
-
-    // Render-space position of the key light. `stars[0]` is documented as
-    // brightest-apparent-first, which is the same star `CameraRig` lights the
-    // scene with — they must not disagree.
-    const keyLight = scene.stars[0]?.placement.position ?? null
-    const keyColor = scene.stars[0]?.color ?? { r: 1, g: 1, b: 1 }
 
     const geometryFor = (angle: number): SphereGeometry =>
       (
@@ -443,11 +347,18 @@ export function Bodies({
       }
     }
 
-    const draw = (
-      key: string,
-      body: RenderBody,
-      star: { r: number; g: number; b: number } | null,
-    ): void => {
+    const frame: BodyFrame = {
+      // Render-space position of the key light. `stars[0]` is documented as
+      // brightest-apparent-first, which is the same star `CameraRig` lights
+      // the scene with — they must not disagree.
+      keyLight: scene.stars[0]?.placement.position ?? null,
+      keyColor: scene.stars[0]?.color ?? { r: 1, g: 1, b: 1 },
+      visibility,
+      renderTime: engine.snapshot?.renderTime ?? 0,
+      eye: scene.camera.position,
+    }
+
+    const draw = (key: string, body: RenderBody, star: Rgb | null): void => {
       const appearance = body.appearance
       const visual = residency.draw(key, () =>
         materialize(
@@ -458,81 +369,51 @@ export function Bodies({
       )
       if (visual === null) return
 
-      const { placement, orientation } = body
+      // The textures stay here; the uniforms only need to know which exist.
+      const maps = texturesFor(appearance.texture, anisotropy)
+      const bake =
+        visual.planet !== null && wantsBake(body)
+          ? (baker.current?.textureFor(body.address) ?? null)
+          : null
+      const uniforms = bodyUniforms(
+        body,
+        frame,
+        {
+          normal: maps.normal !== null,
+          night: maps.night !== null,
+          clouds: maps.clouds !== null,
+          bake: bake !== null,
+        },
+        star,
+      )
+      const { orientation } = body
       const quaternion = visual.mesh.quaternion.set(
         orientation.x,
         orientation.y,
         orientation.z,
         orientation.w,
       )
-      visual.mesh.position.set(
-        placement.position.x,
-        placement.position.y,
-        placement.position.z,
-      )
-      /*
-       * Two shapes, and which one is not a rendering choice.
-       *
-       * A body with no `figure` is a spheroid, and is drawn the way it always
-       * was: a unit sphere, squashed along its spin axis by the measured
-       * flattening. Saturn is 9.8% oblate and reads as wrong long before
-       * anyone can say why, and the quaternion tilts the bulge with the axis,
-       * which is the whole point of doing it in the body's own frame.
-       *
-       * A body *with* a figure is not a spheroid and never was. Its mesh is
-       * built from a measured shape model or from its own seed, already
-       * carries its three half-extents and its relief, and is normalized to
-       * `trueRadius` — so it scales by one number. Applying `flattening` on
-       * top would squash it a second time by a ratio the geometry has already
-       * spent.
-       */
-      const shape = shapeGeometryFor(body)
-      if (shape === null) {
-        visual.mesh.scale.set(
-          placement.scale,
-          placement.scale * body.flattening,
-          placement.scale,
-        )
-        visual.mesh.geometry = geometryFor(placement.angularRadius)
-      } else {
-        visual.mesh.scale.setScalar(placement.scale)
-        visual.mesh.geometry = shape
-      }
+      const position = uniforms.position
+      visual.mesh.position.set(position.x, position.y, position.z)
+      setVector(visual.mesh.scale, uniforms.scale)
+      // The figure branch is `bodyUniforms`'s; this only follows it to the
+      // mesh. A figured body's shape already carries its polar squash.
+      visual.mesh.geometry = uniforms.figured
+        ? shapeGeometryFor(body)!
+        : geometryFor(body.placement.angularRadius)
       visual.mesh.visible = true
-      // A body drawn as streamed terrain does not also need its datum sphere,
-      // except as the sea floor below it.
-      visual.mesh.renderOrder = placement.tier === 'surface' ? -1 : 0
+      visual.mesh.renderOrder = uniforms.renderOrder
 
-      // The color is a uniform rather than a construction argument because a
-      // star's rendered color is derived from its temperature every frame, and
-      // a material built once from the first frame's value would freeze it.
-      if (star !== null && visual.star !== null) {
-        visual.star.color.value.setRGB(star.r, star.g, star.b)
-        // Presentation time, for the granulation churn — simulation seconds,
-        // so time warp stirs the photosphere faster, which reads as intended.
-        visual.star.time.value = engine.snapshot?.renderTime ?? 0
-        const filling = Math.min(
-          1,
-          Math.max(0, (placement.angularRadius - 0.015) / 0.085),
-        )
-        visual.star.exposure.value =
-          body.sunlight * (visibility ? 1 - filling * 0.9 : 1)
+      if (uniforms.star !== null && visual.star !== null) {
+        setColor(visual.star.color, uniforms.star.color)
+        setNumber(visual.star.time, uniforms.star.time)
+        setNumber(visual.star.exposure, uniforms.star.exposure)
       }
 
-      const sun = scratch.sun
-      if (keyLight !== null)
-        sun
-          .set(keyLight.x, keyLight.y, keyLight.z)
-          .sub(visual.mesh.position)
-          // A body sitting exactly on its star — which is what a star's own
-          // entry would be — leaves this zero-length, and a normalized zero is
-          // NaN across the whole shell.
-          .normalize()
-
+      const sun = uniforms.sun
       const planet = visual.planet
-      if (planet !== null) {
-        const tuning = tuningFor(body)
-        const maps = texturesFor(appearance.texture, anisotropy)
+      if (uniforms.planet !== null && planet !== null) {
+        const values = uniforms.planet
         // The ring-shadow strip lives under the *ring's* manifest key
         // ('saturn-ring'), not the body's — the body's own set never carries
         // a ring map, so looking it up there disables the shadow entirely.
@@ -541,258 +422,101 @@ export function Bodies({
         planet.setTextures(
           body.rings === null
             ? maps
-            : {
-                ...maps,
-                ring:
-                  body.rings.texture === null
-                    ? proceduralRingStrip(body.kind, body.address)
-                    : texturesFor(body.rings.texture, anisotropy).ring,
-              },
+            : { ...maps, ring: ringStrip(body, body.rings, anisotropy) },
         )
-        planet.sunDirection.value.copy(sun)
-        planet.sunColor.value.setRGB(
-          keyColor.r * (visibility ? 1 : body.sunlight),
-          keyColor.g * (visibility ? 1 : body.sunlight),
-          keyColor.b * (visibility ? 1 : body.sunlight),
-        )
-        planet.spinAxis.value
-          .set(0, 1, 0)
-          .applyQuaternion(quaternion)
-          .normalize()
-        planet.center.value.copy(visual.mesh.position)
-        const color = surfaceColor(appearance)
-        planet.baseColor.value.setRGB(color.r, color.g, color.b)
-        /*
-         * A generated body wears its bake once one is ready, and asking is
-         * what starts it. Only where the archive has no photograph — a
-         * mapped body's sphere is its map — and only once the disk is worth
-         * looking at, because a bake is ninety-six tiles of the producer's
-         * time and a point of light does not need one.
-         */
-        const bake =
-          appearance.texture === null &&
-          !giantKind(body.kind) &&
-          placement.angularRadius > BAKE_ANGLE
-            ? (baker.current?.textureFor(body.address) ?? null)
-            : null
         planet.setBake(bake)
-        /*
-         * The sea the bake's mask keys is the liquid's color, the same
-         * number the ground's palette and the sheet read, so a magma world
-         * does not wear a blue sea from orbit and a red one at the gate.
-         * Open-ocean blue where the record names no liquid: a photographed
-         * body's mask is in its normal map, and its sea is water.
-         */
-        const liquid = appearance.liquid?.color ?? OPEN_OCEAN
-        planet.oceanColor.value.setRGB(liquid.r, liquid.g, liquid.b)
-        planet.albedoScale.value = surfaceVisibilityGain(
-          appearance.geometricAlbedo,
-          placement.angularRadius,
-          visibility,
-        )
-        planet.lunarLambert.value = tuning.lunarLambert
-        planet.terminator.value = tuning.terminator
-        /*
-         * The bake carries relief as the archive's normal map does, and it
-         * is exaggerated by the same number for the same reason: at forty
-         * kilometers a texel the real slope is a fraction of a degree, and
-         * a generated disk drawn at unity is the smooth ball it was before
-         * it had a bake. No map and no bake is the one case with nothing
-         * to scale.
-         */
-        planet.reliefScale.value =
-          maps.normal === null && bake === null ? 0 : tuning.reliefScale
-        planet.limbDarkening.value = tuning.limbDarkening
-        planet.saturation.value = tuning.saturation
-        planet.flowRate.value = tuning.flowRate
-        planet.time.value = engine.snapshot?.renderTime ?? 0
-        /*
-         * The aerial term reads the same authored haze the shell does, so the
-         * air over the ground and the air past the limb cannot disagree about
-         * what color the sky is. Giants get less: their "surface" already is
-         * cloud-top, and a full-strength veil flattened Jupiter's bands into
-         * fog. The veil is what limb-brightens an atmosphere-bearing disk;
-         * lunar-Lambert would otherwise leave it too flat to read as a sphere.
-         */
-        const airHaze = appearance.haze
-        const giant = giantKind(body.kind)
-        planet.hazeStrength.value =
-          airHaze === null ? 0 : giant ? 0.18 : airHaze.thickness
-        if (airHaze !== null) {
-          planet.hazeColor.value.setRGB(
-            airHaze.color.r,
-            airHaze.color.g,
-            airHaze.color.b,
-          )
-          planet.hazeLimb.value.setRGB(
-            airHaze.limb.r,
-            airHaze.limb.g,
-            airHaze.limb.b,
-          )
-        }
-        // Sun-glint needs an ocean to land on, and the mask that says where one
-        // is rides in the normal map's blue — or in the bake's relief record's.
-        // No mask, no ocean, no glint.
-        planet.specularStrength.value =
-          maps.normal === null && bake === null ? 0 : tuning.specular
-        planet.nightStrength.value = maps.night === null ? 0 : tuning.night
-        planet.cloudShadow.value = maps.clouds === null ? 0 : 0.55
-        planet.cloudHeight.value =
-          appearance.clouds === null
-            ? 0
-            : appearance.clouds.altitude / Math.max(body.trueRadius, 1)
-        // In render meters, because the shader measures the sun ray's
-        // plane-crossing against `positionWorld` — the dimensionless scales
-        // alone sit far inside any drawn sphere and never shadow anything.
-        planet.ringInner.value = (body.rings?.innerScale ?? 0) * placement.scale
-        planet.ringOuter.value = (body.rings?.outerScale ?? 0) * placement.scale
-        planet.ringOpacity.value = Math.min(1, body.rings?.opticalDepth ?? 0)
+        if (sun !== null) setVector(planet.sunDirection.value, sun)
+        setColor(planet.sunColor, uniforms.sunColor)
+        setVector(planet.spinAxis.value, uniforms.spinAxis)
+        setVector(planet.center.value, position)
+        setColor(planet.baseColor, values.baseColor)
+        setColor(planet.oceanColor, values.oceanColor)
+        setNumber(planet.albedoScale, values.albedoScale)
+        setNumber(planet.lunarLambert, values.lunarLambert)
+        setNumber(planet.terminator, values.terminator)
+        setNumber(planet.reliefScale, values.reliefScale)
+        setNumber(planet.limbDarkening, values.limbDarkening)
+        setNumber(planet.saturation, values.saturation)
+        setNumber(planet.flowRate, values.flowRate)
+        setNumber(planet.time, values.time)
+        setNumber(planet.hazeStrength, values.hazeStrength)
+        if (values.hazeColor !== null)
+          setColor(planet.hazeColor, values.hazeColor)
+        if (values.hazeLimb !== null) setColor(planet.hazeLimb, values.hazeLimb)
+        setNumber(planet.specularStrength, values.specularStrength)
+        setNumber(planet.nightStrength, values.nightStrength)
+        setNumber(planet.cloudShadow, values.cloudShadow)
+        setNumber(planet.cloudHeight, values.cloudHeight)
+        setNumber(planet.ringInner, values.ringInner)
+        setNumber(planet.ringOuter, values.ringOuter)
+        setNumber(planet.ringOpacity, values.ringOpacity)
       }
 
       /* --- the cloud deck ------------------------------------------------- */
       if (visual.clouds !== null && visual.cloudMaterial !== null) {
-        const clouds = appearance.clouds
-        const visible = clouds !== null && placement.tier !== 'point'
-        visual.clouds.visible = visible
-        if (visible && clouds !== null) {
-          /*
-           * The shell is lifted to at least 0.4% of the radius.
-           *
-           * Earth's cloud tops are twelve kilometers up on a radius of six
-           * thousand, which is 0.2% and is a shell you cannot see past at the
-           * limb. What sells a cloud deck from orbit is precisely that parallax
-           * — the clouds overhanging the edge of the disk — and the altitude is
-           * not on the list of things a player can check.
-           */
-          const lift = Math.max(
-            clouds.altitude / Math.max(body.trueRadius, 1),
-            0.004,
-          )
-          const shell = placement.scale * (1 + lift)
+        const values = uniforms.clouds
+        visual.clouds.visible = values !== null
+        if (values !== null) {
           visual.clouds.position.copy(visual.mesh.position)
           visual.clouds.quaternion.copy(quaternion)
-          visual.clouds.scale.set(shell, shell * body.flattening, shell)
-          visual.clouds.geometry = geometryFor(placement.angularRadius)
+          setVector(visual.clouds.scale, values.scale)
+          visual.clouds.geometry = geometryFor(body.placement.angularRadius)
           const material = visual.cloudMaterial
-          // The shell is a thin weather image. Its final quarter-altitude of
-          // height clears continuously before the eye enters the deck.
-          material.entryDistance.value = placement.scale * lift * 0.25
-          material.eyeAltitude.value = cloudShellAltitude(
-            Vec.sub(scene.camera.position, placement.position),
-            orientation,
-            shell,
-            body.flattening,
-          )
-          const cloudMap = texturesFor(appearance.texture, anisotropy).clouds
-          material.setTexture(cloudMap)
-          // A deck with no map — Titan's, and every procedural world's — is
-          // drawn from the body's tint over the opaque fallback texel; a
-          // mapped deck keeps its own colors untinted.
-          if (cloudMap === null)
-            material.baseColor.value.setRGB(
-              appearance.color.r,
-              appearance.color.g,
-              appearance.color.b,
-            )
-          else material.baseColor.value.setRGB(1, 1, 1)
-          material.sunDirection.value.copy(sun)
-          material.sunColor.value.setRGB(
-            keyColor.r * (visibility ? 1 : body.sunlight),
-            keyColor.g * (visibility ? 1 : body.sunlight),
-            keyColor.b * (visibility ? 1 : body.sunlight),
-          )
-          // The deck's dusk color is the body's authored sunset, so clouds
-          // and air agree about what the low sun does here.
-          const deckHaze = appearance.haze
-          if (deckHaze !== null)
-            material.sunsetColor.value.setRGB(
-              deckHaze.limb.r,
-              deckHaze.limb.g,
-              deckHaze.limb.b,
-            )
-          material.opacity.value = clouds.opacity
-          // The deck turns against the surface, whose quaternion already spins
-          // at the body's own period — so the drift is the *difference* of the
-          // two rates. Subtracting a fixed 24-hour day here gave Venus's deck
-          // a spurious daily lap and slid Titan's around a tidally locked
-          // moon.
-          material.drift.value =
-            (engine.snapshot?.renderTime ?? 0) / clouds.rotationPeriod -
-            (engine.snapshot?.renderTime ?? 0) / body.rotationPeriod
+          material.setTexture(maps.clouds)
+          setNumber(material.entryDistance, values.entryDistance)
+          setNumber(material.eyeAltitude, values.eyeAltitude)
+          setColor(material.baseColor, values.baseColor)
+          if (sun !== null) setVector(material.sunDirection.value, sun)
+          setColor(material.sunColor, uniforms.sunColor)
+          if (values.sunsetColor !== null)
+            setColor(material.sunsetColor, values.sunsetColor)
+          setNumber(material.opacity, values.opacity)
+          setNumber(material.drift, values.drift)
         }
       }
 
       /* --- the rings ------------------------------------------------------ */
       if (visual.rings !== null && visual.ringMaterial !== null) {
+        const values = uniforms.rings
         const ring = body.rings
-        const visible = ring !== null && placement.tier !== 'point'
-        visual.rings.visible = visible
-        if (visible && ring !== null) {
-          const extent = placement.scale * ring.outerScale
+        visual.rings.visible = values !== null
+        if (values !== null && ring !== null) {
           visual.rings.position.copy(visual.mesh.position)
           visual.rings.quaternion.copy(quaternion)
-          visual.rings.scale.setScalar(extent)
+          visual.rings.scale.setScalar(values.extent)
           const material = visual.ringMaterial
-          material.setTexture(
-            ring.texture === null
-              ? proceduralRingStrip(body.kind, body.address)
-              : texturesFor(ring.texture, anisotropy).ring,
-          )
-          material.sunDirection.value.copy(sun)
-          material.sunColor.value.setRGB(
-            keyColor.r * (visibility ? 1 : body.sunlight),
-            keyColor.g * (visibility ? 1 : body.sunlight),
-            keyColor.b * (visibility ? 1 : body.sunlight),
-          )
-          material.innerFraction.value = ring.innerScale / ring.outerScale
-          material.center.value.copy(visual.mesh.position)
-          // In render meters: the eclipse test runs on `positionWorld`, so a
-          // mesh-local value (1/outerScale) never shadowed a single fragment.
-          material.bodyRadius.value = placement.scale
-          material.opticalDepth.value = ring.opticalDepth
-          // A generated strip carries its own grays — re-dying it with the
-          // body's tint is how Uranus's charcoal threads came out cyan. Only
-          // a photographed strip is neutral enough to take the tint.
-          if (ring.texture === null) material.baseColor.value.setRGB(1, 1, 1)
-          else
-            material.baseColor.value.setRGB(
-              appearance.color.r,
-              appearance.color.g,
-              appearance.color.b,
-            )
+          material.setTexture(ringStrip(body, ring, anisotropy))
+          if (sun !== null) setVector(material.sunDirection.value, sun)
+          setColor(material.sunColor, uniforms.sunColor)
+          setNumber(material.innerFraction, values.innerFraction)
+          setVector(material.center.value, position)
+          setNumber(material.bodyRadius, values.bodyRadius)
+          setNumber(material.opticalDepth, values.opticalDepth)
+          setColor(material.baseColor, values.baseColor)
         }
       }
 
       /* --- the atmosphere ------------------------------------------------- */
-      visual.atmosphere.visible =
-        body.hasAtmosphere && placement.tier !== 'point'
-      if (visual.atmosphere.visible) {
-        const shell = placement.scale * body.atmosphereScale
+      const shell = uniforms.atmosphere
+      visual.atmosphere.visible = shell !== null
+      if (shell !== null) {
         visual.atmosphere.position.copy(visual.mesh.position)
-        // Oblate like the body it wraps, or the shell floats a tenth of a
-        // radius off Saturn's poles; the shader unstretches it — see the
-        // material for what the spherical version looked like.
         visual.atmosphere.quaternion.copy(quaternion)
-        visual.atmosphere.scale.set(shell, shell * body.flattening, shell)
-        visual.atmosphere.geometry = geometryFor(placement.angularRadius)
-
-        // The shell's shader needs the same geometry the transform above encodes,
-        // in render space, because it integrates along the view ray rather than
-        // shading a surface. Written every frame for the same reason the matrix
-        // is: distance compression rescales both radii whenever the tier moves.
+        setVector(visual.atmosphere.scale, shell.scale)
+        visual.atmosphere.geometry = geometryFor(body.placement.angularRadius)
         const air = visual.atmosphereMaterial
-        air.center.value.copy(visual.mesh.position)
-        air.outerRadius.value = shell
-        air.innerRadius.value = placement.scale
-        air.spinAxis.value.set(0, 1, 0).applyQuaternion(quaternion).normalize()
-        air.flattening.value = body.flattening
+        setVector(air.center.value, position)
+        setNumber(air.outerRadius, shell.outerRadius)
+        setNumber(air.innerRadius, shell.innerRadius)
+        setVector(air.spinAxis.value, uniforms.spinAxis)
+        setNumber(air.flattening, shell.flattening)
         const haze = appearance.haze
         if (haze !== null) {
           /*
            * Cached after the first ask; baked on the pool when there is one,
            * and drawn with the stand-ins — a vacuum — until the tables land,
-           * because a 40 ms bake inside this frame was the largest single
-           * thing an arrival paid. Written every frame, so the frame the
+           * because a 40 ms bake inside this frame is the largest single
+           * thing an arrival would pay. Written every frame, so the frame the
            * tables arrive on is the frame they bind. `atmosphereLuts.ts`.
            */
           const pool = engine.pool()
@@ -807,44 +531,14 @@ export function Bodies({
               scattering.multiScatter,
             )
         }
-        air.sunColor.value.setRGB(
-          keyColor.r * (visibility ? 1 : body.sunlight),
-          keyColor.g * (visibility ? 1 : body.sunlight),
-          keyColor.b * (visibility ? 1 : body.sunlight),
-        )
-        if (keyLight !== null) air.sunDirection.value.copy(sun)
+        setColor(air.sunColor, uniforms.sunColor)
+        if (sun !== null) setVector(air.sunDirection.value, sun)
       }
     }
 
     for (const body of scene.bodies) draw(body.address, body, null)
-    for (const star of scene.stars) {
-      draw(
-        `star:${star.system}`,
-        {
-          address: `star:${star.system}`,
-          name: star.name,
-          kind: 'star',
-          sunlight: visibility
-            ? CALIBRATED_STAR_RADIANCE
-            : star.luminance / SURFACE_LUMINANCE,
-          placement: star.placement,
-          orientation: { x: 0, y: 0, z: 0, w: 1 },
-          hasAtmosphere: false,
-          // A star has no surface and no terminator; the disk is unlit.
-          terminator: 0,
-          atmosphereScale: 1,
-          trueRadius: 1,
-          rotationPeriod: 1,
-          flattening: 1,
-          // A star is a sphere, and the one in this scene is drawn by
-          // `createStarMaterial` on a sphere tier regardless.
-          figure: null,
-          rings: null,
-          appearance: STAR_APPEARANCE,
-        },
-        star.color,
-      )
-    }
+    for (const star of scene.stars)
+      draw(starKey(star), starAsBody(star, visibility), star.color)
 
     residency.end()
 
@@ -929,27 +623,33 @@ export function Bodies({
   return <group ref={group} />
 }
 
-/**
- * How large a generated body's disk is, in radians of angular radius, before
- * its bake is asked for. A hundredth is about twelve pixels of radius at the
- * flight lens over the baseline viewport; below it the tint is the picture.
+/** The strip a ring is drawn from: its photograph, or one generated for it. */
+function ringStrip(
+  body: RenderBody,
+  ring: NonNullable<RenderBody['rings']>,
+  anisotropy: number,
+): Texture | null {
+  return ring.texture === null
+    ? proceduralRingStrip(body.kind, body.address)
+    : texturesFor(ring.texture, anisotropy).ring
+}
+
+/*
+ * The writes, each compared first. A uniform is read by reference every
+ * frame, so a write that changes nothing is pure cost — and most of a body's
+ * uniforms are the same from one frame to the next.
  */
-const BAKE_ANGLE = 0.01
+function setNumber(uniform: { value: number }, value: number): void {
+  if (uniform.value !== value) uniform.value = value
+}
 
-const giantKind = (kind: string): boolean =>
-  kind === 'gas-giant' || kind === 'ice-giant'
+function setColor(uniform: { value: Color }, rgb: Rgb): void {
+  const color = uniform.value
+  if (color.r !== rgb.r || color.g !== rgb.g || color.b !== rgb.b)
+    color.setRGB(rgb.r, rgb.g, rgb.b)
+}
 
-/** A star is drawn by `createStarMaterial`; none of this reaches it. */
-const STAR_APPEARANCE: RenderBody['appearance'] = {
-  texture: null,
-  maps: [],
-  relief: 0,
-  geometricAlbedo: 1,
-  roughness: 1,
-  clouds: null,
-  rings: null,
-  haze: null,
-  color: { r: 1, g: 1, b: 1 },
-  pigment: { r: 1, g: 1, b: 1 },
-  liquid: null,
+function setVector(target: Vector3, value: Vec3): void {
+  if (target.x !== value.x || target.y !== value.y || target.z !== value.z)
+    target.set(value.x, value.y, value.z)
 }

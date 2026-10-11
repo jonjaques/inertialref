@@ -41,6 +41,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | Time has one writer                                          | [`apps/game/src/hud/time.ts`](../../apps/game/src/hud/time.ts) and its test                                     |
 | The ground under a walker is one module                      | [`packages/rendering/src/ground.ts`](../../packages/rendering/src/ground.ts), `supportUnder`, rule 53           |
 | The walker's presentation is a function                      | [`apps/game/src/engine/onFootPresentation.ts`](../../apps/game/src/engine/onFootPresentation.ts) and its test   |
+| A body's uniforms are a pure mapping                         | [`apps/game/src/render/bodyUniforms.ts`](../../apps/game/src/render/bodyUniforms.ts) and its test               |
 
 ---
 
@@ -48,8 +49,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                                                           | Track                    | Builds on | Strength        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | --------- | --------------- |
-| 6   | [Bodies: the uniforms are a pure mapping](#6-bodies-the-uniforms-are-a-pure-mapping)                                                                   | The walker and the frame | —         | Strong          |
-| 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | 6         | Strong          |
+| 7   | [The frame's owner is named once](#7-the-frames-owner-is-named-once)                                                                                   | The walker and the frame | —         | Strong          |
 | 8   | [The engine's derived state keys on one generation](#8-the-engines-derived-state-keys-on-one-generation)                                               | The walker and the frame | 7         | Strong          |
 | 9   | [The director is a sub-object, and the driver asks whether the app booted](#9-the-director-is-a-sub-object-and-the-driver-asks-whether-the-app-booted) | The harness              | —         | Strong          |
 | 10  | [The guide's wire contract lives in `packages/protocol`](#10-the-guides-wire-contract-lives-in-packagesprotocol)                                       | The guide                | —         | Strong          |
@@ -71,7 +71,6 @@ The deepenings already landed, each carrying its reasoning in its own file:
 flowchart LR
   P9[9 Director and booted]
   P7[7 Frame owner]
-  P6[6 Bodies uniforms] --> P7
   P7 --> P8[8 One generation]
   P10[10 Guide contract] --> P11[11 Guide verdict] --> P12[12 Live channel]
   P13[13 Archive]
@@ -94,53 +93,14 @@ and its section says so. Three files are edited by more than one pull request,
 and the order is what keeps them apart:
 
 - `apps/game/src/engine/GameEngine.ts` — the frame's owner and the derived
-  state in 6–8, and the archive's wiring in 13. Different regions of it: a rebase, not
+  state in 7 and 8, and the archive's wiring in 13. Different regions of it: a rebase, not
   a design dependency.
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 - `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
 
-**Start with 6.** The walker's arm of `#step` is one call now, and what is
-left of the track is the frame around it: 6 makes Bodies' uniforms a mapping
-7's consumers can call, and 7 then names the frame's owner once.
-
----
-
-## 6. Bodies: the uniforms are a pure mapping
-
-**Track:** the walker and the frame · **Strong** · in-process
-
-**Builds on:** nothing; placed before 7 so the frame-owner change edits the
-rewritten frame closure rather than rebasing across it (`Bodies.tsx:870` is one
-of 7's consumers). **Unblocks:** 7.
-
-**Files.** `apps/game/src/scene/Bodies.tsx` — the frame closure, `:375–927`:
-the visual's materials and their compile, tessellation tiers, tuning, the
-orbital bake, per-frame uniforms for four materials, and the star as a body.
-
-**The friction.** None of the mapping from a body to its uniforms is reachable
-from Node; `materials.gpu.test.ts` covers the materials and not the mapping
-into them. The flattening [ADR-0013](../../docs/adr/0013-measured-figures.md)
-spends once, on the mesh, is applied again to the cloud shell (`:674`, `:684`)
-and the atmosphere shell (`:776`, `:788`) outside the figure branch
-(`:489–499`). Whether any figured body carries clouds or haze today is not
-verified; the rule is what is not literally true.
-
-The residency half is in the tree: `scene/bodyResidency.ts` owns the resident
-map, the cap and its eviction, the build-ahead queue, the requeue at the cap and
-the census ticket, generic over the visual so the policy runs in Node. What is
-left is the mapping the frame draws through.
-
-**The shape.** `render/bodyUniforms.ts`: a pure mapping from a `RenderBody` and
-the frame's context — sun, eye, sunlight — to the uniform records of the
-planet, the clouds, the rings and the atmosphere, with `tuningFor` exported
-rather than module-local and the figure branch taken once, the shells on its
-side. The frame closure applies the records, comparing before it writes.
-
-**Gate.** `bodyUniforms.test.ts` in Node: a figured body yields shells with no
-flattening; a mapped body's tuning; the star as a body. `pnpm test:gpu` keeps
-compiling the materials. The frame is unchanged: a plate either side at a
-figured body, a mapped one, and one with the star in frame, since the mapping
-is what draws — and one of the three in a generated system.
+**Start with 7.** The walker's arm of `#step` is one call and Bodies' uniforms
+are a mapping, so what is left of the track is the frame around them: 7 names
+the frame's owner once.
 
 ---
 
@@ -148,9 +108,10 @@ is what draws — and one of the three in a generated system.
 
 **Track:** the walker and the frame · **Strong** · in-process
 
-**Builds on:** 6, so Bodies' consumer is the new mapping's caller. The
-walker's arm is one call, `presentOnFoot`, and `OnFoot.ship()` already answers
-"the player's ship" on foot. **Unblocks:** 8.
+**Builds on:** nothing left open. Bodies' consumer is the build-ahead in the
+frame closure, beside `bodyUniforms`'s caller. The walker's arm is one call,
+`presentOnFoot`, and `OnFoot.ship()` already answers "the player's ship" on
+foot. **Unblocks:** 8.
 
 **Files.** `apps/game/src/engine/GameEngine.ts` (`#step`: the `eye`,
 `#presentedPose`, the `buildScene` eye argument at `:1662–1664`, the

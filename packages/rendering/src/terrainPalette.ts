@@ -94,7 +94,7 @@ export interface TerrainPalette {
   /**
    * How much of the photometric blend is Lommel-Seeliger.
    *
-   * The same split `Bodies.tsx` gives the body material, and it has to be the
+   * The same split `tuningFor` gives the body material, and it has to be the
    * same or the streamed ground and the sphere behind it shade differently at
    * the terminator: a powder backscatters, so an airless world is nearly flat
    * across its disk and falls off a cliff at the shadow line, while a surface
