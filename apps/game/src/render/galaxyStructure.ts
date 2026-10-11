@@ -1,9 +1,8 @@
+import { runQuadPasses } from './quadPass.ts'
 import {
-  ColorManagement,
   HalfFloatType,
   LinearFilter,
   NodeMaterial,
-  NoToneMapping,
   QuadMesh,
   RenderTarget,
   RGFormat,
@@ -69,26 +68,15 @@ export class GalaxyStructureTable {
       { target: this.#target, material: this.#material },
     ]).then(() => {
       if (this.#disposed) return
-      const previous = renderer.getRenderTarget(),
-        mrt = renderer.getMRT()
-      const tone = renderer.toneMapping,
-        color = renderer.outputColorSpace,
-        clear = renderer.autoClear
-      try {
-        renderer.setMRT(null)
-        renderer.toneMapping = NoToneMapping
-        renderer.outputColorSpace = ColorManagement.workingColorSpace
-        renderer.autoClear = true
-        renderer.setRenderTarget(this.#target)
-        this.#quad.render(renderer)
-        this.#ready = true
-      } finally {
-        renderer.setRenderTarget(previous)
-        renderer.setMRT(mrt)
-        renderer.toneMapping = tone
-        renderer.outputColorSpace = color
-        renderer.autoClear = clear
-      }
+      runQuadPasses(
+        renderer,
+        this.#quad,
+        { linear: true, autoClear: true },
+        (draw) => {
+          draw('galaxy structure', this.#target, this.#material)
+          this.#ready = true
+        },
+      )
     })
     return this.#warm
   }

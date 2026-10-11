@@ -1,3 +1,4 @@
+import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass, type WarmPass } from './warmup.ts'
 import {
   HalfFloatType,
@@ -32,6 +33,11 @@ import {
 } from 'three/tsl'
 
 const TILE = 20
+/*
+ * The timeline's name for each pass. The two tile passes are the same size,
+ * so a label is what keeps them two rows rather than one.
+ */
+const LABELS = ['motion tile max', 'motion neighbor max', 'motion blur']
 
 /** Tile-max / neighbor-max motion, bounded by one tile and ordered by depth. */
 export class MotionNode extends TempNode<'vec4'> {
@@ -164,24 +170,19 @@ export class MotionNode extends TempNode<'vec4'> {
         ? this.#stages[2]!.target.texture
         : this.sourceNode.value
     if (renderer === null || this.fraction.value <= 0) return
-    const previous = renderer.getRenderTarget()
     const size = renderer.getDrawingBufferSize(this.#size)
     this.dimensions.value.copy(size)
     const width = Math.ceil(size.x / TILE)
     const height = Math.ceil(size.y / TILE)
     this.tileStep.value.set(1 / width, 1 / height)
-    try {
+    runQuadPasses(renderer, this.#quad, {}, (draw) => {
       for (let i = 0; i < 3; i += 1) {
         const target = this.#stages[i]!.target
         target.setSize(i === 2 ? size.x : width, i === 2 ? size.y : height)
-        renderer.setRenderTarget(target)
-        this.#quad.material = this.#stages[i]!.material
-        this.#quad.render(renderer)
+        draw(LABELS[i]!, target, this.#stages[i]!.material)
         this.passes += 1
       }
-    } finally {
-      renderer.setRenderTarget(previous)
-    }
+    })
   }
 
   override dispose(): void {

@@ -1,3 +1,4 @@
+import { runQuadPasses } from './quadPass.ts'
 import {
   HalfFloatType,
   LinearFilter,
@@ -5,8 +6,6 @@ import {
   MeshBasicNodeMaterial,
   NodeMaterial,
   NodeUpdateType,
-  NoToneMapping,
-  ColorManagement,
   PlaneGeometry,
   QuadMesh,
   RenderTarget,
@@ -469,40 +468,32 @@ export class GalaxyVolumeNode extends TempNode<'vec4'> {
       ? this.#cache!.pixelAngle
       : this.#fov / height
     const started = timer.on ? performance.now() : 0
-    const previous = renderer.getRenderTarget(),
-      mrt = renderer.getMRT()
-    const tone = renderer.toneMapping,
-      color = renderer.outputColorSpace,
-      clear = renderer.autoClear
-    try {
-      renderer.setMRT(null)
-      renderer.toneMapping = NoToneMapping
-      renderer.outputColorSpace = ColorManagement.workingColorSpace
-      renderer.autoClear = true
-      if (!cached && this.#temporal !== null) {
-        this.#temporal.render(renderer as WebGPURenderer, width, height)
-        this.#draws += 2
-      }
-      renderer.setRenderTarget(this.#target)
-      this.#quad.material = cached
-        ? this.#cachedMaterial
-        : this.#temporal === null
-          ? this.#material
-          : this.#temporalMaterial
-      this.#quad.render(renderer)
-      if (cached) this.#samplingDraws++
-      else this.#liveDraws++
-      this.#draws++
-      this.#drawnSampling = sampling
-      this.#dirty = false
-      this.#held = false
-    } finally {
-      renderer.setRenderTarget(previous)
-      renderer.setMRT(mrt)
-      renderer.toneMapping = tone
-      renderer.outputColorSpace = color
-      renderer.autoClear = clear
-    }
+    runQuadPasses(
+      renderer,
+      this.#quad,
+      { linear: true, autoClear: true },
+      (draw) => {
+        if (!cached && this.#temporal !== null) {
+          this.#temporal.render(renderer as WebGPURenderer, width, height)
+          this.#draws += 2
+        }
+        draw(
+          'galaxy volume',
+          this.#target,
+          cached
+            ? this.#cachedMaterial
+            : this.#temporal === null
+              ? this.#material
+              : this.#temporalMaterial,
+        )
+        if (cached) this.#samplingDraws++
+        else this.#liveDraws++
+        this.#draws++
+        this.#drawnSampling = sampling
+        this.#dirty = false
+        this.#held = false
+      },
+    )
     // The submission's own time, not the GPU's: the draw runs after this
     // returns. What the entry carries is that a draw happened, and at what
     // quality — which is the question the trace could not answer before.
