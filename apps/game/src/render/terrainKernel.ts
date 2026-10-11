@@ -895,6 +895,16 @@ export function uploadSurface(
   kernel.drainageWords.needsUpdate = true
 }
 
+/**
+ * The revision of this kernel's arithmetic: the GPU producer's namespace in
+ * the heightfield archive (`ArchivedSource.archive`). Spend one when the graph
+ * below changes what a tile holds without a canonical terrain bump.
+ *
+ * Manual, unlike the pool's, which a fingerprint holds: the kernel's output
+ * varies by adapter within its measured bound, so no golden tile pins it.
+ */
+export const TERRAIN_KERNEL_REVISION = 1
+
 export function createTerrainKernel(
   layout: TerrainKernelLayout,
 ): TerrainKernel {

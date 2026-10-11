@@ -5,9 +5,10 @@ import {
   regionAddress,
   surfaceGrammar,
 } from '@inertialref/universe'
-import type { HeightfieldSource } from './tasks.ts'
+import type { ArchivedSource } from './tasks.ts'
 import {
-  CachedHeightfieldSource,
+  HeightfieldArchive,
+  heightfieldArchiveVersion,
   heightfieldCacheKey,
   type HeightfieldStore,
 } from './heightfieldCache.ts'
@@ -63,9 +64,11 @@ function fixture() {
       maxEntries: 100,
       maxBytes: 1000000,
     }),
+    close: vi.fn(),
   }
-  const source: HeightfieldSource = {
+  const source: ArchivedSource = {
     kind: 'pool',
+    archive: 'cpu@test',
     available: true,
     submit: vi.fn((s, r) => ({
       id: 1,
@@ -73,12 +76,8 @@ function fixture() {
       cancel: vi.fn(),
     })),
   }
-  return {
-    rows,
-    store,
-    source,
-    cache: new CachedHeightfieldSource(source, store, 'cpu'),
-  }
+  const archive = new HeightfieldArchive(store)
+  return { rows, store, source, archive, cache: archive.wrap(source) }
 }
 
 describe('regenerable heightfield cache', () => {
@@ -113,7 +112,10 @@ describe('regenerable heightfield cache', () => {
     ])
       expect(heightfieldCacheKey(changed, request, 'cpu')).not.toBe(key)
     expect(heightfieldCacheKey(surface, request, 'gpu')).not.toBe(key)
-    expect(heightfieldCacheKey(surface, request, 'cpu', 'future')).not.toBe(key)
+    // The canonical terrain version leads the key, under every namespace.
+    expect(
+      key.startsWith(JSON.stringify(heightfieldArchiveVersion('cpu'))),
+    ).toBe(true)
   })
   it('separates a non-finite number from null and from the other non-finites', () => {
     // `JSON.stringify` writes `null` for NaN and for either infinity, so four
@@ -124,12 +126,13 @@ describe('regenerable heightfield cache', () => {
     )
     expect(new Set(keys).size).toBe(4)
   })
-  it('restores every typed array exactly across source instances without generating', async () => {
+  it('restores every typed array exactly across archives without generating', async () => {
     const f = fixture()
     const first = await f.cache.submit(surface, request).result
-    await f.cache.flush()
-    const next = new CachedHeightfieldSource(f.source, f.store, 'cpu')
-    const second = await next.submit(surface, request).result
+    await f.archive.flush()
+    // A reload: a new archive over the same store.
+    const next = new HeightfieldArchive(f.store)
+    const second = await next.wrap(f.source).submit(surface, request).result
     expect(second).toEqual(first)
     expect(second).not.toBe(first)
     expect(f.source.submit).toHaveBeenCalledTimes(1)
@@ -138,18 +141,18 @@ describe('regenerable heightfield cache', () => {
   it('regenerates a corrupt finite elevation and a truncated water record', async () => {
     const f = fixture()
     await f.cache.submit(surface, request).result
-    await f.cache.flush()
+    await f.archive.flush()
     const key = [...f.rows.keys()][0]!
     const record = f.rows.get(key) as {
       field: { elevations: Float32Array; water: Float32Array }
     }
     record.field.elevations[0] = 123
     await f.cache.submit(surface, request).result
-    await f.cache.flush()
+    await f.archive.flush()
     ;(f.rows.get(key) as typeof record).field.water = new Float32Array(0)
     await f.cache.submit(surface, request).result
     expect(f.source.submit).toHaveBeenCalledTimes(3)
-    expect(f.cache.stats().invalid).toBe(2)
+    expect(f.archive.stats().invalid).toBe(2)
   })
   it('continues generation when reads or quota-limited writes fail', async () => {
     const f = fixture()
@@ -158,8 +161,8 @@ describe('regenerable heightfield cache', () => {
     await expect(
       f.cache.submit(surface, request).result,
     ).resolves.toHaveProperty('water')
-    await f.cache.flush()
-    expect(f.cache.stats()).toMatchObject({ readErrors: 1, writeErrors: 1 })
+    await f.archive.flush()
+    expect(f.archive.stats()).toMatchObject({ readErrors: 1, writeErrors: 1 })
   })
   it('cancels during a disk lookup without submitting generation or writing', async () => {
     const f = fixture()
@@ -199,31 +202,84 @@ describe('regenerable heightfield cache', () => {
   })
 })
 
-it('clearing a shared store prevents an older GPU request from repopulating it', async () => {
-  const f = fixture()
+/** A producer whose one tile arrives when the test says. */
+function deferred(namespace: string) {
   let resolve!: (field: ReturnType<typeof generateHeightfield>) => void
-  const gpu = new CachedHeightfieldSource(
-    {
-      kind: 'gpu',
-      available: true,
-      submit: () => ({
-        id: 2,
-        result: new Promise((done) => {
-          resolve = done
-        }),
-        cancel() {},
+  const source: ArchivedSource = {
+    kind: 'gpu',
+    archive: namespace,
+    available: true,
+    submit: () => ({
+      id: 2,
+      result: new Promise((done) => {
+        resolve = done
       }),
-    },
-    f.store,
-    'gpu:terrain-tsl@1',
-  )
-  const job = gpu.submit(surface, request)
-  await Promise.resolve()
-  await f.cache.clear()
-  resolve(generateHeightfield(surface, request))
-  await job.result
-  await gpu.flush()
-  expect(f.rows.size).toBe(0)
+      cancel() {},
+    }),
+  }
+  return {
+    source,
+    arrive: () => resolve(generateHeightfield(surface, request)),
+  }
+}
+
+describe('the archive', () => {
+  it('retires every producer’s lookups on clear, so none repopulates it', async () => {
+    const f = fixture()
+    const gpu = deferred('gpu:test')
+    const job = f.archive.wrap(gpu.source).submit(surface, request)
+    await Promise.resolve()
+    // Cleared through the archive the pool's wrapper also belongs to.
+    await f.archive.clear()
+    gpu.arrive()
+    await job.result
+    await f.archive.flush()
+    expect(f.rows.size).toBe(0)
+  })
+
+  it('counts both producers’ traffic in one place', async () => {
+    const f = fixture()
+    await f.cache.submit(surface, request).result
+    const gpu = deferred('gpu:test')
+    const job = f.archive.wrap(gpu.source).submit(surface, request)
+    await Promise.resolve()
+    gpu.arrive()
+    await job.result
+    await f.archive.flush()
+    // Different namespaces: the GPU's lookup missed the pool's tile.
+    expect(f.archive.stats()).toMatchObject({ misses: 2, writes: 2, hits: 0 })
+    expect(f.rows.size).toBe(2)
+    expect(await f.archive.storage()).toMatchObject({ entries: 2 })
+  })
+
+  it('closes after its writes land, and passes straight through afterward', async () => {
+    const f = fixture()
+    let land!: () => void
+    vi.mocked(f.store.write).mockImplementationOnce(
+      (record) =>
+        new Promise<void>((done) => {
+          land = () => {
+            f.rows.set(record.key, clone(record))
+            done()
+          }
+        }),
+    )
+    await f.cache.submit(surface, request).result
+    const closing = f.archive.close()
+    await Promise.resolve()
+    expect(f.store.close).not.toHaveBeenCalled()
+    land()
+    await closing
+    expect(f.rows.size).toBe(1)
+    expect(f.store.close).toHaveBeenCalledOnce()
+    // A request after the close never touches the store it released.
+    vi.mocked(f.store.read).mockClear()
+    await f.cache.submit(surface, request).result
+    expect(f.store.read).not.toHaveBeenCalled()
+    expect(f.source.submit).toHaveBeenCalledTimes(2)
+    await f.archive.close()
+    expect(f.store.close).toHaveBeenCalledOnce()
+  })
 })
 
 it('a synchronous storage write failure still delivers the generated field', async () => {
@@ -234,8 +290,8 @@ it('a synchronous storage write failure still delivers the generated field', asy
   await expect(f.cache.submit(surface, request).result).resolves.toHaveProperty(
     'elevations',
   )
-  await f.cache.flush()
-  expect(f.cache.stats().writeErrors).toBe(1)
+  await f.archive.flush()
+  expect(f.archive.stats().writeErrors).toBe(1)
 })
 
 it('does not report a persisted write when the store refuses an oversized record', async () => {
@@ -244,6 +300,6 @@ it('does not report a persisted write when the store refuses an oversized record
   await expect(f.cache.submit(surface, request).result).resolves.toHaveProperty(
     'elevations',
   )
-  await f.cache.flush()
-  expect(f.cache.stats()).toMatchObject({ writes: 0, writeErrors: 0 })
+  await f.archive.flush()
+  expect(f.archive.stats()).toMatchObject({ writes: 0, writeErrors: 0 })
 })

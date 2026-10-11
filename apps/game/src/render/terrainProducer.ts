@@ -16,14 +16,15 @@ import {
   writeTileFrame,
 } from '@inertialref/universe'
 import {
+  type ArchivedSource,
   HeightfieldUnavailable,
   type HeightfieldResponse,
-  type HeightfieldSource,
 } from '@inertialref/workers'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { QUERY } from '../pages/paths.ts'
 import {
   createTerrainKernel,
+  TERRAIN_KERNEL_REVISION,
   type TerrainKernel,
   uploadSurface,
 } from './terrainKernel.ts'
@@ -62,8 +63,10 @@ import {
  * queued or in flight rejects with `HeightfieldUnavailable`, and `Heightfields`
  * retries those requests on the pool. Nothing here is the field the contact
  * test integrates — that is `elevationAt` on the CPU, always — and nothing
- * here is versioned, because the divergence from the CPU tile is a measured
- * bound (`terrainKernel.gpu.test.ts`) rather than a change to the ground.
+ * here moves a canonical version, because the divergence from the CPU tile is
+ * a measured bound (`terrainKernel.gpu.test.ts`) rather than a change to the
+ * ground. What the archive keeps its tiles under is the kernel's own
+ * revision, `TERRAIN_KERNEL_REVISION`, beside the graph it describes.
  */
 
 const log = getLogger('game.terrain.gpu')
@@ -107,7 +110,7 @@ export interface TileProducerStats {
   readonly meanBatchMs: number
 }
 
-export interface TileProducer extends HeightfieldSource {
+export interface TileProducer extends ArchivedSource {
   readonly kind: 'gpu'
   /** `MAX_TILE_LEVEL`: the frame is exact through 23, and deeper is the pool's. */
   readonly maxLevel: number
@@ -351,6 +354,7 @@ export function createTileProducer(
 
   return {
     kind: 'gpu',
+    archive: `gpu:terrain-tsl@${TERRAIN_KERNEL_REVISION}`,
     maxLevel: MAX_TILE_LEVEL,
     get available() {
       return available

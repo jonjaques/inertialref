@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_MAX_PATCHES } from '@inertialref/rendering'
+import { HeightfieldArchive } from '@inertialref/workers'
 import {
   DEBUG_LANDING_SITE,
   DEFAULT_CACHE,
@@ -80,10 +81,10 @@ const STREAMING_TIMEOUT = 300_000
  * not fewer frames.
  */
 describe('the ground, over one descent', () => {
-  const archive = new DiskHeightfieldStore()
+  const archive = new HeightfieldArchive(new DiskHeightfieldStore())
   const game = headlessEngine({
     catalog: loadStarCatalog(),
-    heightfieldStore: archive,
+    heightfieldArchive: archive,
   })
 
   const settle = async (frames: number): Promise<void> => {
@@ -269,7 +270,9 @@ describe('the ground, over one descent', () => {
     if (process.env.IR_TERRAIN_CACHE_REPORT === '1')
       console.info('terrain archive', await game.terrainCache())
     game.dispose()
-    archive.close()
+    // Through the archive, which lands the writes still in flight before it
+    // releases the store: a write after the store closed reopened it.
+    await archive.close()
   })
 
   it('keeps the ground under a landed ship, frame after frame', () => {

@@ -68,9 +68,9 @@ import {
   type Viewport,
 } from '@inertialref/rendering'
 import {
+  type ArchivedSource,
+  HeightfieldArchive,
   type HeightfieldSource,
-  type HeightfieldStore,
-  CachedHeightfieldSource,
   poolHeightfieldSource,
   type Heightfields,
   surveySkyTask,
@@ -258,7 +258,12 @@ export interface GameEngineOptions {
    * engine under Node.
    */
   readonly workers?: WorkerFactory | null
-  readonly heightfieldStore?: HeightfieldStore | null
+  /**
+   * Where generated tiles are kept across reloads (ADR-0045). Omit for the
+   * browser's IndexedDB archive; pass `null` for none. The caller that passes
+   * one owns it, and closes it.
+   */
+  readonly heightfieldArchive?: HeightfieldArchive | null
   readonly store?: SaveStore
   readonly now?: () => number
 }
@@ -318,10 +323,14 @@ export class GameEngine {
    * carries `Float32Array`s and the harness returns JSON.
    */
   readonly #terrain: TerrainStreamer
-  readonly #terrainStore: HeightfieldStore | null
-  readonly #terrainCache: CachedHeightfieldSource | null
-  /** The producer's own wrapper, when one is installed; see `#archive`. */
-  #preferredCache: CachedHeightfieldSource | null = null
+  /**
+   * The one object over the tile store. The pool and the GPU producer are
+   * each wrapped by it, and its clear retires both producers' lookups in
+   * flight — which reaching the store directly would not: a lookup still in
+   * flight would write its tile back into a cache the caller had just
+   * discarded.
+   */
+  readonly #archive: HeightfieldArchive | null
   /** Rolling per-frame samples for the performance overlay. */
   readonly metrics = new FrameMetrics()
 
@@ -991,19 +1000,18 @@ export class GameEngine {
       if (!stance.observatory) this.harness.observatory.clear()
     })
     this.saves = this.session.store
-    this.#terrainStore =
-      options.heightfieldStore === undefined
+    this.#archive =
+      options.heightfieldArchive === undefined
         ? typeof indexedDB === 'undefined'
           ? null
-          : new IndexedDbHeightfieldStore()
-        : options.heightfieldStore
+          : new HeightfieldArchive(new IndexedDbHeightfieldStore())
+        : options.heightfieldArchive
     const pool = this.session.pool()
     const fallback = pool === null ? null : poolHeightfieldSource(pool)
-    this.#terrainCache =
-      fallback !== null && this.#terrainStore !== null
-        ? new CachedHeightfieldSource(fallback, this.#terrainStore, 'cpu')
-        : null
-    this.#terrain = new TerrainStreamer(pool, this.#terrainCache ?? fallback)
+    this.#terrain = new TerrainStreamer(
+      pool,
+      fallback === null ? null : this.#archived(fallback),
+    )
     /*
      * The level, forwarded across the worker boundary.
      *
@@ -1081,47 +1089,31 @@ export class GameEngine {
    * canvas — so it is a setter rather than a constructor option, like `gl`.
    * `null` puts the pool back.
    */
-  setHeightfieldSource(source: HeightfieldSource | null): void {
-    const wrapped =
-      source !== null && this.#terrainStore !== null
-        ? new CachedHeightfieldSource(
-            source,
-            this.#terrainStore,
-            `${source.kind}:terrain-tsl@1`,
-          )
-        : null
-    this.#preferredCache = wrapped
-    this.#terrain.heightfields.preferred = wrapped ?? source
+  setHeightfieldSource(source: ArchivedSource | null): void {
+    this.#terrain.heightfields.preferred =
+      source === null ? null : this.#archived(source)
   }
 
-  /*
-   * Either wrapper answers for the archive: the counters and the in-flight
-   * write set are shared per store, so clearing through one retires the
-   * other's pending writes too. Reaching the store directly does not — it
-   * would empty the database while a producer's lookup is still in flight,
-   * and that lookup would write the tile back into a cache the caller had
-   * just discarded.
-   */
-  get #archive(): CachedHeightfieldSource | null {
-    return this.#terrainCache ?? this.#preferredCache
+  /** A source, answering from the archive first when there is one. */
+  #archived(source: ArchivedSource): HeightfieldSource {
+    return this.#archive?.wrap(source) ?? source
   }
 
   /** Shared CPU/GPU archive counters and the host's bounded storage usage. */
   async terrainCache() {
+    const archive = this.#archive
     let storage = null
-    let available = this.#terrainStore !== null
+    let available = archive !== null
     try {
-      storage = (await this.#terrainStore?.stats()) ?? null
+      storage = (await archive?.storage()) ?? null
     } catch {
       available = false
     }
-    return { available, activity: this.#archive?.stats() ?? null, storage }
+    return { available, activity: archive?.stats() ?? null, storage }
   }
 
   async clearTerrainCache(): Promise<void> {
-    const archive = this.#archive
-    if (archive !== null) await archive.clear()
-    else await this.#terrainStore?.clear()
+    await this.#archive?.clear()
   }
 
   get starField(): StarField {

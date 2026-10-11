@@ -9,7 +9,7 @@ const makeEngine = (canFly = true) =>
   new GameEngine({
     workers: null,
     store: new MemorySaveStore(),
-    heightfieldStore: null,
+    heightfieldArchive: null,
     canFly,
     now: () => 0,
   })

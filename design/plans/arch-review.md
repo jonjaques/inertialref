@@ -17,9 +17,8 @@ buys callers **leverage** and maintainers **locality**. The deletion test —
 does deleting the module concentrate complexity, or just move it — is what
 separates a candidate from a pass-through.
 
-Every figure and line reference below is read from the tree at `96bdc2fd`,
-except in 13, which is re-read with 6–11 in the tree; nothing was run
-unless the section says so. Line numbers drift; the symbol beside each one is
+Every figure and line reference below is read from the tree at `96bdc2fd`;
+nothing was run unless the section says so. Line numbers drift; the symbol beside each one is
 the reference.
 
 ---
@@ -57,7 +56,6 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 | #   | Pull request                                                                                                     | Track       | Builds on | Strength        |
 | --- | ---------------------------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 13  | [The heightfield archive is one object](#13-the-heightfield-archive-is-one-object)                               | The terrain | —         | Strong          |
 | 14  | [A body the kernel cannot pack goes to the pool alone](#14-a-body-the-kernel-cannot-pack-goes-to-the-pool-alone) | The terrain | —         | Strong          |
 | 15  | [One water decision per patch](#15-one-water-decision-per-patch)                                                 | The terrain | —         | Worth exploring |
 | 16  | [The drainage graph is prepared off the draw thread](#16-the-drainage-graph-is-prepared-off-the-draw-thread)     | The terrain | 14        | Worth exploring |
@@ -67,19 +65,17 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)                               | The picture | 19        | Worth exploring |
 | 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                                                 | The picture | 19        | Worth exploring |
 | A   | [One compass basis](#a-one-compass-basis)                                                                        | Optional    | —         | Speculative     |
-| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                            | Optional    | 13, 16    | Speculative     |
+| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                                            | Optional    | 16        | Speculative     |
 
 ```mermaid
 flowchart LR
-  P13[13 Archive]
   P14[14 Per-body refusal] --> P16[16 Prepared graph]
   P15[15 Water decision]
   P17[17 Target layout] --> P18[18 Pixel grid]
   P19[19 Quad-pass runner] --> P20[20 Stage list]
   P19 --> P21[21 One timing instrument]
   A[A Compass basis]
-  P13 -.-> B[B Surface identity]
-  P16 -.-> B
+  P16 -.-> B[B Surface identity]
 ```
 
 **Every pull request builds only on ones numbered before it, and within a track
@@ -91,80 +87,13 @@ and its section says so. Two files are edited by more than one pull request,
 and the order is what keeps them apart:
 
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
-- `apps/game/src/render/terrainProducer.ts` — 13, 14 and 16.
+- `apps/game/src/render/terrainProducer.ts` — 14 and 16.
 
-**Start with 13.** The guide track is in the tree. The terrain and picture
-tracks build on nothing left open and can start in parallel; 13 opens the
-terrain track and is the first of the three pull requests that edit
-`terrainProducer.ts`.
+**Start with 14.** The guide track is in the tree, and so is the archive. The
+terrain and picture tracks build on nothing left open and can start in
+parallel.
 [Open from the review of 6–11](#open-from-the-review-of-611) holds the smaller
 follow-ups those pull requests left, none of them a pull request of its own.
-
----
-
-## 13. The heightfield archive is one object
-
-**Track:** the terrain · **Strong** · ports and adapters (IndexedDB and SQLite
-are the two real adapters)
-
-**Builds on:** nothing. **Unblocks:** [B](#b-surface-identity-is-stated-once).
-
-**Files.** `packages/workers/src/heightfieldCache.ts`
-(`HEIGHTFIELD_CACHE_REVISION`, `HEIGHTFIELD_CACHE_VERSION`, the module-level
-`WeakMap` at `:204`), `apps/game/src/engine/GameEngine.ts` (the cache wiring at
-`:995–1006`; `#archive` and the `'terrain-tsl@1'` namespace at `:1076–1127`),
-`apps/headless/src/main.ts` (`:150–164`),
-`apps/game/src/render/terrainProducer.ts`, `.github/workflows/check.yml` (the
-`.data/heightfields` cache), `scripts/terrainArchive.mjs`.
-
-**The friction.**
-
-- **Two adapters share hidden state.** The CPU and GPU cache adapters share the
-  clear epoch, the counters and the pending writes through a module-level
-  `WeakMap<HeightfieldStore, CacheState>`. `GameEngine` carries "clear through
-  an adapter, never the store" as a comment and an `#archive` getter that picks
-  either one.
-- **A tile's identity rests on four versions in three packages:**
-  `HEIGHTFIELD_CACHE_REVISION`, bumped by hand; `TERRAIN_ALGORITHM.version`;
-  `generateHeightfieldTask.version`; and the GPU namespace `'terrain-tsl@1'`, a
-  string literal in the engine. The `'cpu'` namespace is written in
-  `GameEngine.ts`, in `apps/headless/src/main.ts` and in a test.
-- **Nothing detects a missed revision.**
-  [ADR-0023](../../docs/adr/0023-the-gpu-producer.md) leaves a drawn-tail change
-  unversioned because the tail is not canon, and CI restores
-  `.data/heightfields` keyed on the version. A change to the tile arithmetic
-  that no version covers runs the slow descent suite on stale tiles, and it
-  passes.
-- `scripts/terrainArchive.mjs`'s header prints version `1-5-3`; the task is at
-  version 7.
-
-**The shape.** An archive built over a store owns the epoch, the pending
-writes, the counters, `flush`, `clear`, `close` and `stats`. `archive.wrap(source)`
-reads a revision each source declares next to its own arithmetic — the pool's
-task, and the GPU kernel's module. A fingerprint gate hashes a few CPU tiles
-from a dry body and a generated wet body, pinned beside the version, and its
-failure message says to spend the revision. The GPU revision stays manual,
-because GPU output varies by adapter. `close()` flushes, which ends the
-unflushed close [terrain § 2](terrain.md#2-open-work) records in the slow
-descent suite; the archive's write lock and the cross-app import stay there.
-
-**Gate.**
-
-- No module-level map of cache state remains.
-  `heightfieldCache.test.ts`'s shared-state case becomes a test of the
-  archive.
-- The engine's clear and stats path has a test over a fake store.
-- The fingerprint test exists, and fails on a one-ulp change to the CPU field,
-  demonstrated against a scratch copy rather than a checkout of the tracked
-  file.
-- `'terrain-tsl@1'` and `'cpu'` are each written once.
-- The slow descent suite closes through the archive.
-
-The fingerprint is a deliberate golden vector. `micro.test.ts` avoids golden
-vectors because they go stale; here going stale is the signal to spend the
-revision. The pull request amends
-[ADR-0045](../../docs/adr/0045-generated-terrain-is-a-disposable-cache.md),
-whose manual obligation it makes mechanical.
 
 ---
 
@@ -172,8 +101,7 @@ whose manual obligation it makes mechanical.
 
 **Track:** the terrain · **Strong** · in-process, with Dawn for the kernel
 
-**Builds on:** nothing; placed after 13 because both edit `terrainProducer.ts`.
-**Unblocks:** 16.
+**Builds on:** nothing. **Unblocks:** 16.
 
 **Files.** `apps/game/src/render/terrainProducer.ts` (`pump`, `fail`),
 `packages/universe/src/terrainKernel.ts` (`packDrainage`'s invariants against
@@ -486,7 +414,8 @@ this way is 0. It is a trap for the first heading taken from a landed ship.
 
 **Optional** · **Speculative** · in-process
 
-**Builds on:** 13 and 16, whose keys it would replace.
+**Builds on:** 16, whose key it would replace, and the archive's, which is in
+the tree.
 
 **The friction.** Four keys answer "which surface is this": the drainage memo's,
 the survey's, the archive's and the sketch's. The drainage and survey keys list
