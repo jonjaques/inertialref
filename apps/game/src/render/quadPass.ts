@@ -15,12 +15,12 @@ import { namePass } from './passTimeline.ts'
  * frame's own passes, and every one of them has to hand the renderer back as
  * it found it — the target above all. A quad that leaves its target bound is
  * the defect ADR-0029 records: the next pass draws into the optics' scratch
- * texture, and the picture comes out one transfer too dark. Seven modules
- * saved and restored by hand, each a different subset of the state, so the
- * restore lives here, in `finally`, and covers everything any of them sets.
+ * texture, and the picture comes out one transfer too dark. The restore is
+ * here, in `finally`, and covers everything any stage sets, so no stage
+ * keeps its own subset of it.
  *
  * And every pass is named as it draws. The timeline labels a target nobody
- * named by its texture and size, so two passes of one size merged into one
+ * named by its texture and size, which puts two passes of one size in one
  * row; a label given at the draw is a label no stage can forget.
  */
 

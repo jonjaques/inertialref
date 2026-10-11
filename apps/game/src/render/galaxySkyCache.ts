@@ -304,20 +304,20 @@ export class GalaxySkyCache {
         // setting only `target.scissorTest` draws a full face for every
         // tile, which the coverage test observes as an outside texel.
         { linear: true, autoClear: false, scissor: true },
-        (draw) => {
-          draw('galaxy sky', target, this.#material, tile.face)
-          this.schedule.complete(tile)
-          this.#ticket?.done()
-          this.#select()
-          if (
-            this.available &&
-            (this.schedule.selected!.faceSize >=
-              Math.min(128, this.schedule.faceSize) ||
-              !this.schedule.report.pending)
-          )
-            this.#finishTicket()
-        },
+        (draw) => draw('galaxy sky', target, this.#material, tile.face),
       )
+      // After the runner hands the renderer back: a listener the ticket
+      // reaches may draw, and must not inherit the scissor and the kept clear.
+      this.schedule.complete(tile)
+      this.#ticket?.done()
+      this.#select()
+      if (
+        this.available &&
+        (this.schedule.selected!.faceSize >=
+          Math.min(128, this.schedule.faceSize) ||
+          !this.schedule.report.pending)
+      )
+        this.#finishTicket()
     } finally {
       target.scissorTest = false
     }

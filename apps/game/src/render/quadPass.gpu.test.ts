@@ -172,7 +172,11 @@ describe('the timeline, through the runner', () => {
           'psf resolve',
         ]),
       )
-      expect(labels.filter((label) => label.startsWith('target '))).toEqual([])
+      // The timeline's fallback for a target nobody named is its texture's
+      // name and size, so a size suffix is a pass drawn outside the runner.
+      expect(labels.filter((label) => / \d+×\d+( ×\d+)?$/.test(label))).toEqual(
+        [],
+      )
     } finally {
       psf.dispose()
       blur.dispose()
@@ -185,7 +189,13 @@ describe('the timeline, through the runner', () => {
 
   it('finds the galaxy volume and its temporal passes by name', async () => {
     const view = GALAXY_VIEWS['face-on']
-    const renderer = gpu.renderer
+    /*
+     * A renderer of its own: the scene-target declaration and the tone curve
+     * are per renderer and have no undo, so on the file's shared one they
+     * would shape every pass a later test compiles.
+     */
+    const own = await openGpu(SIZE, SIZE)
+    const renderer = own.renderer
     renderer.setSize(SIZE, SIZE, false)
     renderer.outputColorSpace = LinearSRGBColorSpace
     declareSceneTarget(renderer, { samples: 0, optics: true })
@@ -237,6 +247,7 @@ describe('the timeline, through the runner', () => {
       sensor.dispose()
       volume.dispose()
       output.dispose()
+      own.dispose()
     }
   })
 })
