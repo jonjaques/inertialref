@@ -125,7 +125,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    */
   useKeyContext({ context: 'cutscene' }, transport !== null)
   useAction('cutscene.skip', () => {
-    if (engine.cinematic !== null) engine.harness.stopCutscene()
+    if (engine.owner?.arm === 'cutscene') engine.harness.stopCutscene()
   })
 
   /*
@@ -243,7 +243,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
           // hook because this closure is registered once, with `[engine]`.
           if (
             playing.current === null ||
-            engine.cinematic === null ||
+            engine.owner?.arm !== 'cutscene' ||
             (engineStore.getState().playhead?.paused ?? true)
           ) {
             element.pause()

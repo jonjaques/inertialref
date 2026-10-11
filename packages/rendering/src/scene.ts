@@ -217,7 +217,12 @@ export function originForCamera(
 export function buildScene(
   snapshot: WorldSnapshot,
   origin: RenderOrigin,
-  cameraEntity: EntityId,
+  /**
+   * The player's entity, flagged `isCamera` and the eye when no other is
+   * given. Null for a frame with no player, which then needs `eye`: a
+   * playerless observatory frame is drawn from the observatory's eye.
+   */
+  cameraEntity: EntityId | null,
   /**
    * A presentation-only eye, overriding the camera entity's pose — the
    * cinematic director's seam. It must come through here rather than being
@@ -238,18 +243,24 @@ export function buildScene(
    */
   thresholds?: LodThresholds,
 ): RenderScene {
-  const entity = snapshot.entities.find((e) => e.id === cameraEntity)
+  const entity =
+    cameraEntity === null
+      ? undefined
+      : snapshot.entities.find((e) => e.id === cameraEntity)
   invariant(
-    entity !== undefined,
+    cameraEntity === null || entity !== undefined,
     `Camera entity ${cameraEntity} is not in the snapshot`,
   )
+  const pose = eye ?? entity
+  invariant(pose !== undefined, 'A scene with no camera entity needs an eye')
   const camera = {
-    position: eye?.position ?? entity.position,
-    orientation: eye?.orientation ?? entity.orientation,
+    position: pose.position,
+    orientation: pose.orientation,
     // The entity's measured altitude belongs to the entity. A cinematic eye
     // flies far from any contact test, and `null` is the honest answer — it
     // also keeps the chase camera's ground-clearance rule out of the shot.
-    altitude: eye === undefined ? entity.altitude : null,
+    altitude:
+      eye === undefined && entity !== undefined ? entity.altitude : null,
   }
 
   /*

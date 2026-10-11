@@ -105,7 +105,8 @@ export interface EngineSource {
     status(): HarnessStatus
     observerStatus(): ObserverStatus | null
   }
-  readonly cinematic: object | null
+  /** Who owns the frame; only whether a script does is published. */
+  readonly owner: { readonly arm: string } | null
   readonly showShip: boolean
   readonly showOrbits: boolean
   readonly labels: boolean
@@ -154,7 +155,7 @@ export function sampleOnce(store: EngineStore, source: EngineSource): void {
     character: source.character?.status() ?? null,
     exposure: source.exposure ?? null,
     status: source.harness.status(),
-    cinema: source.cinematic !== null,
+    cinema: source.owner?.arm === 'cutscene',
     observer: source.harness.observerStatus(),
     presentation: {
       showShip: source.showShip,

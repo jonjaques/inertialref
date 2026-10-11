@@ -11118,6 +11118,25 @@ at every one, three of them outside Sol, so no shipped figured body carries a
 deck or a shell that reaches a plate. `bodyUniforms.test.ts` fails two cases
 with the shells back on `body.flattening`.
 
+## The frame's owner is named once (7 Oct 2026)
+
+The camera precedence — cutscene, observatory, walker, ship — was spelled out
+three times in `GameEngine.#step` (the eye, the pose the galaxy reads, the eye
+`buildScene` took) and a fourth in `CameraRig`, as
+`cinematic ?? observer ?? characterCamera`, and six consumers asked
+`engine.cinematic === null` for themselves. `engine/frameOwner.ts` states the
+order once; `#step` publishes the result as `engine.owner` — the arm, its eye
+in render space, and the player's ship — and `cinematic`, `observer` and
+`characterCamera` are getters over it. Three defects went with the spellings.
+A frame no arm owned cleared two of the three eyes and left `characterCamera`,
+which the rig read as its last fallback. `ThrusterFx` and the nav ball named
+the player's ship by `isCamera`, which on foot is the walker, while
+`ShipModel` asked the character controller. And `buildScene` required a
+camera entity, so `#step` returned before the scene when there was no player
+and a playerless observatory frame drew the last frame's scene; it takes the
+owner's eye now, with the entity optional. `gameEngine.test.ts` holds all
+three, and the playerless case fails with the early return put back.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

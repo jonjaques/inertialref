@@ -86,7 +86,15 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     if (fill.current !== null) fill.current.intensity = lighting.fill
     if (scene === null) return
 
-    const override = cinematic ?? engine.observer ?? engine.characterCamera
+    // The arm `#step` resolved, read rather than re-derived: a frame nobody
+    // owns has no eye to hold, and the ship arm's camera is the chase rig.
+    const owner = engine.owner
+    const override =
+      owner === null || owner.arm === 'ship'
+        ? null
+        : owner.arm === 'cutscene'
+          ? owner.cinematic
+          : owner.view
 
     /*
      * The lens, applied here rather than pushed at the camera from React: the

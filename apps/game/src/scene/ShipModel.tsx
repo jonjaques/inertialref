@@ -104,8 +104,9 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     // A playing cutscene puts its hero prop where the director says, and the
     // entity underneath — still simulating, chase-framed, wherever the player
     // left it — is not drawn until the scene hands everything back.
-    const cinematic = engine.cinematic
-    if (cinematic !== null) {
+    const owner = engine.owner
+    if (owner?.arm === 'cutscene') {
+      const cinematic = owner.cinematic
       group.current.visible = cinematic.ship.visible && onStage
       group.current.position.set(
         cinematic.ship.position.x,
@@ -124,11 +125,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     const ship =
       engine.parkedRocinante ??
       scene.entities.find(
-        (entity) =>
-          entity.kind === 'ship' &&
-          (engine.character.active
-            ? entity.id === engine.character.ship
-            : entity.isCamera),
+        (entity) => entity.kind === 'ship' && entity.id === owner?.ship,
       )
     group.current.visible = engine.showShip && onStage && ship !== undefined
     if (ship === undefined) return
