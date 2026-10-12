@@ -87,18 +87,43 @@ export const pictureDprFactor = (picture: Picture): number =>
 export const pictureSharpness = (picture: Picture): number =>
   SHARPNESS[picture.sharpness]
 
+/**
+ * Whether a picture draws its scene below the display and reconstructs it.
+ *
+ * Asked of a *resolved* picture: a WebGL renderer resolves every picture to
+ * one that does not, so the answer is also whether the upscaler exists.
+ */
+export const pictureUpscales = (picture: Picture): boolean =>
+  picture.aa === 'temporal' || picture.scale !== 'native'
+
+/**
+ * The scene pass's extent along one axis, for a drawing buffer `pixels`
+ * across at a render ratio.
+ *
+ * Three's own arithmetic, from `PassNode.setSize`: the pass is told
+ * `setResolutionScale(1 / ratio)` and sizes its target `floor(pixels · scale)`,
+ * and the upscaler's input has to be exactly the texture the pass drew.
+ * `floor(pixels / ratio)` is the obvious spelling and agrees with it for
+ * every width from 1 to 7,999 at the four ratios, by the behavior of the
+ * floats rather than by construction; spelled the pass's way, the two are one
+ * expression.
+ */
+export const renderSize = (pixels: number, ratio: number): number =>
+  Math.max(1, Math.floor(pixels * (1 / ratio)))
+
 /** Display dimensions exclude supersampling; terrain refinement reads the same display. */
 export function pictureDimensions(
   picture: Picture,
   width: number,
   height: number,
 ) {
-  const factor = pictureDprFactor(picture) / pictureRatio(picture)
+  const supersample = pictureDprFactor(picture)
+  const ratio = pictureRatio(picture)
   return {
     display: { width, height },
     render: {
-      width: Math.max(1, Math.floor(width * factor)),
-      height: Math.max(1, Math.floor(height * factor)),
+      width: renderSize(width * supersample, ratio),
+      height: renderSize(height * supersample, ratio),
     },
   }
 }

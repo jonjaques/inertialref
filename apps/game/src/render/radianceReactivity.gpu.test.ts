@@ -60,8 +60,6 @@ it.each([
       scene,
       camera,
       sceneLayout(TEMPORAL, sceneBackend(gpu.renderer)),
-      undefined,
-      TEMPORAL,
     )
     try {
       sensor.render(target)
@@ -112,8 +110,6 @@ it('replaces hidden background reactivity and combines translucent coverage', as
     scene,
     camera,
     sceneLayout(TEMPORAL, sceneBackend(gpu.renderer)),
-    undefined,
-    TEMPORAL,
   )
   const coverage = async () => {
     sensor.render(target)

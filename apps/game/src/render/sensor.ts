@@ -3,13 +3,7 @@ import {
   type PictureDebug,
   type UpscaleDiagnostics,
 } from './upscale.ts'
-import {
-  DEFAULT_PICTURE,
-  pictureRatio,
-  pictureSharpness,
-  resolvePicture,
-  type Picture,
-} from './picture.ts'
+import { pictureRatio, pictureSharpness, pictureUpscales } from './picture.ts'
 import {
   attachment,
   attachmentBytes,
@@ -71,28 +65,38 @@ import { namePass } from './passTimeline.ts'
  */
 
 /*
- * The stand-ins the warm-up compiles against, one per renderer and layout.
+ * The stand-ins the warm-up compiles against, one per renderer and attachment
+ * shape.
  *
- * Never disposed. A layout is one of at most eight objects and a stand-in is
- * 4×4, so keeping every one a renderer has used costs nothing — and a stand-in
- * that is never disposed is one no compile can lose mid-queue. Three keys a
- * render context on the attachment shape rather than the target, and
- * `compileAsync` builds each queued pipeline after a yield, reading the depth
- * format from the texture that shared context holds by then; a stand-in
- * disposed under that queue has no format, and every pipeline left in it is
- * refused at the device with `depthStencil.format` undefined. A picture change
- * is a new layout and a new stand-in, and the old one stays whole for whatever
- * is still building.
+ * Keyed on what a pipeline is keyed on — the sample count, the rows and the
+ * depth type — rather than on the whole layout, whose picture also carries a
+ * scale and a sharpness the pipeline never sees; and never disposed. There are
+ * eight shapes at most and a stand-in is 4×4, so keeping every one a renderer
+ * has used costs nothing — and a stand-in that is never disposed is one no
+ * compile can lose mid-queue. Three keys a render context on the attachment
+ * shape rather than the target, and `compileAsync` builds each queued pipeline
+ * after a yield, reading the depth format from the texture that shared context
+ * holds by then; a stand-in disposed under that queue has no format, and every
+ * pipeline left in it is refused at the device with `depthStencil.format`
+ * undefined. A picture change that changes the shape is a new stand-in, and
+ * the old one stays whole for whatever is still building.
  *
  * Keyed on the renderer as well, and weakly, because a stand-in a renderer has
  * compiled against holds that renderer: three adds a `dispose` listener to the
  * target and its textures that closes over the renderer's texture manager, and
- * `Renderer.dispose` removes none of them. Held by the layout alone, each one
+ * `Renderer.dispose` removes none of them. Held by the shape alone, each one
  * kept every renderer the canvas replaced — an HDR toggle, a move between an
  * EDR and an SDR display, StrictMode's second mount — reachable for the
  * session.
  */
-const standIns = new WeakMap<object, Map<SceneLayout, RenderTarget>>()
+const standIns = new WeakMap<object, Map<string, RenderTarget>>()
+
+const shapeKey = (layout: SceneLayout): string =>
+  [
+    layout.samples,
+    layout.depthType ?? 'default',
+    ...layout.attachments.map((row) => row.name),
+  ].join('|')
 
 /**
  * A target of the scene pass's layout, for a compile.
@@ -113,10 +117,11 @@ export function warmTargetFor(
     held = new Map()
     standIns.set(renderer, held)
   }
-  let standIn = held.get(layout)
+  const key = shapeKey(layout)
+  let standIn = held.get(key)
   if (standIn === undefined) {
     standIn = sceneTarget(4, 4, layout)
-    held.set(layout, standIn)
+    held.set(key, standIn)
   }
   return standIn
 }
@@ -216,23 +221,20 @@ export function createSensor(
   camera: Camera,
   layout: SceneLayout,
   frame?: () => SensorFrame,
-  preference: Picture = DEFAULT_PICTURE,
   diagnostic?: 'bilinear',
 ): Sensor {
   const exposure = new ExposureMeter()
   const history = new SensorHistory()
   const automaticAvailable = 'isWebGPUBackend' in renderer.backend
   let requestedMode: SensorSettings['mode'] | undefined
-  const picture = resolvePicture(
-    preference,
-    automaticAvailable ? 'webgpu' : 'webgl',
-  )
-  // The layout is the picture's, by the same function the warm-up's was
-  // taken from. Handed one for another picture, the pass would draw into
-  // attachments the warmed pipelines were not built for.
+  // Resolved once, by the layout: what the pass draws into and what it is
+  // reconstructed from are one picture by construction.
+  const picture = layout.picture
+  // A layout is made for a backend's depth convention; one made for another
+  // renderer would draw depth the pass does not hold.
   invariant(
-    layout === sceneLayout(preference, sceneBackend(renderer)),
-    'the scene layout is not the one this picture draws into',
+    layout === sceneLayout(picture, sceneBackend(renderer)),
+    'the scene layout was made for another backend',
   )
   const temporal = attachment(layout, 'velocity') !== null
   const scenePass = pass(scene, camera, { samples: layout.samples })
@@ -266,7 +268,7 @@ export function createSensor(
    */
   scenePass.updateBeforeType = NodeUpdateType.RENDER
   const upscale =
-    automaticAvailable && (temporal || picture.scale !== 'native')
+    automaticAvailable && pictureUpscales(picture)
       ? createUpscale(
           renderer,
           {

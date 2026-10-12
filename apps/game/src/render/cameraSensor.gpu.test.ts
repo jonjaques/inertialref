@@ -225,23 +225,16 @@ it.each(['scrub', 'focus', 'resize'] as const)(
     const camera = new PerspectiveCamera(60, 1, 0.1, 100)
     const lens = { ...LENS_PRESETS.flight, focus: Infinity }
     let time = 0
-    const sensor = createSensor(
-      renderer,
-      scene,
-      camera,
-      layout,
-      () => ({
-        lens,
-        settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'automatic' },
-        time,
-        adaptationTime: time,
-        historyKey: `scrub:${time}`,
-        headroom: 1,
-        pinned: null,
-        noiseTick: 0,
-      }),
-      NO_MSAA,
-    )
+    const sensor = createSensor(renderer, scene, camera, layout, () => ({
+      lens,
+      settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'automatic' },
+      time,
+      adaptationTime: time,
+      historyKey: `scrub:${time}`,
+      headroom: 1,
+      pinned: null,
+      noiseTick: 0,
+    }))
     const target = new RenderTarget(32, 32, {
       type: FloatType,
       depthBuffer: false,
@@ -308,22 +301,15 @@ it('keeps metered exposure when continuous camera motion rebases the scene', asy
   scene.add(ground)
   let origin = createRenderOrigin(UV.UNIVERSE_ORIGIN)
   let time = 0
-  const sensor = createSensor(
-    renderer,
-    scene,
-    camera,
-    layout,
-    () => ({
-      lens: GALAXY_VIEWS['edge-on'].lens,
-      settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'automatic' },
-      time,
-      headroom: 1,
-      pinned: null,
-      noiseTick: 0,
-      renderOrigin: origin,
-    }),
-    NO_MSAA,
-  )
+  const sensor = createSensor(renderer, scene, camera, layout, () => ({
+    lens: GALAXY_VIEWS['edge-on'].lens,
+    settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'automatic' },
+    time,
+    headroom: 1,
+    pinned: null,
+    noiseTick: 0,
+    renderOrigin: origin,
+  }))
   const target = new RenderTarget(32, 32, { type: FloatType })
   try {
     await sensor.warm()
@@ -373,14 +359,7 @@ it('excludes visible instrument pixels from the physical histogram', async () =>
   ink.position.set(-0.5, 0, 0.1)
   ink.renderOrder = 2
   scene.add(ground, ink)
-  const sensor = createSensor(
-    gpu.renderer,
-    scene,
-    camera,
-    layout,
-    undefined,
-    NO_MSAA,
-  )
+  const sensor = createSensor(gpu.renderer, scene, camera, layout)
   const target = new RenderTarget(32, 32, { type: FloatType })
   try {
     sensor.render(target)

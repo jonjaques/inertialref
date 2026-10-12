@@ -11282,6 +11282,30 @@ had declared four samples and passed a temporal picture, which the old
 `createSensor` papered over by redeclaring, and the assertion found it on the
 first run.
 
+## The render grid is one expression, and the pixel angle stays the display's (11 Oct 2026)
+
+The deepening plan's 18 waited on plates: the terrain and water detail fades
+take the display's pixel angle over the drawing buffer, so under a render ratio
+`r` they assume samples `r` times finer than the scene pass draws, and could
+under-filter. Plates at 1600×900 under `?picture=off:performance:off` (spatial,
+`r = 2`), with the angle multiplied by `r` in a scratch edit against the tree:
+27 px apart at `earthrise` (the Moon, sun 24°), 5,795 at `tau-ceti-dusk`
+(generated, sun 5°) where two boots of the unchanged build differed by 56,267,
+and crops nobody could tell apart. The angle stays; what landed is the rest of 18. `renderSize` is three's own expression for the pass's extent,
+`floor(w · (1 / r))` from `PassNode.setSize`, so the upscaler's input and the
+pass's target are one formula rather than two that agree by the floats; a Node
+test sizes a real `PassNode` against it at every ratio, and found that a buffer
+narrower than the ratio gives the pass a target 0 across where `renderSize`
+holds one. The resolved picture rides on the scene layout, so `createSensor`,
+`Sensor.tsx` and `createRenderer` no longer each resolve it, and "does this
+picture upscale" is `pictureUpscales`.
+
+A dev-server trap met on the way: after a dozen edits, a live picture change
+threw `ReferenceError: pictureUpscales is not defined` from a module the
+served source imported correctly, and the galaxy's pipelines then failed with
+an undefined color format. A restarted Vite did not reproduce either through
+the same steps; `--fresh` reloads the page but not Vite's module graph.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

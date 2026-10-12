@@ -1,4 +1,5 @@
-import { resolvePicture, type Picture } from './picture.ts'
+import type { Picture } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 import { getLogger } from '@inertialref/shared'
 import { runtimeFailure } from '../runtimeFailure.ts'
 import {
@@ -242,10 +243,8 @@ async function buildRenderer(
       }
     }
     stopValidation = watchRendererValidation(renderer, report)
-    const resolvedPicture = resolvePicture(
-      picture,
-      'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl',
-    )
+    // Resolved by the layout, as the sensor and the warm-up read it.
+    const resolvedPicture = sceneLayout(picture, sceneBackend(renderer)).picture
 
     /*
      * Clear to *opaque* black. The default clear alpha is 0, and on the

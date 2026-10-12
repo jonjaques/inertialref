@@ -1,5 +1,7 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
+import { PerspectiveCamera, Scene } from 'three/webgpu'
+import { pass } from 'three/tsl'
 import {
   DEFAULT_PICTURE,
   PICTURE_AA,
@@ -12,6 +14,8 @@ import {
   pictureRatio,
   pictureSamples,
   pictureSharpness,
+  pictureUpscales,
+  renderSize,
   resolvePicture,
 } from './picture.ts'
 
@@ -135,5 +139,73 @@ describe('the picture record', () => {
       'bilinear:quality:unknown',
     ])
       expect(parsePictureQuery(invalid)).toBeNull()
+  })
+})
+
+describe('the render grid', () => {
+  /*
+   * The scene pass sizes its own target, by three's arithmetic, and the
+   * upscaler sizes its input by `renderSize`. They are one grid only if the
+   * two are one expression, so this asks a real pass — three's `PassNode`,
+   * which sizes a target in Node without a device — rather than a copy of its
+   * formula.
+   */
+  const scenePass = pass(new Scene(), new PerspectiveCamera())
+
+  it("is the pass's own extent at every ratio", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 7680 }),
+        fc.integer({ min: 1, max: 4320 }),
+        fc.constantFrom(...PICTURE_SCALES),
+        (width, height, scale) => {
+          const ratio = pictureRatio({ ...DEFAULT_PICTURE, scale })
+          scenePass.setResolutionScale(1 / ratio)
+          scenePass.setSize(width, height)
+          // Equal wherever the pass has an extent. A buffer narrower than the
+          // ratio gives the pass a target 0 across, which no texture can be,
+          // and the upscaler's input is held at one.
+          expect(renderSize(width, ratio)).toBe(
+            Math.max(1, scenePass.renderTarget.width),
+          )
+          expect(renderSize(height, ratio)).toBe(
+            Math.max(1, scenePass.renderTarget.height),
+          )
+        },
+      ),
+      { numRuns: 400 },
+    )
+  })
+
+  it('is what the panel reports as the render size', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 7680 }),
+        fc.integer({ min: 1, max: 4320 }),
+        fc.constantFrom(...PICTURE_SCALES),
+        fc.constantFrom(...PICTURE_AA),
+        (width, height, scale, aa) => {
+          const picture = { ...DEFAULT_PICTURE, scale, aa }
+          const buffer = pictureDprFactor(picture)
+          expect(pictureDimensions(picture, width, height).render).toEqual({
+            width: renderSize(width * buffer, pictureRatio(picture)),
+            height: renderSize(height * buffer, pictureRatio(picture)),
+          })
+        },
+      ),
+    )
+  })
+
+  it('upscales exactly the resolved pictures that draw below the display', () => {
+    for (const aa of PICTURE_AA) {
+      for (const scale of PICTURE_SCALES) {
+        const picture = { aa, scale, sharpness: 'standard' } as const
+        expect(pictureUpscales(resolvePicture(picture, 'webgpu'))).toBe(
+          aa === 'temporal' || scale !== 'native',
+        )
+        // A WebGL renderer has no upscaler, and resolution says so.
+        expect(pictureUpscales(resolvePicture(picture, 'webgl'))).toBe(false)
+      }
+    }
   })
 })

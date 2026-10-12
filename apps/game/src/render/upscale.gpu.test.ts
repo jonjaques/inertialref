@@ -47,14 +47,7 @@ function rig(picture: Picture, frame?: () => SensorFrame) {
   scene.add(slab)
   scene.updateMatrixWorld(true)
   camera.updateMatrixWorld(true)
-  const sensor = createSensor(
-    gpu.renderer,
-    scene,
-    camera,
-    layout,
-    frame,
-    picture,
-  )
+  const sensor = createSensor(gpu.renderer, scene, camera, layout, frame)
   const target = new RenderTarget(SIZE, SIZE, {
     type: FloatType,
     depthBuffer: false,

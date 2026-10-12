@@ -1,7 +1,7 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
-import { resolvePicture, type Picture } from '../render/picture.ts'
+import { pictureUpscales, type Picture } from '../render/picture.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -42,13 +42,16 @@ export function Sensor({
     // The one cast, for the reason `warmRenderer` gives: R3F types `gl` as
     // its own renderer union, and the web `<Canvas>` here is always handed a
     // `WebGPURenderer` by `createRenderer`.
+    // The engine's, which every warm-up compiled against: the knob wrote
+    // this picture before the preference re-rendered this component. It
+    // carries the picture resolved for this backend, so nothing here
+    // resolves it again.
+    const layout = engine.sceneLayout(gl)
     const built = createSensor(
       gl as unknown as WebGPURenderer,
       scene,
       camera,
-      // The engine's, which every warm-up compiled against: the knob wrote
-      // this picture before the preference re-rendered this component.
-      engine.sceneLayout(gl),
+      layout,
       () => ({
         lens: engine.lens,
         pictureEpoch: engine.pictureEpoch,
@@ -73,18 +76,13 @@ export function Sensor({
           engine.cinematic?.frame ?? (engine.snapshot?.renderTime ?? 0) * 60,
         ),
       }),
-      picture,
       diagnostic,
     )
     chain.current = built
     // The producer is registered once per label, so under StrictMode's
     // mount–unmount–mount it belongs to the first chain, which is disposed by
     // the time boot runs it. Warm whichever chain is live instead.
-    const resolved = resolvePicture(
-      picture,
-      engine.gl?.description.backend ?? 'webgpu',
-    )
-    if (resolved.aa === 'temporal' || resolved.scale !== 'native') {
+    if (pictureUpscales(layout.picture)) {
       warmAtMount({
         label: 'compiling the upscaler',
         units: 1,
@@ -116,6 +114,8 @@ export function Sensor({
       chain.current = null
       built.dispose()
     }
+    // `picture` is read through the engine's layout rather than here; it is a
+    // dependency because a new picture is a new chain.
   }, [gl, scene, camera, engine, picture, diagnostic])
 
   useTimedFrame(

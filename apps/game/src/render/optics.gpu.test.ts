@@ -139,21 +139,14 @@ it('draws one scene per full sensor frame, warms every pass, and holds a paused 
     draws += 1
   }
   let time = 0
-  const sensor = createSensor(
-    renderer,
-    scene,
-    camera,
-    layout,
-    () => ({
-      lens: LENS_PRESETS.flight,
-      settings: DEFAULT_SENSOR_SETTINGS,
-      time,
-      pinned: 0,
-      headroom: 1,
-      motionBlur: true,
-    }),
-    NO_MSAA,
-  )
+  const sensor = createSensor(renderer, scene, camera, layout, () => ({
+    lens: LENS_PRESETS.flight,
+    settings: DEFAULT_SENSOR_SETTINGS,
+    time,
+    pinned: 0,
+    headroom: 1,
+    motionBlur: true,
+  }))
   const target = new RenderTarget(128, 128, {
     type: FloatType,
     depthBuffer: false,
