@@ -69,7 +69,6 @@ The deepenings already landed, each carrying its reasoning in its own file:
 ```mermaid
 flowchart LR
   P16[16 Prepared graph]
-  P15[15 Water decision]
   P17[17 Target layout] --> P18[18 Pixel grid]
   P19[19 Quad-pass runner] --> P20[20 Stage list]
   P19 --> P21[21 One timing instrument]
@@ -87,41 +86,12 @@ and the order is what keeps them apart:
 
 - `apps/game/src/render/sensor.ts` — 17 through 21, in that order.
 
-**Start with 15.** The guide track is in the tree, and so are the archive and
-the per-body refusal. The terrain and picture tracks build on nothing left
-open and can start in parallel.
+**Start with 17.** The guide track is in the tree, and so are the archive, the
+per-body refusal and the water decision; what is left of the terrain track is
+16, which waits on a measurement. The picture track builds on nothing left
+open.
 [Open from the review of 6–11](#open-from-the-review-of-611) holds the smaller
 follow-ups those pull requests left, none of them a pull request of its own.
-
----
-
-## 15. One water decision per patch
-
-**Track:** the terrain · **Worth exploring** · in-process
-
-**Builds on:** nothing. **Unblocks:** nothing.
-
-**Files.** `apps/game/src/engine/terrainStreamer.ts` (`:1497–1503`, `:1556`),
-`apps/game/src/render/orbitalBake.ts` (`:269–303`),
-`packages/rendering/src/terrainPalette.ts` (`:270–285`),
-`packages/universe/src/terrain.ts` (`:539–551`),
-`packages/rendering/src/terrainMesh.ts` (`:439–460`).
-
-**The friction.** Rule 53 makes "a sheet is drawn" and "this tile is the
-seabed" one decision. Each of the two callers computes it as two expressions —
-`seabed` on the request and `seaLevel` on the patch build — so it lives at four
-sites, whose comments vouch for each other. On a mapped wet body with a graph,
-such as Earth, "no sheet" is stated nowhere; it follows from the clamped ground
-never falling below the water level in `terrainMesh.ts`. Nothing tests
-`RenderPatch.water` ([erosion](erosion.md#4-the-defects-ranked) defect 6).
-
-**The shape.** One pure function in `packages/rendering` returns the request
-half and the build half together, and the streamer and the orbital bake call
-it.
-
-**Gate.** Erosion defect 6's fixture lands here — a lake over part of the grid
-and a river across it — with one case per body class: dry, generated wet with a
-graph, mapped wet, mapped dry. The erosion plan loses defect 6.
 
 ---
 
@@ -563,7 +533,7 @@ carries the argument.
 - [ADR index](../../docs/adr/README.md) — the decisions each pull request sits
   under
 - [Terrain](terrain.md) · [Erosion](erosion.md) — the terrain track's
-  neighbors: the archive's write lock and cross-app import, defects 2, 6 and 15
+  neighbors: the archive's write lock and cross-app import, defects 2 and 14
 - [Perf](perf.md) — the measurement 16 waits on
 - [The upscaler](the-upscaler.md) — the velocity-overlay defect 17 makes one
   change

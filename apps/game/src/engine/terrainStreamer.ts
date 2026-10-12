@@ -24,7 +24,6 @@ import {
   type RegionAddress,
   regionChildren,
   regionParent,
-  standingWaterIsSampled,
   surfaceDetailFloor,
 } from '@inertialref/universe'
 import {
@@ -45,7 +44,8 @@ import {
   selectTerrain,
   type TerrainEye,
   type TerrainPalette,
-  seaSheetDatum,
+  patchWater,
+  sheetInput,
   terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
@@ -1473,6 +1473,9 @@ export class TerrainStreamer {
   /** Build geometry for the regions that need it next, under budget. */
   #build(wanted: readonly RegionAddress[], body: Body): void {
     let built = 0
+    // The body's decision, which the request was made under too: one surface
+    // per body, and `#epoch` drops a field that outlives it.
+    const water = patchWater(body)
     for (const region of wanted) {
       if (built >= BUILDS_PER_FRAME) return
       const key = regionKey(region)
@@ -1492,15 +1495,8 @@ export class TerrainStreamer {
           border: field.border,
           elevations: field.elevations,
           cover: field.cover,
-          water: field.water,
           bodyRadius: body.radius,
-          // The sheet's datum, where one is drawn at all — the same answer
-          // the palette gives the material, from the same function — unless
-          // the field sampled the water itself, in which case the sea is in
-          // `water` where the sea reaches and nowhere else.
-          seaLevel: standingWaterIsSampled(body.surface)
-            ? null
-            : seaSheetDatum(body),
+          ...sheetInput(water, field.water),
         }),
       )
       built += 1
@@ -1542,6 +1538,7 @@ export class TerrainStreamer {
       })
       .slice(0, budget)
 
+    const { seabed } = patchWater(body)
     for (const region of missing) {
       const key = regionKey(region)
       // Captured beside the key: a result that outlives its world is dropped
@@ -1552,8 +1549,8 @@ export class TerrainStreamer {
         region,
         resolution: HEIGHTFIELD_RESOLUTION,
         border: HEIGHTFIELD_BORDER,
-        // The seabed only where `buildPatch` is handed a sheet to lay over it.
-        seabed: seaSheetDatum(body) !== null,
+        // The request half: the seabed only where a sheet is laid over it.
+        seabed,
       })
       if (handle === null) continue
       this.#inFlight.set(key, handle)

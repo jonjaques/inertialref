@@ -4,6 +4,7 @@ import {
   type LinearRgb,
   type LiquidAppearance,
   seaDatumElevation,
+  standingWaterIsSampled,
 } from '@inertialref/universe'
 import { surfaceColor } from './surfaceColor.ts'
 
@@ -268,20 +269,65 @@ export function terminatorFor(
 
 /**
  * The datum the sea sheet is built on for this body, meters, or null where
- * no sheet is drawn.
- *
- * One function for the two readers that have to agree — the streamer, which
- * builds the sheet into every patch the sea reaches, and the palette, which
- * tells the ground material whether it is a seabed. A sheet exists where the
- * generator's sea is the only sea there is: a dry world has none, a mapped
- * one has a photograph, and a body whose grammar admits no liquid has a
- * datum with nothing to stand at it.
+ * no sheet is drawn. A sheet exists where the generator's sea is the only sea
+ * there is: a dry world has none, a mapped one has a photograph, and a body
+ * whose grammar admits no liquid has a datum with nothing to stand at it.
+ * `patchWater` is its one reader.
  */
-export function seaSheetDatum(body: Body): Meters | null {
+function seaSheetDatum(body: Body): Meters | null {
   if (body.appearance.texture !== null || body.appearance.liquid === null) {
     return null
   }
   return seaDatumElevation(body.surface)
+}
+
+/**
+ * Whether a patch of this body is drawn with water over it, and from what —
+ * rule 53's "a sheet is drawn" and "this tile is the seabed", as one answer.
+ *
+ * Two halves that must agree, for two callers that must agree: the request
+ * the streamer and the orbital bake send the producer, and the input they
+ * hand `buildPatch` when the tile comes back. A seabed asked for with no
+ * sheet laid over it is a sea drawn as a hole.
+ *
+ * A sheet is drawn only over a sea the sheet datum admits — a datum, a
+ * liquid, no photograph — because the palette's `sheet` flag, which
+ * `WaterPatches` gates every sheet on, is this decision's `seabed`. There
+ * the tile is the seabed, and the sheet stands at the datum, or at the
+ * field's own water where a drainage graph samples it: the sea where the sea
+ * reaches, and the lakes and rivers inland.
+ *
+ * Everywhere else no sheet is built, whatever the field samples. That
+ * includes a world whose liquid stands only inland, such as Titan: its
+ * graph samples lakes, but with no sea datum the palette draws no sheet, so
+ * a sheet built from them would be geometry nothing draws.
+ */
+export interface PatchWater {
+  /** The request half: the tile without the sea clamp, because a sheet lies over it. */
+  readonly seabed: boolean
+  /** The build half: the sheet's one datum, where the sea is one datum. */
+  readonly seaLevel: Meters | null
+  /** The build half: whether the sheet is the field's own sampled water. */
+  readonly sampled: boolean
+}
+
+export function patchWater(body: Body): PatchWater {
+  const sheet = seaSheetDatum(body)
+  if (sheet === null) return { seabed: false, seaLevel: null, sampled: false }
+  return standingWaterIsSampled(body.surface)
+    ? { seabed: true, seaLevel: null, sampled: true }
+    : { seabed: true, seaLevel: sheet, sampled: false }
+}
+
+/** `buildPatch`'s two water inputs for one returned tile, from the decision. */
+export function sheetInput(
+  decision: PatchWater,
+  water: Float32Array,
+): { readonly seaLevel: Meters | null; readonly water: Float32Array | null } {
+  return {
+    seaLevel: decision.seaLevel,
+    water: decision.sampled ? water : null,
+  }
 }
 
 /**
@@ -452,7 +498,7 @@ export function terrainPalette(body: Body): TerrainPalette {
     // what orbit shows is water, not the bathymetry underneath it.
     oceanColor: body.appearance.liquid?.color ?? OPEN_OCEAN,
     liquid: body.appearance.liquid,
-    sheet: seaSheetDatum(body) === null ? 0 : 1,
+    sheet: patchWater(body).seabed ? 1 : 0,
 
     sunsetTint: body.appearance.haze?.limb ?? { r: 1, g: 1, b: 1 },
     airThickness: body.appearance.haze?.thickness ?? 0,
