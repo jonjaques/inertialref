@@ -5,7 +5,11 @@ import type {
 import type { JobHandle } from './pool.ts'
 import type { HeightfieldResponse, HeightfieldSource } from './tasks.ts'
 
-/** A retired producer cannot complete this request; another adapter may. */
+/**
+ * This source cannot complete this request; another adapter may. A retired
+ * producer says it for everything, and a producer that cannot take one body
+ * says it for that body's requests alone while staying `available`.
+ */
 export class HeightfieldUnavailable extends Error {
   constructor() {
     super('producer unavailable')

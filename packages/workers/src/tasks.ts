@@ -387,8 +387,11 @@ export const generateHeightfieldTask = defineTask<
  * `available` is how a producer says it can no longer answer — a kernel that
  * would not build, a device that was lost. It rejects pending requests with
  * `HeightfieldUnavailable`, which lets `Heightfields` retry them on the
- * fallback while preserving the caller's cancellation handle. Ordinary
- * request failures propagate; unsupported shapes never reach the adapter.
+ * fallback while preserving the caller's cancellation handle. The same
+ * rejection with `available` still true is a refusal of one body: that
+ * body's requests go to the fallback and the source keeps every other body's.
+ * Ordinary request failures propagate; unsupported shapes never reach the
+ * adapter.
  *
  * `submit` takes what `generateHeightfield` takes — the surface, and the
  * request — so a caller hands over the object it holds rather than a
