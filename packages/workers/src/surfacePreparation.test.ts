@@ -56,7 +56,14 @@ const unseen = (): SurfaceParameters => ({
   seed: rootSeed(`unseen-${(fresh += 1)}`),
 })
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+// Host globals this package's libs leave out, as `inline.ts` declares the
+// first. A macrotask rather than a count of microtasks, because a gated job's
+// answer is several hops through the inline worker and the count would be a
+// guess.
+declare const structuredClone: <T>(value: T) => T
+declare const setTimeout: (run: () => void, ms: number) => unknown
+const settle = () =>
+  new Promise((resolve) => setTimeout(() => resolve(null), 0))
 
 /**
  * A pool whose preparation answers when the test says, or fails how it says.

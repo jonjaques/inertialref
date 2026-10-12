@@ -41,6 +41,11 @@ import { DRAINAGE_CELL_START_AT, surfaceKernel } from './terrainKernel.ts'
 
 const ROOT = rootSeed('inertialref')
 
+// What a worker's answer crosses. In every runtime this package targets, and
+// in neither of the libs it deliberately leaves out; `world.test.ts` declares
+// it the same way.
+declare const structuredClone: <T>(value: T) => T
+
 const SOL = generateSystem(
   ROOT,
   MILKY_WAY,
