@@ -179,8 +179,11 @@ export type GuideToolOutput = Readonly<Record<string, unknown>> & {
  * GuideStopStatus`, so renaming one on either side fails the typecheck rather
  * than leaving every move unable to end a linger.
  */
-const STOP_STATUSES = ['moving', 'held'] as const
-export type GuideStopStatus = (typeof STOP_STATUSES)[number]
+export type GuideStopStatus = 'moving' | 'held'
+const STOP_STATUSES: ReadonlySet<string> = new Set<GuideStopStatus>([
+  'moving',
+  'held',
+])
 
 /**
  * Whether an answer ends the current stop, which is what the beat keys on: a
@@ -196,7 +199,7 @@ export type GuideStopStatus = (typeof STOP_STATUSES)[number]
  * or canceled move changed nothing, so it ends nothing.
  */
 export const endsStop = (output: GuideToolOutput): boolean =>
-  (STOP_STATUSES as readonly string[]).includes(output.status)
+  STOP_STATUSES.has(output.status)
 
 const nullable = (schema: Record<string, unknown>) => ({
   anyOf: [schema, { type: 'null' }],
