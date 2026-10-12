@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { summarize } from './passTimeline.ts'
+import { summarize, summarizeOwned } from './passTimeline.ts'
 
 /** Nanosecond slots from millisecond pairs, in allocation order. */
 function slots(pairs: readonly (readonly [number, number])[]): BigUint64Array {
@@ -124,5 +124,56 @@ describe('summarize', () => {
     expect(result.passes.map((p) => p.label)).toEqual(['scene'])
     expect(result.spanMs).toBe(4)
     expect(result.gaps).toEqual([])
+  })
+})
+
+describe('summarizeOwned', () => {
+  it('averages each source’s passes by name, in the order they came back', () => {
+    expect(
+      summarizeOwned([
+        {
+          source: 'upscaler',
+          samples: [
+            { label: 'reconstruct', ms: 0.4 },
+            { label: 'exposure', ms: 0.1 },
+            { label: 'reconstruct', ms: 0.6 },
+          ],
+        },
+      ]),
+    ).toEqual([
+      { source: 'upscaler', label: 'reconstruct', samples: 2, latencyMs: 0.5 },
+      { source: 'upscaler', label: 'exposure', samples: 1, latencyMs: 0.1 },
+    ])
+  })
+
+  it('keeps two sources’ passes of one name apart', () => {
+    const rows = summarizeOwned([
+      { source: 'a', samples: [{ label: 'blit', ms: 1 }] },
+      { source: 'b', samples: [{ label: 'blit', ms: 3 }] },
+    ])
+    expect(rows.map((row) => [row.source, row.latencyMs])).toEqual([
+      ['a', 1],
+      ['b', 3],
+    ])
+  })
+
+  it('drops a reading that is not a duration rather than averaging it in', () => {
+    expect(
+      summarizeOwned([
+        {
+          source: 'upscaler',
+          samples: [
+            { label: 'reconstruct', ms: Number.NaN },
+            { label: 'reconstruct', ms: -1 },
+            { label: 'reconstruct', ms: Number.POSITIVE_INFINITY },
+            { label: 'reconstruct', ms: 0.25 },
+          ],
+        },
+        // A source whose disarm threw returns nothing, and is no row.
+        { source: 'broken', samples: [] },
+      ]),
+    ).toEqual([
+      { source: 'upscaler', label: 'reconstruct', samples: 1, latencyMs: 0.25 },
+    ])
   })
 })

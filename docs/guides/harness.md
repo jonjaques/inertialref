@@ -641,7 +641,11 @@ by `runQuadPasses` in `render/quadPass.ts`. It returns `wallMs` —
 `ir.gpu()`'s figure over the same frames — beside `busyMs`, the passes' shares
 summed, and the two agree within 2% at the shore; a larger disagreement is time
 in work the timeline does not see, such as the upscaler's own passes, which
-also shows in `gaps`.
+also shows in `gaps`. Those passes are reported beside the rest under `owned`:
+the upscaler lends the timeline its own timer for the run, and its compute
+passes come back as `{ source, label, samples, latencyMs }` — the package's
+begin-to-end means, latency rather than share, in neither `busyMs` nor
+`gaps`.
 
 **A pass's `ms` is its share, not its timestamp pair.** Apple's GPUs pipeline
 passes and frames, and Metal samples a pass's timestamps at its stage

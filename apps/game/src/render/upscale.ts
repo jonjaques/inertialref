@@ -19,6 +19,7 @@ import { passTexture, velocity } from 'three/tsl'
 import { getLogger } from '@inertialref/shared'
 import { onTimingLevel } from '../engine/browserTiming.ts'
 import { renderSize } from './picture.ts'
+import { type OwnedSample, passTimelineOf } from './passTimeline.ts'
 
 const log = getLogger('game.upscale')
 
@@ -84,7 +85,34 @@ interface RawBackend {
 interface RawTimer {
   enabled: boolean
   takeSamples(): unknown[]
+  /** The queue, then every readback in flight. */
+  drain(): Promise<void>
   reset(): void
+}
+
+/*
+ * A sample is `{ frameTag, sequence, passes: [{ label, milliseconds }] }` in
+ * 0.2.0: `readback` subtracts each begin from its end and unmaps the buffer,
+ * so a duration is all that leaves the timer. Read defensively, because the
+ * shape is the package's private business.
+ */
+function durations(samples: readonly unknown[]): OwnedSample[] {
+  const out: OwnedSample[] = []
+  for (const sample of samples) {
+    const passes = (sample as { passes?: unknown } | null)?.passes
+    if (!Array.isArray(passes)) continue
+    for (const pass of passes as {
+      label?: unknown
+      milliseconds?: unknown
+    }[]) {
+      if (
+        typeof pass?.label === 'string' &&
+        typeof pass.milliseconds === 'number'
+      )
+        out.push({ label: pass.label, ms: pass.milliseconds })
+    }
+  }
+  return out
 }
 
 /**
@@ -126,6 +154,9 @@ export class UpscaleNode extends TempNode<'vec4'> {
   #debug: PictureDebug = 'none'
   #timer: RawTimer | null = null
   #stopTiming: (() => void) | null = null
+  #detach: (() => void) | null = null
+  /** Durations kept for a pass timeline's run; null when none is measuring. */
+  #collected: OwnedSample[] | null = null
 
   constructor(
     renderer: WebGPURenderer,
@@ -171,11 +202,42 @@ export class UpscaleNode extends TempNode<'vec4'> {
         (this.#kernel as unknown as { _timer?: RawTimer })._timer ?? null
       this.#timer = timer
       const supported = timer?.enabled === true
-      this.#stopTiming = onTimingLevel((level) => {
-        if (timer === null) return
+      let level = 'off'
+      this.#stopTiming = onTimingLevel((next) => {
+        level = next
+        if (timer === null || this.#collected !== null) return
         timer.enabled = supported && level === 'full'
         if (!timer.enabled) timer.reset()
       })
+      /*
+       * The pass timeline is the renderer's one GPU instrument, and these
+       * compute passes are encoded outside three where its hooks cannot
+       * reach. So the timer is lent to it for a run: armed whatever the level,
+       * drained after the frames, and handed back as begin-to-end durations
+       * the timeline reports beside its own passes rather than among them.
+       */
+      const timeline = passTimelineOf(this.#renderer)
+      if (timer !== null && supported && timeline !== null) {
+        this.#detach = timeline.attach({
+          name: 'upscaler',
+          arm: () => {
+            timer.takeSamples()
+            this.#collected = []
+            timer.enabled = true
+          },
+          disarm: async () => {
+            try {
+              await timer.drain()
+              this.#collected?.push(...durations(timer.takeSamples()))
+              return this.#collected ?? []
+            } finally {
+              this.#collected = null
+              timer.enabled = level === 'full'
+              if (!timer.enabled) timer.reset()
+            }
+          },
+        })
+      }
       // compileAsync executes update-before dependencies too. The host input
       // must be backed before warming can dispatch the temporal kernel.
       this.#renderer.initTexture(this.#pre)
@@ -319,8 +381,10 @@ export class UpscaleNode extends TempNode<'vec4'> {
     if (this.#disposed) return
     // The library retains a fresh-sample queue separately from its latest
     // timings map. The interactive readout needs only the latter; drain the
-    // former each submission so a long flight cannot grow it indefinitely.
-    this.#timer?.takeSamples()
+    // former each submission so a long flight cannot grow it indefinitely,
+    // and keep what it held while a pass timeline is measuring.
+    const samples = this.#timer?.takeSamples() ?? []
+    this.#collected?.push(...durations(samples))
     this.#kernel.dispatch(
       {
         color: this.#inputs.color.value,
@@ -366,6 +430,7 @@ export class UpscaleNode extends TempNode<'vec4'> {
     if (this.#disposed) return
     this.#disposed = true
     this.#stopTiming?.()
+    this.#detach?.()
     if (this.#initialized) this.#kernel.dispose()
     this.#pre.dispose()
     this.#standIn.dispose()

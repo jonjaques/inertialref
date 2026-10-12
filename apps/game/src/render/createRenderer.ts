@@ -15,7 +15,6 @@ import {
   resolveOutputMode,
 } from './output.ts'
 import { installSceneOrder } from './sceneOrder.ts'
-import { installGpuTiming } from './gpuTiming.ts'
 import { installPassTimeline } from './passTimeline.ts'
 import { createCanvasGamut, type CanvasGamut } from './gamut.ts'
 import {
@@ -215,18 +214,15 @@ async function buildRenderer(
   }
   const stopErrors = watchRendererErrors(renderer, report)
   let stopValidation = (): void => {}
-  let stopTiming = (): void => {}
   let stopTimeline = (): void => {}
   const stopWatching = (): void => {
     stopTimeline()
-    stopTiming()
     stopValidation()
     stopErrors()
   }
   try {
     await renderer.init()
     installSceneOrder(renderer)
-    stopTiming = installGpuTiming(renderer)
     stopTimeline = installPassTimeline(renderer)
     if (runtimeFailure.getSnapshot() !== null) {
       throw new Error('Graphics startup was canceled.')

@@ -26,4 +26,15 @@ export interface PassReport {
     readonly ms: number
   }[]
   readonly dropped: number
+  /**
+   * Passes timed by their owner's own timer, beside the rest: the upscaler's,
+   * which run outside the renderer's hooks. Begin-to-end means, so latency
+   * rather than cost, and counted in neither `busyMs` nor `gaps`.
+   */
+  readonly owned: readonly {
+    readonly source: string
+    readonly label: string
+    readonly samples: number
+    readonly latencyMs: number
+  }[]
 }

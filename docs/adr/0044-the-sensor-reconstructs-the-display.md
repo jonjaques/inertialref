@@ -115,11 +115,15 @@ the scene and optical targets, allocation padding and driver overhead, and is
 not total device VRAM. The compute initialization has its own warm-up census
 unit. Debug views expose motion, depth, disocclusion, age, locks, exposure,
 shading change and reactivity. The public `ir.timing('full')` switch enables
-GPU timestamps when the device supports them; `off` disables query writes.
-The renderer permits one readback batch in flight, resolving render and compute
-queries together and skipping collection until both settle. The raw upscaler's
-fresh-sample queue is drained each submission. Neither queue grows with flight
-duration, and `game.render` logs the selected backend and resolved picture.
+the upscaler's own GPU timestamps when the device supports them; `off`
+disables its query writes. Three's timestamp tracking stays off at every
+level: nothing reads its figure, which double-counts beside a canvas output
+pass, and `ir.passes` times every pass three encodes with a query set of its
+own. The upscaler lends that timeline its timer for a run, so `ir.passes`
+reports reconstruction under `owned` as the package's begin-to-end means. The
+raw upscaler's fresh-sample queue is drained each submission and does not grow
+with flight duration, and `game.render` logs the selected backend and resolved
+picture.
 
 Reconstruction remains presentation state. Neither its preference, history,
 cut counter nor working textures enter the canonical state hash or save.
@@ -152,11 +156,17 @@ picture settings.
 
 At Tau Ceti Dusk, DPR 2, Temporal Quality's separately sampled reconstruction,
 exposure, shading-change, accumulation and RCAS passes took 0.459, 0.131,
-0.393, 2.687 and 0.459 ms respectively. Temporal Quality reported 78,706,817
-raw working-texture bytes at DPR 1 and 314,868,017 at DPR 2. Those counts are
-not total device VRAM. Its measured kernel initialization was 0.1–0.3 ms;
-that timer excludes subsequent working-texture configuration and scene
-warm-up.
+0.393, 2.687 and 0.459 ms respectively. Read through `ir.passes` at the same
+preset on an Apple M5 with 10 GPU cores (`Mac17,4`) on 11 October 2026 —
+Chrome 155, two 60-frame runs in one boot, eight samples each, the most the
+package's eight readback slots return — they read 0.66–0.69, 0.11–0.15,
+0.48–0.53, 2.88–2.98 and 0.51–0.78 ms. Each is the package's begin-to-end
+pair, which on this GPU is latency rather than cost: the first run put the gap
+between the scene pass and the optics, where the reconstruction's work falls
+on the timeline, at 1.01 ms. Temporal Quality reported 78,706,817 raw
+working-texture bytes at DPR 1 and 314,868,017 at DPR 2. Those counts are not
+total device VRAM. Its measured kernel initialization was 0.1–0.3 ms; that
+timer excludes subsequent working-texture configuration and scene warm-up.
 
 For DPR 1 stills, RGB8 RMSE against native MSAA was 9.592 for Spatial Quality
 and 8.579 for Temporal Quality on Tau Ceti Dusk; Far Shore measured 3.972 and
