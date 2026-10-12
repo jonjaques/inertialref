@@ -46,6 +46,7 @@ export interface EngineKnobs {
   lensFlare: boolean
   surfaceQuality: SurfaceQuality
   supersample: number
+  picture: Picture
   onLensRequest: ((lens: Lens) => void) | null
   onSensorRequest?: ((settings: SensorSettings) => void) | null
 }
@@ -92,7 +93,8 @@ export function bindEngineKnobs(
   const releases = KNOBS.map((bind) => bind(engine))
   releases.push(
     knob(RENDER_PICTURE, (bound, picture) => {
-      bound.supersample = pictureDprFactor(pictureOverride ?? picture)
+      bound.picture = pictureOverride ?? picture
+      bound.supersample = pictureDprFactor(bound.picture)
     })(engine),
   )
   /*

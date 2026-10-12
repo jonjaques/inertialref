@@ -46,6 +46,9 @@ export function Sensor({
       gl as unknown as WebGPURenderer,
       scene,
       camera,
+      // The engine's, which every warm-up compiled against: the knob wrote
+      // this picture before the preference re-rendered this component.
+      engine.sceneLayout(gl),
       () => ({
         lens: engine.lens,
         pictureEpoch: engine.pictureEpoch,

@@ -42,6 +42,7 @@ function engine(): EngineKnobs {
     lensFlare: true,
     surfaceQuality: DEFAULT_SURFACE_QUALITY,
     supersample: 1,
+    picture: DEFAULT_PICTURE,
     onLensRequest: null,
   }
 }
@@ -75,6 +76,9 @@ describe('the engine knobs', () => {
     const release = bindEngineKnobs(bound)
     expect(bound.lensFlare).toBe(false)
     expect(bound.supersample).toBe(2)
+    // The picture the scene layout is taken from, so the warm-ups that run
+    // before the sensor mounts compile for the picture it will draw.
+    expect(bound.picture).toEqual(read(RENDER_PICTURE))
     expect(bound.flightLens).toEqual(read(CAMERA_LENS))
     release()
   })
@@ -161,8 +165,10 @@ describe('the engine knobs', () => {
     }
     const release = bindEngineKnobs(bound, override)
     expect(bound.supersample).toBe(1)
+    expect(bound.picture).toEqual(override)
     write(RENDER_PICTURE, { ...DEFAULT_PICTURE, aa: 'supersample' })
     expect(bound.supersample).toBe(1)
+    expect(bound.picture).toEqual(override)
     expect(read(RENDER_PICTURE).aa).toBe('supersample')
     release()
   })

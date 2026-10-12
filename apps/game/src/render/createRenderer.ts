@@ -1,11 +1,11 @@
-import { pictureSamples, resolvePicture, type Picture } from './picture.ts'
+import { resolvePicture, type Picture } from './picture.ts'
 import { getLogger } from '@inertialref/shared'
 import { runtimeFailure } from '../runtimeFailure.ts'
 import {
   watchRendererErrors,
   watchRendererValidation,
 } from './rendererErrors.ts'
-import { FloatType, HalfFloatType, WebGPURenderer } from 'three/webgpu'
+import { HalfFloatType, WebGPURenderer } from 'three/webgpu'
 import { probeOutputCapability } from './capability.ts'
 import {
   headroomFor,
@@ -14,7 +14,6 @@ import {
   type RendererDescription,
   resolveOutputMode,
 } from './output.ts'
-import { declareSceneTarget } from './sensor.ts'
 import { installSceneOrder } from './sceneOrder.ts'
 import { installGpuTiming } from './gpuTiming.ts'
 import { installPassTimeline } from './passTimeline.ts'
@@ -247,12 +246,6 @@ async function buildRenderer(
       picture,
       'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl',
     )
-    declareSceneTarget(renderer, {
-      samples: pictureSamples(resolvedPicture),
-      temporal: resolvedPicture.aa === 'temporal',
-      optics: true,
-      ...(renderer.reversedDepthBuffer ? { depthType: FloatType } : {}),
-    })
 
     /*
      * Clear to *opaque* black. The default clear alpha is 0, and on the

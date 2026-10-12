@@ -5,6 +5,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { type LoadedShip, loadShipModel } from '../render/shipModels.ts'
 import { RENDER_SHIP, usePersistentState } from '../state/preferences.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import type { SceneLayout } from '../render/sceneLayout.ts'
 import { debugMaterials } from './debugMaterials.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -48,10 +49,18 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
 
   useEffect(
     () =>
-      loadInto(shipId, anisotropy, gl, camera, scene as Scene, (ship) => {
-        engine.hull = ship
-        setHull(ship)
-      }),
+      loadInto(
+        shipId,
+        anisotropy,
+        gl,
+        engine,
+        camera,
+        scene as Scene,
+        (ship) => {
+          engine.hull = ship
+          setHull(ship)
+        },
+      ),
     [engine, anisotropy, shipId, gl, camera, scene],
   )
 
@@ -61,6 +70,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
       stagedId,
       anisotropy,
       gl,
+      engine,
       camera,
       scene as Scene,
       (ship) => {
@@ -77,7 +87,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
       run: async (done) => {
         const ship = await loadShipModel('rocinante', anisotropy)
         if (ship !== null)
-          await warmCompile(warmRenderer(gl), {
+          await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
             object: ship.group,
             camera,
             scene: scene as Scene,
@@ -85,7 +95,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
         done()
       },
     })
-  }, [anisotropy, gl, camera, scene])
+  }, [engine, anisotropy, gl, camera, scene])
 
   useTimedFrame('shipModel', () => {
     const wanted =
@@ -187,6 +197,7 @@ function loadInto(
   id: string,
   anisotropy: number,
   gl: object,
+  engine: { sceneLayout(renderer: object): SceneLayout },
   camera: Camera,
   scene: Scene,
   apply: (ship: LoadedShip) => void,
@@ -194,7 +205,11 @@ function loadInto(
   let mounted = true
   void loadShipModel(id, anisotropy).then(async (ship) => {
     if (ship === null) return
-    await warmCompile(warmRenderer(gl), { object: ship.group, camera, scene })
+    await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
+      object: ship.group,
+      camera,
+      scene,
+    })
     if (mounted) apply(ship)
   })
   return () => {

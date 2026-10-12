@@ -60,7 +60,7 @@ export function WaterPatches({
       units: 1,
       run: async (done) => {
         const dummy = seaDummy(material)
-        await warmCompile(warmRenderer(gl), {
+        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
           object: dummy,
           camera,
           scene: scene as Scene,
@@ -68,7 +68,7 @@ export function WaterPatches({
         dummy.geometry.dispose()
       },
     })
-  }, [gl, camera, scene, material])
+  }, [engine, gl, camera, scene, material])
 
   useTimedFrame('waterPatches', () => {
     const container = group.current

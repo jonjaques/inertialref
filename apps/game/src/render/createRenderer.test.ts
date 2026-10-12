@@ -65,7 +65,6 @@ vi.mock('../runtimeFailure.ts', () => ({
     report: vi.fn(),
   },
 }))
-vi.mock('./sensor.ts', () => ({ declareSceneTarget: vi.fn() }))
 vi.mock('./gamut.ts', () => ({
   createCanvasGamut: () => ({ dispose: vi.fn(), colorSpace: 'srgb' }),
 }))

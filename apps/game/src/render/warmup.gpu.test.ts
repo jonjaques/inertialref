@@ -15,8 +15,13 @@ import { vec3, vec4 } from 'three/tsl'
 import { type GpuSession, openGpu, type Pixels } from './gpuHarness.ts'
 import { groundDummy } from './groundWear.ts'
 import { createStarMaterial } from './materials.ts'
-import { declareSceneTarget } from './sensor.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { warmTargetFor } from './sensor.ts'
 import { warmCompile, warmRenderer, warmSensorPass } from './warmup.ts'
+
+/** The production picture with its four samples off. */
+const NO_MSAA = { ...DEFAULT_PICTURE, aa: 'off' } as const
 
 /*
  * The half of `warmup.test.ts` that file says it cannot cover: whether the
@@ -247,21 +252,20 @@ it('warms depthless sensor attachments without rebuilding their first draw', asy
   }
 })
 
-it('keeps the stand-in target alive until the compiles bound to it land', async () => {
+it('keeps the stand-in target whole across a picture change mid-queue', async () => {
   /*
    * Three keys a render context on the attachment shape, not on the target,
    * and `compileAsync` builds each queued pipeline after a yield from
-   * whatever depth texture that shared context holds by then. A sensor that
-   * mounts while a warm-up is still building declares its shape again, and
-   * the stand-in the warm-up bound goes with the old declaration — so the
-   * next pipeline reads the format of a disposed texture, `undefined`, and
-   * the device refuses the descriptor: "Required member is undefined". The
-   * hold opens that window on purpose: the first pipeline is asked for and
-   * held, the shape is declared again, and the second pipeline is built
-   * after it.
+   * whatever depth texture that shared context holds by then. A picture
+   * change while a warm-up is still building is a new layout and a new
+   * stand-in; were the old one disposed with it, the next pipeline would read
+   * the format of a disposed texture, `undefined`, and the device would refuse
+   * the descriptor: "Required member is undefined". The hold opens that window
+   * on purpose: the first pipeline is asked for and held, the new picture's
+   * stand-in is made, and the second pipeline is built after it.
    */
   const { renderer } = gpu
-  declareSceneTarget(renderer, { samples: 0 })
+  const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
   const scene = new Scene()
   for (const [i, x] of [-1.2, 1.2].entries()) {
     const material = new MeshBasicNodeMaterial()
@@ -278,14 +282,17 @@ it('keeps the stand-in target alive until the compiles bound to it land', async 
   const from = gpu.reported().length
   const before = created()
   const gate = gpu.holdNextPipeline()
-  const compiled = warmCompile(warmRenderer(renderer), {
+  const compiled = warmCompile(warmRenderer(renderer, layout), {
     object: scene,
     camera,
     scene,
   })
   try {
     await gate.requested
-    declareSceneTarget(renderer, { samples: 4 })
+    warmTargetFor(
+      renderer,
+      sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer)),
+    )
   } finally {
     gate.release()
   }

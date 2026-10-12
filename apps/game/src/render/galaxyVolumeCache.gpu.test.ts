@@ -19,10 +19,12 @@ import {
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import { createGalaxyBackdrop, GalaxyVolumeNode } from './galaxyVolume.ts'
-import { createSensor, declareSceneTarget } from './sensor.ts'
+import { createSensor } from './sensor.ts'
 import { installToneCurve } from './tonemap.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -34,7 +36,7 @@ it('keeps full-resolution foreground occlusion and held-frame identity after cac
   const view = GALAXY_VIEWS['face-on']
   const renderer = gpu.renderer
   renderer.outputColorSpace = LinearSRGBColorSpace
-  declareSceneTarget(renderer, { samples: 4, optics: true })
+  const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
   installToneCurve(renderer, 1)
   const camera = new PerspectiveCamera(
     verticalFovDegrees(view.lens),
@@ -62,7 +64,7 @@ it('keeps full-resolution foreground occlusion and held-frame identity after cac
     type: FloatType,
     depthBuffer: false,
   })
-  const sensor = createSensor(renderer, scene, camera, () => ({
+  const sensor = createSensor(renderer, scene, camera, layout, () => ({
     lens: view.lens,
     settings: DEFAULT_SENSOR_SETTINGS,
     time: 0,
@@ -72,12 +74,16 @@ it('keeps full-resolution foreground occlusion and held-frame identity after cac
   }))
   try {
     await volume.warm(renderer)
-    await warmCompile(warmRenderer(renderer), {
+    await warmCompile(warmRenderer(renderer, layout), {
       object: backdrop,
       camera,
       scene,
     })
-    await warmCompile(warmRenderer(renderer), { object: body, camera, scene })
+    await warmCompile(warmRenderer(renderer, layout), {
+      object: body,
+      camera,
+      scene,
+    })
     await sensor.warm()
     for (let i = 0; i < 24; i++) sensor.render(output)
     const clear = await gpu.read(output)

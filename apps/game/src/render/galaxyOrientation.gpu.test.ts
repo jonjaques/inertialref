@@ -18,6 +18,8 @@ import {
 import { createGalaxyBackdrop, GalaxyVolumeNode } from './galaxyVolume.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 
 /*
  * Which way up the composed volume is.
@@ -75,11 +77,17 @@ it.each(['outside', 'inside'] as const)(
       scene.add(backdrop)
       camera.updateMatrixWorld()
       await volume.warm(gpu.renderer)
-      await warmCompile(warmRenderer(gpu.renderer), {
-        object: backdrop,
-        camera,
-        scene,
-      })
+      await warmCompile(
+        warmRenderer(
+          gpu.renderer,
+          sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer)),
+        ),
+        {
+          object: backdrop,
+          camera,
+          scene,
+        },
+      )
       const pixels = await gpu.draw(scene, camera, {
         width: SIZE,
         height: SIZE,

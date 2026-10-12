@@ -32,9 +32,14 @@ import { MotionNode } from './motion.ts'
 import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 import { PsfNode } from './psf.ts'
 import { runQuadPasses } from './quadPass.ts'
-import { createSensor, declareSceneTarget } from './sensor.ts'
+import { createSensor } from './sensor.ts'
 import { sensorMrt } from './sensorMrt.ts'
 import { installToneCurve } from './tonemap.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+
+/** The production picture with its four samples off, for a pass read back directly. */
+const NO_MSAA = { ...DEFAULT_PICTURE, aa: 'off' } as const
 
 /*
  * The quad-pass runner on the physical GPU: it hands the renderer back as it
@@ -57,7 +62,7 @@ describe('the quad-pass runner', () => {
     const material = new MeshBasicNodeMaterial()
     material.colorNode = vec4(1, 0, 0, 1)
     const quad = new QuadMesh(material)
-    const mrt = sensorMrt(false, true)
+    const mrt = sensorMrt(sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer)))
     const before = {
       tone: ACESFilmicToneMapping,
       color: SRGBColorSpace,
@@ -198,7 +203,7 @@ describe('the timeline, through the runner', () => {
     const renderer = own.renderer
     renderer.setSize(SIZE, SIZE, false)
     renderer.outputColorSpace = LinearSRGBColorSpace
-    declareSceneTarget(renderer, { samples: 0, optics: true })
+    const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
     installToneCurve(renderer, 1)
     const camera = new PerspectiveCamera(
       verticalFovDegrees(view.lens),
@@ -220,13 +225,20 @@ describe('the timeline, through the runner', () => {
       type: FloatType,
       depthBuffer: false,
     })
-    const sensor = createSensor(renderer, scene, camera, () => ({
-      lens: view.lens,
-      settings: DEFAULT_SENSOR_SETTINGS,
-      time: 0,
-      headroom: 1,
-      pinned: exposurePinnedToLens(view.lens),
-    }))
+    const sensor = createSensor(
+      renderer,
+      scene,
+      camera,
+      layout,
+      () => ({
+        lens: view.lens,
+        settings: DEFAULT_SENSOR_SETTINGS,
+        time: 0,
+        headroom: 1,
+        pinned: exposurePinnedToLens(view.lens),
+      }),
+      NO_MSAA,
+    )
     const stop = installPassTimeline(renderer)
     try {
       await volume.warm(renderer)

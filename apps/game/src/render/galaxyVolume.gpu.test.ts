@@ -23,11 +23,12 @@ import {
   GalaxyVolumeNode,
   GALAXY_SETTLE_SUBMISSIONS,
 } from './galaxyVolume.ts'
-import { createSensor, declareSceneTarget } from './sensor.ts'
+import { createSensor } from './sensor.ts'
 import { installToneCurve } from './tonemap.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { DEFAULT_PICTURE, type Picture } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -45,7 +46,7 @@ it.each([
     const renderer = gpu.renderer
     renderer.setSize(64, 64, false)
     renderer.outputColorSpace = LinearSRGBColorSpace
-    declareSceneTarget(renderer, { samples: 4, optics: true })
+    const layout = sceneLayout(picture, sceneBackend(renderer))
     installToneCurve(renderer, 1)
     const camera = new PerspectiveCamera(
       verticalFovDegrees(view.lens),
@@ -76,6 +77,7 @@ it.each([
       renderer,
       scene,
       camera,
+      layout,
       () => ({
         lens: view.lens,
         settings: DEFAULT_SENSOR_SETTINGS,
@@ -87,12 +89,16 @@ it.each([
     )
     try {
       await volume.warm(renderer)
-      await warmCompile(warmRenderer(renderer), {
+      await warmCompile(warmRenderer(renderer, layout), {
         object: backdrop,
         camera,
         scene,
       })
-      await warmCompile(warmRenderer(renderer), { object: body, camera, scene })
+      await warmCompile(warmRenderer(renderer, layout), {
+        object: body,
+        camera,
+        scene,
+      })
       await sensor.warm()
       const pipelines = gpu.pipelinesBuilt()
       body.visible = false

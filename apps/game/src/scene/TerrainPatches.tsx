@@ -84,7 +84,7 @@ export function TerrainPatches({
       units: 1,
       run: async (done) => {
         const dummy = groundDummy(material)
-        await warmCompile(warmRenderer(gl), {
+        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
           object: dummy,
           camera,
           scene: scene as Scene,
@@ -92,7 +92,7 @@ export function TerrainPatches({
         dummy.geometry.dispose()
       },
     })
-  }, [gl, camera, scene, material])
+  }, [engine, gl, camera, scene, material])
 
   useTimedFrame('terrainPatches', () => {
     const visibility = engine.visibilityProcessing

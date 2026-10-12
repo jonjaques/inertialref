@@ -80,7 +80,7 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
           const staged = stageFor(id)
           staged.firing.fill(1)
           staged.plumes.update(staged.firing, 1, 1)
-          await warmCompile(warmRenderer(gl), {
+          await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
             object: staged.plumes.group,
             camera,
             scene: scene as Scene,
@@ -90,7 +90,7 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
         done()
       },
     })
-  }, [gl, camera, scene, stageFor])
+  }, [engine, gl, camera, scene, stageFor])
 
   const mounted = useRef<string | null>(null)
 

@@ -39,7 +39,7 @@ export function WarpFx({ engine }: { engine: GameEngine }) {
       label: 'compiling the warp',
       units: 1,
       run: async (done) => {
-        await warmCompile(warmRenderer(gl), {
+        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
           object: fx.group,
           camera,
           scene: scene as Scene,
@@ -47,7 +47,7 @@ export function WarpFx({ engine }: { engine: GameEngine }) {
         done()
       },
     })
-  }, [fx, gl, camera, scene])
+  }, [engine, fx, gl, camera, scene])
 
   useTimedFrame('warpFx', () => {
     fx.update(camera as PerspectiveCamera, engine.cinematic)

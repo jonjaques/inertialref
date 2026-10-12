@@ -17,7 +17,7 @@ export function CinematicStage({ engine }: { engine: GameEngine }) {
       label: 'compiling the landing effects',
       units: 1,
       run: async (done) => {
-        await warmCompile(warmRenderer(gl), {
+        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
           object: effects.group,
           camera,
           scene: scene as Scene,
@@ -25,7 +25,7 @@ export function CinematicStage({ engine }: { engine: GameEngine }) {
         done()
       },
     })
-  }, [gl, camera, scene, effects])
+  }, [engine, gl, camera, scene, effects])
 
   useTimedFrame('cinematicStage', () => {
     // The sample goes through whole: the sky and the pad dust hang off the

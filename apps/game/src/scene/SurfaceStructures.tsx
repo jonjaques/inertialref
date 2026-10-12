@@ -52,7 +52,7 @@ export function SurfaceStructures({ engine }: { engine: GameEngine }) {
         for (const asset of assets) {
           const model = await loadSurfaceModel(asset, anisotropy)
           if (model !== null)
-            await warmCompile(warmRenderer(gl), {
+            await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
               object: model,
               camera,
               scene: scene as Scene,

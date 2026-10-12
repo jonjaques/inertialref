@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { Camera, Object3D, Scene } from 'three/webgpu'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneLayout } from './sceneLayout.ts'
+import { warmTargetFor } from './sensor.ts'
 import {
   type BootProgress,
   type WarmRenderer,
@@ -308,5 +311,21 @@ describe('the boot census', () => {
     expect(warmup.settled).toBe(false)
     await warmup.run()
     expect(warmup.settled).toBe(true)
+  })
+})
+
+describe('the stand-in a warm-up compiles against', () => {
+  it('is one per renderer and layout', () => {
+    // Per renderer because a stand-in a renderer has compiled against holds
+    // it — three's dispose listeners on the target close over the renderer —
+    // so one shared across renderers keeps every replaced one alive.
+    const layout = sceneLayout(DEFAULT_PICTURE, {
+      kind: 'webgpu',
+      reversedDepth: true,
+    })
+    const first = {}
+    const second = {}
+    expect(warmTargetFor(first, layout)).toBe(warmTargetFor(first, layout))
+    expect(warmTargetFor(second, layout)).not.toBe(warmTargetFor(first, layout))
   })
 })

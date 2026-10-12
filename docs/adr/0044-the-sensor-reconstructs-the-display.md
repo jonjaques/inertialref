@@ -39,8 +39,9 @@ WebGPU uses `reversedDepthBuffer` and a `FloatType` scene depth attachment.
 WebGL selects logarithmic depth before backend initialization. A standard
 float depth buffer over the 0.05 m to 10¹⁰ m camera range loses distant
 separation; reversing it preserves relative precision without a fragment depth
-write. `declareSceneTarget` carries the samples, formats and attachment layout
-to both the scene pass and the warm-up stand-in.
+write. `render/sceneLayout.ts` holds the samples, depth type and one row per
+attachment — name, channels, storage, blend — and the scene pass, the MRT node
+and the warm-up stand-in are each built from those rows.
 
 Depth convention also governs explicit depth writes and ordering. The scene's
 far depth is zero on reversed WebGPU and one on the logarithmic fallback;
