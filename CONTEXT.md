@@ -11213,6 +11213,46 @@ verdict's sentence — so nothing about the last account greets the next. The
 account-switch guard and the end-on-loss rule each fail their new case with
 the guard removed; neither had a test.
 
+## The drainage graph is prepared off the draw thread, and the producer was the first asker once in four (11 Oct 2026)
+
+The deepening plan proposed moving the GPU producer's pack off the draw thread,
+on the reasoning that its `surfaceKernel` call built a wet body's drainage
+graph — 50 to 110 ms cold in Node by ADR-0043 — synchronously. Measured first,
+under the V8 CPU profiler over CDP, dev build, 1600×900 at DPR 1, archive
+cleared, at Earth and at HIP 82724 IV (b:3, generated, wet): the browser build
+is 57 to 103 ms, and the producer was the first asker in one case of four. In
+the planetarium the site list built it, in a passive effect after the focus
+paints — a 94 ms build inside a 139 ms frame on Earth, 57 ms inside 158 ms on
+HIP 82724 IV — and the planetarium's boot at Earth built it 657 ms in, behind
+a cover that lifted at 4,358 ms. In flight the scatter field's one
+`drawnElevation` a frame built it the first frame the streamer walked Earth, a
+117 ms frame. Only on arriving at HIP 82724 IV in flight was it the producer,
+88 ms, asked by the orbital bake for ninety-six tiles the first frame the world
+was in view. A pack with the graph warm is 0.1 to 3.6 ms in Node, so moving the
+producer's pack alone would have fixed the case that mattered least.
+
+The floor search already built the graph — on its worker, because it samples
+the field — so the task became `universe.prepareSurface`, returning the floor
+and the graph, and `SurfacePreparation` seeds the draw thread's memo before
+publishing the floor. One preparation is shared: the streamer's floor, the GPU
+producer's requests (held inside the archive wrapper, because a stored tile
+needs no graph) and the site list all read it. The answer is cloned rather than
+transferred, because transferring detaches the arrays in the worker's own
+memo, which its next heightfield reads; Earth's graph is 3.2 MB and clones in
+about a millisecond. After, at the same four operating points: no build on the
+main thread in any, no frame over 50 ms through the Earth focus-and-descent or
+the Earth flight, and the two arrivals at HIP 82724 IV at 59 ms (flight) and
+53 and 65 ms (planetarium), which is the system load the arrival always cost.
+The price is the site list: it now fills 286 ms after focusing Earth and 163 ms
+after HIP 82724 IV, where it filled one frame after the click.
+
+A rig trap worth not repeating: an in-page probe that imports a module by its
+`/@fs/` path shares the app's instance only until the file is edited. Vite then
+serves it to the app with a `?t=` query, so the probe's import is a second
+instance with an empty memo and a counter at zero. The CPU profile matches by
+file name and was unaffected; restarting the dev server put the probe back on
+the app's instance.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

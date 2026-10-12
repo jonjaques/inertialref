@@ -18,7 +18,7 @@ import {
  * 43.3 ms frame the first time one of its hazes is seen. Nothing in it needs
  * the main thread; it reads only what the request carries and is the same
  * function wherever it runs. So it runs on the pool, the way
- * `universe.surfaceDetailFloor` does for the same reason.
+ * `universe.prepareSurface` does for the same reason.
  *
  * It is defined here rather than in `packages/workers` because it cannot be
  * defined there: `workers` and `rendering` are both layer 5, and the graph
@@ -29,7 +29,8 @@ import {
  *
  * The response carries arrays, not textures: a worker has no GPU, and the
  * half-float conversion and upload stay on the main thread in
- * `atmosphereLuts.ts`, which is the shape `surfaceDetailFloor`'s consumer has.
+ * `atmosphereLuts.ts`, which is the shape `universe.prepareSurface`'s consumer
+ * has.
  * Nothing here may import `three/webgpu` — this file is part of the worker
  * bundle.
  */

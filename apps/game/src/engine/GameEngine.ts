@@ -43,8 +43,10 @@ import {
 } from '@inertialref/simulation'
 import {
   type Body,
+  drains,
   type EntityId,
   findBody,
+  hasSolidSurface,
   MARS_PAD,
   parseAddress,
   type StarCatalog,
@@ -74,6 +76,7 @@ import {
   poolHeightfieldSource,
   type Heightfields,
   surveySkyTask,
+  SurfacePreparation,
   type WorkerFactory,
   WorkerPool,
 } from '@inertialref/workers'
@@ -331,6 +334,12 @@ export class GameEngine {
    * discarded.
    */
   readonly #archive: HeightfieldArchive | null
+  /**
+   * The one preparation of a body's ground on this thread: the streamer's
+   * floor, the GPU producer's hold and the site list's wait all read it, so
+   * a surface is prepared once whichever of them asks first.
+   */
+  readonly #preparation: SurfacePreparation
   /** Rolling per-frame samples for the performance overlay. */
   readonly metrics = new FrameMetrics()
 
@@ -1008,9 +1017,11 @@ export class GameEngine {
         : options.heightfieldArchive
     const pool = this.session.pool()
     const fallback = pool === null ? null : poolHeightfieldSource(pool)
+    this.#preparation = new SurfacePreparation(pool)
     this.#terrain = new TerrainStreamer(
       pool,
       fallback === null ? null : this.#archived(fallback),
+      this.#preparation,
     )
     /*
      * The level, forwarded across the worker boundary.
@@ -1090,8 +1101,36 @@ export class GameEngine {
    * `null` puts the pool back.
    */
   setHeightfieldSource(source: ArchivedSource | null): void {
+    /*
+     * Held until the surface is prepared, inside the archive: a stored tile
+     * needs no graph, and the producer's pack reads one. The orbital bake asks
+     * for ninety-six tiles the first frame a generated world is in view, and
+     * unheld, that pack builds the graph in the arrival frame.
+     */
     this.#terrain.heightfields.preferred =
-      source === null ? null : this.#archived(source)
+      source === null ? null : this.#archived(this.#preparation.holding(source))
+  }
+
+  /**
+   * Settles once the body at `address` can be read on this thread without
+   * building anything here, starting the preparation if nothing has.
+   *
+   * At once for an address with no loaded body, and for a body with no solid
+   * surface: the site list draws an empty state for both and reads no ground.
+   * At once for a body that does not drain, too: its graph is a null nothing
+   * builds, and the site list's own search is the whole cost of reading it.
+   *
+   * Asked again when the wait is canceled, because that is a replaced world:
+   * the address names a new body, and a load with the same seed changes
+   * neither of the site list's keys, so nothing else would ask.
+   */
+  async surfacePrepared(address: string): Promise<void> {
+    for (;;) {
+      const body = this.bodyFor(address)
+      if (body === null || !hasSolidSurface(body) || !drains(body.surface))
+        return
+      if ((await this.#preparation.whenPrepared(body.surface)) !== null) return
+    }
   }
 
   /** A source, answering from the archive first when there is one. */
@@ -1189,6 +1228,7 @@ export class GameEngine {
     this.#scene = null
     this.#generation += 1
     this.#terrain.clear()
+    this.#preparation.clear()
     log.info('world replaced, derived state dropped', {
       tick: this.world.clock.tick,
     })

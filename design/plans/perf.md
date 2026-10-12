@@ -230,25 +230,23 @@ a handful of atmospheres, against the same jump with the loop paced. The fix
 is a queue on this branch too, or the priority lane the survey section above
 finds no other use for.
 
-### The first tile of a wet body builds its drainage graph on the draw thread, unmeasured
+### Every pool worker builds a wet body's drainage graph for itself, unmeasured
 
-On a WebGPU page the tile producer packs a body's surface before its first
-dispatch, synchronously, inside `pump` in
-[`terrainProducer.ts`](../../apps/game/src/render/terrainProducer.ts):
-`surfaceKernel` builds the body's drainage graph and packs it for the kernel.
-Each thread builds a graph once per body and keeps up to twelve, so the cost
-lands once, in the frame whose request reaches the producer first.
-[ADR-0043](../../docs/adr/0043-the-rivers-drain.md) measures the build at
-**50 to 110 ms a body**, cold in Node. The browser figure is not measured, and
-neither is whether that frame is one a player is watching or one behind the
-boot cover or an arrival cut.
+The draw thread builds no graph: `SurfacePreparation` builds it on one
+worker and seeds the page's memo with the answer (the build log, 11 Oct 2026).
+The other workers still build their own, because each thread has its own memo
+and a heightfield task reads the field — on a WebGPU page for every tile deeper
+than the producer's ceiling, and under `?producer=cpu` for every tile. At the
+85 ms a worker run averaged in that session, eight workers is about 0.7 s of
+pool time per wet body, spent ahead of that body's first tiles. Nobody has
+measured whether it delays the ground a player sees.
 
-**The experiment that settles it.** A descent onto a wet body whose graph no
-thread has built — Earth, and a generated wet world — under `?timing=full`,
-reading the frame that carries the body's first GPU dispatch against the frame
-before it; then the same descent with the memo warm. If the stall is in a
-watched frame, [the deepening plan](arch-review.md) § 16 moves the build off the
-draw thread. If it is behind a cover or a cut, nothing needs to move.
+**The experiment that settles it.** A descent onto Earth with the archive
+cleared under `?producer=cpu` and `?timing=trace`, read with `pnpm timing
+--threads`: each worker's first `universe.generateHeightfield` run on the body
+against its later ones. If the first runs carry the build and the ground waits
+on them, seeding the workers from the preparation's answer is the change; if
+not, nothing moves.
 
 ## Boot
 

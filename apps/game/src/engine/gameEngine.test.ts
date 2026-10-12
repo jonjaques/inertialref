@@ -7,9 +7,12 @@ import {
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import { rootSeed } from '@inertialref/procedural'
 import {
+  drainageBuilds,
+  drains,
   generateHeightfield,
   regionAddress,
   surfaceGrammar,
+  surfaceKernel,
 } from '@inertialref/universe'
 import { HeightfieldArchive, type HeightfieldStore } from '@inertialref/workers'
 import { headlessEngine } from './headlessEngine.ts'
@@ -454,6 +457,100 @@ describe('the terrain archive, through the engine', () => {
         activity: null,
         storage: null,
       })
+    } finally {
+      game.dispose()
+    }
+  })
+})
+
+describe('a body’s ground, prepared off this thread', () => {
+  it('is read here only once a worker has prepared it', async () => {
+    /*
+     * The graph is 57 to 103 ms in the browser, and each reader of it on the
+     * draw thread is the first asker somewhere: the GPU producer's pack for the
+     * orbital bake on arriving at a generated world, the site list on focusing
+     * a body. Each waits for the preparation instead.
+     *
+     * The inline worker shares this thread's memo, so the graph is built here
+     * either way — inside the task. What the counter holds is that the readers
+     * build nothing themselves: they are not asked until the task has run.
+     */
+    const game = headlessEngine({ heightfieldArchive: null })
+    try {
+      const earth = game.bodyFor('g:milky-way/s:SOL/b:2')
+      if (earth === null) throw new Error('no Earth')
+      // A producer that packs the surface where the GPU producer does: on
+      // this thread, inside the first request for the body.
+      let packed: number | null = null
+      game.setHeightfieldSource({
+        kind: 'gpu',
+        archive: 'gpu:test',
+        available: true,
+        submit: (surface, request) => {
+          const before = drainageBuilds()
+          surfaceKernel(surface, request.seabed ?? false)
+          packed = drainageBuilds() - before
+          return {
+            id: 1,
+            result: Promise.resolve(generateHeightfield(surface, request)),
+            cancel() {},
+          }
+        },
+      })
+      const job = game.heightfields.submit(earth.surface, {
+        region: regionAddress(0, 2, 1, 1),
+        resolution: 9,
+        border: 1,
+        seabed: true,
+      })
+      expect(packed).toBeNull()
+      expect(await job?.result).not.toBeNull()
+      expect(packed).toBe(0)
+
+      // Titan, because a body asked about above is already prepared and the
+      // claim would hold vacuously.
+      const titan = 'g:milky-way/s:SOL/b:5.5'
+      await game.surfacePrepared(titan)
+      const before = drainageBuilds()
+      expect(game.harness.sites(titan).length).toBeGreaterThan(0)
+      expect(drainageBuilds()).toBe(before)
+    } finally {
+      game.dispose()
+    }
+  })
+
+  it('is asked about again when a replaced world cancels the wait', async () => {
+    /*
+     * The site list keys on the address and the seed, and a load with the
+     * same seed changes neither, so nothing re-runs it. A wait the replace
+     * cancels has to ask again by itself, or the Ground section stays empty
+     * until the camera moves.
+     */
+    const game = headlessEngine({ heightfieldArchive: null })
+    try {
+      const earth = 'g:milky-way/s:SOL/b:2'
+      const prepared = game.surfacePrepared(earth)
+      game.session.replaceWorld(game.world, null)
+      await prepared
+      // One preparation the replace canceled, and one asked for after it.
+      expect(game.session.pool()?.stats()).toMatchObject({
+        canceled: 1,
+        completed: 1,
+      })
+    } finally {
+      game.dispose()
+    }
+  })
+
+  it('does not wait on a body that does not drain', async () => {
+    const game = headlessEngine({ heightfieldArchive: null })
+    try {
+      const luna = game.bodyFor('g:milky-way/s:SOL/b:2.0')
+      if (luna === null) throw new Error('no Luna')
+      expect(drains(luna.surface)).toBe(false)
+      // Settled with no job: the site list's search is the whole cost.
+      await game.surfacePrepared('g:milky-way/s:SOL/b:2.0')
+      expect(game.session.pool()?.stats().completed).toBe(0)
     } finally {
       game.dispose()
     }

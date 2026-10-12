@@ -237,6 +237,14 @@ export class WorkerPool {
       worker.port.post({ kind: 'timing', level })
   }
 
+  /**
+   * Whether `terminate` has run. `submit` throws its invariant from then on,
+   * so a caller that submits on its own schedule asks this first.
+   */
+  get terminated(): boolean {
+    return this.#terminated
+  }
+
   stats(): PoolStats {
     return {
       workers: this.#workers.length,

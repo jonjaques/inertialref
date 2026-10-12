@@ -263,10 +263,11 @@ Read it beside `visited` or the other four will describe a frame that walked
 nothing.
 
 **A pooled streamer's first frame on a body selects nothing at all.** The
-subdivision floor is a worker answer — `surfaceDetailFloor` is 33–43 ms cold
-and used to be paid inside the arrival frame — so a body it has not measured
-yet has no ceiling to select against and the ground waits, the same way it
-waits for the heightfields themselves. `--wait` through it; a single frame
+subdivision floor is a worker answer — `universe.prepareSurface` is 33–43 ms of
+floor search cold, plus the drainage graph on a wet body, and a frame cannot
+carry either — so a body it has not prepared yet has no ceiling to select
+against and the ground waits, the same way it waits for the heightfields
+themselves. `--wait` through it; a single frame
 after `ir.visit` reports zeros for a reason that is not the gate above.
 
 ---

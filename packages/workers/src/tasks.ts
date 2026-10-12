@@ -8,6 +8,8 @@ import {
   type CellContext,
   type PopulationCoverage,
   createGalaxyField,
+  type DrainageGraph,
+  drainageGraph,
   selectPopulationSky,
   cellKey,
   NO_CATALOG,
@@ -448,43 +450,53 @@ export const poolHeightfieldSource = (pool: WorkerPool): ArchivedSource => ({
 })
 
 /** The surface on the wire, and the patch resolution the floor is measured at. */
-export interface SurfaceDetailFloorRequest {
+export interface PrepareSurfaceRequest {
   readonly surface: WireSurface
   readonly resolution: number
 }
 
-export const surfaceDetailFloorTask = defineTask<
-  SurfaceDetailFloorRequest,
-  { readonly level: number }
+/** What a thread needs before it can read a body's ground without stalling. */
+export interface PreparedSurface {
+  /** The region level past which a patch is an upsample of its parent. */
+  readonly level: number
+  /** The surface's drainage graph, null where nothing drains. */
+  readonly drainage: DrainageGraph | null
+}
+
+export const prepareSurfaceTask = defineTask<
+  PrepareSurfaceRequest,
+  PreparedSurface
 >({
   /*
-   * The level floor, off the arrival frame.
+   * A body's two cold costs, off the frame that first reads its ground.
    *
    * `surfaceDetailFloor` refines trial fields until the field stops selling
-   * detail, which is ~1,500 samples and 33-43 ms cold on the bodies measured
-   * here — and it is cold exactly once per body, in the frame the streamer
-   * first has that body underfoot. That was 85% of a 40 ms first-contact spike
-   * on Earth and of the 114 ms one on Proxima Centauri b, on the one frame a
-   * player is watching the ground arrive.
+   * detail, ~1,500 samples and 33-43 ms cold, and the field it samples carries
+   * the drainage graph, which is built on first read at 50 to 110 ms. Both are
+   * cold once per body per thread, and on the draw thread each lands in a
+   * frame a player is watching: the floor is 85% of a 40 ms first-contact
+   * spike on Earth and of a 114 ms one on Proxima Centauri b, and the graph is
+   * a 117 ms frame as Earth's ground arrives and a 139 ms one on focusing
+   * Earth in the planetarium.
    *
-   * Nothing in it needs the main thread; its own docstring said so. It reads
-   * only what the heightfield request already carries, and it is a pure
-   * function of that, so the answer is the same wherever it runs. The streamer
-   * holds the ground back for the frames it takes rather than blocking on it —
-   * which is what it already does for the heightfields themselves.
+   * One task rather than two because the floor search builds the graph on its
+   * way: the worker answering the floor already holds it, and returning it is
+   * a structured clone of a few megabytes, about a millisecond either side.
+   * Cloned rather than transferred, because this worker's memo keeps the
+   * arrays and its next heightfield reads them. Nothing in either needs the
+   * main thread; each is a pure function of the surface, so the answer is the
+   * same wherever it runs.
    */
-  name: 'universe.surfaceDetailFloor',
-  /*
-   * 2: the surface travels under `surface` as the heightfield task's does,
-   * for the reason given at that task's version 6.
-   */
-  version: 2,
+  name: 'universe.prepareSurface',
+  version: 1,
   run(payload) {
+    const surface = decodeSurface(payload.surface)
     return {
-      level: surfaceDetailFloor(
-        decodeSurface(payload.surface),
-        payload.resolution,
-      ),
+      // Asked for by name rather than read off the floor search's side
+      // effect: on a body whose stack runs no drainage stage the search never
+      // reads it, and `surveySites` and the packer still do.
+      drainage: drainageGraph(surface),
+      level: surfaceDetailFloor(surface, payload.resolution),
     }
   },
 })
@@ -627,7 +639,7 @@ export function createTaskRegistry(): TaskRegistry {
   registry.register(surveySkyTask)
   registry.register(generateHeightfieldTask)
   registry.register(surveySystemTask)
-  registry.register(surfaceDetailFloorTask)
+  registry.register(prepareSurfaceTask)
   registry.register(findWorldsTask)
   return registry
 }

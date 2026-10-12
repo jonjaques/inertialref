@@ -17,6 +17,12 @@ import { useEngine } from '../state/engineStore.ts'
  * `surveySites` memoizes per body, so every render after the first is a map
  * lookup and the effect returns the same array.
  *
+ * And it waits for the body's surface to be prepared first, because the
+ * search reads the field and the field on a wet body reads the drainage
+ * graph: built here, that is 57 to 103 ms more inside the frame the click
+ * landed in, the slowest of them a 139 ms frame on focusing Earth. A worker
+ * builds it instead, and the panel fills in when the worker answers.
+ *
  * The address comes from the observatory rather than from the mode's React
  * mirror of it, for the reason `useDossier` gives at length: every other route
  * to the camera — the console, a cutscene, a `?at=` restore — moves it without
@@ -72,13 +78,23 @@ export function useSurveySites(
       setBuilt({ of: null, seed: null, sites: [] })
       return
     }
-    try {
-      setBuilt({ of: address, seed, sites: engine.harness.sites(address) })
-    } catch {
-      // A star, an unloaded system, or a world a save replaced under us. An
-      // empty list is what the panel already draws an empty state for; throwing
-      // would take the whole overlay through the error boundary.
-      setBuilt({ of: address, seed, sites: [] })
+    // The answer is for the body the effect ran for. A click on another one
+    // while the worker prepares this one must not have this list land late
+    // under the next body's header.
+    let current = true
+    void engine.surfacePrepared(address).then(() => {
+      if (!current) return
+      try {
+        setBuilt({ of: address, seed, sites: engine.harness.sites(address) })
+      } catch {
+        // A star, an unloaded system, or a world a save replaced under us. An
+        // empty list is what the panel already draws an empty state for;
+        // throwing would take the whole overlay through the error boundary.
+        setBuilt({ of: address, seed, sites: [] })
+      }
+    })
+    return () => {
+      current = false
     }
   }, [engine, address, seed])
 
