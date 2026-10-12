@@ -11331,7 +11331,7 @@ for the private timer, keep the durations beside `ir.passes`, or ask upstream �
 Jon chose the second. The timeline takes `PassSource`s: the upscaler lends it
 its timer for a run, armed whatever the level and handed back at the level it
 found, and `ir.passes` reports the passes under `owned` as begin-to-end means,
-in neither `busyMs` nor `gaps`. At Tau Ceti Dusk, DPR 2, Temporal Quality they
+not in `busyMs` — the work itself is a gap on the timeline. At Tau Ceti Dusk, DPR 2, Temporal Quality they
 read reconstruct 0.66–0.69, exposure 0.11–0.15, shading change 0.48–0.53,
 accumulate 2.88–2.98 and RCAS 0.51–0.78 ms, eight samples a 60-frame run (the
 package's eight readback slots), while the gap the timeline sees where that work

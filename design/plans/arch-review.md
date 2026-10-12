@@ -236,10 +236,6 @@ request of its own; each belongs to the next change that opens its file.
 What those pull requests found and did not fix. None is a pull request of its
 own.
 
-- **`upscale.gpu.test.ts` flaked on three's timestamp figure.** The case
-  polled `renderer.info.render.timestamp` and read `0` about one run in two.
-  The figure went with `gpuTiming.ts` in 21, which found no reader of it, and
-  the file then passed ten runs of ten on this Mac through Dawn.
 - **Two galaxy passes are named and not measured.** `quadPass.gpu.test.ts`
   finds every optical pass and the volume's, rays and history by name;
   `galaxy structure` draws inside an asynchronous warm and `galaxy sky` behind

@@ -72,7 +72,9 @@ export interface PassTime {
  * reach. Reported beside the timeline's passes, not among them: the owner's
  * timer hands back only begin-to-end durations, with no timestamps to place
  * on the frame, so a pass here is a raw pair — latency on this machine, by the
- * argument at `summarize` — and is in neither `busyMs` nor `gaps`.
+ * argument at `summarize` — and is not in `busyMs`. The work itself falls in
+ * a gap between the timeline's passes, so adding these to `gaps` counts it
+ * twice.
  */
 export interface OwnedPassTime {
   /** Whose timer: `PassSource.name`. */
@@ -94,9 +96,14 @@ export interface OwnedSample {
  * A timer the timeline arms beside its own, for passes it cannot hook.
  *
  * `arm` runs before the measured frames and `disarm` after them; `disarm`
- * settles once the source's own readbacks have, and returns every duration
- * taken since `arm`. Either may throw without costing the measurement: rule
- * 65, a readout never stops the frame.
+ * settles once the source's own readbacks have, and returns the durations
+ * its timer resolved for frames drawn since `arm` — none from before it. A
+ * timer with a fixed set of query slots times at most that many frames of a
+ * run drawn back to back, the run's first: a slot frees only in its readback
+ * callback, which a synchronous loop of frames never yields to. The
+ * upscaler's has eight, and `OwnedPassTime.samples` says how many there were.
+ * Either may throw without costing the measurement: rule 65, a readout never
+ * stops the frame.
  */
 export interface PassSource {
   readonly name: string

@@ -2156,10 +2156,12 @@ export class GameHarness {
    * `scene after copy` row is the same pass resumed after the sea read the
    * frame behind it. `gaps` are the time between passes that none accounts
    * for: a copy, a raw WebGPU pass such as the upscaler's. The upscaler's own
-   * passes are in `owned`, timed by its own timer over the same frames and
-   * reported beside the rest as begin-to-end means. `wallMs` is the drained
-   * figure over the same frames, so `busyMs` can be checked against it. Null where the host has no device, no timestamps, or no presenting
-   * chain — the last is a case where `gpu()` still answers.
+   * passes are in `owned`, timed by its own timer over the run's first
+   * frames, as many as it has query slots, and reported beside the rest as
+   * begin-to-end means. `wallMs` is the drained figure over the same frames,
+   * so `busyMs` can be checked against it. Null where the host has no device,
+   * no timestamps, or no presenting chain — the last is a case where `gpu()`
+   * still answers.
    */
   async passes(frames?: number): Promise<PassReport | null> {
     return (await this.#host.render.measurePasses(frames)) ?? null

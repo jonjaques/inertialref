@@ -29,7 +29,9 @@ export interface PassReport {
   /**
    * Passes timed by their owner's own timer, beside the rest: the upscaler's,
    * which run outside the renderer's hooks. Begin-to-end means, so latency
-   * rather than cost, and counted in neither `busyMs` nor `gaps`.
+   * rather than cost, over as many frames as the owner's timer has slots —
+   * `samples` says how many. Not counted in `busyMs`; the work falls in one
+   * of `gaps`, so adding the two counts it twice.
    */
   readonly owned: readonly {
     readonly source: string

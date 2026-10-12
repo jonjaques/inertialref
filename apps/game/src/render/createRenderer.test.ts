@@ -151,8 +151,9 @@ it('uses a capable WebGL fallback in standard output', async () => {
   expect(renderer.setTransparentSort).toHaveBeenCalledExactlyOnceWith(
     expect.any(Function),
   )
-  // Three's own timestamp tracking is off from construction and nothing turns
-  // it on: `ir.passes` times every pass with a query set of its own.
+  // Three's own timestamp tracking is off from construction, the option its
+  // backend reads once at init: `ir.passes` times every pass with a query set
+  // of its own.
   expect(renderer.options.trackTimestamp).toBe(false)
   expect(mock.failure).not.toHaveBeenCalled()
 })
