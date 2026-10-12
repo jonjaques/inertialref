@@ -1,5 +1,4 @@
-import type { Picture } from './picture.ts'
-import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { resolvePicture, type Picture } from './picture.ts'
 import { getLogger } from '@inertialref/shared'
 import { runtimeFailure } from '../runtimeFailure.ts'
 import {
@@ -243,8 +242,6 @@ async function buildRenderer(
       }
     }
     stopValidation = watchRendererValidation(renderer, report)
-    // Resolved by the layout, as the sensor and the warm-up read it.
-    const resolvedPicture = sceneLayout(picture, sceneBackend(renderer)).picture
 
     /*
      * Clear to *opaque* black. The default clear alpha is 0, and on the
@@ -298,7 +295,7 @@ async function buildRenderer(
       output: mode,
       headroom,
       preference,
-      picture: resolvedPicture,
+      picture: resolvePicture(picture, backend),
       dynamicRangeHigh: capability.dynamicRangeHigh,
       extendedCanvas: capability.extendedCanvas,
     })

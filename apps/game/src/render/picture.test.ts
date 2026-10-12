@@ -17,6 +17,7 @@ import {
   pictureUpscales,
   renderSize,
   resolvePicture,
+  type Picture,
 } from './picture.ts'
 
 describe('the picture record', () => {
@@ -196,15 +197,60 @@ describe('the render grid', () => {
     )
   })
 
+  it('draws a 2560 × 1440 display at the sizes the scale table names', () => {
+    // Worked by hand from the table, not from the function: a property that
+    // restates `renderSize` fails on an edit and never on a wrong answer.
+    const sizes: Record<Picture['scale'], readonly [number, number]> = {
+      native: [2560, 1440],
+      quality: [1706, 960],
+      balanced: [1505, 847],
+      performance: [1280, 720],
+      ultra: [853, 480],
+    }
+    for (const scale of PICTURE_SCALES) {
+      const { render } = pictureDimensions(
+        { ...DEFAULT_PICTURE, aa: 'temporal', scale },
+        2560,
+        1440,
+      )
+      expect([render.width, render.height]).toEqual(sizes[scale])
+    }
+    // Supersampling draws twice the display along each axis and reports the
+    // display it was asked for.
+    expect(
+      pictureDimensions(
+        { ...DEFAULT_PICTURE, aa: 'supersample', scale: 'native' },
+        2560,
+        1440,
+      ),
+    ).toEqual({
+      display: { width: 2560, height: 1440 },
+      render: { width: 5120, height: 2880 },
+    })
+  })
+
   it('upscales exactly the resolved pictures that draw below the display', () => {
+    const upscales = (aa: Picture['aa'], scale: Picture['scale']) =>
+      pictureUpscales(
+        resolvePicture({ aa, scale, sharpness: 'standard' }, 'webgpu'),
+      )
+    // Reconstruction at the display's own size, and a reduced scale under
+    // any anti-aliasing: both draw below what is presented.
+    expect(upscales('temporal', 'native')).toBe(true)
+    expect(upscales('off', 'performance')).toBe(true)
+    expect(upscales('msaa', 'quality')).toBe(true)
+    // A native picture without reconstruction draws the display itself.
+    expect(upscales('off', 'native')).toBe(false)
+    expect(upscales('msaa', 'native')).toBe(false)
+    expect(upscales('supersample', 'native')).toBe(false)
+    // A WebGL renderer has no upscaler, and resolution says so.
     for (const aa of PICTURE_AA) {
       for (const scale of PICTURE_SCALES) {
-        const picture = { aa, scale, sharpness: 'standard' } as const
-        expect(pictureUpscales(resolvePicture(picture, 'webgpu'))).toBe(
-          aa === 'temporal' || scale !== 'native',
-        )
-        // A WebGL renderer has no upscaler, and resolution says so.
-        expect(pictureUpscales(resolvePicture(picture, 'webgl'))).toBe(false)
+        expect(
+          pictureUpscales(
+            resolvePicture({ aa, scale, sharpness: 'standard' }, 'webgl'),
+          ),
+        ).toBe(false)
       }
     }
   })

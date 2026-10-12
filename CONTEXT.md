@@ -11291,14 +11291,19 @@ under-filter. Plates at 1600×900 under `?picture=off:performance:off` (spatial,
 `r = 2`), with the angle multiplied by `r` in a scratch edit against the tree:
 27 px apart at `earthrise` (the Moon, sun 24°), 5,795 at `tau-ceti-dusk`
 (generated, sun 5°) where two boots of the unchanged build differed by 56,267,
-and crops nobody could tell apart. The angle stays; what landed is the rest of 18. `renderSize` is three's own expression for the pass's extent,
+and crops nobody could tell apart. The angle stays; what landed is the rest
+of 18. `renderSize` is three's own expression for the pass's extent,
 `floor(w · (1 / r))` from `PassNode.setSize`, so the upscaler's input and the
 pass's target are one formula rather than two that agree by the floats; a Node
 test sizes a real `PassNode` against it at every ratio, and found that a buffer
 narrower than the ratio gives the pass a target 0 across where `renderSize`
-holds one. The resolved picture rides on the scene layout, so `createSensor`,
-`Sensor.tsx` and `createRenderer` no longer each resolve it, and "does this
-picture upscale" is `pictureUpscales`.
+holds one. The resolved picture rides on the scene layout, which `createSensor`
+reads and `Sensor.tsx` checks its own picture against, and "does this picture
+upscale" is `pictureUpscales`, which the Graphics panel asks as well. The
+layout's intern key is every field of `Picture` by a list the compiler holds to
+its keys, and the warm-up's stand-ins are keyed on each row's format as well as
+its name: both carried three hand-listed terms that matched the rows only
+today.
 
 A dev-server trap met on the way: after a dozen edits, a live picture change
 threw `ReferenceError: pictureUpscales is not defined` from a module the
