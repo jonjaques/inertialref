@@ -31,6 +31,11 @@ function recorder() {
     setRenderTarget: (next: RenderTarget) => {
       target = next
     },
+    // What the quad-pass runner reads and puts back besides the target.
+    getActiveCubeFace: () => 0,
+    getActiveMipmapLevel: () => 0,
+    getScissorTest: () => false,
+    setScissorTest: () => {},
     getMRT: () => mrt,
     setMRT: (next: object | null) => {
       mrt = next

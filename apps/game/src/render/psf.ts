@@ -1,3 +1,4 @@
+import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass, type WarmPass } from './warmup.ts'
 import { psfWeights } from '@inertialref/rendering'
 import {
@@ -19,6 +20,14 @@ import { passTexture, texture, uniform, uv, vec2, vec4 } from 'three/tsl'
 
 const LEVELS = 6
 const PASSES = LEVELS * 2
+/** The timeline's name for each pass: down the pyramid, back up, and the resolve. */
+const LABELS = Array.from({ length: PASSES }, (_, i) =>
+  i < LEVELS
+    ? `psf down ${i}`
+    : i < PASSES - 1
+      ? `psf up ${i - LEVELS}`
+      : 'psf resolve',
+)
 const TAPS = [
   [0, 0, 0.125],
   [-2, -2, 0.03125],
@@ -150,23 +159,18 @@ export class PsfNode extends TempNode<'vec4'> {
     if (this.#disposed) return
     if (renderer === null) return
     this.inputNode.value = this.sourceNode.value
-    const previous = renderer.getRenderTarget()
-    const autoClear = renderer.autoClear
     const size = renderer.getDrawingBufferSize(this.#size)
     let width = size.x
     let height = size.y
     this.#stages[PASSES - 1]!.target.setSize(width, height)
-    renderer.autoClear = true
-    try {
+    runQuadPasses(renderer, this.#quad, { autoClear: true }, (draw) => {
       for (let i = 0; i < LEVELS; i += 1) {
         this.steps[i]!.value.set(1 / width, 1 / height)
         width = Math.max(1, Math.floor(width / 2))
         height = Math.max(1, Math.floor(height / 2))
         const target = this.#stages[i]!.target
         target.setSize(width, height)
-        renderer.setRenderTarget(target)
-        this.#quad.material = this.#stages[i]!.material
-        this.#quad.render(renderer)
+        draw(LABELS[i]!, target, this.#stages[i]!.material)
       }
       for (let i = LEVELS - 2; i >= 0; i -= 1) {
         const index = LEVELS + LEVELS - 2 - i
@@ -181,22 +185,16 @@ export class PsfNode extends TempNode<'vec4'> {
           this.#stages[i]!.target.width,
           this.#stages[i]!.target.height,
         )
-        renderer.setRenderTarget(target)
-        this.#quad.material = this.#stages[index]!.material
-        this.#quad.render(renderer)
+        draw(LABELS[index]!, target, this.#stages[index]!.material)
       }
-      renderer.setRenderTarget(this.#stages[PASSES - 1]!.target)
       this.upSteps[LEVELS - 1]!.value.set(
         1 / this.#stages[0]!.target.width,
         1 / this.#stages[0]!.target.height,
       )
       this.directNode.value = this.inputNode.value
-      this.#quad.material = this.#stages[PASSES - 1]!.material
-      this.#quad.render(renderer)
-    } finally {
-      renderer.autoClear = autoClear
-      renderer.setRenderTarget(previous)
-    }
+      const resolve = this.#stages[PASSES - 1]!
+      draw(LABELS[PASSES - 1]!, resolve.target, resolve.material)
+    })
   }
 
   override dispose(): void {

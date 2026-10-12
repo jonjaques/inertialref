@@ -1,4 +1,4 @@
-import { namePass } from './passTimeline.ts'
+import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass, type WarmPass } from './warmup.ts'
 import { GLASS_PRESETS, type Glass } from '@inertialref/rendering'
 import {
@@ -28,6 +28,9 @@ import {
   vec2,
   vec4,
 } from 'three/tsl'
+
+/** The timeline's name for each of the four passes. */
+const LABELS = ['defocus 0', 'defocus 1', 'defocus 2', 'defocus 3']
 
 /** A deterministic equal-area iris sample; the outer ring describes the blades. */
 export function irisPattern(
@@ -168,9 +171,8 @@ export class DefocusNode extends TempNode<'vec4'> {
     )
     const color = mix(base, near.rgb.div(max(near.a, float(1e-6))), nearOpacity)
     this.#stages[3]!.material.fragmentNode = vec4(color, 1).context(context)
-    this.#stages.forEach(({ material, target }, i) => {
+    this.#stages.forEach(({ material }, i) => {
       material.name = `Sensor Defocus ${i}`
-      namePass(target, `defocus ${i}`)
     })
     this.#smallGathers.forEach(({ material }, i) => {
       material.name = `Sensor Defocus ${i + 1} small`
@@ -200,27 +202,25 @@ export class DefocusNode extends TempNode<'vec4'> {
     if (renderer === null || this.enabled.value < 0.5) return
     this.samples = this.maximum.value <= 4 ? 12 : 48
     this.#sampleCount.value = this.samples
-    const previous = renderer.getRenderTarget()
     const size = renderer.getDrawingBufferSize(this.#size)
     this.pixelStep.value.set(1 / size.x, 1 / size.y)
-    try {
+    runQuadPasses(renderer, this.#quad, {}, (draw) => {
       for (let i = 0; i < 4; i += 1) {
         const target = this.#stages[i]!.target
         target.setSize(
           i === 3 ? size.x : Math.max(1, Math.ceil(size.x / 2)),
           i === 3 ? size.y : Math.max(1, Math.ceil(size.y / 2)),
         )
-        renderer.setRenderTarget(target)
-        this.#quad.material =
+        draw(
+          LABELS[i]!,
+          target,
           this.samples === 12 && (i === 1 || i === 2)
             ? this.#smallGathers[i - 1]!.material
-            : this.#stages[i]!.material
-        this.#quad.render(renderer)
+            : this.#stages[i]!.material,
+        )
         this.passes += 1
       }
-    } finally {
-      renderer.setRenderTarget(previous)
-    }
+    })
   }
 
   override dispose(): void {

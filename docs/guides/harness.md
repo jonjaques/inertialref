@@ -632,8 +632,12 @@ await ir.passes(40) // the same frames, by named pass
 `ir.passes` holds the loop, submits the frames through the presenting chain
 with a timestamp pair on every pass three encodes, and names each pass by its
 target: `scene` is the sensor's pass, `scene after copy` is the same pass
-resumed after the sea read the frame behind it, `defocus 0`–`3` and
-`Sensor PSF n` are the optics, `canvas` is the output. It returns `wallMs` —
+resumed after the sea read the frame behind it, `defocus 0`–`3`,
+`motion tile max`, `motion neighbor max`, `motion blur`, `psf down 0`–`5`,
+`psf up 0`–`4` and `psf resolve` are the optics, `galaxy volume`,
+`galaxy rays`, `galaxy history`, `galaxy structure` and `galaxy sky` are the
+galaxy's, and `canvas` is the output. Every quad pass is named where it draws,
+by `runQuadPasses` in `render/quadPass.ts`. It returns `wallMs` —
 `ir.gpu()`'s figure over the same frames — beside `busyMs`, the passes' shares
 summed, and the two agree within 2% at the shore; a larger disagreement is time
 in work the timeline does not see, such as the upscaler's own passes, which

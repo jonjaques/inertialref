@@ -1,9 +1,8 @@
+import { runQuadPasses } from './quadPass.ts'
 import {
-  ColorManagement,
   HalfFloatType,
   LinearFilter,
   NodeMaterial,
-  NoToneMapping,
   QuadMesh,
   RenderTarget,
   Vector2,
@@ -276,44 +275,30 @@ export class GalaxyTemporalVolume {
     const half = Math.tan(verticalFov(lens) / 2)
     this.#plane.value.set((half * width) / height, half)
     this.#angle.value = verticalFov(lens) / height
-    const heldTarget = renderer.getRenderTarget(),
-      mrt = renderer.getMRT(),
-      tone = renderer.toneMapping,
-      color = renderer.outputColorSpace,
-      clear = renderer.autoClear
-    try {
-      renderer.setMRT(null)
-      renderer.toneMapping = NoToneMapping
-      renderer.outputColorSpace = ColorManagement.workingColorSpace
-      renderer.autoClear = true
-      this.#quad.material = this.#rayMaterial
-      renderer.setRenderTarget(this.#rays)
-      this.#quad.render(renderer)
-      this.#previousMap.value = this.#history[this.#slot]!.texture
-      const next = 1 - this.#slot
-      this.#quad.material = this.#resolveMaterial
-      renderer.setRenderTarget(this.#history[next]!)
-      this.#quad.render(renderer)
-      this.#outputMap.value = this.#history[next]!.texture
-      this.#slot = next
-      this.#refreshed++
-      this.#phaseIndex = (this.#phaseIndex + 1) % (this.stride * this.stride)
-      this.#drawnPose = {
-        position: { ...pose.position },
-        orientation: { ...pose.orientation },
-      }
-      this.#drawnVersion = this.#version
-      this.#previousRight.value.copy(this.#right.value)
-      this.#previousUp.value.copy(this.#up.value)
-      this.#previousForward.value.copy(this.#forward.value)
-      this.#previousPlane.value.copy(this.#plane.value)
-    } finally {
-      renderer.setRenderTarget(heldTarget)
-      renderer.setMRT(mrt)
-      renderer.toneMapping = tone
-      renderer.outputColorSpace = color
-      renderer.autoClear = clear
-    }
+    runQuadPasses(
+      renderer,
+      this.#quad,
+      { linear: true, autoClear: true },
+      (draw) => {
+        draw('galaxy rays', this.#rays, this.#rayMaterial)
+        this.#previousMap.value = this.#history[this.#slot]!.texture
+        const next = 1 - this.#slot
+        draw('galaxy history', this.#history[next]!, this.#resolveMaterial)
+        this.#outputMap.value = this.#history[next]!.texture
+        this.#slot = next
+        this.#refreshed++
+        this.#phaseIndex = (this.#phaseIndex + 1) % (this.stride * this.stride)
+        this.#drawnPose = {
+          position: { ...pose.position },
+          orientation: { ...pose.orientation },
+        }
+        this.#drawnVersion = this.#version
+        this.#previousRight.value.copy(this.#right.value)
+        this.#previousUp.value.copy(this.#up.value)
+        this.#previousForward.value.copy(this.#forward.value)
+        this.#previousPlane.value.copy(this.#plane.value)
+      },
+    )
     return true
   }
   dispose(): void {
