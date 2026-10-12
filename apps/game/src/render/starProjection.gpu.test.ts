@@ -20,6 +20,8 @@ import { createStarProjection } from './starProjection.ts'
 import { createStarfieldMaterial } from './materials.ts'
 import { sensorMrt } from './sensorMrt.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -225,7 +227,9 @@ it('keeps paused and rebased sprites still while reporting observer and star mot
   scene.add(sprite)
   const camera = new PerspectiveCamera(60, 1, 0.1, 1e9)
   const scenePass = pass(scene, camera)
-  scenePass.setMRT(sensorMrt())
+  scenePass.setMRT(
+    sensorMrt(sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer))),
+  )
   const motion = scenePass.getTextureNode('motion')
   const history = (
     gpu.renderer as unknown as { _nodes: { nodeFrame: { frameId: number } } }

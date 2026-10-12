@@ -23,13 +23,18 @@ import {
 } from 'three/webgpu'
 import { nodeObject, pass, texture, uv, vec4 } from 'three/tsl'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
-import { createSensor, declareSceneTarget } from './sensor.ts'
+import { createSensor } from './sensor.ts'
 import { sensorRadiance } from './radiance.ts'
 import { sensorSignature } from './signature.ts'
 import { installToneCurve } from './tonemap.ts'
 import { sensorMrt } from './sensorMrt.ts'
 import { DefocusNode } from './defocus.ts'
 import { createStarfieldMaterial } from './materials.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+
+/** The production picture with its four samples off, for a pass read back directly. */
+const NO_MSAA = { ...DEFAULT_PICTURE, aa: 'off' } as const
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -50,7 +55,9 @@ it('measures a star at its instance position instead of the sprite quad', async 
   const scene = new Scene()
   scene.add(star)
   const scenePass = pass(scene, camera)
-  scenePass.setMRT(sensorMrt())
+  scenePass.setMRT(
+    sensorMrt(sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer))),
+  )
   const motion = scenePass.getTextureNode('motion')
   const history = (
     gpu.renderer as unknown as { _nodes: { nodeFrame: { frameId: number } } }
@@ -96,7 +103,9 @@ it('keeps a surface’s depth in the motion attachment under an overlay quad', a
   overlay.renderOrder = 1
   scene.add(overlay)
   const scenePass = pass(scene, camera)
-  scenePass.setMRT(sensorMrt())
+  scenePass.setMRT(
+    sensorMrt(sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer))),
+  )
   const motion = scenePass.getTextureNode('motion')
   try {
     const drawn = await gpu.drawGraph(motion, { float: true })
@@ -117,7 +126,7 @@ it('draws one scene per full sensor frame, warms every pass, and holds a paused 
   const renderer = gpu.renderer
   installToneCurve(renderer, 1)
   renderer.outputColorSpace = LinearSRGBColorSpace
-  declareSceneTarget(renderer, { samples: 0, optics: true })
+  const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
   const camera = new PerspectiveCamera(65, 1, 0.01, 100)
   camera.position.z = 2
   const scene = new Scene()
@@ -130,14 +139,21 @@ it('draws one scene per full sensor frame, warms every pass, and holds a paused 
     draws += 1
   }
   let time = 0
-  const sensor = createSensor(renderer, scene, camera, () => ({
-    lens: LENS_PRESETS.flight,
-    settings: DEFAULT_SENSOR_SETTINGS,
-    time,
-    pinned: 0,
-    headroom: 1,
-    motionBlur: true,
-  }))
+  const sensor = createSensor(
+    renderer,
+    scene,
+    camera,
+    layout,
+    () => ({
+      lens: LENS_PRESETS.flight,
+      settings: DEFAULT_SENSOR_SETTINGS,
+      time,
+      pinned: 0,
+      headroom: 1,
+      motionBlur: true,
+    }),
+    NO_MSAA,
+  )
   const target = new RenderTarget(128, 128, {
     type: FloatType,
     depthBuffer: false,
@@ -266,7 +282,9 @@ it('gives a stationary prop zero velocity across a camera-relative rebase', asyn
   const plane = new Mesh(new PlaneGeometry(2, 2), new MeshBasicNodeMaterial())
   scene.add(plane)
   const scenePass = pass(scene, camera)
-  scenePass.setMRT(sensorMrt())
+  scenePass.setMRT(
+    sensorMrt(sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer))),
+  )
   const data = scenePass.getTextureNode('motion')
   // The headless renderer has no rAF; this advances three's own history clock.
   const history = (

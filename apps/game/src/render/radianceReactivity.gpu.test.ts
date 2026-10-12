@@ -12,6 +12,14 @@ import { float, texture, vec3, vec4 } from 'three/tsl'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { createSensor } from './sensor.ts'
 import { sensorRadiance } from './radiance.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+
+/** A temporal picture at native scale: the reactive row exists, nothing rescales. */
+const TEMPORAL = {
+  aa: 'temporal',
+  scale: 'native',
+  sharpness: 'off',
+} as const
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -47,11 +55,14 @@ it.each([
       type: FloatType,
       depthBuffer: false,
     })
-    const sensor = createSensor(gpu.renderer, scene, camera, undefined, {
-      aa: 'temporal',
-      scale: 'native',
-      sharpness: 'off',
-    })
+    const sensor = createSensor(
+      gpu.renderer,
+      scene,
+      camera,
+      sceneLayout(TEMPORAL, sceneBackend(gpu.renderer)),
+      undefined,
+      TEMPORAL,
+    )
     try {
       sensor.render(target)
       await gpu.read(target)
@@ -96,11 +107,14 @@ it('replaces hidden background reactivity and combines translucent coverage', as
     type: FloatType,
     depthBuffer: false,
   })
-  const sensor = createSensor(gpu.renderer, scene, camera, undefined, {
-    aa: 'temporal',
-    scale: 'native',
-    sharpness: 'off',
-  })
+  const sensor = createSensor(
+    gpu.renderer,
+    scene,
+    camera,
+    sceneLayout(TEMPORAL, sceneBackend(gpu.renderer)),
+    undefined,
+    TEMPORAL,
+  )
   const coverage = async () => {
     sensor.render(target)
     await gpu.read(target)

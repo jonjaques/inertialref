@@ -163,7 +163,7 @@ export function ScatterRocks({
         // objects over two arrays exactly as the real geometry above, and the
         // instanced program rather than the patches' — see `groundDummy`.
         const dummy = groundDummy(material, INSTANCE_CAPACITY)
-        await warmCompile(warmRenderer(gl), {
+        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
           object: dummy,
           camera,
           scene: scene as Scene,
@@ -171,7 +171,7 @@ export function ScatterRocks({
         dummy.geometry.dispose()
       },
     })
-  }, [gl, camera, scene, material])
+  }, [engine, gl, camera, scene, material])
 
   useTimedFrame('scatterRocks', () => {
     const container = group.current

@@ -7,6 +7,7 @@ import {
   createAstronautAnimation,
   type AstronautMotion,
 } from './astronautAnimation.ts'
+import type { SceneLayout } from './sceneLayout.ts'
 import { rebuildMaterials } from './shipMaterial.ts'
 
 export interface AstronautView extends AstronautMotion {
@@ -19,6 +20,8 @@ export interface AstronautView extends AstronautMotion {
 export interface AstronautSource {
   readonly characterViews: readonly (AstronautView & { readonly id: string })[]
   readonly world: { readonly clock: { readonly renderTime: number } }
+  /** What the suit's pipelines are compiled against. `GameEngine.sceneLayout`. */
+  sceneLayout(renderer: object): SceneLayout
 }
 
 export interface LoadedAstronaut {

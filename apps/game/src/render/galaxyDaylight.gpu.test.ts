@@ -22,11 +22,13 @@ import {
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import { createGalaxyBackdrop, GalaxyVolumeNode } from './galaxyVolume.ts'
-import { createSensor, declareSceneTarget } from './sensor.ts'
+import { createSensor } from './sensor.ts'
 import { sensorRadiance } from './radiance.ts'
 import { installToneCurve } from './tonemap.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -40,7 +42,7 @@ it.each([1, 0])(
     const { renderer } = gpu
     renderer.setSize(96, 96, false)
     renderer.outputColorSpace = SRGBColorSpace
-    declareSceneTarget(renderer, { samples: 4, optics: true })
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
     installToneCurve(renderer, 1)
     const lens = {
       ...GALAXY_VIEWS['edge-on'].lens,
@@ -69,7 +71,7 @@ it.each([1, 0])(
       depthBuffer: false,
     })
     let pinned: number | null = 0
-    const sensor = createSensor(renderer, scene, camera, () => ({
+    const sensor = createSensor(renderer, scene, camera, layout, () => ({
       lens,
       settings: DEFAULT_SENSOR_SETTINGS,
       time: 0,
@@ -80,7 +82,11 @@ it.each([1, 0])(
     try {
       await volume.warm(renderer)
       for (const object of [backdrop, body])
-        await warmCompile(warmRenderer(renderer), { object, camera, scene })
+        await warmCompile(warmRenderer(renderer, layout), {
+          object,
+          camera,
+          scene,
+        })
       await sensor.warm()
       for (const yaw of [-Math.PI / 2, 0, Math.PI / 2]) {
         volume.configure(

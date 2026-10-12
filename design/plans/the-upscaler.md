@@ -33,7 +33,9 @@ Widening the attachment to RGBA16F costs 4 B/px over a full-resolution target
 resolution, and a re-measurement of both presets at both display ratios.
 Reading the already-masked `motion.rg` when optics are on costs nothing and
 removes an attachment, but leaves the optics-off temporal path needing its own
-answer.
+answer. Either is a change to the `velocity` row of `render/sceneLayout.ts`,
+and the layout's test refuses the mirror Dawn refuses: a blend that reads alpha
+on a row with fewer than four channels.
 
 The defect is stated by a GPU probe: a temporal sensor, a 40 × 40 surface at
 z = −4 through `sensorRadiance`, a 0.5 × 0.5 overlay at z = −2 that travels

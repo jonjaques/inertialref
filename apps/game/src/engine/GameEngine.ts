@@ -9,6 +9,12 @@ import type {
   GuideHostPort,
 } from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
+import { DEFAULT_PICTURE, type Picture } from '../render/picture.ts'
+import {
+  sceneBackend,
+  sceneLayout,
+  type SceneLayout,
+} from '../render/sceneLayout.ts'
 import { CharacterController } from './characterController.ts'
 import type { CharacterView } from './characterView.ts'
 import { resolveFrameOwner } from './frameOwner.ts'
@@ -576,6 +582,27 @@ export class GameEngine {
    * The place to spend on sharper terrain is `cellPixels`.
    */
   supersample = 1
+
+  /**
+   * The picture preference, or the page's `?picture=` over it, bound by
+   * `state/engineKnobs.ts` beside `supersample`.
+   */
+  picture: Picture = DEFAULT_PICTURE
+
+  /**
+   * What the scene pass draws into on `renderer`, for this engine's picture.
+   *
+   * The one answer the sensor's pass and every warm-up read, so a pipeline
+   * compiled ahead is the one the first frame draws with. A function of the
+   * renderer rather than a field because the renderer is replaced when the
+   * output preference remounts the canvas, and of the picture, which the
+   * knob writes the moment the preference changes — before the sensor that
+   * follows the same preference rebuilds. `render/sceneLayout.ts` holds the
+   * rows.
+   */
+  sceneLayout(renderer: object): SceneLayout {
+    return sceneLayout(this.picture, sceneBackend(renderer))
+  }
 
   /**
    * How many *display* pixels one CSS pixel is, written by the shell.

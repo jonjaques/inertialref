@@ -38,7 +38,7 @@ export function AstronautModel({ engine }: { engine: AstronautSource }) {
     // so the warm covers the first suit and a second compiles on first sight.
     const pending = loadAstronaut(anisotropy).then(async (loaded) => {
       if (loaded !== null && mounted) {
-        await warmCompile(warmRenderer(gl), {
+        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
           object: loaded.group,
           camera,
           scene: scene as Scene,
@@ -63,7 +63,7 @@ export function AstronautModel({ engine }: { engine: AstronautSource }) {
       }
       instances.clear()
     }
-  }, [anisotropy, gl, camera, scene, instances, root])
+  }, [engine, anisotropy, gl, camera, scene, instances, root])
 
   useTimedFrame('astronaut', () => {
     const time = engine.world.clock.renderTime

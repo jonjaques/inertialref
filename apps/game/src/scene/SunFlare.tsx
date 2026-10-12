@@ -30,7 +30,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       label: 'compiling the solar lens',
       units: 1,
       run: async (done) => {
-        await warmCompile(warmRenderer(gl), {
+        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
           object: flare.group,
           camera,
           scene: scene as Scene,
@@ -38,7 +38,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
         done()
       },
     })
-  }, [flare, gl, camera, scene])
+  }, [engine, flare, gl, camera, scene])
 
   useTimedFrame('sunFlare', () => {
     const scene = engine.scene()

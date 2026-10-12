@@ -17,9 +17,14 @@ import {
 import { positionLocal, vec3 } from 'three/tsl'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createStarfieldMaterial, createStarMaterial } from './materials.ts'
-import { createSensor, declareSceneTarget } from './sensor.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { createSensor } from './sensor.ts'
 import { installToneCurve } from './tonemap.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
+
+/** The production picture with its four samples off, for a pass read back directly. */
+const NO_MSAA = { ...DEFAULT_PICTURE, aa: 'off' } as const
 
 /*
  * The spine's gate, headless.
@@ -105,7 +110,7 @@ describe('the spine', () => {
   it('draws the frame the renderer draws for itself, at headroom 1', async () => {
     const { renderer } = gpu
     installToneCurve(renderer, 1)
-    declareSceneTarget(renderer, { samples: 0 })
+    const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
     const scene = stagedScene()
 
     const own = floatTarget()
@@ -127,7 +132,14 @@ describe('the spine', () => {
      * for the pass's alpha: 2,412 of 9,216 at alpha 1, worst channel 0.934.
      */
     const chain = floatTarget()
-    const sensor = createSensor(renderer, scene, camera)
+    const sensor = createSensor(
+      renderer,
+      scene,
+      camera,
+      layout,
+      undefined,
+      NO_MSAA,
+    )
     const clearAlpha = renderer.getClearAlpha()
     renderer.setClearAlpha(0)
     try {
@@ -169,7 +181,7 @@ describe('the spine', () => {
     const { renderer } = gpu
     installToneCurve(renderer, 1)
     renderer.outputColorSpace = SRGBColorSpace
-    declareSceneTarget(renderer, { samples: 0 })
+    const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
 
     /*
      * The scene renders inside `RenderPipeline.render`'s swap of the renderer
@@ -194,7 +206,14 @@ describe('the spine', () => {
     scene.updateMatrixWorld(true)
 
     const target = floatTarget()
-    const sensor = createSensor(renderer, scene, camera)
+    const sensor = createSensor(
+      renderer,
+      scene,
+      camera,
+      layout,
+      undefined,
+      NO_MSAA,
+    )
     renderer.xr.enabled = true
     try {
       expect(() => sensor.render(target)).toThrow('a frame that throws')
@@ -233,7 +252,7 @@ describe('the spine', () => {
     const { renderer } = gpu
     installToneCurve(renderer, 1)
     renderer.outputColorSpace = SRGBColorSpace
-    declareSceneTarget(renderer, { samples: 0 })
+    const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
 
     /*
      * Three frames through one chain, back to back in one task, with no frame
@@ -253,7 +272,14 @@ describe('the spine', () => {
     scene.updateMatrixWorld(true)
 
     const target = floatTarget()
-    const sensor = createSensor(renderer, scene, camera)
+    const sensor = createSensor(
+      renderer,
+      scene,
+      camera,
+      layout,
+      undefined,
+      NO_MSAA,
+    )
     const before = renderer.info.calls
     sensor.render(target)
     const first = (await gpu.read(target)).at(SIZE / 2, SIZE / 2)
@@ -285,9 +311,16 @@ describe('the spine', () => {
     // which is the one thing between the scene's radiance and the canvas the
     // `rgba16float` swap chain of spike 1 accepts values above one from.
     renderer.toneMapping = NoToneMapping
-    declareSceneTarget(renderer, { samples: 0 })
+    const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
     const target = floatTarget()
-    const sensor = createSensor(renderer, scene, camera)
+    const sensor = createSensor(
+      renderer,
+      scene,
+      camera,
+      layout,
+      undefined,
+      NO_MSAA,
+    )
     const through = async (): Promise<[number, number, number, number]> => {
       sensor.render(target)
       return (await gpu.read(target)).at(SIZE / 2, SIZE / 2)
@@ -315,9 +348,9 @@ describe('the spine', () => {
     installToneCurve(renderer, 1)
     renderer.outputColorSpace = SRGBColorSpace
     // Four samples, which the harness renderer itself does not have: the
-    // warm-up has to compile against the pass's shape rather than the
+    // warm-up has to compile against the pass's layout rather than the
     // renderer's, or every pipeline is built twice.
-    declareSceneTarget(renderer, { samples: 4 })
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
 
     /*
      * Two meshes per arm, each with a material of its own, so the pipelines
@@ -350,7 +383,7 @@ describe('the spine', () => {
     }
     const target = floatTarget()
     const present = async (scene: Scene): Promise<void> => {
-      const sensor = createSensor(renderer, scene, camera)
+      const sensor = createSensor(renderer, scene, camera, layout)
       sensor.render(target)
       await gpu.read(target)
       sensor.dispose()
@@ -368,7 +401,7 @@ describe('the spine', () => {
     // the frame builds nothing the scene needs — at most the chain's own
     // output quad, which no scene compile can reach.
     const warm = arm(0.57)
-    await warmCompile(warmRenderer(renderer), {
+    await warmCompile(warmRenderer(renderer, layout), {
       object: warm,
       camera,
       scene: warm,

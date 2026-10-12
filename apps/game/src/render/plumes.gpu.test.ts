@@ -15,6 +15,8 @@ import { openGpu, type GpuSession, type Pixels } from './gpuHarness.ts'
 import { createThrusterPlumes } from './plumes.ts'
 import { setSceneExposure } from './radiance.ts'
 import { sensorMrt } from './sensorMrt.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -66,7 +68,9 @@ it.each(['rcs', 'pod', 'drive shell', 'drive disk'] as const)(
     scene.add(plumes.group)
     const scenePass = pass(scene, camera)
     scenePass.updateBeforeType = NodeUpdateType.RENDER
-    scenePass.setMRT(sensorMrt())
+    scenePass.setMRT(
+      sensorMrt(sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer))),
+    )
     const output = scenePass.getTextureNode('output')
     const motion = scenePass.getTextureNode('motion')
     try {

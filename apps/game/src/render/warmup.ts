@@ -13,7 +13,8 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
-import { holdWarmTarget, sceneTargetShape } from './sensor.ts'
+import type { SceneLayout } from './sceneLayout.ts'
+import { warmTargetFor } from './sensor.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
 /*
@@ -139,13 +140,15 @@ function bindWarmTarget(
  * `compileAsync`; the three scene components each made this cast for
  * themselves, which is three places for the day the union changes.
  *
- * **The compile is bound to a target of the scene pass's shape.** A pipeline
- * is keyed on the sample count and the formats of what it draws into, and the
- * scene is drawn into the sensor's pass target — four samples, half-float —
- * while the renderer's own framebuffer, which `compileAsync` binds when no
- * target is set, is built at zero. A compile against that builds a variant
- * nothing draws with, and every warmed pipeline is then compiled again on the
- * first presented frame, which is the hitch the census exists to hide.
+ * **The compile is bound to a target of the scene pass's layout** — the one
+ * the caller hands in, which in the app is `engine.sceneLayout(gl)`, the layout
+ * the sensor's pass is built from. A pipeline is keyed on the sample count and
+ * the formats of what it draws into, and the scene is drawn into the sensor's
+ * pass target — four samples, half-float — while the renderer's own
+ * framebuffer, which `compileAsync` binds when no target is set, is built at
+ * zero. A compile against that builds a variant nothing draws with, and every
+ * warmed pipeline is then compiled again on the first presented frame, which
+ * is the hitch the census exists to hide.
  *
  * **One `compileAsync` per renderable, all issued before the target is put
  * back.** `compileAsync` walks its tree synchronously and then builds what it
@@ -164,33 +167,24 @@ function bindWarmTarget(
  * honors it — an invisible subtree compiles nothing — and `warmCompile` has
  * made the root visible before this runs.
  */
-export const warmRenderer = (gl: object): WarmRenderer => {
+export const warmRenderer = (gl: object, layout: SceneLayout): WarmRenderer => {
   const renderer = gl as WebGPURenderer
   return {
     compileAsync(object, camera, scene) {
       const previousMrt = renderer.getMRT()
-      // Held until the last pipeline lands, not until the walk returns — see
-      // `holdWarmTarget`.
-      const hold = holdWarmTarget(renderer)
       const compiles: Promise<unknown>[] = []
-      const unbind = bindWarmTarget(renderer, hold.target)
+      const unbind = bindWarmTarget(renderer, warmTargetFor(layout))
       try {
-        const shape = sceneTargetShape(renderer)
-        if (shape.optics === true || shape.temporal === true)
-          renderer.setMRT(sensorMrt(shape.temporal, shape.optics === true))
+        renderer.setMRT(sensorMrt(layout))
         object.traverseVisible((node) => {
           if (isRenderable(node))
             compiles.push(renderer.compileAsync(node, camera, scene))
         })
       } finally {
         // A throw in the walk otherwise leaves every later frame bound to a
-        // 4×4 target and the hold never released, so a retired stand-in is
-        // never disposed.
+        // 4×4 target with the scene's outputs.
         unbind()
         renderer.setMRT(previousMrt)
-        // Settled, not all: `Promise.all` rejects at the first failure while
-        // the rest of the queue is still building against the stand-in.
-        void Promise.allSettled(compiles).then(hold.release)
       }
       return Promise.all(compiles)
     },

@@ -599,7 +599,7 @@ export function Bodies({
         materialize(task.star, task.clouded, task.ringed),
       )
       if (visual !== null) {
-        const renderer = warmRenderer(gl)
+        const renderer = warmRenderer(gl, engine.sceneLayout(gl))
         for (const part of [
           visual.mesh,
           visual.atmosphere,

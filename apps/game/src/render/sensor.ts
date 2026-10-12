@@ -6,11 +6,19 @@ import {
 import {
   DEFAULT_PICTURE,
   pictureRatio,
-  pictureSamples,
   pictureSharpness,
   resolvePicture,
   type Picture,
 } from './picture.ts'
+import {
+  attachment,
+  attachmentBytes,
+  attachmentFormat,
+  attachmentType,
+  sceneBackend,
+  sceneLayout,
+  type SceneLayout,
+} from './sceneLayout.ts'
 import { PsfNode } from './psf.ts'
 import type { RenderOrigin } from '@inertialref/spatial'
 import { sensorMrt } from './sensorMrt.ts'
@@ -18,20 +26,15 @@ import { DefocusNode } from './defocus.ts'
 import { MotionNode } from './motion.ts'
 import { sensorSignature } from './signature.ts'
 import { DISPLAY_P3 } from './gamut.ts'
+import { invariant } from '@inertialref/shared'
 import {
   type Camera,
   type Node,
   DepthTexture,
   HalfFloatType,
-  FloatType,
-  RGFormat,
-  RGBAFormat,
-  type TextureDataType,
   NodeUpdateType,
   RenderPipeline,
   RenderTarget,
-  RedFormat,
-  UnsignedByteType,
   type Scene,
   type WebGPURenderer,
   Vector2,
@@ -60,162 +63,67 @@ import { namePass } from './passTimeline.ts'
  * detector response and the canvas encode. MSAA belongs to the scene target;
  * the output triangle has no interior edge that needs multisampling.
  *
- * Every compile uses the pass's declared attachment shape: pre-exposed
+ * Every compile uses the pass's layout (`render/sceneLayout.ts`): pre-exposed
  * radiance, velocity.xy / reciprocal view-space meters, and a meter-only
  * instrument mask. The mask does not alter the presented image.
  * Internal optical quads read plain textures; the final dependency graph
  * schedules each pass exactly once per render call. ADR-0031.
  */
 
-/**
- * What the scene pass draws into, described once so a warm-up can build a
- * target of the same shape before the sensor exists.
- *
- * Radiance stays half-float above white. WebGPU uses reversed depth with a
- * float attachment; the WebGL fallback retains its logarithmic depth. Every
- * optional attachment is part of the warm pipeline key.
- */
-export interface SceneTargetShape {
-  /** 4 or 0. WebGPU has no other count. */
-  readonly samples: number
-  readonly optics?: boolean
-  readonly temporal?: boolean
-  readonly depthType?: TextureDataType
-}
-
-/** The per-renderer record of the shape, and the stand-in built to it. */
-interface SceneTargetRecord {
-  readonly shape: SceneTargetShape
-  standIn: RenderTarget | null
-}
-
 /*
- * Keyed on the renderer object because that is what every caller holds: the
- * factory has the handle, the scene components have R3F's `gl`, and both are
- * the same object. A picture change replaces the layout on the same renderer.
+ * The stand-ins the warm-up compiles against, one per layout.
+ *
+ * Keyed on the layout rather than the renderer, and never disposed. A layout
+ * is one of at most eight objects and a stand-in is four pixels, so keeping
+ * every one a session has used costs nothing — and a stand-in that is never
+ * disposed is one no compile can lose mid-queue. Three keys a render context
+ * on the attachment shape rather than the target, and `compileAsync` builds
+ * each queued pipeline after a yield, reading the depth format from the
+ * texture that shared context holds by then; a stand-in disposed under that
+ * queue has no format, and every pipeline left in it is refused at the device
+ * with `depthStencil.format` undefined. A picture change is a new layout and a
+ * new stand-in, and the old one stays whole for whatever is still building.
  */
-const targets = new WeakMap<object, SceneTargetRecord>()
+const standIns = new WeakMap<SceneLayout, RenderTarget>()
 
 /**
- * Say what the scene pass will draw into, before anything compiles.
- *
- * Called by `createRenderer` with the sample count the constructor was *not*
- * given — see the file comment — so the warm-up and the sensor build their
- * targets from one number.
- */
-export function declareSceneTarget(
-  renderer: object,
-  shape: SceneTargetShape,
-): void {
-  const standIn = targets.get(renderer)?.standIn
-  if (standIn != null) retire(standIn)
-  targets.set(renderer, { shape, standIn: null })
-}
-
-/*
- * Warm-ups still building against a stand-in, and whether a later
- * declaration has replaced it.
- *
- * A stand-in outlives its declaration while anything compiles against it.
- * Three keys a render context on the attachment shape rather than the target,
- * and `compileAsync` builds each queued pipeline after a yield, reading the
- * depth format from the texture that shared context holds by then. The sensor
- * declares its shape again when it mounts — at boot, on a picture change, on
- * a hot reload — and a warm-up from the build-ahead can be mid-queue when it
- * does. Disposed there, the texture has no format, and every pipeline left in
- * the queue is refused at the device with `depthStencil.format` undefined:
- * logged, marked broken, and compiled again by the first frame that needs it.
- */
-const holds = new WeakMap<RenderTarget, { count: number; retired: boolean }>()
-
-function retire(standIn: RenderTarget): void {
-  const hold = holds.get(standIn)
-  if (hold === undefined || hold.count === 0) standIn.dispose()
-  else hold.retired = true
-}
-
-/** The declared shape, or the renderer's own sample count when none was. */
-export function sceneTargetShape(renderer: WebGPURenderer): SceneTargetShape {
-  return targets.get(renderer)?.shape ?? { samples: renderer.samples }
-}
-
-/**
- * A target of the scene pass's shape, for a compile.
+ * A target of the scene pass's layout, for a compile.
  *
  * A stand-in rather than the live pass target because the warm-up starts from
  * the effect that sees the renderer, and the sensor mounts inside the canvas
  * tree the same tick — which of the two runs first is React's business. The
  * pipeline key holds only the sample count and the formats, so any target of
- * the shape compiles the pipeline the pass will use, and four pixels is the
+ * the layout compiles the pipeline the pass will use, and four pixels is the
  * cheapest one that exists.
  */
-export function warmTargetFor(renderer: WebGPURenderer): RenderTarget {
-  const shape = sceneTargetShape(renderer)
-  let record = targets.get(renderer)
-  if (record === undefined) {
-    record = { shape, standIn: null }
-    targets.set(renderer, record)
+export function warmTargetFor(layout: SceneLayout): RenderTarget {
+  let standIn = standIns.get(layout)
+  if (standIn === undefined) {
+    standIn = sceneTarget(4, 4, layout)
+    standIns.set(layout, standIn)
   }
-  record.standIn ??= sceneTarget(4, 4, shape)
-  return record.standIn
-}
-
-/**
- * `warmTargetFor`, held until `release`: a declaration made meanwhile
- * disposes the stand-in only once every hold on it is released.
- */
-export function holdWarmTarget(renderer: WebGPURenderer): {
-  readonly target: RenderTarget
-  release(): void
-} {
-  const target = warmTargetFor(renderer)
-  let hold = holds.get(target)
-  if (hold === undefined) {
-    hold = { count: 0, retired: false }
-    holds.set(target, hold)
-  }
-  hold.count += 1
-  let released = false
-  return {
-    target,
-    release() {
-      if (released) return
-      released = true
-      hold.count -= 1
-      if (hold.count === 0 && hold.retired) target.dispose()
-    },
-  }
+  return standIn
 }
 
 function sceneTarget(
   width: number,
   height: number,
-  shape: SceneTargetShape,
+  layout: SceneLayout,
 ): RenderTarget {
-  const depthTexture = new DepthTexture(width, height, shape.depthType)
+  const depthTexture = new DepthTexture(width, height, layout.depthType)
   depthTexture.isRenderTargetTexture = true
   const target = new RenderTarget(width, height, {
     type: HalfFloatType,
-    samples: shape.samples,
+    samples: layout.samples,
     depthTexture,
-    count:
-      1 + (shape.optics === true ? 2 : 0) + (shape.temporal === true ? 2 : 0),
+    count: layout.attachments.length,
   })
-  target.textures[0]!.name = 'output'
-  if (shape.optics === true) {
-    target.textures[1]!.name = 'motion'
-    target.textures[2]!.name = 'meterMask'
-    target.textures[2]!.format = RedFormat
-    target.textures[2]!.type = UnsignedByteType
-  }
-  if (shape.temporal === true) {
-    const offset = shape.optics === true ? 3 : 1
-    target.textures[offset]!.name = 'velocity'
-    target.textures[offset]!.format = RGFormat
-    target.textures[offset + 1]!.name = 'reactive'
-    target.textures[offset + 1]!.format = RGBAFormat
-    target.textures[offset + 1]!.type = UnsignedByteType
-  }
+  layout.attachments.forEach((row, i) => {
+    const texture = target.textures[i]!
+    texture.name = row.name
+    texture.format = attachmentFormat(row)
+    texture.type = attachmentType(row)
+  })
   return target
 }
 
@@ -290,8 +198,9 @@ export function createSensor(
   renderer: WebGPURenderer,
   scene: Scene,
   camera: Camera,
+  layout: SceneLayout,
   frame?: () => SensorFrame,
-  preference?: Picture,
+  preference: Picture = DEFAULT_PICTURE,
   diagnostic?: 'bilinear',
 ): Sensor {
   const exposure = new ExposureMeter()
@@ -299,34 +208,27 @@ export function createSensor(
   const automaticAvailable = 'isWebGPUBackend' in renderer.backend
   let requestedMode: SensorSettings['mode'] | undefined
   const picture = resolvePicture(
-    preference ?? DEFAULT_PICTURE,
+    preference,
     automaticAvailable ? 'webgpu' : 'webgl',
   )
-  const existingShape = sceneTargetShape(renderer)
-  const shape: SceneTargetShape = {
-    ...existingShape,
-    // Explicitly declared test fixtures retain their sample count unless a
-    // picture preference is supplied by the scene adapter.
-    samples:
-      preference === undefined
-        ? existingShape.samples
-        : pictureSamples(picture),
-    temporal: picture.aa === 'temporal',
-    ...(renderer.reversedDepthBuffer ? { depthType: FloatType } : {}),
-  }
-  declareSceneTarget(renderer, shape)
-  const scenePass = pass(scene, camera, { samples: shape.samples })
+  // The layout is the picture's, by the same function the warm-up's was
+  // taken from. Handed one for another picture, the pass would draw into
+  // attachments the warmed pipelines were not built for.
+  invariant(
+    layout === sceneLayout(preference, sceneBackend(renderer)),
+    'the scene layout is not the one this picture draws into',
+  )
+  const temporal = attachment(layout, 'velocity') !== null
+  const scenePass = pass(scene, camera, { samples: layout.samples })
   namePass(scenePass.renderTarget, 'scene')
   scenePass.renderTarget.depthTexture!.type =
-    shape.depthType ?? scenePass.renderTarget.depthTexture!.type
+    layout.depthType ?? scenePass.renderTarget.depthTexture!.type
   scenePass.setResolutionScale(1 / pictureRatio(picture))
-  if (shape.optics === true || shape.temporal === true)
-    scenePass.setMRT(sensorMrt(shape.temporal, shape.optics === true))
-  if (shape.optics === true) {
-    scenePass.getTextureNode('motion')
-    const mask = scenePass.getTextureNode('meterMask').value
-    mask.format = RedFormat
-    mask.type = UnsignedByteType
+  scenePass.setMRT(sensorMrt(layout))
+  for (const row of layout.attachments) {
+    const texture = scenePass.getTextureNode(row.name).value
+    texture.format = attachmentFormat(row)
+    texture.type = attachmentType(row)
   }
   /*
    * The pass draws the scene once per *render call*, not once per three
@@ -346,50 +248,35 @@ export function createSensor(
    * on. Keyed on the render call, the pass runs exactly when `render()` does
    * — once per presented frame in the app, once per call everywhere else.
    */
-  if (shape.temporal === true) {
-    scenePass.getTextureNode('velocity').value.format = RGFormat
-    const reactive = scenePass.getTextureNode('reactive').value
-    reactive.format = RGBAFormat
-    reactive.type = UnsignedByteType
-  }
   scenePass.updateBeforeType = NodeUpdateType.RENDER
   const upscale =
-    automaticAvailable &&
-    (shape.temporal === true || picture.scale !== 'native')
+    automaticAvailable && (temporal || picture.scale !== 'native')
       ? createUpscale(
           renderer,
           {
             color: scenePass.getTextureNode('output'),
             depth: scenePass.getTextureNode('depth'),
-            velocity:
-              shape.temporal === true
-                ? scenePass.getTextureNode('velocity')
-                : null,
-            reactive:
-              shape.temporal === true
-                ? scenePass.getTextureNode('reactive')
-                : null,
+            velocity: temporal ? scenePass.getTextureNode('velocity') : null,
+            reactive: temporal ? scenePass.getTextureNode('reactive') : null,
           },
           camera,
           {
-            path:
-              diagnostic ?? (shape.temporal === true ? 'temporal' : 'spatial'),
+            path: diagnostic ?? (temporal ? 'temporal' : 'spatial'),
             ratio: pictureRatio(picture),
             sharpness: pictureSharpness(picture),
           },
         )
       : null
-  const motionTexture =
-    shape.optics === true ? scenePass.getTextureNode('motion') : null
+  const motionTexture = scenePass.getTextureNode('motion')
+  const mask = attachment(layout, 'meterMask')
+  const maskBytes = mask === null ? 0 : attachmentBytes(mask)
   const meter =
     frame === undefined || !automaticAvailable
       ? null
       : createHistogramMeter(
           scenePass.renderTarget.texture,
-          motionTexture?.value,
-          shape.optics === true
-            ? scenePass.getTextureNode('meterMask').value
-            : undefined,
+          motionTexture.value,
+          scenePass.getTextureNode('meterMask').value,
         )
   const post = new RenderPipeline(renderer)
 
@@ -400,11 +287,11 @@ export function createSensor(
     upscale?.outputTexture.value ?? scenePass.renderTarget.texture,
   )
   const defocus =
-    motionTexture === null || frame === undefined
+    frame === undefined
       ? null
       : new DefocusNode(radiance, texture(motionTexture.value))
   const motion =
-    defocus === null || motionTexture === null
+    defocus === null
       ? null
       : new MotionNode(defocus.outputTexture, texture(motionTexture.value))
   const psf =
@@ -514,12 +401,13 @@ export function createSensor(
         enhancedSkyGain:
           exposure.reading?.processing === 'enhanced' ? ENHANCED_SKY_GAIN : 1,
         enhancedSkyCeiling: ENHANCED_SKY_CEILING,
+        // Each sample and the resolve: the multisampled mask is resolved for
+        // the meter, so a four-sample layout holds the mask five times.
         meterMaskBytes:
-          shape.optics === true
-            ? scenePass.renderTarget.width *
-              scenePass.renderTarget.height *
-              (shape.samples + 1)
-            : 0,
+          scenePass.renderTarget.width *
+          scenePass.renderTarget.height *
+          (layout.samples + 1) *
+          maskBytes,
         maximumCircle,
         defocusPasses: defocus?.passes ?? 0,
         motionPasses: motion?.passes ?? 0,

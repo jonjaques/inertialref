@@ -90,7 +90,7 @@ export function GalaxyVolume({ engine }: { engine: GameEngine }) {
         await current.volume.warm(gl as unknown as WebGPURenderer)
         done()
         if (live.current === current)
-          await warmCompile(warmRenderer(gl), {
+          await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
             object: current.mesh,
             camera,
             scene,

@@ -11253,6 +11253,31 @@ instance with an empty memo and a counter at zero. The CPU profile matches by
 file name and was unaffected; restarting the dev server put the probe back on
 the app's instance.
 
+## The scene target's layout is one table, and the engine answers for it (11 Oct 2026)
+
+Each attachment of the scene pass was described three times — the warm-up's
+stand-in set the count, names and formats, `createSensor` set the formats on
+the live textures, `sensorMrt` set the names and blends — and the shape
+reached the warm-up through a module-level map keyed on the renderer, which the
+GPU suite filled by hand in eighteen calls. `render/sceneLayout.ts` is now the
+rows (name, channels, storage, blend) as a pure function of the picture and the
+backend, memoized so one picture is one object. Where the warm-ups read it was
+Jon's call among three: a React context, deriving it in the warm-up, or the
+engine. The engine won: `GameEngine.picture` is written by the picture knob the
+moment the preference changes, `engine.sceneLayout(renderer)` answers from it,
+and the sensor and all thirteen warm-up sites take the result as an argument.
+18 can publish the pixel grid in the same place.
+
+The stand-in became one target per layout, never disposed. The renderer map's
+declaration replaced the stand-in on every picture change and hot reload, so
+it carried a hold count to keep a disposed texture out of a compile queue still
+building against it; with at most eight layouts of four pixels each, keeping
+every one costs nothing and the hazard has no window left. `createSensor`
+asserts the layout it is handed is its picture's: `galaxyVolume.gpu.test.ts`
+had declared four samples and passed a temporal picture, which the old
+`createSensor` papered over by redeclaring, and the assertion found it on the
+first run.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

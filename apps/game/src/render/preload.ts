@@ -228,7 +228,7 @@ async function warm(
       const view = await sceneView(engine)
       if (view === null) return
       warmGroup ??= buildWarmGroup()
-      await warmCompile(warmRenderer(renderer), {
+      await warmCompile(warmRenderer(renderer, engine.sceneLayout(renderer)), {
         object: warmGroup,
         camera: view.camera,
         scene: view.scene as Scene,
@@ -250,7 +250,7 @@ async function warm(
       // first compile — the same degradation a mapless body's first frame is.
       const hull = await loadShipModel(read(RENDER_SHIP), anisotropy)
       if (hull === null) return
-      await warmCompile(warmRenderer(renderer), {
+      await warmCompile(warmRenderer(renderer, engine.sceneLayout(renderer)), {
         object: hull.group,
         camera: view.camera,
         scene: view.scene as Scene,

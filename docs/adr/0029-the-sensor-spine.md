@@ -65,10 +65,10 @@ to draw nothing for a pipeline still building.**
 
 - **The chain is the default path.** `scene/Sensor.tsx` mounts unconditionally
   and the `?sensor=1` flag is gone; R3F never draws the frame itself. The
-  renderer is built at zero samples and MSAA lives on the scene pass, declared
-  once through `declareSceneTarget` from the antialias preference, so the
-  canvas receives one full-screen quad with no edge in it and no resolve.
-  The warm-up binds a target of the pass's shape around every compile.
+  renderer is built at zero samples and MSAA lives on the scene pass, taken
+  from the antialias preference through `engine.sceneLayout`, so the canvas
+  receives one full-screen quad with no edge in it and no resolve. The
+  warm-up binds a target of the same layout around every compile.
 - **The pass is `NodeUpdateType.RENDER`.** It draws the scene exactly when
   `render()` is called — once per presented frame in the app, once per call
   in the measurement rig and the harness. `sensor.gpu.test.ts` draws three

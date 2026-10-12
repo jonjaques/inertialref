@@ -20,8 +20,13 @@ import {
 import { uv, vec3 as rgb } from 'three/tsl'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { sensorRadiance } from './radiance.ts'
-import { createSensor, declareSceneTarget } from './sensor.ts'
+import { createSensor } from './sensor.ts'
 import { installToneCurve } from './tonemap.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+
+/** The production picture with its four samples off, for a pass read back directly. */
+const NO_MSAA = { ...DEFAULT_PICTURE, aa: 'off' } as const
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -33,7 +38,7 @@ it('bypasses optical motion at a rebase and resumes on the next physical frame',
   const renderer = gpu.renderer
   installToneCurve(renderer, 1)
   renderer.outputColorSpace = LinearSRGBColorSpace
-  declareSceneTarget(renderer, { samples: 0, optics: true })
+  const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
   const anchor = UV.fromMeters(8e20, -3e20, 5e20)
   let origin = createRenderOrigin(anchor)
   const prop = UV.translate(anchor, vec3(4095, 0, -100))
@@ -53,18 +58,25 @@ it('bypasses optical motion at a rebase and resumes on the next physical frame',
   let time = 0
   const dt = 1 / 60
   const lens = { ...LENS_PRESETS.flight, shutter: 1 / 120 }
-  const sensor = createSensor(renderer, scene, camera, () => ({
-    lens,
-    settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'manual' },
-    time,
-    adaptationTime: time,
-    renderOrigin: origin,
-    historyKey: 'moving-prop',
-    pinned: null,
-    headroom: 1,
-    motionBlur: true,
-    noiseTick: 0,
-  }))
+  const sensor = createSensor(
+    renderer,
+    scene,
+    camera,
+    layout,
+    () => ({
+      lens,
+      settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'manual' },
+      time,
+      adaptationTime: time,
+      renderOrigin: origin,
+      historyKey: 'moving-prop',
+      pinned: null,
+      headroom: 1,
+      motionBlur: true,
+      noiseTick: 0,
+    }),
+    NO_MSAA,
+  )
   const target = new RenderTarget(64, 64, {
     type: FloatType,
     depthBuffer: false,

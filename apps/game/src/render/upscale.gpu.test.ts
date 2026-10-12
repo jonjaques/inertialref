@@ -14,7 +14,8 @@ import {
   Scene,
 } from 'three/webgpu'
 import { Fn, float, texture, vec3, vec4 } from 'three/tsl'
-import { createSensor, declareSceneTarget, warmTargetFor } from './sensor.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { createSensor, warmTargetFor } from './sensor.ts'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { reactiveCoverage } from './sensorMrt.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
@@ -33,11 +34,9 @@ afterAll(() => gpu.dispose())
 
 function rig(picture: Picture, frame?: () => SensorFrame) {
   gpu.renderer.setSize(SIZE, SIZE, false)
-  declareSceneTarget(gpu.renderer, {
-    samples: 0,
-    depthType: FloatType,
-    optics: frame !== undefined,
-  })
+  // Production's layout for the picture: the optics' rows are there whether
+  // or not a frame drives the optical stages, as they are in the app.
+  const layout = sceneLayout(picture, sceneBackend(gpu.renderer))
   const camera = new PerspectiveCamera(60, 1, 0.05, 1e10)
   const scene = new Scene()
   const material = new MeshBasicNodeMaterial()
@@ -48,7 +47,14 @@ function rig(picture: Picture, frame?: () => SensorFrame) {
   scene.add(slab)
   scene.updateMatrixWorld(true)
   camera.updateMatrixWorld(true)
-  const sensor = createSensor(gpu.renderer, scene, camera, frame, picture)
+  const sensor = createSensor(
+    gpu.renderer,
+    scene,
+    camera,
+    layout,
+    frame,
+    picture,
+  )
   const target = new RenderTarget(SIZE, SIZE, {
     type: FloatType,
     depthBuffer: false,
@@ -58,6 +64,7 @@ function rig(picture: Picture, frame?: () => SensorFrame) {
     scene,
     slab,
     material,
+    layout,
     sensor,
     target,
     dispose() {
@@ -235,7 +242,7 @@ describe('the upscaler on the physical GPU', () => {
   it('warms the complete temporal attachment layout before the first frame', async () => {
     const f = rig(temporal)
     try {
-      const warm = warmTargetFor(gpu.renderer)
+      const warm = warmTargetFor(f.layout)
       expect(
         warm.textures.map((one) => [one.name, one.format, one.type]),
       ).toEqual(
@@ -246,7 +253,7 @@ describe('the upscaler on the physical GPU', () => {
         ]),
       )
       expect(warm.depthTexture!.type).toBe(FloatType)
-      await warmCompile(warmRenderer(gpu.renderer), {
+      await warmCompile(warmRenderer(gpu.renderer, f.layout), {
         object: f.scene,
         camera: f.camera,
         scene: f.scene,
