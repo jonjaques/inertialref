@@ -7,15 +7,30 @@ import {
 } from '@inertialref/universe'
 import type { JobHandle } from './pool.ts'
 import {
+  type ArchivedSource,
   encodeSurface,
-  generateHeightfieldTask,
   type HeightfieldResponse,
   type HeightfieldSource,
 } from './tasks.ts'
 
-/** Bump when drawn-field arithmetic changes without a canonical terrain bump. */
-export const HEIGHTFIELD_CACHE_REVISION = 1
-export const HEIGHTFIELD_CACHE_VERSION = `${HEIGHTFIELD_CACHE_REVISION}:${TERRAIN_ALGORITHM.version}:${generateHeightfieldTask.version}`
+/*
+ * The heightfield archive: regenerable tiles kept across reloads and test
+ * processes, behind a host store (ADR-0045).
+ *
+ * One `HeightfieldArchive` per store owns everything the store's users share
+ * — the clear epoch, the writes in flight, the counters — and hands out a
+ * wrapper per source. A tile's identity is the canonical terrain version, the
+ * namespace its source declares, and every input: nothing else, and nothing
+ * the archive has to be told to bump.
+ */
+
+/**
+ * What a source's tiles are kept under: the canonical terrain version, which
+ * every producer's ground follows, and the source's own namespace. CI keys
+ * its cache of the disk archive on the pool's (`scripts/terrainArchive.mjs`).
+ */
+export const heightfieldArchiveVersion = (namespace: string): string =>
+  `${TERRAIN_ALGORITHM.version}:${namespace}`
 
 export interface HeightfieldCacheRecord {
   readonly key: string
@@ -37,6 +52,8 @@ export interface HeightfieldStore {
   remove(key: string): Promise<void>
   clear(): Promise<void>
   stats(): Promise<HeightfieldStoreStats>
+  /** Release the host's handle; a store that holds none has nothing to do. */
+  close?(): void
 }
 
 function stable(value: unknown): string {
@@ -59,15 +76,14 @@ const surfaceKeys = new WeakMap<SurfaceParameters, string>()
 export function heightfieldCacheKey(
   surface: SurfaceParameters,
   request: HeightfieldRequest,
-  producer: string,
-  version = HEIGHTFIELD_CACHE_VERSION,
+  namespace: string,
 ): string {
   let encoded = surfaceKeys.get(surface)
   if (encoded === undefined) {
     encoded = stable(encodeSurface(surface))
     surfaceKeys.set(surface, encoded)
   }
-  return `${JSON.stringify(version)}:${JSON.stringify(producer)}:${encoded}:${stable(request)}`
+  return `${JSON.stringify(heightfieldArchiveVersion(namespace))}:${encoded}:${stable(request)}`
 }
 
 function checksum(field: HeightfieldResponse): number {
@@ -188,7 +204,9 @@ export interface HeightfieldCacheStats {
   readonly pendingWrites: number
 }
 
-interface CacheState {
+/** What every wrapper over one store shares; the archive owns it. */
+interface ArchiveState {
+  readonly store: HeightfieldStore
   readonly writes: Set<Promise<void>>
   readonly counts: {
     hits: number
@@ -199,46 +217,95 @@ interface CacheState {
     writeErrors: number
     canceled: number
   }
-  generation: number
+  /** Bumped by `clear` and `close`: a lookup from an older epoch writes nothing. */
+  epoch: number
+  closed: boolean
 }
-const states = new WeakMap<HeightfieldStore, CacheState>()
-/** A storage failure costs generation, never a missing tile or a changed world. */
-export class CachedHeightfieldSource implements HeightfieldSource {
-  readonly #source: HeightfieldSource
-  readonly #store: HeightfieldStore
-  readonly #producer: string
-  readonly #state: CacheState
-  readonly #writes: Set<Promise<void>>
-  readonly #counts: CacheState['counts']
-  #nextId = 1
-  constructor(
-    source: HeightfieldSource,
-    store: HeightfieldStore,
-    producer: string,
-  ) {
-    this.#source = source
-    this.#store = store
-    this.#producer = producer
-    let state = states.get(store)
-    if (state === undefined) {
-      state = {
-        writes: new Set(),
-        counts: {
-          hits: 0,
-          misses: 0,
-          invalid: 0,
-          writes: 0,
-          readErrors: 0,
-          writeErrors: 0,
-          canceled: 0,
-        },
-        generation: 0,
-      }
-      states.set(store, state)
+
+/**
+ * One store, and everything its users share.
+ *
+ * The CPU and GPU producers write to the same store under different
+ * namespaces, so a clear has to retire both producers' lookups in flight, and
+ * the counters describe the store, not one producer. That state lives here
+ * and nowhere else: a wrapper made by `wrap` holds the archive's, so clearing
+ * through the archive is the only clear there is.
+ */
+export class HeightfieldArchive {
+  readonly #state: ArchiveState
+
+  constructor(store: HeightfieldStore) {
+    this.#state = {
+      store,
+      writes: new Set(),
+      counts: {
+        hits: 0,
+        misses: 0,
+        invalid: 0,
+        writes: 0,
+        readErrors: 0,
+        writeErrors: 0,
+        canceled: 0,
+      },
+      epoch: 0,
+      closed: false,
     }
+  }
+
+  /** The source, answering from the archive first, under its own namespace. */
+  wrap(source: ArchivedSource): HeightfieldSource {
+    return new ArchivedHeightfieldSource(source, this.#state)
+  }
+
+  stats(): HeightfieldCacheStats {
+    return { ...this.#state.counts, pendingWrites: this.#state.writes.size }
+  }
+
+  /**
+   * The host's retained entries and bytes. Refused after `close`, as `clear`
+   * is: a disk store reopens its handle for any call.
+   */
+  storage(): Promise<HeightfieldStoreStats> {
+    if (this.#state.closed)
+      return Promise.reject(new Error('the heightfield archive is closed'))
+    return this.#state.store.stats()
+  }
+
+  /** Wait for every write in flight. */
+  async flush(): Promise<void> {
+    await Promise.all(this.#state.writes)
+  }
+
+  /** In-flight lookups cannot repopulate a cache the caller just cleared. */
+  async clear(): Promise<void> {
+    if (this.#state.closed) throw new Error('the heightfield archive is closed')
+    this.#state.epoch++
+    await this.flush()
+    await this.#state.store.clear()
+  }
+
+  /**
+   * Finish the writes in flight, then release the store. After this a
+   * wrapper passes straight through to its source: a write landing after the
+   * close would reopen a handle nothing is waiting on.
+   */
+  async close(): Promise<void> {
+    if (this.#state.closed) return
+    this.#state.closed = true
+    this.#state.epoch++
+    await this.flush()
+    this.#state.store.close?.()
+  }
+}
+
+/** A storage failure costs generation, never a missing tile or a changed world. */
+class ArchivedHeightfieldSource implements HeightfieldSource {
+  readonly #source: ArchivedSource
+  readonly #state: ArchiveState
+  #nextId = 1
+  constructor(source: ArchivedSource, state: ArchiveState) {
+    this.#source = source
     this.#state = state
-    this.#writes = state.writes
-    this.#counts = state.counts
   }
   get kind(): string {
     return this.#source.kind
@@ -252,25 +319,17 @@ export class CachedHeightfieldSource implements HeightfieldSource {
   supports(request: HeightfieldRequest): boolean {
     return this.#source.supports?.(request) ?? true
   }
-  stats(): HeightfieldCacheStats {
-    return { ...this.#counts, pendingWrites: this.#writes.size }
-  }
-  async flush(): Promise<void> {
-    await Promise.all(this.#writes)
-  }
-  /** In-flight lookups cannot repopulate a cache the caller just cleared. */
-  async clear(): Promise<void> {
-    this.#state.generation++
-    await this.flush()
-    await this.#store.clear()
-  }
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,
   ): JobHandle<HeightfieldResponse> {
+    const state = this.#state
+    if (state.closed) return this.#source.submit(surface, request)
+    const counts = state.counts
+    const store = state.store
     const id = this.#nextId++
-    const key = heightfieldCacheKey(surface, request, this.#producer)
-    const generation = this.#state.generation
+    const key = heightfieldCacheKey(surface, request, this.#source.archive)
+    const epoch = state.epoch
     let active: JobHandle<HeightfieldResponse> | null = null
     let settled = false
     let canceled = false
@@ -280,46 +339,50 @@ export class CachedHeightfieldSource implements HeightfieldSource {
       void (async () => {
         let value: unknown = null
         try {
-          value = await this.#store.read(key)
+          value = await store.read(key)
         } catch {
-          this.#counts.readErrors++
+          counts.readErrors++
         }
         if (canceled) return
         const record = validateHeightfieldCacheRecord(value, key, request)
         if (record !== null) {
-          this.#counts.hits++
+          counts.hits++
           settled = true
           resolve(record.field)
           return
         }
         if (value !== null && value !== undefined) {
-          this.#counts.invalid++
-          try {
-            await this.#store.remove(key)
-          } catch {
-            this.#counts.writeErrors++
+          counts.invalid++
+          // A lookup that outlives `close` leaves the row to the next run:
+          // removing it would reopen the store.
+          if (!state.closed) {
+            try {
+              await store.remove(key)
+            } catch {
+              counts.writeErrors++
+            }
           }
           if (canceled) return
         }
-        this.#counts.misses++
+        counts.misses++
         active = this.#source.submit(surface, request)
         const field = await active.result
         if (canceled) return
-        if (generation === this.#state.generation) {
+        if (epoch === state.epoch) {
           const row = heightfieldCacheRecord(key, field)
           if (validateHeightfieldCacheRecord(row, key, request) !== null) {
             const write = Promise.resolve()
-              .then(() => this.#store.write(row))
+              .then(() => store.write(row))
               .then(
                 (stored) => {
-                  if (stored !== false) this.#counts.writes++
+                  if (stored !== false) counts.writes++
                 },
                 () => {
-                  this.#counts.writeErrors++
+                  counts.writeErrors++
                 },
               )
-            this.#writes.add(write)
-            void write.then(() => this.#writes.delete(write))
+            state.writes.add(write)
+            void write.then(() => state.writes.delete(write))
           }
         }
         settled = true
@@ -337,7 +400,7 @@ export class CachedHeightfieldSource implements HeightfieldSource {
       cancel: () => {
         if (settled || canceled) return
         canceled = true
-        this.#counts.canceled++
+        counts.canceled++
         reject(new Error('canceled'))
         active?.cancel()
       },

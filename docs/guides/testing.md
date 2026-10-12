@@ -452,9 +452,10 @@ IR_TERRAIN_CACHE_REPORT=1 pnpm vitest run --config apps/game/vitest.slow.config.
 The first two simulation commands are a cold/warm pair over the same requested
 regions; the third measures the zoo through the source. The disk store is
 `.data/heightfields/tiles.sqlite`. Cache hits avoid field generation, so retain
-direct generator tests and bump `HEIGHTFIELD_CACHE_REVISION` when drawn-only
-arithmetic changes. A warm descent cannot prove a generator implementation it
-did not execute.
+direct generator tests. A drawn-only arithmetic change spends a version of
+`generateHeightfieldTask`, which `heightfieldFingerprint.test.ts` enforces by
+failing until it is spent. A warm descent cannot prove a generator
+implementation it did not execute.
 
 Browser retention needs a real IndexedDB check as well. After a generated-world
 visit, inspect `await engine.terrainCache()`, reload through the driver with

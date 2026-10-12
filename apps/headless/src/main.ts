@@ -34,7 +34,7 @@ import {
   measureHeightfieldSource,
 } from '@inertialref/devtools'
 import {
-  CachedHeightfieldSource,
+  HeightfieldArchive,
   createInlineWorker,
   createTaskRegistry,
   poolHeightfieldSource,
@@ -151,18 +151,14 @@ const terrainArchive =
   values['terrain-cache'] ||
   values['terrain-cache-descent'] ||
   values['terrain-cache-clear']
-    ? new DiskHeightfieldStore()
+    ? new HeightfieldArchive(new DiskHeightfieldStore())
     : null
 const terrainPool = session.pool()
 const terrainSource =
   terrainArchive !== null && terrainPool !== null
-    ? new CachedHeightfieldSource(
-        poolHeightfieldSource(terrainPool),
-        terrainArchive,
-        'cpu',
-      )
+    ? terrainArchive.wrap(poolHeightfieldSource(terrainPool))
     : null
-if (values['terrain-cache-clear'] === true) await terrainSource?.clear()
+if (values['terrain-cache-clear'] === true) await terrainArchive?.clear()
 
 if (values['galaxy-calibration'] === true) {
   let passed = false
@@ -171,7 +167,7 @@ if (values['galaxy-calibration'] === true) {
     console.log(JSON.stringify(report, null, 2))
     passed = report.passed
   } finally {
-    terrainArchive?.close()
+    await terrainArchive?.close()
     session.dispose()
     releaseTiming?.()
   }
@@ -187,7 +183,7 @@ if (values['galaxy-plates'] !== undefined) {
       Number(values['galaxy-width']),
     )
   } finally {
-    terrainArchive?.close()
+    await terrainArchive?.close()
     session.dispose()
     releaseTiming?.()
   }
@@ -306,15 +302,15 @@ if (values.profile === true) {
   )
 }
 
-if (terrainSource !== null) {
-  await terrainSource.flush()
+if (terrainArchive !== null) {
+  await terrainArchive.flush()
   let storage = null
   try {
-    storage = (await terrainArchive?.stats()) ?? null
+    storage = await terrainArchive.storage()
   } catch {
     /* Missing disk storage leaves generation available. */
   }
-  console.log({ terrainCache: terrainSource.stats(), storage })
+  console.log({ terrainCache: terrainArchive.stats(), storage })
 }
-terrainArchive?.close()
+await terrainArchive?.close()
 session.dispose()

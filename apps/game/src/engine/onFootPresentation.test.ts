@@ -162,7 +162,7 @@ describe("the walker camera's memory", () => {
     const game = new GameEngine({
       workers: null,
       store: new MemorySaveStore(),
-      heightfieldStore: null,
+      heightfieldArchive: null,
       now: () => 0,
     })
     game.character.atMarsPad()

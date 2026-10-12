@@ -9,7 +9,7 @@ import {
   parseAddress,
   regionAddress,
 } from '@inertialref/universe'
-import { CachedHeightfieldSource } from '@inertialref/workers'
+import { HeightfieldArchive } from '@inertialref/workers'
 import { loadStarCatalog } from './catalog.ts'
 import { DiskHeightfieldStore } from './heightfieldStore.ts'
 
@@ -32,8 +32,14 @@ it('replays canonical terrain outside Sol from disk without touching the world o
       result: Promise.resolve(generateHeightfield(surface, request)),
       cancel() {},
     }))
-    const source = { kind: 'pool', available: true, submit: generate }
-    const cold = new CachedHeightfieldSource(source, store, 'cpu')
+    const source = {
+      kind: 'pool',
+      archive: 'cpu@test',
+      available: true,
+      submit: generate,
+    }
+    const coldArchive = new HeightfieldArchive(store)
+    const cold = coldArchive.wrap(source)
     const regions = [regionAddress(0, 6, 0, 0), regionAddress(1, 6, 0, 0)]
     let clock = 0
     const report = await measureHeightfieldSource(
@@ -43,13 +49,14 @@ it('replays canonical terrain outside Sol from disk without touching the world o
       cold,
       3,
     )
-    await cold.flush()
+    await coldArchive.close()
     expect(report).toMatchObject({ patches: 2, totalMs: 1, samples: 98 })
     expect(generate).toHaveBeenCalledTimes(2)
-    store.close()
-    const warm = new CachedHeightfieldSource(source, restored, 'cpu')
+    // A second process: a new archive over the same file.
+    const warmArchive = new HeightfieldArchive(restored)
+    const warm = warmArchive.wrap(source)
     await measureHeightfieldSource(body, regions, () => ++clock, warm, 3)
-    expect(warm.stats()).toMatchObject({ hits: 2, misses: 0 })
+    expect(warmArchive.stats()).toMatchObject({ hits: 2, misses: 0 })
     expect(generate).toHaveBeenCalledTimes(2)
     expect(session.world.stateHash()).toBe(hash)
   } finally {

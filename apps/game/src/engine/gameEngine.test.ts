@@ -5,6 +5,13 @@ import {
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import { DEFAULT_FILL } from '@inertialref/devtools'
+import { rootSeed } from '@inertialref/procedural'
+import {
+  generateHeightfield,
+  regionAddress,
+  surfaceGrammar,
+} from '@inertialref/universe'
+import { HeightfieldArchive, type HeightfieldStore } from '@inertialref/workers'
 import { headlessEngine } from './headlessEngine.ts'
 
 /*
@@ -357,4 +364,98 @@ it('the external instrument uses physical starlight only while its camera owns t
   } finally {
     game.dispose()
   }
+})
+
+describe('the terrain archive, through the engine', () => {
+  const seed = rootSeed('engine-archive')
+  const surface = {
+    seed,
+    maxElevation: 6000,
+    roughness: 3,
+    seaLevel: null,
+    grammar: surfaceGrammar(seed, {
+      mass: 7.35e22,
+      meanRadius: 1.737e6,
+      atmosphere: null,
+      temperature: 250,
+      tidalProxy: 0,
+      hasOcean: false,
+      reliefSpent: 1,
+      publishedRelief: 6000,
+    }),
+  }
+  const request = { region: regionAddress(0, 3, 1, 1), resolution: 3 }
+
+  it('reports both producers in one place, and its clear retires both', async () => {
+    const rows = new Map<string, unknown>()
+    const store: HeightfieldStore = {
+      read: async (key) => rows.get(key) ?? null,
+      write: async (record) => {
+        rows.set(record.key, record)
+      },
+      remove: async (key) => {
+        rows.delete(key)
+      },
+      clear: async () => {
+        rows.clear()
+      },
+      stats: async () => ({
+        entries: rows.size,
+        bytes: 0,
+        maxEntries: 8,
+        maxBytes: 1_000_000,
+      }),
+    }
+    const game = headlessEngine({
+      heightfieldArchive: new HeightfieldArchive(store),
+    })
+    try {
+      // The pool's tile, through the archive's wrapper.
+      expect(await game.heightfields.submit(surface, request)?.result).not.toBe(
+        null,
+      )
+      // A GPU producer whose tile is still in flight when the cache is cleared.
+      let arrive: (() => void) | null = null
+      game.setHeightfieldSource({
+        kind: 'gpu',
+        archive: 'gpu:test',
+        available: true,
+        submit: (s, r) => ({
+          id: 1,
+          result: new Promise((done) => {
+            arrive = () => done(generateHeightfield(s, r))
+          }),
+          cancel() {},
+        }),
+      })
+      const late = game.heightfields.submit(surface, request)!
+      for (let i = 0; i < 20 && arrive === null; i++) await Promise.resolve()
+      await game.clearTerrainCache()
+      arrive!()
+      await late.result
+      const report = await game.terrainCache()
+      expect(report.available).toBe(true)
+      // Two lookups, one per namespace; the pool's tile was written and
+      // cleared, and the GPU's, from before the clear, never was.
+      expect(report.activity).toMatchObject({ misses: 2, writes: 1 })
+      expect(report.storage).toMatchObject({ entries: 0 })
+      expect(rows.size).toBe(0)
+    } finally {
+      game.dispose()
+    }
+  })
+
+  it('reports no archive, and clears nothing, without one', async () => {
+    const game = headlessEngine({ heightfieldArchive: null })
+    try {
+      await game.clearTerrainCache()
+      expect(await game.terrainCache()).toEqual({
+        available: false,
+        activity: null,
+        storage: null,
+      })
+    } finally {
+      game.dispose()
+    }
+  })
 })

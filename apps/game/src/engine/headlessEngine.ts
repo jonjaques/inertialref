@@ -20,7 +20,7 @@ import { GameEngine, type GameEngineOptions } from './GameEngine.ts'
  * pool a test drives serves exactly the names the browser's workers do.
  */
 export function headlessEngine(
-  options: Pick<GameEngineOptions, 'catalog' | 'heightfieldStore'> = {},
+  options: Pick<GameEngineOptions, 'catalog' | 'heightfieldArchive'> = {},
 ): GameEngine {
   const registry = createGameTaskRegistry()
   let clock = 0

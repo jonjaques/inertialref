@@ -1,6 +1,8 @@
 # ADR-0045: Generated terrain is a bounded, disposable cache
 
-Status: accepted · 19 Sep 2026. Extends the cache option in
+Status: accepted · 19 Sep 2026 · amended 11 Oct 2026: one archive object per
+store, sources declare their own namespace, and the CPU revision is held by a
+fingerprint. Extends the cache option in
 [ADR-0007](0007-persistence.md); saves still contain no generated terrain.
 
 ## Context
@@ -17,15 +19,18 @@ byte, so one producer's cached tile cannot silently become the other's answer.
 
 ## Decision
 
-**A `CachedHeightfieldSource` validates regenerable tiles through a host store;
+**A `HeightfieldArchive` validates regenerable tiles through a host store;
 cache failure falls back to the original source, and no cache joins a save.**
 
-The portable wrapper lives in `packages/workers`. Its key contains the complete
-encoded `SurfaceParameters`, every `HeightfieldRequest` member, a producer
-namespace, the terrain algorithm version, the heightfield task version and
-`HEIGHTFIELD_CACHE_REVISION`. The current CPU namespace is `cpu`; the browser's
-GPU namespace includes `terrain-tsl@1`. Adding a request field therefore changes
-identity without relying on a separate hand-maintained list of key fields.
+The portable archive lives in `packages/workers`, one per store, and wraps each
+source with `archive.wrap(source)`. Its key contains the complete encoded
+`SurfaceParameters`, every `HeightfieldRequest` member, the terrain algorithm
+version and the namespace the source declares beside its own arithmetic: the
+pool's is `cpu@` and its task's version (`POOL_ARCHIVE`), and the GPU
+producer's is `gpu:terrain-tsl@` and `TERRAIN_KERNEL_REVISION`, in the kernel's
+module, joined to the pool's, because the kernel reads records the CPU packs
+from the same sketch and drainage graph. Adding a request field therefore changes identity without relying on a
+separate hand-maintained list of key fields.
 
 Host stores index the stable input serialization by its SHA-256 digest and
 retain the full signature in the payload. A read must match that full key and
@@ -34,12 +39,19 @@ finite elevations, the water field's finite-or-NaN convention, extrema and a
 checksum of the payload. A malformed or corrupt entry is removed and generated
 again. A digest match alone never makes a tile valid.
 
-The revision is an explicit maintenance obligation. Bump
-`HEIGHTFIELD_CACHE_REVISION` when drawn-field arithmetic, cached payload shape
-or a producer implementation changes without a corresponding canonical terrain
-or task-version bump. A kernel-specific namespace revision separates producer
-implementations as well. Old versions can remain on disk until bounded eviction
-reclaims them; they cannot match a request from the new version.
+The CPU revision is enforced, not remembered. When drawn-field arithmetic
+changes without a canonical terrain bump, the pool's task spends a version,
+and `heightfieldFingerprint.test.ts` fails until it does: it
+hashes tiles from a dry body and a wet one with a drainage graph against
+fingerprints pinned beside the version, and its failure message says to spend
+the revision. The fingerprint is a golden vector on purpose — going stale is
+the signal. The GPU revision stays a maintenance obligation, because the
+kernel's output varies by adapter within its measured bound and no golden tile
+can pin it. A change to the record's shape is neither: the fingerprint hashes
+the arrays and extremes, and validation ignores a field it does not know, so a
+new field in `HeightfieldResponse` spends the pool's version by hand, which
+retires both namespaces. Old versions can remain on disk until bounded
+eviction reclaims them; they cannot match a request from the new version.
 
 The browser uses IndexedDB database `inertialref-terrain`, separate from saves.
 It defaults to 8,192 entries and 256 MiB of estimated record bytes. Tile writes,
@@ -60,8 +72,11 @@ limits together. The limits account for payloads, not exact filesystem usage.
 A completed source job returns its tile without awaiting the storage write.
 `flush()` waits for outstanding writes. Cancellation before a read completes
 prevents a miss from starting generation; cancellation during generation reaches
-the original job. Clearing increments the shared store generation, drains
-writes and clears storage so older in-flight requests cannot repopulate it.
+the original job. Clearing increments the archive's epoch, drains writes and
+clears storage so older in-flight requests from either producer cannot
+repopulate it. `close()` drains writes before releasing the store, and a
+wrapper passes straight through to its source afterward, so no write reopens a
+store its owner closed.
 
 ## Alternatives considered
 

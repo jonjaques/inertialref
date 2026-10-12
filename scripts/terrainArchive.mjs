@@ -2,16 +2,16 @@
 /*
  * The terrain archive, from outside the process that fills it.
  *
- *     node scripts/terrainArchive.mjs            {"version":"1-5-3","entries":1246,"bytes":88486528}
- *     node scripts/terrainArchive.mjs version    1-5-3
+ *     node scripts/terrainArchive.mjs            {"version":"5-cpu@7","entries":1246,"bytes":88486528}
+ *     node scripts/terrainArchive.mjs version    5-cpu@7
  *     node scripts/terrainArchive.mjs entries    1246
  *
  * Two readers, and neither can import the store. CI keys its cache of
- * `.data/heightfields/` on `version`, so a bump to the terrain algorithm, the
- * heightfield task or `HEIGHTFIELD_CACHE_REVISION` starts a fresh archive
- * rather than restoring one no request can match; and it saves the archive
- * back only when `entries` grew, so a warm run that generated nothing does not
- * upload the same 90 MB it downloaded. Both are decided in a shell step, which
+ * `.data/heightfields/` on `version` — the canonical terrain version and the
+ * pool's namespace in the archive, which is its task's version — so a bump to
+ * either starts a fresh archive rather than restoring one no request can
+ * match; and it saves the archive back only when `entries` grew, so a warm run
+ * that generated nothing does not upload the same 90 MB it downloaded. Both are decided in a shell step, which
  * is why this prints one value at a time.
  *
  * The count comes from the store's own tally rather than from the file's size
@@ -23,10 +23,12 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { HEIGHTFIELD_CACHE_VERSION } from '../packages/workers/src/heightfieldCache.ts'
+import { heightfieldArchiveVersion } from '../packages/workers/src/heightfieldCache.ts'
+import { POOL_ARCHIVE } from '../packages/workers/src/tasks.ts'
 import { DEFAULT_HEIGHTFIELD_DIRECTORY } from '../apps/headless/src/heightfieldStore.ts'
 
-const version = HEIGHTFIELD_CACHE_VERSION.replaceAll(':', '-')
+// The headless archive is the pool's alone: nothing in Node runs the kernel.
+const version = heightfieldArchiveVersion(POOL_ARCHIVE).replaceAll(':', '-')
 
 function tally() {
   // The store's own spelling of its file, so the two cannot name different ones.

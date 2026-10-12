@@ -336,6 +336,12 @@ export const generateHeightfieldTask = defineTask<
    * worker's answer has no `water`, and `buildPatch` reads it where it is
    * handed one, so the mismatch is a patch with no lakes rather than an
    * error; the version makes it loud.
+   *
+   * The version is also the revision of the CPU tile: the heightfield archive
+   * keeps the pool's tiles under it (`POOL_ARCHIVE`). A change to the tile's
+   * arithmetic that no canonical terrain version covers — the drawn tail,
+   * which is not canon — spends a version here, and
+   * `heightfieldFingerprint.test.ts` fails until it is spent.
    */
   version: 7,
   run(payload) {
@@ -409,9 +415,27 @@ export interface HeightfieldSource {
   ): JobHandle<HeightfieldResponse>
 }
 
+/**
+ * A source the heightfield archive can keep tiles for: one that names its
+ * arithmetic.
+ *
+ * `archive` is the producer and the revision of the arithmetic that made the
+ * tile, declared beside that arithmetic, so a change to it changes every key
+ * the source writes. The pool declares `POOL_ARCHIVE`; the GPU producer
+ * declares its kernel's revision, which stays manual because its output
+ * varies by adapter.
+ */
+export interface ArchivedSource extends HeightfieldSource {
+  readonly archive: string
+}
+
+/** The pool's namespace in the archive: the CPU tile at its task's version. */
+export const POOL_ARCHIVE = `cpu@${generateHeightfieldTask.version}`
+
 /** The pool, as a source: `generateHeightfieldTask` on a worker. */
-export const poolHeightfieldSource = (pool: WorkerPool): HeightfieldSource => ({
+export const poolHeightfieldSource = (pool: WorkerPool): ArchivedSource => ({
   kind: 'pool',
+  archive: POOL_ARCHIVE,
   available: true,
   submit: (surface, request) =>
     pool.submit(generateHeightfieldTask, {

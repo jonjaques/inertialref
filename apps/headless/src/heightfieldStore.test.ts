@@ -11,7 +11,7 @@ import {
   surfaceGrammar,
 } from '@inertialref/universe'
 import {
-  CachedHeightfieldSource,
+  HeightfieldArchive,
   heightfieldCacheRecord,
   validateHeightfieldCacheRecord,
 } from '@inertialref/workers'
@@ -85,18 +85,16 @@ it('storage absence is a generated tile, never a failed source', async () => {
   writeFileSync(file, 'occupied')
   const store = new DiskHeightfieldStore({ directory: file })
   stores.push(store)
-  const source = new CachedHeightfieldSource(
-    {
-      kind: 'pool',
-      available: true,
-      submit: () => ({ id: 1, result: Promise.resolve(field), cancel() {} }),
-    },
-    store,
-    'cpu',
-  )
+  const archive = new HeightfieldArchive(store)
+  const source = archive.wrap({
+    kind: 'pool',
+    archive: 'cpu@test',
+    available: true,
+    submit: () => ({ id: 1, result: Promise.resolve(field), cancel() {} }),
+  })
   await expect(source.submit(surface, request).result).resolves.toEqual(field)
-  await source.flush()
-  expect(source.stats()).toMatchObject({ readErrors: 1, writeErrors: 1 })
+  await archive.flush()
+  expect(archive.stats()).toMatchObject({ readErrors: 1, writeErrors: 1 })
 })
 
 it('reports a quota refusal without claiming a persisted tile', async () => {
