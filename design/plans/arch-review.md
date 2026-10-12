@@ -306,10 +306,12 @@ tests use `localTriad`. The first is geographic east — `geodeticDirection`'s
 longitude increases along `cross(+Y, up)` — so the surface frame's +X points
 west. A landed entity's orientation is stored relative to that frame, and
 `ir.land` teleports a ship there at `Q.IDENTITY`, so making the surface frame
-read the shared basis turns every landed ship 180° about up, saved ones
-included: the pull request either keeps the surface frame's axes and converts
-at the boundary, or spends a version on what a save means. Nothing is wrong today, because every heading derived
-this way is 0. It is a trap for the first heading taken from a landed ship.
+read the shared basis turns every `ir.land` placement and every landed ship in
+a save 180° about up — a ship that lands by flight is reframed and keeps its
+heading. The pull request either keeps the surface frame's axes and converts
+at the boundary, or spends a version on what a save means. Nothing is wrong
+today, because every heading derived this way is 0. It is a trap for the first
+heading taken from a landed ship.
 
 **The shape.** `compassBasis(latitude, longitude, heading)` in
 `packages/universe`, read by all four.

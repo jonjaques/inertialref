@@ -348,9 +348,12 @@ export function directionToGeodetic(direction: {
 /**
  * Install a local tangent frame on a body's surface.
  *
- * Axes are east / up / south — right-handed with +Y up, matching the rest of
+ * Axes are west / up / north — right-handed with +Y up, matching the rest of
  * the simulation, so "up" in a landing HUD is the same +Y the renderer uses and
- * nothing has to be flipped at the boundary.
+ * nothing has to be flipped at the boundary. West, not east: +X is
+ * `(-up.z, 0, up.x)`, the negation of `cross(+Y, up)`, along which
+ * `geodeticDirection`'s longitude increases. Landed orientations are stored in
+ * this frame and saved, so the axes are part of what a save means.
  */
 export function installSurfaceFrame(
   graph: FrameGraph,
@@ -369,11 +372,11 @@ export function installSurfaceFrame(
   // A caller-supplied elevation sampled at the unrounded position put a
   // restored landing site 21 mm from the original.
   const elevation = surfaceRadius(body, up) - body.radius
-  const east = Vec.normalize(vec3(-up.z, 0, up.x))
-  // Degenerate at the poles, where "east" is undefined; fall back to +X.
-  const eastSafe = Vec.lengthSquared(east) === 0 ? vec3(1, 0, 0) : east
-  const south = Vec.cross(eastSafe, up)
-  const orientation = Q.fromBasis(eastSafe, up, south)
+  const west = Vec.normalize(vec3(-up.z, 0, up.x))
+  // Degenerate at the poles, where "west" is undefined; fall back to +X.
+  const westSafe = Vec.lengthSquared(west) === 0 ? vec3(1, 0, 0) : west
+  const north = Vec.cross(westSafe, up)
+  const orientation = Q.fromBasis(westSafe, up, north)
   const position = Vec.scale(up, body.radius + elevation)
 
   graph.define({
