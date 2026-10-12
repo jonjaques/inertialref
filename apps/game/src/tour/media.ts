@@ -1,4 +1,8 @@
-import { GUIDE_CLIENT_EVENTS } from '@inertialref/protocol'
+import {
+  type GuideClientEvent,
+  isGuideClientEvent,
+} from '@inertialref/protocol'
+import type { LiveTransport } from './channel.ts'
 
 /*
  * The voice connection: one peer connection, one data channel, one speaker.
@@ -7,9 +11,11 @@ import { GUIDE_CLIENT_EVENTS } from '@inertialref/protocol'
  * the Worker's answer, plays the remote track, and sends every command the
  * guide needs over the data channel. There is no relay: the events the
  * provider sends arrive here and go straight to the loop, and the commands
- * the loop sends go straight out. `send` refuses anything not on the
- * data-channel allow list before the provider can, so a bug is a thrown
- * error in a test rather than an `event_not_allowed` in a session.
+ * the loop sends go straight out, through the verbs in `channel.ts`. `send`
+ * is typed on the protocol's events and still refuses anything not on the
+ * data-channel allow list before the provider can, because a cast reaches
+ * the wire as surely as a typo: a bug is a thrown error in a test rather than
+ * an `event_not_allowed` in a session.
  *
  * The remote track is also the clock. Output audio streams whether or not
  * the guide is speaking, so `level()` reads an `AnalyserNode` on the track
@@ -79,7 +85,7 @@ export type LiveServerEvent = Readonly<Record<string, unknown>> & {
   readonly type: string
 }
 
-export class LiveConnection {
+export class LiveConnection implements LiveTransport {
   #peer: RTCPeerConnection | null = null
   #channel: RTCDataChannel | null = null
   #stream: MediaStream | null = null
@@ -237,12 +243,9 @@ export class LiveConnection {
    * The event id is the browser's, so an acknowledgment can be matched to the
    * append that asked for it.
    */
-  send(event: Record<string, unknown>): string {
-    const type = event.type
-    if (
-      typeof type !== 'string' ||
-      !(GUIDE_CLIENT_EVENTS as readonly string[]).includes(type)
-    )
+  send(event: GuideClientEvent): string {
+    const type: unknown = event.type
+    if (!isGuideClientEvent(type))
       throw new Error(`The guide may not send ${String(type)}.`)
     const channel = this.#channel
     if (this.#stopped || channel === null || channel.readyState !== 'open')

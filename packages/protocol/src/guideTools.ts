@@ -174,6 +174,33 @@ export type GuideToolOutput = Readonly<Record<string, unknown>> & {
   readonly status: string
 }
 
+/**
+ * The answers that end a stop. The executor writes them `satisfies
+ * GuideStopStatus`, so renaming one on either side fails the typecheck rather
+ * than leaving every move unable to end a linger.
+ */
+export type GuideStopStatus = 'moving' | 'held'
+const STOP_STATUSES: ReadonlySet<string> = new Set<GuideStopStatus>([
+  'moving',
+  'held',
+])
+
+/**
+ * Whether an answer ends the current stop, which is what the beat keys on: a
+ * linger the guide declared is dropped, and an arrival still waiting to be
+ * narrated is superseded.
+ *
+ * Read from the answer rather than the tool's name, because the effect is the
+ * executor's to state. A move that travels answers `moving` and later arrives
+ * (`go_to`, `frame_pair`, `stand_at`, `leave_surface`); `hold_view` answers
+ * `held`, declaring the view as it stands the stop. A refinement of the stop
+ * — `adjust_view`, `look_around`, `set_time` — answers `ok` and leaves a
+ * linger running: the visitor is still looking at the same thing. A refused
+ * or canceled move changed nothing, so it ends nothing.
+ */
+export const endsStop = (output: GuideToolOutput): boolean =>
+  STOP_STATUSES.has(output.status)
+
 const nullable = (schema: Record<string, unknown>) => ({
   anyOf: [schema, { type: 'null' }],
 })
@@ -747,7 +774,67 @@ export const GUIDE_CLIENT_EVENTS = [
   'session.input_audio.unmute',
   'session.close',
 ] as const
-export type GuideClientEvent = (typeof GUIDE_CLIENT_EVENTS)[number]
+export type GuideClientEventType = (typeof GUIDE_CLIENT_EVENTS)[number]
+
+/** What the browser adds to the conversation: a message, or a tool's answer. */
+export type GuideConversationItem =
+  | {
+      readonly type: 'message'
+      /** `developer` is state the browser writes; `user` is the visitor's own words. */
+      readonly role: 'developer' | 'user'
+      readonly content: readonly [
+        { readonly type: 'input_text'; readonly text: string },
+      ]
+    }
+  | {
+      readonly type: 'function_call_output'
+      readonly call_id: string
+      /** The tool's `GuideToolOutput`, as JSON text: the model reads it so. */
+      readonly output: string
+    }
+
+/**
+ * Every event the browser may send, by shape. The sender stamps `event_id`.
+ *
+ * Typed so that a misspelled event fails `tsc` rather than passing the tests
+ * and failing as `event_not_allowed` in a live, billed session; the type and
+ * the allow list are held to each other below.
+ */
+export type GuideClientEvent =
+  | {
+      readonly type: 'response.item.create'
+      readonly item: GuideConversationItem
+    }
+  | { readonly type: 'response.create' }
+  | {
+      readonly type:
+        | 'session.thinking.append'
+        | 'session.instructions.append'
+        | 'session.commentary.append'
+      /** Null: the session's, not one delegation's. */
+      readonly delegation_id: null
+      readonly content: string
+    }
+  | { readonly type: 'session.input_audio.mute' }
+  | { readonly type: 'session.input_audio.unmute' }
+  | { readonly type: 'session.close' }
+
+// The shapes and the allow list name the same events, both ways.
+const everyListedEventHasAShape: GuideClientEventType extends GuideClientEvent['type']
+  ? true
+  : never = true
+const everyShapeIsListed: GuideClientEvent['type'] extends GuideClientEventType
+  ? true
+  : never = true
+void everyListedEventHasAShape
+void everyShapeIsListed
+
+/** Whether the allow list admits an event — checked at run time, past any cast. */
+export const isGuideClientEvent = (
+  type: unknown,
+): type is GuideClientEventType =>
+  typeof type === 'string' &&
+  (GUIDE_CLIENT_EVENTS as readonly string[]).includes(type)
 
 /** Every voice the Live reference lists that the panel offers. */
 export const GUIDE_VOICES = [

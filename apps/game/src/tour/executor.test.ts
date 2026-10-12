@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { openSession } from '@inertialref/devtools'
-import type { GuideCall, TourCameraMotion } from '@inertialref/protocol'
+import {
+  endsStop,
+  type GuideCall,
+  type TourCameraMotion,
+} from '@inertialref/protocol'
 import { GuideExecutor, type GuideArrival } from './executor.ts'
 
 function rig(ready?: () => boolean) {
@@ -74,6 +78,33 @@ describe('the guide executor moves without blocking', () => {
     expect(f.arrivals).toHaveLength(1)
     expect(f.takeovers()).toBe(0)
     expect(f.session.world.stateHash()).toBe(hash)
+    f.dispose()
+  })
+
+  it('answers the stop-ending statuses the protocol reads, for a move and a hold', async () => {
+    const f = rig()
+    expect(endsStop(await f.executor.execute(goTo('Saturn')))).toBe(true)
+    f.settle()
+    expect(endsStop(await f.executor.execute({ name: 'hold_view' }))).toBe(true)
+    f.dispose()
+  })
+
+  it('answers a composition refused after the camera moved as the default move it made', async () => {
+    const f = rig()
+    // `compose` retargets before it finds the star, so its throw comes late.
+    const compose = vi.spyOn(f.eye, 'compose').mockImplementation(() => {
+      throw new Error('Saturn has no star to compose against')
+    })
+    const output = await f.executor.execute(goTo('Saturn', 'portrait'))
+    expect(output).toMatchObject({
+      status: 'moving',
+      subject: 'Saturn',
+      framing: 'default',
+    })
+    expect(String(output.note)).toMatch(/no star/)
+    expect(endsStop(output)).toBe(true)
+    expect(f.executor.pending).toBe('go_to')
+    compose.mockRestore()
     f.dispose()
   })
 

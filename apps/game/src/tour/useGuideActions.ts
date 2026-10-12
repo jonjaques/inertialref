@@ -8,7 +8,7 @@ export function useGuideActions(guide: GuideLifetime<GuideRuntime>): void {
     const runtime = guide.current
     if (event.phase !== 'down' || runtime === null) return
     if (id === 'guide.pause') {
-      if (runtime.getSnapshot().paused) runtime.resume()
+      if (runtime.getSnapshot().activity.state === 'paused') runtime.resume()
       else runtime.pause()
     }
     if (id === 'guide.end') void runtime.end()

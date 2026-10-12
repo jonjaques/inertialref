@@ -5,6 +5,7 @@ import {
   type GuideCall,
   type GuideToolOutput,
 } from '@inertialref/protocol'
+import type { GuideChannel } from './channel.ts'
 
 /*
  * The tool loop over the data channel.
@@ -34,10 +35,11 @@ import {
  * at the wrong place.
  */
 
-export interface GuideChannel {
-  /** Send one client event; returns its event id. */
-  send(event: Record<string, unknown>): string
-}
+/** The verbs the loop speaks in; `GuideChannel` in `channel.ts` is the one implementation. */
+export type GuideLoopChannel = Pick<
+  GuideChannel,
+  'note' | 'ask' | 'answer' | 'respond'
+>
 
 export interface GuideLoopOptions {
   readonly now: () => number
@@ -47,6 +49,8 @@ export interface GuideLoopOptions {
   /** A delegation the voice started, not one the browser prompted. */
   readonly onDelegation?: () => void
   readonly onError?: (code: string, message: string) => void
+  /** The provider ended the session, with its reason: `expired`, or why else. */
+  readonly onClosed?: (reason: string) => void
   readonly onChange?: () => void
   /** Milliseconds since the last visitor fragment during which the visitor counts as speaking. */
   readonly visitorQuietMs?: number
@@ -85,7 +89,7 @@ const CANCELED: GuideToolOutput = {
 }
 
 export class GuideLoop {
-  readonly #channel: GuideChannel
+  readonly #channel: GuideLoopChannel
   readonly #options: GuideLoopOptions
   readonly #responses = new Map<string, OpenResponse>()
   readonly #calls = new Map<string, PendingCall>()
@@ -109,7 +113,7 @@ export class GuideLoop {
   #closed: { reason: string } | null = null
   #stopped = false
 
-  constructor(channel: GuideChannel, options: GuideLoopOptions) {
+  constructor(channel: GuideLoopChannel, options: GuideLoopOptions) {
     this.#channel = channel
     this.#options = options
   }
@@ -146,20 +150,14 @@ export class GuideLoop {
 
   /** Queue a developer message as state the next response will read. */
   queue(text: string): void {
-    this.#item({
-      type: 'message',
-      role: 'developer',
-      content: [{ type: 'input_text', text }],
-    })
+    if (this.#stopped) return
+    this.#channel.note(text)
   }
 
   /** The visitor's own words, typed: the documented text-input path. */
   ask(text: string): void {
-    this.#item({
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'input_text', text }],
-    })
+    if (this.#stopped) return
+    this.#channel.ask(text)
     this.#create()
   }
 
@@ -245,10 +243,12 @@ export class GuideLoop {
           ...this.#usage,
           voiceSeconds: Math.max(this.#usage.voiceSeconds, seconds),
         }
-      if (type === 'session.closed')
-        this.#closed = {
-          reason: typeof event.reason === 'string' ? event.reason : 'unknown',
-        }
+      if (type === 'session.closed') {
+        const reason =
+          typeof event.reason === 'string' ? event.reason : 'unknown'
+        this.#closed = { reason }
+        this.#options.onClosed?.(reason)
+      }
       this.#options.onChange?.()
       return
     }
@@ -407,11 +407,8 @@ export class GuideLoop {
   }
 
   #output(callId: string, output: GuideToolOutput): void {
-    this.#item({
-      type: 'function_call_output',
-      call_id: callId,
-      output: JSON.stringify(output),
-    })
+    if (this.#stopped) return
+    this.#channel.answer(callId, output)
     const responseId = this.#calls.get(callId)?.responseId ?? null
     if (responseId === null) this.#create()
     else this.#continueIfAnswered(responseId)
@@ -435,18 +432,13 @@ export class GuideLoop {
     this.#create()
   }
 
-  #item(item: Record<string, unknown>): void {
-    if (this.#stopped) return
-    this.#channel.send({ type: 'response.item.create', item })
-  }
-
   #create(): void {
     if (this.#stopped) return
     // Between this send and the provider's `response.created` the chain is
     // open and nothing has said so yet; the flag covers that gap so an
     // arrival cannot start a second response into it.
     this.#continuing = true
-    this.#channel.send({ type: 'response.create' })
+    this.#channel.respond()
     this.#options.onChange?.()
   }
 }

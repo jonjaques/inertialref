@@ -1,4 +1,5 @@
 import type {
+  GuideState,
   GuideStatus,
   GuideTraceEntry,
   GuideUsage,
@@ -9,11 +10,17 @@ import {
   decode,
   decodeGuideError,
   decodeGuideSessionCreated,
+  endsStop,
   GUIDE_SESSIONS_PATH,
   type GuideCall,
   type GuideSessionRequest,
   type GuideToolOutput,
 } from '@inertialref/protocol'
+import {
+  GuideChannel,
+  isOutputTranscript,
+  type LiveTransport,
+} from './channel.ts'
 import { SpeechClock } from './clock.ts'
 import { accessState, type GuideAccess } from './verdict.ts'
 import type { GuideArrival, SceneFacts } from './executor.ts'
@@ -51,12 +58,78 @@ import {
  * takeover, a pause, a new delegation or a new move ends the wait.
  */
 
+/**
+ * Where the session is, and while it is connected, what the guide is doing.
+ *
+ * Held as a code, never as the words under the controls: the status line and
+ * `ir.guideStatus` are both derived from it, so a change to one sentence does
+ * not change what a script reads.
+ */
+export type GuideActivity =
+  | { readonly state: 'offline' }
+  | { readonly state: 'connecting' }
+  | { readonly state: 'listening' }
+  | { readonly state: 'speaking' }
+  | { readonly state: 'thinking' }
+  | { readonly state: 'searching' }
+  | { readonly state: 'moving'; readonly subject: string }
+  /** The visitor took the camera and the guide has not acted since. */
+  | { readonly state: 'visitor-camera' }
+  | { readonly state: 'paused' }
+  | { readonly state: 'ending' }
+
+const OFFLINE: GuideActivity = { state: 'offline' }
+const LISTENING: GuideActivity = { state: 'listening' }
+
+/** The one line under the controls. */
+export function statusLine(activity: GuideActivity): string {
+  switch (activity.state) {
+    case 'offline':
+      return 'Ready'
+    case 'connecting':
+      return 'Connecting'
+    case 'listening':
+      return 'Listening'
+    case 'speaking':
+      return 'Speaking'
+    case 'thinking':
+      return 'Thinking'
+    case 'searching':
+      return 'Searching the sky'
+    case 'moving':
+      return `Moving to ${activity.subject}`
+    case 'visitor-camera':
+      return 'You have the camera'
+    case 'paused':
+      return 'Paused'
+    case 'ending':
+      return 'Ending'
+  }
+}
+
+/** The connection an activity implies: the peer connection's own phases. */
+export function connectionOf(
+  activity: GuideActivity,
+): GuideStatus['connection'] {
+  switch (activity.state) {
+    case 'offline':
+      return 'offline'
+    case 'connecting':
+      return 'connecting'
+    case 'ending':
+      return 'closing'
+    default:
+      return 'connected'
+  }
+}
+
+const sameActivity = (a: GuideActivity, b: GuideActivity): boolean =>
+  a.state === b.state &&
+  (a.state !== 'moving' || (b.state === 'moving' && a.subject === b.subject))
+
 export interface GuideSnapshot {
-  readonly connection: GuideStatus['connection']
+  readonly activity: GuideActivity
   readonly voice: string | null
-  readonly paused: boolean
-  /** One line under the controls: Listening, Speaking, Moving to Titan. */
-  readonly status: string
   readonly message: string | null
   readonly usage: GuideUsage
   readonly expiresAt: number | null
@@ -76,14 +149,15 @@ export interface GuideExecutorPort {
   dispose(): void
 }
 
-/** What the runtime needs from the connection; `media.ts` is the one implementation. */
-export interface LiveConnectionPort {
+/**
+ * What the runtime needs from the connection: the transport the channel's
+ * verbs speak over, and the lifecycle around it. `media.ts` is the one
+ * implementation; `liveFake.ts` is the tests'.
+ */
+export interface LiveConnectionPort extends LiveTransport {
   prepare(): Promise<string>
   accept(sdp: string): Promise<void>
-  send(event: Record<string, unknown>): string
   level(): number
-  muteMicrophone(muted: boolean): Promise<void>
-  muteGuide(muted: boolean): void
   close(timeoutMs?: number): Promise<{ closed: boolean }>
   stop(): void
 }
@@ -127,16 +201,15 @@ export class GuideRuntime {
   readonly #listeners = new Set<() => void>()
   readonly #clock: SpeechClock
   #snapshot: GuideSnapshot = {
-    connection: 'offline',
+    activity: OFFLINE,
     voice: null,
-    paused: false,
-    status: '',
     message: null,
     usage: NO_GUIDE_USAGE,
     expiresAt: null,
   }
   #executor: GuideExecutorPort | null = null
   #live: LiveConnectionPort | null = null
+  #channel: GuideChannel | null = null
   #loop: GuideLoop | null = null
   #sessionId: string | null = null
   #generation = 0
@@ -192,31 +265,36 @@ export class GuideRuntime {
   }
 
   diagnostics(): GuideStatus {
-    const state = this.#snapshot
+    const { activity, usage } = this.#snapshot
     const access = this.#host.access()
+    const connection = connectionOf(activity)
+    const paused = activity.state === 'paused'
     return {
       available: access.state === 'granted',
       loaded: true,
       // An offline runtime is as available as the verdict says, so a refused
       // visitor reads as refused, not as an idle guide, once it has loaded.
       state:
-        state.connection === 'offline'
+        activity.state === 'offline'
           ? accessState(access)
-          : state.status.toLowerCase() || 'idle',
-      connection: state.connection,
+          : (activity.state satisfies GuideState),
+      connection,
       sessionId: this.#sessionId,
       viewRevision: this.#executor?.viewRevision ?? null,
       microphone:
-        state.connection === 'connected'
-          ? state.paused
-            ? 'muted'
-            : 'active'
-          : 'off',
-      paused: state.paused,
+        connection === 'connected' ? (paused ? 'muted' : 'active') : 'off',
+      paused,
       pendingCalls: this.#loop?.pendingCalls ?? 0,
       inFlight: this.#loop?.inFlight ?? false,
-      usage: state.usage,
+      usage,
     }
+  }
+
+  #connected(): boolean {
+    return connectionOf(this.#snapshot.activity) === 'connected'
+  }
+  #paused(): boolean {
+    return this.#snapshot.activity.state === 'paused'
   }
 
   #update(next: Partial<GuideSnapshot>): void {
@@ -226,7 +304,7 @@ export class GuideRuntime {
 
   /** Request the microphone, post the offer, greet. */
   async start(voice: string): Promise<void> {
-    if (this.#snapshot.connection !== 'offline') return
+    if (this.#snapshot.activity.state !== 'offline') return
     /*
      * The mode's verdict, read rather than kept: there is one per mode, keyed
      * on the user, and the runtime holds no copy to fall out of step with it.
@@ -243,10 +321,8 @@ export class GuideRuntime {
         verdict.voices[0] ??
         'marin'
       this.#update({
-        connection: 'connecting',
+        activity: { state: 'connecting' },
         voice: chosen,
-        paused: false,
-        status: 'Connecting',
         message: null,
         usage: NO_GUIDE_USAGE,
         expiresAt: null,
@@ -256,24 +332,26 @@ export class GuideRuntime {
         (reason) => this.#failure(live, reason),
       )
       this.#live = live
-      const loop = new GuideLoop(
-        { send: (event) => this.#send(event) },
-        {
-          now: () => this.#host.now(),
-          execute: (call) => this.#execute(call),
-          onExecuted: (call, output) => this.#executed(call, output),
-          onDelegation: () => {
-            this.#cancelLinger()
-            this.#takenOver = false
-          },
-          onError: (code, detail) => {
-            this.#record('note', { error: code, detail })
-            if (code === 'session_expired')
-              this.#update({ message: 'The guide session expired.' })
-          },
-          onChange: () => this.#refresh(),
-        },
+      const channel = new GuideChannel(live, (event, id) =>
+        this.#record('send', { ...event, event_id: id }),
       )
+      this.#channel = channel
+      const loop = new GuideLoop(channel, {
+        now: () => this.#host.now(),
+        execute: (call) => this.#execute(call),
+        onExecuted: (call, output) => this.#executed(call, output),
+        onDelegation: () => {
+          this.#cancelLinger()
+          this.#takenOver = false
+        },
+        onError: (code, detail) => {
+          this.#record('note', { error: code, detail })
+          if (code === 'session_expired')
+            this.#update({ message: 'The guide session expired.' })
+        },
+        onClosed: (reason) => this.#closed(reason),
+        onChange: () => this.#refresh(),
+      })
       this.#loop = loop
       const sdp = await live.prepare()
       this.#guard(generation)
@@ -303,106 +381,77 @@ export class GuideRuntime {
       this.#sceneRevision = executor.viewRevision
       this.#sceneChangedAt = null
       this.#sceneText = sceneBlock(view, facts)
-      this.#update({ connection: 'connected', status: 'Listening' })
+      this.#update({ activity: LISTENING })
       this.#pollRelease ??= this.#host.poll(() => this.#tick())
       this.#visibilityRelease ??= this.#host.visibility((visible) => {
         if (!visible) this.pause()
       })
       this.#leavingRelease ??=
         this.#host.leaving?.(() => {
-          try {
-            this.#send({ type: 'session.close' })
-          } catch {
-            /* The peer connection closing is the fallback the provider honors. */
-          }
+          this.#channel?.close()
           this.#live?.stop()
         }) ?? null
       // The documented recipe: the instruction alone greeted in one of two
       // probe runs; with the commentary cue after it, every time.
-      const greeting = this.#send({
-        type: 'session.instructions.append',
-        delegation_id: null,
-        content: greetingInstruction(chosen),
-      })
+      const greeting = channel.instruct(greetingInstruction(chosen))
       await loop.waitForAck(greeting, ACK_TIMEOUT_MS)
       if (generation !== this.#generation) return
-      this.#send({
-        type: 'session.commentary.append',
-        delegation_id: null,
-        content: BEGIN_CONVERSATION,
-      })
+      channel.comment(BEGIN_CONVERSATION)
     } catch (cause) {
       if (generation !== this.#generation) return
       this.#teardown()
-      this.#update({
-        connection: 'offline',
-        status: '',
-        message: message(cause),
-      })
+      this.#update({ activity: OFFLINE, message: message(cause) })
     }
   }
 
   pause(): void {
-    if (this.#snapshot.connection !== 'connected' || this.#snapshot.paused)
-      return
+    const channel = this.#channel
+    if (!this.#connected() || this.#paused() || channel === null) return
     this.#pausedAt = this.#host.now()
     this.#cancelLinger()
     this.#deferredArrival = null
     this.#executor?.cancel()
-    void this.#live?.muteMicrophone(true).catch(() => {})
-    this.#live?.muteGuide(true)
-    try {
-      this.#send({ type: 'session.input_audio.mute' })
-      this.#send({
-        type: 'session.instructions.append',
-        delegation_id: null,
-        content: PAUSE_INSTRUCTION,
-      })
-    } catch {
-      /* A connection that cannot carry the mute is one the failure handler is about to report. */
-    }
-    this.#update({ paused: true, status: 'Paused' })
+    void channel.mute(true).catch(() => {})
+    this.#instruct(channel, PAUSE_INSTRUCTION)
+    this.#update({ activity: { state: 'paused' } })
   }
 
   resume(): void {
-    if (this.#snapshot.connection !== 'connected' || !this.#snapshot.paused)
-      return
+    const channel = this.#channel
+    if (!this.#connected() || !this.#paused() || channel === null) return
     this.#pausedAt = null
-    void this.#live?.muteMicrophone(false).catch((cause: unknown) => {
+    void channel.mute(false).catch((cause: unknown) => {
       this.#update({ message: message(cause) })
     })
-    this.#live?.muteGuide(false)
+    this.#instruct(channel, RESUME_INSTRUCTION)
+    this.#update({ activity: LISTENING, message: null })
+  }
+
+  /** An instruction a closing connection may refuse; its failure handler reports that. */
+  #instruct(channel: GuideChannel, content: string): void {
     try {
-      this.#send({ type: 'session.input_audio.unmute' })
-      this.#send({
-        type: 'session.instructions.append',
-        delegation_id: null,
-        content: RESUME_INSTRUCTION,
-      })
+      channel.instruct(content)
     } catch {
-      /* As above. */
+      /* A connection that cannot carry it is one the failure handler is about to report. */
     }
-    this.#update({ paused: false, status: 'Listening', message: null })
   }
 
   /** Close the session, wait for its final usage, release everything. */
   async end(): Promise<void> {
-    if (this.#snapshot.connection === 'offline' || this.#ending) return
+    if (this.#snapshot.activity.state === 'offline' || this.#ending) return
     this.#ending = true
     this.#generation++
     this.#cancelLinger()
     this.#executor?.cancel()
-    this.#update({ connection: 'closing', status: 'Ending' })
+    this.#update({ activity: { state: 'ending' } })
     const live = this.#live
     if (live !== null) await live.close()
+    // Read before the teardown drops the loop: the provider's closing event
+    // carries the billed seconds, and `#refresh` stops reading once the
+    // session ends.
+    const usage = this.#loop?.usage ?? this.#snapshot.usage
     this.#teardown()
-    this.#update({
-      connection: 'offline',
-      paused: false,
-      status: '',
-      voice: null,
-      expiresAt: null,
-    })
+    this.#update({ activity: OFFLINE, voice: null, expiresAt: null, usage })
   }
 
   /** Drop the message: it was written for an account that is not this one. */
@@ -413,12 +462,7 @@ export class GuideRuntime {
   /** A typed request, as the visitor's own words. */
   async ask(text: string): Promise<void> {
     const query = text.trim().slice(0, 4000)
-    if (
-      !query ||
-      this.#loop === null ||
-      this.#snapshot.connection !== 'connected'
-    )
-      return
+    if (!query || this.#loop === null || !this.#connected()) return
     this.#loop.ask(query)
   }
 
@@ -428,49 +472,37 @@ export class GuideRuntime {
 
   #event(live: LiveConnectionPort, event: LiveServerEvent): void {
     if (live !== this.#live) return
-    if (event.type !== 'session.output_transcript.delta')
-      this.#record('receive', event)
+    if (!isOutputTranscript(event)) this.#record('receive', event)
     this.#loop?.receive(event)
-    if (event.type === 'session.closed' && !this.#ending) {
-      const reason = typeof event.reason === 'string' ? event.reason : 'closed'
-      this.#teardown()
-      this.#update({
-        connection: 'offline',
-        paused: false,
-        status: '',
-        voice: null,
-        message:
-          reason === 'expired'
-            ? 'The guide session reached its time limit.'
-            : 'The guide session ended.',
-      })
-    }
+  }
+
+  /** The provider ended the session; an end the visitor asked for is `end`'s. */
+  #closed(reason: string): void {
+    if (this.#ending) return
+    // The closing event's seconds, which the loop has and the snapshot not yet.
+    const usage = this.#loop?.usage ?? this.#snapshot.usage
+    this.#teardown()
+    this.#update({
+      activity: OFFLINE,
+      voice: null,
+      usage,
+      message:
+        reason === 'expired'
+          ? 'The guide session reached its time limit.'
+          : 'The guide session ended.',
+    })
   }
 
   #failure(live: LiveConnectionPort, reason: string): void {
     if (live !== this.#live || this.#ending) return
     this.#teardown()
-    this.#update({
-      connection: 'offline',
-      paused: false,
-      status: '',
-      voice: null,
-      message: reason,
-    })
-  }
-
-  #send(event: Record<string, unknown>): string {
-    const live = this.#live
-    if (live === null) throw new Error('The voice connection is not open.')
-    const id = live.send(event)
-    this.#record('send', { ...event, event_id: id })
-    return id
+    this.#update({ activity: OFFLINE, voice: null, message: reason })
   }
 
   async #execute(call: GuideCall): Promise<GuideToolOutput> {
     const executor = this.#executor
     if (executor === null) return { status: 'rejected', reason: 'No scene.' }
-    if (this.#snapshot.paused)
+    if (this.#paused())
       return { status: 'rejected', reason: 'The visitor has paused the guide.' }
     const output = await executor.execute(call)
     this.#record('note', { call: call.name, output })
@@ -483,15 +515,9 @@ export class GuideRuntime {
       this.#linger = { seconds: call.seconds, phase: 'chain', quietFrom: 0 }
       return
     }
-    if (
-      call.name === 'go_to' ||
-      call.name === 'frame_pair' ||
-      call.name === 'stand_at' ||
-      call.name === 'leave_surface' ||
-      call.name === 'hold_view'
-    ) {
+    if (endsStop(output)) {
       this.#cancelLinger()
-      // A new move supersedes any arrival still waiting to be narrated.
+      // A new stop supersedes any arrival still waiting to be narrated.
       this.#deferredArrival = null
     }
     this.#refresh()
@@ -538,19 +564,11 @@ export class GuideRuntime {
     this.#sceneChangedAt = null
     loop.queue(takeoverBlock(view, facts))
     this.#think(takeoverContext(view))
-    this.#update({ status: 'You have the camera' })
+    this.#update({ activity: { state: 'visitor-camera' } })
   }
 
   #think(content: string): void {
-    try {
-      this.#send({
-        type: 'session.thinking.append',
-        delegation_id: null,
-        content,
-      })
-    } catch {
-      /* Reported by the failure handler if the connection is gone. */
-    }
+    this.#channel?.think(content)
   }
 
   /* ---------------------------------------------------------------------- */
@@ -558,7 +576,7 @@ export class GuideRuntime {
   /* ---------------------------------------------------------------------- */
 
   #tick(): void {
-    if (this.#snapshot.connection !== 'connected') return
+    if (!this.#connected()) return
     const executor = this.#executor
     const loop = this.#loop
     const live = this.#live
@@ -651,25 +669,29 @@ export class GuideRuntime {
 
   #refresh(): void {
     const snapshot = this.#snapshot
-    if (snapshot.connection !== 'connected') return
+    if (!this.#connected()) return
     const loop = this.#loop
     const executor = this.#executor
     const usage = loop?.usage ?? snapshot.usage
-    const status = snapshot.paused
-      ? 'Paused'
-      : executor?.searching
-        ? 'Searching the sky'
-        : executor?.pending !== null && executor?.pendingSubject
-          ? `Moving to ${executor.pendingSubject}`
-          : this.#clock.speaking
-            ? 'Speaking'
-            : loop?.inFlight
-              ? 'Thinking'
-              : snapshot.status === 'You have the camera'
-                ? snapshot.status
-                : 'Listening'
-    if (status !== snapshot.status || usage !== snapshot.usage)
-      this.#update({ status, usage })
+    const current = snapshot.activity
+    // A takeover holds until the guide does something else; listening is
+    // the one thing that does not count.
+    const activity: GuideActivity =
+      current.state === 'paused'
+        ? current
+        : executor?.searching
+          ? { state: 'searching' }
+          : executor?.pending !== null && executor?.pendingSubject
+            ? { state: 'moving', subject: executor.pendingSubject }
+            : this.#clock.speaking
+              ? { state: 'speaking' }
+              : loop?.inFlight
+                ? { state: 'thinking' }
+                : current.state === 'visitor-camera'
+                  ? current
+                  : LISTENING
+    if (!sameActivity(activity, current) || usage !== snapshot.usage)
+      this.#update({ activity, usage })
   }
 
   /* ---------------------------------------------------------------------- */
@@ -691,6 +713,7 @@ export class GuideRuntime {
     this.#leavingRelease = null
     this.#loop?.stop()
     this.#loop = null
+    this.#channel = null
     this.#live?.stop()
     this.#live = null
     this.#executor?.dispose()
