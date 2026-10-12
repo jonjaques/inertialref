@@ -225,20 +225,13 @@ describe('the timeline, through the runner', () => {
       type: FloatType,
       depthBuffer: false,
     })
-    const sensor = createSensor(
-      renderer,
-      scene,
-      camera,
-      layout,
-      () => ({
-        lens: view.lens,
-        settings: DEFAULT_SENSOR_SETTINGS,
-        time: 0,
-        headroom: 1,
-        pinned: exposurePinnedToLens(view.lens),
-      }),
-      NO_MSAA,
-    )
+    const sensor = createSensor(renderer, scene, camera, layout, () => ({
+      lens: view.lens,
+      settings: DEFAULT_SENSOR_SETTINGS,
+      time: 0,
+      headroom: 1,
+      pinned: exposurePinnedToLens(view.lens),
+    }))
     const stop = installPassTimeline(renderer)
     try {
       await volume.warm(renderer)

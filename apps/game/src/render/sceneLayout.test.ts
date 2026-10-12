@@ -64,6 +64,8 @@ describe('the scene layout', () => {
       fc.property(picture, backend, (p, b) => {
         const layout = sceneLayout(p, b)
         const resolved = resolvePicture(p, b.kind)
+        // The one resolution: what the sensor reconstructs from is this.
+        expect(layout.picture).toEqual(resolved)
         expect(layout.samples).toBe(pictureSamples(resolved))
         const temporal = resolved.aa === 'temporal'
         expect(attachment(layout, 'velocity') !== null).toBe(temporal)

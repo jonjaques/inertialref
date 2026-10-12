@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Camera, Object3D, Scene } from 'three/webgpu'
 import { DEFAULT_PICTURE } from './picture.ts'
-import { sceneLayout } from './sceneLayout.ts'
+import { sceneLayout, type SceneLayout } from './sceneLayout.ts'
 import { warmTargetFor } from './sensor.ts'
 import {
   type BootProgress,
@@ -327,5 +327,24 @@ describe('the stand-in a warm-up compiles against', () => {
     const second = {}
     expect(warmTargetFor(first, layout)).toBe(warmTargetFor(first, layout))
     expect(warmTargetFor(second, layout)).not.toBe(warmTargetFor(first, layout))
+  })
+
+  it('is one per attachment format, not per attachment name', () => {
+    // The same rows by name, one stored differently: the pipeline a stand-in
+    // compiles is keyed on the format, so sharing one would warm the wrong one.
+    const renderer = {}
+    const layout = sceneLayout(DEFAULT_PICTURE, {
+      kind: 'webgpu',
+      reversedDepth: true,
+    })
+    const restored: SceneLayout = {
+      ...layout,
+      attachments: layout.attachments.map((row) =>
+        row.name === 'meterMask' ? { ...row, storage: 'half' } : row,
+      ),
+    }
+    expect(warmTargetFor(renderer, restored)).not.toBe(
+      warmTargetFor(renderer, layout),
+    )
   })
 })

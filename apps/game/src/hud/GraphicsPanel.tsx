@@ -21,6 +21,7 @@ import {
   PICTURE_SHARPNESS,
   PICTURE_LABELS,
   pictureDimensions,
+  pictureUpscales,
   resolvePicture,
 } from '../render/picture.ts'
 import { PictureRow } from './PictureRow.tsx'
@@ -208,8 +209,7 @@ export function GraphicsPanel({
           disabled={() =>
             pageOverride
               ? 'Set by the page link'
-              : resolvedPicture.aa !== 'temporal' &&
-                  resolvedPicture.scale === 'native'
+              : !pictureUpscales(resolvedPicture)
                 ? 'Choose temporal anti-aliasing or a reduced render scale'
                 : undefined
           }

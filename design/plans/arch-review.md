@@ -27,50 +27,49 @@ the reference.
 
 The deepenings already landed, each carrying its reasoning in its own file:
 
-| Landed                                                       | Where                                                                                                                                   |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| The band stack's composition is one description              | [`packages/universe/src/bandStack.ts`](../../packages/universe/src/bandStack.ts), ADR-0023 § Consequences                               |
-| A mesh that wears the ground is dressed in one place         | [`apps/game/src/render/groundWear.ts`](../../apps/game/src/render/groundWear.ts), `render/wear.ts`                                      |
-| The harness is built over one host                           | `Host` and `renderHost` in [`packages/devtools/src/harness.ts`](../../packages/devtools/src/harness.ts)                                 |
-| The preference registry owns every knob the frame loop reads | [`apps/game/src/state/engineKnobs.ts`](../../apps/game/src/state/engineKnobs.ts)                                                        |
-| The entity store hands out its read half                     | `EntityView` in [`packages/simulation/src/entity.ts`](../../packages/simulation/src/entity.ts), `spawnShip`                             |
-| The heightfield request carries the surface                  | `HeightfieldSource.submit(surface, request)` and `WireSurface` in `packages/workers/src/tasks.ts`, ADR-0023 § 3                         |
-| A body's visual residency is a policy that runs in Node      | [`apps/game/src/scene/bodyResidency.ts`](../../apps/game/src/scene/bodyResidency.ts) and its test                                       |
-| On foot is a session verb                                    | [`packages/devtools/src/onFoot.ts`](../../packages/devtools/src/onFoot.ts), ADR-0047                                                    |
-| The flying verbs are a module                                | [`packages/devtools/src/maneuvers.ts`](../../packages/devtools/src/maneuvers.ts) and its test                                           |
-| Time has one writer                                          | [`apps/game/src/hud/time.ts`](../../apps/game/src/hud/time.ts) and its test                                                             |
-| The ground under a walker is one module                      | [`packages/rendering/src/ground.ts`](../../packages/rendering/src/ground.ts), `supportUnder`, rule 53                                   |
-| The walker's presentation is a function                      | [`apps/game/src/engine/onFootPresentation.ts`](../../apps/game/src/engine/onFootPresentation.ts) and its test                           |
-| A body's uniforms are a pure mapping                         | [`apps/game/src/render/bodyUniforms.ts`](../../apps/game/src/render/bodyUniforms.ts) and its test                                       |
-| The frame's owner is named once                              | [`apps/game/src/engine/frameOwner.ts`](../../apps/game/src/engine/frameOwner.ts), `engine.owner`, rule 31                               |
-| The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests                             |
-| The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                                                    |
-| The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                                           |
-| The game holds one guide verdict per mode                    | [`apps/game/src/tour/verdict.ts`](../../apps/game/src/tour/verdict.ts), `mountGuide`, and their tests                                   |
-| The Worker decides "configured" once                         | `guideAccess` in [`apps/server/src/tour/access.ts`](../../apps/server/src/tour/access.ts), ADR-0048                                     |
-| The Live channel speaks in verbs                             | [`apps/game/src/tour/channel.ts`](../../apps/game/src/tour/channel.ts), `liveFake.ts`, `endsStop`, ADR-0042                             |
-| The heightfield archive is one object                        | `HeightfieldArchive` in `packages/workers/src/heightfieldCache.ts`, the fingerprint test, ADR-0045                                      |
-| A body the kernel cannot pack goes to the pool alone         | `refuse` in [`apps/game/src/render/terrainProducer.ts`](../../apps/game/src/render/terrainProducer.ts) and its GPU test                 |
-| One water decision per patch                                 | `patchWater` in [`packages/rendering/src/terrainPalette.ts`](../../packages/rendering/src/terrainPalette.ts), `patchWater.test.ts`      |
-| One quad-pass runner                                         | `runQuadPasses` in [`apps/game/src/render/quadPass.ts`](../../apps/game/src/render/quadPass.ts) and its GPU test                        |
-| The drainage graph is prepared off the draw thread           | `SurfacePreparation` in [`packages/workers/src/surfacePreparation.ts`](../../packages/workers/src/surfacePreparation.ts) and its test   |
-| The scene target's layout is one table                       | `sceneLayout` in [`apps/game/src/render/sceneLayout.ts`](../../apps/game/src/render/sceneLayout.ts), `engine.sceneLayout`, and its test |
+| Landed                                                       | Where                                                                                                                                                    |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The band stack's composition is one description              | [`packages/universe/src/bandStack.ts`](../../packages/universe/src/bandStack.ts), ADR-0023 § Consequences                                                |
+| A mesh that wears the ground is dressed in one place         | [`apps/game/src/render/groundWear.ts`](../../apps/game/src/render/groundWear.ts), `render/wear.ts`                                                       |
+| The harness is built over one host                           | `Host` and `renderHost` in [`packages/devtools/src/harness.ts`](../../packages/devtools/src/harness.ts)                                                  |
+| The preference registry owns every knob the frame loop reads | [`apps/game/src/state/engineKnobs.ts`](../../apps/game/src/state/engineKnobs.ts)                                                                         |
+| The entity store hands out its read half                     | `EntityView` in [`packages/simulation/src/entity.ts`](../../packages/simulation/src/entity.ts), `spawnShip`                                              |
+| The heightfield request carries the surface                  | `HeightfieldSource.submit(surface, request)` and `WireSurface` in `packages/workers/src/tasks.ts`, ADR-0023 § 3                                          |
+| A body's visual residency is a policy that runs in Node      | [`apps/game/src/scene/bodyResidency.ts`](../../apps/game/src/scene/bodyResidency.ts) and its test                                                        |
+| On foot is a session verb                                    | [`packages/devtools/src/onFoot.ts`](../../packages/devtools/src/onFoot.ts), ADR-0047                                                                     |
+| The flying verbs are a module                                | [`packages/devtools/src/maneuvers.ts`](../../packages/devtools/src/maneuvers.ts) and its test                                                            |
+| Time has one writer                                          | [`apps/game/src/hud/time.ts`](../../apps/game/src/hud/time.ts) and its test                                                                              |
+| The ground under a walker is one module                      | [`packages/rendering/src/ground.ts`](../../packages/rendering/src/ground.ts), `supportUnder`, rule 53                                                    |
+| The walker's presentation is a function                      | [`apps/game/src/engine/onFootPresentation.ts`](../../apps/game/src/engine/onFootPresentation.ts) and its test                                            |
+| A body's uniforms are a pure mapping                         | [`apps/game/src/render/bodyUniforms.ts`](../../apps/game/src/render/bodyUniforms.ts) and its test                                                        |
+| The frame's owner is named once                              | [`apps/game/src/engine/frameOwner.ts`](../../apps/game/src/engine/frameOwner.ts), `engine.owner`, rule 31                                                |
+| The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests                                              |
+| The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                                                                     |
+| The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                                                            |
+| The game holds one guide verdict per mode                    | [`apps/game/src/tour/verdict.ts`](../../apps/game/src/tour/verdict.ts), `mountGuide`, and their tests                                                    |
+| The Worker decides "configured" once                         | `guideAccess` in [`apps/server/src/tour/access.ts`](../../apps/server/src/tour/access.ts), ADR-0048                                                      |
+| The Live channel speaks in verbs                             | [`apps/game/src/tour/channel.ts`](../../apps/game/src/tour/channel.ts), `liveFake.ts`, `endsStop`, ADR-0042                                              |
+| The heightfield archive is one object                        | `HeightfieldArchive` in `packages/workers/src/heightfieldCache.ts`, the fingerprint test, ADR-0045                                                       |
+| A body the kernel cannot pack goes to the pool alone         | `refuse` in [`apps/game/src/render/terrainProducer.ts`](../../apps/game/src/render/terrainProducer.ts) and its GPU test                                  |
+| One water decision per patch                                 | `patchWater` in [`packages/rendering/src/terrainPalette.ts`](../../packages/rendering/src/terrainPalette.ts), `patchWater.test.ts`                       |
+| One quad-pass runner                                         | `runQuadPasses` in [`apps/game/src/render/quadPass.ts`](../../apps/game/src/render/quadPass.ts) and its GPU test                                         |
+| The drainage graph is prepared off the draw thread           | `SurfacePreparation` in [`packages/workers/src/surfacePreparation.ts`](../../packages/workers/src/surfacePreparation.ts) and its test                    |
+| The scene target's layout is one table                       | `sceneLayout` in [`apps/game/src/render/sceneLayout.ts`](../../apps/game/src/render/sceneLayout.ts), `engine.sceneLayout`, and its test                  |
+| One render size and one resolution                           | `renderSize` and `pictureUpscales` in [`apps/game/src/render/picture.ts`](../../apps/game/src/render/picture.ts), `SceneLayout.picture`, and their tests |
 
 ---
 
 ## The order
 
-| #   | Pull request                                                                                  | Track       | Builds on | Strength        |
-| --- | --------------------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 18  | [The sensor publishes the frame's pixel grid](#18-the-sensor-publishes-the-frames-pixel-grid) | The picture | —         | Worth exploring |
-| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages)            | The picture | —         | Worth exploring |
-| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                              | The picture | —         | Worth exploring |
-| A   | [One compass basis](#a-one-compass-basis)                                                     | Optional    | —         | Speculative     |
-| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)                         | Optional    | —         | Speculative     |
+| #   | Pull request                                                                       | Track       | Builds on | Strength        |
+| --- | ---------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
+| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages) | The picture | —         | Worth exploring |
+| 21  | [GPU timing is one instrument](#21-gpu-timing-is-one-instrument)                   | The picture | —         | Worth exploring |
+| A   | [One compass basis](#a-one-compass-basis)                                          | Optional    | —         | Speculative     |
+| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)              | Optional    | —         | Speculative     |
 
 ```mermaid
 flowchart LR
-  P18[18 Pixel grid]
   P20[20 Stage list]
   P21[21 One timing instrument]
   A[A Compass basis]
@@ -85,61 +84,15 @@ on nothing and still has a place in the order, the place is about collision,
 and its section says so. One file is edited by more than one pull request,
 and the order is what keeps them apart:
 
-- `apps/game/src/render/sensor.ts` — 18, 20 and 21, in that order.
+- `apps/game/src/render/sensor.ts` — 20 and 21, in that order.
 
-**Next is 18, after its plates.** The guide and terrain tracks are in the
-tree, and of the picture track the scene layout. 18 waits on the plates its
-section names; 20 waits on a fourth stage; 21 keeps the upscaler's durations
-beside `ir.passes`, the option its section records as taken.
-[Open from the review of 6–11](#open-from-the-review-of-611) and the two lists
+**Next is 21.** The guide and terrain tracks are in the tree, and of the
+picture track the scene layout and the render grid. 21 keeps the upscaler's
+durations beside `ir.passes`, the option its section records as taken; 20
+waits on a fourth stage.
+[Open from the review of 6–11](#open-from-the-review-of-611) and the lists
 after it hold the smaller follow-ups those pull requests left, none of them a
 pull request of its own.
-
----
-
-## 18. The sensor publishes the frame's pixel grid
-
-**Track:** the picture · **Worth exploring**, **measure first** · in-process
-
-**Builds on:** nothing left open. The layout is `sceneLayout`, derived from the
-same resolved picture the grid would be. **Unblocks:** nothing.
-
-**Files.** `apps/game/src/render/sensor.ts` (`:322`),
-`apps/game/src/render/upscale.ts` (`:192`), `apps/game/src/render/picture.ts`
-(`pictureDimensions`), `apps/game/src/scene/Sensor.tsx` (`:80–84`),
-`apps/game/src/render/createRenderer.ts` (`:246`),
-`apps/game/src/scene/TerrainPatches.tsx` (`:140–146`),
-`apps/game/src/scene/WaterPatches.tsx` (`:79–84`),
-`apps/game/src/render/terrain.ts` (the detail fade, `:501–508`).
-
-**The friction.**
-
-- **Two formulas for the render size.** Three's pass computes `floor(w·(1/r))`
-  and the upscaler `floor(w/r)`. They agree for every width from 1 to 7,999 at
-  the four ratios — checked in Node — by the behavior of the floats, not by
-  construction.
-- The picture is resolved four times — `createRenderer`, `createSensor`,
-  `Sensor.tsx` and `sceneLayout` — and "does this picture upscale" is written
-  twice.
-- **The pixel angle may not match the grid the samples land on.** Terrain and
-  water divide the display's pixel angle by the drawing buffer's height. Under a
-  reduced render scale the samples land on a grid `r` times coarser than that
-  angle assumes, so the detail fade may under-filter — for spatial FSR at least;
-  temporal reconstruction may justify the display-rate figure. Not measured.
-
-**The shape.** The sensor resolves the render size, the sample-grid ratio and
-the upscale path once and publishes them, and the pixel-angle writers read
-that. `RENDER_AA` and the screen-resolution multiplier stay where they are; see
-[below](#what-the-landed-deepenings-left-deliberately).
-
-**Precondition.** Plates at a reduced render scale, in daylight, at Sol and at a
-generated world, show whether the under-filtering is visible. If it is not, the
-pull request is the one formula and the one resolution, and the pixel angle
-stays.
-
-**Gate.** A Node test of the resolved grid and the per-sample angle at each
-ratio. If the angle changes, plates either side at the same two operating
-points.
 
 ---
 
@@ -371,7 +324,7 @@ own.
 
 ---
 
-## Open from 16
+## Open from 16–18
 
 - **The site list waits for a worker.** It fills 286 ms after focusing Earth
   and 163 ms after HIP 82724 IV, where it filled the frame after the click;
@@ -388,6 +341,19 @@ own.
 - **`gameEngine.test.ts`'s archive case waits twenty microtasks for a GPU
   tile**, and that tile is now held behind its surface's preparation on the
   inline worker. It passes; the wait is a count, not a condition.
+- **The pixel angle stays the display's under a reduced render scale.** The
+  terrain and water detail fades divide the display's pixel angle by the
+  drawing buffer, so at a render ratio `r` they assume samples `r` times finer
+  than the pass draws. Plates at `off:performance:off` (spatial, `r = 2`),
+  1600×900, with the angle multiplied by `r` against without: 27 px apart at
+  `earthrise` (Sol, the Moon, sun 24°) and 5,795 at `tau-ceti-dusk` (generated,
+  sun 5°), where two boots of the unchanged build, one of them fresh, differ by
+  56,267; the crops are indistinguishable. Not measured: the temporal path,
+  which may justify the display rate outright, and a cast for shimmer, which
+  the fade's unchanged output makes unlikely to differ.
+- **The Graphics panel resolves the picture it is editing for itself.** It
+  shows the render size of the preference before the sensor rebuilds, through
+  `pictureDimensions`, which now reads `renderSize`.
 
 ---
 
@@ -406,8 +372,8 @@ own.
 - **`RENDER_HDR` and `RENDER_AA` stay in `App`.** Both are facts about the
   renderer it builds — a constructor argument and the drawing buffer's ratio —
   and the canvas key reads them. `RENDER_AA` is also bound by the registry, for
-  the supersample factor the terrain predicate divides back out; 18 reads that
-  and does not move it.
+  the supersample factor the terrain predicate divides back out. The pixel
+  angle reads it too, and stays the display's: see "Open from 16–18".
 - **The streamer still caches the palette for the renderer.** `TerrainState`
   carries `palette`, `datumRadius`, `orientation`, `center` and `lens` so the
   renderer has them in the frame the drawn set is empty. Small, and its home is

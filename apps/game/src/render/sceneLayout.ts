@@ -55,6 +55,12 @@ export interface SceneAttachment {
 }
 
 export interface SceneLayout {
+  /**
+   * The picture this is the layout of, resolved for the backend: what the
+   * sensor reconstructs from, so what the pass draws into and what it is
+   * reconstructed from are one picture by construction.
+   */
+  readonly picture: Picture
   /** 4 or 0. WebGPU has no other count. */
   readonly samples: 0 | 4
   /** Float under reversed depth; the backend's default otherwise. */
@@ -99,11 +105,23 @@ const TEMPORAL: readonly SceneAttachment[] = [
 ]
 
 /*
- * One object per distinct layout, so a layout can key a cache — the warm-up
- * keeps one stand-in per renderer and layout — and so two readers of the same
- * picture hold the same rows rather than equal ones. There are eight at most.
+ * One object per resolved picture and depth convention, so two readers of the
+ * same picture hold the same rows rather than equal ones. A session meets a
+ * handful; the record admits a hundred and twenty.
  */
 const LAYOUTS = new Map<string, SceneLayout>()
+
+/*
+ * Every field of a picture, by a list the compiler holds to `Picture`'s keys.
+ * The layout carries the picture the sensor reconstructs from, so a field the
+ * intern key left out would hand one picture's layout — and its reconstruction
+ * — to another, with no error anywhere.
+ */
+const PICTURE_FIELDS = Object.keys({
+  aa: true,
+  scale: true,
+  sharpness: true,
+} satisfies Record<keyof Picture, true>) as readonly (keyof Picture)[]
 
 /** The layout `picture` draws its scene into on `backend`. */
 export function sceneLayout(
@@ -113,10 +131,14 @@ export function sceneLayout(
   const resolved = resolvePicture(picture, backend.kind)
   const samples = pictureSamples(resolved)
   const temporal = resolved.aa === 'temporal'
-  const key = `${samples}|${temporal}|${backend.reversedDepth}`
+  const key = [
+    ...PICTURE_FIELDS.map((field) => resolved[field]),
+    backend.reversedDepth,
+  ].join('|')
   let layout = LAYOUTS.get(key)
   if (layout === undefined) {
     layout = Object.freeze({
+      picture: Object.freeze({ ...resolved }),
       samples,
       depthType: backend.reversedDepth ? FloatType : undefined,
       attachments: Object.freeze([

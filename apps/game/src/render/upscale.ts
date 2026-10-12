@@ -18,6 +18,7 @@ import {
 import { passTexture, velocity } from 'three/tsl'
 import { getLogger } from '@inertialref/shared'
 import { onTimingLevel } from '../engine/browserTiming.ts'
+import { renderSize } from './picture.ts'
 
 const log = getLogger('game.upscale')
 
@@ -189,8 +190,9 @@ export class UpscaleNode extends TempNode<'vec4'> {
       this.#initialized = true
     }
     this.#renderer.getDrawingBufferSize(this.#size)
-    const width = Math.max(1, Math.floor(this.#size.x / this.#ratio))
-    const height = Math.max(1, Math.floor(this.#size.y / this.#ratio))
+    // The pass's own extent, by the pass's own arithmetic: see `renderSize`.
+    const width = renderSize(this.#size.x, this.#ratio)
+    const height = renderSize(this.#size.y, this.#ratio)
     if (
       this.#kernel.displayWidth === this.#size.x &&
       this.#kernel.displayHeight === this.#size.y &&

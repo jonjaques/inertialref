@@ -132,14 +132,7 @@ describe('the spine', () => {
      * for the pass's alpha: 2,412 of 9,216 at alpha 1, worst channel 0.934.
      */
     const chain = floatTarget()
-    const sensor = createSensor(
-      renderer,
-      scene,
-      camera,
-      layout,
-      undefined,
-      NO_MSAA,
-    )
+    const sensor = createSensor(renderer, scene, camera, layout)
     const clearAlpha = renderer.getClearAlpha()
     renderer.setClearAlpha(0)
     try {
@@ -206,14 +199,7 @@ describe('the spine', () => {
     scene.updateMatrixWorld(true)
 
     const target = floatTarget()
-    const sensor = createSensor(
-      renderer,
-      scene,
-      camera,
-      layout,
-      undefined,
-      NO_MSAA,
-    )
+    const sensor = createSensor(renderer, scene, camera, layout)
     renderer.xr.enabled = true
     try {
       expect(() => sensor.render(target)).toThrow('a frame that throws')
@@ -272,14 +258,7 @@ describe('the spine', () => {
     scene.updateMatrixWorld(true)
 
     const target = floatTarget()
-    const sensor = createSensor(
-      renderer,
-      scene,
-      camera,
-      layout,
-      undefined,
-      NO_MSAA,
-    )
+    const sensor = createSensor(renderer, scene, camera, layout)
     const before = renderer.info.calls
     sensor.render(target)
     const first = (await gpu.read(target)).at(SIZE / 2, SIZE / 2)
@@ -313,14 +292,7 @@ describe('the spine', () => {
     renderer.toneMapping = NoToneMapping
     const layout = sceneLayout(NO_MSAA, sceneBackend(renderer))
     const target = floatTarget()
-    const sensor = createSensor(
-      renderer,
-      scene,
-      camera,
-      layout,
-      undefined,
-      NO_MSAA,
-    )
+    const sensor = createSensor(renderer, scene, camera, layout)
     const through = async (): Promise<[number, number, number, number]> => {
       sensor.render(target)
       return (await gpu.read(target)).at(SIZE / 2, SIZE / 2)

@@ -242,10 +242,6 @@ async function buildRenderer(
       }
     }
     stopValidation = watchRendererValidation(renderer, report)
-    const resolvedPicture = resolvePicture(
-      picture,
-      'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl',
-    )
 
     /*
      * Clear to *opaque* black. The default clear alpha is 0, and on the
@@ -299,7 +295,7 @@ async function buildRenderer(
       output: mode,
       headroom,
       preference,
-      picture: resolvedPicture,
+      picture: resolvePicture(picture, backend),
       dynamicRangeHigh: capability.dynamicRangeHigh,
       extendedCanvas: capability.extendedCanvas,
     })

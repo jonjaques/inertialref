@@ -257,8 +257,8 @@ it('keeps the stand-in target whole across a picture change mid-queue', async ()
    * Three keys a render context on the attachment shape, not on the target,
    * and `compileAsync` builds each queued pipeline after a yield from
    * whatever depth texture that shared context holds by then. A picture
-   * change while a warm-up is still building is a new layout and a new
-   * stand-in; were the old one disposed with it, the next pipeline would read
+   * change that changes the attachment shape while a warm-up is still
+   * building is a new stand-in; were the old one disposed with it, the next pipeline would read
    * the format of a disposed texture, `undefined`, and the device would refuse
    * the descriptor: "Required member is undefined". The hold opens that window
    * on purpose: the first pipeline is asked for and held, the new picture's

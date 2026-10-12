@@ -58,25 +58,18 @@ it('bypasses optical motion at a rebase and resumes on the next physical frame',
   let time = 0
   const dt = 1 / 60
   const lens = { ...LENS_PRESETS.flight, shutter: 1 / 120 }
-  const sensor = createSensor(
-    renderer,
-    scene,
-    camera,
-    layout,
-    () => ({
-      lens,
-      settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'manual' },
-      time,
-      adaptationTime: time,
-      renderOrigin: origin,
-      historyKey: 'moving-prop',
-      pinned: null,
-      headroom: 1,
-      motionBlur: true,
-      noiseTick: 0,
-    }),
-    NO_MSAA,
-  )
+  const sensor = createSensor(renderer, scene, camera, layout, () => ({
+    lens,
+    settings: { ...DEFAULT_SENSOR_SETTINGS, mode: 'manual' },
+    time,
+    adaptationTime: time,
+    renderOrigin: origin,
+    historyKey: 'moving-prop',
+    pinned: null,
+    headroom: 1,
+    motionBlur: true,
+    noiseTick: 0,
+  }))
   const target = new RenderTarget(64, 64, {
     type: FloatType,
     depthBuffer: false,

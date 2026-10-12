@@ -73,20 +73,13 @@ it.each([
       type: FloatType,
       depthBuffer: false,
     })
-    const sensor = createSensor(
-      renderer,
-      scene,
-      camera,
-      layout,
-      () => ({
-        lens: view.lens,
-        settings: DEFAULT_SENSOR_SETTINGS,
-        time: 0,
-        headroom: 1,
-        pinned: exposurePinnedToLens(view.lens),
-      }),
-      picture,
-    )
+    const sensor = createSensor(renderer, scene, camera, layout, () => ({
+      lens: view.lens,
+      settings: DEFAULT_SENSOR_SETTINGS,
+      time: 0,
+      headroom: 1,
+      pinned: exposurePinnedToLens(view.lens),
+    }))
     try {
       await volume.warm(renderer)
       await warmCompile(warmRenderer(renderer, layout), {
