@@ -289,7 +289,10 @@ it('keeps the stand-in target whole across a picture change mid-queue', async ()
   })
   try {
     await gate.requested
-    warmTargetFor(sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer)))
+    warmTargetFor(
+      renderer,
+      sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer)),
+    )
   } finally {
     gate.release()
   }

@@ -242,7 +242,7 @@ describe('the upscaler on the physical GPU', () => {
   it('warms the complete temporal attachment layout before the first frame', async () => {
     const f = rig(temporal)
     try {
-      const warm = warmTargetFor(f.layout)
+      const warm = warmTargetFor(gpu.renderer, f.layout)
       expect(
         warm.textures.map((one) => [one.name, one.format, one.type]),
       ).toEqual(

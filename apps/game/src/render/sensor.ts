@@ -71,20 +71,28 @@ import { namePass } from './passTimeline.ts'
  */
 
 /*
- * The stand-ins the warm-up compiles against, one per layout.
+ * The stand-ins the warm-up compiles against, one per renderer and layout.
  *
- * Keyed on the layout rather than the renderer, and never disposed. A layout
- * is one of at most eight objects and a stand-in is four pixels, so keeping
- * every one a session has used costs nothing — and a stand-in that is never
- * disposed is one no compile can lose mid-queue. Three keys a render context
- * on the attachment shape rather than the target, and `compileAsync` builds
- * each queued pipeline after a yield, reading the depth format from the
- * texture that shared context holds by then; a stand-in disposed under that
- * queue has no format, and every pipeline left in it is refused at the device
- * with `depthStencil.format` undefined. A picture change is a new layout and a
- * new stand-in, and the old one stays whole for whatever is still building.
+ * Never disposed. A layout is one of at most eight objects and a stand-in is
+ * 4×4, so keeping every one a renderer has used costs nothing — and a stand-in
+ * that is never disposed is one no compile can lose mid-queue. Three keys a
+ * render context on the attachment shape rather than the target, and
+ * `compileAsync` builds each queued pipeline after a yield, reading the depth
+ * format from the texture that shared context holds by then; a stand-in
+ * disposed under that queue has no format, and every pipeline left in it is
+ * refused at the device with `depthStencil.format` undefined. A picture change
+ * is a new layout and a new stand-in, and the old one stays whole for whatever
+ * is still building.
+ *
+ * Keyed on the renderer as well, and weakly, because a stand-in a renderer has
+ * compiled against holds that renderer: three adds a `dispose` listener to the
+ * target and its textures that closes over the renderer's texture manager, and
+ * `Renderer.dispose` removes none of them. Held by the layout alone, each one
+ * kept every renderer the canvas replaced — an HDR toggle, a move between an
+ * EDR and an SDR display, StrictMode's second mount — reachable for the
+ * session.
  */
-const standIns = new WeakMap<SceneLayout, RenderTarget>()
+const standIns = new WeakMap<object, Map<SceneLayout, RenderTarget>>()
 
 /**
  * A target of the scene pass's layout, for a compile.
@@ -93,14 +101,22 @@ const standIns = new WeakMap<SceneLayout, RenderTarget>()
  * the effect that sees the renderer, and the sensor mounts inside the canvas
  * tree the same tick — which of the two runs first is React's business. The
  * pipeline key holds only the sample count and the formats, so any target of
- * the layout compiles the pipeline the pass will use, and four pixels is the
- * cheapest one that exists.
+ * the layout compiles the pipeline the pass will use, and 4×4 is the cheapest
+ * one that exists.
  */
-export function warmTargetFor(layout: SceneLayout): RenderTarget {
-  let standIn = standIns.get(layout)
+export function warmTargetFor(
+  renderer: object,
+  layout: SceneLayout,
+): RenderTarget {
+  let held = standIns.get(renderer)
+  if (held === undefined) {
+    held = new Map()
+    standIns.set(renderer, held)
+  }
+  let standIn = held.get(layout)
   if (standIn === undefined) {
     standIn = sceneTarget(4, 4, layout)
-    standIns.set(layout, standIn)
+    held.set(layout, standIn)
   }
   return standIn
 }

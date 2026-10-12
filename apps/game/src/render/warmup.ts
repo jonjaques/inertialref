@@ -173,7 +173,7 @@ export const warmRenderer = (gl: object, layout: SceneLayout): WarmRenderer => {
     compileAsync(object, camera, scene) {
       const previousMrt = renderer.getMRT()
       const compiles: Promise<unknown>[] = []
-      const unbind = bindWarmTarget(renderer, warmTargetFor(layout))
+      const unbind = bindWarmTarget(renderer, warmTargetFor(renderer, layout))
       try {
         renderer.setMRT(sensorMrt(layout))
         object.traverseVisible((node) => {
