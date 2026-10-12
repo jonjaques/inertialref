@@ -783,7 +783,7 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * and the cold number is what a body costs the first time anything asks — which
  * is why nothing in the browser asks on the main thread. It reads only what
  * `HeightfieldRequestPayload` already carries, so it is a second task on the
- * pool, `universe.surfaceDetailFloor`, and the streamer holds a body's ground
+ * pool, `universe.prepareSurface`, and the streamer holds a body's ground
  * back for the frames it takes rather than paying it inside the frame that body
  * arrives. The synchronous path here is what a host with no pool gets: the
  * headless runner, the tests and the Node benchmarks, none of which has a frame

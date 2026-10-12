@@ -214,13 +214,20 @@ samples seven times finer again; the presentational tail below it is worth the
 last two to three levels on its own. Nothing in any of that is a constant to
 raise, which is what measuring it from the field buys.
 
-The measuring is a pool task, `universe.surfaceDetailFloor`, because it is about
+The measuring is a pool task, `universe.prepareSurface`, because it is about
 1,500 samples of the same band stack — 33 to 43 ms cold, and cold exactly once
-per body, in the frame the streamer first has that body underfoot. So a body
-whose floor has not come back yet has **no ceiling to select against**, and the
-streamer holds the ground back for those frames rather than guessing one: the
-same shape as waiting for the heightfields themselves. A host with no pool
-measures it inline, which is every host that has no frame to drop.
+per body, in the frame the streamer first has that body underfoot. The same
+task returns the body's drainage graph, which the search builds on its way and
+which is 50 to 140 ms more on whichever thread reads a wet body's ground first:
+this thread's memo is seeded with it before the floor is published, so the
+scatter field's first sample and the GPU producer's first pack find it a lookup.
+`SurfacePreparation` in `packages/workers` owns the job, and the engine shares
+one with the site list and the GPU producer, whose requests wait for their
+surface. So a body whose preparation has not come back yet has **no ceiling to
+select against**, and the streamer holds the ground back for those frames
+rather than guessing one: the same shape as waiting for the heightfields
+themselves. A host with no pool prepares it inline, which is every host that
+has no frame to drop.
 
 Two things settle the walk rather than one. A quiet level counts only if its
 stencils touched dry ground — the sea clamp manufactures exact zeros over open
@@ -329,7 +336,7 @@ through Dawn on an M5, a batch of sixteen Luna tiles at the detail floor is
 thread. [ADR-0023](../adr/0023-the-gpu-producer.md) is the record.
 
 The producer outranks the pool while it can answer, and only for the
-heightfields: the level floor is `surfaceDetailFloorTask` on the pool whichever
+heightfields: the level floor is `prepareSurfaceTask` on the pool whichever
 draws the ground, because it is the canonical field's own measurement. A
 producer that stops reports itself unavailable and rejects pending jobs with
 `HeightfieldUnavailable`. `Heightfields` retries those jobs on the pool while

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import fc from 'fast-check'
+import { describe, expect, it, vi } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
 import { Vec, vec3, type Vec3 } from '@inertialref/spatial'
 import { TEST_CATALOG } from './catalog/fixture.ts'
@@ -550,5 +551,83 @@ describe('the field that reads it', () => {
         Math.cos(DRAINAGE_SHAPE.jitter * Math.SQRT2 * (2 / graph.cells)),
       )
     }
+  })
+})
+
+describe('a graph built on another thread', () => {
+  /*
+   * A worker preparing a surface builds the graph and posts it back, and this
+   * thread seeds its memo with the clone. The claim is that the clone *is* the
+   * graph this thread then reads — nothing is built here — and that the field
+   * read through it is the field the building thread reads, to the bit.
+   *
+   * Two threads are two module instances, so the second one is a fresh import
+   * after `vi.resetModules`: its memo is empty, its counter is zero, and its
+   * `terrain.ts` reads its own `drainage.ts`. The static imports above are the
+   * worker.
+   */
+  const fresh = async () => {
+    vi.resetModules()
+    const here = await import('./drainage.ts')
+    const field = await import('./terrain.ts')
+    return { here, field }
+  }
+
+  it.each([
+    ['Earth', earth],
+    ['a generated wet world', generated],
+  ])(
+    'is the graph %s reads here, and its field to the bit',
+    async (_, body) => {
+      const handed = structuredClone(graphOf(body))
+      const { here, field } = await fresh()
+      here.seedDrainageGraph(body.surface, handed)
+
+      expect(here.drainageGraph(body.surface)).toBe(handed)
+      // A worker decodes the surface into a new object per task, and so does a
+      // second reader of the same body here: the string memo answers for it.
+      expect(here.drainageGraph({ ...body.surface })).toBe(handed)
+
+      fc.assert(
+        fc.property(
+          fc.double({ min: -1, max: 1, noNaN: true }),
+          fc.double({ min: -1, max: 1, noNaN: true }),
+          fc.double({ min: -1, max: 1, noNaN: true }),
+          (x, y, z) => {
+            fc.pre(Math.hypot(x, y, z) > 1e-3)
+            const direction = Vec.normalize(vec3(x, y, z))
+            expect(field.elevationAt(body.surface, direction)).toBe(
+              elevationAt(body.surface, direction),
+            )
+            expect(field.waterLevelAt(body.surface, direction)).toBe(
+              waterLevelAt(body.surface, direction),
+            )
+          },
+        ),
+        { numRuns: 64 },
+      )
+      // Read on the channels, not only where a random direction lands: a node's
+      // own position is on its segment, so the carve there is the whole cut.
+      const graph = graphOf(body)
+      for (let n = 0; n < graph.nodes; n += 997) {
+        const direction = nodeDirection(graph, n)
+        expect(field.elevationAt(body.surface, direction)).toBe(
+          elevationAt(body.surface, direction),
+        )
+      }
+      expect(here.drainageBuilds()).toBe(0)
+    },
+  )
+
+  it('keeps the graph this thread already holds', async () => {
+    const { here } = await fresh()
+    const own = here.drainageGraph(earth.surface)
+    expect(here.drainageBuilds()).toBe(1)
+    // The same arithmetic over the same key, so either would do — but the
+    // field and the packed kernel may already be holding this one.
+    here.seedDrainageGraph(earth.surface, structuredClone(graphOf(earth)))
+    expect(here.drainageGraph(earth.surface)).toBe(own)
+    here.seedDrainageGraph({ ...earth.surface }, structuredClone(own))
+    expect(here.drainageGraph({ ...earth.surface })).toBe(own)
   })
 })

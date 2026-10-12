@@ -1144,6 +1144,9 @@ const cacheKey = (surface: SurfaceParameters): string =>
     JSON.stringify(surface.grammar),
   ].join('|')
 
+/** Graphs this thread has built, as against looked up or been handed. */
+let builds = 0
+
 /** The drainage graph of a surface, built once and kept; null where nothing drains. */
 export function drainageGraph(
   surface: SurfaceParameters,
@@ -1156,7 +1159,43 @@ export function drainageGraph(
     BY_SURFACE.set(surface, hit)
     return hit
   }
-  const graph = build(surface)
+  builds += 1
+  return keep(surface, key, build(surface))
+}
+
+/**
+ * Hand this thread a graph another thread built for the same surface.
+ *
+ * The build is 60 to 140 ms and every thread that samples the field pays it
+ * once per body, so a browser's draw thread paid it in whichever frame first
+ * read a wet body's ground: the site list on focusing one, the scatter field's
+ * one sample a frame as the ground arrived, the GPU producer's first pack. A
+ * worker preparing the surface builds it anyway, and the arrays survive a
+ * structured clone, so what crosses back is the graph rather than the work.
+ *
+ * A graph this thread already holds is kept rather than replaced. Both are
+ * the same arithmetic over the same key, and the field and the packed kernel
+ * may already be holding the one that is here.
+ */
+export function seedDrainageGraph(
+  surface: SurfaceParameters,
+  graph: DrainageGraph | null,
+): void {
+  if (BY_SURFACE.has(surface)) return
+  const key = cacheKey(surface)
+  const held = CACHE.get(key)
+  if (held !== undefined) BY_SURFACE.set(surface, held)
+  else keep(surface, key, graph)
+}
+
+/** How many graphs this thread has built: the instrument for the claim above. */
+export const drainageBuilds = (): number => builds
+
+function keep(
+  surface: SurfaceParameters,
+  key: string,
+  graph: DrainageGraph | null,
+): DrainageGraph | null {
   if (CACHE.size >= DRAINAGE_CACHE_LIMIT) {
     const oldest = CACHE.keys().next().value
     if (oldest !== undefined) CACHE.delete(oldest)

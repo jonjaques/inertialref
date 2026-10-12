@@ -7,9 +7,11 @@ import {
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import { rootSeed } from '@inertialref/procedural'
 import {
+  drainageBuilds,
   generateHeightfield,
   regionAddress,
   surfaceGrammar,
+  surfaceKernel,
 } from '@inertialref/universe'
 import { HeightfieldArchive, type HeightfieldStore } from '@inertialref/workers'
 import { headlessEngine } from './headlessEngine.ts'
@@ -454,6 +456,63 @@ describe('the terrain archive, through the engine', () => {
         activity: null,
         storage: null,
       })
+    } finally {
+      game.dispose()
+    }
+  })
+})
+
+describe('a body’s ground, prepared off this thread', () => {
+  it('is read here only once a worker has prepared it', async () => {
+    /*
+     * The graph is 50 to 140 ms, and in the browser each reader of it on the
+     * draw thread is the first asker somewhere: the GPU producer's pack for the
+     * orbital bake on arriving at a generated world, the site list on focusing
+     * a body. Each waits for the preparation instead.
+     *
+     * The inline worker shares this thread's memo, so the graph is built here
+     * either way — inside the task. What the counter holds is that the readers
+     * build nothing themselves: they are not asked until the task has run.
+     */
+    const game = headlessEngine({ heightfieldArchive: null })
+    try {
+      const earth = game.bodyFor('g:milky-way/s:SOL/b:2')
+      if (earth === null) throw new Error('no Earth')
+      // A producer that packs the surface where the GPU producer does: on
+      // this thread, inside the first request for the body.
+      let packed: number | null = null
+      game.setHeightfieldSource({
+        kind: 'gpu',
+        archive: 'gpu:test',
+        available: true,
+        submit: (surface, request) => {
+          const before = drainageBuilds()
+          surfaceKernel(surface, request.seabed ?? false)
+          packed = drainageBuilds() - before
+          return {
+            id: 1,
+            result: Promise.resolve(generateHeightfield(surface, request)),
+            cancel() {},
+          }
+        },
+      })
+      const job = game.heightfields.submit(earth.surface, {
+        region: regionAddress(0, 2, 1, 1),
+        resolution: 9,
+        border: 1,
+        seabed: true,
+      })
+      expect(packed).toBeNull()
+      expect(await job?.result).not.toBeNull()
+      expect(packed).toBe(0)
+
+      // Titan, because a body asked about above is already prepared and the
+      // claim would hold vacuously.
+      const titan = 'g:milky-way/s:SOL/b:5.5'
+      await game.surfacePrepared(titan)
+      const before = drainageBuilds()
+      expect(game.harness.sites(titan).length).toBeGreaterThan(0)
+      expect(drainageBuilds()).toBe(before)
     } finally {
       game.dispose()
     }

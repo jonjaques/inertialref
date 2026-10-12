@@ -13,7 +13,9 @@ import { UV } from '@inertialref/spatial'
 import {
   catalogStub,
   COVER_CHANNELS,
+  drainageGraph,
   generateCell,
+  generateSystem,
   galaxySeedOf,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
@@ -26,6 +28,7 @@ import {
   populationCoverage,
   resolveSystem,
   type SystemId,
+  walkBodies,
 } from '@inertialref/universe'
 import { createInlineWorker } from './inline.ts'
 import { WorkerPool } from './pool.ts'
@@ -37,7 +40,7 @@ import {
   encodeSurface,
   generateCellTask,
   generateHeightfieldTask,
-  surfaceDetailFloorTask,
+  prepareSurfaceTask,
   surveySystemTask,
   surveyRegionTask,
   surveySkyTask,
@@ -341,8 +344,8 @@ describe('terrain task', () => {
       resolution: HEIGHTFIELD_RESOLUTION,
     }
 
-    const viaPool = await pool().run(surfaceDetailFloorTask, payload)
-    const direct = await runInline(surfaceDetailFloorTask, payload)
+    const viaPool = await pool().run(prepareSurfaceTask, payload)
+    const direct = await runInline(prepareSurfaceTask, payload)
     // Against the generator itself, not only against the other spelling of the
     // task — two callers of one memo agreeing proves less than either agreeing
     // with the search.
@@ -386,7 +389,7 @@ describe('terrain task', () => {
       maxElevation: 8_848,
       grammar: bigGrammar,
     }
-    const elsewhere = await pool().run(surfaceDetailFloorTask, {
+    const elsewhere = await pool().run(prepareSurfaceTask, {
       ...payload,
       surface: encodeSurface(biggerSurface),
     })
@@ -394,6 +397,30 @@ describe('terrain task', () => {
       surfaceDetailFloor(biggerSurface, HEIGHTFIELD_RESOLUTION),
     )
     expect(elsewhere.level).not.toBe(here)
+  })
+
+  it('carries the drainage graph back with the floor', async () => {
+    /*
+     * The floor search builds the graph on its way and the answer returns it,
+     * so the thread that asked can read the body's ground without building
+     * it. Earth, because it drains to a sea and the rock above drains nothing:
+     * the claim is about a graph, and a null on both sides would hold it
+     * vacuously.
+     */
+    const sol = generateSystem(
+      SEED,
+      MILKY_WAY,
+      catalogStub(TEST_CATALOG.stars[0] as (typeof TEST_CATALOG.stars)[number]),
+    )
+    const earth = [...walkBodies(sol)].find((body) => body.name === 'Earth')
+    if (earth === undefined) throw new Error('no Earth in Sol')
+    const answer = await pool().run(prepareSurfaceTask, {
+      surface: encodeSurface(earth.surface),
+      resolution: HEIGHTFIELD_RESOLUTION,
+    })
+    expect(answer.drainage).not.toBeNull()
+    expect(answer.drainage).toStrictEqual(drainageGraph(earth.surface))
+    expect(answer.level).toBe(surfaceDetailFloor(earth.surface))
   })
 
   it('carries a surface across the wire as the surface it was', () => {

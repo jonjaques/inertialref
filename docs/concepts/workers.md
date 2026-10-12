@@ -68,7 +68,7 @@ Today's tasks:
 | Task                           | Work                                                                                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `universe.generateHeightfield` | 65×65 samples × six bands and a crater ladder → a transferable `Float32Array` of elevations and a `Uint8Array` of surface cover |
-| `universe.surfaceDetailFloor`  | the level past which a patch is an upsample of its parent — ~1,500 samples of the same bands, once per body                     |
+| `universe.prepareSurface`      | the level past which a patch is an upsample of its parent, and the drainage graph — ~1,500 samples and a flood, once per body   |
 | `universe.generateCell`        | the procedural population inside one 20 ly spatial cell                                                                         |
 | `universe.surveyRegion`        | a block of cells — tens of thousands of stars                                                                                   |
 | `universe.surveySky`           | a bounded luminosity-level source selection, with the actual magnitude limit and completed level mask for diffuse subtraction   |
@@ -85,14 +85,17 @@ for it. So the game's worker entry serves `createGameTaskRegistry()` —
 client needs — and the prefix on the name says which set a task belongs to.
 [ADR-0028](../adr/0028-client-tasks.md) is the record.
 
-`surfaceDetailFloor` is on the pool because it reads nothing a heightfield
-request does not already carry, and paying it on the main thread paid it inside
-the frame a body arrives — 85% of a 40 ms spike on Earth, on the one frame a
-player is watching the ground appear. The consequence a caller has to know is
-that a body whose floor is not measured yet has no ceiling to select against, so
-the streamer holds the ground back for the frames it takes rather than guessing
-one. A host with no pool computes it synchronously; none of those have a frame
-to drop.
+`universe.prepareSurface` is on the pool because it reads nothing a heightfield
+request does not already carry, and paid on the main thread it lands inside a
+frame a player is watching: the floor is 85% of a 40 ms spike on Earth as the
+ground appears, and the drainage graph a wet body's field reads is a 117 ms
+frame there and a 139 ms one on focusing Earth in the planetarium. The graph
+comes back with the floor and seeds the main thread's memo. The consequence a
+caller has to know is that a body whose preparation has not come back has no
+ceiling to select against, so the streamer holds the ground back for the frames
+it takes rather than guessing one, and the GPU producer's requests and the
+planetarium's site list wait on `SurfacePreparation` the same way. A host with
+no pool prepares synchronously; none of those have a frame to drop.
 
 ---
 
