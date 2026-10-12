@@ -1166,10 +1166,10 @@ export function drainageGraph(
 /**
  * Hand this thread a graph another thread built for the same surface.
  *
- * The build is 60 to 140 ms and every thread that samples the field pays it
- * once per body, so a browser's draw thread paid it in whichever frame first
- * read a wet body's ground: the site list on focusing one, the scatter field's
- * one sample a frame as the ground arrived, the GPU producer's first pack. A
+ * The build is 57 to 103 ms in the browser, and every thread that samples the
+ * field pays it once per body — on the draw thread, in whichever frame first
+ * reads a wet body's ground: the site list on focusing one, the scatter field's
+ * one sample a frame as the ground arrives, the GPU producer's first pack. A
  * worker preparing the surface builds it anyway, and the arrays survive a
  * structured clone, so what crosses back is the graph rather than the work.
  *

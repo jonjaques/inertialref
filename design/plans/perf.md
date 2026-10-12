@@ -232,7 +232,7 @@ finds no other use for.
 
 ### Every pool worker builds a wet body's drainage graph for itself, unmeasured
 
-The draw thread no longer builds a graph: `SurfacePreparation` builds it on one
+The draw thread builds no graph: `SurfacePreparation` builds it on one
 worker and seeds the page's memo with the answer (the build log, 11 Oct 2026).
 The other workers still build their own, because each thread has its own memo
 and a heightfield task reads the field — on a WebGPU page for every tile deeper

@@ -619,6 +619,9 @@ describe('a graph built on another thread', () => {
         expect(field.elevationAt(body.surface, direction)).toBe(
           elevationAt(body.surface, direction),
         )
+        expect(field.waterLevelAt(body.surface, direction)).toBe(
+          waterLevelAt(body.surface, direction),
+        )
       }
       expect(here.drainageBuilds()).toBe(0)
     },

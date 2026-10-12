@@ -472,7 +472,7 @@ export const prepareSurfaceTask = defineTask<
    *
    * `surfaceDetailFloor` refines trial fields until the field stops selling
    * detail, ~1,500 samples and 33-43 ms cold, and the field it samples carries
-   * the drainage graph, which is built on first read at 50 to 140 ms. Both are
+   * the drainage graph, which is built on first read at 50 to 110 ms. Both are
    * cold once per body per thread, and on the draw thread each lands in a
    * frame a player is watching: the floor is 85% of a 40 ms first-contact
    * spike on Earth and of a 114 ms one on Proxima Centauri b, and the graph is

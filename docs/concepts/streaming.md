@@ -218,7 +218,7 @@ The measuring is a pool task, `universe.prepareSurface`, because it is about
 1,500 samples of the same band stack — 33 to 43 ms cold, and cold exactly once
 per body, in the frame the streamer first has that body underfoot. The same
 task returns the body's drainage graph, which the search builds on its way and
-which is 50 to 140 ms more on whichever thread reads a wet body's ground first:
+which is 57 to 103 ms more on whichever thread reads a wet body's ground first:
 this thread's memo is seeded with it before the floor is published, so the
 scatter field's first sample and the GPU producer's first pack find it a lookup.
 `SurfacePreparation` in `packages/workers` owns the job, and the engine shares
