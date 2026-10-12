@@ -50,7 +50,6 @@ import { toneCurveFor } from './tonemap.ts'
 import { warmPipeline } from './warmup.ts'
 import { SensorHistory } from './sensorHistory.ts'
 import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
-import { beginGpuTiming, endGpuTiming } from './gpuTiming.ts'
 import { namePass } from './passTimeline.ts'
 
 /* The sensor owns the only scene draw, then applies lens-side optics,
@@ -559,7 +558,6 @@ export function createSensor(
       const layers = camera.layers.mask
       const overrideMaterial = scene.overrideMaterial
       const sceneName = scene.name
-      beginGpuTiming(renderer)
       try {
         const reading = exposure.reading
         const pictureKey = [
@@ -620,7 +618,6 @@ export function createSensor(
           )
         }
       } finally {
-        endGpuTiming(renderer)
         upscale?.endFrame()
         setSceneExposure(renderer, null)
         renderer.toneMapping = toneMapping

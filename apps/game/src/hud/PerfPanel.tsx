@@ -222,9 +222,16 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
             label="FSR initialization"
             value={`${engine.sensorDiagnostics.picture.initMs.toFixed(1)} ms`}
           />
+          {/* The package's own timer: a pass's begin to its end, which on a
+              pipelining GPU is latency rather than cost. `ir.passes` reports
+              the same pairs beside the shares that are cost. */}
           {Object.entries(engine.sensorDiagnostics.picture.gpuTimings).map(
             ([name, ms]) => (
-              <Row key={name} label={name} value={`${ms.toFixed(3)} ms`} />
+              <Row
+                key={name}
+                label={`${name}, begin to end`}
+                value={`${ms.toFixed(3)} ms`}
+              />
             ),
           )}
         </Section>

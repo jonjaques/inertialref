@@ -20,7 +20,7 @@ import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { reactiveCoverage } from './sensorMrt.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 import type { Picture } from './picture.ts'
-import { installGpuTiming } from './gpuTiming.ts'
+import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 import { setTimingLevel } from '../engine/browserTiming.ts'
 
 let gpu: GpuSession
@@ -73,8 +73,7 @@ const spatial: Picture = { aa: 'off', scale: 'performance', sharpness: 'off' }
 const temporal: Picture = { aa: 'temporal', scale: 'quality', sharpness: 'off' }
 
 describe('the upscaler on the physical GPU', () => {
-  it('samples GPU passes only on request and drains renderer query pools', async () => {
-    const stop = installGpuTiming(gpu.renderer)
+  it('samples GPU passes only on request and keeps its query slots bounded', async () => {
     const f = rig(temporal)
     try {
       setTimingLevel('off')
@@ -89,30 +88,88 @@ describe('the upscaler on the physical GPU', () => {
       const timings = f.sensor.diagnostics.picture.gpuTimings
       expect(Object.keys(timings)).toContain('reconstruct')
       expect(Object.values(timings).some((value) => value > 0)).toBe(true)
-      // The pixel staging buffer and timestamp staging buffer map
-      // independently. Reading the frame does not settle the timing readback,
-      // especially while the complete GPU suite is submitting other work — and
-      // `poll`'s own second is not long enough for it: this failed on an M5
-      // both inside the full suite and alone on a machine that had just run
-      // one, and passed three times running once the machine was quiet.
-      await expect
-        .poll(() => gpu.renderer.info.render.timestamp, { timeout: 15_000 })
-        .toBeGreaterThan(0)
+      // Its eight query slots come back. Eleven hundred frames each ask for
+      // one, and a reset readout then fills again — a slot that never went
+      // idle would leave it empty for good.
       for (let i = 0; i < 1100; i += 1) f.sensor.render(f.target)
       await gpu.read(f.target)
-      expect(
-        gpu
-          .warnings()
-          .some((entry) => entry.message.includes('Maximum number of queries')),
-      ).toBe(false)
+      setTimingLevel('off')
+      setTimingLevel('full')
+      await expect
+        .poll(
+          async () => {
+            f.sensor.render(f.target)
+            await gpu.read(f.target)
+            return Object.keys(f.sensor.diagnostics.picture.gpuTimings)
+          },
+          { timeout: 10_000 },
+        )
+        .toContain('reconstruct')
       setTimingLevel('off')
       f.sensor.render(f.target)
       await gpu.read(f.target)
       expect(f.sensor.diagnostics.picture.gpuTimings).toEqual({})
     } finally {
       setTimingLevel('off')
-      stop()
       f.dispose()
+    }
+  })
+
+  it('lends its timer to the pass timeline for a run, and takes it back', async () => {
+    /*
+     * The upscaler's compute passes are encoded outside three, where the
+     * timeline's hooks cannot reach them, so its own timer is armed for the
+     * run whatever the level and its durations come back beside the
+     * timeline's passes. At level `off` before and after, the run is the
+     * only time the timer writes queries.
+     */
+    const uninstall = installPassTimeline(gpu.renderer)
+    const f = rig(temporal)
+    try {
+      setTimingLevel('off')
+      f.sensor.render(f.target)
+      await gpu.read(f.target)
+      const timeline = passTimelineOf(gpu.renderer)
+      expect(timeline).not.toBeNull()
+      const run = await timeline!.measure(() => f.sensor.render(f.target), 8)
+      const reconstruct = run.owned.find(
+        (pass) => pass.source === 'upscaler' && pass.label === 'reconstruct',
+      )
+      expect(reconstruct?.samples).toBeGreaterThan(0)
+      // Any one pass at 64 pixels can finish inside the timestamp quantum and
+      // read zero; across the run, one of them reads time.
+      expect(run.owned.some((pass) => pass.latencyMs > 0)).toBe(true)
+      // Beside the timeline, not in it: no owned pass is one of its rows.
+      expect(run.passes.some((pass) => pass.label === 'reconstruct')).toBe(
+        false,
+      )
+      // Handed back at the level it found.
+      f.sensor.render(f.target)
+      await gpu.read(f.target)
+      expect(f.sensor.diagnostics.picture.gpuTimings).toEqual({})
+
+      const reconstructed = (result: typeof run) =>
+        result.owned.find(
+          (pass) => pass.source === 'upscaler' && pass.label === 'reconstruct',
+        )?.samples ?? 0
+      // A run drawn back to back is timed for as many frames as the timer
+      // has slots, the first of them, whatever the frame count.
+      const long = await timeline!.measure(() => f.sensor.render(f.target), 20)
+      expect(reconstructed(long)).toBeGreaterThan(0)
+      expect(reconstructed(long)).toBeLessThanOrEqual(8)
+
+      // Frames drawn just before a run have readbacks still in flight when it
+      // is armed, and they land during its first drain. None is the run's:
+      // four frames are four samples at most, not four plus theirs.
+      setTimingLevel('full')
+      for (let i = 0; i < 4; i += 1) f.sensor.render(f.target)
+      const short = await timeline!.measure(() => f.sensor.render(f.target), 4)
+      expect(reconstructed(short)).toBeGreaterThan(0)
+      expect(reconstructed(short)).toBeLessThanOrEqual(4)
+    } finally {
+      setTimingLevel('off')
+      f.dispose()
+      uninstall()
     }
   })
 

@@ -2155,10 +2155,13 @@ export class GameHarness {
    * named by the target it draws into — `scene` is the sensor's pass, and a
    * `scene after copy` row is the same pass resumed after the sea read the
    * frame behind it. `gaps` are the time between passes that none accounts
-   * for: a copy, a raw WebGPU pass such as the upscaler's. `wallMs` is the
-   * drained figure over the same frames, so `busyMs` can be checked against
-   * it. Null where the host has no device, no timestamps, or no presenting
-   * chain — the last is a case where `gpu()` still answers.
+   * for: a copy, a raw WebGPU pass such as the upscaler's. The upscaler's own
+   * passes are in `owned`, timed by its own timer over the run's first
+   * frames, as many as it has query slots, and reported beside the rest as
+   * begin-to-end means. `wallMs` is the drained figure over the same frames,
+   * so `busyMs` can be checked against it. Null where the host has no device,
+   * no timestamps, or no presenting chain — the last is a case where `gpu()`
+   * still answers.
    */
   async passes(frames?: number): Promise<PassReport | null> {
     return (await this.#host.render.measurePasses(frames)) ?? null
@@ -2280,7 +2283,7 @@ export class GameHarness {
       '  ir.timing.tracks() / .mark(name) / .drain()',
       '  await ir.profile(ms)          arm, record, disarm; .text is the answer',
       '  await ir.gpu(frames?)         ms per presented frame, across a drained queue',
-      '  await ir.passes(frames?)      the same frames, GPU ms by named pass, and the gaps',
+      "  await ir.passes(frames?)      the same frames, GPU ms by named pass, the gaps, and the upscaler's own",
       '  ir.logs(n)',
     ].join('\n')
   }

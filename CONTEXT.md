@@ -11311,6 +11311,34 @@ served source imported correctly, and the galaxy's pipelines then failed with
 an undefined color format. A restarted Vite did not reproduce either through
 the same steps; `--fresh` reloads the page but not Vite's module graph.
 
+## The pass timeline is the one GPU instrument, and three's timestamps are off (11 Oct 2026)
+
+Three timestamp mechanisms ran under `ir.timing('full')`. `gpuTiming.ts` turned
+three's own tracking on and drained it every frame; `passTimeline.ts` hooks the
+backend to time every pass three encodes for `ir.passes`; and the upscaler read
+its package's private timer for the Perf panel. Nothing read three's figure —
+`render/measure.ts` records that it double-counts beside a canvas output pass —
+so `gpuTiming.ts` was query writes and readbacks every frame at `full` with no
+reader, and the one test that read it, polling `renderer.info.render.timestamp`,
+was the `upscale.gpu.test.ts` case that failed about one run in two. It is gone;
+the file passed ten runs of ten after.
+
+The plan wanted the upscaler's intervals on the timeline, and the package does
+not have them to give: `takeSamples()` returns `{ label, milliseconds }` per
+pass, because `readback` subtracts each begin from its end and unmaps the
+buffer (`@pmndrs/upscaler` 0.2.0). Of the three ways left — stand an adapter in
+for the private timer, keep the durations beside `ir.passes`, or ask upstream —
+Jon chose the second. The timeline takes `PassSource`s: the upscaler lends it
+its timer for a run, armed whatever the level and handed back at the level it
+found, and `ir.passes` reports the passes under `owned` as begin-to-end means,
+not in `busyMs` — the work itself is a gap on the timeline. At Tau Ceti Dusk, DPR 2, Temporal Quality they
+read reconstruct 0.66–0.69, exposure 0.11–0.15, shading change 0.48–0.53,
+accumulate 2.88–2.98 and RCAS 0.51–0.78 ms, eight samples a 60-frame run (the
+package's eight readback slots), while the gap the timeline sees where that work
+falls was 1.01 ms — the raw pairs are latency on this GPU, as `summarize` says.
+A 64-pixel pass can finish inside the timestamp quantum and read 0, so the GPU
+test asks that some owned pass read time, not each.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

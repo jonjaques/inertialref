@@ -66,6 +66,51 @@ export interface PassTime {
   readonly latencyMs: number
 }
 
+/**
+ * A pass its owner encodes outside three and times with its own timer — the
+ * upscaler's compute passes, which three never sees and the hooks below never
+ * reach. Reported beside the timeline's passes, not among them: the owner's
+ * timer hands back only begin-to-end durations, with no timestamps to place
+ * on the frame, so a pass here is a raw pair — latency on this machine, by the
+ * argument at `summarize` — and is not in `busyMs`. The work itself falls in
+ * a gap between the timeline's passes, so adding these to `gaps` counts it
+ * twice.
+ */
+export interface OwnedPassTime {
+  /** Whose timer: `PassSource.name`. */
+  readonly source: string
+  readonly label: string
+  /** Samples of this pass the source returned over the run. */
+  readonly samples: number
+  /** Begin to end, the mean over those samples. */
+  readonly latencyMs: number
+}
+
+/** One duration a source's timer read back. */
+export interface OwnedSample {
+  readonly label: string
+  readonly ms: number
+}
+
+/**
+ * A timer the timeline arms beside its own, for passes it cannot hook.
+ *
+ * `arm` runs before the measured frames and `disarm` after them; `disarm`
+ * settles once the source's own readbacks have, and returns the durations
+ * its timer resolved for frames drawn since `arm` — none from before it. A
+ * timer with a fixed set of query slots times at most that many frames of a
+ * run drawn back to back, the run's first: a slot frees only in its readback
+ * callback, which a synchronous loop of frames never yields to. The
+ * upscaler's has eight, and `OwnedPassTime.samples` says how many there were.
+ * Either may throw without costing the measurement: rule 65, a readout never
+ * stops the frame.
+ */
+export interface PassSource {
+  readonly name: string
+  arm(): void
+  disarm(): Promise<readonly OwnedSample[]>
+}
+
 /** Time no pass was running, between the pass that finished and the next to begin. */
 export interface PassGap {
   readonly after: string
@@ -87,6 +132,8 @@ export interface PassTimelineResult {
   readonly gaps: readonly PassGap[]
   /** Passes that found the query set full and went untimed. */
   readonly dropped: number
+  /** Passes timed by their owners, beside the timeline. See `OwnedPassTime`. */
+  readonly owned: readonly OwnedPassTime[]
 }
 
 /*
@@ -168,6 +215,7 @@ interface Backend {
 
 export class PassTimeline {
   readonly #device: GPUDevice
+  readonly #sources = new Set<PassSource>()
   readonly #querySet: GPUQuerySet
   readonly #resolve: GPUBuffer
   readonly #read: GPUBuffer
@@ -290,6 +338,12 @@ export class PassTimeline {
     }
   }
 
+  /** Measure `source` beside the timeline from now on. Returns the detach. */
+  attach(source: PassSource): () => void {
+    this.#sources.add(source)
+    return () => this.#sources.delete(source)
+  }
+
   /**
    * Submit `frames` frames through `draw` with every pass timed, then read
    * the timeline back.
@@ -305,30 +359,56 @@ export class PassTimeline {
     try {
       this.#pending.length = 0
       this.#dropped = 0
+      const sources = [...this.#sources].filter((source) => {
+        try {
+          source.arm()
+          return true
+        } catch {
+          return false
+        }
+      })
       // Armed per frame rather than across the drains, so nothing encoded
       // while the queue drains is taken for one of these frames.
-      const wallMs = await drainedFrameMs(
-        this.#device,
-        () => {
-          this.#armed = true
-          try {
-            draw()
-          } finally {
-            this.#armed = false
-          }
-        },
-        frames,
-      )
+      let wallMs: number
+      let returned: { source: string; samples: readonly OwnedSample[] }[] = []
+      try {
+        wallMs = await drainedFrameMs(
+          this.#device,
+          () => {
+            this.#armed = true
+            try {
+              draw()
+            } finally {
+              this.#armed = false
+            }
+          },
+          frames,
+        )
+      } finally {
+        returned = await Promise.all(
+          sources.map(async (source) => {
+            try {
+              return { source: source.name, samples: await source.disarm() }
+            } catch {
+              return { source: source.name, samples: [] }
+            }
+          }),
+        )
+      }
+      const owned = summarizeOwned(returned)
 
       const used = this.#pending.length * 2
       if (used === 0)
-        return summarize(
-          [],
-          new BigUint64Array(0),
-          frames,
-          wallMs,
-          this.#dropped,
-        )
+        return {
+          ...summarize(
+            [],
+            new BigUint64Array(0),
+            frames,
+            wallMs,
+            this.#dropped,
+          ),
+          owned,
+        }
       const queue = this.#device.queue
       const encoder = this.#device.createCommandEncoder({
         label: 'pass timeline resolve',
@@ -341,14 +421,17 @@ export class PassTimeline {
         const times = new BigUint64Array(this.#read.getMappedRange(0, used * 8))
         const floor = this.#floor
         for (const time of times) if (time > this.#floor) this.#floor = time
-        return summarize(
-          this.#pending,
-          times,
-          frames,
-          wallMs,
-          this.#dropped,
-          floor,
-        )
+        return {
+          ...summarize(
+            this.#pending,
+            times,
+            frames,
+            wallMs,
+            this.#dropped,
+            floor,
+          ),
+          owned,
+        }
       } finally {
         this.#read.unmap()
       }
@@ -400,7 +483,7 @@ export function summarize(
   wallMs: number,
   dropped: number,
   floor = 0n,
-): PassTimelineResult {
+): Omit<PassTimelineResult, 'owned'> {
   const intervals: Interval[] = []
   for (const pass of pending) {
     const begin = times[pass.slot]!
@@ -500,6 +583,42 @@ export function summarize(
       .filter((gap) => gap.ms >= GAP_FLOOR_MS)
       .sort((a, b) => b.ms - a.ms),
   }
+}
+
+/**
+ * The owned passes, by source and label, in the order they first came back:
+ * how many samples each returned and their mean. Exported for the test.
+ *
+ * A duration that is not a finite, non-negative number is dropped rather than
+ * averaged in. It is a source's readback, not this instrument's, and a NaN in
+ * a mean is a row nobody can read.
+ */
+export function summarizeOwned(
+  returned: readonly {
+    readonly source: string
+    readonly samples: readonly OwnedSample[]
+  }[],
+): OwnedPassTime[] {
+  const rows = new Map<
+    string,
+    { source: string; label: string; samples: number; total: number }
+  >()
+  for (const { source, samples } of returned) {
+    for (const { label, ms } of samples) {
+      if (!Number.isFinite(ms) || ms < 0) continue
+      const key = `${source}\u0000${label}`
+      const row = rows.get(key) ?? { source, label, samples: 0, total: 0 }
+      row.samples += 1
+      row.total += ms
+      rows.set(key, row)
+    }
+  }
+  return [...rows.values()].map(({ source, label, samples, total }) => ({
+    source,
+    label,
+    samples,
+    latencyMs: total / samples,
+  }))
 }
 
 const timelines = new WeakMap<WebGPURenderer, PassTimeline>()
