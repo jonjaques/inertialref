@@ -22,12 +22,15 @@ import {
   createTaskRegistry,
   type HeightfieldResponse,
   type HeightfieldSource,
+  SurfacePreparation,
+  WorkerPool,
 } from '@inertialref/workers'
 import {
   bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
   COVER_CHANNELS,
+  findBody,
   HEIGHTFIELD_BORDER,
   type HeightfieldRequest,
   heightfieldStride,
@@ -274,6 +277,43 @@ describe('the terrain streamer', () => {
     )
     expect(streamer.summary().selections).toBe(3)
 
+    session.dispose()
+  })
+
+  it('does not re-walk for a surface prepared for something else', async () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const view = groundView(session)
+    // The engine's shape: one preparation, shared with the site list and the
+    // GPU producer, over a pool of its own here so the heightfields stay
+    // synchronous and no answer of theirs can move the epoch.
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(createTaskRegistry()),
+      size: 1,
+    })
+    const preparation = new SurfacePreparation(pool)
+    const streamer = new TerrainStreamer(null, undefined, preparation)
+    await walkOnce(streamer, session, view)
+    const walked = streamer.summary().selections
+
+    // The site list focusing Mars while the ship stands on Earth.
+    const mars = parseAddress('g:milky-way/s:SOL/b:3')
+    if (mars.kind !== 'body') throw new Error('not a body address')
+    const system = session.world.system(mars.system)
+    const body = system === undefined ? undefined : findBody(system, mars.body)
+    if (body === undefined) throw new Error('no Mars')
+    expect(await preparation.whenPrepared(body.surface)).not.toBeNull()
+
+    streamer.update(
+      session.world,
+      view.renderTime,
+      frame(),
+      view.camera,
+      view.origin,
+      view.body,
+    )
+    expect(streamer.summary().selections).toBe(walked)
+
+    pool.terminate()
     session.dispose()
   })
 

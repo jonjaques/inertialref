@@ -43,6 +43,7 @@ import {
 } from '@inertialref/simulation'
 import {
   type Body,
+  drains,
   type EntityId,
   findBody,
   hasSolidSurface,
@@ -1116,11 +1117,20 @@ export class GameEngine {
    *
    * At once for an address with no loaded body, and for a body with no solid
    * surface: the site list draws an empty state for both and reads no ground.
+   * At once for a body that does not drain, too: its graph is a null nothing
+   * builds, and the site list's own search is the whole cost of reading it.
+   *
+   * Asked again when the wait is canceled, because that is a replaced world:
+   * the address names a new body, and a load with the same seed changes
+   * neither of the site list's keys, so nothing else would ask.
    */
   async surfacePrepared(address: string): Promise<void> {
-    const body = this.bodyFor(address)
-    if (body === null || !hasSolidSurface(body)) return
-    await this.#preparation.whenPrepared(body.surface)
+    for (;;) {
+      const body = this.bodyFor(address)
+      if (body === null || !hasSolidSurface(body) || !drains(body.surface))
+        return
+      if ((await this.#preparation.whenPrepared(body.surface)) !== null) return
+    }
   }
 
   /** A source, answering from the archive first when there is one. */

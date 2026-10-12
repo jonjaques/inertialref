@@ -1,5 +1,6 @@
 import { getLogger } from '@inertialref/shared'
 import {
+  drains,
   HEIGHTFIELD_RESOLUTION,
   type HeightfieldRequest,
   seedDrainageGraph,
@@ -19,13 +20,13 @@ import {
  *
  * Two things about a surface are cold once per body per thread and too slow
  * for a frame: the detail floor, 33-43 ms of probe search, and the drainage
- * graph, 50 to 140 ms of lattice and flood. Everything that reads a wet body's
- * ground on the draw thread reads the graph — the site list, the scatter
- * field's one sample a frame, the GPU producer's pack — and each is the first
- * asker somewhere: the site list on focusing a body in the planetarium, the
- * scatter field as the ground arrives under a ship, the producer for the
- * orbital bake on arriving at a generated world. So the answer cannot live in
- * any one of them.
+ * graph, 57 to 103 ms of lattice and flood in the browser. Everything that
+ * reads a wet body's ground on the draw thread reads the graph — the site
+ * list, the scatter field's one sample a frame, the GPU producer's pack — and
+ * each is the first asker somewhere: the site list on focusing a body in the
+ * planetarium, the scatter field as the ground arrives under a ship, the
+ * producer for the orbital bake on arriving at a generated world. So the
+ * answer cannot live in any one of them.
  *
  * A worker prepares the surface: the floor, and the graph the floor search
  * builds on its way. The answer seeds this thread's drainage memo before the
@@ -33,7 +34,8 @@ import {
  * a lookup. The streamer holds the ground back until then, the GPU producer's
  * requests are held through `holding`, and the site list waits on
  * `whenPrepared` — each the shape it already had for the heightfields
- * themselves.
+ * themselves. Only the streamer waits on a body that does not drain: its
+ * graph is a null nothing has to build, and the floor is the streamer's alone.
  *
  * What it cannot hold back is canonical code. The contact test and the flight
  * model sample the field synchronously, and a body reached by teleport rather
@@ -50,24 +52,30 @@ export interface Prepared {
 }
 
 interface Waiting {
-  readonly promise: Promise<Prepared>
-  readonly resolve: (prepared: Prepared) => void
+  readonly promise: Promise<Prepared | null>
+  readonly resolve: (prepared: Prepared | null) => void
 }
 
 export class SurfacePreparation {
   readonly #pool: WorkerPool | null
   readonly #resolution: number
   /*
-   * Keyed on the `SurfaceParameters` object, for the reason the streamer kept
-   * its floors that way: it is immutable, it belongs to the loaded body, and a
-   * reseed under the same address produces a new one — so a new world cannot
-   * inherit the old one's answer, and nothing has to clear this.
+   * Keyed on the `SurfaceParameters` object: it is immutable, it belongs to the
+   * loaded body, and a reseed under the same address produces a new one — so a
+   * new world cannot inherit the old one's answer, and nothing has to clear
+   * this.
    */
   readonly #prepared = new WeakMap<SurfaceParameters, Prepared>()
   readonly #jobs = new Map<SurfaceParameters, JobHandle<unknown>>()
   readonly #waiting = new WeakMap<SurfaceParameters, Waiting>()
-  readonly #listeners = new Set<(surface: SurfaceParameters) => void>()
-  #terminated = false
+  /*
+   * Surfaces neither thread could prepare. Held, not released: the search
+   * that failed here fails the same way on the next ask, and a released
+   * surface is resubmitted by the next frame's `prepare` — a job, a warning
+   * and a partial search on this thread every frame, for a body whose field
+   * throws for every reader anyway.
+   */
+  readonly #failed = new WeakSet<SurfaceParameters>()
 
   constructor(
     pool: WorkerPool | null,
@@ -93,35 +101,45 @@ export class SurfacePreparation {
         surfaceDetailFloor(surface, this.#resolution),
       )
     }
-    if (this.#jobs.has(surface) || this.#terminated) return null
+    // A terminated pool is asked rather than inferred from a rejection: with
+    // nothing in flight at `dispose()` there is no rejection to infer it from,
+    // and `submit` would throw its invariant into the frame that asked.
+    if (
+      this.#jobs.has(surface) ||
+      this.#failed.has(surface) ||
+      this.#pool.terminated
+    )
+      return null
     this.#submit(this.#pool, surface)
     return null
   }
 
   /**
-   * Settles once `prepare` answers for `surface`, and starts the preparation
-   * if nothing has. It never rejects, and after the pool is terminated it
-   * never settles: there is no frame left to spend an answer on.
+   * Settles with the answer once `prepare` has one for `surface`, and starts
+   * the preparation if nothing has. It never rejects.
+   *
+   * Settles with null when `clear` cancels the preparation: the world it was
+   * asked for is gone, and the waiter asks again about whatever its address
+   * names now. Left pending instead, a waiter on a replaced world's surface
+   * waits for an answer nothing will ever ask for.
+   *
+   * Never settles after the pool is terminated — there is no frame left to
+   * spend an answer on — nor for a surface neither thread could prepare,
+   * whose field throws for every reader.
    */
-  whenPrepared(surface: SurfaceParameters): Promise<Prepared> {
+  whenPrepared(surface: SurfaceParameters): Promise<Prepared | null> {
     const held = this.prepare(surface)
     if (held !== null) return Promise.resolve(held)
     let waiting = this.#waiting.get(surface)
     if (waiting === undefined) {
-      let resolve!: (prepared: Prepared) => void
-      const promise = new Promise<Prepared>((settle) => {
+      let resolve!: (prepared: Prepared | null) => void
+      const promise = new Promise<Prepared | null>((settle) => {
         resolve = settle
       })
       waiting = { promise, resolve }
       this.#waiting.set(surface, waiting)
     }
     return waiting.promise
-  }
-
-  /** Hear about every surface as it becomes prepared. */
-  subscribe(listener: (surface: SurfaceParameters) => void): () => void {
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
   }
 
   /**
@@ -149,13 +167,15 @@ export class SurfacePreparation {
       resolution: this.#resolution,
     })
     this.#jobs.set(surface, job)
+    // One chain rather than `then(ok, fail)`: an answer this thread cannot
+    // seed is a failure like any other, and is prepared here.
     job.result
       .then((answer) => {
         this.#jobs.delete(surface)
         // The graph before the floor: a floor is what lets the streamer walk,
         // and the first walk reads the graph through the scatter field.
         seedDrainageGraph(surface, answer.drainage)
-        this.#arrived(surface, this.#settle(surface, answer.level))
+        this.#release(surface, this.#settle(surface, answer.level))
       })
       .catch((cause: unknown) => {
         this.#jobs.delete(surface)
@@ -164,17 +184,16 @@ export class SurfacePreparation {
         // surface is released and the next ask submits again. Held instead,
         // the surface has no answer and no job, and that body never streams
         // again for the life of the session.
-        if (message === 'canceled') return
+        if (message === 'canceled') {
+          this.#release(surface, null)
+          return
+        }
         // The pool is gone, which is a disposed session and nothing else:
         // `terminate` rejects everything pending with this. Not measured —
         // there is no frame left to spend the answer on, and measuring would
         // put the whole cold cost on the teardown of every session that had a
-        // preparation outstanding — and nothing is submitted again, because
-        // `submit` on a terminated pool throws its invariant into the frame.
-        if (message === 'pool terminated') {
-          this.#terminated = true
-          return
-        }
+        // preparation outstanding.
+        if (message === 'pool terminated') return
         /*
          * A task failure that will not fix itself on a retry: a worker bundle
          * without `universe.prepareSurface`, a version mismatch across a
@@ -188,10 +207,17 @@ export class SurfacePreparation {
         log.warn('surface preparation failed; preparing it on this thread', {
           cause: message,
         })
-        this.#arrived(
-          surface,
-          this.#settle(surface, surfaceDetailFloor(surface, this.#resolution)),
-        )
+        let floor: number
+        try {
+          floor = surfaceDetailFloor(surface, this.#resolution)
+        } catch (failure) {
+          this.#failed.add(surface)
+          log.error('surface preparation failed on this thread too', {
+            cause: failure instanceof Error ? failure.message : String(failure),
+          })
+          return
+        }
+        this.#release(surface, this.#settle(surface, floor))
       })
   }
 
@@ -201,25 +227,21 @@ export class SurfacePreparation {
     return prepared
   }
 
-  /*
-   * Only an answer that arrives later is announced. The synchronous one is
-   * returned to the caller that asked, inside its own frame, and a listener
-   * bumping the streamer's epoch from inside the update that asked would
-   * stale a selection that has not been made yet.
-   */
-  #arrived(surface: SurfaceParameters, prepared: Prepared): void {
+  #release(surface: SurfaceParameters, prepared: Prepared | null): void {
     this.#waiting.get(surface)?.resolve(prepared)
     this.#waiting.delete(surface)
-    for (const listener of this.#listeners) listener(surface)
   }
 }
 
 /**
  * A source that asks the preparation before it asks the producer.
  *
- * A prepared surface goes straight through, with the producer's own handle. A
- * held one waits; canceling it while it waits rejects at once and never
- * reaches the producer, the way a canceled pool job never reaches a worker.
+ * A prepared surface goes straight through, with the producer's own handle,
+ * and so does one that does not drain: its pack reads a null graph, and
+ * holding it would put the orbital bake of a dry world behind a floor search
+ * the producer never reads. A held one waits; canceling it while it waits
+ * rejects at once and never reaches the producer, the way a canceled pool job
+ * never reaches a worker, and so does a preparation `clear` cancels under it.
  */
 class HeldHeightfieldSource implements ArchivedSource {
   readonly #source: ArchivedSource
@@ -248,7 +270,7 @@ class HeldHeightfieldSource implements ArchivedSource {
     surface: SurfaceParameters,
     request: HeightfieldRequest,
   ): JobHandle<HeightfieldResponse> {
-    if (this.#preparation.prepare(surface) !== null) {
+    if (!drains(surface) || this.#preparation.prepare(surface) !== null) {
       return this.#source.submit(surface, request)
     }
     const id = this.#nextId++
@@ -257,8 +279,13 @@ class HeldHeightfieldSource implements ArchivedSource {
     let reject!: (cause: unknown) => void
     const result = new Promise<HeightfieldResponse>((resolve, fail) => {
       reject = fail
-      void this.#preparation.whenPrepared(surface).then(() => {
+      void this.#preparation.whenPrepared(surface).then((prepared) => {
         if (settled) return
+        if (prepared === null) {
+          settled = true
+          fail(new Error('canceled'))
+          return
+        }
         try {
           active = this.#source.submit(surface, request)
         } catch (cause) {

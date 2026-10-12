@@ -5,6 +5,7 @@ import {
   type DrainageGraph,
   drainageBuilds,
   drainageGraph,
+  drains,
   generateSystem,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
@@ -34,8 +35,8 @@ import {
  * The inline worker shares this thread's memo, so nothing here can show a
  * graph crossing between threads — `drainage.test.ts` holds that, over two
  * module instances. What is held here is the protocol: one job a surface, the
- * graph seeded before the floor is published, the three ways a job fails and
- * what each leaves behind, and a source that waits for its surface.
+ * graph seeded before the floor is published, the ways a job fails and what
+ * each leaves behind, and a source that waits for its surface.
  */
 
 const SOL = generateSystem(
@@ -49,10 +50,14 @@ const surfaceOf = (name: string): SurfaceParameters => {
   throw new Error(`no ${name} in Sol`)
 }
 
-/** A surface no thread has prepared, so a fake answer cannot meet a real one. */
+/**
+ * A surface no thread has prepared, so a fake answer cannot meet a real one.
+ * Luna's does not drain, which is what a held source passes straight through;
+ * Earth's does, which is what it holds.
+ */
 let fresh = 0
-const unseen = (): SurfaceParameters => ({
-  ...surfaceOf('Luna'),
+const unseen = (like: 'Luna' | 'Earth' = 'Luna'): SurfaceParameters => ({
+  ...surfaceOf(like),
   seed: rootSeed(`unseen-${(fresh += 1)}`),
 })
 
@@ -155,19 +160,16 @@ describe('preparing a surface', () => {
     })
     const preparation = new SurfacePreparation(pool)
     const surface = surfaceOf('Earth')
-    const heard: SurfaceParameters[] = []
-    preparation.subscribe((one) => heard.push(one))
 
     expect(preparation.prepare(surface)).toBeNull()
     expect(preparation.prepare(surface)).toBeNull()
     const prepared = await preparation.whenPrepared(surface)
 
-    expect(prepared.floor).toBe(surfaceDetailFloor(surface))
+    expect(prepared?.floor).toBe(surfaceDetailFloor(surface))
     expect(preparation.prepare(surface)).toBe(prepared)
     expect(await preparation.whenPrepared(surface)).toBe(prepared)
-    // Two asks while it ran, two after: one job, one announcement.
+    // Two asks while it ran, two after: one job.
     expect(pool.stats().completed).toBe(1)
-    expect(heard).toEqual([surface])
     pool.terminate()
   })
 
@@ -177,10 +179,11 @@ describe('preparing a surface', () => {
     const preparation = new SurfacePreparation(gate.pool)
     const surface = unseen()
     let seen: DrainageGraph | null | undefined
-    preparation.subscribe((one) => {
+    let built = -1
+    void preparation.whenPrepared(surface).then(() => {
       const before = drainageBuilds()
-      seen = drainageGraph(one)
-      expect(drainageBuilds()).toBe(before)
+      seen = drainageGraph(surface)
+      built = drainageBuilds() - before
     })
 
     expect(preparation.prepare(surface)).toBeNull()
@@ -188,8 +191,9 @@ describe('preparing a surface', () => {
 
     expect(preparation.prepare(surface)?.floor).toBe(7)
     // A copy, because the answer crossed the worker's structured clone — and
-    // read without building, which the listener above holds.
+    // read without building, the moment the waiter heard.
     expect(seen).toStrictEqual(graph)
+    expect(built).toBe(0)
     gate.pool.terminate()
   })
 
@@ -202,7 +206,10 @@ describe('preparing a surface', () => {
     expect(gate.pool.stats().active).toBe(1)
     preparation.clear()
     await gate.release()
-    // Released: no answer, and no job until something asks.
+    // Released: no answer, and no job until something asks. The waiter hears
+    // the cancel, because a waiter on a replaced world's surface is waiting
+    // for an answer nothing will ask for again.
+    expect(await answered).toBeNull()
     expect(gate.pool.stats().canceled).toBe(1)
     expect(gate.runs()).toBe(1)
     expect(preparation.prepare(surface)).toBeNull()
@@ -210,8 +217,7 @@ describe('preparing a surface', () => {
     expect(gate.runs()).toBe(2)
 
     await gate.release()
-    // The waiter from before the cancel hears the second job's answer.
-    expect((await answered).floor).toBe(5)
+    expect((await preparation.whenPrepared(surface))?.floor).toBe(5)
     gate.pool.terminate()
   })
 
@@ -236,6 +242,15 @@ describe('preparing a surface', () => {
     expect(gate.runs()).toBe(1)
   })
 
+  it('asks nothing of a pool terminated with nothing in flight', () => {
+    const gate = gatedPool(() => ({ level: 5, drainage: null }))
+    const preparation = new SurfacePreparation(gate.pool)
+    // No job outstanding, so no rejection arrives to say the pool is gone.
+    gate.pool.terminate()
+    expect(() => preparation.prepare(unseen())).not.toThrow()
+    expect(gate.runs()).toBe(0)
+  })
+
   it('prepares here when the task fails, rather than asking again', async () => {
     const registry = new TaskRegistry()
     registry.register(
@@ -257,10 +272,46 @@ describe('preparing a surface', () => {
     expect(preparation.prepare(surface)).toBeNull()
     const prepared = await preparation.whenPrepared(surface)
 
-    expect(prepared.floor).toBe(surfaceDetailFloor(surface))
+    expect(prepared?.floor).toBe(surfaceDetailFloor(surface))
     expect(pool.stats().failed).toBe(1)
     for (let frame = 0; frame < 4; frame += 1) preparation.prepare(surface)
     expect(pool.stats().failed + pool.stats().completed).toBe(1)
+    pool.terminate()
+  })
+
+  it('holds a surface neither thread can prepare, rather than asking again', async () => {
+    const registry = new TaskRegistry()
+    registry.register(
+      defineTask({
+        name: prepareSurfaceTask.name,
+        version: prepareSurfaceTask.version,
+        run(): PreparedSurface {
+          throw new Error('a throw inside the search')
+        },
+      }),
+    )
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(registry),
+      size: 1,
+    })
+    const preparation = new SurfacePreparation(pool)
+    // A field the search cannot sample on this thread either.
+    const surface = {
+      ...unseen(),
+      grammar: undefined,
+    } as unknown as SurfaceParameters
+    let settled = false
+    void preparation.whenPrepared(surface).then(() => (settled = true))
+
+    await settle()
+    for (let frame = 0; frame < 4; frame += 1) {
+      expect(preparation.prepare(surface)).toBeNull()
+      await settle()
+    }
+    // One job, and no frame after it submits another.
+    expect(pool.stats().failed).toBe(1)
+    expect(pool.stats().completed + pool.stats().queued).toBe(0)
+    expect(settled).toBe(false)
     pool.terminate()
   })
 })
@@ -271,7 +322,7 @@ describe('a source held for its surface', () => {
     const preparation = new SurfacePreparation(gate.pool)
     const { source, asked } = countingSource()
     const held = preparation.holding(source)
-    const surface = unseen()
+    const surface = unseen('Earth')
 
     const job = held.submit(surface, REQUEST)
     await settle()
@@ -290,11 +341,42 @@ describe('a source held for its surface', () => {
     const { source, asked } = countingSource()
     const held = preparation.holding(source)
 
-    const job = held.submit(unseen(), REQUEST)
+    const job = held.submit(unseen('Earth'), REQUEST)
     job.cancel()
     await expect(job.result).rejects.toThrow('canceled')
     await gate.release()
     expect(asked).toEqual([])
+    gate.pool.terminate()
+  })
+
+  it('fails a request held for a preparation that was canceled under it', async () => {
+    const gate = gatedPool(() => ({ level: 5, drainage: null }))
+    const preparation = new SurfacePreparation(gate.pool)
+    const { source, asked } = countingSource()
+    const held = preparation.holding(source)
+
+    const job = held.submit(unseen('Earth'), REQUEST)
+    preparation.clear()
+    const failed = expect(job.result).rejects.toThrow('canceled')
+    // The worker hears the cancel when it next yields, which is the release.
+    await gate.release()
+    await failed
+    expect(asked).toEqual([])
+    gate.pool.terminate()
+  })
+
+  it('passes a surface that does not drain straight through, unprepared', async () => {
+    const gate = gatedPool(() => ({ level: 5, drainage: null }))
+    const preparation = new SurfacePreparation(gate.pool)
+    const { source, asked } = countingSource()
+    const held = preparation.holding(source)
+    const surface = unseen()
+    expect(drains(surface)).toBe(false)
+
+    await held.submit(surface, REQUEST).result
+    // Answered with no preparation at all: its pack reads a null graph.
+    expect(asked).toEqual([surface])
+    expect(gate.runs()).toBe(0)
     gate.pool.terminate()
   })
 

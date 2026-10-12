@@ -94,8 +94,10 @@ comes back with the floor and seeds the main thread's memo. The consequence a
 caller has to know is that a body whose preparation has not come back has no
 ceiling to select against, so the streamer holds the ground back for the frames
 it takes rather than guessing one, and the GPU producer's requests and the
-planetarium's site list wait on `SurfacePreparation` the same way. A host with
-no pool prepares synchronously; none of those have a frame to drop.
+planetarium's site list wait on `SurfacePreparation` the same way for a body
+that drains — a dry one's graph is a null nothing builds, so they do not wait
+for it. A host with no pool prepares synchronously; none of those have a frame
+to drop.
 
 ---
 

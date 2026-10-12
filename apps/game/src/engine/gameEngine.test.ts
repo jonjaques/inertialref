@@ -8,6 +8,7 @@ import { DEFAULT_FILL } from '@inertialref/devtools'
 import { rootSeed } from '@inertialref/procedural'
 import {
   drainageBuilds,
+  drains,
   generateHeightfield,
   regionAddress,
   surfaceGrammar,
@@ -465,7 +466,7 @@ describe('the terrain archive, through the engine', () => {
 describe('a body’s ground, prepared off this thread', () => {
   it('is read here only once a worker has prepared it', async () => {
     /*
-     * The graph is 50 to 140 ms, and in the browser each reader of it on the
+     * The graph is 57 to 103 ms in the browser, and each reader of it on the
      * draw thread is the first asker somewhere: the GPU producer's pack for the
      * orbital bake on arriving at a generated world, the site list on focusing
      * a body. Each waits for the preparation instead.
@@ -513,6 +514,43 @@ describe('a body’s ground, prepared off this thread', () => {
       const before = drainageBuilds()
       expect(game.harness.sites(titan).length).toBeGreaterThan(0)
       expect(drainageBuilds()).toBe(before)
+    } finally {
+      game.dispose()
+    }
+  })
+
+  it('is asked about again when a replaced world cancels the wait', async () => {
+    /*
+     * The site list keys on the address and the seed, and a load with the
+     * same seed changes neither, so nothing re-runs it. A wait the replace
+     * cancels has to ask again by itself, or the Ground section stays empty
+     * until the camera moves.
+     */
+    const game = headlessEngine({ heightfieldArchive: null })
+    try {
+      const earth = 'g:milky-way/s:SOL/b:2'
+      const prepared = game.surfacePrepared(earth)
+      game.session.replaceWorld(game.world, null)
+      await prepared
+      // One preparation the replace canceled, and one asked for after it.
+      expect(game.session.pool()?.stats()).toMatchObject({
+        canceled: 1,
+        completed: 1,
+      })
+    } finally {
+      game.dispose()
+    }
+  })
+
+  it('does not wait on a body that does not drain', async () => {
+    const game = headlessEngine({ heightfieldArchive: null })
+    try {
+      const luna = game.bodyFor('g:milky-way/s:SOL/b:2.0')
+      if (luna === null) throw new Error('no Luna')
+      expect(drains(luna.surface)).toBe(false)
+      // Settled with no job: the site list's search is the whole cost.
+      await game.surfacePrepared('g:milky-way/s:SOL/b:2.0')
+      expect(game.session.pool()?.stats().completed).toBe(0)
     } finally {
       game.dispose()
     }

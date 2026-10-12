@@ -705,12 +705,6 @@ export class TerrainStreamer {
     preparation: SurfacePreparation = new SurfacePreparation(pool),
   ) {
     this.#preparation = preparation
-    // A surface prepared since the last walk: the held selection was made
-    // against no floor at all, so it is not merely stale — there is none.
-    // `#forget` left nothing to keep; this is what lets the next frame walk.
-    preparation.subscribe(() => {
-      this.#cacheEpoch += 1
-    })
     this.heightfields = new Heightfields(
       source === undefined
         ? pool === null
@@ -957,7 +951,10 @@ export class TerrainStreamer {
       // ceiling that is not known yet, and guessing one would either starve
       // the ground or spend worker time on patches that are upsamples of their
       // parents — and the scatter field's first sample would build the
-      // drainage graph inside this frame.
+      // drainage graph inside this frame. `#forget` drops the held selection,
+      // so the first frame after the answer walks without an epoch bump; a
+      // bump on every answer would re-walk whatever body is held, for a
+      // surface the site list or a bake asked about.
       this.#forget()
       return
     }
