@@ -6,7 +6,9 @@ account; then verification is networkless over a held key set, grants are held
 a minute, the account routes carry allowances, production is the default
 evaluation of the config, and a connection that outlives its token
 re-presents one; amended 30 Sep 2026: accounts and the guide are on in every
-evaluation, and answer on one production host. Fills the account routes reserved by
+evaluation, and answer on one production host; amended 11 Oct 2026: whether
+the deployment offers the guide is decided with the grant, in
+`tour/access.ts`. Fills the account routes reserved by
 [ADR-0011](0011-application-shell-and-modes.md), answers the account half of
 the open question in [hosting](../hosting.md#open-questions), and amends the
 guide's authorization in [ADR-0042](0042-the-guide-speaks-in-one-voice.md).
@@ -161,7 +163,13 @@ dev` — against the development instance: each environment's build settings
   `tour`, strictly `true`, grants the guide. The planetarium asks
   `/api/tour/capabilities` once per signed-in user and offers the Guide panel
   only on a yes; the Worker refuses a session to anybody else — 401 signed
-  out, 403 without the grant — whatever the menu showed.
+  out, 403 without the grant — whatever the menu showed. Whether the
+  deployment offers the guide at all is decided there too: without a provider
+  key, a secret key at the request's host, or with `TOUR_GUIDE_ENABLED` off,
+  the verdict is `unavailable` before any token is read: the session route
+  answers 503 and the verdict route answers it as the verdict. `guideAccess`
+  returns the protocol's refusal codes, so the two routes map one answer
+  rather than each deciding "configured".
 - **A deployment fault is a 503, not a refusal.** A key set that cannot be
   loaded with nothing held, a held key an hour past its last confirmation, a
   secret that is invalid, or Clerk's API unreachable during the grant lookup

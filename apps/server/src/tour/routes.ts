@@ -6,11 +6,12 @@ import {
   GUIDE_VERDICT_PATH,
   GUIDE_VOICES,
   type GuideError,
+  type GuideRefusal,
   type GuideSessionCreated,
   type GuideVerdict,
   isGuideVoice,
 } from '@inertialref/protocol'
-import { accountKeys, AccountUnavailableError } from '../account.ts'
+import { AccountUnavailableError } from '../account.ts'
 import { allowed, RETRY_AFTER } from '../limits.ts'
 import { logger, span } from '../log.ts'
 import { allowedOrigin } from '../origins.ts'
@@ -63,40 +64,39 @@ export async function serveTour(
   })
 }
 
+/*
+ * A refusal's status says whose problem it is: the deployment's at 503, so it
+ * logs as an error, and the visitor's at 4xx — 401 for a sign-in that would
+ * fix it, 403 for one that would not.
+ */
+const REFUSAL_STATUS: Readonly<Record<GuideRefusal, number>> = {
+  unavailable: 503,
+  'signed-out': 401,
+  'not-granted': 403,
+}
+
 async function handle(
   request: Request,
   env: Env,
   path: string,
 ): Promise<Response> {
   try {
-    // The provider, and the accounts that decide who may use it.
-    const keys = accountKeys(env, request)
-    const configured = Boolean(
-      env.OPENAI_API_KEY &&
-      keys.secretKey &&
-      String(env.TOUR_GUIDE_ENABLED) !== 'false',
-    )
     if (path === GUIDE_VERDICT_PATH && request.method === 'GET') {
-      const access = configured ? await guideAccess(request, keys) : null
+      const access = await guideAccess(request, env)
       return tourJson(
-        (access === null
-          ? { granted: false, reason: 'unavailable' }
-          : !access.signedIn
-            ? { granted: false, reason: 'signed-out' }
-            : !access.authorized
-              ? { granted: false, reason: 'not-granted' }
-              : { granted: true, voices: GUIDE_VOICES }) satisfies GuideVerdict,
+        (access.granted
+          ? { granted: true, voices: GUIDE_VOICES }
+          : { granted: false, reason: access.reason }) satisfies GuideVerdict,
       )
     }
     if (!allowedOrigin(request))
       throw new TourHttpError('Use the guide from this site.', 403)
-    if (!configured)
-      throw new TourHttpError(GUIDE_REFUSAL_SENTENCES.unavailable, 503)
-    const access = await guideAccess(request, keys)
-    if (!access.signedIn)
-      throw new TourHttpError(GUIDE_REFUSAL_SENTENCES['signed-out'], 401)
-    if (!access.authorized)
-      throw new TourHttpError(GUIDE_REFUSAL_SENTENCES['not-granted'], 403)
+    const access = await guideAccess(request, env)
+    if (!access.granted)
+      throw new TourHttpError(
+        GUIDE_REFUSAL_SENTENCES[access.reason],
+        REFUSAL_STATUS[access.reason],
+      )
     if (path === GUIDE_SESSIONS_PATH && request.method === 'POST') {
       /*
        * Per account, after the grant: a session is minutes of the OpenAI
@@ -104,10 +104,7 @@ async function handle(
        * one caller that clears every check above. A person starting, pausing
        * and restarting the guide stays far inside it.
        */
-      if (
-        access.userId !== null &&
-        !(await allowed(env.GUIDE_SESSION_LIMIT, access.userId))
-      )
+      if (!(await allowed(env.GUIDE_SESSION_LIMIT, access.userId)))
         throw new TourHttpError(
           'Too many guide sessions. Try again in a minute.',
           429,

@@ -130,7 +130,8 @@ export default defineConfig(({ isPreview }) => {
          * this file, reviewed like any other — a dashboard edit is no way
          * round that, and stops the next deploy from running at all (above).
          *
-         *   TOUR_GUIDE_ENABLED  the Planetarium guide (`src/tour/routes.ts`).
+         *   TOUR_GUIDE_ENABLED  the Planetarium guide (`guideAccess` in
+         *                       `src/tour/access.ts`).
          *   CLERK_ENABLED       accounts on the Worker (`src/account.ts`); off, it
          *                       answers every account question with "not
          *                       configured" and the guide admits nobody.

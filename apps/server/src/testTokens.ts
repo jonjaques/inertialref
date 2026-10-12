@@ -72,3 +72,66 @@ export const session = (extra: Record<string, unknown> = {}) => ({
   exp: now() + 60,
   ...extra,
 })
+
+const CLERK_API = 'https://api.clerk.com/v1'
+
+/** One call the Worker made to Clerk's Backend API. */
+export interface ClerkCall {
+  readonly url: string
+  readonly authorization: string | null
+}
+
+/**
+ * Clerk's Backend API as the Worker reaches it with only a secret key: the
+ * instance's key set, listing `issuer`, and its users, each with the private
+ * metadata a person set in the dashboard.
+ *
+ * `answer` is `null` for a URL that is not Clerk's, so a test can put the
+ * provider beside it in one `fetch`. A user absent from `users` does not
+ * exist; a `status` other than 200 fails every user lookup with it.
+ */
+export function fakeClerk(
+  issuer: Signer,
+  users: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {},
+) {
+  const state = {
+    users: { ...users } as Record<string, Readonly<Record<string, unknown>>>,
+    status: 200,
+    calls: [] as ClerkCall[],
+  }
+  const answer = (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Response | null => {
+    const url = String(input instanceof Request ? input.url : input)
+    if (!url.startsWith(CLERK_API)) return null
+    state.calls.push({
+      url,
+      authorization: new Headers(
+        input instanceof Request ? input.headers : init?.headers,
+      ).get('authorization'),
+    })
+    if (url === `${CLERK_API}/jwks`)
+      return Response.json({ keys: [issuer.jwk] })
+    const user = /\/users\/([^/?]+)$/.exec(url)?.[1]
+    const metadata = user === undefined ? undefined : state.users[user]
+    if (state.status === 200 && metadata !== undefined)
+      return Response.json({
+        id: user,
+        object: 'user',
+        private_metadata: metadata,
+        public_metadata: {},
+        unsafe_metadata: {},
+      })
+    return Response.json(
+      { errors: [{ code: 'resource_not_found', message: 'not found' }] },
+      { status: state.status === 200 ? 404 : state.status },
+    )
+  }
+  return {
+    state,
+    answer,
+    /** The user lookups so far, leaving out the key set. */
+    lookups: () => state.calls.filter((call) => call.url.includes('/users/')),
+  }
+}
