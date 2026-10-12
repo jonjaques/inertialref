@@ -56,8 +56,9 @@ export interface SceneAttachment {
 
 export interface SceneLayout {
   /**
-   * The picture this is the layout of, resolved for the backend: the one
-   * resolution the sensor, its warm-up and the renderer's description read.
+   * The picture this is the layout of, resolved for the backend: what the
+   * sensor reconstructs from, so what the pass draws into and what it is
+   * reconstructed from are one picture by construction.
    */
   readonly picture: Picture
   /** 4 or 0. WebGPU has no other count. */
@@ -110,6 +111,18 @@ const TEMPORAL: readonly SceneAttachment[] = [
  */
 const LAYOUTS = new Map<string, SceneLayout>()
 
+/*
+ * Every field of a picture, by a list the compiler holds to `Picture`'s keys.
+ * The layout carries the picture the sensor reconstructs from, so a field the
+ * intern key left out would hand one picture's layout — and its reconstruction
+ * — to another, with no error anywhere.
+ */
+const PICTURE_FIELDS = Object.keys({
+  aa: true,
+  scale: true,
+  sharpness: true,
+} satisfies Record<keyof Picture, true>) as readonly (keyof Picture)[]
+
 /** The layout `picture` draws its scene into on `backend`. */
 export function sceneLayout(
   picture: Picture,
@@ -119,9 +132,7 @@ export function sceneLayout(
   const samples = pictureSamples(resolved)
   const temporal = resolved.aa === 'temporal'
   const key = [
-    resolved.aa,
-    resolved.scale,
-    resolved.sharpness,
+    ...PICTURE_FIELDS.map((field) => resolved[field]),
     backend.reversedDepth,
   ].join('|')
   let layout = LAYOUTS.get(key)

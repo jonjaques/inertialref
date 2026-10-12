@@ -1,8 +1,10 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
+import { invariant } from '@inertialref/shared'
 import { pictureUpscales, type Picture } from '../render/picture.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { sceneBackend, sceneLayout } from '../render/sceneLayout.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 import { warmAtMount } from '../render/warmup.ts'
@@ -39,15 +41,23 @@ export function Sensor({
 
   useEffect(() => {
     engine.declareCut()
-    // The one cast, for the reason `warmRenderer` gives: R3F types `gl` as
-    // its own renderer union, and the web `<Canvas>` here is always handed a
-    // `WebGPURenderer` by `createRenderer`.
     // The engine's, which every warm-up compiled against: the knob wrote
     // this picture before the preference re-rendered this component. It
     // carries the picture resolved for this backend, so nothing here
     // resolves it again.
     const layout = engine.sceneLayout(gl)
+    // The prop is only this effect's dependency, so a mount whose picture is
+    // not the engine's would draw the engine's and rebuild on the wrong
+    // change. The two are one preference, and a layout is one object per
+    // resolved picture, so identity is the whole comparison.
+    invariant(
+      layout === sceneLayout(picture, sceneBackend(gl)),
+      'the sensor was handed a picture the engine is not drawing',
+    )
     const built = createSensor(
+      // The one cast, for the reason `warmRenderer` gives: R3F types `gl` as
+      // its own renderer union, and the web `<Canvas>` here is always handed
+      // a `WebGPURenderer` by `createRenderer`.
       gl as unknown as WebGPURenderer,
       scene,
       camera,
@@ -114,8 +124,8 @@ export function Sensor({
       chain.current = null
       built.dispose()
     }
-    // `picture` is read through the engine's layout rather than here; it is a
-    // dependency because a new picture is a new chain.
+    // `picture` is drawn through the engine's layout and only checked here;
+    // it is a dependency because a new picture is a new chain.
   }, [gl, scene, camera, engine, picture, diagnostic])
 
   useTimedFrame(

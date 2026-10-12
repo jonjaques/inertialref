@@ -91,11 +91,17 @@ import { namePass } from './passTimeline.ts'
  */
 const standIns = new WeakMap<object, Map<string, RenderTarget>>()
 
+// A row by its name, its channels and its storage: the format comes from the
+// last two, and a row whose storage someday follows the picture would
+// otherwise share a stand-in of the wrong format, compiling pipelines the
+// first frame then builds again.
 const shapeKey = (layout: SceneLayout): string =>
   [
     layout.samples,
     layout.depthType ?? 'default',
-    ...layout.attachments.map((row) => row.name),
+    ...layout.attachments.map(
+      (row) => `${row.name}:${row.channels}:${row.storage}`,
+    ),
   ].join('|')
 
 /**
