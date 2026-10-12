@@ -89,9 +89,10 @@ and the order is what keeps them apart:
 
 **Start with 17, after one decision.** The guide and terrain tracks are in the
 tree, the prepared drainage graph last. What is left is the picture track: 18
-and 21 wait on measurements and 20 waits on a fourth stage. 17 is open on a
-question its section names: where the warm-up reads the layout once the
-module-level map is gone.
+waits on a measurement, 20 on a fourth stage, and 21 on a choice its section
+names now that the upscaler's samples are known to carry durations only. 17 is
+open on a question its section names: where the warm-up reads the layout once
+the module-level map is gone.
 [Open from the review of 6–11](#open-from-the-review-of-611) and the two lists
 after it hold the smaller follow-ups those pull requests left, none of them a
 pull request of its own.
@@ -265,10 +266,27 @@ temporal sensor's busy time is close to its wall time. ADR-0044's reconstruction
 figures are re-measured through the one instrument and the ADR amended. Rule 65
 binds: the instrument never changes the frame or stops it.
 
-**Open before starting.** Whether the package's `takeSamples()` exposes raw
-begin and end timestamps is not checked. Removing three's timestamps touches
-what ADR-0044 promises for `ir.timing('full')`. The private field is re-tested
-on every bump of the package.
+**Open before starting.** `takeSamples()` does not expose the timestamps
+(`@pmndrs/upscaler` 0.2.0, `src/internal/GpuTimer.ts`). A sample is a frame tag,
+a sequence and `{ label, milliseconds }` per pass: `readback` maps the resolved
+query buffer, subtracts each begin from its end, and unmaps it, so the raw
+pairs never leave the timer. The adapter in the shape above therefore has
+nothing to place on `summarize`'s timeline. What remains is a choice:
+
+- **Stand an adapter in for the private `_timer`.** The upscaler asks it for
+  `timestampWrites` per compute pass (`passDescriptor`), and an object that
+  answers from the instrument's own query sets puts reconstruction on the
+  shared timeline as intervals. It widens the reliance on the private field
+  from one read to the timer's whole surface, which every bump of the package
+  re-tests.
+- **Keep the package's durations** and show reconstruction beside `ir.passes`
+  rather than inside it, labeled as the raw pairs they are; the rest of the
+  pull request — one instrument, `gpuTiming.ts` gone — stands without it.
+- **Ask upstream** for raw timestamps on a sample, or a pluggable timer, and
+  wait.
+
+Removing three's timestamps still touches what ADR-0044 promises for
+`ir.timing('full')`.
 
 ---
 
@@ -284,7 +302,13 @@ steps out facing the way its ship faces needs this first.
 `installSurfaceFrame` (`packages/universe/src/frames.ts`) takes
 `(-up.z, 0, up.x)`, its negation; `spawnCharacter` re-derives the basis in
 another closed form; `OnFoot.site` computes a third; the camera's
-tests use `localTriad`. Nothing is wrong today, because every heading derived
+tests use `localTriad`. The first is geographic east — `geodeticDirection`'s
+longitude increases along `cross(+Y, up)` — so the surface frame's +X points
+west. A landed entity's orientation is stored relative to that frame, and
+`ir.land` teleports a ship there at `Q.IDENTITY`, so making the surface frame
+read the shared basis turns every landed ship 180° about up, saved ones
+included: the pull request either keeps the surface frame's axes and converts
+at the boundary, or spends a version on what a save means. Nothing is wrong today, because every heading derived
 this way is 0. It is a trap for the first heading taken from a landed ship.
 
 **The shape.** `compassBasis(latitude, longitude, heading)` in
