@@ -18,7 +18,12 @@ vi.mock('three/webgpu', () => ({
     initialized = false
     reversedDepthBuffer: boolean
     logarithmicDepthBuffer = false
-    constructor(options: { reversedDepthBuffer: boolean }) {
+    readonly options: { reversedDepthBuffer: boolean; trackTimestamp?: boolean }
+    constructor(options: {
+      reversedDepthBuffer: boolean
+      trackTimestamp?: boolean
+    }) {
+      this.options = options
       this.reversedDepthBuffer = options.reversedDepthBuffer
     }
     _getFallback = () => this.backend
@@ -146,7 +151,9 @@ it('uses a capable WebGL fallback in standard output', async () => {
   expect(renderer.setTransparentSort).toHaveBeenCalledExactlyOnceWith(
     expect.any(Function),
   )
-  expect(renderer.backend.trackTimestamp).toBe(false)
+  // Three's own timestamp tracking is off from construction and nothing turns
+  // it on: `ir.passes` times every pass with a query set of its own.
+  expect(renderer.options.trackTimestamp).toBe(false)
   expect(mock.failure).not.toHaveBeenCalled()
 })
 
