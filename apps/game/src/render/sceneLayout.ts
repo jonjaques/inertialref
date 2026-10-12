@@ -28,8 +28,14 @@ import { pictureSamples, resolvePicture, type Picture } from './picture.ts'
 
 /** How an attachment combines a draw with what it already holds. */
 export type AttachmentBlend =
-  /** Whatever the material's own blend is. */
+  /**
+   * Whatever the material's own blend is. `output`'s alone: three takes the
+   * material's blend for the attachment named `output` and gives every other
+   * one none, so on another row this would describe a blend nothing applies.
+   */
   | 'material'
+  /** None: the draw replaces what the attachment holds. */
+  | 'none'
   /** Source alpha over the destination; the destination keeps its alpha. */
   | 'over'
   /** The larger of the two, per channel. */
@@ -88,14 +94,14 @@ const OPTICS: readonly SceneAttachment[] = [
   { name: 'meterMask', channels: 1, storage: 'byte', blend: 'max' },
 ]
 const TEMPORAL: readonly SceneAttachment[] = [
-  { name: 'velocity', channels: 2, storage: 'half', blend: 'material' },
+  { name: 'velocity', channels: 2, storage: 'half', blend: 'none' },
   { name: 'reactive', channels: 4, storage: 'byte', blend: 'union' },
 ]
 
 /*
- * One object per distinct layout, so a layout can key a cache — the warm-up's
- * stand-in is one target per layout — and so two readers of the same picture
- * hold the same rows rather than equal ones. There are eight at most.
+ * One object per distinct layout, so a layout can key a cache — the warm-up
+ * keeps one stand-in per renderer and layout — and so two readers of the same
+ * picture hold the same rows rather than equal ones. There are eight at most.
  */
 const LAYOUTS = new Map<string, SceneLayout>()
 
@@ -127,10 +133,10 @@ export function sceneLayout(
 /**
  * The backend a renderer is, as a layout reads it.
  *
- * Takes any object because the scene components hold R3F's \`gl\`, typed as R3F's
- * own renderer union, and the web \`<Canvas>\` here is always handed a
- * \`WebGPURenderer\` by \`createRenderer\` — the cast \`warmRenderer\` makes, made
- * once more here rather than at thirteen call sites.
+ * Takes any object because the scene components hold R3F's `gl`, typed as
+ * R3F's own renderer union, and the web `<Canvas>` here is always handed a
+ * `WebGPURenderer` by `createRenderer` — the cast `warmRenderer` makes, made
+ * once more here rather than at every call site.
  */
 export function sceneBackend(renderer: object): SceneBackend {
   const { backend, reversedDepthBuffer } = renderer as {

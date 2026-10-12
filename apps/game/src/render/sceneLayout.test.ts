@@ -48,6 +48,17 @@ describe('the scene layout', () => {
     )
   })
 
+  it('takes the material’s blend on output alone', () => {
+    // Three applies a material's blend to the attachment named `output` and
+    // none to any other, so `material` on another row is a blend nobody draws.
+    fc.assert(
+      fc.property(picture, backend, (p, b) => {
+        for (const row of sceneLayout(p, b).attachments)
+          expect(row.blend === 'material').toBe(row.name === 'output')
+      }),
+    )
+  })
+
   it('is the resolved picture’s: its samples, and temporal rows only for temporal', () => {
     fc.assert(
       fc.property(picture, backend, (p, b) => {

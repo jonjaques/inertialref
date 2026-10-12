@@ -73,7 +73,9 @@ const WRITES: Readonly<Record<SceneAttachmentName, () => Node>> = {
  * occluded sky overlay and reject history on every foreground pixel
  * indefinitely.
  */
-function blendMode(blend: Exclude<AttachmentBlend, 'material'>): BlendMode {
+function blendMode(
+  blend: Exclude<AttachmentBlend, 'material' | 'none'>,
+): BlendMode {
   const mode = new BlendMode(CustomBlending)
   if (blend === 'over') {
     mode.blendSrc = SrcAlphaFactor
@@ -99,7 +101,7 @@ export function sensorMrt(layout: SceneLayout) {
     ),
   )
   for (const row of layout.attachments) {
-    if (row.blend !== 'material')
+    if (row.blend !== 'material' && row.blend !== 'none')
       node.setBlendMode(row.name, blendMode(row.blend))
   }
   return node

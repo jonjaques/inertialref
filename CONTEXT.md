@@ -11265,14 +11265,18 @@ backend, memoized so one picture is one object. Where the warm-ups read it was
 Jon's call among three: a React context, deriving it in the warm-up, or the
 engine. The engine won: `GameEngine.picture` is written by the picture knob the
 moment the preference changes, `engine.sceneLayout(renderer)` answers from it,
-and the sensor and all thirteen warm-up sites take the result as an argument.
+and the sensor and every warm-up site take the result as an argument.
 18 can publish the pixel grid in the same place.
 
-The stand-in became one target per layout, never disposed. The renderer map's
-declaration replaced the stand-in on every picture change and hot reload, so
-it carried a hold count to keep a disposed texture out of a compile queue still
-building against it; with at most eight layouts of four pixels each, keeping
-every one costs nothing and the hazard has no window left. `createSensor`
+The stand-in became one 4×4 target per renderer and layout, never disposed.
+The renderer map's declaration replaced the stand-in on every picture change
+and hot reload, so it carried a hold count to keep a disposed texture out of a
+compile queue still building against it; with at most eight layouts, keeping
+every one costs nothing and the hazard has no window left. It stays keyed on
+the renderer, weakly, because three's dispose listeners on a target close over
+the renderer that compiled against it and `Renderer.dispose` removes none of
+them: a stand-in keyed on the layout alone held every renderer the canvas
+replaced for the session. `createSensor`
 asserts the layout it is handed is its picture's: `galaxyVolume.gpu.test.ts`
 had declared four samples and passed a temporal picture, which the old
 `createSensor` papered over by redeclaring, and the assertion found it on the

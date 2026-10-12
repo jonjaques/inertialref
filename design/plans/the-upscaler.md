@@ -31,9 +31,9 @@ Two candidates, both of which move what the frame numbers were measured with.
 Widening the attachment to RGBA16F costs 4 B/px over a full-resolution target
 — about 16% of the MRT's write bandwidth at the recorded temporal Quality
 resolution, and a re-measurement of both presets at both display ratios.
-Reading the already-masked `motion.rg` when optics are on costs nothing and
-removes an attachment, but leaves the optics-off temporal path needing its own
-answer. Either is a change to the `velocity` row of `render/sceneLayout.ts`,
+Reading the already-masked `motion.rg` costs nothing and removes an
+attachment: every layout carries `motion`, whether or not a frame runs the
+optics' stages. Either is a change to the `velocity` row of `render/sceneLayout.ts`,
 and the layout's test refuses the mirror Dawn refuses: a blend that reads alpha
 on a row with fewer than four channels.
 
