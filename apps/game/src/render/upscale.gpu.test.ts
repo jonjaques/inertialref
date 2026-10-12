@@ -88,13 +88,23 @@ describe('the upscaler on the physical GPU', () => {
       const timings = f.sensor.diagnostics.picture.gpuTimings
       expect(Object.keys(timings)).toContain('reconstruct')
       expect(Object.values(timings).some((value) => value > 0)).toBe(true)
+      // Its eight query slots come back. Eleven hundred frames each ask for
+      // one, and a reset readout then fills again — a slot that never went
+      // idle would leave it empty for good.
       for (let i = 0; i < 1100; i += 1) f.sensor.render(f.target)
       await gpu.read(f.target)
-      expect(
-        gpu
-          .warnings()
-          .some((entry) => entry.message.includes('Maximum number of queries')),
-      ).toBe(false)
+      setTimingLevel('off')
+      setTimingLevel('full')
+      await expect
+        .poll(
+          async () => {
+            f.sensor.render(f.target)
+            await gpu.read(f.target)
+            return Object.keys(f.sensor.diagnostics.picture.gpuTimings)
+          },
+          { timeout: 10_000 },
+        )
+        .toContain('reconstruct')
       setTimingLevel('off')
       f.sensor.render(f.target)
       await gpu.read(f.target)
@@ -137,6 +147,25 @@ describe('the upscaler on the physical GPU', () => {
       f.sensor.render(f.target)
       await gpu.read(f.target)
       expect(f.sensor.diagnostics.picture.gpuTimings).toEqual({})
+
+      const reconstructed = (result: typeof run) =>
+        result.owned.find(
+          (pass) => pass.source === 'upscaler' && pass.label === 'reconstruct',
+        )?.samples ?? 0
+      // A run drawn back to back is timed for as many frames as the timer
+      // has slots, the first of them, whatever the frame count.
+      const long = await timeline!.measure(() => f.sensor.render(f.target), 20)
+      expect(reconstructed(long)).toBeGreaterThan(0)
+      expect(reconstructed(long)).toBeLessThanOrEqual(8)
+
+      // Frames drawn just before a run have readbacks still in flight when it
+      // is armed, and they land during its first drain. None is the run's:
+      // four frames are four samples at most, not four plus theirs.
+      setTimingLevel('full')
+      for (let i = 0; i < 4; i += 1) f.sensor.render(f.target)
+      const short = await timeline!.measure(() => f.sensor.render(f.target), 4)
+      expect(reconstructed(short)).toBeGreaterThan(0)
+      expect(reconstructed(short)).toBeLessThanOrEqual(4)
     } finally {
       setTimingLevel('off')
       f.dispose()

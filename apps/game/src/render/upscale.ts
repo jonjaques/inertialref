@@ -195,9 +195,23 @@ export class UpscaleNode extends TempNode<'vec4'> {
     if (!this.#initialized) {
       const start = performance.now()
       this.#kernel.init()
+      // compileAsync executes update-before dependencies too. The host input
+      // must be backed before warming can dispatch the temporal kernel.
+      this.#renderer.initTexture(this.#pre)
+      this.#camera.coordinateSystem = this.#renderer.coordinateSystem
+      ;(this.#camera as unknown as { _reversedDepth: boolean })._reversedDepth =
+        this.#renderer.reversedDepthBuffer
+      this.#camera.updateProjectionMatrix()
+      this.#kernel.unjitteredProjectionMatrix.copy(
+        this.#camera.projectionMatrix,
+      )
       // The private sample queue is the only way to opt out of timestamps, so
       // its absence in a future release costs the readout and nothing else:
       // a throw here runs inside `setup`, which is a frame that never draws.
+      // Last in the first prepare, because a throw above leaves
+      // `#initialized` false and the next prepare's `init` makes a new timer:
+      // lent before that, the timeline would hold two sources sharing
+      // `#collected`, and `dispose` would take back only the second.
       const timer =
         (this.#kernel as unknown as { _timer?: RawTimer })._timer ?? null
       this.#timer = timer
@@ -221,7 +235,10 @@ export class UpscaleNode extends TempNode<'vec4'> {
         this.#detach = timeline.attach({
           name: 'upscaler',
           arm: () => {
-            timer.takeSamples()
+            // A reset, not a take: a take empties what has landed, and the
+            // readbacks of frames drawn before the run land during its first
+            // drain and would be counted as its own. The epoch drops them.
+            timer.reset()
             this.#collected = []
             timer.enabled = true
           },
@@ -238,16 +255,6 @@ export class UpscaleNode extends TempNode<'vec4'> {
           },
         })
       }
-      // compileAsync executes update-before dependencies too. The host input
-      // must be backed before warming can dispatch the temporal kernel.
-      this.#renderer.initTexture(this.#pre)
-      this.#camera.coordinateSystem = this.#renderer.coordinateSystem
-      ;(this.#camera as unknown as { _reversedDepth: boolean })._reversedDepth =
-        this.#renderer.reversedDepthBuffer
-      this.#camera.updateProjectionMatrix()
-      this.#kernel.unjitteredProjectionMatrix.copy(
-        this.#camera.projectionMatrix,
-      )
       this.#initMs = performance.now() - start
       this.#initialized = true
     }
