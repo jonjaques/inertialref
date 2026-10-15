@@ -2,7 +2,11 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { useAccount } from '../account/accounts.ts'
 import { sessionHeaders } from '../account/token.ts'
 import { askGuideVerdict, type GuideVerdict } from './capabilities.ts'
-import type { GuideAccess, GuideAccessOwner } from './verdict.ts'
+import {
+  followAccount,
+  type GuideAccess,
+  type GuideAccessOwner,
+} from './verdict.ts'
 
 /*
  * Whether the planetarium offers the guide to whoever is signed in.
@@ -23,12 +27,9 @@ import type { GuideAccess, GuideAccessOwner } from './verdict.ts'
 
 /** The mode's verdict, kept in step with whoever is signed in. */
 export function useGuideAccess(owner: GuideAccessOwner): GuideAccess {
-  // `userId` is null until the account provider loads as well as when nobody
-  // is signed in; settling on the first would read a signed-in visitor as
-  // signed out for the length of the boot, so the verdict stays `checking`.
   const { loaded, userId } = useAccount()
   useEffect(() => {
-    if (loaded) owner.forUser(userId)
+    followAccount(owner, { loaded, userId })
   }, [owner, loaded, userId])
   return useSyncExternalStore(owner.subscribe, owner.current, owner.current)
 }

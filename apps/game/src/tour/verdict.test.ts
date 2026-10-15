@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GuideVerdict } from '@inertialref/protocol'
-import { createGuideAccess } from './verdict.ts'
+import { createGuideAccess, followAccount } from './verdict.ts'
 
 /** An ask the test answers by hand, in whatever order it likes. */
 function controlled() {
@@ -63,5 +63,31 @@ describe('the guide verdict, one per mode', () => {
       state: 'refused',
       reason: 'unavailable',
     })
+  })
+})
+
+describe('the verdict follows the account provider', () => {
+  it('stays checking until the provider loads, then asks for the user', async () => {
+    const worker = controlled()
+    const access = createGuideAccess(worker.ask)
+    // The provider's first render: not loaded, and so no user yet.
+    followAccount(access, { loaded: false, userId: null })
+    expect(access.current()).toEqual({ state: 'checking' })
+    expect(worker.pending).toHaveLength(0)
+    followAccount(access, { loaded: true, userId: 'user_1' })
+    expect(worker.pending).toHaveLength(1)
+    worker.pending[0]!({ granted: true, voices: ['marin'] })
+    await settle()
+    expect(access.current()).toEqual({ state: 'granted', voices: ['marin'] })
+  })
+
+  it('settles a signed-out visitor only once the provider has loaded', () => {
+    const worker = controlled()
+    const access = createGuideAccess(worker.ask)
+    followAccount(access, { loaded: false, userId: null })
+    expect(access.current()).toEqual({ state: 'checking' })
+    followAccount(access, { loaded: true, userId: null })
+    expect(access.current()).toEqual({ state: 'refused', reason: 'signed-out' })
+    expect(worker.pending).toHaveLength(0)
   })
 })
