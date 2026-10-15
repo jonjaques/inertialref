@@ -265,18 +265,6 @@ reference: the WebGPU frame is the one the target applies to.
     planet's rivers into this one. Clearing costs 4.4 MB of writes per body
     switch, which is why it is a decision and not an edit; the cheaper answer
     is one gate rather than two.
-15. **`riverSites` drops the lake when there is no river.** The `mouth < 0`
-    return sits a hundred lines above the lake selection, so a body whose
-    drainable nodes are all lake or sea gets none of the four sites rather
-    than the one that applies. It wants the function split — the lake site
-    does not depend on the mouth.
-16. **`evaluate` returns the sampled water level through a module global.**
-    `sampledLevel` is written by `surfaceCoverAt`, `elevationAt` and
-    `waterLevelAt` and read by `waterSurface`, which is correct only because
-    every reader is in `terrain.ts` and reads immediately. The `water:
-Float32Array` out-parameter already carries this value for the kernel
-    path; a module-level `Float64Array(1)` passed the same way keeps the
-    float64 the clamp needs without the hidden channel.
 
 ---
 

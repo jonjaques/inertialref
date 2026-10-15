@@ -15,12 +15,16 @@ import {
 import { terrainSketch } from './sketch.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
 import { coastRemap } from './bands.ts'
+import { COVER_CHANNELS } from './cover.ts'
 import {
   coastWidth,
   elevationAt,
+  groundCoverAt,
+  groundElevation,
   regionDirection,
   regionForDirection,
   seaDatumElevation,
+  surfaceCoverAt,
   waterLevelAt,
 } from './terrain.ts'
 import { DRAINAGE_CELL_START_AT, surfaceKernel } from './terrainKernel.ts'
@@ -556,6 +560,42 @@ describe('the field that reads it', () => {
         Math.cos(DRAINAGE_SHAPE.jitter * Math.SQRT2 * (2 / graph.cells)),
       )
     }
+  })
+})
+
+describe('the clamp to the water standing over a sample', () => {
+  /*
+   * The clamped ground reads the float64 level its own `evaluate` call wrote,
+   * and nothing a sample of somewhere else writes in between can reach it:
+   * every reader of the field, called on another direction between two
+   * clamped samples of one, leaves both samples equal to the bit. Earth,
+   * because its sea is the clamp a graph's level replaces.
+   */
+  it('is a function of its own sample, whatever was sampled between', () => {
+    const direction = fc
+      .tuple(
+        fc.double({ min: -1, max: 1, noNaN: true }),
+        fc.double({ min: -1, max: 1, noNaN: true }),
+        fc.double({ min: -1, max: 1, noNaN: true }),
+      )
+      .filter(([x, y, z]) => Math.hypot(x, y, z) > 1e-3)
+      .map(([x, y, z]) => vec3(x, y, z))
+    const cover = new Uint8Array(COVER_CHANNELS)
+    const water = new Float32Array(1)
+    fc.assert(
+      fc.property(direction, direction, (here, there) => {
+        const ground = groundElevation(earth.surface, here)
+        const drawn = groundCoverAt(earth.surface, here, null, 0)
+        groundElevation(earth.surface, there)
+        elevationAt(earth.surface, there)
+        waterLevelAt(earth.surface, there)
+        surfaceCoverAt(earth.surface, there)
+        groundCoverAt(earth.surface, there, cover, 0, false, water, 0)
+        expect(groundElevation(earth.surface, here)).toBe(ground)
+        expect(groundCoverAt(earth.surface, here, null, 0)).toBe(drawn)
+      }),
+      { numRuns: 200 },
+    )
   })
 })
 

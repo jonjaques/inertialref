@@ -302,7 +302,7 @@ export function elevationAt(
   surface: SurfaceParameters,
   direction: Vec3,
 ): Meters {
-  return evaluate(surface, Vec.normalize(direction), null, 0, null, 0)
+  return evaluate(surface, Vec.normalize(direction), null, 0, null, 0, null)
 }
 
 /**
@@ -322,6 +322,10 @@ export function elevationAt(
  * `water` is the same shape for the level of any lake or river over the
  * sample — the sheet's datum at that vertex, NaN where there is none — and
  * it is null on every path that is not building a heightfield.
+ *
+ * `level` is the same level in float64, for the sea clamp: a datum rounded to
+ * float32 is a datum the ocean's own test can tell from the one
+ * `seaDatumElevation` states. Null on every path that does not clamp.
  */
 function evaluate(
   surface: SurfaceParameters,
@@ -330,13 +334,14 @@ function evaluate(
   at: number,
   water: Float32Array | null,
   waterAt: number,
+  level: Float64Array | null,
 ): Meters {
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
   const budget = surface.maxElevation
   if (bareGround(surface)) {
     if (out !== null) packCover(BARE_COVER, out, at)
-    sampledLevel = Number.NaN
+    if (level !== null) level[0] = Number.NaN
     if (water !== null) water[waterAt] = Number.NaN
     return 0
   }
@@ -395,7 +400,7 @@ function evaluate(
    * corridor from it rather than evaluating the segments twice.
    */
   let drainage: DrainageSample = NO_DRAINAGE
-  let level = Number.NaN
+  let standing = Number.NaN
   if (stageOn('drainage', stack)) {
     const graph = drainageGraph(surface)
     if (graph !== null) {
@@ -405,7 +410,7 @@ function evaluate(
         elevation,
       )
       elevation = carve.ground
-      level = carve.water
+      standing = carve.water
       drainage = {
         channel: carve.channel,
         corridor: carve.corridor,
@@ -426,10 +431,11 @@ function evaluate(
   if (stageOn('coast', stack) && stack.sea !== null) {
     const width = coastWidth(surface)
     elevation = coastRemap(elevation, stack.sea, width)
-    if (!Number.isNaN(level)) level = coastRemap(level, stack.sea, width)
+    if (!Number.isNaN(standing))
+      standing = coastRemap(standing, stack.sea, width)
   }
-  sampledLevel = level
-  if (water !== null) water[waterAt] = level
+  if (level !== null) level[0] = standing
+  if (water !== null) water[waterAt] = standing
   if (out !== null) {
     packCover(
       surfaceCover(sketch, grammar, d, plates, craters, craterLimit, drainage),
@@ -501,7 +507,7 @@ export function groundCoverAt(
   const d = Vec.normalize(direction)
   const sea = seaDatumElevation(surface)
   const elevation =
-    evaluate(surface, d, out, at, water, waterAt) + tail(surface, d)
+    evaluate(surface, d, out, at, water, waterAt, SAMPLED) + tail(surface, d)
   const clamp = stageOn('clamp', {
     surface,
     sketch: terrainSketch(surface),
@@ -509,21 +515,14 @@ export function groundCoverAt(
     seabed,
   })
   if (!clamp || sea === null) return elevation
-  return Math.max(elevation, waterSurface(surface, sea))
+  return Math.max(elevation, waterSurface(surface, sea, SAMPLED[0] as number))
 }
 
 /**
- * The level the drainage stage wrote for the last sample `evaluate` took,
- * in float64, NaN where there is none.
- *
- * A module-level channel rather than a return, because `evaluate` returns
- * the elevation to every caller and the level is read by two, both
- * synchronous and both in this file, right after the call. The heightfield
- * gets the same number through its `Float32Array`; the clamp reads this
- * one, because a datum rounded to float32 is a datum the ocean's own test
- * can tell from the one `seaDatumElevation` states.
+ * The float64 level the two clamping readers hand `evaluate` and read back
+ * right after it, one slot reused rather than one allocated per sample.
  */
-let sampledLevel = Number.NaN
+const SAMPLED = new Float64Array(1)
 
 /**
  * The water a sample's ground is clamped up to: the sea's datum on a body
@@ -531,9 +530,13 @@ let sampledLevel = Number.NaN
  * which is the sea where the sea reaches, and dry ground under an inland
  * basin the sea never reached.
  */
-function waterSurface(surface: SurfaceParameters, sea: Meters): Meters {
+function waterSurface(
+  surface: SurfaceParameters,
+  sea: Meters,
+  level: Meters,
+): Meters {
   if (!drains(surface)) return sea
-  return Number.isNaN(sampledLevel) ? Number.NEGATIVE_INFINITY : sampledLevel
+  return Number.isNaN(level) ? Number.NEGATIVE_INFINITY : level
 }
 
 /**
@@ -637,7 +640,7 @@ export function surfaceCoverAt(
   direction: Vec3,
 ): SurfaceCover {
   const bytes = new Uint8Array(COVER_CHANNELS)
-  evaluate(surface, Vec.normalize(direction), bytes, 0, null, 0)
+  evaluate(surface, Vec.normalize(direction), bytes, 0, null, 0, null)
   return unpackCover(bytes, 0)
 }
 
@@ -650,7 +653,7 @@ export function waterLevelAt(
   direction: Vec3,
 ): Meters {
   const level = new Float32Array(1)
-  evaluate(surface, Vec.normalize(direction), null, 0, level, 0)
+  evaluate(surface, Vec.normalize(direction), null, 0, level, 0, null)
   return level[0] as number
 }
 
@@ -680,8 +683,9 @@ export function groundElevation(
     0,
     null,
     0,
+    SAMPLED,
   )
-  return Math.max(elevation, waterSurface(surface, sea))
+  return Math.max(elevation, waterSurface(surface, sea, SAMPLED[0] as number))
 }
 
 /**
