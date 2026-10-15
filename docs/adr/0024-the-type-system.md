@@ -43,13 +43,27 @@ coverage ships with the faces instead of being left to the platform.**
 - The solar and planetary sigils (`☉`, `⊕`, `♃`, …) exist in no text family;
   two Noto subsets close each stack before any platform font gets a vote.
   Every symbol file is `unicode-range`-gated and downloads the first time
-  such a glyph is drawn, never otherwise. Two of them are not closed by those
-  subsets and still reach a platform font — `☉` U+2609 and `⊕` U+2295, the two
-  this record's own census counts at 21 and 14. Noto Sans Symbols begins its
-  U+2600 block at U+260A and carries no U+2295; Noto Sans Math holds both and
-  is declared over a range containing neither.
-  [`design/plans/type-coverage.md`](../../design/plans/type-coverage.md) carries
-  the cut and the reason a census over families could not see it.
+  such a glyph is drawn, never otherwise.
+- **Coverage is checked per file, through the file's own cmap.** A declared
+  range over a glyph the file does not hold is silent — no tofu, just a
+  platform font mid-figure — so a census over families reports success where
+  the browser falls through. `☉` U+2609 and `⊕` U+2295, the two this record's
+  own census counts at 21 and 14, are that shape in both Fontsource Notos:
+  Noto Sans Symbols begins its U+2600 block at U+260A and carries no U+2295,
+  and Noto Sans Math holds both under a `latin` range containing neither. The
+  vendored Plex subsets declare `U+2200-22FF` and do not hold U+2295 either,
+  which looks covered and is not. A third vendored subset, 8 KB cut from that
+  same Noto Sans Math file, declares both under the `Noto Sans Math` family
+  that already follows the Plex families in every stack.
+- **The mono's Greek comes from Noto, because Plex Mono draws only `π`.** IBM's
+  release (`@ibm/plex-mono@2.5.0`, font version 2.005) maps that one codepoint in
+  U+0370–03FF and no other. The mono subset's cut takes the block anyway and gains
+  `π`; the Noto subset declares the whole block, so `μ` in a mono context
+  renders in one declared face on every platform — proportional Noto rather
+  than Plex, which is the cost of a family that does not draw it. In the sans,
+  the Plex subset's 73 Greek codepoints answer first.
+  `scripts/brand/coverage.test.mjs` reads each vendored file's cmap and the
+  `unicode-range` `index.css` routes to it.
 - The mono steps drop the width and tracking compensation Martian Mono
   needed; Plex Mono's advance fits the same eleven-character reading at its
   natural width.
@@ -91,16 +105,33 @@ one string set at poster size.
 ## Consequences
 
 Prose gains true italics and 100–700 of weight; every operator the simulation
-prints renders in a declared face on every platform, and every sigil but `☉`
-and `⊕`; the poster figures read as an instrument cluster instead of a fourth
+prints renders in a declared face on every platform, and so does every sigil
+and every Greek letter; the poster figures read as an instrument cluster instead of a fourth
 line of readout.
 
 **Plex Mono is static.** A fourth weight is a new file rather than a number,
-and the vendored operator subsets are generated artifacts: regenerating one
-needs IBM's released TTFs and
-`pyftsubset --flavor=woff2 --layout-features='*' --unicodes=U+2032-2033,U+2070-209F,U+2190-21FF,U+2200-22FF,U+2300-23FF`
-(the sans subset adds `U+0370-03FF` for Greek), so a glyph the census did not
-include is a rebuild of those files rather than an edit.
+and the vendored symbol subsets are generated artifacts: regenerating the Plex
+pair needs the `Regular` TTFs from IBM's `@ibm/plex-mono@2.5.0` and
+`@ibm/plex-sans@1.1.0` releases, and the third needs Fontsource's Noto Sans Math file, already a
+dependency. A glyph the census did not include is a rebuild of those files
+rather than an edit. `uvx --from 'fonttools[woff]' pyftsubset` runs each
+without a global install:
+
+```sh
+pyftsubset IBMPlexMono-Regular.ttf --flavor=woff2 --layout-features='*' \
+  --unicodes=U+0370-03FF,U+2032-2033,U+2044,U+2070-209F,U+2113,U+2126,U+2190-21FF,U+2200-22FF,U+2300-23FF \
+  --output-file=ibm-plex-mono-symbols.woff2
+pyftsubset IBMPlexSans-Regular.ttf --flavor=woff2 --layout-features='*' \
+  --unicodes=U+0370-03FF,U+2032-2033,U+2044,U+2070-209F,U+2113,U+2126,U+2190-21FF,U+2200-22FF,U+2300-23FF \
+  --output-file=ibm-plex-sans-symbols.woff2
+pyftsubset noto-sans-math-latin-400-normal.woff2 --flavor=woff2 --layout-features='*' \
+  --unicodes=U+0370-03FF,U+2295,U+2609 \
+  --output-file=noto-sans-math-symbols.woff2
+```
+
+The sans command reproduces the vendored file byte for byte, and so does the
+mono command with its Greek range left out; that is how `⁄` U+2044, `ℓ` U+2113
+and `Ω` U+2126 are known to belong in both.
 
 **The symbol faces are weight-400.** An operator inside 600 text renders at
 the browser's synthetic bold, which is acceptable at readout sizes and would

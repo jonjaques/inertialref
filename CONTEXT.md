@@ -6610,7 +6610,7 @@ the worst of the three shapes, because it looks covered. So `M☉` and `R⊕`, t
 two units the object record states most often, still reach a platform font.
 Checking a family, a spec sheet or a declared range all report success; only
 `fontkit`'s `characterSet` on the served file answers it.
-`design/plans/type-coverage.md` has the cut.
+ADR-0024 records the cut that closes it.
 
 A defect the instruments could not see, because it was arithmetic rather than
 shape: **`describeBody` divided by a thousand and rounded**, so every one of

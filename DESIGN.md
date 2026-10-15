@@ -282,10 +282,12 @@ set). Readouts never italicize, so its italics stay unloaded.
 **Symbol coverage:** two vendored subsets of the desktop Plex families carry
 the mathematical operators (`≈`, `→`, `∞`, the primes of parallax, the sans's
 Greek) under the same family names, and two Noto subsets carry the planetary
-sigils no text family draws. All four are `unicode-range`-gated, downloading
-only when such a glyph is drawn. `☉` and `⊕` are the two the set does not
-reach — a declared range over a glyph the subset file does not hold is silent,
-not a tofu — and `design/plans/type-coverage.md` carries the cut for them.
+sigils no text family draws. A third vendored subset, cut from Noto Sans Math,
+carries `☉` and `⊕` — which neither Fontsource Noto build reaches — and the
+Greek Plex Mono does not draw. All are `unicode-range`-gated, downloading only
+when such a glyph is drawn. A declared range over a glyph the subset file does
+not hold is silent, not a tofu, so coverage is checked per file through its
+own cmap ([ADR-0024](docs/adr/0024-the-type-system.md)).
 
 **A condensed grotesque, and deliberately not a serif.** Two serifs were tried
 in this slot and both were the same mistake in different clothes. Instrument
