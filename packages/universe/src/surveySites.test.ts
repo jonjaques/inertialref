@@ -19,8 +19,11 @@ import {
   groundElevation,
   regionForDirection,
 } from './terrain.ts'
+import type { DrainageGraph } from './drainage.ts'
 import {
   findSurveySite,
+  largestLake,
+  largestRiver,
   SURVEY_LEVEL,
   type SurveySite,
   surveySites,
@@ -395,5 +398,45 @@ describe('survey sites', () => {
         expect(back.longitude).toBeCloseTo(site.longitude, 9)
       }
     }
+  })
+})
+
+describe('the sites a drainage graph makes', () => {
+  /*
+   * A graph whose drainable nodes are all lake or sea has no river and still
+   * has its lake: the lake is read off the standing water, not found by
+   * walking up from a mouth. Six nodes on the lattice's own arrays — three at
+   * one spill, one at another, two under the sea — because no generated body
+   * at a fixture seed drains entirely to standing water.
+   */
+  const graph = {
+    nodes: 6,
+    positions: new Float64Array([
+      1, 0, 0, 0.99, 0.1, 0, 0.99, -0.1, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1,
+    ]),
+    receiver: new Int32Array([1, 4, 1, 5, -1, -1]),
+    area: new Float64Array([1, 3, 1, 1, 4, 2]),
+    lake: new Float64Array([120, 120, 120, 50, 0, 0]),
+    sea: new Uint8Array([0, 0, 0, 0, 1, 1]),
+  } as unknown as DrainageGraph
+
+  it('find no river where every drainable node is lake or sea', () => {
+    expect(largestRiver(graph)).toBeNull()
+  })
+
+  it('find the largest lake without a river mouth', () => {
+    expect(largestLake(graph)).toEqual({ node: 0, level: 120 })
+  })
+
+  it('find the river and the lake apart when both exist', () => {
+    const lake = Float64Array.from(graph.lake)
+    lake[3] = Number.NaN
+    const both = { ...graph, lake }
+    expect(largestRiver(both)).toEqual({
+      mouth: 3,
+      headwater: 3,
+      confluence: -1,
+    })
+    expect(largestLake(both)).toEqual({ node: 0, level: 120 })
   })
 })
