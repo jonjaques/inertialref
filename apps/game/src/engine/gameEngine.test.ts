@@ -418,7 +418,12 @@ describe('the terrain archive, through the engine', () => {
         null,
       )
       // A GPU producer whose tile is still in flight when the cache is cleared.
-      let arrive: (() => void) | null = null
+      // The archive reaches it only after its miss and the surface's
+      // preparation, so the test waits for the call, not a count of turns.
+      let reached: (arrive: () => void) => void = () => {}
+      const submitted = new Promise<() => void>((resolve) => {
+        reached = resolve
+      })
       game.setHeightfieldSource({
         kind: 'gpu',
         archive: 'gpu:test',
@@ -426,15 +431,15 @@ describe('the terrain archive, through the engine', () => {
         submit: (s, r) => ({
           id: 1,
           result: new Promise((done) => {
-            arrive = () => done(generateHeightfield(s, r))
+            reached(() => done(generateHeightfield(s, r)))
           }),
           cancel() {},
         }),
       })
       const late = game.heightfields.submit(surface, request)!
-      for (let i = 0; i < 20 && arrive === null; i++) await Promise.resolve()
+      const arrive = await submitted
       await game.clearTerrainCache()
-      arrive!()
+      arrive()
       await late.result
       const report = await game.terrainCache()
       expect(report.available).toBe(true)

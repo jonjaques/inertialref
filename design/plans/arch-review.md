@@ -270,9 +270,6 @@ own.
 - **Every pool worker still builds its own graph.** Off the draw thread, and in
   [perf](perf.md#every-pool-worker-builds-a-wet-bodys-drainage-graph-for-itself-unmeasured)
   with the measurement that would say whether the ground waits on it.
-- **`gameEngine.test.ts`'s archive case waits twenty microtasks for a GPU
-  tile**, and that tile is now held behind its surface's preparation on the
-  inline worker. It passes; the wait is a count, not a condition.
 - **The pixel angle stays the display's under a reduced render scale.** The
   terrain and water detail fades divide the display's pixel angle by the
   drawing buffer, so at a render ratio `r` they assume samples `r` times finer
