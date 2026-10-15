@@ -668,11 +668,13 @@ landings' worth, and whether that is garbage a major collection has not yet
 taken or state something still holds is the measurement that has not been
 made: a heap snapshot on either side of one jump, diffed by constructor.
 
-The producers of that garbage at a stance, from the retained sites: the 8 Hz
-status sample — `inspectWorld` mapped every entity through `inspectEntity`,
-and `inspectEntity` built a whole world snapshot, 129 bodies with their poses,
-to read one entity, twice a sample — the 1 Hz travel survey, and the frame's
-own snapshot. The first is the cheap one to cut.
+The producers of that garbage at a stance, from the retained sites, are the 1
+Hz travel survey and the frame's own snapshot. The 8 Hz status sample is not
+among them: it reads each entity once through `entitySnapshot`, which resolves
+that entity's frame chain rather than posing every loaded body, and the
+player's record is the list's own. `packages/devtools/src/inspect.test.ts`
+counts the views a sample builds and fails on a world snapshot. What the
+sample still costs at a stance has not been measured.
 
 Prime suspects for the _working set_ are unchanged: the geometry cache (450 MB
 at its documented full ceiling) plus the field cache (138 MB full), retained

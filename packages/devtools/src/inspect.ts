@@ -168,9 +168,9 @@ export function inspectEntity(
 ): EntityInspection | null {
   const entity = world.entities.get(id)
   if (entity === undefined) return null
-  // The one entity, at the tick. A whole world snapshot here — every body's
-  // orbit and spin pose, searched for one id — is paid twice a status sample:
-  // once for the player and once per entity in the list.
+  // The one entity, at the tick, resolved through its own frame chain. The
+  // world snapshot would pose every loaded body to answer the same question,
+  // and this runs once per entity per status sample.
   const view = entitySnapshot(world, entity, 0)
   const altitude = world.altitudeOf(id)
 
