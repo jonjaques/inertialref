@@ -192,10 +192,9 @@ request of its own; each belongs to the next change that opens its file.
   the raised, upright pad pose. They differ only if a parked hull reports a
   thrust demand, and nothing shows one never does. Either root the plumes at
   `engine.parkedRocinante`, or hold a parked hull's demand at zero in a test.
-- **The derived-state test counts its own probes, not the fields.** Its count
-  makes a deleted probe loud and cannot see a field added to
-  `#invalidateDerived` without one; `rotationStop` and `terrain` are never warm
-  at the pad, so their cold read proves only that they do not throw.
+- **Two of the derived-state test's probes are never warm.** `rotationStop`
+  and `terrain` are cold at the pad before the load, so their cold read after
+  it proves only that they do not throw.
 - **6's gate is short two plates.** No plate was taken of a figured body or of
   the star filling the frame; the figured path is equivalent in code and the
   star's exposure is held by `bodyUniforms.test.ts`. The per-body records it

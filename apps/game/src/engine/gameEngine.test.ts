@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   framingDistance,
@@ -195,16 +196,16 @@ describe('the game engine, headless', () => {
     const game = headlessEngine()
     game.presentation.push({ showOrbits: true })
     game.character.atMarsPad()
+    game.character.lockChanged(true)
     game.frame(1 / 60)
     await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
     await game.save('slot-b')
 
     /*
      * Every derived field the world replacement drops, as a probe that reads
-     * true when it is cold. The count makes a deleted probe loud; it cannot
-     * see a field added to `#invalidateDerived` without one. The rotation
-     * cue and the terrain are not warm at the pad, so their cold read after
-     * the load proves nothing beyond not throwing. The star survey and the orbit traces are two of them, cold because they
+     * true when it is cold. The rotation cue and the terrain are not warm at
+     * the pad, so their cold read after the load proves nothing beyond not
+     * throwing. The star survey and the orbit traces are cold because they
      * key on the world generation rather than because anything cleared them.
      */
     const cold = {
@@ -212,6 +213,7 @@ describe('the game engine, headless', () => {
       scene: () => game.scene() === null,
       snapshot: () => game.snapshot === null,
       walkerEye: () => game.characterCamera === null,
+      walkerLock: () => !game.character.status().locked,
       characterView: () => game.characterView === null,
       characterViews: () => game.characterViews.length === 0,
       rotationStop: () => game.rotationStop === null,
@@ -220,7 +222,31 @@ describe('the game engine, headless', () => {
       starSurvey: () => game.starSurvey.center === null,
       orbits: () => game.orbits.length === 0,
     }
-    expect(Object.keys(cold)).toHaveLength(11)
+    /*
+     * The fields `#invalidateDerived` writes, read from its source, and the
+     * probes that see each one cold. A field added there without an entry
+     * here fails the first comparison; a probe nothing points at fails the
+     * second. Two have none: the on-foot memory is read only by the next
+     * save, and the preparation's `clear` cancels jobs the pad never queued.
+     */
+    const covers: Record<string, readonly (keyof typeof cold)[]> = {
+      character: ['walkerLock'],
+      owner: ['walkerEye'],
+      characterView: ['characterView'],
+      characterViews: ['characterViews'],
+      rotationStop: ['rotationStop'],
+      origin: ['origin'],
+      snapshot: ['snapshot'],
+      '#scene': ['scene'],
+      '#generation': ['starField', 'starSurvey', 'orbits'],
+      '#terrain': ['terrain'],
+      '#onFootMemory': [],
+      '#preparation': [],
+    }
+    expect(Object.keys(covers).sort()).toEqual(invalidatedFields())
+    expect(new Set(Object.values(covers).flat())).toEqual(
+      new Set(Object.keys(cold)),
+    )
     const warm = Object.entries(cold).filter(
       ([name, probe]) =>
         probe() && name !== 'rotationStop' && name !== 'terrain',
@@ -368,6 +394,23 @@ it('the external instrument uses physical starlight only while its camera owns t
     game.dispose()
   }
 })
+
+/**
+ * Every field `#invalidateDerived` assigns, clears, resets or bumps, from
+ * the method's source in `GameEngine.ts`, sorted.
+ */
+function invalidatedFields(): string[] {
+  const source = readFileSync(
+    new URL('./GameEngine.ts', import.meta.url),
+    'utf8',
+  )
+  const start = source.indexOf('  #invalidateDerived(): void {')
+  const end = source.indexOf('\n  }\n', start)
+  expect(start).toBeGreaterThan(-1)
+  const method = source.slice(start, end)
+  const written = /this\.(#?\w+)(?:\s*(?:=(?!=)|\+=)|\.(?:clear|reset)\(\))/g
+  return [...new Set([...method.matchAll(written)].map((m) => m[1]!))].sort()
+}
 
 describe('the terrain archive, through the engine', () => {
   const seed = rootSeed('engine-archive')
