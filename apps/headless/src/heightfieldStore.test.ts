@@ -139,9 +139,9 @@ store.close()`,
 })
 
 it('serves reads while another connection holds the write lock', async () => {
-  // Two processes share the default archive file. A read that needed the
-  // write lock took SQLITE_BUSY behind any writer and the archive counted a
-  // readError, falling back to regeneration without saying so.
+  // Two processes share the default archive file. A read takes no write lock,
+  // opening the store included: SQLITE_BUSY behind a writer would count a
+  // readError and regenerate the tile without saying so.
   const { store, directory } = make(8)
   const other = new DiskHeightfieldStore({ directory })
   stores.push(other)
@@ -157,10 +157,14 @@ it('serves reads while another connection holds the write lock', async () => {
   await archive.flush()
   const writer = new DatabaseSync(join(directory, 'tiles.sqlite'))
   writer.exec('PRAGMA busy_timeout=0; BEGIN IMMEDIATE')
+  // Opened under the lock: its first read is also its first connection.
+  const late = new DiskHeightfieldStore({ directory })
+  stores.push(late)
   try {
-    const [mine, theirs, archived] = await Promise.all([
+    const [mine, theirs, lates, archived] = await Promise.all([
       store.read('shared'),
       other.read('shared'),
+      late.read('shared'),
       source.submit(surface, request).result,
     ])
     const record = heightfieldCacheRecord('shared', field)
@@ -168,6 +172,9 @@ it('serves reads while another connection holds the write lock', async () => {
       record,
     )
     expect(validateHeightfieldCacheRecord(theirs, 'shared', request)).toEqual(
+      record,
+    )
+    expect(validateHeightfieldCacheRecord(lates, 'shared', request)).toEqual(
       record,
     )
     expect(archived).toEqual(field)
@@ -182,22 +189,23 @@ it('commits a write under an open read, which keeps its snapshot', async () => {
   const { store, directory } = make(1)
   await store.write(heightfieldCacheRecord('old', field))
   const reader = new DatabaseSync(join(directory, 'tiles.sqlite'))
-  reader.exec('BEGIN')
-  const before = reader.prepare('SELECT count(*) AS n FROM tiles').get()!.n
+  let after
   try {
+    reader.exec('BEGIN')
+    const before = reader.prepare('SELECT count(*) AS n FROM tiles').get()!.n
     // At maxEntries 1 the write replaces the tile and evicts the old one: the
     // insert, the tally and the delete land together or not at all.
     expect(await store.write(heightfieldCacheRecord('new', field))).toBe(true)
     expect(reader.prepare('SELECT count(*) AS n FROM tiles').get()!.n).toBe(
       before,
     )
-  } finally {
     reader.exec('COMMIT')
+    after = reader
+      .prepare('SELECT entries, (SELECT count(*) FROM tiles) AS n FROM tally')
+      .get()
+  } finally {
+    reader.close()
   }
-  const after = reader
-    .prepare('SELECT entries, (SELECT count(*) FROM tiles) AS n FROM tally')
-    .get()!
-  reader.close()
   expect(after).toEqual({ entries: 1, n: 1 })
   expect(await store.read('old')).toBeNull()
   expect(await store.read('new')).not.toBeNull()
