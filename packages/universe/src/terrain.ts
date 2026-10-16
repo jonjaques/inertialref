@@ -506,8 +506,9 @@ export function groundCoverAt(
 ): Meters {
   const d = Vec.normalize(direction)
   const sea = seaDatumElevation(surface)
-  const elevation =
-    evaluate(surface, d, out, at, water, waterAt, SAMPLED) + tail(surface, d)
+  const landform = evaluate(surface, d, out, at, water, waterAt, SAMPLED)
+  const level = SAMPLED[0] as number
+  const elevation = landform + tail(surface, d)
   const clamp = stageOn('clamp', {
     surface,
     sketch: terrainSketch(surface),
@@ -515,7 +516,7 @@ export function groundCoverAt(
     seabed,
   })
   if (!clamp || sea === null) return elevation
-  return Math.max(elevation, waterSurface(surface, sea, SAMPLED[0] as number))
+  return Math.max(elevation, waterSurface(surface, sea, level))
 }
 
 /**
