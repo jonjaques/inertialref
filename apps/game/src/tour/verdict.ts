@@ -33,6 +33,19 @@ export interface GuideAccessOwner {
 }
 
 /**
+ * Pass the account to the owner once the account provider has loaded.
+ * `userId` is null until it loads as well as when nobody is signed in;
+ * settling on the first would read a signed-in visitor as signed out for the
+ * length of the boot, so until then the verdict stays `checking`.
+ */
+export function followAccount(
+  owner: GuideAccessOwner,
+  account: { readonly loaded: boolean; readonly userId: string | null },
+): void {
+  if (account.loaded) owner.forUser(account.userId)
+}
+
+/**
  * The verdict as `ir.guideStatus` names an idle guide's state: `idle` when
  * granted, otherwise `checking` or the refusal's reason.
  */

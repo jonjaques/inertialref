@@ -400,17 +400,6 @@ measurement in this document settles one.
 
 ---
 
-## Rig note
-
-`body()` in [`scripts/drive.mjs`](../../scripts/drive.mjs) treats any `--js` or
-`--file` payload containing a `;` or a newline as a function body, so an IIFE,
-or any multi-line file without a top-level `return`, evaluates and returns
-`null` with no diagnostic. A warning when the completion value is `undefined`
-and the payload contains no `return` would cost one line. It is a tooling fix,
-not a phase.
-
----
-
 ## Related
 
 - [`DESIGN.md`](../../DESIGN.md) — the design bible every finding above is measured against

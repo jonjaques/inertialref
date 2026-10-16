@@ -192,10 +192,9 @@ request of its own; each belongs to the next change that opens its file.
   the raised, upright pad pose. They differ only if a parked hull reports a
   thrust demand, and nothing shows one never does. Either root the plumes at
   `engine.parkedRocinante`, or hold a parked hull's demand at zero in a test.
-- **The derived-state test counts its own probes, not the fields.** Its count
-  makes a deleted probe loud and cannot see a field added to
-  `#invalidateDerived` without one; `rotationStop` and `terrain` are never warm
-  at the pad, so their cold read proves only that they do not throw.
+- **Two of the derived-state test's probes are never warm.** `rotationStop`
+  and `terrain` are cold at the pad before the load, so their cold read after
+  it proves only that they do not throw.
 - **6's gate is short two plates.** No plate was taken of a figured body or of
   the star filling the frame; the figured path is equivalent in code and the
   star's exposure is held by `bodyUniforms.test.ts`. The per-body records it
@@ -224,8 +223,9 @@ request of its own; each belongs to the next change that opens its file.
   The decoder is strict, so a page loaded before the deploy reads the new
   answer as not offered until it reloads — the same skew 10 accepted for the
   shape change.
-- **`useGuideAccess` waiting for the account provider has no test.** It is a
-  hook and the suite runs in Node; the verdict it feeds is tested.
+- **`useGuideAccess`'s wiring has no test.** `followAccount` holds the wait
+  for the account provider; the effect that calls it, its dependency list and
+  the store subscription are React, and the suite runs in Node.
 - **The 1,500-byte scene bound is the adapter's own.** No provider limit is
   documented in `openaiLive.ts` or ADR-0042; if one exists, cite it there.
 
@@ -270,9 +270,6 @@ own.
 - **Every pool worker still builds its own graph.** Off the draw thread, and in
   [perf](perf.md#every-pool-worker-builds-a-wet-bodys-drainage-graph-for-itself-unmeasured)
   with the measurement that would say whether the ground waits on it.
-- **`gameEngine.test.ts`'s archive case waits twenty microtasks for a GPU
-  tile**, and that tile is now held behind its surface's preparation on the
-  inline worker. It passes; the wait is a count, not a condition.
 - **The pixel angle stays the display's under a reduced render scale.** The
   terrain and water detail fades divide the display's pixel angle by the
   drawing buffer, so at a render ratio `r` they assume samples `r` times finer
