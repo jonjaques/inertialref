@@ -23,11 +23,11 @@ const FONTS = new URL('../../apps/game/src/assets/fonts/', import.meta.url)
 const REQUIRED = {
   'ibm-plex-mono-symbols.woff2': '′″⁰₀→≈∞≤π',
   'ibm-plex-sans-symbols.woff2': '′″⁰₀→≈∞≤Δμ',
-  'noto-sans-math-symbols.woff2': '☉⊕Δμ',
+  'noto-sans-math-symbols.woff2': '☉⊕ΔμΩωρ',
 }
 
 /** `unicode-range` of each `@font-face` whose source is a vendored file. */
-async function declaredRanges() {
+async function parseDeclaredRanges() {
   const css = await readFile(CSS, 'utf8')
   const ranges = new Map()
   for (const [block] of css.matchAll(/@font-face\s*\{[^}]*\}/g)) {
@@ -45,6 +45,9 @@ async function declaredRanges() {
   return ranges
 }
 
+/** Read once and shared: every case below asks the same stylesheet. */
+const declaredRanges = parseDeclaredRanges()
+
 async function characterSet(file) {
   const sfnt = Buffer.from(
     await decompress(await readFile(fileURLToPath(new URL(file, FONTS)))),
@@ -57,7 +60,7 @@ const hex = (cp) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`
 describe('the vendored symbol subsets', () => {
   for (const [file, glyphs] of Object.entries(REQUIRED)) {
     it(`${file} is routed every glyph it carries for the interface, and has it`, async () => {
-      const range = (await declaredRanges()).get(file)
+      const range = (await declaredRanges).get(file)
       expect(
         range,
         `index.css declares no @font-face for ${file}`,

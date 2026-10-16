@@ -54,7 +54,7 @@ coverage ships with the faces instead of being left to the platform.**
   vendored Plex subsets declare `U+2200-22FF` and do not hold U+2295 either,
   which looks covered and is not. A third vendored subset, 8 KB cut from that
   same Noto Sans Math file, declares both under the `Noto Sans Math` family
-  that already follows the Plex families in every stack.
+  that already follows the text face in every stack.
 - **The mono's Greek comes from Noto, because Plex Mono draws only `π`.** IBM's
   release (`@ibm/plex-mono@2.5.0`, font version 2.005) maps that one codepoint in
   U+0370–03FF and no other. The mono subset's cut takes the block anyway and gains
@@ -106,8 +106,10 @@ one string set at poster size.
 
 Prose gains true italics and 100–700 of weight; every operator the simulation
 prints renders in a declared face on every platform, and so does every sigil
-and every Greek letter; the poster figures read as an instrument cluster instead of a fourth
-line of readout.
+and the unaccented Greek alphabet; the poster figures read as an instrument
+cluster instead of a fourth line of readout. The Noto subset holds 59 of the
+135 assigned codepoints its Greek range declares, so a tonos-accented letter in a mono
+or display context still reaches a platform font.
 
 **Plex Mono is static.** A fourth weight is a new file rather than a number,
 and the vendored symbol subsets are generated artifacts: regenerating the Plex

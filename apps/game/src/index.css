@@ -103,7 +103,7 @@
  * The sun, the Earth, and the mono's Greek.
  *
  * Declared under Fontsource's own family name, so it merges into the `Noto
- * Sans Math` that already follows the Plex families in every stack. In the
+ * Sans Math` that already follows the text face in every stack. In the
  * sans, Plex's Greek subset answers first; in the mono, Plex Mono draws `π`
  * and nothing else in the block, and `μ` lands here — one declared face on
  * every platform, proportional rather than Plex. 8 KB, fetched only when one
