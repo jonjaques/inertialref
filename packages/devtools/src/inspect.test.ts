@@ -69,8 +69,7 @@ describe('inspection', () => {
     const count = session.world.entities.size
     const inspection = inspectWorld(session.world)
     expect(inspection.entities).toHaveLength(count)
-    // At most one, and the honest number is none: nothing in an inspection
-    // needs a body it is not inside.
+    // Nothing in an inspection needs a body it is not inside.
     expect(simulation.snapshot).toHaveBeenCalledTimes(0)
     expect(simulation.entitySnapshot).toHaveBeenCalledTimes(count)
     session.dispose()
@@ -80,9 +79,7 @@ describe('inspection', () => {
     const session = crowded()
     const count = session.world.entities.size
     const status = session.harness.status()
-    expect(
-      vi.mocked(simulation.snapshot).mock.calls.length,
-    ).toBeLessThanOrEqual(1)
+    expect(simulation.snapshot).toHaveBeenCalledTimes(0)
     expect(simulation.entitySnapshot).toHaveBeenCalledTimes(count)
     expect(status.player).not.toBeNull()
     expect(status.player).toBe(

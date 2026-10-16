@@ -638,13 +638,12 @@ export class GameHarness {
     const world = inspectWorld(this.world)
     return {
       world,
-      // The player is one of the entities just inspected. Reading it out of
-      // the list keeps a sample at one inspection per entity.
+      // The player is one of the entities just inspected, and a sample is one
+      // inspection per entity. An id the list lacks is no entity at all.
       player:
         player === null
           ? null
-          : (world.entities.find((entity) => entity.id === player) ??
-            inspectEntity(this.world, player)),
+          : (world.entities.find((entity) => entity.id === player) ?? null),
       render: scene === null ? null : inspectRender(scene),
       workers: this.#host.pool()?.stats() ?? null,
       frame: this.#host.render.frameStats(),
