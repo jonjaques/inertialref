@@ -223,6 +223,9 @@ request of its own; each belongs to the next change that opens its file.
   The decoder is strict, so a page loaded before the deploy reads the new
   answer as not offered until it reloads — the same skew 10 accepted for the
   shape change.
+- **`useGuideAccess`'s wiring has no test.** `followAccount` holds the wait
+  for the account provider; the effect that calls it, its dependency list and
+  the store subscription are React, and the suite runs in Node.
 - **The 1,500-byte scene bound is the adapter's own.** No provider limit is
   documented in `openaiLive.ts` or ADR-0042; if one exists, cite it there.
 
