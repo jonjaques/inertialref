@@ -396,8 +396,10 @@ it('the external instrument uses physical starlight only while its camera owns t
 })
 
 /**
- * Every field `#invalidateDerived` assigns, clears, resets or bumps, from
- * the method's source in `GameEngine.ts`, sorted.
+ * Every field `#invalidateDerived` assigns, bumps or calls a method on, from
+ * the method's source in `GameEngine.ts`, sorted. A method call counts
+ * whatever its name — `clear`, `reset`, `dispose`, `splice` — because a field
+ * dropped by a verb this list did not foresee is the one a probe-count misses.
  */
 function invalidatedFields(): string[] {
   const source = readFileSync(
@@ -407,8 +409,10 @@ function invalidatedFields(): string[] {
   const start = source.indexOf('  #invalidateDerived(): void {')
   const end = source.indexOf('\n  }\n', start)
   expect(start).toBeGreaterThan(-1)
+  expect(end).toBeGreaterThan(start)
   const method = source.slice(start, end)
-  const written = /this\.(#?\w+)(?:\s*(?:=(?!=)|\+=)|\.(?:clear|reset)\(\))/g
+  const written =
+    /this\.(#?\w+)(?:\s*(?:(?:&&|\|\||\?\?|[-+*/|&])?=(?!=)|\+\+|--)|\??\.\w+\s*\()/g
   return [...new Set([...method.matchAll(written)].map((m) => m[1]!))].sort()
 }
 
