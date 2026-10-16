@@ -382,7 +382,8 @@ function derive(body: Body): readonly SurveySite[] {
  * The four places a river makes, read off the drainage graph rather than
  * searched for: the mouth of the largest river, its source, the junction
  * where its largest tributary joins it, and the largest lake. None on a
- * body nothing drains.
+ * body nothing drains; the lake alone on one whose drainable nodes are all
+ * lake or sea, because the lake does not depend on the river.
  *
  * Read off the graph because a search of the field could not find them —
  * "the largest river" is a fact about the whole tree, not about a point.
@@ -394,33 +395,129 @@ function derive(body: Body): readonly SurveySite[] {
 function riverSites(body: Body): readonly SurveySite[] {
   const graph = drainageGraph(body.surface)
   if (graph === null) return []
-  // The sea is a lake at the datum on every node it reaches, which is what
-  // the field reads the ocean's own level off — so "is this a lake" has to
-  // exclude it, or the largest lake on a wet world is the ocean and the
-  // site stands in the middle of it at the sea datum.
-  const isLake = (n: number): boolean =>
-    graph.sea[n] === 0 && !Number.isNaN(graph.lake[n] as number)
-  const isChannel = (n: number): boolean => graph.sea[n] === 0 && !isLake(n)
+  const river = largestRiver(graph)
+  const lake = largestLake(graph)
+  if (river === null && lake === null) return []
 
+  const sketch = terrainSketch(body.surface)
+  const at = (n: number): Vec3 => {
+    const target: Vec3 = {
+      x: graph.positions[n * 3] as number,
+      y: graph.positions[n * 3 + 1] as number,
+      z: graph.positions[n * 3 + 2] as number,
+    }
+    // The preimage under the warp, by fixed point: the warp's slope is
+    // under a half, so this lands within a nanoradian.
+    let guess = target
+    for (let i = 0; i < 60; i += 1) {
+      guess = Vec.normalize(
+        Vec.add(guess, Vec.sub(target, drainageLookup(graph, sketch, guess))),
+      )
+    }
+    return guess
+  }
+  const on = (id: SurveySiteId, name: string, detail: string, n: number) =>
+    siteAt(
+      id,
+      name,
+      detail,
+      centerOf(body, regionForDirection(at(n), SURVEY_LEVEL)),
+    )
+  const sites: SurveySite[] = []
+  if (river !== null) {
+    const { mouth, headwater, confluence } = river
+    /*
+     * The cell's area, not its edge squared: the lattice is six squares on a
+     * sphere, so a cell covers `4πR²/nodes` — `8/3π` of `cellMeters²`, fifteen
+     * percent under what the edge alone gives. This is the figure the build
+     * accumulates the discharge against, and what sets `channelHalfWidth` and
+     * `channelDepth`; the edge squared makes a basin `√(3π/8)` too wide, which
+     * read Earth's largest as 1,483 km across against a true 1,367 km.
+     */
+    const radius = body.surface.grammar.meanRadius
+    const cellArea = (4 * Math.PI * radius * radius) / graph.nodes
+    const mouthArea = (graph.area[mouth] as number) * cellArea
+    const sea = seaDatumElevation(body.surface)
+    sites.push(
+      on(
+        'headwater',
+        'Headwater',
+        `the source of the largest river, ${riverLength(graph, headwater, mouth, body)} from its mouth`,
+        headwater,
+      ),
+      on(
+        'mouth',
+        sea === null ? 'River End' : 'River Mouth',
+        `where the largest river, draining a basin ${formatReading(Math.sqrt(mouthArea))} across, ${sea === null ? 'ends' : 'meets the sea'}`,
+        mouth,
+      ),
+    )
+    if (confluence >= 0) {
+      sites.push(
+        on(
+          'confluence',
+          'Confluence',
+          "where the largest river's largest tributary joins it",
+          confluence,
+        ),
+      )
+    }
+  }
+  if (lake !== null) {
+    sites.push(
+      on(
+        'lake',
+        'Lake',
+        `the largest lake the graph holds, standing ${relative(lake.level)}`,
+        lake.node,
+      ),
+    )
+  }
+  return sites
+}
+
+/*
+ * The sea is a lake at the datum on every node it reaches, which is what
+ * the field reads the ocean's own level off — so "is this a lake" has to
+ * exclude it, or the largest lake on a wet world is the ocean and the site
+ * stands in the middle of it at the sea datum.
+ */
+const isLake = (graph: DrainageGraph, n: number): boolean =>
+  graph.sea[n] === 0 && !Number.isNaN(graph.lake[n] as number)
+const isChannel = (graph: DrainageGraph, n: number): boolean =>
+  graph.sea[n] === 0 && !isLake(graph, n)
+
+/** The largest river's mouth, its source, and its largest confluence (−1 where none). */
+export interface RiverNodes {
+  readonly mouth: number
+  readonly headwater: number
+  readonly confluence: number
+}
+
+/**
+ * The largest river on a graph, as nodes, or null where no channel node
+ * exists — every drainable node lake or sea.
+ */
+export function largestRiver(graph: DrainageGraph): RiverNodes | null {
   // The mouth: the channel node of the largest area that drains into
   // standing water, or into a sink where nothing stands.
   let mouth = -1
   for (let n = 0; n < graph.nodes; n += 1) {
-    if (!isChannel(n)) continue
+    if (!isChannel(graph, n)) continue
     const r = graph.receiver[n] as number
-    if (r >= 0 && isChannel(r)) continue
+    if (r >= 0 && isChannel(graph, r)) continue
     if (mouth < 0 || (graph.area[n] as number) > (graph.area[mouth] as number))
       mouth = n
   }
-  if (mouth < 0) return []
+  if (mouth < 0) return null
 
   // The tributaries of every channel node, largest first, from one pass.
   const largest = new Int32Array(graph.nodes).fill(-1)
   const second = new Int32Array(graph.nodes).fill(-1)
   for (let n = 0; n < graph.nodes; n += 1) {
-    if (!isChannel(n)) continue
+    if (!isChannel(graph, n)) continue
     const r = graph.receiver[n] as number
-    if (r < 0 || !isChannel(r)) continue
+    if (r < 0 || !isChannel(graph, r)) continue
     const area = graph.area[n] as number
     const held = largest[r] as number
     if (held < 0 || area > (graph.area[held] as number)) {
@@ -448,12 +545,19 @@ function riverSites(body: Body): readonly SurveySite[] {
       confluence = headwater
     }
   }
+  return { mouth, headwater, confluence }
+}
 
-  // The largest lake, by nodes at one level, and its node nearest the mean
-  // of its nodes' directions.
+/**
+ * The largest lake on a graph, by nodes at one level, and its node nearest
+ * the mean of its nodes' directions; null where the graph holds no lake.
+ */
+export function largestLake(
+  graph: DrainageGraph,
+): { readonly node: number; readonly level: Meters } | null {
   const counts = new Map<number, number>()
   for (let n = 0; n < graph.nodes; n += 1) {
-    if (!isLake(n)) continue
+    if (!isLake(graph, n)) continue
     const level = graph.lake[n] as number
     counts.set(level, (counts.get(level) ?? 0) + 1)
   }
@@ -465,102 +569,30 @@ function riverSites(body: Body): readonly SurveySite[] {
       lakeNodes = count
     }
   }
+  if (lakeNodes === 0) return null
+  let mx = 0
+  let my = 0
+  let mz = 0
+  for (let n = 0; n < graph.nodes; n += 1) {
+    if (!isLake(graph, n) || (graph.lake[n] as number) !== lakeLevel) continue
+    mx += graph.positions[n * 3] as number
+    my += graph.positions[n * 3 + 1] as number
+    mz += graph.positions[n * 3 + 2] as number
+  }
+  let best = -Infinity
   let lake = -1
-  if (lakeNodes > 0) {
-    let mx = 0
-    let my = 0
-    let mz = 0
-    for (let n = 0; n < graph.nodes; n += 1) {
-      if (!isLake(n) || (graph.lake[n] as number) !== lakeLevel) continue
-      mx += graph.positions[n * 3] as number
-      my += graph.positions[n * 3 + 1] as number
-      mz += graph.positions[n * 3 + 2] as number
-    }
-    let best = -Infinity
-    for (let n = 0; n < graph.nodes; n += 1) {
-      if (!isLake(n) || (graph.lake[n] as number) !== lakeLevel) continue
-      const dot =
-        (graph.positions[n * 3] as number) * mx +
-        (graph.positions[n * 3 + 1] as number) * my +
-        (graph.positions[n * 3 + 2] as number) * mz
-      if (dot > best) {
-        best = dot
-        lake = n
-      }
+  for (let n = 0; n < graph.nodes; n += 1) {
+    if (!isLake(graph, n) || (graph.lake[n] as number) !== lakeLevel) continue
+    const dot =
+      (graph.positions[n * 3] as number) * mx +
+      (graph.positions[n * 3 + 1] as number) * my +
+      (graph.positions[n * 3 + 2] as number) * mz
+    if (dot > best) {
+      best = dot
+      lake = n
     }
   }
-
-  const sketch = terrainSketch(body.surface)
-  const at = (n: number): Vec3 => {
-    const target: Vec3 = {
-      x: graph.positions[n * 3] as number,
-      y: graph.positions[n * 3 + 1] as number,
-      z: graph.positions[n * 3 + 2] as number,
-    }
-    // The preimage under the warp, by fixed point: the warp's slope is
-    // under a half, so this lands within a nanoradian.
-    let guess = target
-    for (let i = 0; i < 60; i += 1) {
-      guess = Vec.normalize(
-        Vec.add(guess, Vec.sub(target, drainageLookup(graph, sketch, guess))),
-      )
-    }
-    return guess
-  }
-  const on = (id: SurveySiteId, name: string, detail: string, n: number) =>
-    siteAt(
-      id,
-      name,
-      detail,
-      centerOf(body, regionForDirection(at(n), SURVEY_LEVEL)),
-    )
-  /*
-   * The cell's area, not its edge squared: the lattice is six squares on a
-   * sphere, so a cell covers `4πR²/nodes` — `8/3π` of `cellMeters²`, fifteen
-   * percent under what the edge alone gives. This is the figure the build
-   * accumulates the discharge against, and what sets `channelHalfWidth` and
-   * `channelDepth`; the edge squared makes a basin `√(3π/8)` too wide, which
-   * read Earth's largest as 1,483 km across against a true 1,367 km.
-   */
-  const radius = body.surface.grammar.meanRadius
-  const cellArea = (4 * Math.PI * radius * radius) / graph.nodes
-  const mouthArea = (graph.area[mouth] as number) * cellArea
-  const sea = seaDatumElevation(body.surface)
-  const sites: SurveySite[] = [
-    on(
-      'headwater',
-      'Headwater',
-      `the source of the largest river, ${riverLength(graph, headwater, mouth, body)} from its mouth`,
-      headwater,
-    ),
-    on(
-      'mouth',
-      sea === null ? 'River End' : 'River Mouth',
-      `where the largest river, draining a basin ${formatReading(Math.sqrt(mouthArea))} across, ${sea === null ? 'ends' : 'meets the sea'}`,
-      mouth,
-    ),
-  ]
-  if (confluence >= 0) {
-    sites.push(
-      on(
-        'confluence',
-        'Confluence',
-        "where the largest river's largest tributary joins it",
-        confluence,
-      ),
-    )
-  }
-  if (lake >= 0) {
-    sites.push(
-      on(
-        'lake',
-        'Lake',
-        `the largest lake the graph holds, standing ${relative(lakeLevel)}`,
-        lake,
-      ),
-    )
-  }
-  return sites
+  return { node: lake, level: lakeLevel }
 }
 
 /** The main stem's length from a source to the mouth, along the nodes, as a reading. */
