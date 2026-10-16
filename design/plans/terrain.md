@@ -148,18 +148,6 @@ of Sol contains one: generated moons come out on orbits too circular for the
 eccentricity tide to register. The archetype is covered by a Sol body instead,
 so the zoo is a set of bodies rather than one system.
 
-**The disk archive takes a write lock to read, on a rollback journal.**
-`DiskHeightfieldStore` runs every operation through `BEGIN IMMEDIATE` and sets
-`busy_timeout` to 100 ms, and nothing sets `journal_mode=WAL`. Two processes
-sharing the default `.data/heightfields/tiles.sqlite` therefore contend for an
-exclusive lock on a read: vitest runs suites in parallel workers, and
-`apps/game`'s slow descent suite and `pnpm sim --terrain-cache*` both default
-to that path, so the second reader takes SQLITE_BUSY,
-the archive counts a `readError` and the run degrades silently to
-full regeneration rather than failing. WAL plus a read-only transaction for the
-read path is the fix; the class comment already claims the atomicity it does
-not have.
-
 **The slow descent suite reaches across an app boundary that no check walks.** It
 imports `apps/headless/src/heightfieldStore.ts` by relative path, so
 `apps/game`'s test graph transitively requires `node:sqlite`, `node:v8`,
