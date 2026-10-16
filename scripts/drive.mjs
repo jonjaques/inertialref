@@ -59,7 +59,7 @@ import { analyzeFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveUrl } from './driveUrl.mjs'
-import { body, silentCompletion } from './driveScript.mjs'
+import { silentCompletion, wrap } from './driveScript.mjs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -536,7 +536,7 @@ function connect(ws) {
 
 async function evaluate(send, expression, userGesture = false) {
   const result = await send('Runtime.evaluate', {
-    expression: `(async () => { ${body(expression)} })()`,
+    expression: wrap(expression),
     awaitPromise: true,
     returnByValue: true,
     ...(userGesture ? { userGesture: true } : {}),
