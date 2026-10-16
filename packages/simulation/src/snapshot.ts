@@ -182,8 +182,8 @@ const lerpState = (
  * One entity's view at an interpolation alpha.
  *
  * Exported on its own because an inspector asking about one ship does not
- * need the poses of a hundred and twenty-nine bodies to answer — and it was
- * building the whole snapshot, twice a sample, to read one entry out of it.
+ * need the poses of a hundred and twenty-nine bodies to answer. It is the same
+ * record `snapshot` lists for that entity at the same alpha.
  */
 export function entitySnapshot(
   world: World,

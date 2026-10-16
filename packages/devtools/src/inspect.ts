@@ -11,14 +11,10 @@ import { UV, Vec } from '@inertialref/spatial'
 import type {
   EntitySnapshot,
   FrameBinding,
+  ThrustDemand,
   World,
 } from '@inertialref/simulation'
-import {
-  airVelocity,
-  entitySnapshot,
-  thrustDemand,
-  TICK_DURATION,
-} from '@inertialref/simulation'
+import { airVelocity, entitySnapshot } from '@inertialref/simulation'
 import {
   type EntityId,
   formatAddress,
@@ -168,11 +164,11 @@ export function inspectEntity(
 ): EntityInspection | null {
   const entity = world.entities.get(id)
   if (entity === undefined) return null
-  // The one entity, at the tick. A whole world snapshot here — every body's
-  // orbit and spin pose, searched for one id — is paid twice a status sample:
-  // once for the player and once per entity in the list.
+  // The one entity, at the tick, resolved through its own frame chain. The
+  // world snapshot would pose every loaded body to answer the same question,
+  // and this runs once per entity per status sample.
   const view = entitySnapshot(world, entity, 0)
-  const altitude = world.altitudeOf(id)
+  const altitude = view.altitude
 
   return {
     id: entity.id,
@@ -211,7 +207,7 @@ export function inspectEntity(
     partition: partitionForFrames(world.galaxy, view.frameChain, view.position),
     throttle: entity.control.throttle,
     flightAssist: entity.flightAssist,
-    thrusting: isThrusting(thrustDemand(entity, TICK_DURATION)),
+    thrusting: isThrusting(view.thrust),
     ...againstTheBody(world, view),
   }
 }
@@ -256,7 +252,7 @@ function againstTheBody(
 }
 
 /** Any valve open: the demand the tick fired, not the hand on the keys. */
-const isThrusting = (demand: ReturnType<typeof thrustDemand>): boolean =>
+const isThrusting = (demand: ThrustDemand | null): boolean =>
   demand !== null &&
   (Vec.lengthSquared(demand.linear) > 0 ||
     Vec.lengthSquared(demand.angular) > 0)

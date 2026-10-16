@@ -635,9 +635,15 @@ export class GameHarness {
   status(): HarnessStatus {
     const player = this.#host.player()
     const scene = this.#host.render.scene()
+    const world = inspectWorld(this.world)
     return {
-      world: inspectWorld(this.world),
-      player: player === null ? null : inspectEntity(this.world, player),
+      world,
+      // The player is one of the entities just inspected, and a sample is one
+      // inspection per entity. An id the list lacks is no entity at all.
+      player:
+        player === null
+          ? null
+          : (world.entities.find((entity) => entity.id === player) ?? null),
       render: scene === null ? null : inspectRender(scene),
       workers: this.#host.pool()?.stats() ?? null,
       frame: this.#host.render.frameStats(),
