@@ -37,6 +37,13 @@ optics' stages. Either is a change to the `velocity` row of `render/sceneLayout.
 and the layout's test refuses the mirror Dawn refuses: a blend that reads alpha
 on a row with fewer than four channels.
 
+**Decided: reconstruction reads the masked `motion.rg`, and the `velocity`
+attachment goes.** It costs nothing and every layout already carries `motion`;
+widening is the more expensive way to buy the same mask. The optical passes'
+contract does not move — `motion` stays undilated surface motion, and FSR
+dilates its own copy. The presets are re-measured once to confirm the frame
+figures in ADR-0044 still stand without the attachment.
+
 The defect is stated by a GPU probe: a temporal sensor, a 40 × 40 surface at
 z = −4 through `sensorRadiance`, a 0.5 × 0.5 overlay at z = −2 that travels
 with the eye so its own screen motion is zero, and a 0.25-unit camera pan

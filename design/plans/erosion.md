@@ -188,8 +188,11 @@ reference: the WebGPU frame is the one the target applies to.
    kernel owes cannot be a ninth buffer. Phase 4's slope and seat need none:
    the second cover word carries wet and biota in its low sixteen bits and
    nothing in its high sixteen. Phase 3's refined segments and phase 5's flow
-   direction do, and they go into a buffer that already exists or the layout
-   goes to one buffer with an offset table. Nothing requests a limit above the
+   direction do. **Decided: the drainage data goes to one storage buffer read
+   through an offset table**, which frees bindings for good and runs the same
+   on every device; packing into an existing buffer only moves the wall, and a
+   raised limit splits behavior by adapter. The CPU/GPU tolerance tests are
+   re-held across the change. Nothing requests a limit above the
    default — not `createRenderer`, not the producer, not the Dawn harness — so
    every device, this one included, runs at eight. A ninth binding fails
    pipeline validation in the producer's `warm()`, which retires the GPU
@@ -199,6 +202,7 @@ reference: the WebGPU frame is the one the target applies to.
    against the ground temperature, and the lithospheric weakening reads the
    sea. Proxima Centauri II lost twenty plates. The weakening wants its own
    draw — a world that _had_ a sea — rather than the drawn sea's presence.
+   It lands in the batched terrain version (§ 6).
 4. **The coast has one shape, and the mouth has one.** Shelf and plain from a
    remap, a ria at every river. The graph gives the mouth a discharge and a
    floor; the delta is § 2's last item.
@@ -214,7 +218,8 @@ reference: the WebGPU frame is the one the target applies to.
    test prices this at a one-meter tolerance ("two lakes at different levels
    can share a ring") against a budget in kilometers, and nothing bounds the
    blend. The fix is to weight one body — the nearest by node count, or the
-   one the sample's own receiver drains to — rather than to mix them.
+   one the sample's own receiver drains to — rather than to mix them. It
+   lands in the batched terrain version (§ 6).
 7. **A sea inlet under two cells wide loses both its sheet and its clamp.**
    On a body with a graph the sea is applied only where `lakeLevelAt` finds a
    sea node within 1.2 lattice cells, and a cell is 156 km on Earth. A bay or
@@ -243,10 +248,10 @@ reference: the WebGPU frame is the one the target applies to.
     a frame at 200 m/px — and the bake evaluates it unfaded at 20 km a texel.
     Beside it, the "four kilometers" `MACRO_METERS` names is 637 m a cell in
     practice: `macroFrequency` is `2π · R / MACRO_METERS` applied to a unit
-    direction, a 2π the period arithmetic never divides out. Either that one
-    band goes to an aperiodic evaluation, or the period is fixed at a real
-    4 km cell and the bake's detail bands are set flat; both change the look,
-    so a plate decides.
+    direction, a 2π the period arithmetic never divides out. **Decided: the
+    macro band goes to an aperiodic evaluation**, taken off the baked texture;
+    a period fixed at a real 4 km cell still repeats, only larger. The look
+    changes, so the change carries daylight plates either side.
 12. **A lava sea glows on the ground and not on the sphere.** The sheet emits
     the liquid's glow and the sphere takes only the liquid's color
     (`planet.oceanColor`), so a magma world is red at the gate and dark from
@@ -263,8 +268,8 @@ reference: the WebGPU frame is the one the target applies to.
     gates are both zero — `SCALAR.DRAINAGE` and `WORD.DRAINAGE_CELLS` — and a
     future read that checks one gate and not the other carves the previous
     planet's rivers into this one. Clearing costs 4.4 MB of writes per body
-    switch, which is why it is a decision and not an edit; the cheaper answer
-    is one gate rather than two.
+    switch. **Decided: one gate rather than two**, so every reader tests the
+    same word; the buffers are not cleared.
 
 ---
 
@@ -313,6 +318,15 @@ and its figures are § 3's pass table.
 | 4     | Slope and seat in the cover's spare bytes                                                   | The deposit step and the seat tail gone                                                                                                             |
 | 5     | The look: gullies, talus, the derivative-damped grain; a flow on the river sheet; the mouth | Plates at the four sites, either side; the frame at the shore within two fps of the ADR's 16.3                                                      |
 | 6     | The tradeoffs revisited against phase 0's numbers                                           | § 3 rows either closed or carried with a fresh figure                                                                                               |
+
+**Versions are spent in batches.** Every change that moves the canonical field
+moves every landed ship and misses every archived tile, so the changes share a
+version where they can. The next one carries defects 3 and 6, Enceladus's
+stripe extent ([terrain § 2](terrain.md#2-open-work)) and the surface identity
+([arch-review B](arch-review.md#b-surface-identity-is-stated-once)), and lands
+before phase 3. Phase 3's carve takes a version of its own when it lands. The
+slow suite's timeout carries the headroom that makes each one a slow first CI
+run rather than a failed one ([arch-review](arch-review.md#open-from-1115-and-19)).
 
 ---
 

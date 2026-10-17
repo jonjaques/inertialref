@@ -125,14 +125,29 @@ own `browserWorker.ts` has already defined once for the browser.
 - **`vitest --changed`** in the gate would run only the files affected by the
   turn's edits. It is the cheapest change on this page and the least
   trustworthy: vitest's affected-file graph follows imports, and a change to a
-  data file or a config under `scripts/` affects tests it cannot see. Worth
-  trying with the full run kept in `pnpm check`; not worth trusting alone.
+  data file or a config under `scripts/` affects tests it cannot see.
+  **Decided: tried in the Stop gate, with the full run kept in `pnpm check`
+  and CI.** It stays only if a measurement on the M5 says how much it saves and
+  how often it skips a test a turn's edit broke.
 - **`isolate: false`** for `packages/*`, whose tests are pure functions over
   pure inputs, skips the per-file module re-evaluation. Import time across the
   16.8 s run is 27.8 s of thread time, against 99.9 s of test time and 5.8 s of
   transform, so the ceiling on this is two or three seconds of wall clock.
-  Measure before taking it: a test that leaks module state across files fails in
-  a way that looks like another file's bug.
+  **Declined.** Two or three seconds do not pay for a class of failure where a
+  test that leaks module state across files fails as another file's bug.
+
+### 4. The GPU suite in CI, settled by one run
+
+`pnpm test:gpu` and `pnpm presets:compare` run only on a machine with a
+physical adapter, so a shader regression is caught only when someone runs them
+there. Whether a hosted macOS runner gives Dawn a plain `MTLDevice` is
+unknown, and Linux is the wrong fallback — Dawn takes SwiftShader there and
+misses the Metal-only failures the suite exists to catch
+([roadmap § automation gaps](../../docs/roadmap.md#automation-gaps)).
+**Decided: one throwaway workflow run on a hosted macOS runner** installs,
+reports the adapter Dawn finds and runs `pnpm test:gpu`. If it passes on Metal,
+the GPU project joins CI; if not, the suite stays a local discipline and the
+roadmap row names the reason.
 
 ---
 

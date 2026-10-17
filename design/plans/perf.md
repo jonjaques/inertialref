@@ -161,7 +161,9 @@ Detaching it is not a one-line change: `terrainStore.test.ts`'s "evicts by
 recent reads" depends on the bump landing before the next write, so the
 ordering between a detached bump and a subsequent write has to be decided
 before the await comes out. Neither the cost nor the win is measured — the
-1,390 figure is the transaction count, not a millisecond total.
+1,390 figure is the transaction count, not a millisecond total. **Decided:
+measure first.** The warm Tau Ceti Dusk reload's hit path is timed on the rig,
+and the figure goes here before the await comes out or the ordering is chosen.
 
 ### The stack's gates allocate a context per sample, unmeasured
 
@@ -705,7 +707,9 @@ contains an entity. Wiring it into the frame loop changes what unloads
 mid-flight, which is a gameplay decision. The rest of the legality is
 settled — saves pin references and the catalog regenerates deterministically, so
 a cache-not-save unload is allowed by the ADRs — but it wants the heap
-breakdown first.
+breakdown first. **Decided: it is wired once that breakdown and the jump's
+heap diff are in**, with the radius those figures support; until then systems
+stay resident.
 
 ### Warp is delivered to 10⁷×, and the frame at warp is the snapshot and the starfield
 
@@ -852,7 +856,8 @@ the experiment that would put a figure on the gate; it has not been run.
    One worker's first patch against its tenth on the same body separates the
    cold per-body caches from the grammar and the scheduler.
 4. **A heap breakdown of the 524 MB stance**, which gates both the cap tuning
-   and system eviction. The steady state is flat; what is left is what the
+   and system eviction — and system eviction is decided: `updateInterest` is
+   wired as soon as this and item 5 are in. The steady state is flat; what is left is what the
    working set is made of.
 5. **The transitions' retention.** One jump, one heap snapshot either side,
    diffed by constructor: that is where the tour's 906 MB lives, and neither

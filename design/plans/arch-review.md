@@ -62,11 +62,11 @@ The deepenings already landed, each carrying its reasoning in its own file:
 
 ## The order
 
-| #   | Pull request                                                                       | Track       | Builds on | Strength        |
-| --- | ---------------------------------------------------------------------------------- | ----------- | --------- | --------------- |
-| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages) | The picture | —         | Worth exploring |
-| A   | [One compass basis](#a-one-compass-basis)                                          | Optional    | —         | Speculative     |
-| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)              | Optional    | —         | Speculative     |
+| #   | Pull request                                                                       | Track       | Builds on | When                 |
+| --- | ---------------------------------------------------------------------------------- | ----------- | --------- | -------------------- |
+| 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages) | The picture | —         | With iris sampling   |
+| A   | [One compass basis](#a-one-compass-basis)                                          | The frame   | —         | Decided              |
+| B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)              | Terrain     | —         | Next terrain version |
 
 ```mermaid
 flowchart LR
@@ -80,8 +80,8 @@ the numbering is the order to take them in. Nothing left crosses a track.**
 
 **What is left waits on something.** The guide and terrain tracks are in the
 tree, and of the picture track everything but 20, which waits on a fourth
-optical stage. A and B are optional and speculative, and each section says
-what taking it would cost.
+optical stage, which is per-glass iris sampling. A is decided and takes a save
+version; B rides the next terrain version. Each section says what it costs.
 [Open from the review of 6–11](#open-from-the-review-of-611) and the lists
 after it hold the smaller follow-ups those pull requests left, none of them a
 pull request of its own.
@@ -90,7 +90,7 @@ pull request of its own.
 
 ## 20. The optical chain is a list of stages
 
-**Track:** the picture · **Worth exploring** · local-substitutable (Dawn)
+**Track:** the picture · **With iris sampling** · local-substitutable (Dawn)
 
 **Builds on:** nothing left open — every stage already draws through
 `runQuadPasses`. **Unblocks:** nothing.
@@ -112,6 +112,12 @@ and bypass become testable in Node with fake stages, and
 **Weigh it.** Three stages make the seam real and also make the list close to a
 framework. Take it with the fourth stage, not before.
 
+**Decided: the fourth stage is per-glass iris sampling, and the list lands in
+the same change.** It is the first row of
+[the camera beyond the three modes](../../docs/roadmap.md#the-camera-beyond-the-three-modes):
+the glass records exist, and the check is blur shape plus the half-pixel
+defocus gate.
+
 **Gate.** `optics.gpu.test.ts`'s "warms every pass" becomes a check over the
 list: every stage warmed, named and disposed.
 
@@ -119,7 +125,7 @@ list: every stage warmed, named and disposed.
 
 ## A. One compass basis
 
-**Optional** · **Speculative** · in-process
+**Track:** the frame · **Decided** · in-process
 
 **Slots in:** anywhere. `OnFoot.site` steps out at heading 0; a walker that
 steps out facing the way its ship faces needs this first.
@@ -143,11 +149,18 @@ heading taken from a landed ship.
 **The shape.** `compassBasis(latitude, longitude, heading)` in
 `packages/universe`, read by all four.
 
+**Decided: taken, and it spends a save version with no migration.** The
+surface frame reads the shared basis, so its +X is geographic east, and a save
+written under the old frame is not carried forward — backward compatibility of
+saves is not a requirement here. The pull request bumps the save version and
+says in its own body what an older save does on load: refused, or loaded with
+its landed ships turned 180° about up.
+
 ---
 
 ## B. Surface identity is stated once
 
-**Optional** · **Speculative** · in-process
+**Track:** terrain · **With the next terrain version** · in-process
 
 **Builds on:** nothing left open. The drainage memo's key, which
 `seedDrainageGraph` shares with the build, and the archive's are both in the
@@ -171,8 +184,12 @@ the identity — replaces the hand-written key cases in
 **What it costs.** Every archive key changes, so every stored tile is a miss
 once, and CI pays it as 13 did: until `main` holds the new archive, each pull
 request's first run generates every tile of the slow descent (see "Open from
-11–15 and 19"). Worth taking with the DEM input, which changes the surface
-anyway.
+11–15 and 19").
+
+**Decided: it rides the next terrain version.** That is the batch carrying
+erosion defects 3 and 6 and Enceladus's stripe extent
+([erosion § 6](erosion.md#6-phases)), so the archive is invalidated once for
+all four rather than once each.
 
 ---
 
@@ -247,8 +264,9 @@ own.
   neighbor. So until `main` holds a `5-cpu@7` archive, each pull request's
   first run generates every tile: 284 s on the first, against the hook's
   300 s, and over it on the next three. Their reruns restore their own archive
-  and take 88 s. A warm `main` ends it; a timeout with headroom, or a cache
-  key a stack can share, would keep the next key change from repeating it.
+  and take 88 s. A warm `main` ends it. **Decided: the slow suite's timeout
+  takes headroom** — the cold run stays slow and stops failing; a cache key a
+  stack can share is not taken.
 - **The fingerprint pins the CPU tile on one machine's arithmetic.** It held on
   CI's Linux runner on its first push; a host where V8's float functions
   differ would fail it with the message to spend a version, which there would
@@ -279,7 +297,9 @@ own.
   sun 5°), where two boots of the unchanged build, one of them fresh, differ by
   56,267; the crops are indistinguishable. Not measured: the temporal path,
   which may justify the display rate outright, and a cast for shimmer, which
-  the fade's unchanged output makes unlikely to differ.
+  the fade's unchanged output makes unlikely to differ. **Decided: the
+  temporal path is measured before this closes** — a camera pan under
+  temporal Quality, cast for shimmer, with and without the angle multiplied.
 - **The Graphics panel resolves the picture it is editing for itself.** It
   shows the render size of the preference before the sensor rebuilds, through
   `pictureDimensions`, which now reads `renderSize`.
