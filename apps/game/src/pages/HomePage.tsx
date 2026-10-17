@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { BookText, Info, SlidersHorizontal } from 'lucide-react'
-import { BootLine } from '../hud/BootLine.tsx'
+import { BootStack } from '../hud/BootStack.tsx'
 import { useBoot } from '../hud/useBoot.ts'
 import { Logomark } from '../icons/Logomark.tsx'
 import { AccountLinks } from './AccountLinks.tsx'
@@ -181,30 +181,35 @@ export function HomePage() {
             and without a word. The lead's second line is where the state of
             the project is stated, in a sentence rather than in a label that
             reads like uptime. */}
-      <footer className="type-ui flex max-w-[33rem] flex-wrap items-center gap-x-5 gap-y-2">
+      <footer className="type-ui relative flex max-w-[33rem] flex-wrap items-center gap-x-5 gap-y-2">
         <FooterLink to={DOCS} icon={BookText} label="Documentation" />
         <FooterLink to={SETTINGS} icon={SlidersHorizontal} label="Settings" />
         <FooterLink to={ABOUT} icon={Info} label="About" />
         <AccountLinks />
-        {/* The scene's own progress, at the end of the status row, while the
-              black behind the poster is the cover and not the sky. One line of
-              the ledger the scene modes get whole, in the register the figures
-              above are set in; it leaves with the cover, a beat after the
-              check, so the planet arriving and the line going are one event.
-              `ml-auto` in a wrapping row: beside the links while they fit on
-              one line, on its own line at the right edge when they do not. */}
+        {/* The scene's own progress, while the black behind the poster is the
+              cover and not the sky. One line of the ledger the scene modes get
+              whole, in the register the figures above are set in; it leaves
+              with the cover, a beat after the check, so the planet arriving and
+              the line going are one event.
+              Hung below the links rather than in their row. The column is
+              centered on its own height, so anything in flow that arrives,
+              wraps or leaves moves every line above it; out of flow, the
+              status comes and goes without the page moving at all. It lands in
+              the space the centering leaves below the column; only on a frame
+              short enough to scroll does it reach the 2.5rem bottom padding,
+              which it overhangs by 2px. */}
         <AnimatePresence>
           {boot !== null && boot.phase !== 'done' && (
-            <motion.span
+            <motion.div
               key="boot"
-              className="ml-auto min-w-0"
+              className="absolute top-full right-0 mt-2 flex w-full justify-end"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <BootLine boot={boot} />
-            </motion.span>
+              <BootStack boot={boot} />
+            </motion.div>
           )}
         </AnimatePresence>
       </footer>

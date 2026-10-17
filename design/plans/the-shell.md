@@ -3,10 +3,11 @@
 A review of the app shell — `apps/game/src/App.tsx`, the two route tables, the
 ten type steps in `index.css`, and how the five modes cohere as one interface.
 Every finding below is open. Several are policy decisions rather than defects —
-what the compact layout is for, whether the boot cover persuades, and how much
-of the author's instruments a visitor should meet — and those are gathered in
-[Open questions](#open-questions) rather than given a phase, because they are
-not decisions a measurement makes on its own.
+what the compact layout is for, what the boot cover shows, and how much of the
+author's instruments a visitor should meet — and those are gathered in
+[Decisions](#decisions-and-the-question-still-open) rather than given a phase,
+because they are not decisions a measurement makes on its own. All but one are
+decided.
 
 > **The standing test is answered.**
 > [`DESIGN.md`](../../DESIGN.md) sets it — "would this still be readable with
@@ -288,34 +289,35 @@ product's one unfakeable claim is behind the cover by design, so the cover
 carries the persuasion, and a status line in a corner of a black frame reads as
 a page that failed rather than a galaxy loading. What follows it is the best
 moment in the product — an 0.8 s cross-fade onto a real crescent Earth turning
-behind the wordmark, with a lens streak crossing under the type. Whether the
-cover should be black at all is [an open question](#open-questions).
+behind the wordmark, with a lens streak crossing under the type. The cover is
+the scene's own black, stars first
+([decided](#decisions-and-the-question-still-open)).
 
 ---
 
 ## Smaller findings
 
-| Site                                 | What                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dock/IrMenu.tsx:96–110`             | In `/cinema` both pane toggles report `aria-pressed="true"` and render highlighted with **zero pane elements in the document**; in `/docs` both report `false` and are also no-ops. The bar whose job is saying what is on screen misreports it in two of five modes. Gating on whether the mode's workspace has panes settles both                                                                                                          |
-| `components/ui/slider.tsx:56`        | `bg-white rounded-full` with `hover:ring-4 focus-visible:ring-4` — four white circles in a system with two radii and no circles, plus a glow `DESIGN.md` rules out. The `tooltip.tsx` precedent says fix it in the file, not at the call sites                                                                                                                                                                                               |
-| `components/ui/tabs.tsx:65`          | `dark:text-muted-foreground`, which maps to `slate-500` at `index.css:143`. `planetarium/PresetsPage.tsx:42` renders `TabsTrigger` for the Included and Saved tabs, so the grade is on screen in the Presets panel                                                                                                                                                                                                                           |
-| `pages/OverlayPage.tsx`              | Every routed dialog draws Chrome's own focus ring, `outline: auto 1px rgb(153,200,255)` — brighter than `slate-200`, the system's brightest neutral. **Open to re-measurement**: the panel is `tabIndex={-1}` and its class string carries `outline-none` at `:75` and no `FOCUS_RING`, so whether the ring still draws, and what draws instead, is phase 0's question                                                                       |
-| `pages/ModeRoutes.tsx:265`           | `<Route path="*">` renders the front door at a wrong address with no correction, in a product whose thesis is that the URL is the public surface                                                                                                                                                                                                                                                                                             |
-| `pages/FooterLink.tsx:18`            | `min-h-6` — 24px tap targets, measured 105×24, 66×24 and 53×24 at 390×844, in a build that sets 44px as the thumb minimum                                                                                                                                                                                                                                                                                                                    |
-| `planetarium/CatalogPage.tsx`        | 138 rows at 324×28 inside the compact sheet: 151 of 161 targets there are under 44×44. The compact bar itself is 3 targets and 0 undersized. Virtualizing the rows is the same change as the sheet's target count                                                                                                                                                                                                                            |
-| `planetarium/NavigatorPanel.tsx:271` | The search placeholder names the field (`Name or address`); `hud/AddressForm.tsx:42` teaches the syntax and lives behind the instruments disclosure                                                                                                                                                                                                                                                                                          |
-| `hud/LensSection.tsx`                | The Lens header rounds to `19 mm` where the Focal length row four pixels below reads `18.8 mm` — one quantity, two roundings, in the register `PRODUCT.md` makes a commitment about. `hud/controls.ts:156` is the channel                                                                                                                                                                                                                    |
-| Orbit traces                         | `planetarium.orbits` is `initial: true` and `planetarium.orbitScope` is `context` (`state/preferences.ts:401–415`), so at `s:SOL` the first frame carries thirty-odd chords crossing the subject — the ellipses are edge-on at these distances, so it reads as wireframe debris. The loudest element in the product, on by default                                                                                                           |
-| `pages/KeysPage.tsx`                 | Two rows render invisible key caps — a backtick and a comma at 11px `slate-400` — and the sheet clips mid-row with no scroll affordance                                                                                                                                                                                                                                                                                                      |
-| `cinema/CinemaLibrary.tsx:47`        | `type-display` on a mode name, where the type table reserves that step for the product name on the front door and gives a mode `type-title`. The room around it is a title, a paragraph, one list row and a starship dead center                                                                                                                                                                                                             |
-| The front door's status labels       | "Solo — BUILT" sits under "NOT IN THIS BUILD", and `PLAYABLE` badges sit above prose reading "It is early", one click from `/about`'s "There is no gameplay yet." Three vocabularies for one fact                                                                                                                                                                                                                                            |
-| The homage                           | The ship is the Enterprise-D and the only cinema entry is a TNG title study, with no in-product statement that either is a placeholder — two of five surfaces presenting the homage as identity, which `PRODUCT.md` forbids building on. The ship's name reaches a visitor as `Debug One`, and `warming surface maps` reaches one too                                                                                                        |
-| Settings tab                         | A filled chip, where `DESIGN.md` specifies a `border-sky-400` underline for Instrument Blue 400                                                                                                                                                                                                                                                                                                                                              |
-| `type-micro` carrying prose          | Twelve sites set sentences in the 10px mono step, which the type table assigns to a chart axis, a unit or a timecode. Prose is `type-body`                                                                                                                                                                                                                                                                                                   |
-| Reduced motion                       | Honored properly — `MotionConfig reducedMotion="user"` in `Root.tsx` covers every `motion/react` site, and `index.css` kills the only `@keyframes`. Ungated transforms: `animate-in`/`animate-out` in `tooltip.tsx:85-86`, `hover:scale-125` in `NeighborhoodRail.tsx:83`, and the front door's raw-rAF camera orbit at 1.8°/s, which is the largest-field motion in the product. The boot cover's spinner is not among them; phase 0 counts |
-| `body`                               | Computes `transition: width` on every route. Nothing in `index.css` sets it, so the source is whatever injects it, and that is the first thing to find                                                                                                                                                                                                                                                                                       |
-| `/docs` diagrams                     | Mermaid node and edge labels sit at the low end of the ramp and are close to illegible. 83 `mermaid` fences across 32 source files under `docs/`                                                                                                                                                                                                                                                                                             |
+| Site                                 | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dock/IrMenu.tsx:96–110`             | In `/cinema` both pane toggles report `aria-pressed="true"` and render highlighted with **zero pane elements in the document**; in `/docs` both report `false` and are also no-ops. The bar whose job is saying what is on screen misreports it in two of five modes. Gating on whether the mode's workspace has panes settles both                                                                                                                                 |
+| `components/ui/slider.tsx:56`        | `bg-white rounded-full` with `hover:ring-4 focus-visible:ring-4` — four white circles in a system with two radii and no circles, plus a glow `DESIGN.md` rules out. The `tooltip.tsx` precedent says fix it in the file, not at the call sites                                                                                                                                                                                                                      |
+| `components/ui/tabs.tsx:65`          | `dark:text-muted-foreground`, which maps to `slate-500` at `index.css:143`. `planetarium/PresetsPage.tsx:42` renders `TabsTrigger` for the Included and Saved tabs, so the grade is on screen in the Presets panel                                                                                                                                                                                                                                                  |
+| `pages/OverlayPage.tsx`              | Every routed dialog draws Chrome's own focus ring, `outline: auto 1px rgb(153,200,255)` — brighter than `slate-200`, the system's brightest neutral. **Open to re-measurement**: the panel is `tabIndex={-1}` and its class string carries `outline-none` at `:75` and no `FOCUS_RING`, so whether the ring still draws, and what draws instead, is phase 0's question                                                                                              |
+| `pages/ModeRoutes.tsx:265`           | `<Route path="*">` renders the front door at a wrong address with no correction, in a product whose thesis is that the URL is the public surface                                                                                                                                                                                                                                                                                                                    |
+| `pages/FooterLink.tsx:18`            | `min-h-6` — 24px tap targets, measured 105×24, 66×24 and 53×24 at 390×844, in a build that sets 44px as the thumb minimum                                                                                                                                                                                                                                                                                                                                           |
+| `planetarium/CatalogPage.tsx`        | 138 rows at 324×28 inside the compact sheet: 151 of 161 targets there are under 44×44. The compact bar itself is 3 targets and 0 undersized. Virtualizing the rows is the same change as the sheet's target count                                                                                                                                                                                                                                                   |
+| `planetarium/NavigatorPanel.tsx:271` | The search placeholder names the field (`Name or address`); `hud/AddressForm.tsx:42` teaches the syntax and lives behind the instruments disclosure                                                                                                                                                                                                                                                                                                                 |
+| `hud/LensSection.tsx`                | The Lens header rounds to `19 mm` where the Focal length row four pixels below reads `18.8 mm` — one quantity, two roundings, in the register `PRODUCT.md` makes a commitment about. `hud/controls.ts:156` is the channel                                                                                                                                                                                                                                           |
+| Orbit traces                         | `planetarium.orbits` is `initial: true` and `planetarium.orbitScope` is `context` (`state/preferences.ts:401–415`), so at `s:SOL` the first frame carries thirty-odd chords crossing the subject — the ellipses are edge-on at these distances, so it reads as wireframe debris. The loudest element in the product, on by default                                                                                                                                  |
+| `pages/KeysPage.tsx`                 | Two rows render invisible key caps — a backtick and a comma at 11px `slate-400` — and the sheet clips mid-row with no scroll affordance                                                                                                                                                                                                                                                                                                                             |
+| `cinema/CinemaLibrary.tsx:47`        | `type-display` on a mode name, where the type table reserves that step for the product name on the front door and gives a mode `type-title`. The backdrop is the Enterprise-D dead center; it becomes a planet ([decision 3](#decisions-and-the-question-still-open))                                                                                                                                                                                               |
+| The front door's status labels       | "Solo — BUILT" sits under "NOT IN THIS BUILD", and `PLAYABLE` badges sit above prose reading "It is early", one click from `/about`'s "There is no gameplay yet." Three vocabularies for one fact                                                                                                                                                                                                                                                                   |
+| The homage                           | The ship is the Enterprise-D and the TNG title study has no in-product statement that it is a study — two of five surfaces presenting the homage as identity, which `PRODUCT.md` forbids building on. The ship's name reaches a visitor as `Debug One`, and `warming surface maps` reaches one too. [Decision 4](#decisions-and-the-question-still-open) closes it: the Rocinante by default, the study labeled, no borrowed name on any surface but a cinema title |
+| Settings tab                         | A filled chip, where `DESIGN.md` specifies a `border-sky-400` underline for Instrument Blue 400                                                                                                                                                                                                                                                                                                                                                                     |
+| `type-micro` carrying prose          | Twelve sites set sentences in the 10px mono step, which the type table assigns to a chart axis, a unit or a timecode. Prose is `type-body`                                                                                                                                                                                                                                                                                                                          |
+| Reduced motion                       | Honored properly — `MotionConfig reducedMotion="user"` in `Root.tsx` covers every `motion/react` site, and `index.css` kills the only `@keyframes`. Ungated transforms: `animate-in`/`animate-out` in `tooltip.tsx:85-86`, `hover:scale-125` in `NeighborhoodRail.tsx:83`, and the front door's raw-rAF camera orbit at 1.8°/s, which is the largest-field motion in the product. The boot cover's spinner is not among them; phase 0 counts                        |
+| `body`                               | Computes `transition: width` on every route. Nothing in `index.css` sets it, so the source is whatever injects it, and that is the first thing to find                                                                                                                                                                                                                                                                                                              |
+| `/docs` diagrams                     | Mermaid node and edge labels sit at the low end of the ramp and are close to illegible. 83 `mermaid` fences across 32 source files under `docs/`                                                                                                                                                                                                                                                                                                                    |
 
 ---
 
@@ -332,7 +334,7 @@ different number in it.
 | 2     | A skip link as the first stop in `.hud-layer`, or `IrMenu` earlier in DOM order with CSS `order` holding its place                                                                                      | The phase 0 census re-run: the way home is reachable within three stops of a cold focus on every route, and within three of activating any control by keyboard; the total stop count moves by at most the link; no stop is lost and no trap appears                                                                                                                                                                |
 | 3     | The named standards: an accessible name on every control in a panel body, docs navigation icons off `slate-600`, targets at 24×24, the `ToggleGroup` root's invisible stop, the dialog's own focus ring | The name audit returns zero unnamed controls on `/planetarium` and `/settings/display`; a modal-pixel sample puts every navigation icon at or above 3:1 on both grounds; the target sweep returns zero focusable targets under 24×24, or each exception names the SC 2.5.8 clause in its file; `:focus-visible` returns true on the group root or the root is not a stop; `OverlayPage`'s panel draws `FOCUS_RING` |
 | 4     | The IR menu reads as runs: a `type-label` name per run, a pressed state separable at 28px, `PanelLeft`/`PanelRight` distinguishable at 16px, the pane pair gated on whether the mode has panes          | A modal-pixel sample separates pressed from resting by at least the 3:1 the non-text floor asks of a control boundary; `/cinema` and `/docs` report no pane toggles; the twelve glyphs carry three names and the menu is still one press deep to every panel                                                                                                                                                       |
-| 5     | The first viewport: whatever phase 0 leaves open on the cover, judged against the argument rather than the pixel count                                                                                  | The empty fraction and the drawn completion ratio re-measured at 1600×900 and at 390×844; the cover's own plate taken at both, at the slow boot and the fast one                                                                                                                                                                                                                                                   |
+| 5     | The first viewport: the cover is the scene's black, the starfield first and the planet arriving into it, with the live `12/12` self-test on the ledger                                                  | The starfield presents before the surface maps finish warming; the self-test reaches 12/12 or names its failure without moving first light; the cover's plate taken at 1600×900 and 390×844, at the slow boot and the fast one                                                                                                                                                                                     |
 | 6     | The sweep: the smaller findings, each in the file that owns it                                                                                                                                          | Every row of § Smaller findings is closed, or carried with the reason it stays; the in-page detector's `type-micro` signal returns zero; `body` computes no `transition: width` on any route                                                                                                                                                                                                                       |
 
 ---
@@ -344,14 +346,13 @@ different number in it.
    carries the thing the finding says is missing, and a gate written as "the
    same measurement with this number instead" is worth nothing while the first
    measurement describes a different tree.
-2. **Phase 1, and it is the go/no-go.** Every other phase is a change to a
-   control. This one changes how each piece of chrome resolves its position,
-   against a commitment in `PRODUCT.md` — three text sizes scaling all UI
-   including the HUD — that page zoom is the one case with no answer for. If
-   chrome cannot be anchored to the visual viewport without breaking the
-   internal clipping the panels already do, then the commitment is what needs
-   restating, and that decision belongs before the rest of the work rather than
-   after it.
+2. **Phase 1, and it is a go.** Every other phase is a change to a control.
+   This one changes how each piece of chrome resolves its position, against a
+   commitment in `PRODUCT.md` — three text sizes scaling all UI including the
+   HUD — that page zoom is the one case with no answer for. The commitment
+   stands and chrome anchors to the visual viewport; restating `PRODUCT.md` is
+   not the answer. If anchoring breaks the internal clipping the panels already
+   do, that is a defect in phase 1, not a reason to narrow the promise.
 3. **Phase 2 next, because it is cheap and certain**, and because it is what
    makes phase 3's gate readable: a name audit run from a cold focus is a
    different exercise when the way home is 133 stops away.
@@ -367,36 +368,40 @@ different number in it.
 
 ---
 
-## Open questions
+## Decisions, and the question still open
 
-Policy, not defects. Each is a decision about what the product is for, and no
-measurement in this document settles one.
+Policy, not defects: each is a decision about what the product is for, and no
+measurement in this document settles one. Five are decided.
 
-1. **The compact layout is the better interface. Why is 900px the line rather
-   than the direction?** `dock/CompactDock.tsx` is 3 tab stops and 0 undersized
-   targets because a finger cannot hover to ask what a glyph means — and neither
-   can a first-time visitor on a laptop. What the desktop actually loses by
-   being that layout plus two panes is unstated.
-2. **What measures the cockpit HUD before it is built?** The Edge Rule is doing
-   more of the contrast result than the translucency is: the panels survive a
-   star mostly because the subject is never behind them, and the one center-frame
-   element measured 1.05:1 before its hairline. A HUD projected on the canopy is
-   over the subject by construction, so none of the figures above transfer to it.
-3. **Twelve capabilities are proven executably and zero are on the front door.**
-   The console harness is a real second interface — every state is a URL, every
-   control has a harness verb. What a live `12/12`, self-testing in the visitor's
-   own browser during the boot they are already waiting through, is worth in
-   that first minute is a product question.
-4. **Is `/cinema` a mode?** It holds one item. `/cinema/tng-intro` as the only
-   route — the player, no library — is the more honest shape until there is a
-   second scene.
-5. **What is the cheapest thing that stops the homage functioning as identity?**
-   A generated hull for `/play/solo`, or a one-line "placeholder, ADR-0010" on
-   the cinema card. Two of five surfaces is the measurement; which fix is the
-   decision.
-6. **Does the boot cover want to be black at all?** If first light is the pitch,
-   the cover could be the black of the scene — starfield first, planet second —
-   so the load is the shot.
+1. **The compact layout stays a breakpoint.** Desktop keeps a workspace one
+   press deep to every panel, and phase 4 is the answer to the twelve glyphs:
+   names on the runs, a pressed state that separates, pane glyphs that are not
+   mirror images.
+2. **A live `12/12` runs during boot.** The capability self-test runs in the
+   visitor's own browser while the cover is up and the ledger shows it reaching
+   twelve. It is phase 5's, and it never delays first light: a check still
+   running when the scene is ready finishes behind it.
+3. **`/cinema` stays a mode with its library**, which holds more than one scene.
+   Its backdrop is a planet rather than the Enterprise-D, and its heading takes
+   `type-title`.
+4. **No third-party reference reaches a surface of the product, except as the
+   title of a scene in the cinema library.** The Rocinante is `/play/solo`'s
+   default hull; the Enterprise-D remains a choice in Display settings without
+   being named as one; the TNG piece is labeled a study on its card; `Debug
+One` and every other borrowed name leave the chrome. That is wider than the
+   homage row in § Smaller findings, so phase 6 sweeps every surface for it
+   rather than the two the row names.
+5. **The boot cover is the black of the scene.** The starfield draws first and
+   the planet arrives into it, so the load is the shot. It needs a path that
+   presents stars before the surface maps warm, and it is phase 5's subject.
+
+Still open:
+
+- **What measures the cockpit HUD before it is built?** The Edge Rule is doing
+  more of the contrast result than the translucency is: the panels survive a
+  star mostly because the subject is never behind them, and the one center-frame
+  element measured 1.05:1 before its hairline. A HUD projected on the canopy is
+  over the subject by construction, so none of the figures above transfer to it.
 
 ---
 

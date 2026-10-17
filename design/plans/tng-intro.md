@@ -100,7 +100,13 @@ fitted to them wants to pass 33 m from the hull's center — so the hull's nose
 still sits a mean 89° off its own path there, on the one stretch the reference
 cannot arbitrate.
 
-### The next piece, if there is one
+### The next piece
+
+**Decided: the full pass is taken, the credit rail included.** In order: the
+re-capture in § 3; then the three things the eyes found, if the re-capture
+leaves them standing — the hull's shading, hull-scale blur on the wipes, and
+the Earth standoff moved together with the eclipse's camera; then the credit
+rail below, prototyped against a capture.
 
 The credit sequence wants to be **one straight rail with a camera that tilts**:
 the ship descends toward the lens, passes overhead, and the camera pitches up to

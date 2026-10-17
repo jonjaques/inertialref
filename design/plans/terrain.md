@@ -74,8 +74,10 @@ plus the drive rig. One question for it is already on the table: because a
 mapless sphere wears its relief,
 Enceladus's tiger stripes read from orbit as four hairlines from pole to
 pole, because `StripeAxis` is a whole great circle. The published fractures are
-a south-polar family about 130 km long, so the stripe wants an extent, or the
-sphere's exaggeration wants to leave a trough of a few hundred meters alone.
+a south-polar family about 130 km long. **Decided: `StripeAxis` takes an
+extent** — a south-polar window about 130 km long — rather than the sphere
+leaving shallow troughs unexaggerated. It moves the canonical field, so it
+lands in the batched terrain version ([erosion § 6](erosion.md#6-phases)).
 
 **The cover has two spare bytes, and two open defects share the channel that
 would fill them.** The record is eight bytes now — six channels, four to an
@@ -154,9 +156,10 @@ imports `apps/headless/src/heightfieldStore.ts` by relative path, so
 `node:fs` and `node:crypto` through a dependency `apps/game/package.json` does
 not declare. `scripts/check-graph.mjs` walks `packages/*` only, which is why
 nothing catches it; moving or renaming that file breaks a suite in another app
-with no manifest edge to warn anyone. The store belongs under `packages/*`, or
-the dependency belongs in the manifest and the graph check belongs over
-`apps/*` as well.
+with no manifest edge to warn anyone. **Decided: the store moves under
+`packages/*`**, as a Node-only export the browser bundle never reaches, and the layer check
+then covers the edge the relative import hides. `packages/workers`, beside
+`HeightfieldArchive`, is the natural home.
 
 ---
 
