@@ -14,6 +14,9 @@ import { decompress } from 'wawoff2'
  * routes it there, and the file's own cmap carries it. Never the foundry's
  * spec sheet, and never the declared range alone — the Plex subsets declare
  * U+2200-22FF and do not hold `⊕`.
+ *
+ * The converse is checked too: a glyph a file holds and no range routes to it
+ * is bytes every visitor downloads and no browser can select.
  */
 
 const CSS = new URL('../../apps/game/src/index.css', import.meta.url)
@@ -48,11 +51,17 @@ async function parseDeclaredRanges() {
 /** Read once and shared: every case below asks the same stylesheet. */
 const declaredRanges = parseDeclaredRanges()
 
+/**
+ * The codepoints a file maps, less U+FFFF: a format-4 cmap must end in a
+ * 0xFFFF segment, and fontkit reports that terminator as a character.
+ */
 async function characterSet(file) {
   const sfnt = Buffer.from(
     await decompress(await readFile(fileURLToPath(new URL(file, FONTS)))),
   )
-  return new Set(fontkit.create(sfnt).characterSet)
+  const cmap = new Set(fontkit.create(sfnt).characterSet)
+  cmap.delete(0xffff)
+  return cmap
 }
 
 const hex = (cp) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`
@@ -77,6 +86,17 @@ describe('the vendored symbol subsets', () => {
           `${file} has no glyph for ${glyph} ${hex(cp)}`,
         ).toBe(true)
       }
+    })
+
+    it(`${file} holds nothing its unicode-range does not route to it`, async () => {
+      const range = (await declaredRanges).get(file)
+      const unrouted = [...(await characterSet(file))].filter(
+        (cp) => !range.some(([lo, hi]) => lo <= cp && cp <= hi),
+      )
+      expect(
+        unrouted.map(hex),
+        `${file} carries glyphs no browser can select`,
+      ).toEqual([])
     })
   }
 })

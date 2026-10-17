@@ -74,9 +74,9 @@
  * their web builds. These two files are cut from IBM's released TTFs
  * (github.com/IBM/plex, SIL OFL 1.1) with pyftsubset, down to the arrow,
  * operator, technical and superscript blocks — 4 KB for the mono, 12 KB for
- * the sans with its Greek; the mono's cut takes the Greek block too and finds
- * only `π` in it. Declared under the *same family name* with a
- * `unicode-range`, they merge into the faces above: a readout that prints
+ * the sans with its Greek; Plex Mono draws one Greek letter, `π`, and the
+ * mono's cut and range carry that one. Declared under the *same family name*
+ * with a `unicode-range`, they merge into the faces above: a readout that prints
  * `Δv ≈ 2.1` never changes voice mid-figure.
  */
 @font-face {
@@ -86,7 +86,7 @@
   font-weight: 400;
   src: url('./assets/fonts/ibm-plex-mono-symbols.woff2') format('woff2');
   unicode-range:
-    U+0370-03FF, U+2032-2033, U+2070-209F, U+2190-21FF, U+2200-22FF, U+2300-23FF;
+    U+03C0, U+2032-2033, U+2070-209F, U+2190-21FF, U+2200-22FF, U+2300-23FF;
 }
 
 @font-face {

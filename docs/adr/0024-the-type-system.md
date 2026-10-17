@@ -57,8 +57,9 @@ coverage ships with the faces instead of being left to the platform.**
   that already follows the text face in every stack.
 - **The mono's Greek comes from Noto, because Plex Mono draws only `π`.** IBM's
   release (`@ibm/plex-mono@2.5.0`, font version 2.005) maps that one codepoint in
-  U+0370–03FF and no other. The mono subset's cut takes the block anyway and gains
-  `π`; the Noto subset declares the whole block, so `μ` in a mono context
+  U+0370–03FF and no other. The mono subset's cut and its `unicode-range` carry
+  U+03C0 alone, so no other Greek letter fetches a file that does not hold it;
+  the Noto subset declares the whole block, so `μ` in a mono context
   renders in one declared face on every platform — proportional Noto rather
   than Plex, which is the cost of a family that does not draw it. In the sans,
   the Plex subset's 73 Greek codepoints answer first.
@@ -121,19 +122,20 @@ without a global install:
 
 ```sh
 pyftsubset IBMPlexMono-Regular.ttf --flavor=woff2 --layout-features='*' \
-  --unicodes=U+0370-03FF,U+2032-2033,U+2044,U+2070-209F,U+2113,U+2126,U+2190-21FF,U+2200-22FF,U+2300-23FF \
+  --unicodes=U+03C0,U+2032-2033,U+2070-209F,U+2190-21FF,U+2200-22FF,U+2300-23FF \
   --output-file=ibm-plex-mono-symbols.woff2
 pyftsubset IBMPlexSans-Regular.ttf --flavor=woff2 --layout-features='*' \
-  --unicodes=U+0370-03FF,U+2032-2033,U+2044,U+2070-209F,U+2113,U+2126,U+2190-21FF,U+2200-22FF,U+2300-23FF \
+  --unicodes=U+0370-03FF,U+2032-2033,U+2070-209F,U+2190-21FF,U+2200-22FF,U+2300-23FF \
   --output-file=ibm-plex-sans-symbols.woff2
 pyftsubset noto-sans-math-latin-400-normal.woff2 --flavor=woff2 --layout-features='*' \
   --unicodes=U+0370-03FF,U+2295,U+2609 \
   --output-file=noto-sans-math-symbols.woff2
 ```
 
-The sans command reproduces the vendored file byte for byte, and so does the
-mono command with its Greek range left out; that is how `⁄` U+2044, `ℓ` U+2113
-and `Ω` U+2126 are known to belong in both.
+Each Plex cut is its file's `unicode-range` and nothing more: a glyph in the
+file that no range routes to is never drawn. `⁄` U+2044 is in Fontsource's
+`latin` range and served by its Plex file, and nothing in the interface prints
+`ℓ` U+2113 or the ohm sign U+2126 — the ascending node's `Ω` is Greek U+03A9.
 
 **The symbol faces are weight-400.** An operator inside 600 text renders at
 the browser's synthetic bold, which is acceptable at readout sizes and would
