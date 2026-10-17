@@ -43,13 +43,14 @@
  * is `unicode-range`-gated to its blocks, so it downloads the first time such a
  * glyph is actually drawn and never otherwise.
  *
- * Two glyphs are still uncovered, and nothing here shows it: `☉` U+2609 and
- * `⊕` U+2295, which `dossier.ts` prints in `M☉` and `R⊕`. Noto Sans Symbols'
- * U+2600 block begins at U+260A — one codepoint above the sun — and carries no
- * U+2295; Noto Sans Math holds both, but Fontsource declares only its `latin`
- * range and a browser never selects a face for a codepoint outside the range,
- * however many glyphs the file has. The mono's Greek is absent the same way.
- * `design/plans/type-coverage.md` has the cut that closes both.
+ * A declared range over a glyph the file does not hold is silent, not a tofu,
+ * so coverage is a fact about each *file*, never about a family. `☉` U+2609
+ * and `⊕` U+2295, which `dossier.ts` prints in `M☉` and `R⊕`, are in neither
+ * Fontsource Noto build: Noto Sans Symbols' U+2600 block begins at U+260A and
+ * carries no U+2295, and Noto Sans Math holds both under a `latin` range that
+ * contains neither. A third vendored subset, cut from that same Noto Sans Math
+ * file, declares them — and Greek, which Plex Mono does not draw beyond `π`.
+ * `scripts/brand/coverage.test.mjs` reads each vendored file's own cmap.
  *
  * The Cyrillic subsets ride along in the same files and cost nothing: they are
  * `unicode-range`-gated, so a Latin interface never fetches them and the worker
@@ -73,8 +74,9 @@
  * their web builds. These two files are cut from IBM's released TTFs
  * (github.com/IBM/plex, SIL OFL 1.1) with pyftsubset, down to the arrow,
  * operator, technical and superscript blocks — 4 KB for the mono, 12 KB for
- * the sans with its Greek. Declared under the *same family name* with a
- * `unicode-range`, they merge into the faces above: a readout that prints
+ * the sans with its Greek; Plex Mono draws one Greek letter, `π`, and the
+ * mono's cut and range carry that one. Declared under the *same family name*
+ * with a `unicode-range`, they merge into the faces above: a readout that prints
  * `Δv ≈ 2.1` never changes voice mid-figure.
  */
 @font-face {
@@ -84,7 +86,7 @@
   font-weight: 400;
   src: url('./assets/fonts/ibm-plex-mono-symbols.woff2') format('woff2');
   unicode-range:
-    U+2032-2033, U+2070-209F, U+2190-21FF, U+2200-22FF, U+2300-23FF;
+    U+03C0, U+2032-2033, U+2070-209F, U+2190-21FF, U+2200-22FF, U+2300-23FF;
 }
 
 @font-face {
@@ -95,6 +97,25 @@
   src: url('./assets/fonts/ibm-plex-sans-symbols.woff2') format('woff2');
   unicode-range:
     U+0370-03FF, U+2032-2033, U+2070-209F, U+2190-21FF, U+2200-22FF, U+2300-23FF;
+}
+
+/*
+ * The sun, the Earth, and the mono's Greek.
+ *
+ * Declared under Fontsource's own family name, so it merges into the `Noto
+ * Sans Math` that already follows the text face in every stack. In the
+ * sans, Plex's Greek subset answers first; in the mono, Plex Mono draws `π`
+ * and nothing else in the block, and `μ` lands here — one declared face on
+ * every platform, proportional rather than Plex. 8 KB, fetched only when one
+ * of these is drawn.
+ */
+@font-face {
+  font-family: 'Noto Sans Math';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('./assets/fonts/noto-sans-math-symbols.woff2') format('woff2');
+  unicode-range: U+0370-03FF, U+2295, U+2609;
 }
 
 /*
