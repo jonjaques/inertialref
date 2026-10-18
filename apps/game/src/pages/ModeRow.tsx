@@ -28,7 +28,7 @@ export function ModeRow({ mode }: { mode: ModeCard }) {
     <div className="flex items-center gap-2.5">
       <Icon
         aria-hidden
-        className="size-3.5 shrink-0 text-slate-500"
+        className="size-3.5 shrink-0 text-slate-400"
         strokeWidth={1.5}
       />
       {/*
@@ -37,7 +37,10 @@ export function ModeRow({ mode }: { mode: ModeCard }) {
        * preference — 500 reaches 4.24:1 on an opaque `slate-950` and no ground
        * here is more opaque than that. The demotion is carried by size, by the
        * prose sans instead of the display face, and by the absence of a card;
-       * none of it is carried by contrast.
+       * none of it is carried by contrast. The glyph above sits on the same
+       * floor for the non-text reason: a 1.5px stroke at 14px is the thinnest
+       * mark on the page, and the 3:1 it owes is the figure a bright scene
+       * behind the glass takes from a `slate-500` first.
        */}
       <span className="type-ui text-slate-300">{mode.title}</span>
       <StatusBadge status={mode.status} />

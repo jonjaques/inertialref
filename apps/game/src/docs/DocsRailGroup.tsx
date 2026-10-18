@@ -50,7 +50,7 @@ export function DocsRailGroup({
       >
         <ChevronRight
           aria-hidden
-          className="doc-rail-chevron size-3 shrink-0 text-slate-600 transition-transform"
+          className="doc-rail-chevron size-3 shrink-0 text-slate-400 transition-transform"
         />
         {group.label}
       </summary>
