@@ -16,9 +16,17 @@ import type { MouseEvent } from 'react'
  * changes that, so this exists, and it is a 1px outline in the accent rather
  * than a ring with an offset because a hairline in Instrument Blue is how the
  * rest of the system draws structure. No glow, no offset, nothing that moves.
+ *
+ * The style is named outright with `outline-solid`, not left to `outline`.
+ * Tailwind's `outline` and `outline-1` both write `outline-style:
+ * var(--tw-outline-style)`, and `focus:outline-none` sets that variable to
+ * `none` on every focused element — a keyboard-focused one included — so the
+ * pair resolved to a 1px sky-400 outline of style `none`, and no stop drew
+ * anything. `outline-solid` sets the variable and the property together, and
+ * the `focus-visible` variant sorts after `focus`, so it wins.
  */
 export const FOCUS_RING =
-  'focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-400'
+  'focus:outline-none focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-sky-400'
 
 /**
  * `FOCUS_RING`, on an element a library styles inline.
