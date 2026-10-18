@@ -1,0 +1,105 @@
+# One question, asked of two hosted runners: does Dawn get a physical GPU here?
+#
+# `pnpm test:gpu` needs a physical adapter, and a software one is refused by
+# `gpuHarness.gpu.test.ts` because a graph that compiles on SwiftShader and not
+# on a real driver is the failure the suite exists to catch. GitHub's standard
+# Linux runners have no GPU, so Dawn takes SwiftShader there
+# (docs/roadmap.md § Automation gaps). This workflow is the decided experiment
+# in design/plans/test-speed.md § 4, widened to the two candidates that would
+# put the suite in CI:
+#
+#   - `ubicloud-gpu` — Ubicloud's GPU runner, an NVIDIA RTX 4000 Ada on Ubuntu,
+#     billed per minute. Dawn's Vulkan backend on a real NVIDIA driver is a
+#     physical adapter by the harness's own test. It does not see Metal, so a
+#     failure that only Metal's shader translation produces stays a local one.
+#   - `macos-15` — GitHub's standard Apple-silicon runner, free on a public
+#     repository. A virtual machine with a paravirtual Apple GPU, which Chromium
+#     reaches through Metal; whether Dawn's Metal backend accepts it, and with
+#     what limits, is what the run reports. actions/runner-images#14840 records
+#     WebGL2 stalling in Metal resource creation on the same image, so a hang
+#     here is a finding, not a flake to retry.
+#
+# Each job reports the adapter first (`scripts/gpuAdapter.mjs`, also written to
+# the job summary) and runs the suite even when the report fails, so a software
+# adapter and a physical one that refuses a pipeline read differently.
+#
+# It runs on a push to its own branch and by hand, never on a pull request: the
+# Ubicloud job bills, and a probe is not a gate. Once one runner passes, the
+# suite joins `check.yml` as a job on that runner and this file goes.
+
+name: gpu-probe
+
+on:
+  push:
+    branches: [ci/gpu-probe]
+  workflow_dispatch:
+
+concurrency:
+  group: gpu-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: ubicloud-gpu (Vulkan)
+    runs-on: ubicloud-gpu
+    timeout-minutes: 20
+
+    steps:
+      # No LFS: no `*.gpu.test.ts` reads a model or a plate.
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The image carries NVIDIA's driver for CUDA; Vulkan needs the loader and
+      # the driver's ICD as well, and a driver installed for compute alone can
+      # ship without the second. Both are printed rather than assumed, so a
+      # missing ICD reads as that and not as "Dawn found no adapter".
+      - name: Driver and Vulkan
+        run: |
+          nvidia-smi || echo "nvidia-smi: not found"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libvulkan1 vulkan-tools
+          ls -l /usr/share/vulkan/icd.d /etc/vulkan/icd.d 2>/dev/null || echo "no Vulkan ICD directory"
+          vulkaninfo --summary || echo "vulkaninfo: failed"
+
+      # DISPLAY unset: with one set, NVIDIA's Vulkan driver enumerates through
+      # the X server, and a runner has none to connect to.
+      - name: Adapter
+        run: env -u DISPLAY node scripts/gpuAdapter.mjs
+
+      - name: GPU suite
+        if: success() || failure()
+        run: env -u DISPLAY pnpm test:gpu
+
+  macos:
+    name: macos-15 (Metal, paravirtual)
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Display hardware
+        run: system_profiler SPDisplaysDataType
+
+      - name: Adapter
+        run: node scripts/gpuAdapter.mjs
+
+      - name: GPU suite
+        if: success() || failure()
+        run: pnpm test:gpu
