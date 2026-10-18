@@ -219,8 +219,6 @@ request of its own; each belongs to the next change that opens its file.
 - **A baseline from before `ir.status().boot` costs twelve seconds a plate.**
   The driver reads such a build as `drawing` and the cover wait gives up after
   twelve seconds, which is correct and slow; it ages out as baselines move past 9.
-- **The director still calls `host.render.declareCut()`.** 9's shape did not
-  move it.
 
 **The guide.**
 
@@ -317,6 +315,16 @@ own.
   `TerrainPatches` reading the body.
 - **`engine.pool()` stays.** `scene/Bodies.tsx` and `render/preload.ts` read
   the pool through it; when both read the session it goes, as `player()` did.
+- **The director still calls `host.render.declareCut()`.** That port is how
+  every harness module says it moved the camera discontinuously — the
+  observatory, `OnFoot`, `Maneuvers` and the harness's own `load` and `view`
+  call it, fifteen sites in all — and the director's four are the same
+  statement: a scene starts, ends, seeks, or crosses a shot boundary. The last
+  is the one that keeps it there. Only the prepared script knows where one
+  shot gives way to the next, and it learns it inside `sample`, so moving the
+  call out means a `cut` flag on every sample that the engine turns back into
+  the same `declareCut()`: a second path for one fact, for the one caller of
+  five that would take it.
 - **The cinema playhead keeps its `mine` guard.** With the director on
   `ir.cutscene` a console `ir.play` can still replace a scene the session
   opened, and the guard is what keeps the session from claiming that ending.
