@@ -48,8 +48,15 @@ export function DocsRailGroup({
       <summary
         className={`type-label flex cursor-pointer list-none items-center gap-1 rounded py-0.5 text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
       >
+        {/*
+         * 2.5 rather than Lucide's 2: at `size-3` the default stroke is one
+         * CSS pixel, and a closed group's unrotated chevron at DPR 1 falls
+         * across two device pixels at half ink — 2.66:1 against the rail, under
+         * the 3:1 a non-text mark owes. 1.25px reaches 4.71:1 at the same spot.
+         */}
         <ChevronRight
           aria-hidden
+          strokeWidth={2.5}
           className="doc-rail-chevron size-3 shrink-0 text-slate-400 transition-transform"
         />
         {group.label}
