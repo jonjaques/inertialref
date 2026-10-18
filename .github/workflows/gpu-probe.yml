@@ -48,6 +48,7 @@ jobs:
           node-version-file: '.node-version'
           cache: pnpm
       - name: Install
+        id: install
         run: pnpm install --frozen-lockfile
 
       # The images carry NVIDIA's driver for CUDA; Vulkan needs the loader and
@@ -67,6 +68,9 @@ jobs:
       - name: Adapter
         run: env -u DISPLAY node scripts/gpuAdapter.mjs
 
+      # After a failed adapter step as well, since what the suite says about a
+      # refused device is the other half of the answer — but not after a
+      # failed install, where it could only fail to resolve its imports.
       - name: GPU suite
-        if: success() || failure()
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: env -u DISPLAY pnpm test:gpu

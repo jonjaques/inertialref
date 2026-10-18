@@ -60,15 +60,19 @@ describe('the device', () => {
      * GPU of a hosted macOS runner reports `apple` / `` /
      * `apple-paravirtual-device`, a real Metal device with no family name.
      * The architecture is still read, so a renamed field fails the type check
-     * and the software pattern still sees it.
+     * and the software pattern still sees it. With the architecture allowed
+     * blank, the names alone would pass a CPU adapter the pattern has not met,
+     * so Dawn's own fallback flag is asserted as well; `scripts/gpuAdapter.mjs`
+     * refuses on the same flag and the same names, description included.
      */
     expect(info.vendor).toMatch(/\S/)
     expect(info.device).toMatch(/\S/)
     expect(typeof info.architecture).toBe('string')
+    expect(info.isFallbackAdapter).toBe(false)
     const software = /mesa|llvmpipe|swiftshader|warp|microsoft basic/i
-    expect(`${info.vendor} ${info.architecture} ${info.device}`).not.toMatch(
-      software,
-    )
+    expect(
+      `${info.vendor} ${info.architecture} ${info.device} ${info.description}`,
+    ).not.toMatch(software)
   })
 
   it('refuses to draw anywhere but a render target', () => {
