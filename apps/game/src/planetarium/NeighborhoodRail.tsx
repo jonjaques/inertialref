@@ -72,15 +72,22 @@ export function NeighborhoodRail({
                 onFocus(star.address)
               }}
               /*
-               * 20 px of hit area around a 6 px dot, and the two are different
+               * 24 px of hit area around a 6 px dot, and the two are different
                * boxes on purpose — the same split `LensSlider` makes for the
                * thumb and its track. Dots overlap where two stars are at
                * similar distances, so the *drawn* mark has to stay small while
                * the target stays reachable; the last one painted wins the
                * click, which is the near one, which is the one a pointer aimed
                * between two of them most likely meant.
+               *
+               * 24×24 is WCAG 2.2 SC 2.5.8's minimum, and the box overhangs the
+               * 20 px band by 2 px into the gap either side rather than growing
+               * the rail. Where two stars fall within a pip of each other the
+               * boxes overlap, and the clause's **essential** exception covers
+               * it: a pip's position is the distance it reports, so spacing the
+               * targets apart would change the information.
                */
-              className={`absolute top-1/2 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-transform hover:scale-125 active:scale-[0.96] ${FOCUS_RING}`}
+              className={`absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-transform hover:scale-125 active:scale-[0.96] ${FOCUS_RING}`}
               style={{ left: `${star.at * 100}%` }}
             >
               <span

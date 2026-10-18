@@ -17,6 +17,18 @@ const ToggleGroupContext = React.createContext<
   spacing: 0,
 })
 
+/*
+ * The root is a tab stop, and it has to draw when it holds focus.
+ *
+ * Radix's roving focus makes the root `tabindex="0"` until an item has been
+ * focused: no item is a tab stop before then, so the root is what Tab lands on,
+ * and it forwards focus to the pressed item on a keyboard entry. If it is left
+ * holding focus — a programmatic `focus()`, an entry the forward does not
+ * answer — it is a stop that draws nothing, and Tab looks to have done nothing.
+ * So it carries `FOCUS_RING`'s hairline (`hud/focus.ts`), marked important
+ * because Radix writes `outline: none` inline on this element and an inline
+ * style beats any class.
+ */
 function ToggleGroup({
   className,
   variant,
@@ -36,7 +48,7 @@ function ToggleGroup({
       data-spacing={spacing}
       style={{ '--gap': spacing } as React.CSSProperties}
       className={cn(
-        'group/toggle-group flex w-fit items-center gap-[--spacing(var(--gap))] rounded-md data-[spacing=default]:data-[variant=outline]:shadow-xs',
+        'group/toggle-group flex w-fit items-center gap-[--spacing(var(--gap))] rounded-md focus-visible:outline-1! focus-visible:outline-sky-400! focus-visible:outline-solid! data-[spacing=default]:data-[variant=outline]:shadow-xs',
         className,
       )}
       {...props}
