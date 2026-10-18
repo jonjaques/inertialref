@@ -20,25 +20,14 @@ import type { MouseEvent } from 'react'
  * The style is named outright with `outline-solid`, not left to `outline`.
  * Tailwind's `outline` and `outline-1` both write `outline-style:
  * var(--tw-outline-style)`, and `focus:outline-none` sets that variable to
- * `none` on every focused element — a keyboard-focused one included — so the
- * pair resolved to a 1px sky-400 outline of style `none`, and no stop drew
- * anything. `outline-solid` sets the variable and the property together, and
+ * `none` on every focused element — a keyboard-focused one included — so
+ * without a named style the ring resolves to a 1px sky-400 outline of style
+ * `none`, and no stop draws anything. `outline-solid` sets the variable and
+ * the property together, and
  * the `focus-visible` variant sorts after `focus`, so it wins.
  */
 export const FOCUS_RING =
   'focus:outline-none focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-sky-400'
-
-/**
- * `FOCUS_RING`, on an element a library styles inline.
- *
- * An inline `outline: none` beats any class, so on such an element the
- * hairline draws only when it is marked important — Radix's roving-focus root
- * writes exactly that. Spelled out beside `FOCUS_RING` rather than derived from
- * it, because Tailwind finds classes by scanning source for literals and never
- * sees one built at runtime; change the two together.
- */
-export const FOCUS_RING_OVER_INLINE =
-  'focus-visible:outline-1! focus-visible:outline-sky-400! focus-visible:outline-solid!'
 
 /**
  * Hand focus back to the flight loop — but only when a pointer took it.
