@@ -9,11 +9,12 @@ import { cn } from '@/lib/utils'
  * The name and the value text belong on the thumb.
  *
  * `role="slider"` is the thumb, not the root, and Radix's `Root` spreads an
- * `aria-label`, an `aria-labelledby` or an `aria-valuetext` onto its own span — an element no reader
- * focuses, while the thumb it does focus announces "slider" and a raw scrub
- * index. So the name, the description and the value text go to the thumb. Only for a single thumb: a range has
- * two, Radix names those "Minimum" and "Maximum" itself, and the name stays on
- * the root as the group's.
+ * `aria-label`, an `aria-labelledby` or an `aria-valuetext` onto its own span
+ * — an element no reader focuses, while the thumb it does focus announces
+ * "slider" and a raw scrub index. So the name, the description and the value
+ * text go to the thumb. Only for a single thumb: a range has two, Radix names
+ * those "Minimum" and "Maximum" itself, and the name stays on the root as the
+ * group's.
  *
  * WCAG 2.2 SC 2.5.8: the thumb draws at 14×14 and measures there, under the
  * 24×24 minimum. It takes the clause's **spacing** exception — a 24px circle on

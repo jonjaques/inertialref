@@ -5,6 +5,7 @@ import { type VariantProps } from 'class-variance-authority'
 import { ToggleGroup as ToggleGroupPrimitive } from 'radix-ui'
 
 import { cn } from '@/lib/utils'
+import { FOCUS_RING_OVER_INLINE } from '@/hud/focus'
 import { toggleVariants } from '@/components/ui/toggle'
 
 const ToggleGroupContext = React.createContext<
@@ -25,9 +26,9 @@ const ToggleGroupContext = React.createContext<
  * and it forwards focus to the pressed item on a keyboard entry. If it is left
  * holding focus — a programmatic `focus()`, an entry the forward does not
  * answer — it is a stop that draws nothing, and Tab looks to have done nothing.
- * So it carries `FOCUS_RING`'s hairline (`hud/focus.ts`), marked important
- * because Radix writes `outline: none` inline on this element and an inline
- * style beats any class.
+ * So it carries `FOCUS_RING_OVER_INLINE` (`hud/focus.ts`), the hairline
+ * marked important, because Radix writes `outline: none` inline on this
+ * element and an inline style beats any class.
  */
 function ToggleGroup({
   className,
@@ -48,7 +49,7 @@ function ToggleGroup({
       data-spacing={spacing}
       style={{ '--gap': spacing } as React.CSSProperties}
       className={cn(
-        'group/toggle-group flex w-fit items-center gap-[--spacing(var(--gap))] rounded-md focus-visible:outline-1! focus-visible:outline-sky-400! focus-visible:outline-solid! data-[spacing=default]:data-[variant=outline]:shadow-xs',
+        `group/toggle-group flex w-fit items-center gap-[--spacing(var(--gap))] rounded-md ${FOCUS_RING_OVER_INLINE} data-[spacing=default]:data-[variant=outline]:shadow-xs`,
         className,
       )}
       {...props}

@@ -65,8 +65,10 @@ export function PageShell({ initialDocs }: { initialDocs?: InitialDocs }) {
                * order. Behind the mode in the DOM, the dialog's Close would
                * come after every control on that page: sixth from a cold focus
                * over the front door's five links, and after every open panel
-               * over the planetarium. Here it is the first stop after the skip
-               * link, and the mode's controls follow the dialog's. Both bands
+               * over the planetarium. Here it leads this layer, behind only
+               * the skip link and `App`'s layer, which comes first in the
+               * document — the walker's row in a mode that has one — and the
+               * mode's controls follow the dialog's. Both bands
                * carry an explicit z-index, so paint and hit testing do not read
                * this order: the dialog stays at 40 over a mode at 0 or 30.
                */}
