@@ -4,6 +4,7 @@
  *
  *     pnpm check                       the whole gate, in parallel
  *     pnpm check --only gate           what the Stop hook runs: graph, lint, typecheck, test
+ *     pnpm check --only test:changed   the root suite cut to what the branch's edits reach
  *     pnpm check --only typecheck      the six type projects — what `pnpm typecheck` is
  *     pnpm check --skip slow,bundle    everything but the named stages
  *     pnpm check --force               ignore the stamps and run everything
@@ -76,6 +77,29 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url))
  * contention this budget exists to prevent.
  */
 const VITEST_WORKERS = Math.max(1, Math.min(4, availableParallelism() - 1))
+
+/**
+ * What `test:changed` diffs against: the branch's fork point from `origin/main`.
+ *
+ * Vitest's `--changed` with no ref reads the index and the working tree alone,
+ * so a turn that commits its edit before it stops hands the gate an empty diff
+ * and a green suite that ran nothing. The fork point covers every commit on the
+ * branch as well as what is uncommitted. It is a resolved hash rather than the
+ * ref's name because the stage's command line is part of its stamp key: a tree
+ * that passed against one base has not passed against the next. With no
+ * `origin/main` to fork from, `HEAD` is the uncommitted change alone.
+ */
+function changedBase() {
+  try {
+    return execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return 'HEAD'
+  }
+}
 
 /**
  * The stages.
@@ -173,6 +197,24 @@ const STAGES = [
     timeout: 600_000,
   },
   {
+    /*
+     * The root suite cut to the files whose import graph reaches a changed
+     * file — or all of them when `package.json` or a vite config changed,
+     * vitest's `forceRerunTriggers`. Opt-in: no unfiltered `pnpm check` runs
+     * it, and it is its own stage with its own stamp, so a pass here never
+     * stands in for `test`. The graph follows `import`; a file read through
+     * `fs` is invisible to it. `design/plans/test-speed.md` § 3 has the miss
+     * rate and the savings.
+     */
+    name: 'test:changed',
+    why: 'vitest --changed',
+    argv: ['pnpm', 'test', '--changed', changedBase()],
+    optIn: true,
+    weight: VITEST_WORKERS,
+    cost: 27,
+    timeout: 600_000,
+  },
+  {
     name: 'slow',
     why: 'the terrain descent or the galaxy calibration',
     argv: ['pnpm', 'test:slow'],
@@ -222,14 +264,20 @@ const STAGES = [
   },
 ]
 
-/** Names a `--only` may use for several stages at once. */
+/**
+ * Names a `--only` may use for several stages at once.
+ *
+ * `IR_GATE_CHANGED=1` swaps the gate's suite for `test:changed`. Off by
+ * default: § 3 of `design/plans/test-speed.md` keeps it off until a figure on
+ * the M5 says what it saves.
+ */
 const GROUPS = {
   typecheck: STAGES.filter((s) => s.group === 'typecheck').map((s) => s.name),
   gate: [
     'graph',
     'lint',
     ...STAGES.filter((s) => s.group === 'typecheck').map((s) => s.name),
-    'test',
+    process.env.IR_GATE_CHANGED === '1' ? 'test:changed' : 'test',
   ],
 }
 
@@ -260,6 +308,7 @@ if (values.help) {
       '  --list                 print the stages',
       '',
       'IR_CHECK_JOBS=<n> sets the core budget; the default is availableParallelism().',
+      'IR_GATE_CHANGED=1 runs test:changed in the gate group in place of test.',
     ].join('\n'),
   )
   process.exit(0)
@@ -281,8 +330,9 @@ const expand = (names = []) =>
 
 const only = new Set(expand(values.only))
 const skip = new Set(expand(values.skip))
+// An opt-in stage runs only when named, by itself or through a group.
 let selected = STAGES.filter(
-  (s) => (only.size === 0 || only.has(s.name)) && !skip.has(s.name),
+  (s) => (only.size === 0 ? !s.optIn : only.has(s.name)) && !skip.has(s.name),
 )
 /*
  * A selected stage pulls its needs in, because `--only bundle` that silently
