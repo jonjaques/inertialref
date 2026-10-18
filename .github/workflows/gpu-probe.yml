@@ -42,8 +42,22 @@ permissions:
   contents: read
 
 jobs:
+  # Whether Ubicloud picks up this repository's jobs at all, on its cheapest
+  # runner, so that a GPU job left queued reads as the label and not the app.
+  ubicloud:
+    name: ubicloud-standard-2 (integration)
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    steps:
+      - run: uname -a && nproc && cat /etc/os-release | head -2
+
+  # Behind a repository variable, because no runner answers to the label
+  # until Ubicloud's GPU fleet is enabled for the account: the current
+  # runner-types page lists no GPU label, and GitHub leaves a job whose label
+  # nothing serves queued for a day rather than failing it.
   linux:
     name: ubicloud-gpu (Vulkan)
+    if: vars.UBICLOUD_GPU == 'true'
     runs-on: ubicloud-gpu
     timeout-minutes: 20
 
