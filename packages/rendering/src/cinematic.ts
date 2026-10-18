@@ -876,11 +876,8 @@ export interface AdvanceBeat {
  *
  * Everything is in camera axes, the frame `screenOffset` produces offsets in,
  * so `anchor` is a displacement from the lens rather than a place in the
- * universe. Fitting one of these from a measured track belongs in devtools and
- * is not written yet: a solver has no business on the sample path. Nothing in
- * `tngIntro.ts` flies one of these either — the straight passes are still
- * authored `AimBeat`s composed through `withAttitude`, which is the same
- * attitude a line would derive but without the guarantee.
+ * universe. Fitting one from measured beats is devtools' `fitLinePath`: a
+ * solver has no business on the sample path.
  */
 export interface LinePath {
   /** Camera axes. The point `t = 0` names. */
