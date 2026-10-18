@@ -58,6 +58,9 @@
 // whose imports reach an edit run. It is a separate stage with its own stamp, so a green
 // gate under it leaves `test` unstamped and `pnpm check` still runs the whole suite. Off
 // by default; `design/plans/test-speed.md` § 3 has what it misses and what it saves.
+// The hook reads it from the environment Claude Code started with — the shell that
+// launched it, or `env` in a settings file — so an `export` in another terminal does
+// nothing. With no `origin/main` to fork from the stage runs the whole suite.
 //
 // Escape hatch: IR_SKIP_GATE=1.
 

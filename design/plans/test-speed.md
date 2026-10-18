@@ -159,7 +159,8 @@ own `browserWorker.ts` has already defined once for the browser.
   run the whole suite. `tsconfig.json`, `.oxlintrc.json` and the files under
   `data/` are not.
 
-  **The saving is a third of the suite, and it depends on what moved.** On an
+  **It costs under a third of the suite, and the saving depends on what
+  moved.** On an
   Intel Xeon at 2.10 GHz with 4 cores (vitest at 3 workers), Linux, Node
   26.12.0, vitest 4.1.10, with nothing else running, the full root suite reads
   105.9 to 110.1 s at 314 to 316% CPU on every commit. `--changed` over the
@@ -177,8 +178,9 @@ own `browserWorker.ts` has already defined once for the browser.
 
   In total that is 225.5 s against 758.3 s of wall clock, and 659 s against
   2,389 s of CPU: 30% and 28% of the full cost. An edit to
-  `packages/simulation` or `packages/universe` reaches 100 to 145 files and saves a fifth
-  of the run. A docs, script or tour edit reaches a handful and saves nearly
+  `packages/simulation` or `packages/universe` reaches 100 to 145 files and
+  saves between a fifth (`868c54d`, 145 files) and a half (`7739cce`, 101) of
+  the run. A docs, script or tour edit reaches a handful and saves nearly
   all of it. In the gate the typecheck runs beside the suite: on this machine
   `typecheck:astro` takes 36.1 s, so for a narrow edit the gate's wall clock
   drops from 104.9 s, bounded by `test`, to 36.1 s, bounded by the typecheck.

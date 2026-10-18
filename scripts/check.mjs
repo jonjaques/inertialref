@@ -79,26 +79,34 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const VITEST_WORKERS = Math.max(1, Math.min(4, availableParallelism() - 1))
 
 /**
- * What `test:changed` diffs against: the branch's fork point from `origin/main`.
+ * What `test:changed` runs: the root suite cut to the branch's fork point from
+ * `origin/main`.
  *
  * Vitest's `--changed` with no ref reads the index and the working tree alone,
  * so a turn that commits its edit before it stops hands the gate an empty diff
- * and a green suite that ran nothing. The fork point covers every commit on the
- * branch as well as what is uncommitted. It is a resolved hash rather than the
- * ref's name because the stage's command line is part of its stamp key: a tree
- * that passed against one base has not passed against the next. With no
- * `origin/main` to fork from, `HEAD` is the uncommitted change alone.
+ * and a green suite that ran nothing — `--changed` turns `passWithNoTests` on.
+ * The fork point covers every commit on the branch as well as what is
+ * uncommitted. It is a resolved hash rather than the ref's name because the
+ * stage's command line is part of its stamp key: a tree that passed against one
+ * base has not passed against the next. With no `origin/main` to fork from — no
+ * remote, a shallow clone — there is no base that sees a committed edit, so the
+ * stage runs the whole suite rather than `HEAD`'s empty diff. Resolved on first
+ * read, so a run that never selects the stage spawns no git.
  */
-function changedBase() {
+let changedArgv
+function changedTestArgv() {
+  if (changedArgv) return changedArgv
   try {
-    return execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], {
+    const base = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], {
       cwd: ROOT,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()
+    changedArgv = ['pnpm', 'test', '--changed', base]
   } catch {
-    return 'HEAD'
+    changedArgv = ['pnpm', 'test']
   }
+  return changedArgv
 }
 
 /**
@@ -208,9 +216,13 @@ const STAGES = [
      */
     name: 'test:changed',
     why: 'vitest --changed',
-    argv: ['pnpm', 'test', '--changed', changedBase()],
+    get argv() {
+      return changedTestArgv()
+    },
     optIn: true,
     weight: VITEST_WORKERS,
+    // Not measured: the run is 4 to 87 s by what the edit reaches. `test`'s
+    // figure keeps it at the front of the ready set, where a wide edit needs it.
     cost: 27,
     timeout: 600_000,
   },
