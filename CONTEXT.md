@@ -11363,6 +11363,24 @@ The suite still imports `loadStarCatalog` from `apps/headless/src/catalog.ts`
 by relative path: the same shape, over `node:fs` alone, and no check reads an
 app's relative imports for one that leaves the app.
 
+## A cold terrain archive makes the slow descent slow, not failed (18 Oct 2026)
+
+Every archive key changed with the terrain version `5-cpu@7`, and a pull
+request's GitHub cache is its own — written under `refs/pull/N/merge`,
+restorable by that pull request and from `main`, never by a stacked
+neighbor. Until `main` held the new archive, each pull request's first run
+generated every tile: 284 s on the first, inside the descent's 300 s hook
+timeout, and over it on the next three. Run 38182163525 is one of them, the
+hook killed at 300 s with 1,178 of the descent's 1,246 tiles generated, the
+`slow` stage at 313.4 s. Their reruns restored their own archive and took
+88 s.
+
+`STREAMING_TIMEOUT` is ten minutes: twice the CI cold run, under the `slow`
+stage's fifteen and the job's twenty, so a hang still fails at the hook that
+names it. The other answer was a cache key a stack of pull requests can
+share, which was not taken: the key would have to name something other than
+the branch, and a warm `main` ends the cold runs by itself.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

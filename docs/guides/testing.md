@@ -238,8 +238,9 @@ run. Keep performance measurements separate from a contended gate.
 `gameEngine.descent.slow.test.ts` streams a landing on Proxima Centauri b
 through the CPU source. Its disk archive can skip repeated heightfield
 generation, but a cold run still pays the field serially through an inline
-worker. The five-minute timeout guards the cold path under contention; a warm
-run does not justify lowering it. A shared `beforeAll` performs the descent,
+worker. The ten-minute timeout guards the cold path under contention — CI's first run
+after an archive key change takes about five minutes — and a warm run does
+not justify lowering it. A shared `beforeAll` performs the descent,
 and four assertions inspect its terrain, geometry and contact behavior.
 
 **The descent and galaxy count use the slow suite.** `*.slow.test.ts` is a second vitest

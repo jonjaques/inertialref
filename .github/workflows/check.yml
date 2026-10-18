@@ -83,8 +83,9 @@ jobs:
 
       # The terrain archive (ADR-0045). The slow suite lands on Proxima
       # Centauri b and generates every heightfield of that descent through an
-      # inline worker: 92 s cold on an M5 and longer on this runner, against a
-      # few seconds when the tiles are on disk. The archive validates every
+      # inline worker: 92 s cold on an M5 and 284 s or more on this runner,
+      # against 88 s here when the tiles are on disk. The descent's own timeout
+      # is sized for the cold run (`STREAMING_TIMEOUT`). The archive validates every
       # tile it serves against the full request, so a restored one can only
       # skip work, never change a result — and its key carries the cache
       # version, so a terrain or task bump starts from empty rather than from

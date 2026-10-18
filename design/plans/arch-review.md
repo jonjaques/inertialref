@@ -258,15 +258,6 @@ own.
   `galaxy structure` draws inside an asynchronous warm and `galaxy sky` behind
   the cube cache, so neither is inside a measured frame there. Both draw
   through the runner, which names every draw.
-- **A cold CI archive runs the slow descent at its timeout.** Every archive key
-  changed with 13, and a pull request's cache is its own — `refs/pull/N/merge`,
-  restorable by that pull request and from `main`, not by a stacked
-  neighbor. So until `main` holds a `5-cpu@7` archive, each pull request's
-  first run generates every tile: 284 s on the first, against the hook's
-  300 s, and over it on the next three. Their reruns restore their own archive
-  and take 88 s. A warm `main` ends it. **Decided: the slow suite's timeout
-  takes headroom** — the cold run stays slow and stops failing; a cache key a
-  stack can share is not taken.
 - **The fingerprint pins the CPU tile on one machine's arithmetic.** It held on
   CI's Linux runner on its first push; a host where V8's float functions
   differ would fail it with the message to spend a version, which there would

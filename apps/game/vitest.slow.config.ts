@@ -39,7 +39,7 @@ export default defineConfig({
     include: ['{apps,packages}/*/src/**/*.slow.test.ts'],
     /*
      * The root config's 20 s, and for its reason: a timeout guards against a
-     * hang, not against cost. The descent itself carries its own five-minute
+     * hang, not against cost. The descent itself carries its own ten-minute
      * budget at the `beforeAll` call site, which is where a test that needs
      * more says so.
      */

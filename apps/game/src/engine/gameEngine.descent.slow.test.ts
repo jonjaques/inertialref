@@ -32,29 +32,33 @@ import { DiskHeightfieldStore } from '@inertialref/workers/node'
 /**
  * How long the descent in `beforeAll` below is given, milliseconds.
  *
- * Five minutes against the suite's twenty seconds, and it runs in **99.7 s**
- * measured clean. It generates a landing's worth of terrain — bordered 65×65
- * heightfields at 22 to 50 ms apiece since the field grew a sub-floor tail and
- * the detail floor followed it — through an **inline** worker, which is to say
- * serially on this thread. In a browser that is a pool of six.
+ * Ten minutes against the suite's twenty seconds. It generates a landing's
+ * worth of terrain — bordered 65×65 heightfields at 22 to 50 ms apiece —
+ * through an **inline** worker, which is to say serially on this thread; in a
+ * browser that is a pool of six. The disk archive skips every tile it already
+ * holds, so the cost is two figures, not one:
  *
- * The figure tracks the field rather than this file: every level the floor
- * gains is another ring of patches, so it has roughly doubled once already.
+ * - **Warm**, 3.19 s on the M5 and 88 s in CI, where the descent runs beside
+ *   the rest of `pnpm check` on a four-core runner.
+ * - **Cold**, 92.37 s on the M5 and 284 s on CI's first run after an archive
+ *   key change. The next pull request's cold run reached this hook's limit
+ *   while it was still five minutes: killed at 300 s with 1,178 of the
+ *   descent's 1,246 tiles generated, and two more failed the same way. A
+ *   pull request's cache is its own until `main` holds one under the current
+ *   key, so every terrain or task version bump puts each open pull request
+ *   through a cold run.
  *
  * It is a timeout rather than a target: what it guards against is a hang, so
- * the headroom is the point. Two minutes is only twice the idle cost, and twice
- * is inside the range a busy machine moves this by — the runner puts sixty-four
- * files across every core, and under that contention this descent has taken
- * more than 120 s and been killed for it. A timeout that a green run can reach
- * has stopped measuring the code and started measuring the machine, which is
- * the same mistake `testTimeout`'s own note in `vitest.config.ts` describes one
+ * the headroom is the point, and a cold archive makes the run slow rather than
+ * failed. Ten minutes is twice the CI cold figure and still inside the `slow`
+ * stage's fifteen in `scripts/check.mjs` and the job's twenty in
+ * `.github/workflows/check.yml`, so a hang still fails here, naming this hook,
+ * before either outer limit fires. A timeout that a green run can reach has
+ * stopped measuring the code and started measuring the machine, which is the
+ * same mistake `testTimeout`'s own note in `vitest.config.ts` describes one
  * order of magnitude down.
- *
- * The disk archive reuses generated tiles across runs. A cold run still
- * exercises canonical CPU generation; warm runs exercise the same streamed
- * landing with verified tile records.
  */
-const STREAMING_TIMEOUT = 300_000
+const STREAMING_TIMEOUT = 600_000
 
 /*
  * The four terrain assertions, over one descent.
