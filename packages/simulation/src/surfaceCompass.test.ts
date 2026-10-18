@@ -14,6 +14,7 @@ import {
   bodyFrameId,
   compassBasis,
   dynamicEntityId,
+  formatAddress,
   hasSolidSurface,
   installSurfaceFrame,
   parseSurfaceFrameId,
@@ -112,7 +113,7 @@ describe('the surface compass', () => {
       const pad = placementBasis({
         id: 'pad',
         assetId: 'mars-pad',
-        bodyAddress: frame.slice(3, frame.indexOf('@')),
+        bodyAddress: formatAddress(body.address),
         latitude,
         longitude,
         height: 0,
