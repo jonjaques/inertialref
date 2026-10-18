@@ -15,8 +15,9 @@ import { defineConfig } from 'vitest/config'
  * What it buys is the one feedback loop the browser rig cannot give: a TSL
  * graph compiled to a Metal pipeline, its WGSL read back, and its pixels
  * asserted against arithmetic — in milliseconds, from a test file. How to write
- * a bound that survives that pipeline is `docs/guides/testing.md`; what is still
- * unanswered about running it in CI is `docs/roadmap.md` § Automation gaps.
+ * a bound that survives that pipeline is `docs/guides/testing.md`. CI runs it as
+ * `check.yml`'s `gpu` job on a hosted macOS runner's paravirtual Metal device;
+ * what that device does not cover is `docs/roadmap.md` § Automation gaps.
  */
 export default defineConfig({
   // The same `define` and alias the root config carries, and for the same

@@ -1,49 +1,29 @@
-# One question, asked of two hosted runners: does Dawn get a physical GPU here?
+# Whether Ubicloud gives Dawn a physical Linux GPU — the Vulkan half of the
+# shader suite in CI, run by hand.
 #
-# `pnpm test:gpu` needs a physical adapter, and a software one is refused by
-# `gpuHarness.gpu.test.ts` because a graph that compiles on SwiftShader and not
-# on a real driver is the failure the suite exists to catch. GitHub's standard
-# Linux runners have no GPU, so Dawn takes SwiftShader there
-# (docs/roadmap.md § Automation gaps). This workflow is the decided experiment
-# in design/plans/test-speed.md § 4, widened to the two candidates that would
-# put the suite in CI:
+# `pnpm test:gpu` runs on every pull request as `check.yml`'s `gpu` job, on the
+# paravirtual Apple GPU of the hosted macOS runner. That device sees Metal and
+# offers no `timestamp-query`. A Linux runner with a real NVIDIA driver would
+# add Vulkan — Dawn's other production backend — and the pass timeline, at
+# Ubicloud's per-minute GPU rate.
 #
-#   - `ubicloud-gpu` — Ubicloud's GPU runner, an NVIDIA RTX 4000 Ada on Ubuntu,
-#     billed per minute. Dawn's Vulkan backend on a real NVIDIA driver is a
-#     physical adapter by the harness's own test. It does not see Metal, so a
-#     failure that only Metal's shader translation produces stays a local one.
-#   - `macos-15` — GitHub's standard Apple-silicon runner, free on a public
-#     repository. A virtual machine with a paravirtual Apple GPU, which Chromium
-#     reaches through Metal; whether Dawn's Metal backend accepts it, and with
-#     what limits, is what the run reports. actions/runner-images#14840 records
-#     WebGL2 stalling in Metal resource creation on the same image, so a hang
-#     here is a finding, not a flake to retry.
-#
-# Each job reports the adapter first (`scripts/gpuAdapter.mjs`, also written to
-# the job summary) and runs the suite even when the report fails, so a software
-# adapter and a physical one that refuses a pipeline read differently.
-#
-# It runs on a push to its own branch and by hand, never on a pull request: the
-# Ubicloud job bills, and a probe is not a gate. Once one runner passes, the
-# suite joins `check.yml` as a job on that runner and this file goes.
+# The GPU job waits behind the `UBICLOUD_GPU` repository variable because no
+# runner currently answers to `ubicloud-gpu`: Ubicloud's runner-types page
+# lists no GPU label, and GitHub leaves a job whose label nothing serves queued
+# for a day rather than failing it. The integration job beside it runs on the
+# cheapest Ubicloud runner, so a stuck GPU job reads as the label and not the
+# app. Set the variable once Ubicloud confirms the fleet is enabled for the
+# account, then dispatch this workflow from Actions.
 
 name: gpu-probe
 
 on:
-  push:
-    branches: [ci/gpu-probe]
   workflow_dispatch:
-
-concurrency:
-  group: gpu-probe-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  # Whether Ubicloud picks up this repository's jobs at all, on its cheapest
-  # runner, so that a GPU job left queued reads as the label and not the app.
   ubicloud:
     name: ubicloud-standard-2 (integration)
     runs-on: ubicloud-standard-2
@@ -51,10 +31,6 @@ jobs:
     steps:
       - run: uname -a && nproc && cat /etc/os-release | head -2
 
-  # Behind a repository variable, because no runner answers to the label
-  # until Ubicloud's GPU fleet is enabled for the account: the current
-  # runner-types page lists no GPU label, and GitHub leaves a job whose label
-  # nothing serves queued for a day rather than failing it.
   linux:
     name: ubicloud-gpu (Vulkan)
     if: vars.UBICLOUD_GPU == 'true'
@@ -92,28 +68,3 @@ jobs:
       - name: GPU suite
         if: success() || failure()
         run: env -u DISPLAY pnpm test:gpu
-
-  macos:
-    name: macos-15 (Metal, paravirtual)
-    runs-on: macos-15
-    timeout-minutes: 20
-
-    steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: '.node-version'
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Display hardware
-        run: system_profiler SPDisplaysDataType
-
-      - name: Adapter
-        run: node scripts/gpuAdapter.mjs
-
-      - name: GPU suite
-        if: success() || failure()
-        run: pnpm test:gpu

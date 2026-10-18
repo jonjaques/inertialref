@@ -11339,6 +11339,37 @@ falls was 1.01 ms — the raw pairs are latency on this GPU, as `summarize` says
 A 64-pixel pass can finish inside the timestamp quantum and read 0, so the GPU
 test asks that some owned pass read time, not each.
 
+## The shader suite runs in CI on a paravirtual Apple GPU (18 Oct 2026)
+
+`pnpm test:gpu` is `check.yml`'s `gpu` job, on the hosted `macos-15` runner,
+on every pull request. The runner is a virtual machine, and its GPU is Apple's
+paravirtual device. Dawn reports it as `apple` / `` /
+`apple-paravirtual-device` under the Metal backend. The first probe run
+passed 169 of 176 tests there. The seven failures had two causes, and neither
+was a shader. The empty architecture failed the physical-device check, which
+now requires the device field and keeps the architecture's type and the
+software pattern. The device offers no `timestamp-query` (and no
+`primitive-index`, which the M5 has), so the pass timeline is null, and the
+six tests that read it skip on `adapterOffers('timestamp-query')`. With those
+changes it runs 170 and skips 6 there, and the M5 runs all 176. The runner
+is free on a public repository, and the suite takes 78 s there.
+
+The preferred answer was Linux, and it is not in hand. Ubicloud's
+`ubicloud-gpu` label (an RTX 4000 Ada, $0.032 a minute in its June 2024
+announcement) took no runner. The job sat queued while a `ubicloud-standard-2`
+job in the same workflow ran at once, so the app sees the repository and the
+label is what is gone: the current runner-types page lists no GPU label, and
+the GPU runner guide returns 404. GitHub's own T4 GPU runners need an
+organization on Team or Enterprise. `gpu-probe.yml` keeps the Vulkan job, with
+the driver and ICD diagnostics, behind the `UBICLOUD_GPU` variable, and is run
+by hand once a runner answers to the label.
+
+What the Metal job does not catch: a failure that only Vulkan's or D3D's
+translation produces, and any regression in the pass timeline, which still
+needs a workstation. `presets:compare` stays local. It needs Chrome to present
+the app, and runner-images #14840 records WebGL2 stalling in Metal resource
+creation on the same image.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

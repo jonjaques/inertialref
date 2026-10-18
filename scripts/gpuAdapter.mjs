@@ -6,10 +6,10 @@
  *
  * `pnpm test:gpu` fails the same way on a machine with no physical adapter and
  * on one whose adapter is physical and refuses a pipeline: every file at
- * `requestAdapter`, or every file at its first draw. The probe workflow
- * (`.github/workflows/gpu-probe.yml`) needs the two apart, because the question
- * it answers — does a hosted runner give Dawn a real device — is settled by the
- * first and is merely clouded by the second. So this reports what was offered
+ * `requestAdapter`, or every file at its first draw. CI (`check.yml`'s `gpu` job,
+ * and `gpu-probe.yml` for a Linux runner) needs the two apart, because whether a
+ * hosted runner gives Dawn a real device is settled by the first and merely
+ * clouded by the second. So this reports what was offered
  * under each backend Dawn was built with, the limits the suite leans on, and
  * whether the default is a software rasterizer, with the same pattern
  * `gpuHarness.gpu.test.ts` refuses.

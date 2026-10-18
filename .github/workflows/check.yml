@@ -5,7 +5,9 @@
 # the six type projects, the root and slow test suites, the capability
 # self-test, and the build — as one graph under the runner's core budget, so CI
 # cannot keep a list of its own that drifts from what a developer runs. The
-# runner's own log says what each stage cost here.
+# runner's own log says what each stage cost here. The one stage it cannot
+# run is `pnpm test:gpu`, which needs a physical adapter, so that is a second
+# job on a runner that has one.
 #
 # The run on `main` exists for the cache, not for the verdict: a pull request
 # restores caches created on its own branch or on the default branch, and
@@ -130,3 +132,35 @@ jobs:
         with:
           path: .data/heightfields
           key: ${{ steps.archive-restore.outputs.cache-primary-key }}
+
+  # The shader suite, beside `pnpm check` rather than inside it: it needs a
+  # physical adapter, and the Linux runner above has none — Dawn takes
+  # SwiftShader there, which `gpuHarness.gpu.test.ts` refuses on purpose. The
+  # standard Apple-silicon runner is a virtual machine with a paravirtual Apple
+  # GPU (`apple` / `` / `apple-paravirtual-device`), a real Metal device, free on
+  # a public repository. It offers no `timestamp-query`, so the six tests that
+  # read the pass timeline skip there on the adapter's own answer and still run
+  # on a workstation (`adapterOffers` in `render/gpuHarness.ts`). Every graph
+  # compiles to Metal and every readback is asserted, which is what the suite
+  # is for. `scripts/gpuAdapter.mjs` prints the adapter into the job summary
+  # first, so a runner image that loses the device reads as that rather than
+  # as 46 red files.
+  gpu:
+    name: pnpm test:gpu (macOS, Metal)
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      # No LFS: no `*.gpu.test.ts` reads a model or a plate.
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Adapter
+        run: node scripts/gpuAdapter.mjs
+      - name: GPU suite
+        run: pnpm test:gpu
