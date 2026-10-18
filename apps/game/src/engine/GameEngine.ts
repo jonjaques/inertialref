@@ -690,8 +690,7 @@ export class GameEngine {
 
   get galaxyInstrument(): boolean {
     return (
-      this.cinematic === null &&
-      this.observer !== null &&
+      this.owner?.arm === 'observatory' &&
       this.harness.observatory.galaxyInstrument
     )
   }
@@ -702,7 +701,7 @@ export class GameEngine {
 
   /** The resolved external instrument, under the usual camera precedence. */
   get galaxyView() {
-    return this.cinematic === null && this.observer !== null
+    return this.owner?.arm === 'observatory'
       ? this.harness.observatory.galaxyView
       : null
   }

@@ -200,10 +200,6 @@ request of its own; each belongs to the next change that opens its file.
 
 **The walker and the frame.**
 
-- **Observatory ownership is still spelled out twice in `GameEngine.ts`.**
-  `galaxyInstrument` and `galaxyView` test `cinematic === null` and
-  `observer !== null` together, which is `owner?.arm === 'observatory'`.
-  Correct, and allowed inside the engine; `owner.arm` says it once.
 - **The plumes and the parked hull can part.** On foot `ThrusterFx` roots its
   plumes at the vessel entity's pose; `ShipModel` draws a parked Rocinante at
   the raised, upright pad pose. They differ only if a parked hull reports a
