@@ -65,8 +65,8 @@ const SATURATED = 0.995
  */
 const STEP = 0.1
 /**
- * A centroid this far from the midpoint of its two neighbors' has a second
- * mass in it for one frame. The hull's own centroid moves under 0.005 of the
+ * A centroid this far from each of its neighbors' has a second mass in it for
+ * one frame. The hull's own centroid moves under 0.005 of the
  * frame per frame through the descent; the transients jump 0.1 to 0.4.
  */
 const TRANSIENT = 0.03
@@ -111,7 +111,6 @@ export function subjectTrackBeats(
   const { from, to, hullLength, fov, aspect } = options
   const window = rows
     .filter((row) => row.frame >= from && row.frame <= to)
-    .slice()
     .sort((a, b) => a.frame - b.frame)
   const channels = new Map<number, TrackChannel>()
 
@@ -181,31 +180,34 @@ export function subjectTrackBeats(
   for (const row of window) {
     const width = stitched.get(row.frame)
     const separation = pair.get(row.frame)
-    const interior = width !== undefined
-    let range: number | null = null
+    let range = boxRange(width ?? row.w)
     if (scale !== null && separation !== undefined) {
       range = scale / separation
-      if (interior) channels.set(row.frame, 'pair')
-      if (width !== undefined)
+      if (width !== undefined) {
+        channels.set(row.frame, 'pair')
         pairOverBox.push({ frame: row.frame, ratio: range / boxRange(width) })
-    } else if (width !== undefined) {
-      range = boxRange(width)
-      channels.set(row.frame, 'box')
-    } else if (!channels.has(row.frame)) channels.set(row.frame, 'no range')
+      }
+    } else if (width !== undefined) channels.set(row.frame, 'box')
+    else if (!channels.has(row.frame)) channels.set(row.frame, 'no range')
     beats.push({
       frame: row.frame,
       x: row.cx,
       y: row.cy,
-      range: range ?? boxRange(row.w),
-      weight: interior && range !== null ? 1 : 0,
+      range,
+      weight: width === undefined ? 0 : 1,
     })
   }
   return { beats, channels, pairOverBox }
 }
 
 /**
- * The centroid leaves the midpoint of its neighbors' for one frame, or the
- * frame has no neighbor to be checked against.
+ * The centroid is far from every neighbor's for one frame, or the frame has no
+ * neighbor to be checked against.
+ *
+ * Every neighbor rather than their midpoint: a frame beside a transient has
+ * the transient for one of its two neighbors, and the midpoint of those two is
+ * half the jump away — 0.05 to 0.2 of the frame, past `TRANSIENT` — so a
+ * midpoint test drops both clean frames either side of each jump with it.
  */
 function isTransient(
   row: SubjectTrackRow,
@@ -217,9 +219,9 @@ function isTransient(
   // A detection with no neighbor is not yet a track: f1767 is a 0.40-wide mass
   // in the middle of the frame, three frames before the hull appears at its top.
   if (near.length === 0) return true
-  const x = near.reduce((sum, other) => sum + other.cx, 0) / near.length
-  const y = near.reduce((sum, other) => sum + other.cy, 0) / near.length
-  return Math.hypot(row.cx - x, row.cy - y) > TRANSIENT
+  return near.every(
+    (other) => Math.hypot(row.cx - other.cx, row.cy - other.cy) > TRANSIENT,
+  )
 }
 
 function median(values: readonly number[]): number {

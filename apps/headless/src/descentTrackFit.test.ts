@@ -29,8 +29,8 @@ import {
  * which applies `design/plans/tng-intro.md` § 1), fit a free line to all of
  * them, and compare the two lines against the same frames.
  *
- * Measured, f1920–1960, against the track: the track-fitted line runs 0.044 of
- * the frame at worst and 0.039 on average; `DESCENT_RAIL` runs 0.090 and
+ * Measured, f1920–1960, against the track: the track-fitted line runs 0.043 of
+ * the frame at worst and 0.038 on average; `DESCENT_RAIL` runs 0.090 and
  * 0.085. The figure holds across the channel rules — moving the edge margin,
  * the step threshold, the transient threshold or the pair's selection gives
  * 0.025 to 0.047. So about half of the residual is the beats; the rest, ~0.04,
@@ -74,12 +74,13 @@ function against(path: LinePath, from: number, to: number) {
 describe('the credit descent against the per-frame track', () => {
   it('weights only the frames whose range is a measurement', () => {
     /*
-     * 206 of the 373 frames in f1758–2130. Before f1794 the hull is against
+     * 216 of the 373 frames in f1758–2130. Before f1794 the hull is against
      * the top edge; from f2059 the box is against the left one and then the
-     * frame; 25 frames of the window are one-frame transients. The pair carries the
-     * range on 58 of the 206, the stitched box on the rest.
+     * frame; nine frames of the window are one-frame transients, f1767 and a
+     * jump every sixteen frames or so from f1783. The pair carries the range
+     * on 61 of the 216, the stitched box on the rest.
      */
-    expect(weighted.length).toBe(206)
+    expect(weighted.length).toBe(216)
     expect(weighted[0]?.frame).toBe(1794)
     expect(weighted.at(-1)?.frame).toBe(2058)
     /*
@@ -97,7 +98,7 @@ describe('the credit descent against the per-frame track', () => {
     const tracked = against(fit.path, 1920, 1960)
     const beaten = against(DESCENT_RAIL, 1920, 1960)
     expect(tracked.count).toBe(41)
-    // 0.044 against 0.090.
+    // 0.043 against 0.090.
     expect(tracked.worst).toBeLessThan(0.05)
     expect(tracked.worst).toBeLessThan(0.55 * beaten.worst)
     // Over the whole weighted span: rms 0.033, worst 0.060.
@@ -105,7 +106,7 @@ describe('the credit descent against the per-frame track', () => {
     expect(against(fit.path, 1794, 2058).worst).toBeLessThan(0.065)
   })
 
-  it('finds a direction 6.3° from the landed one, and a throttle that never reverses', () => {
+  it('finds a direction 6.2° from the landed one, and a throttle that never reverses', () => {
     /*
      * The direction is the other half of the answer: the beats and the track
      * disagree about the line, not only about the marks. The script keeps

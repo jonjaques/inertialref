@@ -134,18 +134,18 @@ from.
 reference.** `apps/headless/src/descentTrackFit.test.ts` fits a free line to the
 per-frame track, f1758–2130, with every frame weighted by § 1's rules
 (`subjectTrackBeats.ts`): no weight against an edge or saturated, none on the
-25 one-frame transients whose centroid jumps 0.1–0.4 of the frame, the box
+nine one-frame transients whose centroid jumps 0.1–0.4 of the frame, the box
 stitched across the floor-crossing steps, and the inner-to-starboard blob pair
-as the range wherever it is one, calibrated to the box. That leaves 206
+as the range wherever it is one, calibrated to the box. That leaves 216
 weighted frames, f1794–2058. Against those frames at f1920–1960:
 
 | line                                    | worst | mean  |
 | --------------------------------------- | ----- | ----- |
-| fitted to the track                     | 0.044 | 0.039 |
+| fitted to the track                     | 0.043 | 0.038 |
 | `DESCENT_RAIL`, fitted to the ~20 beats | 0.090 | 0.085 |
 
 The figure holds across the rules' constants — 0.025 to 0.047 — and the track
-fit's rms over the whole weighted span is 0.033. The track's line is 6.3° from
+fit's rms over the whole weighted span is 0.033. The track's line is 6.2° from
 `DESCENT_RAIL`'s, so the beats and the track disagree about the direction as
 well as the marks. Two limits on the instrument: the export's only position is
 the lit mass's centroid, while the beats were read as box centers, 0.025 and
