@@ -5,12 +5,33 @@ import { Slider as SliderPrimitive } from 'radix-ui'
 
 import { cn } from '@/lib/utils'
 
+/*
+ * The name and the value text belong on the thumb.
+ *
+ * `role="slider"` is the thumb, not the root, and Radix's `Root` spreads an
+ * `aria-label`, an `aria-labelledby` or an `aria-valuetext` onto its own span — an element no reader
+ * focuses, while the thumb it does focus announces "slider" and a raw scrub
+ * index. So the name, the description and the value text go to the thumb. Only for a single thumb: a range has
+ * two, Radix names those "Minimum" and "Maximum" itself, and the name stays on
+ * the root as the group's.
+ *
+ * WCAG 2.2 SC 2.5.8: the thumb draws at 14×14 and measures there, under the
+ * 24×24 minimum. It takes the clause's **spacing** exception — a 24px circle on
+ * the thumb meets no other target, because every slider here is alone on its
+ * row with its label on the line above — and the **equivalent** one besides:
+ * the root is a pointer target for the same function, padded by the call site
+ * to 24px of height across the whole track.
+ */
 function Slider({
   className,
   defaultValue,
   value,
   min = 0,
   max = 100,
+  'aria-label': label,
+  'aria-labelledby': labelledBy,
+  'aria-describedby': describedBy,
+  'aria-valuetext': valueText,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
   const _values = React.useMemo(
@@ -22,6 +43,13 @@ function Slider({
           : [min, max],
     [value, defaultValue, min, max],
   )
+  const named = {
+    'aria-label': label,
+    'aria-labelledby': labelledBy,
+    'aria-describedby': describedBy,
+    'aria-valuetext': valueText,
+  }
+  const single = _values.length === 1
 
   return (
     <SliderPrimitive.Root
@@ -30,6 +58,7 @@ function Slider({
       value={value}
       min={min}
       max={max}
+      {...(single ? {} : named)}
       className={cn(
         'relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col',
         className,
@@ -53,6 +82,7 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
+          {...(single ? named : {})}
           className="block size-4 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
