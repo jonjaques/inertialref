@@ -85,15 +85,14 @@ for (const pkg of packages.values()) {
  * Node and may take it; the slow descent suite does.
  */
 const BROWSER_SOURCES = ['apps/game/src', 'apps/game/astro', 'apps/server/src']
-const NODE_EXPORT = /from\s+['"](@inertialref\/[\w-]+\/node)['"]/g
+// `from` covers `import … from` and `export … from`; the bare and dynamic
+// forms reach the module as surely and Vite bundles them the same way.
+const NODE_EXPORT =
+  /(?:\bfrom|\bimport\s*\(?)\s*['"](@inertialref\/[\w-]+\/node)['"]/g
+// No catch around the read: a source root that has moved would otherwise be
+// checked as empty, and the guard would pass by reading nothing.
 function* sources(dir) {
-  let entries
-  try {
-    entries = readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return
-  }
-  for (const entry of entries) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) yield* sources(path)
     else if (
