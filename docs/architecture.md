@@ -307,7 +307,8 @@ flowchart TB
   heightfield — the fallback, and the whole of the ground on WebGL 2. On a
   WebGPU page the drawn tiles come from a TSL compute kernel on the **GPU**,
   sixteen a dispatch, held to the workers' field by a measured bound. One
-  module constructs a `Worker`; everything else talks to a port, and the
+  module per host constructs a `Worker` — the browser's, and a
+  `node:worker_threads` one for Node tests; everything else talks to a port, and the
   streamer asks a `HeightfieldSource` that both implement.
   [Workers](concepts/workers.md) ·
   [Streaming](concepts/streaming.md#where-the-heightfields-come-from)
@@ -354,7 +355,7 @@ in the [invariant map](agents/invariants.md).
 | 2   | No `Math.random`, `Date.now` or `performance.now` in canonical paths | golden vectors, determinism tests                              |
 | 3   | Generation never depends on order                                    | shuffled-order tests                                           |
 | 4   | Canonical state is never in a React component                        | components read snapshots; `packages/*` has no DOM lib         |
-| 5   | One module constructs a `Worker`                                     | port interface in `workers`                                    |
+| 5   | One module per host constructs a `Worker`                            | port interface in `workers`                                    |
 | 6   | Nothing regenerable is persisted                                     | save-size test                                                 |
 | 7   | No vendor SDK below the adapter layer                                | `pnpm graph` — `packages/*` may have no third-party dependency |
 | 8   | Terrain is sampled in body-fixed axes                                | a branded `BodyFixedDirection` type                            |

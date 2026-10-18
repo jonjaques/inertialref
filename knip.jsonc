@@ -64,6 +64,9 @@
         "astro/pages/**/*.astro",
         "public/sw.js",
         "src/render/gpuSetup.ts",
+        // A worker-thread entry: `engine/threadWorker.ts` passes its URL to
+        // `new Worker`, which knip reads as a string, as with `sw.js`.
+        "src/workers/universe.thread.ts",
         "vite.config.ts",
         "vitest.gpu.config.ts",
         "vitest.slow.config.ts",

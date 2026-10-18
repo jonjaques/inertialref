@@ -6,9 +6,10 @@ import { defineConfig } from 'vitest/config'
  *
  * A second vitest project selected by the `.slow.test.ts` suffix, which the
  * root config excludes, for the tests that stream a landing: a whole-disk
- * selection's worth of bordered 65×65 heightfields generated serially through
- * an inline worker at 22 to 50 ms apiece — about a hundred seconds in one
- * `beforeAll`, against ten for everything else in the root suite together.
+ * selection's worth of bordered 65×65 heightfields generated through a pool of
+ * worker threads at 22 to 50 ms apiece on the M5 — minutes of CPU in one
+ * `beforeAll` from a cold archive, against ten seconds for everything else in
+ * the root suite together.
  * The galaxy count convergence test also belongs here: its two quadratures
  * sample almost ten million positions and exceed the root timeout on CI.
  * The root suite is what the Stop hook runs after every turn, so that hook

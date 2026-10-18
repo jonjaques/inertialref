@@ -59,7 +59,7 @@ any rule governing the files being changed.
 - **Never hold an algorithm version because the draw order is intact.** [Details](docs/agents/invariants.md#rule-5).
 - **Never put canonical state in a React component,** [Details](docs/agents/invariants.md#rule-6).
 - **Never write a presentation switch directly.** [Details](docs/agents/invariants.md#rule-7).
-- **Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`.** [Details](docs/agents/invariants.md#rule-8).
+- **Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`, or a `node:worker_threads` one outside `threadWorker.ts` beside it.** [Details](docs/agents/invariants.md#rule-8).
 - **Never assemble a session by hand.** [Details](docs/agents/invariants.md#rule-9).
 - **Never pass a bare `Vec3` to anything that samples terrain.** [Details](docs/agents/invariants.md#rule-10).
 - **Never read a field value off something chosen by rank.** [Details](docs/agents/invariants.md#rule-11).

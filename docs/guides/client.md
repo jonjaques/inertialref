@@ -236,7 +236,9 @@ moves composed against the same captured snapshot discard the first.
 the store, and the harness, in the one order that works. A host passes
 adapters in. It does not construct them.
 
-`Worker` construction lives in `apps/game/src/engine/browserWorker.ts`.
+`Worker` construction lives in `apps/game/src/engine/browserWorker.ts`, and
+its `node:worker_threads` counterpart for Node tests in `threadWorker.ts`
+beside it.
 Tasks are typed and versioned; the pool owns dispatch, cancellation, and
 instrumentation.
 

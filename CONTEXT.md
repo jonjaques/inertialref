@@ -11381,6 +11381,38 @@ names it. The other answer was a cache key a stack of pull requests can
 share, which was not taken: the key would have to name something other than
 the branch, and a warm `main` ends the cold runs by itself.
 
+## The slow descent streams through worker threads, and a frame waits for its jobs (18 Oct 2026)
+
+The descent suite's inline worker ran the field serially on the test's
+thread. `apps/game/src/engine/threadWorker.ts` adapts a `node:worker_threads`
+Worker to `WorkerPort`, the way `browserWorker.ts` adapts a browser one, and
+starts `workers/universe.thread.ts`, which serves the game's registry through
+`serveTasks`. `headlessEngine({ threads: true })` takes `poolSize()` of them;
+the per-turn suite stays inline. Rule 8 names the file: one Worker
+constructor per host.
+
+On a cloud machine — four Xeon vCPUs at 2.10 GHz, so two threads — the cold
+descent is 247.1 s and 237.7 s inline at 100–101% CPU, and 127.1 s and
+129.9 s on threads at 195%, at the same 238–253 s of CPU time; warm, 10.7 s
+inline and 10.9 s threaded, so the threads buy nothing there.
+`design/plans/test-speed.md` § 2 has the table and the boundary measured
+from inside: 0.45–5.4 ms of round trip on a 197 ms tile, and 225–230 ms for
+a thread to load its modules.
+
+The trap: the suite counts frames, and only an inline worker makes a frame a
+unit of work. Its answers land inside the two-millisecond gap between frames,
+so "twenty frames without growth" meant converged. A thread answers a tile
+later; the first cold threaded run "converged" in 1.5 s on six tiles of 134
+requested and failed three assertions with a disk that had never arrived,
+and the 300 km orbit read zero patches. `settle` now waits for the pool's
+queue and active jobs to empty after each frame, which is a no-op inline and
+restores the frame on threads: the warm threaded run then serves exactly the
+inline run's 1,246 tiles. A fixed sleep per frame would have been a number
+about this machine.
+
+`scripts/check.mjs` weights the `slow` stage as the threads plus the test
+thread, `poolSize()` repeated as `DESCENT_THREADS`.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
