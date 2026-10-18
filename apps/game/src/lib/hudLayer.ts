@@ -12,8 +12,11 @@
  *
  * The popup is `position: fixed` under Radix, so the layer's offsets — the safe
  * areas, an attached menu's band — do not move it.
+ *
+ * Not the skip link's layer, which comes first in the document and is mounted
+ * only while there is a menu to skip to (`dock/SkipLink.tsx`).
  */
 export const hudLayer = (): HTMLElement | null =>
   typeof document === 'undefined'
     ? null
-    : document.querySelector<HTMLElement>('.hud-layer')
+    : document.querySelector<HTMLElement>('.hud-layer:not([data-skip-link])')

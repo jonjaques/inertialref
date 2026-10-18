@@ -12,6 +12,7 @@ import { CompactTab } from './CompactTab.tsx'
 import type { DockLayout } from './layout.ts'
 import { openPanels } from './layout.ts'
 import type { DockPanelDefinition } from './panels.ts'
+import { holdWayHome, WAY_HOME } from './wayHome.ts'
 
 /*
  * The same workspace on a phone: a nav bar, and a sheet of panels above it.
@@ -227,6 +228,8 @@ export function CompactDock({
         }}
       >
         <Link
+          id={WAY_HOME}
+          ref={holdWayHome}
           to={HOME}
           aria-label="Back to the menu"
           className={`flex min-h-11 shrink-0 items-center gap-2 rounded px-2 text-slate-300 transition-colors active:bg-slate-800/60 ${FOCUS_RING}`}
