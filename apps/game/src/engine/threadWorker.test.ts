@@ -7,7 +7,7 @@ import {
   generateHeightfieldTask,
   runInline,
 } from '@inertialref/workers'
-import { createThreadWorkerPort } from './threadWorker.ts'
+import { createThreadWorkerPort, threadWorkerPort } from './threadWorker.ts'
 
 /*
  * The thread transport agrees with the browser one.
@@ -66,5 +66,39 @@ it('rejects a payload a real Worker could not clone', async () => {
       surface: { ...payload.surface, extra: () => 0 },
     } as never),
   ).rejects.toThrow(/could not be cloned|DataClone/i)
+  expect(pool.stats().active).toBe(0)
+})
+
+/*
+ * A thread that dies fails its jobs rather than holding them.
+ *
+ * The slow descent drains the pool between frames, so a job that never
+ * settles is a ten-minute hang that names no cause. Both ways a thread ends
+ * on its own — a throw while it serves, and a module that does not load —
+ * have to reach the pool as a failure, and every job after it too.
+ */
+it.each([
+  [
+    'throws while serving',
+    "import { parentPort } from 'node:worker_threads';" +
+      "parentPort.on('message', () => { throw new Error('boom') })",
+    /boom/,
+  ],
+  ['fails to load', "throw new Error('no module')", /no module/],
+])('fails every job on a thread that %s', async (_, source, error) => {
+  const pool = new WorkerPool({
+    factory: () =>
+      threadWorkerPort(
+        new URL(`data:text/javascript,${encodeURIComponent(source)}`),
+      ),
+    size: 1,
+  })
+  pools.push(pool)
+  await expect(pool.run(generateHeightfieldTask, payload)).rejects.toThrow(
+    error,
+  )
+  await expect(pool.run(generateHeightfieldTask, payload)).rejects.toThrow(
+    error,
+  )
   expect(pool.stats().active).toBe(0)
 })
