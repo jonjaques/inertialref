@@ -548,6 +548,29 @@ describe('lineVelocity', () => {
       expect(relative).toBeLessThan(1e-4)
     }
   })
+
+  it('never runs backward on a held advance an ulp from flat', () => {
+    /*
+     * `fitLinePath`'s pool can leave two knots whose advances differ by one ulp:
+     * 22663.957795388706 and 22663.95779538875, as fast-check's seed 42 found.
+     * Their logs are ~10.03 and differ by 1.8e-15, which is under the rounding
+     * of either log through the Hermite basis, so the slope's sign has to come
+     * from their difference and not from two products cancelling.
+     */
+    const held: LinePath = {
+      anchor: ANCHOR,
+      direction: DIRECTION,
+      advance: [
+        { frame: 1002.6666666666666, t: 22663.957795388706 },
+        { frame: 1007.5, t: 22663.95779538875 },
+      ],
+    }
+    for (let frame = 1002.6666666666666; frame <= 1007.5; frame += 0.25)
+      expect(
+        Vec.dot(lineVelocity(held, frame), DIRECTION),
+        `f${frame}`,
+      ).toBeGreaterThanOrEqual(0)
+  })
 })
 
 describe('orientationAlong', () => {

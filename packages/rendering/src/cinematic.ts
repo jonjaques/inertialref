@@ -572,10 +572,12 @@ function splineScalarSlope(
 
   const { v1, v2, m1, m2, t, span } = splineSegment(frames, values, frame)
   const t2 = t * t
+  // `v2 - v1` before the basis rather than each value through it: a log range
+  // is ~10 and a held throttle's knots differ by an ulp, so the two products
+  // cancel to rounding error of either sign and a hold reads as flown backward.
   return (
-    ((6 * t2 - 6 * t) * v1 +
+    ((6 * t - 6 * t2) * (v2 - v1) +
       (3 * t2 - 4 * t + 1) * m1 +
-      (-6 * t2 + 6 * t) * v2 +
       (3 * t2 - 2 * t) * m2) /
     span
   )
