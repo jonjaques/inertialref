@@ -286,9 +286,6 @@ own.
   the fade's unchanged output makes unlikely to differ. **Decided: the
   temporal path is measured before this closes** — a camera pan under
   temporal Quality, cast for shimmer, with and without the angle multiplied.
-- **The Graphics panel resolves the picture it is editing for itself.** It
-  shows the render size of the preference before the sensor rebuilds, through
-  `pictureDimensions`, which now reads `renderSize`.
 
 ---
 
@@ -325,6 +322,16 @@ own.
   call out means a `cut` flag on every sample that the engine turns back into
   the same `declareCut()`: a second path for one fact, for the one caller of
   five that would take it.
+- **The Graphics panel resolves the picture it is editing.** It shows the
+  render size of the preference the moment it changes, before the sensor
+  rebuilds, so it cannot read `engine.sceneLayout`: that is the layout of the
+  picture being drawn, which is the previous one until the rebuild. It calls
+  `resolvePicture`, which is the resolution `sceneLayout` makes —
+  `sceneLayout.test.ts` holds `layout.picture` equal to it for every picture
+  on both backends — and `pictureDimensions` sizes the result with
+  `renderSize`, the pass's own arithmetic. Calling `sceneLayout` instead would
+  ask the panel for a reversed-depth flag it does not have and the picture
+  does not depend on.
 - **The cinema playhead keeps its `mine` guard.** With the director on
   `ir.cutscene` a console `ir.play` can still replace a scene the session
   opened, and the guard is what keeps the session from claiming that ending.
