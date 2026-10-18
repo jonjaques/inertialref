@@ -106,12 +106,13 @@ export function fitLinePath(
   const { fov, aspect, reach } = options
   const kept = beats
     .filter((beat) => (beat.weight ?? 1) > 0)
-    .slice()
     .sort((a, b) => a.frame - b.frame)
   if (kept.length < 2)
     throw new Error('fitLinePath needs at least two weighted beats')
   const excluded = new Set(options.exclude ?? [])
   const fitted = kept.filter((beat) => !excluded.has(beat.frame))
+  if (fitted.length === 0)
+    throw new Error('fitLinePath: `exclude` leaves no beat to fit the line to')
   const points = kept.map((beat) =>
     Vec.scale(screenDirection(beat.x, beat.y, fov, aspect), beat.range),
   )
@@ -325,7 +326,7 @@ function principalDirection(
   return trend >= 0 ? axis : Vec.scale(axis, -1)
 }
 
-/** The heaviest beat nearest the weighted middle of the pass. */
+/** The beat nearest the weighted middle of the pass, the earlier on a tie. */
 function centralIndex(beats: readonly FitBeat[]): number {
   let total = 0
   let frame = 0
@@ -400,7 +401,9 @@ function nelderMead(
     costs = order.map((i) => costs[i] as number)
     const lowest = costs[0] as number
     const highest = costs[n] as number
-    if (highest - lowest <= 1e-16 * (Math.abs(lowest) + 1e-30)) break
+    // A part in 10¹²: a tighter spread is under a double's resolution of the
+    // cost, so the simplex never reaches it and spends all 4000 iterations.
+    if (highest - lowest <= 1e-12 * (Math.abs(lowest) + 1e-30)) break
     const centroid = new Array<number>(n).fill(0)
     for (let i = 0; i < n; i += 1)
       for (let j = 0; j < n; j += 1)
