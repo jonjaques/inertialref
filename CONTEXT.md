@@ -11357,12 +11357,17 @@ is free on a public repository, and the suite takes 78 s there.
 The preferred answer was Linux, and it is not in hand. Ubicloud's
 `ubicloud-gpu` label (an RTX 4000 Ada, $0.032 a minute in its June 2024
 announcement) took no runner. The job sat queued while a `ubicloud-standard-2`
-job in the same workflow ran at once, so the app sees the repository and the
-label is what is gone: the current runner-types page lists no GPU label, and
-the GPU runner guide returns 404. GitHub's own T4 GPU runners need an
-organization on Team or Enterprise. `gpu-probe.yml` keeps the Vulkan job, with
-the driver and ICD diagnostics, behind the `UBICLOUD_GPU` variable, and is run
-by hand once a runner answers to the label.
+job in the same workflow ran at once, so the app saw the repository and the
+label was what had gone: Ubicloud removed GPU runners on 15 March 2026
+(`config/github_runner_labels.yml` in ubicloud/ubicloud). GitHub's own T4 GPU
+runners need an organization on Team or Enterprise. The two candidates left
+both need an account first. RunsOn deploys into the account's own AWS, is free
+for personal non-commercial use, and lists a spot g4dn.xlarge (T4) at about
+$0.005 a minute plus about $7 a month for its control plane. machine.dev
+installs as a GitHub App and bills per minute. Neither documents Vulkan in its
+GPU image. `gpu-probe.yml` runs the Vulkan job, with the driver, loader and ICD
+printed first, on whatever the `LINUX_GPU_RUNNER` variable names, and skips
+it while the variable is unset.
 
 What the Metal job does not catch: a failure that only Vulkan's or D3D's
 translation produces, and any regression in the pass timeline, which still

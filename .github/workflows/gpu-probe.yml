@@ -1,19 +1,28 @@
-# Whether Ubicloud gives Dawn a physical Linux GPU — the Vulkan half of the
+# Whether a Linux runner gives Dawn a physical GPU — the Vulkan half of the
 # shader suite in CI, run by hand.
 #
 # `pnpm test:gpu` runs on every pull request as `check.yml`'s `gpu` job, on the
 # paravirtual Apple GPU of the hosted macOS runner. That device sees Metal and
-# offers no `timestamp-query`. A Linux runner with a real NVIDIA driver would
-# add Vulkan — Dawn's other production backend — and the pass timeline, at
-# Ubicloud's per-minute GPU rate.
+# offers no `timestamp-query`. A Linux runner with a real NVIDIA driver adds
+# Vulkan — Dawn's other production backend — and the pass timeline.
 #
-# The GPU job waits behind the `UBICLOUD_GPU` repository variable because no
-# runner currently answers to `ubicloud-gpu`: Ubicloud's runner-types page
-# lists no GPU label, and GitHub leaves a job whose label nothing serves queued
-# for a day rather than failing it. The integration job beside it runs on the
-# cheapest Ubicloud runner, so a stuck GPU job reads as the label and not the
-# app. Set the variable once Ubicloud confirms the fleet is enabled for the
-# account, then dispatch this workflow from Actions.
+# The runner is the `LINUX_GPU_RUNNER` repository variable, because none of
+# the candidates is a label GitHub serves: each is a third-party provider whose
+# app or stack has to be installed first. It is a `format` string, and `{0}`
+# becomes the run id, which RunsOn's labels need:
+#
+#   RunsOn (your AWS)  runs-on={0}/family=g4dn.xlarge/image=ubuntu24-gpu-x64
+#   machine.dev        machine/gpu=t4/tenancy=spot
+#
+# With the variable unset the job is skipped rather than queued: GitHub leaves
+# a job whose label nothing serves queued for a day instead of failing it.
+# Ubicloud's `ubicloud-gpu` was that label — it removed GPU runners on
+# 15 March 2026 (`config/github_runner_labels.yml` in ubicloud/ubicloud).
+#
+# The images document NVIDIA's CUDA driver and not Vulkan, so the job prints
+# the driver, the loader and the ICD before asking Dawn, and the adapter step
+# fails on a software device — lavapipe or SwiftShader — rather than letting a
+# CPU Vulkan pass for the GPU.
 
 name: gpu-probe
 
@@ -24,17 +33,10 @@ permissions:
   contents: read
 
 jobs:
-  ubicloud:
-    name: ubicloud-standard-2 (integration)
-    runs-on: ubicloud-standard-2
-    timeout-minutes: 5
-    steps:
-      - run: uname -a && nproc && cat /etc/os-release | head -2
-
   linux:
-    name: ubicloud-gpu (Vulkan)
-    if: vars.UBICLOUD_GPU == 'true'
-    runs-on: ubicloud-gpu
+    name: Linux GPU (Vulkan)
+    if: vars.LINUX_GPU_RUNNER != ''
+    runs-on: ${{ format(vars.LINUX_GPU_RUNNER, github.run_id) }}
     timeout-minutes: 20
 
     steps:
@@ -48,7 +50,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # The image carries NVIDIA's driver for CUDA; Vulkan needs the loader and
+      # The images carry NVIDIA's driver for CUDA; Vulkan needs the loader and
       # the driver's ICD as well, and a driver installed for compute alone can
       # ship without the second. Both are printed rather than assumed, so a
       # missing ICD reads as that and not as "Dawn found no adapter".
