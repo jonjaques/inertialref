@@ -15,11 +15,12 @@ import { useTimedFrame } from './useTimedFrame.ts'
  * story as the star catalog's Sol fallback — the flight model neither knows
  * nor cares what the hull looks like.
  *
- * A playing script that names a hero prop gets it drawn from the engine's
- * second slot, `stagedHull`, never from `hull`: the chase distance, the warp
- * and the plumes all read `hull` as the player's, and the scene's prop must
- * not reach them for even the frame between the script's last sample and the
- * player's hull coming back.
+ * A model `engine.stagedModel` names — a playing script's hero prop, or the
+ * Rocinante parked at the Mars pad — is drawn from the engine's second slot,
+ * `stagedHull`, never from `hull`: the chase distance and the warp read `hull`
+ * as the player's, and the staged hull must not reach them for even the frame
+ * between the script's last sample and the player's hull coming back. The
+ * plumes read `hullOnStage`, so they burn on whichever of the two is drawn.
  */
 export function ShipModel({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
@@ -36,15 +37,13 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
   // Seeded from the engine so a Fast Refresh remount, whose effect may not
   // re-run, still renders the hull the session already loaded.
   const [hull, setHull] = useState<LoadedShip | null>(engine.hull)
-  // The prop the playing script asks for, and the hull loaded against it.
-  // `stagedId` is React state rather than a read of `engine.cinematic` at
-  // render time because the primitive below is chosen at render time: the
-  // frame loop writes it, React flushes, and only then does the group hold
-  // the prop — so the visibility gate in the frame callback compares against
+  // The model `engine.stagedModel` names, and the hull loaded against it.
+  // `stagedId` is React state rather than a read of the engine at render
+  // time because the primitive below is chosen at render time: the frame
+  // loop writes it, React flushes, and only then does the group hold the
+  // prop — so the visibility gate in the frame callback compares against
   // this, not the engine, and never shows the group holding the other hull.
-  const [stagedId, setStagedId] = useState<string | null>(
-    engine.cinematic?.ship.model ?? null,
-  )
+  const [stagedId, setStagedId] = useState<string | null>(engine.stagedModel)
   const [staged, setStaged] = useState<LoadedShip | null>(engine.stagedHull)
 
   useEffect(
@@ -103,8 +102,8 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     const scene = engine.scene()
     if (scene === null || group.current === null) return
 
-    // The group holds what the frame asks for: the player's hull when no
-    // script names a prop, the requested prop once it has loaded. Until then
+    // The group holds what the frame asks for: the player's hull when nothing
+    // is staged, the staged model once it has loaded. Until then
     // it is hidden rather than shown holding the other one.
     const onStage =
       stagedId === wanted && (wanted === null || staged?.id === wanted)
