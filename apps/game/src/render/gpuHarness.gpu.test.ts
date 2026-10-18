@@ -49,15 +49,22 @@ describe('the device', () => {
     expect(adapter).not.toBeNull()
     const info = adapter!.info
     /*
-     * Dawn names the hardware here — `apple` / `metal-3` on this machine.
-     * `.not.toBe('')` is not the assertion: it is satisfied by `undefined`,
-     * which is what a renamed field reads as, and the fields are accessors so
-     * a typo enumerates as nothing. And a software adapter is not blank —
-     * lavapipe says `mesa` / `llvmpipe`, WARP says `microsoft` — so the named
-     * ones are excluded by name rather than by emptiness.
+     * Dawn names the hardware here — `apple` / `metal-3` / `apple-m5` on this
+     * machine. `.not.toBe('')` is not the assertion: it is satisfied by
+     * `undefined`, which is what a renamed field reads as, and the fields are
+     * accessors so a typo enumerates as nothing. And a software adapter is not
+     * blank — lavapipe says `mesa` / `llvmpipe`, WARP says `microsoft` — so the
+     * named ones are excluded by name rather than by emptiness.
+     *
+     * The device is what is required, not the architecture: the paravirtual
+     * GPU of a hosted macOS runner reports `apple` / `` /
+     * `apple-paravirtual-device`, a real Metal device with no family name.
+     * The architecture is still read, so a renamed field fails the type check
+     * and the software pattern still sees it.
      */
     expect(info.vendor).toMatch(/\S/)
-    expect(info.architecture).toMatch(/\S/)
+    expect(info.device).toMatch(/\S/)
+    expect(typeof info.architecture).toBe('string')
     const software = /mesa|llvmpipe|swiftshader|warp|microsoft basic/i
     expect(`${info.vendor} ${info.architecture} ${info.device}`).not.toMatch(
       software,

@@ -27,7 +27,7 @@ import {
 } from '@inertialref/rendering'
 import { DefocusNode } from './defocus.ts'
 import { createGalaxyBackdrop, GalaxyVolumeNode } from './galaxyVolume.ts'
-import { openGpu, type GpuSession } from './gpuHarness.ts'
+import { adapterOffers, openGpu, type GpuSession } from './gpuHarness.ts'
 import { MotionNode } from './motion.ts'
 import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 import { PsfNode } from './psf.ts'
@@ -49,6 +49,9 @@ const NO_MSAA = { ...DEFAULT_PICTURE, aa: 'off' } as const
 
 const SIZE = 64
 let gpu: GpuSession
+// The paravirtual GPU of a hosted macOS runner offers no timestamp queries, so
+// the timeline has nothing to read there; gpuHarness.ts `adapterOffers`.
+const TIMESTAMPS = await adapterOffers('timestamp-query')
 beforeAll(async () => {
   gpu = await openGpu(SIZE, SIZE)
 })
@@ -114,7 +117,7 @@ describe('the quad-pass runner', () => {
   })
 })
 
-describe('the timeline, through the runner', () => {
+describe.skipIf(!TIMESTAMPS)('the timeline, through the runner', () => {
   it('finds every optical pass by its own name', async () => {
     const renderer = gpu.renderer
     const stop = installPassTimeline(renderer)

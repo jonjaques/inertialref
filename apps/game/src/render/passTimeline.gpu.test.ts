@@ -9,7 +9,7 @@ import {
   Scene,
 } from 'three/webgpu'
 import { screenUV, vec3, viewportSharedTexture } from 'three/tsl'
-import { openGpu, type GpuSession } from './gpuHarness.ts'
+import { adapterOffers, openGpu, type GpuSession } from './gpuHarness.ts'
 import {
   installPassTimeline,
   namePass,
@@ -19,6 +19,9 @@ import {
 
 let gpu: GpuSession
 const SIZE = 64
+// The instrument is timestamp queries; an adapter without them has nothing to
+// time, which is the paravirtual GPU of a hosted macOS runner.
+const TIMESTAMPS = await adapterOffers('timestamp-query')
 beforeAll(async () => {
   gpu = await openGpu(SIZE, SIZE)
 })
@@ -70,14 +73,14 @@ function sea() {
   }
 }
 
-describe('the pass timeline on the physical GPU', () => {
+describe.skipIf(!TIMESTAMPS)('the pass timeline on the physical GPU', () => {
   it('times the scene pass on both sides of a framebuffer copy', async () => {
     const stop = installPassTimeline(gpu.renderer)
     const rig = sea()
     try {
       const timeline = passTimelineOf(gpu.renderer)
-      // The feature is what the whole instrument rests on; a Dawn without it
-      // is a harness to fix, not a test to skip.
+      // The adapter offers the feature, so no timeline is a renderer that did
+      // not request it: a harness to fix, not a test to skip.
       expect(timeline).not.toBeNull()
       rig.draw() // compile outside the measurement
       let result!: PassTimelineResult

@@ -315,6 +315,22 @@ function unpad(
 
 const DEFAULT_SIZE = 64
 
+/**
+ * Whether this machine's adapter offers `feature`, for a test that measures
+ * through it rather than draws.
+ *
+ * A file awaits this at its top level and skips by it. That is a statement
+ * about the hardware and never a softer test: the paravirtual Apple GPU a
+ * hosted macOS runner provides is a real Metal device that offers no
+ * `timestamp-query`, so the pass timeline has nothing to read there. A skip
+ * keyed on the adapter's own answer still fails a machine whose adapter
+ * offers the feature and whose renderer does not take it up.
+ */
+export async function adapterOffers(feature: GPUFeatureName): Promise<boolean> {
+  const adapter = await navigator.gpu.requestAdapter()
+  return adapter?.features.has(feature) ?? false
+}
+
 export async function openGpu(
   width = DEFAULT_SIZE,
   height = DEFAULT_SIZE,
