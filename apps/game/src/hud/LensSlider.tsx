@@ -27,13 +27,13 @@ import { releaseFocus } from './focus.ts'
 export function LensSlider({
   channel,
   camera,
-  labelledBy,
+  labeledBy,
   describedBy,
 }: {
   channel: LensChannelId
   camera: CameraState
   /** The id of the label drawn above the track, which is the slider's name. */
-  labelledBy: string
+  labeledBy: string
   /** The id of the element carrying the channel's `description`. */
   describedBy: string
 }) {
@@ -47,7 +47,7 @@ export function LensSlider({
       // Named by the word on screen, so what a reader hears and what a
       // speech-input user says are the same — "Shutter", not "Exposure time,
       // seconds" (SC 2.5.3). The longer sentence is the description.
-      aria-labelledby={labelledBy}
+      aria-labelledby={labeledBy}
       aria-describedby={describedBy}
       // The position is a scrub index over a logarithmic travel, so the number
       // a screen reader would otherwise announce is in no unit at all — 386

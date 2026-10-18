@@ -29,7 +29,7 @@ function Slider({
   min = 0,
   max = 100,
   'aria-label': label,
-  'aria-labelledby': labelledBy,
+  'aria-labelledby': labeledBy,
   'aria-describedby': describedBy,
   'aria-valuetext': valueText,
   ...props
@@ -43,12 +43,6 @@ function Slider({
           : [min, max],
     [value, defaultValue, min, max],
   )
-  const named = {
-    'aria-label': label,
-    'aria-labelledby': labelledBy,
-    'aria-describedby': describedBy,
-    'aria-valuetext': valueText,
-  }
   const single = _values.length === 1
 
   return (
@@ -58,7 +52,10 @@ function Slider({
       value={value}
       min={min}
       max={max}
-      {...(single ? {} : named)}
+      aria-label={single ? undefined : label}
+      aria-labelledby={single ? undefined : labeledBy}
+      aria-describedby={single ? undefined : describedBy}
+      aria-valuetext={single ? undefined : valueText}
       className={cn(
         'relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col',
         className,
@@ -82,7 +79,10 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
-          {...(single ? named : {})}
+          aria-label={single ? label : undefined}
+          aria-labelledby={single ? labeledBy : undefined}
+          aria-describedby={single ? describedBy : undefined}
+          aria-valuetext={single ? valueText : undefined}
           className="block size-4 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}

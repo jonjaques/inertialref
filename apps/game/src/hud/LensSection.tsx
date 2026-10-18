@@ -108,7 +108,7 @@ export function LensSection({
               <LensSlider
                 channel={channel}
                 camera={camera}
-                labelledBy={`${id}-${channel}`}
+                labeledBy={`${id}-${channel}`}
                 describedBy={`${id}-${channel}-about`}
               />
             </div>

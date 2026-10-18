@@ -70,10 +70,10 @@ function unnamedControls(markup: string): string[] {
     (m) => m[0],
   ).filter((tag) => {
     if (/aria-label="[^"]+"/.test(tag)) return false
-    const labelledBy = /aria-labelledby="([^"]+)"/.exec(tag)?.[1]
+    const labeledBy = /aria-labelledby="([^"]+)"/.exec(tag)?.[1]
     return (
-      labelledBy === undefined ||
-      !labelledBy.split(' ').every((id) => ids.has(id))
+      labeledBy === undefined ||
+      !labeledBy.split(' ').every((id) => ids.has(id))
     )
   })
 }
