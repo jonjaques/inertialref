@@ -98,9 +98,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
   }, [engine, anisotropy, gl, camera, scene])
 
   useTimedFrame('shipModel', () => {
-    const wanted =
-      engine.cinematic?.ship.model ??
-      (engine.character.padPreview ? 'rocinante' : null)
+    const wanted = engine.stagedModel
     if (wanted !== stagedId) setStagedId(wanted)
     const scene = engine.scene()
     if (scene === null || group.current === null) return

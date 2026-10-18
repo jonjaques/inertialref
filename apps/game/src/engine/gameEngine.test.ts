@@ -5,17 +5,20 @@ import {
   lensForFov,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import { DEFAULT_FILL } from '@inertialref/devtools'
+import { DEBUG_LANDING_SITE, DEFAULT_FILL } from '@inertialref/devtools'
 import { rootSeed } from '@inertialref/procedural'
 import {
   drainageBuilds,
+  type EntityId,
   drains,
   generateHeightfield,
   regionAddress,
   surfaceGrammar,
   surfaceKernel,
+  TEST_CATALOG,
 } from '@inertialref/universe'
 import { HeightfieldArchive, type HeightfieldStore } from '@inertialref/workers'
+import type { GameEngine } from './GameEngine.ts'
 import { headlessEngine } from './headlessEngine.ts'
 
 /*
@@ -346,6 +349,67 @@ describe('the game engine, headless', () => {
     const entity = game.scene()!.entities.find((one) => one.id === ship)
     expect(entity?.kind).toBe('ship')
     game.dispose()
+  })
+
+  it('draws the plumes of the hull it parks, where it parks it', () => {
+    /*
+     * A parked hull can thrust: a throttle under its weight keeps it landed,
+     * and a control held at the step out stays on the vessel. So `ThrusterFx`
+     * is keyed on the hull `ShipModel` draws and rooted at the pose it draws
+     * it at — at the Mars pad a Rocinante, raised and upright, whatever the
+     * player's own hull is; beside a generated world, the player's hull at
+     * the entity's pose.
+     */
+    const hull = (id: string): NonNullable<GameEngine['hull']> => ({
+      id,
+      group: null as never,
+      lengthMeters: 46,
+      beamMeters: 8,
+    })
+    const parkedThrusting = (game: GameEngine, ship: EntityId | null) => {
+      if (ship === null) throw new Error('no vessel')
+      game.world.setThrottle(ship, 0.01)
+      game.world.runTicks(64)
+      game.frame(1 / 60)
+      expect(game.world.isLanded(ship)).toBe(true)
+      expect(game.owner?.ship).toBe(ship)
+      const entity = game.scene()!.entities.find((one) => one.id === ship)
+      expect(entity?.thrust?.drive).toBe(0.01)
+    }
+
+    const pad = headlessEngine()
+    pad.hull = hull('enterprise-d')
+    pad.stagedHull = hull('rocinante')
+    pad.character.atMarsPad()
+    parkedThrusting(pad, pad.character.ship)
+    expect(pad.stagedModel).toBe('rocinante')
+    expect(pad.hullOnStage?.id).toBe('rocinante')
+    expect(pad.parkedRocinante).not.toBeNull()
+    pad.dispose()
+
+    const away = headlessEngine({ catalog: TEST_CATALOG })
+    away.hull = hull('enterprise-d')
+    away.stagedHull = hull('rocinante')
+    away.harness.goToSystem('HIP70890')
+    const world = away.harness
+      .targets()
+      .find(
+        (one) =>
+          one.landable && one.address.startsWith('g:milky-way/s:HIP70890/'),
+      )
+    if (world === undefined) throw new Error('nowhere to land')
+    away.harness.land(
+      world.address,
+      DEBUG_LANDING_SITE.latitude,
+      DEBUG_LANDING_SITE.longitude,
+    )
+    away.harness.step(1)
+    expect(away.harness.onFoot.stepOut().ok).toBe(true)
+    parkedThrusting(away, away.character.ship)
+    expect(away.stagedModel).toBeNull()
+    expect(away.hullOnStage?.id).toBe('enterprise-d')
+    expect(away.parkedRocinante).toBeNull()
+    away.dispose()
   })
 
   it('says whether it has booted, so a driver need name nothing of its own', () => {

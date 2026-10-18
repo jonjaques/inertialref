@@ -100,10 +100,10 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
     if (view === null || root === null) return
 
     // The hull the frame draws, so the plumes are keyed on the same layout:
-    // a script's prop while it names one and has loaded, the player's hull
-    // otherwise. Never `engine.hull` under a named prop — that slot stays
-    // the player's, and the prop's plumes at the entity's pose would be the
-    // Rocinante's drive burning beside the Enterprise.
+    // a script's prop or the pad's parked Rocinante once it has loaded, the
+    // player's hull otherwise. Never `engine.hull` while a model is staged —
+    // that slot stays the player's, and its plumes beside the staged hull
+    // would be the Enterprise's drive burning under the Rocinante.
     const hull = engine.hullOnStage
     const owner = engine.owner
     const cinematic = owner?.arm === 'cutscene' ? owner.cinematic : null
@@ -144,20 +144,23 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
     }
 
     // The player's ship as the frame names it — on foot, the one the walker
-    // stepped out of. Its entity pose, not the raised pad pose `ShipModel`
-    // draws a parked Rocinante at; the two part only if a parked hull thrusts.
+    // stepped out of. Its demand is the entity's, and its pose is the one
+    // `ShipModel` draws the hull at: the raised pad pose for a parked
+    // Rocinante, which a parked hull can thrust from, because a control held
+    // at the step out stays on the vessel.
     const ship = view.entities.find((entity) => entity.id === owner?.ship)
     if (ship === undefined) {
       root.visible = false
       return
     }
+    const pose = engine.parkedRocinante ?? ship
     root.visible = true
-    root.position.set(ship.position.x, ship.position.y, ship.position.z)
+    root.position.set(pose.position.x, pose.position.y, pose.position.z)
     root.quaternion.set(
-      ship.orientation.x,
-      ship.orientation.y,
-      ship.orientation.z,
-      ship.orientation.w,
+      pose.orientation.x,
+      pose.orientation.y,
+      pose.orientation.z,
+      pose.orientation.w,
     )
 
     const demand = ship.thrust

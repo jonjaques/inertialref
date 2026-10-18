@@ -200,11 +200,6 @@ request of its own; each belongs to the next change that opens its file.
 
 **The walker and the frame.**
 
-- **The plumes and the parked hull can part.** On foot `ThrusterFx` roots its
-  plumes at the vessel entity's pose; `ShipModel` draws a parked Rocinante at
-  the raised, upright pad pose. They differ only if a parked hull reports a
-  thrust demand, and nothing shows one never does. Either root the plumes at
-  `engine.parkedRocinante`, or hold a parked hull's demand at zero in a test.
 - **Two of the derived-state test's probes are never warm.** `rotationStop`
   and `terrain` are cold at the pad before the load, so their cold read after
   it proves only that they do not throw.
