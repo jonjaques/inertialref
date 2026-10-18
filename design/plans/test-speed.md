@@ -129,6 +129,69 @@ own `browserWorker.ts` has already defined once for the browser.
   **Decided: tried in the Stop gate, with the full run kept in `pnpm check`
   and CI.** It stays only if a measurement on the M5 says how much it saves and
   how often it skips a test a turn's edit broke.
+
+  The switch is `IR_GATE_CHANGED=1`, off by default. The `gate` group then runs
+  `test:changed` in place of `test`: `vitest run --changed` against the
+  branch's merge-base with `origin/main`, because with no ref vitest diffs
+  only the index and the working tree, and a turn that commits before it stops
+  runs zero files. It is a separate stage with its own stamp, so a green gate
+  under the switch leaves `test` unstamped and `pnpm check` runs the full suite.
+
+  **The miss rate is measured, and it is not zero.** The last seven commits on
+  `origin/main` (`b37e24e` to `84bf20d`) were replayed two ways. In the first,
+  each commit's diff is the working-tree change over its parent. That missed
+  nothing, but no commit on `main` breaks its own tests, so it tests nothing.
+  In the second, each commit's non-test changes are reverted with its tests
+  kept: a known break. Seven test files failed under the full suite, and
+  `--changed` did not run **two of the seven**. Each miss was a blind spot:
+
+  - **A file read through `fs`.** `scripts/brand/coverage.test.mjs` reads the
+    `.woff2` subsets and `index.css` from disk (`e027da6`). The import graph
+    has no edge to them, so `--changed` runs nothing. This is the data-file
+    case named above, and the same holds for configs under `scripts/` read
+    the same way.
+  - **A deleted module.** `scripts/driveScript.test.mjs` imports a module the
+    revert removes (`08eb042`). Vitest's graph walk drops any import that is
+    not on disk, so the test that now fails at import is never selected. A
+    rename or delete that leaves an importer behind is invisible.
+
+  `package.json` and any `vite`/`vitest` config are `forceRerunTriggers` and
+  run the whole suite. `tsconfig.json`, `.oxlintrc.json` and the files under
+  `data/` are not.
+
+  **The saving is a third of the suite, and it depends on what moved.** On an
+  Intel Xeon at 2.10 GHz with 4 cores (vitest at 3 workers), Linux, Node
+  26.12.0, vitest 4.1.10, with nothing else running, the full root suite reads
+  105.9 to 110.1 s at 314 to 316% CPU on every commit. `--changed` over the
+  same seven diffs reads:
+
+  | Commit    | Files run | `--changed`   | Full suite     |
+  | --------- | --------- | ------------- | -------------- |
+  | `84bf20d` | 3 / 271   | 5.8 s @ 193%  | 105.9 s @ 316% |
+  | `e027da6` | 1 / 271   | 4.4 s @ 169%  | 107.0 s @ 315% |
+  | `7739cce` | 101 / 270 | 58.8 s @ 306% | 109.4 s @ 315% |
+  | `868c54d` | 145 / 269 | 86.8 s @ 311% | 109.8 s @ 315% |
+  | `08eb042` | 12 / 269  | 14.4 s @ 198% | 108.8 s @ 315% |
+  | `817c945` | 2 / 268   | 5.0 s @ 175%  | 107.2 s @ 316% |
+  | `b37e24e` | 75 / 268  | 50.2 s @ 304% | 110.1 s @ 314% |
+
+  In total that is 225.5 s against 758.3 s of wall clock, and 659 s against
+  2,389 s of CPU: 30% and 28% of the full cost. An edit to
+  `packages/simulation` or `packages/universe` reaches 100 to 145 files and saves a fifth
+  of the run. A docs, script or tour edit reaches a handful and saves nearly
+  all of it. In the gate the typecheck runs beside the suite: on this machine
+  `typecheck:astro` takes 36.1 s, so for a narrow edit the gate's wall clock
+  drops from 104.9 s, bounded by `test`, to 36.1 s, bounded by the typecheck.
+
+  **Not taken: the M5 figure.** The decision asks for the saving on the M5,
+  and these are four-core cloud figures. The miss rate does not depend on the
+  machine. The saving does, and it is the one local step left: run
+  `IR_GATE_CHANGED=1 pnpm check --only gate` against `pnpm check --only gate`
+  on a narrow and a wide edit, with the CPU percentage beside each. Two misses
+  in seven planted breaks argue for keeping the switch off unless the M5
+  saving is large. Seven commits is a small sample: a planted break that the
+  next commit's tests do not cover never enters the count.
+
 - **`isolate: false`** for `packages/*`, whose tests are pure functions over
   pure inputs, skips the per-file module re-evaluation. Import time across the
   16.8 s run is 27.8 s of thread time, against 99.9 s of test time and 5.8 s of
