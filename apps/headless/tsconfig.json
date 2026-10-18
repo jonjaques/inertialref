@@ -4,5 +4,8 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["src"]
+  /* `packages/workers/node` is the archive's SQLite store: a package file,
+     typed here because this is the Node project and the core's has no Node
+     lib. */
+  "include": ["src", "../../packages/workers/node"]
 }

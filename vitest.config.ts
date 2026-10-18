@@ -43,6 +43,8 @@ export default defineConfig({
      */
     include: [
       'packages/*/src/**/*.test.ts',
+      // A package's Node-only export (`packages/workers/node`), outside `src/`.
+      'packages/*/node/**/*.test.ts',
       'apps/*/src/**/*.test.ts',
       'scripts/**/*.test.mjs',
     ],

@@ -25,7 +25,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { heightfieldArchiveVersion } from '../packages/workers/src/heightfieldCache.ts'
 import { POOL_ARCHIVE } from '../packages/workers/src/tasks.ts'
-import { DEFAULT_HEIGHTFIELD_DIRECTORY } from '../apps/headless/src/heightfieldStore.ts'
+import { DEFAULT_HEIGHTFIELD_DIRECTORY } from '../packages/workers/node/heightfieldStore.ts'
 
 // The headless archive is the pool's alone: nothing in Node runs the kernel.
 const version = heightfieldArchiveVersion(POOL_ARCHIVE).replaceAll(':', '-')

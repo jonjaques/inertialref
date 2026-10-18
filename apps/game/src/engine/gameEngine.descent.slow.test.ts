@@ -13,7 +13,7 @@ import {
 } from './terrainStreamer.ts'
 import { headlessEngine } from './headlessEngine.ts'
 import { loadStarCatalog } from '../../../headless/src/catalog.ts'
-import { DiskHeightfieldStore } from '../../../headless/src/heightfieldStore.ts'
+import { DiskHeightfieldStore } from '@inertialref/workers/node'
 
 /*
  * The ground, over one descent — the slow suite.

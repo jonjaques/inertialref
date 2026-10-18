@@ -11,7 +11,7 @@ import {
 } from '@inertialref/universe'
 import { HeightfieldArchive } from '@inertialref/workers'
 import { loadStarCatalog } from './catalog.ts'
-import { DiskHeightfieldStore } from './heightfieldStore.ts'
+import { DiskHeightfieldStore } from '@inertialref/workers/node'
 
 it('replays canonical terrain outside Sol from disk without touching the world or generator', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'ir-generated-terrain-'))

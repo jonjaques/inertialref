@@ -11339,6 +11339,30 @@ falls was 1.01 ms — the raw pairs are latency on this GPU, as `summarize` says
 A 64-pixel pass can finish inside the timestamp quantum and read 0, so the GPU
 test asks that some owned pass read time, not each.
 
+## The heightfield store is a package's Node export, and the descent suite stops reaching into headless (18 Oct 2026)
+
+`apps/game`'s slow descent suite imported the SQLite archive store from
+`apps/headless/src` by relative path, so the game's test graph needed
+`node:sqlite`, `node:v8`, `node:fs` and `node:crypto` through no manifest
+edge, and `pnpm graph`, which reads manifests under `packages/*`, could not
+see it. The store is `packages/workers/node/heightfieldStore.ts`, reached as
+`@inertialref/workers/node`. It sits outside `src/` because `src/` is the
+portable core's type project, with no Node lib; the headless project types
+it. The game already depends on `@inertialref/workers`, so the manifest edge
+is the same one whether a file takes the root or the subpath — which is why
+the layering alone cannot keep the store out of the browser. `pnpm graph`
+also reads the sources the browser bundle and the Worker compile
+(`apps/game/src` and `astro/` without tests, `apps/server/src`) and refuses
+a `@inertialref/*/node` import there. Vite does not refuse it: it stubs a
+Node builtin with an "externalized for browser compatibility" warning and
+builds. After the move the game build ran clean, with no such warning and no
+`node:` specifier, `DatabaseSync` or `tiles.sqlite` anywhere in the shipped
+JavaScript.
+
+The suite still imports `loadStarCatalog` from `apps/headless/src/catalog.ts`
+by relative path: the same shape, over `node:fs` alone, and no check reads an
+app's relative imports for one that leaves the app.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

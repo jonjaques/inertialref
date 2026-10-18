@@ -442,7 +442,7 @@ requests without another generator call, and holds the world's state hash
 unchanged.
 
 ```bash
-pnpm vitest run packages/workers/src/heightfieldCache.test.ts apps/headless/src/heightfieldStore.test.ts apps/headless/src/terrainCacheBaseline.test.ts apps/game/src/engine/terrainStore.test.ts
+pnpm vitest run packages/workers/src/heightfieldCache.test.ts packages/workers/node/heightfieldStore.test.ts apps/headless/src/terrainCacheBaseline.test.ts apps/game/src/engine/terrainStore.test.ts
 pnpm sim --ticks 0 --terrain-cache-clear --terrain-cache-descent 'g:milky-way/s:HIP70890/b:0'
 pnpm sim --ticks 0 --terrain-cache-descent 'g:milky-way/s:HIP70890/b:0'
 pnpm sim --ticks 0 --terrain-cache --terrain-baseline

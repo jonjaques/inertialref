@@ -1,3 +1,14 @@
+/*
+ * The disk half of the heightfield archive's port, for Node.
+ *
+ * `HeightfieldArchive` in `src/` runs in a browser, a worker and Node and
+ * reaches storage only through `HeightfieldStore`; the browser fills that port
+ * with IndexedDB, and this file fills it with SQLite. It sits outside `src/`
+ * because `src/` is the portable core's type project, which has no Node lib,
+ * and it is reached only through the package's `./node` export, so nothing that
+ * imports `@inertialref/workers` compiles it. `pnpm graph` refuses that export
+ * in any file the browser bundle or the Worker compiles.
+ */
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -8,7 +19,7 @@ import type {
   HeightfieldCacheRecord,
   HeightfieldStore,
   HeightfieldStoreStats,
-} from '@inertialref/workers'
+} from '../src/heightfieldCache.ts'
 
 export const DEFAULT_HEIGHTFIELD_DIRECTORY = fileURLToPath(
   new URL('../../../.data/heightfields/', import.meta.url),

@@ -40,7 +40,7 @@ import {
   poolHeightfieldSource,
 } from '@inertialref/workers'
 import { findBody, parseAddress } from '@inertialref/universe'
-import { DiskHeightfieldStore } from './heightfieldStore.ts'
+import { DiskHeightfieldStore } from '@inertialref/workers/node'
 import { loadStarCatalog } from './catalog.ts'
 import { captureSave, serializeSave } from '@inertialref/persistence'
 
