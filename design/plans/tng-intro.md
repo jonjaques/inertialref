@@ -118,18 +118,40 @@ screen and nothing may move before it clears. Whether 350 frames is enough to
 carry a tilt that follows a ship overhead is a question for a capture, not for
 this file.
 
-Two smaller things:
+**`fitLinePath` is the solver behind every rail**
+(`packages/devtools/src/linePathFit.ts`). It scores a candidate line by the
+screen distance from each beat's mark to the point on the line at that beat's
+range, takes each throttle knot as the root of its range, and pools and splits
+the knots until no quarter-frame sample reverses. `linePathFit.test.ts` refits
+all six rails from the beats they were fitted to: both warp-outs come back to
+the tenth of a meter they were typed to, the three wipes within 0.36° and 0.005
+of the frame, and the descent within 0.40° and 0.015 — its entry fillers land at
+f1760 and f1765 where the script has f1760–1770, the same repair for the same
+overshoot. The script's numbers stay as they are, and the solver is where they come
+from.
 
-- **`fitLinePath` does not exist as a shipped solver.** Every direction and
-  throttle in the file was fitted offline and landed as numbers with a residual
-  test beside them. That is honest and it is not reusable; a second scene would
-  fit its lines by hand again.
-- **The fits are against the ~25 authored beats, not the per-frame track.**
-  `data/reference/tng-subject-track.json` carries a box for 1639 of the 2742
-  frames; `hud/referenceTrack.ts` draws it as the track overlay, and no fit
-  reads it. Weighting each by its width confidence is what would
-  turn the descent's 0.09-of-the-frame residual at f1920–1960 into a statement
-  about the reference rather than about which beats were hand-read.
+**The descent's f1920–1960 residual is half the beats and half the
+reference.** `apps/headless/src/descentTrackFit.test.ts` fits a free line to the
+per-frame track, f1758–2130, with every frame weighted by § 1's rules
+(`subjectTrackBeats.ts`): no weight against an edge or saturated, none on the
+25 one-frame transients whose centroid jumps 0.1–0.4 of the frame, the box
+stitched across the floor-crossing steps, and the inner-to-starboard blob pair
+as the range wherever it is one, calibrated to the box. That leaves 206
+weighted frames, f1794–2058. Against those frames at f1920–1960:
+
+| line                                    | worst | mean  |
+| --------------------------------------- | ----- | ----- |
+| fitted to the track                     | 0.044 | 0.039 |
+| `DESCENT_RAIL`, fitted to the ~20 beats | 0.090 | 0.085 |
+
+The figure holds across the rules' constants — 0.025 to 0.047 — and the track
+fit's rms over the whole weighted span is 0.033. The track's line is 6.3° from
+`DESCENT_RAIL`'s, so the beats and the track disagree about the direction as
+well as the marks. Two limits on the instrument: the export's only position is
+the lit mass's centroid, while the beats were read as box centers, 0.025 and
+0.027 apart at f1920 and f1960; and the pair's range and the box's disagree about the
+closing by 0.91–1.14 where both measure it. Whether `DESCENT_RAIL` takes the
+track's line is a choreography change and waits for a capture.
 
 **Non-goals.** Keyframe asset formats, camera rigs, a `camera` entity, spline
 editors, and depth of field — the reference has no measurable DOF, everything in
