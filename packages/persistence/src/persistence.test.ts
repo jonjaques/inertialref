@@ -2,11 +2,15 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { expect as unwrap } from '@inertialref/shared'
 import { SAVE_SCHEMA_VERSION } from '@inertialref/protocol'
-import { restState, UV, Vec, vec3 } from '@inertialref/spatial'
+import { Quaternion as Q, restState, UV, Vec, vec3 } from '@inertialref/spatial'
 import { World } from '@inertialref/simulation'
 import {
+  bodyFixedFrameId,
   bodyFrameId,
+  compassBasis,
   type EntityId,
+  installSurfaceFrame,
+  parseSurfaceFrameId,
   systemFrameId,
   systemId,
   walkBodies,
@@ -244,6 +248,46 @@ describe('migrations', () => {
     expect(restored.world.entities.require('#0' as EntityId).thrusters).toEqual(
       { mainThrust: 30, rcsThrust: 8, torque: 1.2 },
     )
+  })
+
+  it("reads a v5 landed ship's numbers in the v6 surface frame, turning it a half turn", () => {
+    /*
+     * v5 → v6 renames the surface frame's axes and converts nothing: the
+     * landed pose comes back number for number, so a ship written at identity
+     * — facing south in a v5 frame — now faces north, the compass's heading 0.
+     */
+    const world = new World({ seed: 'inertialref' })
+    const mars = world.loadSystem(SOL).planets[3]!
+    const frame = installSurfaceFrame(world.frames, mars, 0.4, 1.1)
+    const ship = world.spawnShip('lander', frame, Vec.ZERO)
+    world.runTicks(2)
+    expect(world.isLanded(ship.id)).toBe(true)
+    const written = world.entities.require(ship.id).state
+    const v5 = { ...captureSave(world, ship.id), schemaVersion: 5 }
+    const restored = unwrap(
+      restoreSave(unwrap(parseSave(JSON.stringify(v5)), 'parse')),
+      'restore',
+    ).world
+    const state = restored.entities.require(ship.id).state
+    expect(state).toEqual(written)
+    expect(restored.isLanded(ship.id)).toBe(true)
+    const time = restored.clock.time
+    const facing = Q.rotate(
+      Q.multiply(
+        Q.conjugate(
+          restored.frames.pose(bodyFixedFrameId(mars.address), time)
+            .orientation,
+        ),
+        Q.multiply(
+          restored.frames.pose(state.frame, time).orientation,
+          state.orientation,
+        ),
+      ),
+      vec3(0, 0, -1),
+    )
+    const { latitude, longitude } = parseSurfaceFrameId(frame)!
+    const { north } = compassBasis(latitude, longitude, 0)
+    expect(Vec.dot(facing, north)).toBeCloseTo(1, 12)
   })
 
   it('refuses a v2 entity list that is not a list rather than emptying it', () => {

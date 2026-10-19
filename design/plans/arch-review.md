@@ -57,6 +57,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The scene target's layout is one table                       | `sceneLayout` in [`apps/game/src/render/sceneLayout.ts`](../../apps/game/src/render/sceneLayout.ts), `engine.sceneLayout`, and its test                                  |
 | One render size and one resolution                           | `renderSize` and `pictureUpscales` in [`apps/game/src/render/picture.ts`](../../apps/game/src/render/picture.ts), `SceneLayout.picture`, and their tests                 |
 | GPU timing is one instrument                                 | `PassSource` and `owned` in [`apps/game/src/render/passTimeline.ts`](../../apps/game/src/render/passTimeline.ts), the upscaler's source in `render/upscale.ts`, ADR-0044 |
+| East at a surface point is one function                      | `compassBasis` in [`packages/universe/src/frames.ts`](../../packages/universe/src/frames.ts), `surfaceCompass.test.ts`, `CONTEXT.md`                                     |
 
 ---
 
@@ -65,13 +66,11 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | #   | Pull request                                                                       | Track       | Builds on | When                 |
 | --- | ---------------------------------------------------------------------------------- | ----------- | --------- | -------------------- |
 | 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages) | The picture | —         | With iris sampling   |
-| A   | [One compass basis](#a-one-compass-basis)                                          | The frame   | —         | Decided              |
 | B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)              | Terrain     | —         | Next terrain version |
 
 ```mermaid
 flowchart LR
   P20[20 Stage list]
-  A[A Compass basis]
   B[B Surface identity]
 ```
 
@@ -80,8 +79,8 @@ the numbering is the order to take them in. Nothing left crosses a track.**
 
 **What is left waits on something.** The guide and terrain tracks are in the
 tree, and of the picture track everything but 20, which waits on a fourth
-optical stage, which is per-glass iris sampling. A is decided and takes a save
-version; B rides the next terrain version. Each section says what it costs.
+optical stage, which is per-glass iris sampling. B rides the next terrain
+version. Each section says what it costs.
 [Open from the review of 6–11](#open-from-the-review-of-611) and the lists
 after it hold the smaller follow-ups those pull requests left, none of them a
 pull request of its own.
@@ -120,41 +119,6 @@ defocus gate.
 
 **Gate.** `optics.gpu.test.ts`'s "warms every pass" becomes a check over the
 list: every stage warmed, named and disposed.
-
----
-
-## A. One compass basis
-
-**Track:** the frame · **Decided** · in-process
-
-**Slots in:** anywhere. `OnFoot.site` steps out at heading 0; a walker that
-steps out facing the way its ship faces needs this first.
-
-**The friction.** "East" at a surface point is derived four ways. `placementBasis`
-(`packages/simulation/src/surfacePlacement.ts`) takes `cross(+Y, up)`;
-`installSurfaceFrame` (`packages/universe/src/frames.ts`) takes
-`(-up.z, 0, up.x)`, its negation; `spawnCharacter` re-derives the basis in
-another closed form; `OnFoot.site` computes a third; the camera's
-tests use `localTriad`. The first is geographic east — `geodeticDirection`'s
-longitude increases along `cross(+Y, up)` — so the surface frame's +X points
-west. A landed entity's orientation is stored relative to that frame, and
-`ir.land` teleports a ship there at `Q.IDENTITY`, so making the surface frame
-read the shared basis turns every `ir.land` placement and every landed ship in
-a save 180° about up — a ship that lands by flight is reframed and keeps its
-heading. The pull request either keeps the surface frame's axes and converts
-at the boundary, or spends a version on what a save means. Nothing is wrong
-today, because every heading derived this way is 0. It is a trap for the first
-heading taken from a landed ship.
-
-**The shape.** `compassBasis(latitude, longitude, heading)` in
-`packages/universe`, read by all four.
-
-**Decided: taken, and it spends a save version with no migration.** The
-surface frame reads the shared basis, so its +X is geographic east, and a save
-written under the old frame is not carried forward — backward compatibility of
-saves is not a requirement here. The pull request bumps the save version and
-says in its own body what an older save does on load: refused, or loaded with
-its landed ships turned 180° about up.
 
 ---
 

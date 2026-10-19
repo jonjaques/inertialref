@@ -173,12 +173,36 @@ const v4ToV5: Migration = {
   },
 }
 
+/*
+ * The surface frame's axes, renamed and not converted.
+ *
+ * A v5 surface frame has +X west and +Z north, so a ship at identity in it
+ * faces south: `compassBasis` at heading 0, turned a half turn about up. v6
+ * reads the shared basis, so the same numbers mean a pose turned 180° about
+ * the frame's up axis — a landed ship faces the other way, and its offset
+ * from the frame's origin, half a quantum of latitude and longitude at most
+ * and so meters, swings to the other side. The step converts nothing, and
+ * that is the decision rather than an omission: backward compatibility of
+ * saves is not a requirement, nothing reads a landed ship's heading, and the
+ * version is spent so that the change has a name. Characters live in the
+ * body-fixed frame and structures in their own placement basis, so neither
+ * moves.
+ */
+const v5ToV6: Migration = {
+  from: 5,
+  to: 6,
+  describe:
+    'read surface frames as east / up / north, turning landed ships a half turn',
+  migrate: (raw) => ({ ...raw, schemaVersion: 6 }),
+}
+
 export const MIGRATIONS: readonly Migration[] = [
   v0ToV1,
   v1ToV2,
   v2ToV3,
   v3ToV4,
   v4ToV5,
+  v5ToV6,
 ]
 
 export function migrateSave(

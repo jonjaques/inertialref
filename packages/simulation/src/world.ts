@@ -37,6 +37,7 @@ import {
   bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
+  compassBasis,
   directionToGeodetic,
   dynamicEntityId,
   type EntityId,
@@ -646,12 +647,10 @@ export class World implements FlightWorld {
       `${vessel} is not a vessel`,
     )
     this.loadSystem(body.address.system)
-    const direction = geodeticDirection(latitude, longitude)
-    const east = vec3(-Math.sin(longitude), 0, -Math.cos(longitude))
-    const south = Vec.cross(east, direction)
-    const orientation = Q.multiply(
-      Q.fromBasis(east, direction, south),
-      Q.fromAxisAngle(vec3(0, 1, 0), -heading),
+    const { up: direction, orientation } = compassBasis(
+      latitude,
+      longitude,
+      heading,
     )
     return this.spawn({
       id: dynamicEntityId(this.#entities.nextDynamicIndex()),
