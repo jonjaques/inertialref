@@ -909,6 +909,12 @@ const WARP_OUT_1_RAIL: LinePath = (() => {
  * of the recipe was already right.
  */
 const WIPE_OFFSETS = [0, 126, 247] as const
+/** The three wipes as flown: one line, shifted, mirrored, shifted. */
+const WIPE_RAILS: readonly LinePath[] = WIPE_OFFSETS.map((offset, index) =>
+  index === 1
+    ? mirroredLine(WIPE_RAIL, offset)
+    : shiftedLine(WIPE_RAIL, offset),
+)
 /**
  * The first wipe's measured occlusion frame. The other two are it plus their
  * own offsets — derived rather than retyped, because it is the same frame of
@@ -2524,10 +2530,7 @@ function buildStage(world: World): Stage {
     ...WIPE_OFFSETS.map((offset, index) => ({
       from: 1286 + offset,
       to: 1330 + offset,
-      line:
-        index === 1
-          ? mirroredLine(WIPE_RAIL, offset)
-          : shiftedLine(WIPE_RAIL, offset),
+      line: WIPE_RAILS[index] as LinePath,
     })),
     { from: 1755, to: 2130, line: DESCENT_RAIL },
     /*
@@ -3022,9 +3025,16 @@ export function screenPositionOf(offset: Vec3): {
 /** The authored screen beats, in their measured form. */
 export const TNG_SHIP_BEATS = {
   cruise: SHIP_CRUISE,
+  warpOut: WARP_OUT_1,
   wipe: WIPE,
   return: SHIP_RETURN,
 }
+
+/** The two lens spikes, whose directions are the two departures' headings. */
+export const TNG_WARP_OUT_SPIKES = [WARP_OUT_SPIKE, WARP_OUT_2_SPIKE] as const
+
+/** The three wipes' rails as flown, in `TNG_WIPE_OFFSETS` order. */
+export const TNG_WIPE_RAILS = WIPE_RAILS
 
 /** `screenDirection` at this script's lens, for tests. */
 export const tngScreenDirection = (x: number, y: number): Vec3 =>
