@@ -120,7 +120,8 @@ adapter.**
   now the queue — the number the next phase is measured against.
 - Every band's shape table is shared, and a band's change is a kernel change:
   `pnpm test:gpu` is the check, and it needs a physical adapter, so it is
-  outside `pnpm check` and a CI without a GPU cannot run it.
+  outside `pnpm check`; CI runs it as a job of its own on the hosted macOS
+  runner's paravirtual Metal device.
 - The structure around the bands is shared as well. `BAND_STACK` in
   `packages/universe/src/bandStack.ts` is the one description of which stages
   there are, in what order, behind which gate — spelled once against the body

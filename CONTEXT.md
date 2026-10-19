@@ -11459,6 +11459,42 @@ and the two agree only for a hull whose axes carry the spin axis onto itself.
 Over a two-second fall it is far inside a degree, and it is the bound the test
 names; the spin a coasting hull keeps is its own question.
 
+## The shader suite runs in CI on a paravirtual Apple GPU (18 Oct 2026)
+
+`pnpm test:gpu` is `check.yml`'s `gpu` job, on the hosted `macos-15` runner,
+on every pull request. The runner is a virtual machine, and its GPU is Apple's
+paravirtual device. Dawn reports it as `apple` / `` /
+`apple-paravirtual-device` under the Metal backend. The first probe run
+passed 169 of 176 tests there. The seven failures had two causes, and neither
+was a shader. The empty architecture failed the physical-device check, which
+now requires the device field and keeps the architecture's type and the
+software pattern. The device offers no `timestamp-query` (and no
+`primitive-index`, which the M5 has), so the pass timeline is null, and the
+six tests that read it skip on `adapterOffers('timestamp-query')`. With those
+changes it runs 170 and skips 6 there, and the M5 runs all 176. The runner
+is free on a public repository, and the suite takes 78 s there.
+
+The preferred answer was Linux, and it is not in hand. Ubicloud's
+`ubicloud-gpu` label (an RTX 4000 Ada, $0.032 a minute in its June 2024
+announcement) took no runner. The job sat queued while a `ubicloud-standard-2`
+job in the same workflow ran at once, so the app saw the repository and the
+label was what had gone: Ubicloud removed GPU runners on 15 March 2026
+(`config/github_runner_labels.yml` in ubicloud/ubicloud). GitHub's own T4 GPU
+runners need an organization on Team or Enterprise. The two candidates left
+both need an account first. RunsOn deploys into the account's own AWS, is free
+for personal non-commercial use, and lists a spot g4dn.xlarge (T4) at about
+$0.005 a minute plus about $7 a month for its control plane. machine.dev
+installs as a GitHub App and bills per minute. Neither documents Vulkan in its
+GPU image. `gpu-probe.yml` runs the Vulkan job, with the driver, loader and ICD
+printed first, on whatever the `LINUX_GPU_RUNNER` variable names, and skips
+it while the variable is unset.
+
+What the Metal job does not catch: a failure that only Vulkan's or D3D's
+translation produces, and any regression in the pass timeline, which still
+needs a workstation. `presets:compare` stays local. It needs Chrome to present
+the app, and runner-images #14840 records WebGL2 stalling in Metal resource
+creation on the same image.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

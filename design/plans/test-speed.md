@@ -171,19 +171,6 @@ eight threads rather than two.
   **Declined.** Two or three seconds do not pay for a class of failure where a
   test that leaks module state across files fails as another file's bug.
 
-### 4. The GPU suite in CI, settled by one run
-
-`pnpm test:gpu` and `pnpm presets:compare` run only on a machine with a
-physical adapter, so a shader regression is caught only when someone runs them
-there. Whether a hosted macOS runner gives Dawn a plain `MTLDevice` is
-unknown, and Linux is the wrong fallback — Dawn takes SwiftShader there and
-misses the Metal-only failures the suite exists to catch
-([roadmap § automation gaps](../../docs/roadmap.md#automation-gaps)).
-**Decided: one throwaway workflow run on a hosted macOS runner** installs,
-reports the adapter Dawn finds and runs `pnpm test:gpu`. If it passes on Metal,
-the GPU project joins CI; if not, the suite stays a local discipline and the
-roadmap row names the reason.
-
 ---
 
 ## Related

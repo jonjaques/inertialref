@@ -519,12 +519,12 @@ otherwise assert in prose.
 
 ## What is not covered yet
 
-| Gap                                                                                                                              | Roadmap                                            |
-| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal)   | [roadmap](../roadmap.md#persistent-mutations)      |
-| Recorded input replay                                                                                                            | [roadmap](../roadmap.md#replay-and-reconciliation) |
-| Performance regression benchmarks                                                                                                | [roadmap](../roadmap.md#performance-work)          |
-| Shader behavior in CI — `pnpm test:gpu` needs a physical adapter, and whether a hosted macOS runner gives Dawn one is unmeasured | [roadmap](../roadmap.md#automation-gaps)           |
+| Gap                                                                                                                            | Roadmap                                            |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal) | [roadmap](../roadmap.md#persistent-mutations)      |
+| Recorded input replay                                                                                                          | [roadmap](../roadmap.md#replay-and-reconciliation) |
+| Performance regression benchmarks                                                                                              | [roadmap](../roadmap.md#performance-work)          |
+| Shader behavior on Vulkan, and the pass timeline, in CI — the CI GPU is a paravirtual Metal device without `timestamp-query`   | [roadmap](../roadmap.md#automation-gaps)           |
 
 ---
 
