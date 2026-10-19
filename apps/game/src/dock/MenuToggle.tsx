@@ -28,6 +28,7 @@ export function MenuToggle({
   hint,
   pressed,
   onClick,
+  panel,
   side = 'top',
 }: {
   icon: LucideIcon
@@ -36,6 +37,8 @@ export function MenuToggle({
   hint?: string
   pressed: boolean
   onClick: () => void
+  /** The dock panel this toggles, so its Close can hand focus back here. */
+  panel?: string
   /** Away from the edge the menu is on. */
   side?: 'top' | 'bottom'
 }) {
@@ -47,6 +50,7 @@ export function MenuToggle({
           size="icon-sm"
           aria-pressed={pressed}
           aria-label={label}
+          data-panel-toggle={panel}
           onClick={(event) => {
             releaseFocus(event)
             onClick()

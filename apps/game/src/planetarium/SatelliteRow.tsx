@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react'
 import { formatReading } from '@inertialref/shared'
 import type { Satellite } from '@inertialref/devtools'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
@@ -18,7 +19,8 @@ export function SatelliteRow({
   onFocus,
 }: {
   moon: Satellite
-  onFocus: () => void
+  /** Handed the click, so the panel can tell a key from a pointer. */
+  onFocus: (event: MouseEvent<HTMLButtonElement>) => void
 }) {
   const Glyph = iconForKind(moon.kind)
   return (
@@ -27,7 +29,7 @@ export function SatelliteRow({
         type="button"
         onClick={(event) => {
           releaseFocus(event)
-          onFocus()
+          onFocus(event)
         }}
         className={`flex min-h-7 w-full items-center gap-2 rounded px-1 text-left transition-colors text-slate-300 hover:bg-slate-800/60 hover:text-sky-100 ${FOCUS_RING}`}
       >

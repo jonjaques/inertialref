@@ -44,6 +44,40 @@ import {
 } from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
 
+/** Whether a slider thumb is named, through `aria-labelledby`, by this word on screen. */
+function namedSlider(markup: string, label: string): boolean {
+  const id = new RegExp(`id="([^"]+)"[^>]*>${label}<`).exec(markup)?.[1]
+  return (
+    id !== undefined &&
+    new RegExp(`role="slider"[^>]*aria-labelledby="${id}"`).test(markup)
+  )
+}
+
+/**
+ * Every switch and slider thumb in the markup that has no accessible name.
+ *
+ * The static half of the shell plan's name audit: a control counts as named
+ * when it carries a non-empty `aria-label`, or an `aria-labelledby` whose every
+ * id is an element in the same markup. What a browser computes from that — and
+ * whether the referenced text is the word on screen — is the live audit's.
+ */
+function unnamedControls(markup: string): string[] {
+  const ids = new Set(
+    Array.from(markup.matchAll(/ id="([^"]+)"/g), (m) => m[1]),
+  )
+  return Array.from(
+    markup.matchAll(/<[a-z]+ [^>]*role="(?:switch|slider)"[^>]*>/g),
+    (m) => m[0],
+  ).filter((tag) => {
+    if (/aria-label="[^"]+"/.test(tag)) return false
+    const labeledBy = /aria-labelledby="([^"]+)"/.exec(tag)?.[1]
+    return (
+      labeledBy === undefined ||
+      !labeledBy.split(' ').every((id) => ids.has(id))
+    )
+  })
+}
+
 // Static markup is the DOM-free renderer for these mounted client instruments.
 // Their saved preferences and published engine samples belong after hydration;
 // state/hydration.test.ts separately verifies the server's default preferences.
@@ -479,12 +513,8 @@ describe('the author’s instruments', () => {
     const markup = renderToStaticMarkup(
       createElement(KeymapProvider, null, createElement(LensSection)),
     )
-    expect(markup.includes('aria-label="Exposure time, seconds"')).toBe(
-      mode === 'manual',
-    )
-    expect(markup.includes('aria-label="Sensor gain, ISO"')).toBe(
-      mode === 'manual',
-    )
+    expect(namedSlider(markup, 'Shutter')).toBe(mode === 'manual')
+    expect(namedSlider(markup, 'Gain')).toBe(mode === 'manual')
     expect(markup.includes('aria-label="Exposure compensation"')).toBe(
       mode === 'automatic',
     )
@@ -492,6 +522,35 @@ describe('the author’s instruments', () => {
       mode === 'automatic',
     )
     expect(markup).toContain('aria-label="White balance"')
+  })
+
+  it('names every switch and slider thumb in the graphics and lens panels', () => {
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode: 'manual' })
+    const markup =
+      renderToStaticMarkup(
+        createElement(GraphicsPanel, {
+          render: {
+            preference: 'auto' as const,
+            output: null,
+            onPreference: () => {},
+          },
+          onNotice: () => {},
+        }),
+      ) +
+      renderToStaticMarkup(
+        createElement(KeymapProvider, null, createElement(LensSection)),
+      )
+    // Radix renders the name on the root span unless `components/ui/slider.tsx`
+    // moves it, so a thumb with no name is the regression this catches.
+    expect(markup.match(/role="switch"/g)?.length).toBeGreaterThan(0)
+    expect(markup.match(/role="slider"/g)?.length).toBeGreaterThan(0)
+    expect(unnamedControls(markup)).toEqual([])
+    // A switch is named by its label alone; the sentence under it describes.
+    const flare = markup
+      .split('<label')
+      .find((row) => row.includes('Lens Flare'))
+    const labelId = /id="([^"]+)"[^>]*>Lens Flare</.exec(flare ?? '')?.[1]
+    expect(flare).toContain(`aria-labelledby="${labelId}"`)
   })
 
   it('explains unavailable Automatic and exposes its manual fallback controls', () => {
@@ -513,8 +572,8 @@ describe('the author’s instruments', () => {
     )
     expect(markup).toContain('Automatic needs WebGPU')
     expect(markup).toContain('Use Manual')
-    expect(markup).toContain('aria-label="Exposure time, seconds"')
-    expect(markup).toContain('aria-label="Sensor gain, ISO"')
+    expect(namedSlider(markup, 'Shutter')).toBe(true)
+    expect(namedSlider(markup, 'Gain')).toBe(true)
     expect(markup).not.toContain('aria-label="Adaptation rate"')
   })
 

@@ -21,6 +21,7 @@ import { drawn, type PanelGroup } from './panels.ts'
 import type { DockPlacement } from './placement.ts'
 import { PlacementMenu } from './PlacementMenu.tsx'
 import { isOpen, type Workspace } from './useWorkspace.ts'
+import { holdWayHome, WAY_HOME } from './wayHome.ts'
 
 /*
  * The IR menu: the one bar that says where you are and what is on screen.
@@ -108,6 +109,8 @@ export function IrMenu({
         <Tooltip>
           <TooltipTrigger asChild>
             <Link
+              id={WAY_HOME}
+              ref={holdWayHome}
               to={HOME}
               aria-label="Back to the menu"
               className={`flex min-h-7 shrink-0 items-center gap-2 rounded px-1.5 text-slate-300 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
@@ -180,6 +183,7 @@ export function IrMenu({
                       hint={panel.hint}
                       pressed={isOpen(workspace.layout, panel.id)}
                       onClick={() => workspace.toggle(panel.id)}
+                      panel={panel.id}
                       side={side}
                     />
                   ))}
