@@ -28,6 +28,10 @@ import { FOCUS_RING } from '../hud/focus.ts'
  * The trigger is a real `<button>` rather than a `<span title>`. `title` is not
  * reachable from a keyboard and is announced inconsistently, and the reason is
  * the only content of the row.
+ *
+ * `min-h-6` on the button makes it the row's full 24px, WCAG 2.2 SC 2.5.8's
+ * minimum, rather than its 17px line box. The row is baseline-aligned, so the
+ * extra height grows around the text and "no data" stays on the label's line.
  */
 export function FactRow({ fact }: { fact: Fact }) {
   return (
@@ -38,7 +42,7 @@ export function FactRow({ fact }: { fact: Fact }) {
           <TooltipTrigger asChild>
             <button
               type="button"
-              className={`type-readout cursor-help rounded text-right text-slate-400 underline decoration-slate-400/50 decoration-dotted underline-offset-4 transition-colors hover:text-slate-300 ${FOCUS_RING}`}
+              className={`type-readout min-h-6 cursor-help rounded text-right text-slate-400 underline decoration-slate-400/50 decoration-dotted underline-offset-4 transition-colors hover:text-slate-300 ${FOCUS_RING}`}
             >
               no data
             </button>

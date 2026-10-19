@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import { Dialog } from 'radix-ui'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { FOCUS_RING } from '../hud/focus.ts'
 import { useAction, useActionTitle, useKeyContext } from '../input/useKeymap.ts'
 import { useHydrated } from '../state/hydration.ts'
 import { HOME } from './paths.ts'
@@ -72,7 +73,10 @@ export function OverlayPage({
       role="dialog"
       aria-modal={modal}
       aria-label={title}
-      className={`type-body flex max-h-[calc(100%-4rem)] ${wide ? 'w-[56rem]' : 'w-[34rem]'} max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl outline-none`}
+      // The panel takes focus on open, so it draws the system's hairline when
+      // a keyboard opened it — not Chrome's own ring, which is brighter than
+      // any neutral in the palette — and nothing when a pointer did.
+      className={`type-body flex max-h-[calc(100%-4rem)] ${wide ? 'w-[56rem]' : 'w-[34rem]'} max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl ${FOCUS_RING}`}
       initial={hydrated ? { opacity: 0, y: 8 } : false}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+import type { MouseEvent } from 'react'
 import { CircleDashed, CornerLeftUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Section } from '../hud/Section.tsx'
@@ -36,6 +38,35 @@ import type { PlanetariumContext } from './context.ts'
 export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
   const page = useDossier(engine, target)
 
+  /*
+   * Where a keyboard lands when it changes the subject: the new subject's name.
+   *
+   * The primary and every satellite row are buttons that take themselves away —
+   * the page they sit on is replaced by the record of where they lead, through
+   * a render with no record at all while it is built. Left alone, focus drops
+   * to `<body>` there and Chrome resumes the next Tab from the middle of the new
+   * page. The heading is where reading the new page starts and what a screen
+   * reader should announce, and from it the next stop is the way back up, on
+   * every body that has one.
+   *
+   * Matched by address rather than taken by the next page that arrives,
+   * because the old record can be rebuilt before the new one: the observatory's
+   * target reaches this panel through the 8 Hz snapshot, so for up to one
+   * sample the page is still the body that was left.
+   */
+  const title = useRef<HTMLHeadingElement>(null)
+  const arriving = useRef<string | null>(null)
+  useEffect(() => {
+    if (page === null || arriving.current !== page.address) return
+    arriving.current = null
+    title.current?.focus()
+  }, [page])
+
+  const go = (address: string, event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail === 0) arriving.current = address
+    focus(address)
+  }
+
   if (page === null) {
     return (
       <p className="type-ui px-1 py-2 text-pretty text-slate-400">
@@ -65,7 +96,11 @@ export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
              * currently in — which is exactly what this panel is the readout
              * for. Everything under it is instrument and stays instrument.
              */}
-            <h3 className="type-title text-balance text-slate-100">
+            <h3
+              ref={title}
+              tabIndex={-1}
+              className={`type-title text-balance text-slate-100 ${FOCUS_RING}`}
+            >
               {page.name}
             </h3>
             <p className="type-label text-sky-400/80">{page.classification}</p>
@@ -87,7 +122,7 @@ export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
               title={`Look at ${page.primary.name}`}
               onClick={(event) => {
                 releaseFocus(event)
-                if (page.primary !== null) focus(page.primary.address)
+                if (page.primary !== null) go(page.primary.address, event)
               }}
               className={`type-ui flex min-h-6 items-center gap-1 rounded border border-slate-700 bg-slate-800/60 px-1.5 text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 active:scale-[0.96] ${FOCUS_RING}`}
             >
@@ -154,7 +189,7 @@ export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
               <SatelliteRow
                 key={moon.address}
                 moon={moon}
-                onFocus={() => focus(moon.address)}
+                onFocus={(event) => go(moon.address, event)}
               />
             ))}
           </ul>

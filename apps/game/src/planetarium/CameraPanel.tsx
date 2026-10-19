@@ -1,4 +1,5 @@
 import { TargetControls } from './TargetControls.tsx'
+import { useId } from 'react'
 import { Compass } from 'lucide-react'
 import { formatReading } from '@inertialref/shared'
 import { compassDegrees, MIN_STANCE_HEIGHT } from '@inertialref/rendering'
@@ -84,6 +85,7 @@ export function CameraPanel(context: PlanetariumContext) {
     }),
   )
 
+  const glare = useId()
   const lookTitle = useActionTitle(
     'observe.freeLook',
     'Turn the head with a drag and the arrow keys, instead of orbiting',
@@ -283,9 +285,14 @@ export function CameraPanel(context: PlanetariumContext) {
          */}
         <div className="flex flex-col">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="type-ui shrink-0 text-slate-400">Glare</span>
+            <span id={glare} className="type-ui shrink-0 text-slate-400">
+              Glare
+            </span>
             <span className="type-readout truncate text-right text-slate-300">
               {Math.round(flare * 100)}%
+            </span>
+            <span id={`${glare}-about`} hidden>
+              Lens glare — ghosts, streaks and bloom
             </span>
           </div>
           <Slider
@@ -293,7 +300,11 @@ export function CameraPanel(context: PlanetariumContext) {
             max={100}
             step={5}
             value={[Math.round(flare * 100)]}
-            aria-label="Lens glare — ghosts, streaks and bloom"
+            // Named by the word above it, as the lens channels are; the
+            // sentence that says what glare is goes in the description.
+            aria-labelledby={glare}
+            aria-describedby={`${glare}-about`}
+            aria-valuetext={`${Math.round(flare * 100)}%`}
             onValueChange={([next]) => {
               if (next !== undefined) onFlare(next / 100)
             }}

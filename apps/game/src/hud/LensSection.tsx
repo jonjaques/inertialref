@@ -1,5 +1,5 @@
 import { SensorSection } from './SensorSection.tsx'
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import {
   effectiveFocalLength,
   verticalFovDegrees,
@@ -58,6 +58,7 @@ export function LensSection({
     sensor.mode === 'manual' ||
     (sensor.mode === 'automatic' && automaticAvailable === false)
   const camera: CameraState = { lens, onLens: setLens }
+  const id = useId()
   return (
     <>
       <SensorSection />
@@ -91,14 +92,25 @@ export function LensSection({
           .map((channel) => (
             <div key={channel} className="flex flex-col">
               <div className="flex items-baseline justify-between gap-3">
-                <span className="type-ui shrink-0 text-slate-400">
+                <span
+                  id={`${id}-${channel}`}
+                  className="type-ui shrink-0 text-slate-400"
+                >
                   {LENS_CHANNELS[channel].label}
                 </span>
                 <span className="type-readout truncate text-right text-slate-300">
                   {LENS_CHANNELS[channel].format(camera.lens)}
                 </span>
+                <span id={`${id}-${channel}-about`} hidden>
+                  {LENS_CHANNELS[channel].description}
+                </span>
               </div>
-              <LensSlider channel={channel} camera={camera} />
+              <LensSlider
+                channel={channel}
+                camera={camera}
+                labeledBy={`${id}-${channel}`}
+                describedBy={`${id}-${channel}-about`}
+              />
             </div>
           ))}
         {children}

@@ -11412,6 +11412,51 @@ about this machine.
 
 `scripts/check.mjs` weights the `slow` stage as the threads plus the test
 thread, `poolSize()` repeated as `DESCENT_THREADS`.
+## East at a surface point is one function, and the surface frame turned to face it (18 Oct 2026)
+
+"East" at a surface point was derived four ways. `placementBasis` took
+`cross(+Y, up)`, which is geographic east — `geodeticDirection`'s longitude
+increases along it. `spawnCharacter` wrote the same vector in closed form from
+the longitude. `OnFoot.site` took the cross product again against the spun
+pole. `installSurfaceFrame` took `(-up.z, 0, up.x)`, the negation, so the
+surface frame was west / up / north and a ship at `Q.IDENTITY` in it faced
+south while a pad at heading 0 faced north. Nothing disagreed visibly because
+every heading anything derived was 0; the first walker to step out facing the
+way its ship faced would have stepped out backward. `compassBasis(latitude,
+longitude, heading)` in `packages/universe/src/frames.ts` is now the one
+answer, and all four read it. The camera test that built a walker's pose from
+`localTriad(geodeticDirection(...))` reads it too; `localTriad` itself stays,
+because it answers for an `up` in arbitrary axes — the observatory's tilted
+pole — where there are no angles to start from.
+
+The two ways the plan offered were to keep the surface frame's axes and
+convert at the boundary, or to turn the frame and spend a save version. Jon
+took the second, with no migration, because backward compatibility of saves is
+not a requirement and a conversion at every boundary is the trap the change
+removes. Save schema v6 renames the frame's axes: the v5 → v6 step bumps the
+number and converts nothing, so an older save loads and its landed ships come
+back turned 180° about the frame's up, their offset from the frame's origin —
+half a quantum of latitude and longitude at most, meters — swung to the other
+side. Refusing older saves was the other choice, and it would have refused
+every save the migration chain still carries for the sake of a heading nothing
+reads. Characters live in the body-fixed frame and structures in their own
+placement basis, so neither moves. `ir.land` still teleports at `Q.IDENTITY`,
+which now means the pad's heading-0 facing; a ship that lands by flight is
+reframed and keeps its pose, which `surfaceCompass.test.ts` checks across the
+touchdown tick on Mars and on a generated world at Alpha Centauri.
+
+The closed form defines east at the poles as the given meridian's, where
+`cross(+Y, up)` has no length and the old fallback, `cross(+X, up)`, was a guess
+independent of longitude. A placement exactly at a pole now turns with its
+longitude; none exists.
+
+Measuring the flown landing found something outside this change: a probe in
+free fall over Mars, given the body's spin by `reframe`, turns against the
+ground at 2.4e-5 rad/s at 34.6° north. `reframe` returns the angular velocity
+in frame axes; `Q.integrate` right-multiplies, which reads it in body axes,
+and the two agree only for a hull whose axes carry the spin axis onto itself.
+Over a two-second fall it is far inside a degree, and it is the bound the test
+names; the spin a coasting hull keeps is its own question.
 
 ## Known gaps
 

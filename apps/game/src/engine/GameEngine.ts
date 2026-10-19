@@ -690,8 +690,7 @@ export class GameEngine {
 
   get galaxyInstrument(): boolean {
     return (
-      this.cinematic === null &&
-      this.observer !== null &&
+      this.owner?.arm === 'observatory' &&
       this.harness.observatory.galaxyInstrument
     )
   }
@@ -702,7 +701,7 @@ export class GameEngine {
 
   /** The resolved external instrument, under the usual camera precedence. */
   get galaxyView() {
-    return this.cinematic === null && this.observer !== null
+    return this.owner?.arm === 'observatory'
       ? this.harness.observatory.galaxyView
       : null
   }
@@ -804,7 +803,8 @@ export class GameEngine {
   hull: LoadedShip | null = null
 
   /*
-   * The hull a playing script names as its hero prop, once that glTF resolves.
+   * The hull `stagedModel` names — a playing script's hero prop, or the pad's
+   * parked Rocinante — once that glTF resolves.
    *
    * A second slot rather than a swap of `hull`, because `hull` is read as the
    * player's: `CameraRig` solves the chase distance from its length, `WarpFx`
@@ -819,13 +819,25 @@ export class GameEngine {
   stagedHull: LoadedShip | null = null
 
   /**
-   * The hull the frame draws: the script's prop while a playing scene names
-   * one, the player's otherwise. Null while a named prop is still loading,
-   * so nothing scales an effect from the wrong hull in the meantime.
+   * The model `stagedHull` is loaded against: the script's prop while a
+   * playing scene names one, the Rocinante the Mars pad fixture parks beside
+   * its walker, and null for the player's own hull.
+   */
+  get stagedModel(): string | null {
+    return (
+      this.cinematic?.ship.model ??
+      (this.character.padPreview ? 'rocinante' : null)
+    )
+  }
+
+  /**
+   * The hull the frame draws: the staged model when there is one, the
+   * player's otherwise. Null while a staged model is still loading, so
+   * nothing scales an effect from the wrong hull in the meantime.
    */
   get hullOnStage(): LoadedShip | null {
-    const model = this.cinematic?.ship.model
-    if (model === undefined) return this.hull
+    const model = this.stagedModel
+    if (model === null) return this.hull
     return this.stagedHull?.id === model ? this.stagedHull : null
   }
 

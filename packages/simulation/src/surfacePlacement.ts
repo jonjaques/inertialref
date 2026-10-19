@@ -11,6 +11,7 @@ import {
 import {
   type Body,
   type BodyFixedDirection,
+  compassBasis,
   formatAddress,
   geodeticDirection,
   type SurfacePlacement,
@@ -41,16 +42,10 @@ const bases = new WeakMap<SurfacePlacement, PlacementBasis>()
 export function placementBasis(placement: SurfacePlacement): PlacementBasis {
   const held = bases.get(placement)
   if (held !== undefined) return held
-  const up = geodeticDirection(placement.latitude, placement.longitude)
-  const across = Vec.cross(vec3(0, 1, 0), up)
-  const east =
-    Vec.length(across) > 1e-6
-      ? Vec.normalize(across)
-      : Vec.normalize(Vec.cross(vec3(1, 0, 0), up))
-  const south = Vec.cross(east, up)
-  const orientation = Q.multiply(
-    Q.fromBasis(east, up, south),
-    Q.fromAxisAngle(vec3(0, 1, 0), -placement.heading),
+  const { up, orientation } = compassBasis(
+    placement.latitude,
+    placement.longitude,
+    placement.heading,
   )
   const basis: PlacementBasis = {
     up,

@@ -43,7 +43,7 @@ export function DocFooter({
           >
             <ArrowLeft
               aria-hidden
-              className="size-3.5 shrink-0 translate-y-0.5 text-slate-600 transition-colors group-hover:text-sky-300"
+              className="size-3.5 shrink-0 translate-y-0.5 text-slate-400 transition-colors group-hover:text-sky-300"
             />
             <span className="min-w-0">
               <span className="type-label block text-slate-400">Previous</span>
@@ -63,7 +63,7 @@ export function DocFooter({
             </span>
             <ArrowRight
               aria-hidden
-              className="size-3.5 shrink-0 translate-y-0.5 text-slate-600 transition-colors group-hover:text-sky-300"
+              className="size-3.5 shrink-0 translate-y-0.5 text-slate-400 transition-colors group-hover:text-sky-300"
             />
           </Link>
         )}

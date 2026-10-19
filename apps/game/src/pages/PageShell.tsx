@@ -57,20 +57,21 @@ export function PageShell({ initialDocs }: { initialDocs?: InitialDocs }) {
         <div className="hud-layer pointer-events-none absolute">
           {visible && (
             <>
-              <div
-                className={`pointer-events-none absolute inset-0 ${mode === 'cinema' ? 'z-30' : 'z-0'}`}
-              >
-                <ErrorBoundary
-                  what={`the ${mode} mode`}
-                  className="pointer-events-auto absolute inset-0"
-                >
-                  <ModeRoutes
-                    engine={runtime?.engine ?? null}
-                    dev={runtime?.dev ?? NO_DEV}
-                    onNotice={runtime?.onNotice ?? ignoreNotice}
-                  />
-                </ErrorBoundary>
-              </div>
+              {/*
+               * The dialog band before the mode band, in the DOM only.
+               *
+               * A routed dialog is deliberately not modal — the simulation
+               * runs on underneath — so the page it covers stays in the tab
+               * order. Behind the mode in the DOM, the dialog's Close would
+               * come after every control on that page: sixth from a cold focus
+               * over the front door's five links, and after every open panel
+               * over the planetarium. Here it leads this layer, behind only
+               * the skip link and `App`'s layer, which comes first in the
+               * document — the walker's row in a mode that has one — and the
+               * mode's controls follow the dialog's. Both bands
+               * carry an explicit z-index, so paint and hit testing do not read
+               * this order: the dialog stays at 40 over a mode at 0 or 30.
+               */}
               <div className="pointer-events-none absolute inset-0 z-40">
                 <ErrorBoundary
                   what="the page overlay"
@@ -84,6 +85,20 @@ export function PageShell({ initialDocs }: { initialDocs?: InitialDocs }) {
                         onPreference: setHdr,
                       }
                     }
+                    onNotice={runtime?.onNotice ?? ignoreNotice}
+                  />
+                </ErrorBoundary>
+              </div>
+              <div
+                className={`pointer-events-none absolute inset-0 ${mode === 'cinema' ? 'z-30' : 'z-0'}`}
+              >
+                <ErrorBoundary
+                  what={`the ${mode} mode`}
+                  className="pointer-events-auto absolute inset-0"
+                >
+                  <ModeRoutes
+                    engine={runtime?.engine ?? null}
+                    dev={runtime?.dev ?? NO_DEV}
                     onNotice={runtime?.onNotice ?? ignoreNotice}
                   />
                 </ErrorBoundary>

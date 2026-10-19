@@ -15,6 +15,7 @@ import {
   type Body,
   bodyFixedDirection,
   bodyFixedFrameId,
+  compassBasis,
   directionToGeodetic,
   type EntityId,
   findBody,
@@ -169,11 +170,14 @@ export class OnFoot {
     const time = world.clock.time
     const spin = world.frames.pose(bodyFixedFrameId(body.address), time)
     const position = canonicalPosition(world.frames, entity.state, time)
-    const up = Vec.normalize(UV.difference(position, spin.position))
-    const east = Vec.normalize(
-      Vec.cross(Q.rotate(spin.orientation, vec3(0, 1, 0)), up),
+    const { latitude, longitude } = directionToGeodetic(
+      bodyFixedDirection(spin, position),
     )
-    const offset = Vec.scale(east, Math.max(4, beamMeters / 2 + 3))
+    const { east } = compassBasis(latitude, longitude, 0)
+    const offset = Vec.scale(
+      Q.rotate(spin.orientation, east),
+      Math.max(4, beamMeters / 2 + 3),
+    )
     const direction = bodyFixedDirection(spin, UV.translate(position, offset))
     return { body, ...directionToGeodetic(direction), heading: 0 }
   }

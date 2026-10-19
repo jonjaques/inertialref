@@ -572,10 +572,12 @@ function splineScalarSlope(
 
   const { v1, v2, m1, m2, t, span } = splineSegment(frames, values, frame)
   const t2 = t * t
+  // `v2 - v1` before the basis rather than each value through it: a log range
+  // is ~10 and a held throttle's knots differ by an ulp, so the two products
+  // cancel to rounding error of either sign and a hold reads as flown backward.
   return (
-    ((6 * t2 - 6 * t) * v1 +
+    ((6 * t - 6 * t2) * (v2 - v1) +
       (3 * t2 - 4 * t + 1) * m1 +
-      (-6 * t2 + 6 * t) * v2 +
       (3 * t2 - 2 * t) * m2) /
     span
   )
@@ -876,11 +878,8 @@ export interface AdvanceBeat {
  *
  * Everything is in camera axes, the frame `screenOffset` produces offsets in,
  * so `anchor` is a displacement from the lens rather than a place in the
- * universe. Fitting one of these from a measured track belongs in devtools and
- * is not written yet: a solver has no business on the sample path. Nothing in
- * `tngIntro.ts` flies one of these either — the straight passes are still
- * authored `AimBeat`s composed through `withAttitude`, which is the same
- * attitude a line would derive but without the guarantee.
+ * universe. Fitting one from measured beats is devtools' `fitLinePath`: a
+ * solver has no business on the sample path.
  */
 export interface LinePath {
   /** Camera axes. The point `t = 0` names. */

@@ -57,6 +57,7 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | The scene target's layout is one table                       | `sceneLayout` in [`apps/game/src/render/sceneLayout.ts`](../../apps/game/src/render/sceneLayout.ts), `engine.sceneLayout`, and its test                                  |
 | One render size and one resolution                           | `renderSize` and `pictureUpscales` in [`apps/game/src/render/picture.ts`](../../apps/game/src/render/picture.ts), `SceneLayout.picture`, and their tests                 |
 | GPU timing is one instrument                                 | `PassSource` and `owned` in [`apps/game/src/render/passTimeline.ts`](../../apps/game/src/render/passTimeline.ts), the upscaler's source in `render/upscale.ts`, ADR-0044 |
+| East at a surface point is one function                      | `compassBasis` in [`packages/universe/src/frames.ts`](../../packages/universe/src/frames.ts), `surfaceCompass.test.ts`, `CONTEXT.md`                                     |
 
 ---
 
@@ -65,13 +66,11 @@ The deepenings already landed, each carrying its reasoning in its own file:
 | #   | Pull request                                                                       | Track       | Builds on | When                 |
 | --- | ---------------------------------------------------------------------------------- | ----------- | --------- | -------------------- |
 | 20  | [The optical chain is a list of stages](#20-the-optical-chain-is-a-list-of-stages) | The picture | —         | With iris sampling   |
-| A   | [One compass basis](#a-one-compass-basis)                                          | The frame   | —         | Decided              |
 | B   | [Surface identity is stated once](#b-surface-identity-is-stated-once)              | Terrain     | —         | Next terrain version |
 
 ```mermaid
 flowchart LR
   P20[20 Stage list]
-  A[A Compass basis]
   B[B Surface identity]
 ```
 
@@ -80,8 +79,8 @@ the numbering is the order to take them in. Nothing left crosses a track.**
 
 **What is left waits on something.** The guide and terrain tracks are in the
 tree, and of the picture track everything but 20, which waits on a fourth
-optical stage, which is per-glass iris sampling. A is decided and takes a save
-version; B rides the next terrain version. Each section says what it costs.
+optical stage, which is per-glass iris sampling. B rides the next terrain
+version. Each section says what it costs.
 [Open from the review of 6–11](#open-from-the-review-of-611) and the lists
 after it hold the smaller follow-ups those pull requests left, none of them a
 pull request of its own.
@@ -120,41 +119,6 @@ defocus gate.
 
 **Gate.** `optics.gpu.test.ts`'s "warms every pass" becomes a check over the
 list: every stage warmed, named and disposed.
-
----
-
-## A. One compass basis
-
-**Track:** the frame · **Decided** · in-process
-
-**Slots in:** anywhere. `OnFoot.site` steps out at heading 0; a walker that
-steps out facing the way its ship faces needs this first.
-
-**The friction.** "East" at a surface point is derived four ways. `placementBasis`
-(`packages/simulation/src/surfacePlacement.ts`) takes `cross(+Y, up)`;
-`installSurfaceFrame` (`packages/universe/src/frames.ts`) takes
-`(-up.z, 0, up.x)`, its negation; `spawnCharacter` re-derives the basis in
-another closed form; `OnFoot.site` computes a third; the camera's
-tests use `localTriad`. The first is geographic east — `geodeticDirection`'s
-longitude increases along `cross(+Y, up)` — so the surface frame's +X points
-west. A landed entity's orientation is stored relative to that frame, and
-`ir.land` teleports a ship there at `Q.IDENTITY`, so making the surface frame
-read the shared basis turns every `ir.land` placement and every landed ship in
-a save 180° about up — a ship that lands by flight is reframed and keeps its
-heading. The pull request either keeps the surface frame's axes and converts
-at the boundary, or spends a version on what a save means. Nothing is wrong
-today, because every heading derived this way is 0. It is a trap for the first
-heading taken from a landed ship.
-
-**The shape.** `compassBasis(latitude, longitude, heading)` in
-`packages/universe`, read by all four.
-
-**Decided: taken, and it spends a save version with no migration.** The
-surface frame reads the shared basis, so its +X is geographic east, and a save
-written under the old frame is not carried forward — backward compatibility of
-saves is not a requirement here. The pull request bumps the save version and
-says in its own body what an older save does on load: refused, or loaded with
-its landed ships turned 180° about up.
 
 ---
 
@@ -200,18 +164,6 @@ request of its own; each belongs to the next change that opens its file.
 
 **The walker and the frame.**
 
-- **Observatory ownership is still spelled out twice in `GameEngine.ts`.**
-  `galaxyInstrument` and `galaxyView` test `cinematic === null` and
-  `observer !== null` together, which is `owner?.arm === 'observatory'`.
-  Correct, and allowed inside the engine; `owner.arm` says it once.
-- **The plumes and the parked hull can part.** On foot `ThrusterFx` roots its
-  plumes at the vessel entity's pose; `ShipModel` draws a parked Rocinante at
-  the raised, upright pad pose. They differ only if a parked hull reports a
-  thrust demand, and nothing shows one never does. Either root the plumes at
-  `engine.parkedRocinante`, or hold a parked hull's demand at zero in a test.
-- **Two of the derived-state test's probes are never warm.** `rotationStop`
-  and `terrain` are cold at the pad before the load, so their cold read after
-  it proves only that they do not throw.
 - **6's gate is short two plates.** No plate was taken of a figured body or of
   the star filling the frame; the figured path is equivalent in code and the
   star's exposure is held by `bodyUniforms.test.ts`. The per-body records it
@@ -231,8 +183,6 @@ request of its own; each belongs to the next change that opens its file.
 - **A baseline from before `ir.status().boot` costs twelve seconds a plate.**
   The driver reads such a build as `drawing` and the cover wait gives up after
   twelve seconds, which is correct and slow; it ages out as baselines move past 9.
-- **The director still calls `host.render.declareCut()`.** 9's shape did not
-  move it.
 
 **The guide.**
 
@@ -291,9 +241,6 @@ own.
   the fade's unchanged output makes unlikely to differ. **Decided: the
   temporal path is measured before this closes** — a camera pan under
   temporal Quality, cast for shimmer, with and without the angle multiplied.
-- **The Graphics panel resolves the picture it is editing for itself.** It
-  shows the render size of the preference before the sensor rebuilds, through
-  `pictureDimensions`, which now reads `renderSize`.
 
 ---
 
@@ -320,6 +267,26 @@ own.
   `TerrainPatches` reading the body.
 - **`engine.pool()` stays.** `scene/Bodies.tsx` and `render/preload.ts` read
   the pool through it; when both read the session it goes, as `player()` did.
+- **The director still calls `host.render.declareCut()`.** That port is how
+  every harness module says it moved the camera discontinuously — the
+  observatory, `OnFoot`, `Maneuvers` and the harness's own `load` and `view`
+  call it, fifteen sites in all — and the director's four are the same
+  statement: a scene starts, ends, seeks, or crosses a shot boundary. The last
+  is the one that keeps it there. Only the prepared script knows where one
+  shot gives way to the next, and it learns it inside `sample`, so moving the
+  call out means a `cut` flag on every sample that the engine turns back into
+  the same `declareCut()`: a second path for one fact, for the one caller of
+  five that would take it.
+- **The Graphics panel resolves the picture it is editing.** It shows the
+  render size of the preference the moment it changes, before the sensor
+  rebuilds, so it cannot read `engine.sceneLayout`: that is the layout of the
+  picture being drawn, which is the previous one until the rebuild. It calls
+  `resolvePicture`, which is the resolution `sceneLayout` makes —
+  `sceneLayout.test.ts` holds `layout.picture` equal to it for every picture
+  on both backends — and `pictureDimensions` sizes the result with
+  `renderSize`, the pass's own arithmetic. Calling `sceneLayout` instead would
+  ask the panel for a reversed-depth flag it does not have and the picture
+  does not depend on.
 - **The cinema playhead keeps its `mine` guard.** With the director on
   `ir.cutscene` a console `ir.play` can still replace a scene the session
   opened, and the guard is what keeps the session from claiming that ending.
