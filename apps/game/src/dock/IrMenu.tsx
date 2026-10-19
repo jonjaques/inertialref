@@ -183,6 +183,7 @@ export function IrMenu({
                       hint={panel.hint}
                       pressed={isOpen(workspace.layout, panel.id)}
                       onClick={() => workspace.toggle(panel.id)}
+                      panel={panel.id}
                       side={side}
                     />
                   ))}
