@@ -53,6 +53,15 @@
 // reports nothing at all. The runner's own per-stage timeouts fire first in practice
 // and name the stage.
 //
+// `IR_GATE_CHANGED=1` puts `test:changed` in the group in place of `test`: vitest's
+// `--changed` against the branch's fork point from `origin/main`, so only the test files
+// whose imports reach an edit run. It is a separate stage with its own stamp, so a green
+// gate under it leaves `test` unstamped and `pnpm check` still runs the whole suite. Off
+// by default; `design/plans/test-speed.md` § 3 has what it misses and what it saves.
+// The hook reads it from the environment Claude Code started with — the shell that
+// launched it, or `env` in a settings file — so an `export` in another terminal does
+// nothing. With no `origin/main` to fork from the stage runs the whole suite.
+//
 // Escape hatch: IR_SKIP_GATE=1.
 
 import { execFileSync } from 'node:child_process'
