@@ -5,9 +5,11 @@ import {
   type FrameId,
   frameId,
   type LocalPose,
+  type Quat,
   Quaternion as Q,
   ROOT_FRAME,
   Vec,
+  type Vec3,
   vec3,
 } from '@inertialref/spatial'
 import {
@@ -345,15 +347,57 @@ export function directionToGeodetic(direction: {
   }
 }
 
+/** East, north and up at a surface point, and a heading turned about up. */
+export interface CompassBasis {
+  readonly up: BodyFixedDirection
+  /** The direction `geodeticDirection`'s longitude increases along. */
+  readonly east: Vec3
+  /** The direction its latitude increases along. */
+  readonly north: Vec3
+  /**
+   * Local axes into body-fixed ones: +X right, +Y up, −Z forward, with forward
+   * at the heading — north at 0, swinging toward east.
+   */
+  readonly orientation: Quat
+}
+
+/**
+ * The one answer to "which way is east" at a surface point.
+ *
+ * Every surface basis reads this: the surface frame, a placement, a walker's
+ * spawn. Taken from the angles rather than from `up`, so it is defined at the
+ * poles too: east there is the direction the given meridian's longitude would
+ * increase along, where `cross(+Y, up)` has no length and any fallback is a
+ * guess. Closed forms throughout, so the triad is orthonormal to rounding and
+ * owes nothing to a normalization.
+ */
+export function compassBasis(
+  latitude: Radians,
+  longitude: Radians,
+  heading: Radians,
+): CompassBasis {
+  const up = geodeticDirection(latitude, longitude)
+  const sinLat = Math.sin(latitude)
+  const cosLat = Math.cos(latitude)
+  const sinLon = Math.sin(longitude)
+  const cosLon = Math.cos(longitude)
+  const east = vec3(-sinLon, 0, -cosLon)
+  const north = vec3(-sinLat * cosLon, cosLat, sinLat * sinLon)
+  const sin = Math.sin(heading)
+  const cos = Math.cos(heading)
+  const right = Vec.sub(Vec.scale(east, cos), Vec.scale(north, sin))
+  const back = Vec.negate(Vec.add(Vec.scale(north, cos), Vec.scale(east, sin)))
+  return { up, east, north, orientation: Q.fromBasis(right, up, back) }
+}
+
 /**
  * Install a local tangent frame on a body's surface.
  *
- * Axes are west / up / north — right-handed with +Y up, matching the rest of
- * the simulation, so "up" in a landing HUD is the same +Y the renderer uses and
- * nothing has to be flipped at the boundary. West, not east: +X is
- * `(-up.z, 0, up.x)`, the negation of `cross(+Y, up)`, along which
- * `geodeticDirection`'s longitude increases. Landed orientations are stored in
- * this frame and saved, so the axes are part of what a save means.
+ * Axes are `compassBasis` at heading 0 — +X east, +Y up, −Z north — the same
+ * axes a placement and a walker are built in, so a ship at `Q.IDENTITY` here
+ * faces the way a pad at heading 0 does. Landed orientations are stored in
+ * this frame and saved, so the axes are part of what a save means: the schema
+ * version names them.
  */
 export function installSurfaceFrame(
   graph: FrameGraph,
@@ -366,17 +410,12 @@ export function installSurfaceFrame(
   const id = surfaceFrameId(body.address, latitude, longitude)
   if (graph.has(id)) return id
 
-  const up = geodeticDirection(latitude, longitude)
+  const { up, orientation } = compassBasis(latitude, longitude, 0)
   // Elevation is derived here rather than passed in, for the same reason the
   // angles are quantized here: the id has to determine the frame completely.
   // A caller-supplied elevation sampled at the unrounded position put a
   // restored landing site 21 mm from the original.
   const elevation = surfaceRadius(body, up) - body.radius
-  const west = Vec.normalize(vec3(-up.z, 0, up.x))
-  // Degenerate at the poles, where "west" is undefined; fall back to +X.
-  const westSafe = Vec.lengthSquared(west) === 0 ? vec3(1, 0, 0) : west
-  const north = Vec.cross(westSafe, up)
-  const orientation = Q.fromBasis(westSafe, up, north)
   const position = Vec.scale(up, body.radius + elevation)
 
   graph.define({

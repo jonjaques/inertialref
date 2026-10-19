@@ -15,6 +15,7 @@ import {
   SOL_ONLY_CATALOG,
   systemId,
   bodyFixedFrameId,
+  compassBasis,
   geodeticDirection,
   drawnSurfaceRadius,
   MARS_PAD,
@@ -27,7 +28,6 @@ import {
   characterFeet,
 } from './characterCamera.ts'
 import { bodyGround, type Ground } from './ground.ts'
-import { localTriad } from './surfaceStance.ts'
 
 /*
  * The camera is geometry about a ground, so most of it is tested on grounds
@@ -90,14 +90,10 @@ describe('the character eye', () => {
   world.placeStructure(MARS_PAD)
   const spin = world.frames.pose(bodyFixedFrameId(mars.address), 0)
   const surface = (latitude: number, longitude: number) => {
-    const d = geodeticDirection(latitude, longitude)
-    const triad = localTriad(d)
+    const { up: d, orientation } = compassBasis(latitude, longitude, 0)
     return {
       direction: d,
-      orientation: Q.multiply(
-        spin.orientation,
-        Q.fromBasis(triad.east, triad.up, Vec.scale(triad.north, -1)),
-      ) as Quat,
+      orientation: Q.multiply(spin.orientation, orientation) as Quat,
       position: UV.translate(
         spin.position,
         Q.rotate(spin.orientation, Vec.scale(d, surfaceRadius(mars, d))),

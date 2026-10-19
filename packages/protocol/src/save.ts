@@ -42,7 +42,7 @@ import {
  * than a change of model.
  */
 
-export const SAVE_SCHEMA_VERSION = 5
+export const SAVE_SCHEMA_VERSION = 6
 
 /**
  * A maneuvering entity's drive, as the save carries it.
