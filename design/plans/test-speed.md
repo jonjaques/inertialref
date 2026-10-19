@@ -36,7 +36,8 @@ not settled, by the rule above, so that wall clock is not the 16.8 s
 re-measured. The counts are.
 
 `apps/game/src/engine/gameEngine.descent.slow.test.ts` alone is **108.3 s at
-100% CPU** — one core, start to finish — and its four tests take **1 ms**
+100% CPU** through the inline worker — one core, start to finish; § 2 has it
+on threads — and its four tests take **1 ms**
 between them. Everything else in the file is its `beforeAll`: a landing streamed
 through the inline worker, a whole-disk selection's worth of bordered 65×65
 heightfields generated serially on the test's own thread at 22 to 50 ms each.
@@ -108,17 +109,51 @@ storage must regenerate correctly before timing is interpreted as a benefit.
 
 ### 2. A real worker pool in the test
 
-The inline worker runs the real host loop serially on the test's thread, and the
-descent file's 100% CPU over 108.3 s is that claim measured: one core, for the
-whole run, on a ten-core machine. A `worker_threads` port would put the same
-generation on the other nine, which is a hypothesis for reducing the cold-run cost without changing the
-field being tested. Measure the scheduling and transfer cost before assigning
-a speedup.
-The reason it does not exist is the one
-[testing](../../docs/guides/testing.md) gives for the inline one: it is not a
-mock, and a value that is not structured-cloneable still fails. A threads port
-keeps that property; the work is the port, and it is the same port the game's
-own `browserWorker.ts` has already defined once for the browser.
+**Landed.** The descent suite streams through `node:worker_threads`, one
+thread per `poolSize()` — the browser's sizing rule, `cores − 2` — each
+running the real host loop over the game's registry in
+`apps/game/src/workers/universe.thread.ts`, behind the port
+`apps/game/src/engine/threadWorker.ts` defines the way `browserWorker.ts`
+defines the browser's. A thread's `postMessage` is the same structured clone
+with the same transfer list, so it is not a mock: `threadWorker.test.ts`
+holds it to an uncloneable payload, as `workers.test.ts` holds the inline
+port. The per-turn suite stays inline.
+
+The suite's frame loop drains the pool between frames. Every count in it is
+in frames — twenty still frames is convergence — and an inline worker
+answers inside the gap between two; a thread answers a tile later, and
+without the drain the loop calls an empty disk converged in under two
+seconds. With it, a warm run serves the same 1,246 tiles the inline one does.
+
+Measured 18 October 2026 on a cloud session's machine, **not the M5**: four
+vCPUs of an Intel Xeon at 2.10 GHz, 15 GB, Linux 6.18, Node 26.12.0, vitest
+4.1.10, nothing else running, the descent file alone under
+`vitest.slow.config.ts`. `poolSize()` is two threads here, which is also the
+count on CI's four-core runner.
+
+| Descent           | Wall clock |  CPU | CPU time |
+| ----------------- | ---------: | ---: | -------: |
+| Cold, inline      |    247.1 s | 101% |  248.7 s |
+| Cold, inline      |    237.7 s | 100% |  238.5 s |
+| Cold, two threads |    127.1 s | 195% |  248.0 s |
+| Cold, two threads |    129.9 s | 195% |  253.1 s |
+| Warm, inline      |     10.7 s | 118% |   12.7 s |
+| Warm, two threads |     10.9 s | 122% |   13.3 s |
+
+Every cold run generated and wrote 1,246 tiles; every warm run hit 1,246
+with no misses. The cold descent halves at the same CPU time, which is the
+whole of the boundary's cost measured from outside. Measured from inside,
+with `.scratch` driving a pool of one thread against the task run on the
+main thread: a level-8, 65×65 tile costs 196 to 197 ms here, and the thread's
+round trip adds 0.45 to 5.4 ms to it over two hundred tiles in sequence. The
+request's clone is 6 µs; the response's would be 36 µs if it were copied,
+and its three arrays are transferred. A thread takes 225 to 230 ms from
+construction to its `ready`, which the cold run pays once against two
+minutes and the warm run pays against ten seconds — there it buys nothing.
+
+The M5's figures will differ in both directions: its tiles run at 22 to
+50 ms, so the boundary is a larger share of each, and `poolSize()` gives it
+eight threads rather than two.
 
 ### 3. Two small things, measured before believed
 

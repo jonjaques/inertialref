@@ -20,7 +20,7 @@
  * enforced while nothing enforced it.
  */
 import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
 const packagesDir = join(root, 'packages')
@@ -74,6 +74,47 @@ for (const pkg of packages.values()) {
   }
 }
 
+/*
+ * A package's `./node` export is Node-only: `packages/workers/node` opens
+ * SQLite through `node:sqlite`, `node:v8`, `node:fs` and `node:crypto`. The
+ * manifest edge from `apps/game` to `@inertialref/workers` is the same edge
+ * whether a file takes the portable root or the Node subpath, so the layering
+ * above cannot tell them apart — and Vite would bundle the import, stubbing the
+ * builtins with a warning rather than failing. So the sources the browser
+ * bundle and the Worker compile are read for it directly. A game test runs in
+ * Node and may take it; the slow descent suite does.
+ */
+const BROWSER_SOURCES = ['apps/game/src', 'apps/game/astro', 'apps/server/src']
+// `from` covers `import … from` and `export … from`; the bare and dynamic
+// forms reach the module as surely and Vite bundles them the same way.
+const NODE_EXPORT =
+  /(?:\bfrom|\bimport\s*\(?)\s*['"](@inertialref\/[\w-]+\/node)['"]/g
+// No catch around the read: a source root that has moved would otherwise be
+// checked as empty, and the guard would pass by reading nothing.
+function* sources(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) yield* sources(path)
+    else if (
+      /\.(ts|tsx|astro)$/.test(entry.name) &&
+      !/\.test\.tsx?$/.test(entry.name)
+    )
+      yield path
+  }
+}
+for (const dir of BROWSER_SOURCES) {
+  for (const file of sources(join(root, dir))) {
+    for (const [, specifier] of readFileSync(file, 'utf8').matchAll(
+      NODE_EXPORT,
+    )) {
+      problems.push(
+        `${relative(root, file)} imports ${specifier}, a Node-only export, into a ` +
+          `browser or Worker build`,
+      )
+    }
+  }
+}
+
 // Cycle detection, independent of the layer declarations, so a wrong layer
 // number cannot hide a real cycle.
 const state = new Map()
@@ -112,5 +153,6 @@ for (const layer of [...byLayer.keys()].sort((a, b) => a - b)) {
   console.log(`layer ${layer}: ${byLayer.get(layer).sort().join(', ')}`)
 }
 console.log(
-  `${packages.size} packages, no cycles, layering intact, no third-party dependencies`,
+  `${packages.size} packages, no cycles, layering intact, no third-party dependencies, ` +
+    `no Node-only export in a browser or Worker build`,
 )

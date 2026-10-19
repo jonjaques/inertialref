@@ -150,17 +150,6 @@ of Sol contains one: generated moons come out on orbits too circular for the
 eccentricity tide to register. The archetype is covered by a Sol body instead,
 so the zoo is a set of bodies rather than one system.
 
-**The slow descent suite reaches across an app boundary that no check walks.** It
-imports `apps/headless/src/heightfieldStore.ts` by relative path, so
-`apps/game`'s test graph transitively requires `node:sqlite`, `node:v8`,
-`node:fs` and `node:crypto` through a dependency `apps/game/package.json` does
-not declare. `scripts/check-graph.mjs` walks `packages/*` only, which is why
-nothing catches it; moving or renaming that file breaks a suite in another app
-with no manifest edge to warn anyone. **Decided: the store moves under
-`packages/*`**, as a Node-only export the browser bundle never reaches, and the layer check
-then covers the edge the relative import hides. `packages/workers`, beside
-`HeightfieldArchive`, is the natural home.
-
 ---
 
 ## 3. Constraints that still bind

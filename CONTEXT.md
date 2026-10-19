@@ -11339,6 +11339,80 @@ falls was 1.01 ms — the raw pairs are latency on this GPU, as `summarize` says
 A 64-pixel pass can finish inside the timestamp quantum and read 0, so the GPU
 test asks that some owned pass read time, not each.
 
+## The heightfield store is a package's Node export, and the descent suite stops reaching into headless (18 Oct 2026)
+
+`apps/game`'s slow descent suite imported the SQLite archive store from
+`apps/headless/src` by relative path, so the game's test graph needed
+`node:sqlite`, `node:v8`, `node:fs` and `node:crypto` through no manifest
+edge, and `pnpm graph`, which reads manifests under `packages/*`, could not
+see it. The store is `packages/workers/node/heightfieldStore.ts`, reached as
+`@inertialref/workers/node`. It sits outside `src/` because `src/` is the
+portable core's type project, with no Node lib; the headless project types
+it. The game already depends on `@inertialref/workers`, so the manifest edge
+is the same one whether a file takes the root or the subpath — which is why
+the layering alone cannot keep the store out of the browser. `pnpm graph`
+also reads the sources the browser bundle and the Worker compile
+(`apps/game/src` and `astro/` without tests, `apps/server/src`) and refuses
+a `@inertialref/*/node` import there. Vite does not refuse it: it stubs a
+Node builtin with an "externalized for browser compatibility" warning and
+builds. After the move the game build ran clean, with no such warning and no
+`node:` specifier, `DatabaseSync` or `tiles.sqlite` anywhere in the shipped
+JavaScript.
+
+The suite still imports `loadStarCatalog` from `apps/headless/src/catalog.ts`
+by relative path: the same shape, over `node:fs` alone, and no check reads an
+app's relative imports for one that leaves the app.
+
+## A cold terrain archive makes the slow descent slow, not failed (18 Oct 2026)
+
+Every archive key changed with the terrain version `5-cpu@7`, and a pull
+request's GitHub cache is its own — written under `refs/pull/N/merge`,
+restorable by that pull request and from `main`, never by a stacked
+neighbor. Until `main` held the new archive, each pull request's first run
+generated every tile: 284 s on the first, inside the descent's 300 s hook
+timeout, and over it on the next three. Run 38182163525 is one of them, the
+hook killed at 300 s with 1,178 of the descent's 1,246 tiles generated, the
+`slow` stage at 313.4 s. Their reruns restored their own archive and took
+88 s.
+
+`STREAMING_TIMEOUT` is ten minutes: twice the CI cold run, under the `slow`
+stage's fifteen and the job's twenty, so a hang still fails at the hook that
+names it. The other answer was a cache key a stack of pull requests can
+share, which was not taken: the key would have to name something other than
+the branch, and a warm `main` ends the cold runs by itself.
+
+## The slow descent streams through worker threads, and a frame waits for its jobs (18 Oct 2026)
+
+The descent suite's inline worker ran the field serially on the test's
+thread. `apps/game/src/engine/threadWorker.ts` adapts a `node:worker_threads`
+Worker to `WorkerPort`, the way `browserWorker.ts` adapts a browser one, and
+starts `workers/universe.thread.ts`, which serves the game's registry through
+`serveTasks`. `headlessEngine({ threads: true })` takes `poolSize()` of them;
+the per-turn suite stays inline. Rule 8 names the file: one Worker
+constructor per host.
+
+On a cloud machine — four Xeon vCPUs at 2.10 GHz, so two threads — the cold
+descent is 247.1 s and 237.7 s inline at 100–101% CPU, and 127.1 s and
+129.9 s on threads at 195%, at the same 238–253 s of CPU time; warm, 10.7 s
+inline and 10.9 s threaded, so the threads buy nothing there.
+`design/plans/test-speed.md` § 2 has the table and the boundary measured
+from inside: 0.45–5.4 ms of round trip on a 197 ms tile, and 225–230 ms for
+a thread to load its modules.
+
+The trap: the suite counts frames, and only an inline worker makes a frame a
+unit of work. Its answers land inside the two-millisecond gap between frames,
+so "twenty frames without growth" meant converged. A thread answers a tile
+later; the first cold threaded run "converged" in 1.5 s on six tiles of 134
+requested and failed three assertions with a disk that had never arrived,
+and the 300 km orbit read zero patches. `settle` now waits for the pool's
+queue and active jobs to empty after each frame, which is a no-op inline and
+restores the frame on threads: the warm threaded run then serves exactly the
+inline run's 1,246 tiles. A fixed sleep per frame would have been a number
+about this machine.
+
+`scripts/check.mjs` weights the `slow` stage as the threads plus the test
+thread, `poolSize()` repeated as `DESCENT_THREADS`.
+
 ## East at a surface point is one function, and the surface frame turned to face it (18 Oct 2026)
 
 "East" at a surface point was derived four ways. `placementBasis` took

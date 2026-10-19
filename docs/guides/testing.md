@@ -237,9 +237,11 @@ run. Keep performance measurements separate from a contended gate.
 **A test that needs more says so at the call site.**
 `gameEngine.descent.slow.test.ts` streams a landing on Proxima Centauri b
 through the CPU source. Its disk archive can skip repeated heightfield
-generation, but a cold run still pays the field serially through an inline
-worker. The five-minute timeout guards the cold path under contention; a warm
-run does not justify lowering it. A shared `beforeAll` performs the descent,
+generation, but a cold run still pays the whole field, spread over
+`poolSize()` worker threads that run the real host loop. The frame loop
+drains the pool between frames, so a frame is the same unit of work it is
+inline. The ten-minute timeout guards the cold path under contention, and a
+warm run does not justify lowering it. A shared `beforeAll` performs the descent,
 and four assertions inspect its terrain, geometry and contact behavior.
 
 **The descent and galaxy count use the slow suite.** `*.slow.test.ts` is a second vitest
@@ -442,7 +444,7 @@ requests without another generator call, and holds the world's state hash
 unchanged.
 
 ```bash
-pnpm vitest run packages/workers/src/heightfieldCache.test.ts apps/headless/src/heightfieldStore.test.ts apps/headless/src/terrainCacheBaseline.test.ts apps/game/src/engine/terrainStore.test.ts
+pnpm vitest run packages/workers/src/heightfieldCache.test.ts packages/workers/node/heightfieldStore.test.ts apps/headless/src/terrainCacheBaseline.test.ts apps/game/src/engine/terrainStore.test.ts
 pnpm sim --ticks 0 --terrain-cache-clear --terrain-cache-descent 'g:milky-way/s:HIP70890/b:0'
 pnpm sim --ticks 0 --terrain-cache-descent 'g:milky-way/s:HIP70890/b:0'
 pnpm sim --ticks 0 --terrain-cache --terrain-baseline

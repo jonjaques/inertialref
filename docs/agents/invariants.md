@@ -24,7 +24,7 @@ table is one of those three, not drift.
 | The three emit APIs live only in the sink                                                     | [ADR-0022](../adr/0022-the-timeline.md) · [Observability](../concepts/observability.md)                                |
 | Canonical state is not in React                                                               | [Architecture](../architecture.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)                            |
 | Presentation switches go through the stance stack                                             | [Client](../guides/client.md)                                                                                          |
-| One `Worker` constructor                                                                      | [Workers](../concepts/workers.md) · [Development](../guides/development.md)                                            |
+| One `Worker` constructor per host                                                             | [Workers](../concepts/workers.md) · [Development](../guides/development.md)                                            |
 | One session constructor                                                                       | [Client](../guides/client.md)                                                                                          |
 | Terrain is sampled in body-fixed axes                                                         | [Frames](../concepts/frames.md)                                                                                        |
 | No field value read off a rank                                                                | [ADR-0019](../adr/0019-the-geology.md) · [Determinism](../concepts/determinism.md)                                     |
@@ -154,9 +154,13 @@ which is the other half of why it cannot be React state.
 
 ### Rule 8
 
-**Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`.**
+**Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`,
+or a `node:worker_threads` one outside `threadWorker.ts` beside it.**
 Tasks are typed and versioned; the pool owns dispatch, cancellation, and
-instrumentation.
+instrumentation. Each file adapts its host's Worker to `WorkerPort` once, so
+the module URL and the transfer list are decided in one place per host. The
+Node port serves the tests that drive `GameEngine` through `headlessEngine`;
+the browser bundle never imports it.
 
 ### Rule 9
 

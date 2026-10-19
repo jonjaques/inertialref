@@ -78,6 +78,13 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const VITEST_WORKERS = Math.max(1, Math.min(4, availableParallelism() - 1))
 
 /**
+ * How many worker threads the slow descent streams through: `poolSize()` in
+ * `apps/game/src/engine/browserWorker.ts`, repeated for the reason above.
+ * Node's `navigator.hardwareConcurrency` is `availableParallelism()`.
+ */
+const DESCENT_THREADS = Math.max(1, Math.min(8, availableParallelism() - 2))
+
+/**
  * The stages.
  *
  * `cost` is the measured wall clock in seconds on the M5, cold, used only to
@@ -176,9 +183,9 @@ const STAGES = [
     name: 'slow',
     why: 'the terrain descent or the galaxy calibration',
     argv: ['pnpm', 'test:slow'],
-    // The descent is one core for the whole run; the three galaxy files run
-    // beside it, so the suite reads about 150% of a core.
-    weight: 2,
+    // The descent's worker threads and the test thread that drains them; the
+    // three galaxy files run beside it, in its shadow.
+    weight: DESCENT_THREADS + 1,
     cost: 96,
     timeout: 900_000,
   },

@@ -6,7 +6,8 @@
   "description": "Typed task contracts, worker transport ports and a job pool.",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./node": "./node/heightfieldStore.ts"
   },
   "inertialref": {
     "layer": 5

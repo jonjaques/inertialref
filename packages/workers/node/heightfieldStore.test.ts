@@ -14,7 +14,7 @@ import {
   HeightfieldArchive,
   heightfieldCacheRecord,
   validateHeightfieldCacheRecord,
-} from '@inertialref/workers'
+} from '../src/index.ts'
 import { DiskHeightfieldStore } from './heightfieldStore.ts'
 const dirs: string[] = []
 const stores: DiskHeightfieldStore[] = []

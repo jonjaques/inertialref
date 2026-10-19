@@ -13,16 +13,16 @@ import {
 } from './terrainStreamer.ts'
 import { headlessEngine } from './headlessEngine.ts'
 import { loadStarCatalog } from '../../../headless/src/catalog.ts'
-import { DiskHeightfieldStore } from '../../../headless/src/heightfieldStore.ts'
+import { DiskHeightfieldStore } from '@inertialref/workers/node'
 
 /*
  * The ground, over one descent — the slow suite.
  *
  * `*.slow.test.ts` is a second vitest project (`apps/game/vitest.slow.config.ts`,
  * `pnpm test:slow`), selected by suffix and excluded from the root one, and it
- * exists for this file: the `beforeAll` below streams a landing through an
- * inline worker, which is ninety percent of the root suite's wall clock in one
- * hook, and the Stop gate runs that suite after every turn. So the per-turn
+ * exists for this file: the `beforeAll` below streams a landing through a
+ * pool of worker threads, minutes of CPU in one hook from a cold archive, and
+ * the Stop gate runs the root suite after every turn. So the per-turn
  * gate proves everything but the landing in about ten seconds, and `pnpm check`
  * and CI — where "the ship lands on the ground it drew" has to be proved before
  * a merge — run this project as well. It moves the payment, not the price;
@@ -32,40 +32,50 @@ import { DiskHeightfieldStore } from '../../../headless/src/heightfieldStore.ts'
 /**
  * How long the descent in `beforeAll` below is given, milliseconds.
  *
- * Five minutes against the suite's twenty seconds, and it runs in **99.7 s**
- * measured clean. It generates a landing's worth of terrain — bordered 65×65
- * heightfields at 22 to 50 ms apiece since the field grew a sub-floor tail and
- * the detail floor followed it — through an **inline** worker, which is to say
- * serially on this thread. In a browser that is a pool of six.
+ * Ten minutes against the suite's twenty seconds. It generates a landing's
+ * worth of terrain — bordered 65×65 heightfields at 22 to 50 ms apiece on the
+ * M5 — through a pool of `poolSize()` worker threads, the browser's own sizing
+ * rule. The disk archive skips every tile it already holds, so the cost is two
+ * figures, not one:
  *
- * The figure tracks the field rather than this file: every level the floor
- * gains is another ring of patches, so it has roughly doubled once already.
+ * - **Warm**, 3.19 s on the M5 and 88 s in CI, where the descent runs beside
+ *   the rest of `pnpm check` on a four-core runner.
+ * - **Cold**, 92.37 s on the M5 and 284 s on CI's first run after an archive
+ *   key change. The next pull request's cold run reached this hook's limit
+ *   while it was still five minutes: killed at 300 s with 1,178 of the
+ *   descent's 1,246 tiles generated, and two more failed the same way. A
+ *   pull request's cache is its own until `main` holds one under the current
+ *   key, so every terrain or task version bump puts each open pull request
+ *   through a cold run.
+ *
+ * Those figures are the inline worker's, which runs the field serially on this
+ * thread. On a four-core Xeon — two workers by `poolSize()`, the CI runner's
+ * count — the thread pool takes the cold descent from 247 s to 127 s at the
+ * same CPU time, so the headroom over CI's cold run is wider than the figures
+ * say. `design/plans/test-speed.md` § 2 has the measurement.
  *
  * It is a timeout rather than a target: what it guards against is a hang, so
- * the headroom is the point. Two minutes is only twice the idle cost, and twice
- * is inside the range a busy machine moves this by — the runner puts sixty-four
- * files across every core, and under that contention this descent has taken
- * more than 120 s and been killed for it. A timeout that a green run can reach
- * has stopped measuring the code and started measuring the machine, which is
- * the same mistake `testTimeout`'s own note in `vitest.config.ts` describes one
+ * the headroom is the point, and a cold archive makes the run slow rather than
+ * failed. Ten minutes is twice the CI cold figure and still inside the `slow`
+ * stage's fifteen in `scripts/check.mjs` and the job's twenty in
+ * `.github/workflows/check.yml`, so a hang still fails here, naming this hook,
+ * before either outer limit fires. A timeout that a green run can reach has
+ * stopped measuring the code and started measuring the machine, which is the
+ * same mistake `testTimeout`'s own note in `vitest.config.ts` describes one
  * order of magnitude down.
- *
- * The disk archive reuses generated tiles across runs. A cold run still
- * exercises canonical CPU generation; warm runs exercise the same streamed
- * landing with verified tile records.
  */
-const STREAMING_TIMEOUT = 300_000
+const STREAMING_TIMEOUT = 600_000
 
 /*
  * The four terrain assertions, over one descent.
  *
  * Each of them needs a body's ground actually generated — a whole-disk
  * selection on Mercury is about nine hundred heightfields and six hundred
- * drawn patches — and in this file that goes through an **inline** worker,
- * which is to say serially on the test's own thread. Giving each `it` its own
- * engine pays for the same descent four times, and the bill is most of this
- * suite's runtime: four landings is three and a half minutes where one is
- * fifty seconds.
+ * drawn patches — and in this file that goes through the real host loop on
+ * worker threads, as many as a browser on this machine would spawn. Giving
+ * each `it` its own engine pays for the same descent four times, and the
+ * bill is most of this suite's runtime: four landings is three and a half
+ * minutes where one is fifty seconds.
  *
  * So the descent happens once, in `beforeAll`, and it is the real one — a 300
  * km orbit, a landing, and frames until the drawn set stops growing. Each
@@ -77,20 +87,36 @@ const STREAMING_TIMEOUT = 300_000
  * `BUILDS_PER_FRAME` is the floor on how short this can be. Geometry is built
  * four patches to a frame on the main thread, so a six-hundred-patch disk
  * cannot converge in under a hundred and fifty frames however fast the field
- * gets — the way to make this cheaper is that budget or a real worker pool,
- * not fewer frames.
+ * gets — the way to make this cheaper is that budget or more workers, not
+ * fewer frames.
  */
 describe('the ground, over one descent', () => {
   const archive = new HeightfieldArchive(new DiskHeightfieldStore())
   const game = headlessEngine({
     catalog: loadStarCatalog(),
     heightfieldArchive: archive,
+    threads: true,
   })
 
+  /*
+   * A frame, then the pool drained before the next one.
+   *
+   * Every count below is in frames — twenty still frames is convergence, a
+   * drift window is twenty — and a frame is only a unit of work while it
+   * waits for the jobs it asked for. An inline worker answers inside the
+   * two-millisecond gap; a thread answers when its field is done, a tile or
+   * more later, so without the drain the frames outrun the field and the
+   * settle loop calls an empty disk converged. Waiting on the pool's own
+   * queue keeps the frame what it is inline and leaves the generation itself
+   * spread across the workers.
+   */
   const settle = async (frames: number): Promise<void> => {
     for (let i = 0; i < frames; i += 1) {
       game.frame(1 / 60)
       await new Promise((resolve) => setTimeout(resolve, 2))
+      const pool = game.pool()
+      while (pool !== null && (pool.queued > 0 || pool.stats().active > 0))
+        await new Promise((resolve) => setTimeout(resolve, 1))
     }
   }
 

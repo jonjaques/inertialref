@@ -64,6 +64,9 @@
         "astro/pages/**/*.astro",
         "public/sw.js",
         "src/render/gpuSetup.ts",
+        // A worker-thread entry: `engine/threadWorker.ts` passes its URL to
+        // `new Worker`, which knip reads as a string, as with `sw.js`.
+        "src/workers/universe.thread.ts",
         "vite.config.ts",
         "vitest.gpu.config.ts",
         "vitest.slow.config.ts",
@@ -109,8 +112,10 @@
       "ignore": [".cloudflare/**"],
     },
     "packages/*": {
-      "entry": ["src/index.ts", "src/**/*.test.ts"],
-      "project": ["src/**/*.ts"],
+      // `node/` is a package's Node-only export, kept out of `src/` and its
+      // portable type project (`packages/workers/node`).
+      "entry": ["src/index.ts", "src/**/*.test.ts", "node/**/*.test.ts"],
+      "project": ["src/**/*.ts", "node/**/*.ts"],
     },
   },
 }

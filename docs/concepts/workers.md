@@ -19,14 +19,14 @@
 flowchart TB
     POOL["<b>WorkerPool</b><br/>queue · dispatch · cancel · measure"]
     PORT["<b>WorkerPort</b> (interface)<br/>post · subscribe · terminate"]
-    BROWSER["browser Worker adapter<br/><i>apps/game — the one place<br/>a Worker is constructed</i>"]
+    BROWSER["browser Worker adapter<br/><i>apps/game — the one place<br/>a browser Worker is constructed</i>"]
     INLINE["in-process fake<br/><i>runs the real host loop<br/>on a microtask</i>"]
-    NODE["node:worker_threads<br/><i>if a server ever needs it</i>"]
+    NODE["node:worker_threads adapter<br/><i>apps/game — the slow descent's<br/>pool, under Node</i>"]
 
     POOL --> PORT
     PORT --> BROWSER
     PORT --> INLINE
-    PORT -.-> NODE
+    PORT --> NODE
 
     INLINE -.- NOTE["this is why the pool has<br/>real tests, in Node,<br/>with no worker environment"]
     classDef note fill:none,stroke:none,color:#64748b,font-style:italic
@@ -45,6 +45,15 @@ main thread and terrain streaming stops until a pool exists, because
 all Node — the headless runner and three test files. It does go through
 `structuredClone` and honor its transfer list, so a payload that a real `Worker`
 could not clone fails here too.
+
+The Node adapter is the third port: `apps/game/src/engine/threadWorker.ts`
+starts `apps/game/src/workers/universe.thread.ts` on a `node:worker_threads`
+thread, which serves the game's registry through the same host loop. The slow
+descent suite drives its pool of `poolSize()` threads, because its cost is
+the field and an inline worker runs the field serially. A thread takes about
+230 ms to load its modules on a four-core Xeon, so the per-turn suite stays
+inline; on that machine two threads take the cold descent from 247 s to 127 s
+at the same CPU time.
 
 ---
 
