@@ -5,17 +5,28 @@ import {
   lensForFov,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import { DEFAULT_FILL } from '@inertialref/devtools'
+import { DEBUG_LANDING_SITE, DEFAULT_FILL } from '@inertialref/devtools'
 import { rootSeed } from '@inertialref/procedural'
 import {
+  COVER_CHANNELS,
   drainageBuilds,
+  type EntityId,
   drains,
   generateHeightfield,
+  HEIGHTFIELD_BORDER,
+  type HeightfieldRequest,
+  heightfieldStride,
   regionAddress,
   surfaceGrammar,
   surfaceKernel,
+  TEST_CATALOG,
 } from '@inertialref/universe'
-import { HeightfieldArchive, type HeightfieldStore } from '@inertialref/workers'
+import {
+  HeightfieldArchive,
+  type HeightfieldResponse,
+  type HeightfieldStore,
+} from '@inertialref/workers'
+import type { GameEngine } from './GameEngine.ts'
 import { headlessEngine } from './headlessEngine.ts'
 
 /*
@@ -193,20 +204,44 @@ describe('the game engine, headless', () => {
   })
 
   it('drops every piece of derived state when the world is replaced', async () => {
-    const game = headlessEngine()
+    const game = headlessEngine({ heightfieldArchive: null })
+    // The ground, from a flat field: what is under test is that the drawn set
+    // is dropped, and the band stack would spend five seconds of the gate on
+    // tiles nobody reads.
+    game.setHeightfieldSource({
+      kind: 'gpu',
+      archive: 'gpu:flat',
+      available: true,
+      submit: (_, request) => ({
+        id: 1,
+        result: Promise.resolve(flatField(request)),
+        cancel() {},
+      }),
+    })
     game.presentation.push({ showOrbits: true })
+    // A spin stopped before the pad, so the cue is the ship's and survives
+    // the step out: the walker has no rotation to kill.
+    game.harness.flightAssist(false)
+    game.harness.control({ rotation: [1, -1, 0.5] })
+    game.harness.step(8)
+    game.harness.hold()
+    game.killRotation()
     game.character.atMarsPad()
     game.character.lockChanged(true)
     game.frame(1 / 60)
     await vi.waitFor(() => expect(game.starSurvey.pending).toBe(false))
+    await vi.waitFor(() => {
+      game.frame(1 / 60)
+      expect(game.terrainState().patches.length).toBeGreaterThan(0)
+    })
     await game.save('slot-b')
 
     /*
      * Every derived field the world replacement drops, as a probe that reads
-     * true when it is cold. The rotation cue and the terrain are not warm at
-     * the pad, so their cold read after the load proves nothing beyond not
-     * throwing. The star survey and the orbit traces are cold because they
-     * key on the world generation rather than because anything cleared them.
+     * true when it is cold, and each warm before the load — so its cold read
+     * after it is the replacement clearing it. The star survey and the orbit
+     * traces are cold because they key on the world generation rather than
+     * because anything cleared them.
      */
     const cold = {
       origin: () => game.origin === null,
@@ -247,10 +282,7 @@ describe('the game engine, headless', () => {
     expect(new Set(Object.values(covers).flat())).toEqual(
       new Set(Object.keys(cold)),
     )
-    const warm = Object.entries(cold).filter(
-      ([name, probe]) =>
-        probe() && name !== 'rotationStop' && name !== 'terrain',
-    )
+    const warm = Object.entries(cold).filter(([, probe]) => probe())
     expect(warm.map(([name]) => name)).toEqual([])
 
     await game.load('slot-b')
@@ -346,6 +378,67 @@ describe('the game engine, headless', () => {
     const entity = game.scene()!.entities.find((one) => one.id === ship)
     expect(entity?.kind).toBe('ship')
     game.dispose()
+  })
+
+  it('draws the plumes of the hull it parks, where it parks it', () => {
+    /*
+     * A parked hull can thrust: a throttle under its weight keeps it landed,
+     * and a control held at the step out stays on the vessel. So `ThrusterFx`
+     * is keyed on the hull `ShipModel` draws and rooted at the pose it draws
+     * it at — at the Mars pad a Rocinante, raised and upright, whatever the
+     * player's own hull is; beside a generated world, the player's hull at
+     * the entity's pose.
+     */
+    const hull = (id: string): NonNullable<GameEngine['hull']> => ({
+      id,
+      group: null as never,
+      lengthMeters: 46,
+      beamMeters: 8,
+    })
+    const parkedThrusting = (game: GameEngine, ship: EntityId | null) => {
+      if (ship === null) throw new Error('no vessel')
+      game.world.setThrottle(ship, 0.01)
+      game.world.runTicks(64)
+      game.frame(1 / 60)
+      expect(game.world.isLanded(ship)).toBe(true)
+      expect(game.owner?.ship).toBe(ship)
+      const entity = game.scene()!.entities.find((one) => one.id === ship)
+      expect(entity?.thrust?.drive).toBe(0.01)
+    }
+
+    const pad = headlessEngine()
+    pad.hull = hull('enterprise-d')
+    pad.stagedHull = hull('rocinante')
+    pad.character.atMarsPad()
+    parkedThrusting(pad, pad.character.ship)
+    expect(pad.stagedModel).toBe('rocinante')
+    expect(pad.hullOnStage?.id).toBe('rocinante')
+    expect(pad.parkedRocinante).not.toBeNull()
+    pad.dispose()
+
+    const away = headlessEngine({ catalog: TEST_CATALOG })
+    away.hull = hull('enterprise-d')
+    away.stagedHull = hull('rocinante')
+    away.harness.goToSystem('HIP70890')
+    const world = away.harness
+      .targets()
+      .find(
+        (one) =>
+          one.landable && one.address.startsWith('g:milky-way/s:HIP70890/'),
+      )
+    if (world === undefined) throw new Error('nowhere to land')
+    away.harness.land(
+      world.address,
+      DEBUG_LANDING_SITE.latitude,
+      DEBUG_LANDING_SITE.longitude,
+    )
+    away.harness.step(1)
+    expect(away.harness.onFoot.stepOut().ok).toBe(true)
+    parkedThrusting(away, away.character.ship)
+    expect(away.stagedModel).toBeNull()
+    expect(away.hullOnStage?.id).toBe('enterprise-d')
+    expect(away.parkedRocinante).toBeNull()
+    away.dispose()
   })
 
   it('says whether it has booted, so a driver need name nothing of its own', () => {
@@ -608,3 +701,24 @@ describe('a body’s ground, prepared off this thread', () => {
     }
   })
 })
+
+/** A flat dry field for a request, so the ground is drawn without the band stack. */
+function flatField(request: HeightfieldRequest): HeightfieldResponse {
+  const border = request.border ?? HEIGHTFIELD_BORDER
+  const stride = heightfieldStride({ resolution: request.resolution, border })
+  return {
+    region: request.region,
+    resolution: request.resolution,
+    border,
+    elevations: new Float32Array(stride * stride),
+    cover: new Uint8Array(
+      request.resolution * request.resolution * COVER_CHANNELS,
+    ),
+    // NaN is dry; a zero is standing water at the datum.
+    water: new Float32Array(request.resolution * request.resolution).fill(
+      Number.NaN,
+    ),
+    minElevation: 0,
+    maxElevation: 0,
+  }
+}

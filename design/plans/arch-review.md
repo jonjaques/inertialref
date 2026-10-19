@@ -200,18 +200,6 @@ request of its own; each belongs to the next change that opens its file.
 
 **The walker and the frame.**
 
-- **Observatory ownership is still spelled out twice in `GameEngine.ts`.**
-  `galaxyInstrument` and `galaxyView` test `cinematic === null` and
-  `observer !== null` together, which is `owner?.arm === 'observatory'`.
-  Correct, and allowed inside the engine; `owner.arm` says it once.
-- **The plumes and the parked hull can part.** On foot `ThrusterFx` roots its
-  plumes at the vessel entity's pose; `ShipModel` draws a parked Rocinante at
-  the raised, upright pad pose. They differ only if a parked hull reports a
-  thrust demand, and nothing shows one never does. Either root the plumes at
-  `engine.parkedRocinante`, or hold a parked hull's demand at zero in a test.
-- **Two of the derived-state test's probes are never warm.** `rotationStop`
-  and `terrain` are cold at the pad before the load, so their cold read after
-  it proves only that they do not throw.
 - **6's gate is short two plates.** No plate was taken of a figured body or of
   the star filling the frame; the figured path is equivalent in code and the
   star's exposure is held by `bodyUniforms.test.ts`. The per-body records it
@@ -231,8 +219,6 @@ request of its own; each belongs to the next change that opens its file.
 - **A baseline from before `ir.status().boot` costs twelve seconds a plate.**
   The driver reads such a build as `drawing` and the cover wait gives up after
   twelve seconds, which is correct and slow; it ages out as baselines move past 9.
-- **The director still calls `host.render.declareCut()`.** 9's shape did not
-  move it.
 
 **The guide.**
 
@@ -300,9 +286,6 @@ own.
   the fade's unchanged output makes unlikely to differ. **Decided: the
   temporal path is measured before this closes** — a camera pan under
   temporal Quality, cast for shimmer, with and without the angle multiplied.
-- **The Graphics panel resolves the picture it is editing for itself.** It
-  shows the render size of the preference before the sensor rebuilds, through
-  `pictureDimensions`, which now reads `renderSize`.
 
 ---
 
@@ -329,6 +312,26 @@ own.
   `TerrainPatches` reading the body.
 - **`engine.pool()` stays.** `scene/Bodies.tsx` and `render/preload.ts` read
   the pool through it; when both read the session it goes, as `player()` did.
+- **The director still calls `host.render.declareCut()`.** That port is how
+  every harness module says it moved the camera discontinuously — the
+  observatory, `OnFoot`, `Maneuvers` and the harness's own `load` and `view`
+  call it, fifteen sites in all — and the director's four are the same
+  statement: a scene starts, ends, seeks, or crosses a shot boundary. The last
+  is the one that keeps it there. Only the prepared script knows where one
+  shot gives way to the next, and it learns it inside `sample`, so moving the
+  call out means a `cut` flag on every sample that the engine turns back into
+  the same `declareCut()`: a second path for one fact, for the one caller of
+  five that would take it.
+- **The Graphics panel resolves the picture it is editing.** It shows the
+  render size of the preference the moment it changes, before the sensor
+  rebuilds, so it cannot read `engine.sceneLayout`: that is the layout of the
+  picture being drawn, which is the previous one until the rebuild. It calls
+  `resolvePicture`, which is the resolution `sceneLayout` makes —
+  `sceneLayout.test.ts` holds `layout.picture` equal to it for every picture
+  on both backends — and `pictureDimensions` sizes the result with
+  `renderSize`, the pass's own arithmetic. Calling `sceneLayout` instead would
+  ask the panel for a reversed-depth flag it does not have and the picture
+  does not depend on.
 - **The cinema playhead keeps its `mine` guard.** With the director on
   `ir.cutscene` a console `ir.play` can still replace a scene the session
   opened, and the guard is what keeps the session from claiming that ending.
