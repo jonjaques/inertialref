@@ -11412,6 +11412,7 @@ about this machine.
 
 `scripts/check.mjs` weights the `slow` stage as the threads plus the test
 thread, `poolSize()` repeated as `DESCENT_THREADS`.
+
 ## East at a surface point is one function, and the surface frame turned to face it (18 Oct 2026)
 
 "East" at a surface point was derived four ways. `placementBasis` took
