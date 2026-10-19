@@ -3,6 +3,7 @@ import { MotionConfig } from 'motion/react'
 import { AccountProvider } from './account/AccountProvider.tsx'
 import { TooltipProvider } from './components/ui/tooltip.tsx'
 import type { InitialDocs } from './docs/initialDocs.ts'
+import { SkipLink } from './dock/SkipLink.tsx'
 import GameLoader from './GameLoader.tsx'
 import { KeymapProvider } from './input/KeymapProvider.tsx'
 import { PageShell } from './pages/PageShell.tsx'
@@ -24,6 +25,7 @@ export default function Root({
             <TooltipProvider>
               <KeymapProvider>
                 <div className="relative h-full w-full text-slate-200">
+                  <SkipLink />
                   <GameLoader />
                   <PageShell initialDocs={initialDocs} />
                 </div>

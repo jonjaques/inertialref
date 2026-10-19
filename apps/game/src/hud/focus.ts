@@ -1,4 +1,5 @@
 import type { MouseEvent } from 'react'
+import { focusWayHome } from '../dock/wayHome.ts'
 
 /*
  * Who owns the keyboard, and when.
@@ -16,9 +17,18 @@ import type { MouseEvent } from 'react'
  * changes that, so this exists, and it is a 1px outline in the accent rather
  * than a ring with an offset because a hairline in Instrument Blue is how the
  * rest of the system draws structure. No glow, no offset, nothing that moves.
+ *
+ * The style is named outright with `outline-solid`, not left to `outline`.
+ * Tailwind's `outline` and `outline-1` both write `outline-style:
+ * var(--tw-outline-style)`, and `focus:outline-none` sets that variable to
+ * `none` on every focused element — a keyboard-focused one included — so
+ * without a named style the ring resolves to a 1px sky-400 outline of style
+ * `none`, and no stop draws anything. `outline-solid` sets the variable and
+ * the property together, and
+ * the `focus-visible` variant sorts after `focus`, so it wins.
  */
 export const FOCUS_RING =
-  'focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-sky-400'
+  'focus:outline-none focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-sky-400'
 
 /**
  * Hand focus back to the flight loop — but only when a pointer took it.
@@ -43,6 +53,39 @@ export const FOCUS_RING =
  */
 export function releaseFocus(event: MouseEvent<HTMLElement>): void {
   if (event.detail > 0) event.currentTarget.blur()
+}
+
+/**
+ * `releaseFocus` for a control that removes itself: a keyboard keeps a place,
+ * just not this one.
+ *
+ * A panel's Close, its pin, a row that changes the subject — each unmounts the
+ * button that was pressed. The browser moves focus to `<body>`, and Chrome
+ * keeps the sequential-focus starting point where the removed node was, so
+ * the next Tab resumes from the middle of whatever replaced it rather than
+ * from the skip link, with the way home anywhere from 4 to 80 stops off on
+ * `/planetarium`. So a keyboard activation names where focus goes next, and
+ * the way home is what is left when that is not drawn — a panel whose group is
+ * hidden from the menu has no toggle to return to.
+ *
+ * The lookup waits a task. The click's state change is a discrete update that
+ * React commits before the event's task ends, so by the timeout the
+ * destination exists, and a lookup made inside the handler would find the
+ * button that is about to go. A pointer click is `releaseFocus` exactly.
+ */
+export function handFocus(
+  event: MouseEvent<HTMLElement>,
+  next: () => HTMLElement | null,
+): void {
+  if (event.detail > 0) {
+    event.currentTarget.blur()
+    return
+  }
+  setTimeout(() => {
+    const target = next()
+    if (target === null) focusWayHome()
+    else target.focus({ preventScroll: true })
+  })
 }
 
 /**

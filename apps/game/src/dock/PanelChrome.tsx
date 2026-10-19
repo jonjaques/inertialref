@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode, Ref } from 'react'
 import { ChevronDown, ChevronRight, Pin, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
-import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { FOCUS_RING, handFocus, releaseFocus } from '../hud/focus.ts'
 import type { DockPanelDefinition } from './panels.ts'
 
 /*
@@ -150,8 +150,15 @@ export function PanelChrome({
           size="icon-xs"
           aria-pressed={!floating}
           aria-label={`${definition.title}: ${floating ? 'pin back into its pane' : 'unpin, and float over the scene'}`}
+          data-panel-pin=""
           onClick={(event) => {
-            releaseFocus(event)
+            // The panel survives the move and its pin with it, in the other
+            // arrangement's DOM — so the pin is where a keyboard stays.
+            handFocus(event, () =>
+              document.querySelector<HTMLElement>(
+                `[data-dock-panel="${CSS.escape(definition.id)}"] [data-panel-pin]`,
+              ),
+            )
             if (floating) onDock()
             else onFloat()
           }}
@@ -173,7 +180,13 @@ export function PanelChrome({
           size="icon-xs"
           aria-label={`Close ${definition.title}`}
           onClick={(event) => {
-            releaseFocus(event)
+            // Back to the menu toggle that opens it again: what dismisses
+            // itself returns focus to what summons it.
+            handFocus(event, () =>
+              document.querySelector<HTMLElement>(
+                `[data-panel-toggle="${CSS.escape(definition.id)}"]`,
+              ),
+            )
             onHide()
           }}
           className={`shrink-0 rounded text-slate-400 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}

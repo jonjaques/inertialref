@@ -22,6 +22,16 @@ import { releaseFocus } from './focus.ts'
  * switch alone is a 32×18 hit box beside forty characters of text that look
  * exactly as clickable and were not. `min-h-9` — 36px — is what a two-line row
  * needs and is also comfortably past the 24px target minimum.
+ *
+ * The switch itself measures 24×14, under WCAG 2.2 SC 2.5.8's 24×24, and takes
+ * the clause's **equivalent** exception: the row around it is a target for the
+ * same function at the full panel width and 36px of height.
+ *
+ * The name is the label and only the label. A `<label>` names its control with
+ * all of its text, so through `htmlFor` alone the switch is called the label
+ * and the detail run together — a sentence for a name, read before the state.
+ * `aria-labelledby` points at the word, and the sentence is the description,
+ * which a reader announces after the name and the state.
  */
 
 export function SwitchRow({
@@ -87,7 +97,10 @@ export function SwitchRow({
        * at the end of a clause rather than four words in.
        */}
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className={`type-ui ${on ? 'text-sky-200' : 'text-slate-300'}`}>
+        <span
+          id={`${id}-label`}
+          className={`type-ui ${on ? 'text-sky-200' : 'text-slate-300'}`}
+        >
           {label}
         </span>
         {detail !== undefined && (
@@ -96,11 +109,18 @@ export function SwitchRow({
           // sentence set in the Instrument face is the "monospace as a costume
           // for technical" reflex. Two lines in a 19rem column is the honest
           // cost of saying the whole thing.
-          <span className="type-ui text-pretty text-slate-400">{detail}</span>
+          <span
+            id={`${id}-detail`}
+            className="type-ui text-pretty text-slate-400"
+          >
+            {detail}
+          </span>
         )}
       </span>
       <Switch
         id={id}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={detail === undefined ? undefined : `${id}-detail`}
         size="sm"
         checked={on}
         disabled={disabled}
