@@ -81,7 +81,7 @@ export const HOLD_ANGLE = 0.016
  * used from a hundred body-radii out and from just above the orbit floor, and
  * the one thing the mark may not do is leave the frame at either end.
  */
-export const HOLD_ALTITUDE_SHARE = 0.2
+const HOLD_ALTITUDE_SHARE = 0.2
 
 /**
  * How far the ring floats over the ground it follows, as a share of its own
