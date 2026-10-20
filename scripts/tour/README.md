@@ -58,8 +58,9 @@ confirms `session.update` is refused, drops the peer connection without
 closing, and attaches a sideband to see whether the session survived. Both
 write a JSONL trace and a summary under `.scratch/live-probe/` with audio
 payloads dropped and no credentials; visitor clips are cached there so a rerun
-pays for Live and Astra only. A run is a few minutes and under a dollar. The
-plan's § 12 records what they found.
+pays for Live and Astra only. A run is a few minutes and under a dollar.
+[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) records what
+they found.
 
 ## Listening
 

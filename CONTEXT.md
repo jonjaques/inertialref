@@ -9869,8 +9869,9 @@ application message, and budget transition with its session and model. It
 redacts credentials and omits SDP and audio bytes. Browser tracing retains the
 latest 200 application messages. Production tracing remains off by default;
 enabling it deliberately includes conversation text. The measured director
-results, fixture corrections, and remaining evaluations live in the
-[evaluation report](design/reports/the-agentic-tour-guide.md).
+results and fixture corrections were an evaluation report under
+`design/reports/`, retired once ADR-0042 superseded the director; the
+evaluations still open are rows in [the roadmap](docs/roadmap.md#the-guide).
 
 ## The route needs room for a story (13 Sep 2026)
 
