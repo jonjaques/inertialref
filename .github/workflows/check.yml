@@ -42,7 +42,7 @@ jobs:
       # which ones the tree points at — a fresh download of the two hulls and
       # the pad on every run is forty megabytes of LFS bandwidth for files
       # that change a few times a year.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Which LFS objects the tree points at
         run: |
@@ -68,14 +68,14 @@ jobs:
 
       # Reads the pinned version from package.json's `packageManager` field, so
       # the lockfile format and the CI pnpm can never disagree.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       # Node 26 is required: the headless runner executes the TypeScript sources
       # directly through type stripping, which is how `pnpm sim` works with no
       # build step. Read from `.node-version` rather than pinned here, because
       # Cloudflare's build image reads the same file — two CI systems agreeing
       # about the runtime by construction rather than by both being edited.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.node-version'
           cache: pnpm
@@ -154,9 +154,9 @@ jobs:
 
     steps:
       # No LFS: no `*.gpu.test.ts` reads a model or a plate.
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.node-version'
           cache: pnpm
