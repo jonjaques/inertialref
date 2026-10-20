@@ -379,7 +379,12 @@ describe('a drop', () => {
           fc.pre(drop !== null)
           const stance = descentStance(MARS, drop!, 0, star)
           const up = geodeticDirection(stance.latitude, stance.longitude)
-          expect(Vec.length(Vec.cross(up, from))).toBeLessThan(1e-9)
+          // `arcAnomaly` is asin(√x), and x at the release is a rounding of
+          // the radius: the angle comes back at up to √ε ≈ 1.5e-8, measured
+          // 6.7e-9 — 2.3 cm at Mars's radius.
+          expect(Vec.length(Vec.cross(up, from))).toBeLessThan(
+            2 * Math.sqrt(Number.EPSILON),
+          )
           const radius = drawnSurfaceRadius(MARS, up) + stance.height
           expect(near(radius, MARS.radius * radii, 1e-12)).toBe(true)
         },

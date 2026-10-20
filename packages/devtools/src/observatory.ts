@@ -126,7 +126,11 @@ export {
   FLIGHT_FLOOR_SPEED,
   FLIGHT_SPEED_PER_HEIGHT,
 } from './stanceGeometry.ts'
-export type { DropAim, EntryArcPreview } from './stanceGeometry.ts'
+export type {
+  DropAim,
+  EntryArcPreview,
+  StanceFlight,
+} from './stanceGeometry.ts'
 export type { DescentStatus, SurfaceStatus } from './surfaceArm.ts'
 
 /** A camera pose in universe coordinates: where the eye is, and where it looks. */
