@@ -390,12 +390,14 @@ export function flightStep(
   const latitude = clampLatitude(stance.latitude + (north * distance) / reach)
   const cosine = Math.max(1e-6, Math.cos(latitude))
   let longitude = stance.longitude + (east * distance) / (reach * cosine)
+  if (longitude > Math.PI) longitude -= 2 * Math.PI
+  if (longitude < -Math.PI) longitude += 2 * Math.PI
   /*
-   * Wrapped by whole turns, not by one. Near a pole the cosine is small and a
-   * single frame's step crosses more than a turn of longitude — measured, a
-   * fast step 2,000 km over a pole lands at −3.14159265358983 under one
-   * correction of 2π. Only an out-of-range value is touched, so every
-   * longitude already in range comes back bit for bit.
+   * And by whole turns past that. Near a pole the cosine is small and a single
+   * frame's step crosses more than a turn of longitude — measured, a fast step
+   * 2,000 km over a pole lands at −3.14159265358983 after one correction of
+   * 2π. The one-turn correction stays first so every step that crosses the
+   * antimeridian once comes back bit for bit.
    */
   if (longitude > Math.PI || longitude < -Math.PI)
     longitude = Math.PI - wrapHeading(Math.PI - longitude)

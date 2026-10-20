@@ -155,23 +155,26 @@ describe('the ground ring', () => {
     )
   })
 
-  it('stays within a sixth of a turn of its center however far the eye is', () => {
+  it('subtends RING_ANGLE of the eye’s range, capped at 0.22 of the radius, at the body’s center', () => {
     fc.assert(
       fc.property(
         direction,
         direction,
         fc.double({ min: 1.0001, max: 1e4, noNaN: true }),
         (center, sight, radii) => {
-          const ring = groundRing(
-            MARS,
-            center,
-            MARS.radius,
-            Vec.scale(sight, MARS.radius * radii),
-          )
-          for (const p of ring)
-            expect(Vec.dot(Vec.normalize(p), center)).toBeGreaterThanOrEqual(
-              Math.cos(Math.PI / 3) - 1e-9,
-            )
+          const eye = Vec.scale(sight, MARS.radius * radii)
+          const ring = groundRing(MARS, center, MARS.radius, eye)
+          const range = Vec.length(Vec.sub(eye, Vec.scale(center, MARS.radius)))
+          // An arc of the ground `across` long, as an angle at the center.
+          const sweep =
+            Math.min(MARS.radius * 0.22, Math.max(1, range) * RING_ANGLE) /
+            MARS.radius
+          for (const p of ring) {
+            const cosine = Vec.dot(Vec.normalize(p), center)
+            expect(
+              Math.abs(Math.acos(Math.min(1, cosine)) - sweep),
+            ).toBeLessThan(1e-7)
+          }
         },
       ),
       { numRuns: 40 },
@@ -184,10 +187,11 @@ describe('the drop aid', () => {
     fc.assert(
       fc.property(
         direction,
+        direction,
         fc.double({ min: 1.2, max: 20, noNaN: true }),
-        (sight, radii) => {
+        (sight, aimed, radii) => {
           const eye = Vec.scale(sight, MARS.radius * radii)
-          const { latitude, longitude } = directionToGeodetic(sight)
+          const { latitude, longitude } = directionToGeodetic(aimed)
           const aid = entryArcPreview(MARS, eye, { latitude, longitude }, 24)
           expect(aid).not.toBeNull()
           // The aid clamps the latitude short of the pole, as a stance does.

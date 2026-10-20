@@ -70,9 +70,11 @@ import {
  * stance is held.
  *
  * It is built over `Host` and a port the observatory implements beside it,
- * because the arm needs four things only the observatory knows: what it is
- * looking at, how a typed address resolves, how to focus one, and the camera
- * the orbit arm would produce. `declareCut()` is called where the cut is made,
+ * because the arm needs what only the observatory knows: what it is looking
+ * at, how a typed address resolves and how to focus one, how to take the
+ * camera from the orbit arm, the camera as it stands, the photographic
+ * instant, where the star is, and when an edit counts. `SurfacePort` lists
+ * them. `declareCut()` is called where the cut is made,
  * so a reader of a verb sees the cut beside the change it covers.
  *
  * Read-only like the observatory: no teleport, no clock, no entity write.
