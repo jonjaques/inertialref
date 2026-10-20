@@ -108,6 +108,7 @@ import type { PictureFraming } from './pictures.ts'
 import { dragSensitivityOf } from './dragSensitivity.ts'
 import { currentSystemOf, resolveDestination } from './travel.ts'
 import type { Host } from './host.ts'
+import { HeldTime } from './heldTime.ts'
 
 /*
  * The observatory: the planetarium's camera, bound to a live world.
@@ -479,49 +480,36 @@ export class Observatory {
     return this.status()
   }
 
-  #time: number | null = null
-  #timePaused = true
-  #timeScale = 1
+  /** The photographic instant. `heldTime.ts` holds its bounds. */
+  readonly #clock: HeldTime
   get timePaused(): boolean {
-    return this.#timePaused
+    return this.#clock.paused
   }
   get timeScale(): number {
-    return this.#timeScale
+    return this.#clock.scale
   }
   setTimePaused(paused: boolean): void {
     this.#changed()
-    this.#timePaused = paused
+    this.#clock.setPaused(paused)
   }
   setTimeScale(scale: number): void {
     this.#changed()
-    if (!Number.isFinite(scale) || scale <= 0 || scale > 100000)
-      throw new Error('Invalid photographic time rate.')
-    this.#timeScale = scale
+    this.#clock.setScale(scale)
   }
   advanceTime(seconds: number): void {
-    if (this.#time !== null && !this.#timePaused) {
-      const next = this.#time + Math.max(0, seconds) * this.#timeScale
-      if (Math.abs(next) <= 3.15576e12) this.#time = next
-      else this.#timePaused = true
-    }
+    this.#clock.advance(seconds)
   }
 
   /** A held photographic instant, or the live simulation's presentation time. */
   get time(): number {
-    return this.#time ?? this.#host.world.clock.renderTime
+    return this.#clock.time
   }
   get heldTime(): number | null {
-    return this.#time
+    return this.#clock.heldTime
   }
   setTime(time: number | null): void {
     this.#changed()
-    if (
-      time !== null &&
-      (!Number.isFinite(time) || Math.abs(time) > 3.15576e12)
-    )
-      throw new Error('Choose a finite time within 100,000 years of J2000.')
-    this.#time = time
-    this.#timePaused = true
+    this.#clock.set(time)
   }
 
   capture(): Extract<PictureFraming, { kind: 'camera' }> {
@@ -910,6 +898,7 @@ export class Observatory {
 
   constructor(host: Host) {
     this.#host = host
+    this.#clock = new HeldTime(() => host.world.clock.renderTime)
   }
 
   get target(): ObserverTarget | null {
@@ -1093,7 +1082,7 @@ export class Observatory {
     // Idle presentation updates also clear, and must not reset every frame.
     if (this.#target !== null || this.#galaxyView !== null)
       this.#host.render.declareCut()
-    this.#time = null
+    this.#clock.release()
     this.#journey = null
     this.#galaxyView = null
     this.#target = null
