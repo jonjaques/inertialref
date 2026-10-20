@@ -188,9 +188,9 @@ a fetch of one baked noise texture, four named surface levers, and the sphere
 of a generated body wearing six faces of its own ground.
 [ADR-0026](adr/0026-the-liquid.md) is the decision record. Terrain moved to
 algorithm version 3, and the frame at a retina size over the shore went from
-9.5 to 16.3 fps. What it did not do is make a river run downhill: the valleys
-are the zero-level strip of a noise, and
-[the erosion plan](../design/plans/erosion.md) is the answer.
+9.5 to 16.3 fps. What it did not do is make a river run downhill;
+[ADR-0043](adr/0043-the-rivers-drain.md)'s per-body drainage graph does, and
+[the erosion plan](../design/plans/erosion.md) is what it still owes.
 
 The ladder and the relief landed 3 Sep 2026, and between them they close two
 rows of the table below. `MAX_CRATER_LEVELS` goes from eleven halvings
