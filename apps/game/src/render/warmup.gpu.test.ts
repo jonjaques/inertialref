@@ -17,7 +17,7 @@ import { groundDummy } from './groundWear.ts'
 import { createStarMaterial } from './materials.ts'
 import { DEFAULT_PICTURE } from './picture.ts'
 import { sceneBackend, sceneLayout } from './sceneLayout.ts'
-import { warmTargetFor } from './sensor.ts'
+import { warmTargetFor } from './sceneTarget.ts'
 import { warmCompile, warmRenderer, warmSensorPass } from './warmup.ts'
 
 /** The production picture with its four samples off. */

@@ -1,7 +1,7 @@
 import { TargetControls } from './TargetControls.tsx'
 import { useId } from 'react'
 import { Compass } from 'lucide-react'
-import { formatReading, radiansToDegrees } from '@inertialref/shared'
+import { formatReading, wholeDegrees } from '@inertialref/shared'
 import { compassDegrees, MIN_STANCE_HEIGHT } from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
 import { Action } from '../hud/Action.tsx'
@@ -161,7 +161,7 @@ export function CameraPanel(context: PlanetariumContext) {
             <span className="flex min-w-0 items-baseline gap-2">
               <span className="type-readout truncate text-right text-slate-300">
                 {eye.aimed
-                  ? `${compassDegrees(eye.yaw)}° · ${Math.round(radiansToDegrees(eye.look))}°`
+                  ? `${compassDegrees(eye.yaw)}° · ${wholeDegrees(eye.look)}°`
                   : eye.name}
               </span>
               {/* Enabled only when there is something to undo. A control whose
@@ -204,10 +204,7 @@ export function CameraPanel(context: PlanetariumContext) {
               value={`${compassDegrees(eye.azimuth)}°`}
             />
             {/* Clamped to ±90° by the arm, so it needs none of the above. */}
-            <Row
-              label="Elevation"
-              value={`${Math.round(radiansToDegrees(eye.elevation))}°`}
-            />
+            <Row label="Elevation" value={`${wholeDegrees(eye.elevation)}°`} />
 
             <div className="mt-2 flex items-center gap-1.5">
               <span className="type-ui shrink-0 text-slate-400">Move</span>

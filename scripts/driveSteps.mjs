@@ -51,8 +51,9 @@ const count = (arg, flag, least) => {
   return n
 }
 
-/** The least argument each numeric step accepts. */
-const LEAST = { wait: 0, settle: 0, sample: 1, trace: 100 }
+/** The least argument each numeric step accepts. A cast needs two frames to
+ *  difference. */
+const LEAST = { wait: 0, settle: 0, sample: 1, cast: 2, trace: 100 }
 const SCRIPTED = new Set(['sample', 'cast', 'settle'])
 
 /** Every numeric step argument, checked before the dev server, Chrome and an

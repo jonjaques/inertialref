@@ -78,6 +78,9 @@ describe('checkSteps', () => {
     expect(() => checkSteps(plan('--trace', '99'), page)).toThrow(
       '--trace wants a number ≥ 100',
     )
+    expect(() => checkSteps(plan('--cast', '1'), page)).toThrow(
+      '--cast wants a number ≥ 2',
+    )
     expect(() => checkSteps(plan('--settle', '8000'), page)).not.toThrow()
   })
 

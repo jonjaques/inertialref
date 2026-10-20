@@ -74,9 +74,9 @@ Most of `.claude/` runs without being asked.
   are not on main" to it is noise.
 - **The Stop hook runs the gate.** After a turn that touched a
   `.ts` / `.tsx` / `.mjs` / `.json` file, the `gate` group of
-  `scripts/check.mjs` runs — graph, lint, the six typecheck projects and the
-  root test suite, as a graph under the machine's core budget, about thirty
-  seconds and bounded by the suite. A failure comes back as work to do, not a
+  `scripts/check.mjs` runs — graph, knip, fta, lint, the six typecheck
+  projects and the root test suite, as a graph under the machine's core
+  budget, about thirty seconds and bounded by the suite. A failure comes back as work to do, not a
   finished task. It blocks at most three times per prompt, then reports and
   lets go. Every stage that passes is stamped by the content of the working
   tree, so a `pnpm check` on the same tree reuses those stages and runs the

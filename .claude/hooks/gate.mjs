@@ -7,7 +7,7 @@
 // types check and the tests pass. Enforcing it here rather than trusting a checklist
 // costs about half a minute: the `gate` group of `scripts/check.mjs`, which is
 //
-//     graph, lint, the six typecheck projects and the root test suite
+//     graph, knip, fta, lint, the six typecheck projects and the root test suite
 //
 // run as a graph under the machine's core budget, so the six `tsc` projects cost what
 // the slowest one costs and the suite starts beside them. `pnpm test` is that cheap

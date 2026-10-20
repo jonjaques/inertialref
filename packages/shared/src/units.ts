@@ -114,6 +114,9 @@ export const metersToFeet = (m: Meters): Feet => (m / FOOT) as Feet
 export const metersToInches = (m: Meters): Inches => (m / INCH) as Inches
 export const radiansToDegrees = (r: Radians): Degrees =>
   ((r * 180) / Math.PI) as Degrees
+/** Whole degrees, which is every angle a panel prints or puts on a slider. */
+export const wholeDegrees = (r: Radians): Degrees =>
+  Math.round(radiansToDegrees(r)) as Degrees
 export const degreesToRadians = (d: Degrees): Radians => (d * Math.PI) / 180
 
 /*

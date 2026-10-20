@@ -50,8 +50,6 @@ import { SensorHistory } from './sensorHistory.ts'
 import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
 import { namePass } from './passTimeline.ts'
 
-export { warmTargetFor } from './sceneTarget.ts'
-
 /* The sensor owns the only scene draw, then applies lens-side optics,
  * detector response and the canvas encode. MSAA belongs to the scene target;
  * the output triangle has no interior edge that needs multisampling.

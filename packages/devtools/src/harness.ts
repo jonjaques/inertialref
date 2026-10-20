@@ -1735,10 +1735,17 @@ export class GameHarness {
 
   /** Where a search is asked from: the ship, and the planetarium's eye. */
   #vantage(): Vantage {
+    const observatory = this.#observatory
     return {
       world: this.world,
       player: this.#host.player(),
-      observer: this.#observatory.eye,
+      // A getter, because the eye is a pose solve — and a terrain sample while
+      // the camera stands on ground — and only the questions asked from the
+      // observer read it. `search` runs per keystroke and `systemsNearby` is
+      // always from the ship; neither should pay for a vantage it ignores.
+      get observer() {
+        return observatory.eye
+      },
     }
   }
 
