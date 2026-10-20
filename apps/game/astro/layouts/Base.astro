@@ -12,18 +12,20 @@ const { meta, asyncDocs = false } = Astro.props
 
 <!doctype html>
 <html lang="en">
-  <head><Fragment set:html={renderDocumentHead(meta)} /></head>
+  <head>
+    <Fragment set:html={renderDocumentHead(meta)} />
+  </head>
   <body>
-    <div id="root"><slot /></div>
+    <div id="root">
+      <slot />
+    </div>
     <noscript>
-      {
-        asyncDocs && (
-          <p class="absolute inset-x-0 top-0 z-50 bg-slate-950 p-6 text-slate-100">
-            This build loads API reference pages with JavaScript. Enable it to
-            read the reference, or <a href="/docs">browse the documentation</a>.
-          </p>
-        )
-      }
+      {asyncDocs && (
+        <p class="absolute inset-x-0 top-0 z-50 bg-slate-950 p-6 text-slate-100">
+          This build loads API reference pages with JavaScript. Enable it to
+          read the reference, or <a href="/docs">browse the documentation</a>.
+        </p>
+      )}
       <style>
         .doc-rail {
           display: block;

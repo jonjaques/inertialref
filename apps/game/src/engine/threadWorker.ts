@@ -53,7 +53,12 @@ export function threadWorkerPort(entry: URL): WorkerPort {
     dead ??= reason
     for (const job of [...inFlight]) fail(job)
   }
-  worker.on('error', (cause) => die(`worker thread failed: ${cause.message}`))
+  // A worker's uncaught throw arrives as whatever it threw, not always an Error.
+  worker.on('error', (cause) =>
+    die(
+      `worker thread failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+    ),
+  )
   worker.on('exit', (code) => die(`worker thread exited with code ${code}`))
   worker.on('message', (message: WorkerOutbound) => {
     if (message.kind !== 'ready') inFlight.delete(message.job)
