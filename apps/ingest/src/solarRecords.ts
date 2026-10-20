@@ -446,8 +446,24 @@ export interface SolarTexts {
  * byte-count check in `validateSource` cannot see.
  */
 export function solarReference(texts: SolarTexts): SolarRecords {
+  return {
+    ...solarTables(texts.tables),
+    smallBodies: texts.smallBodies.map(({ query, text }) =>
+      parseSmallBody(query.designation, query.name, JSON.parse(text)),
+    ),
+  }
+}
+
+/**
+ * The three HTML tables alone, checked the same way. The build calls this
+ * before it asks SBDB for anything, so a layout change fails before 59
+ * fetches rather than after them.
+ */
+export function solarTables(
+  tables: ReadonlyMap<string, string>,
+): Omit<SolarRecords, 'smallBodies'> {
   const { planets, dwarfPlanets } = parsePlanetTable(
-    texts.tables.get('planets') ?? '',
+    tables.get('planets') ?? '',
   )
   if (planets.length !== 8)
     throw new Error(
@@ -459,18 +475,14 @@ export function solarReference(texts: SolarTexts): SolarRecords {
     )
 
   const satellites = parseSatellites(
-    texts.tables.get('satellitePhysical') ?? '',
-    texts.tables.get('satelliteElements') ?? '',
+    tables.get('satellitePhysical') ?? '',
+    tables.get('satelliteElements') ?? '',
   )
   if (satellites.length < 200)
     throw new Error(
       `satellite tables: parsed ${satellites.length} moons, expected hundreds`,
     )
-
-  const smallBodies = texts.smallBodies.map(({ query, text }) =>
-    parseSmallBody(query.designation, query.name, JSON.parse(text)),
-  )
-  return { planets, dwarfPlanets, satellites, smallBodies }
+  return { planets, dwarfPlanets, satellites }
 }
 
 /* ------------------------------------------------------------------------- */

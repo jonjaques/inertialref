@@ -229,13 +229,15 @@ describe('a body the grid cannot hold', () => {
    * A body with a cavity is refused by volume: every ray hits the outer
    * wall, so coverage is complete and only the volume can tell. The grid
    * holds the full ball, `1 / (1 − k³)` of the shell's volume for a cavity
-   * of `k` times the radius — 103% at k = 0.3, which a grid's own losses can
-   * reach and the tolerance admits, and 114% at k = 0.5, which only a shape
-   * the grid cannot hold reaches.
+   * of `k` times the radius. The cases bracket the tolerance: 105.8% at
+   * k = 0.38 is held, 106.3% at k = 0.39 is refused, so a tolerance widened
+   * to 6.3% or past it turns this red.
    */
   it.each([
-    [0.3, true],
-    [0.5, false],
+    [0.3, '102.7'],
+    [0.38, '105.8'],
+    [0.39, null],
+    [0.5, null],
   ])(
     'holds a cavity of %s of the radius only inside ±6% of the volume',
     (k, held) => {
@@ -254,10 +256,11 @@ describe('a body the grid cannot hold', () => {
         ],
       }
       const convert = () => shapeFieldFrom(vertexTable(shell), source('vertex'))
-      if (held) expect(convert().volumeRatio).toBeCloseTo(1 / (1 - k ** 3), 2)
+      if (held !== null)
+        expect((convert().volumeRatio * 100).toFixed(1)).toBe(held)
       else
         expect(convert).toThrow(
-          /encloses 114\.\d% of the source's volume. Past ±6% .* not star-shaped/,
+          /encloses 1(0[6-9]|1\d)\.\d% of the source's volume\. Past ±6% .* not star-shaped/,
         )
     },
   )

@@ -1,5 +1,5 @@
 {
-  "_fixture": "Excerpt of https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=1P&phys-par=1&discovery=1&full-prec=1, cut 2026-10-20. The sandbox that cut it could not reach ssd-api.jpl.nasa.gov, so the values are the committed data/reference/solar-system.json's (generated 2026-08-26), set in the API's response form. A comet: a two-axis extent, and no GM, density, rotation, magnitude or pole.",
+  "_fixture": "The response form of https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=1P&phys-par=1&discovery=1&full-prec=1, set 2026-10-20, carrying the values data/reference/solar-system.json holds (generated 2026-08-26) rather than a byte copy of a response. Every value is a string, as the API sends it. A comet: a two-axis extent, and no GM, density, rotation, magnitude or pole.",
   "object": {
     "fullname": "1P/Halley",
     "shortname": "1P/Halley",

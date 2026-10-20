@@ -155,12 +155,14 @@ describe('elevationToNormal', () => {
   const radius = (8 * 1_000) / Math.PI
   const relief = 1_000
 
-  it('gives a flat field the normal (0.5, 0.5, 1) everywhere', async () => {
+  it('gives a flat field an untilted normal and no ocean everywhere', async () => {
     const flat = await field(8, 8, () => 90)
     const { info, at } = await decode(
       await elevationToNormal(flat, stub({ width: 8 })),
     )
     expect([info.width, info.height, info.channels]).toEqual([8, 4, 3])
+    // X and Y at 128 are 0.5, a zero tangent; the shader rebuilds Z as 1.
+    // Blue is the ocean mask, not Z.
     for (let y = 0; y < 4; y += 1)
       for (let x = 0; x < 8; x += 1) {
         expect(at(x, y, 0)).toBe(128)

@@ -43,9 +43,10 @@ describe('the vendored shape models', () => {
       const step = (entry.maxRadius - entry.minRadius) / 65_535
       expect(Math.abs(extent.meanRadius - entry.meanRadius)).toBeLessThan(step)
       // `.claude/rules/catalog.md`: every current model lands between 99.8%
-      // and 100.6% of its source's volume.
-      expect(entry.volumeRatio).toBeGreaterThan(0.997)
-      expect(entry.volumeRatio).toBeLessThan(1.007)
+      // and 100.6% of its source's volume, to the rule's one decimal.
+      const percent = Math.round(entry.volumeRatio * 1_000) / 10
+      expect(percent).toBeGreaterThanOrEqual(99.8)
+      expect(percent).toBeLessThanOrEqual(100.6)
     },
   )
 })
