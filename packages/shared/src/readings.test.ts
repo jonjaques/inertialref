@@ -28,6 +28,7 @@ import {
 const MARS_YEAR = 686.98 * SECONDS_PER_DAY
 
 const finite = fc.double({ noNaN: true, noDefaultInfinity: true })
+const nonFinite = fc.constantFrom(Number.NaN, Infinity, -Infinity)
 
 /** The index of a unit in its ladder, smallest first; `million km` before `km`. */
 const rung = (ladder: readonly string[], text: string): number =>
@@ -73,6 +74,41 @@ describe('the reading vocabulary', () => {
           `${small} s → ${period(small)}, ${large} s → ${period(large)}`,
         ).toBeGreaterThanOrEqual(rung(time, period(small)))
       }),
+    )
+  })
+
+  it('prints the em dash alone for a reading that is not finite', () => {
+    /*
+     * A unit after the dash claims a quantity that has no value, and the
+     * guard inside `round` and `significant` cannot stop it: the unit is
+     * appended after they return. Every instrument formatter is in this list,
+     * so a new one that appends its unit to a dash fails it.
+     *
+     * `formatDistance` and `formatDuration` are not instrument readings.
+     * They are log and debug formatters that print the number as it is, and
+     * `tour/brief.ts` splits `formatDuration`'s output into a quantity and a
+     * unit, which a bare dash does not have.
+     */
+    const formatters: Record<string, (value: number) => string> = {
+      formatReading,
+      round: (value) => round(value, 2),
+      significant,
+      exponential,
+      kilometers,
+      period,
+      pressurized,
+      arcs,
+      'density of mass': (value) => density(value, EARTH_RADIUS),
+      'density of radius': (value) => density(EARTH_MASS, value),
+    }
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...Object.keys(formatters)),
+        nonFinite,
+        (name, value) => {
+          expect(formatters[name]?.(value), `${name}(${value})`).toBe('—')
+        },
+      ),
     )
   })
 })
