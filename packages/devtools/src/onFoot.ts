@@ -23,7 +23,7 @@ import {
   MARS_PAD,
   parseAddress,
 } from '@inertialref/universe'
-import type { Host } from './harness.ts'
+import type { Host } from './host.ts'
 
 /*
  * On foot: stepping out of a landed ship, and back into it.

@@ -7,7 +7,7 @@ by the Node runner and the tests.
 > `ir.help()` in the console is the quickest list. This page explains the
 > supported vocabulary and the distinctions that the one-line help cannot.
 >
-> Code: `packages/devtools/src/harness.ts`
+> Code: `packages/devtools/src/harness.ts`, over the port in `host.ts`
 
 ---
 
@@ -217,6 +217,12 @@ node scripts/drive.mjs --url http://localhost:5173/planetarium \
 | `ir.findWorlds(q)`  | bodies matching what a world _is_, swept in worker batches    |
 | `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
 | `ir.loadSystem(id)` | generate a system without moving the ship                     |
+
+The first four are functions over the world and a vantage — the ship, and
+the planetarium's eye when it holds one — in
+[`finding.ts`](../../packages/devtools/src/finding.ts), beside the per-question
+answers in `travel.ts`; the harness forwards to them, and their tests call them
+directly.
 
 `goTo` and the observatory's `look` accept human forms such as `SOL`,
 `s:SOL/b:2`, or `b:2` relative to the current system. The low-level

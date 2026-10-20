@@ -31,7 +31,7 @@ the runtime the dock panel owns rather than opening a second one:
   Planetarium; offline, the verdict's `checking`, `idle`, `unavailable`,
   `signed-out` or `not-granted`; and in a session `connecting`, `listening`,
   `speaking`, `thinking`, `searching`, `moving`, `visitor-camera`, `paused` or
-  `ending` (`GuideState` in `packages/devtools/src/harness.ts`).
+  `ending` (`GuideState` in `packages/devtools/src/host.ts`).
 - `ir.guideTrace(true)` records the last 200 data-channel events and
   commands, with audio and credentials excluded; `ir.guideTrace()`
   returns detached copies and `ir.guideTrace(false)` stops.

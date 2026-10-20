@@ -1,10 +1,6 @@
 import type { PassReport } from './passReport.ts'
 import type { PictureReport } from './pictureReport.ts'
-import {
-  GENERATION_VERSIONS,
-  type WorldMatch,
-  type WorldQuery,
-} from '@inertialref/universe'
+import { GENERATION_VERSIONS, type WorldQuery } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
 import type { OnFoot } from './onFoot.ts'
 import {
@@ -19,28 +15,20 @@ import {
   type GalaxyView,
   isGalaxyView,
 } from '@inertialref/rendering'
-import { GalaxyInspector, type GalaxyRenderReport } from './galaxy.ts'
+import { GalaxyInspector } from './galaxy.ts'
 import {
   AU,
   deg,
   type Degrees,
   degreesToRadians,
   getLogger,
-  LIGHT_YEAR,
   logHub,
   type LogRecord,
   radiansToDegrees,
   type Result,
   RingBufferSink,
 } from '@inertialref/shared'
-import { formatSeed } from '@inertialref/procedural'
-import {
-  type UniverseVector,
-  UV,
-  Vec,
-  type Vec3,
-  vec3,
-} from '@inertialref/spatial'
+import { Vec, type Vec3, vec3 } from '@inertialref/spatial'
 import {
   snapshot,
   type World,
@@ -59,9 +47,7 @@ import {
   isLandable,
   systemId,
   type SystemId,
-  type SystemStub,
   surveySites,
-  systemsWithin,
   walkBodies,
 } from '@inertialref/universe'
 import {
@@ -73,31 +59,18 @@ import {
 import {
   FLIGHT_FOV,
   type FlightView,
-  type Lens,
-  LENS_PRESETS,
   lensForFov,
   type LensReadout,
   lensReadout,
-  type LensView,
   MIN_STANCE_HEIGHT,
   observerPose,
-  type RenderScene,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import {
-  encodeStub,
-  findWorldsTask,
-  type PoolStats,
-  type HeightfieldCacheStats,
-  type HeightfieldStoreStats,
-  type WorkerPool,
-} from '@inertialref/workers'
-import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
+import type { PoolStats } from '@inertialref/workers'
+import type { AuthorityStatus } from '@inertialref/net'
 import {
   describeDrift,
   TOUR_LIMITS,
-  encodeUniverseVector,
-  type GuideRefusal,
   type VersionDrift,
 } from '@inertialref/protocol'
 import {
@@ -115,25 +88,18 @@ import {
   type WorldInspection,
 } from './inspect.ts'
 import {
-  DEFAULT_SEARCH_LIGHT_YEARS,
-  DEFAULT_SEARCH_LIMIT,
-  SEARCH_BATCH,
   currentSystemOf,
   resolveDestination,
   type SearchEntry,
   searchEntries,
   searchIndexVersion,
-  searchTargets,
-  targetsFor,
   type TravelTarget,
   type TravelTargetOptions,
-  travelTargets,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
 import {
   captureCameraProcessing,
   DEFAULT_PICTURE_PROCESSING,
-  type PictureProcessing,
 } from './pictureProcessing.ts'
 import { SHOTS } from './shots.ts'
 import {
@@ -165,11 +131,29 @@ import {
   makeTimingVerb,
   type ProfileReport,
   summarizeProfile,
-  type TimingPort,
   type TimingVerb,
 } from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
 import { CUTSCENES } from './cutscenes/index.ts'
+import {
+  findWorlds,
+  type FindWorldsOptions,
+  nearbyTargets,
+  rowsFor,
+  searchByName,
+  systemsNearby,
+  type Vantage,
+  type WorldSweep,
+} from './finding.ts'
+import {
+  type BootPhase,
+  type FrameStats,
+  type GuideStatus,
+  type GuideTraceEntry,
+  type Host,
+  type TerrainCacheReport,
+  UNAVAILABLE_GUIDE,
+} from './host.ts'
 
 /*
  * The scriptable harness.
@@ -184,332 +168,6 @@ import { CUTSCENES } from './cutscenes/index.ts'
  * harness drives the headless Node runner, so a scenario that reproduces a bug
  * in the browser can be replayed in a test.
  */
-
-/** Frame timing from a render loop. One definition; it used to have three. */
-export interface FrameStats {
-  readonly fps: number
-  readonly frameMs: number
-  readonly ticksLastFrame: number
-}
-
-/**
- * The render side of a host: what a frame can answer, and what it can be told.
- *
- * One object rather than ten optional members on the host, because "absent
- * headlessly" is one fact about a host and not ten. A host that draws supplies
- * the whole thing; a host that does not — the headless runner, a test — gets
- * `renderHost()`, which answers every question the way a display-less runtime
- * honestly can: no scene, no frame, no timeline, the flight lens, a ratio of
- * one, and switches that move nothing. Because the default is an adapter and
- * not a set of `?.` calls, a test can supply the two members it is about and
- * no reader ever asks whether a member is there.
- */
-/**
- * What the guide is doing, as one code a script can compare against. Each
- * names one thing: the panel's status line is derived from these, so a change
- * to its wording does not change what a script reads.
- */
-export type GuideState =
-  /** No guide in this mode: there is a guide only in the Planetarium. */
-  | 'absent'
-  /** Offline, by the mode's verdict: still asking, refused with its reason, or ready. */
-  | 'checking'
-  | GuideRefusal
-  | 'idle'
-  /** A session, from the offer to the close. */
-  | 'connecting'
-  | 'listening'
-  | 'speaking'
-  | 'thinking'
-  | 'searching'
-  | 'moving'
-  /** The visitor took the camera and the guide has not acted since. */
-  | 'visitor-camera'
-  | 'paused'
-  | 'ending'
-
-/** Conversation diagnostics exclude transcript and provider credentials. */
-export interface GuideStatus {
-  readonly available: boolean
-  readonly loaded: boolean
-  readonly state: GuideState
-  readonly connection: 'offline' | 'connecting' | 'connected' | 'closing'
-  readonly sessionId: string | null
-  readonly viewRevision: number | null
-  readonly microphone: 'off' | 'muted' | 'active'
-  readonly paused: boolean
-  /** Function calls received and not yet answered. */
-  readonly pendingCalls: number
-  /** Backend responses whose chain has not ended without a tool call. */
-  readonly inFlight: boolean
-  readonly usage: GuideUsage
-}
-
-/** What the session has cost so far, as the provider reports it. */
-export interface GuideUsage {
-  readonly voiceSeconds: number
-  readonly responses: number
-  readonly inputTokens: number
-  readonly cachedTokens: number
-  readonly outputTokens: number
-}
-
-export interface GuideHostPort {
-  status(): GuideStatus
-  /** A typed request, queued as the visitor's own words. */
-  ask(text: string): Promise<GuideStatus>
-  trace?(enabled?: boolean): readonly GuideTraceEntry[]
-}
-
-/** Optional, in-memory data-channel traffic; never authentication traffic. */
-export interface GuideTraceEntry {
-  readonly sequence: number
-  readonly at: number
-  readonly direction: 'send' | 'receive' | 'note'
-  readonly message: Readonly<Record<string, unknown>>
-}
-
-export const NO_GUIDE_USAGE: GuideUsage = Object.freeze({
-  voiceSeconds: 0,
-  responses: 0,
-  inputTokens: 0,
-  cachedTokens: 0,
-  outputTokens: 0,
-})
-
-export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
-  available: false,
-  loaded: false,
-  state: 'absent',
-  connection: 'offline',
-  sessionId: null,
-  viewRevision: null,
-  microphone: 'off',
-  paused: false,
-  pendingCalls: 0,
-  inFlight: false,
-  usage: NO_GUIDE_USAGE,
-})
-
-export interface TerrainCacheReport {
-  readonly available: boolean
-  readonly activity: HeightfieldCacheStats | null
-  readonly storage: HeightfieldStoreStats | null
-}
-
-/** `RenderHost.boot`: renderer absent, drawing under the cover, or up. */
-export type BootPhase = 'booting' | 'drawing' | 'booted'
-
-export interface RenderHost {
-  /** Discontinuous camera placement invalidates presentation history only. */
-  declareCut(): void
-  /** Inspect reconstruction or select a diagnostic view without persisting it. */
-  picture(debugView?: string): PictureReport | null
-  terrainCache(): Promise<TerrainCacheReport>
-  clearTerrainCache(): Promise<void>
-  /** The active mode supplies this lazy adapter; a headless host need not. */
-  guide?(): GuideHostPort | null
-  scene(): RenderScene | null
-  frameStats(): FrameStats | null
-  /**
-   * How far the presentation has come up: no renderer yet, a renderer
-   * drawing under the boot cover, or the cover lifted. A host with nothing to
-   * present — Node, the headless runner — is booted from the start.
-   */
-  boot(): BootPhase
-  /**
-   * What the terrain streamer is doing this frame.
-   *
-   * The one number in the terrain rig that cannot be derived: `simulateDescent`
-   * says what the streamer *would* be asked for, and this says what it actually
-   * has — how many patches are on screen, how deep the worker queue is, and
-   * whether the cache is holding. The two disagreeing is the interesting case.
-   */
-  terrain(): TerrainReport | null
-  /** The live volume, if a renderer is attached. */
-  galaxyRender(): GalaxyRenderReport | null
-  /**
-   * The lens the picture is being taken with, and the pixels it lands on.
-   *
-   * A getter rather than a setter for the same reason `world` is: the engine
-   * resolves the lens every frame under the pose's own precedence — a script's
-   * lens, then the flight one — and a host that pushed a copy in here would
-   * hold a second producer of it, which is the rule this phase exists to keep.
-   * `ir.lens()` reads it to print the instrument; the terrain predicate reads it
-   * to measure one. The observatory does not — it takes `framingLens()` below,
-   * and the block there says why. Null headlessly, where there is no camera
-   * and no display.
-   */
-  lensView(): LensView | null
-  /**
-   * The lens the framing solver uses: the flight one, never the composed one.
-   *
-   * Separate from `lensView` because the observatory is the one consumer that
-   * must not see the cutscene arm. It produces a camera only when that arm is
-   * null, so framing a target against a script's lens is the observatory
-   * depending on the arm it is defined as the fallback for — and the standoff it
-   * solves is *stored*, so the error outlives the cutscene that caused it.
-   * Measured: `focus('s:SOL/b:2')` during `tng-intro` parks the camera 29.8 Mm
-   * out against the 20.8 Mm the flight lens asks for, 43% too far, permanently.
-   * The flight preset headlessly, where there is no camera panel.
-   */
-  framingLens(): Lens
-  /**
-   * Fit a lens, for the two verbs that solve one.
-   *
-   * `preset` and `rise` compose a picture whose lens is part of it — Earth is
-   * 1.9° across from Luna and Mars is 42.39° from Phobos, so a rise that did
-   * not fit its own lens would produce two very different frames under one
-   * name. Not a second producer of the lens: `engine.lens` still resolves the
-   * cutscene arm first and the flight lens second, and this writes the same
-   * flight lens a panel's slider writes. A no-op headlessly, where there is no
-   * camera to fit it to and the arithmetic is worth running anyway.
-   */
-  setFlightLens(lens: Lens): void
-  /** The player's settings, independent of cinematic and instrument staging. */
-  cameraProcessing(): PictureProcessing
-  /** Restore processing through the same preference owner as the camera panel. */
-  setCameraProcessing(processing: PictureProcessing): void
-  /**
-   * How many display pixels one CSS pixel is, on this host.
-   *
-   * The drag sensitivity needs both and they are not the same number.
-   * `lensView().viewport` is *display* pixels with supersampling divided out
-   * and the device ratio deliberately kept — the terrain predicate and the
-   * circle of confusion are claims about physical pixels. A pointer delta is in
-   * CSS pixels. On a 2× display the two differ by two, and a sensitivity that
-   * conflated them moved the picture at half the rate of the hand. 1 headlessly,
-   * which is also the honest answer for a display that has no ratio to report.
-   */
-  pixelRatio(): number
-  /**
-   * Put the interface in or out of the frame.
-   *
-   * A plate is defined as the frame taken with the chrome cleared, and a plate
-   * has to be reproducible from a script — so the state `Shift+H` reaches has
-   * to be reachable from here too. Headlessly there is no interface to clear.
-   */
-  setChrome(visible: boolean): void
-  /**
-   * Put the sky's own layers — names and traces — in or out of the frame.
-   *
-   * Separate from `setChrome` because they are different claims: chrome is the
-   * interface and these are content, so `Shift+H` clears the first and leaves
-   * the second. A plate wants both gone, because a thumbnail of a picture is a
-   * thumbnail of what the camera does and the layers are the viewer's.
-   */
-  setLayers(visible: boolean): void
-  /**
-   * The performance timeline, when the host has one.
-   *
-   * Null rather than an empty port, because a host without one has a real
-   * answer — "this runtime does not put entries anywhere" — and `ir.profile()`
-   * says so instead of returning an empty report that reads like a fast session.
-   */
-  timing(): TimingPort | null
-  /**
-   * Submit `frames` frames through whatever presents one and time them across
-   * a drained queue — milliseconds per frame.
-   *
-   * The one GPU figure this project trusts, and the reason it is a verb and not
-   * a field: the queue drain is an `await` in the middle of a frame, which is
-   * the stall being measured, so it cannot be sampled. Null where there is no
-   * device to drain — the WebGL backend, and every headless host — so
-   * `ir.gpu()` says so rather than printing a number about nothing.
-   */
-  measureGpu(frames?: number): Promise<number> | null
-  /**
-   * `measureGpu`'s frames with every pass timed and named. Null where there is
-   * no device, the device has no `timestamp-query`, or no presenting chain is
-   * mounted — `measureGpu` falls back to a bare render there, and this does
-   * not time a path nothing presents.
-   */
-  measurePasses(frames?: number): Promise<PassReport> | null
-}
-
-/**
- * The render side of a host that has none, with whatever a caller does supply
- * laid over it — the second adapter of `RenderHost`, and the one every test
- * and the headless runner use.
- *
- * Member by member rather than a spread, because a caller's `undefined` would
- * otherwise win over the default and put a `?.` back into every reader.
- */
-export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
-  let processing = captureCameraProcessing(DEFAULT_PICTURE_PROCESSING)
-  return {
-    declareCut: overrides.declareCut ?? (() => {}),
-    picture: overrides.picture ?? (() => null),
-    terrainCache:
-      overrides.terrainCache ??
-      (async () => ({ available: false, activity: null, storage: null })),
-    clearTerrainCache: overrides.clearTerrainCache ?? (async () => {}),
-    guide: overrides.guide ?? (() => null),
-    scene: overrides.scene ?? (() => null),
-    frameStats: overrides.frameStats ?? (() => null),
-    boot: overrides.boot ?? (() => 'booted'),
-    galaxyRender: overrides.galaxyRender ?? (() => null),
-    terrain: overrides.terrain ?? (() => null),
-    lensView: overrides.lensView ?? (() => null),
-    framingLens: overrides.framingLens ?? (() => LENS_PRESETS.flight),
-    setFlightLens: overrides.setFlightLens ?? (() => {}),
-    cameraProcessing: overrides.cameraProcessing ?? (() => processing),
-    setCameraProcessing:
-      overrides.setCameraProcessing ??
-      ((next) => {
-        processing = captureCameraProcessing(next)
-      }),
-    pixelRatio: overrides.pixelRatio ?? (() => 1),
-    setChrome: overrides.setChrome ?? (() => {}),
-    setLayers: overrides.setLayers ?? (() => {}),
-    timing: overrides.timing ?? (() => null),
-    measureGpu: overrides.measureGpu ?? (() => null),
-    measurePasses: overrides.measurePasses ?? (() => null),
-  }
-}
-
-/**
- * What the harness is built over: the simulation, and the render side.
- *
- * `world` must be a *getter*, not a captured reference. Loading a save replaces
- * the world wholesale, and a host that copied the reference in at construction
- * leaves the harness — and therefore the debug overlay — reporting on the world
- * that was thrown away while the frame loop runs the new one. That split brain
- * looked exactly like "load silently does nothing" from the outside.
- * `openSession` is the one implementation; it gets this right once.
- */
-export interface Host {
-  readonly world: World
-  /** The entity the camera follows. */
-  player(): EntityId | null
-  /** Transfer control without replacing the world or rebuilding its adapters. */
-  controlPlayer(id: EntityId): void
-  /**
-   * The trusted host capability: whether this host's walkers may fly. Never
-   * read off a save — a replaced world's walkers are given this one.
-   */
-  readonly canFly: boolean
-  pool(): WorkerPool | null
-  /** Replace the running world (used by load). */
-  replaceWorld(world: World, player: EntityId | null): void
-  /**
-   * Whoever owns the part of the simulation this client does not.
-   *
-   * Always present: a solo player has a `LocalAuthority`, which is an
-   * implementation rather than the absence of one, and `openSession` supplies
-   * it when a caller does not.
-   */
-  authority(): AuthorityPort
-  /**
-   * The host's clock, for the things here that measure rather than simulate.
-   *
-   * Null where the host has none, and the terrain baseline then reports "not
-   * timed" rather than reaching for `performance.now()` itself — which nothing
-   * below `apps/` is allowed to do.
-   */
-  readonly now: (() => number) | null
-  readonly render: RenderHost
-}
 
 export interface HarnessStatus {
   readonly world: WorldInspection
@@ -575,19 +233,6 @@ function placementInRadians(structure: SurfacePlacement): SurfacePlacement {
     longitude: degreesToRadians(structure.longitude as Degrees),
     heading: degreesToRadians(structure.heading as Degrees),
   }
-}
-
-/** A 500 ly box fits the 200,000-cell travel budget at every grid alignment. */
-function boundedTravelRadius(lightYears: number): number {
-  const bounded = Number.isNaN(lightYears)
-    ? 0
-    : Math.max(0, Math.min(500, lightYears))
-  if (bounded !== lightYears)
-    log.warn('Travel query radius is bounded to 0–500 light-years', {
-      requested: lightYears,
-      applied: bounded,
-    })
-  return bounded * LIGHT_YEAR
 }
 
 export class GameHarness {
@@ -718,87 +363,28 @@ export class GameHarness {
   systemsNearby(
     lightYears = 8,
   ): readonly { id: string; name: string; lightYears: number }[] {
-    const center = this.#here()
-    return systemsWithin(
-      this.world.galaxySeed,
-      this.world.catalog,
-      center,
-      boundedTravelRadius(lightYears),
-    )
-      .map((stub) => ({
-        id: stub.id as string,
-        name: stub.name,
-        lightYears: UV.distance(stub.position, center) / LIGHT_YEAR,
-      }))
-      .sort((a, b) => a.lightYears - b.lightYears)
+    return systemsNearby(this.#vantage(), lightYears)
   }
 
-  /**
-   * Everywhere the player can be sent right now, nearest system first, each
-   * system followed by its bodies if it is loaded.
-   *
-   * The one call that answers "where can I go?", which nothing answered before:
-   * every other verb here takes an address and none of them would tell you one.
-   * The debug overlay renders this list and the console prints it.
-   */
+  /** Everywhere the player can be sent right now. See `finding.ts`. */
   targets(options: TravelTargetOptions = {}): readonly TravelTarget[] {
-    /*
-     * `origin: 'observer'` falls back to the player rather than returning
-     * nothing, and that is not defensiveness — the observatory holds no target
-     * until the planetarium's first focus lands, which is several frames after
-     * the panel's first poll. A listing that was empty for those frames would
-     * flash a "nothing within 16 ly" empty state on every entry to the mode.
-     */
-    const from =
-      (options.origin === 'observer' ? this.observatory.eye : null) ??
-      this.#here()
-    return travelTargets(this.world, from, options)
+    return nearbyTargets(this.#vantage(), options)
   }
 
-  /**
-   * Everywhere matching what somebody typed, nearest first — the *whole*
-   * catalog, not the survey.
-   *
-   * Split from `targets` by question rather than by cost: that one asks "what
-   * is near me", which is a star sweep and cannot run per keystroke; this asks
-   * "what is called this", which is an index lookup and must. Filtering the
-   * survey's result — which is what the two panels did — could only ever find
-   * what was already within a few light years of the camera.
-   */
+  /** Everywhere matching what somebody typed, nearest first — the whole catalog. */
   search(
     text: string,
     options: TravelTargetOptions = {},
   ): readonly TravelTarget[] {
-    const from =
-      (options.origin === 'observer' ? this.observatory.eye : null) ??
-      this.#here()
-    return searchTargets(this.world, from, text)
+    return searchByName(this.#vantage(), text, options)
   }
 
-  /**
-   * Rows for addresses the caller already holds, nearest first not implied —
-   * the order is the caller's.
-   *
-   * The third question, after `targets` and `search`: a fuzzy index in the
-   * navigator answers with addresses, and this turns them back into the rows
-   * the survey draws, measured from the same eye. `b:2` and friends resolve
-   * against the system the player is in, exactly as `goTo` reads them; an
-   * address that names nothing is dropped rather than thrown, so one stale
-   * entry cannot empty the list.
-   */
+  /** Rows for addresses the caller already holds, in the caller's order. */
   rowsFor(
     addresses: readonly string[],
     options: TravelTargetOptions = {},
   ): readonly TravelTarget[] {
-    const from =
-      (options.origin === 'observer' ? this.observatory.eye : null) ??
-      this.#here()
-    return targetsFor(
-      this.world,
-      from,
-      addresses,
-      currentSystemOf(this.world, this.#host.player()),
-    )
+    return rowsFor(this.#vantage(), addresses, options)
   }
 
   /**
@@ -817,156 +403,9 @@ export class GameHarness {
     return searchIndexVersion(this.world)
   }
 
-  /**
-   * Search the volume for bodies that answer a query, in batches.
-   *
-   * The other question a catalog can be asked. `search` answers "what is
-   * called this" from an index; this answers "what is out there *like* this",
-   * and it cannot come from an index because the bodies do not exist until
-   * they are generated. So it is a sweep, and the sweep is the cost: a system
-   * is milliseconds to build and a body is microseconds to test.
-   *
-   * **It answers in batches rather than once.** The volume is cut into jobs
-   * and each is submitted separately, so rows arrive while the search is still
-   * running and a fifty-light-year question is not a blank panel for two
-   * seconds. That shape is forced as well as chosen: a job is one request and
-   * one response, with no partial-result message in the protocol, so streaming
-   * has to be several jobs rather than one job that reports as it goes.
-   *
-   * `cancel` stops it — the queued jobs are dropped and the running ones are
-   * told through `TaskContext.canceled`, which `findWorlds` polls once per
-   * system. A second question therefore does not wait behind the first one's
-   * whole volume.
-   *
-   * With no pool the batches run inline, on this thread, in order. That is the
-   * headless runner and it is slow rather than wrong, which is the same
-   * bargain every other task here makes.
-   */
-  findWorlds(
-    query: WorldQuery,
-    options: {
-      lightYears?: number
-      /**
-       * How many of the nearest matches to keep.
-       *
-       * A sweep is bounded by the volume, and the volume is not bounded by
-       * anything a reader will read: "rocky, within 150 light years" answers
-       * with over a hundred thousand bodies. Keeping them all is twenty
-       * megabytes of records nobody scrolls to, and re-sorting them on every
-       * batch is the main thread's whole budget — measured, it dropped the
-       * simulation clock to a fifth of real time while the sweep ran. So the
-       * nearest are kept and the rest are counted.
-       */
-      limit?: number
-      /**
-       * Called as each batch answers: the nearest matches so far, how far
-       * through the sweep it is, and how many were found in total — which is
-       * not `found.length` once the cap has bitten, and saying so is the
-       * difference between a list that is short and a search that found little.
-       */
-      onBatch?: (
-        found: readonly WorldMatch[],
-        progress: number,
-        total: number,
-      ) => void
-    } = {},
-  ): {
-    /** How many systems the sweep will walk. Zero means there is nothing to do. */
-    readonly systems: number
-    readonly cancel: () => void
-    readonly done: Promise<readonly WorldMatch[]>
-  } {
-    const from = this.observatory.eye ?? this.#here()
-    const stubs = systemsWithin(
-      this.world.galaxySeed,
-      this.world.catalog,
-      from,
-      boundedTravelRadius(options.lightYears ?? DEFAULT_SEARCH_LIGHT_YEARS),
-    )
-    /*
-     * Nearest first, so the batches that answer first are the ones a reader
-     * cares about most. `systemsWithin` sorts by id to stay a pure function of
-     * its query; the ordering that matters *here* is a display decision and is
-     * made here, which is the same split `orbitalOrder` makes.
-     */
-    const ordered = [...stubs].sort(
-      (a, b) => UV.distance(a.position, from) - UV.distance(b.position, from),
-    )
-    const pool = this.#host.pool()
-    const jobs: {
-      readonly result: Promise<{ readonly matches: readonly WorldMatch[] }>
-      readonly cancel: () => void
-    }[] = []
-    const limit = Math.max(1, options.limit ?? DEFAULT_SEARCH_LIMIT)
-    let stopped = false
-    let total = 0
-    let found: WorldMatch[] = []
-    const wire = encodeUniverseVector(from)
-    const seed = formatSeed(this.world.rootSeed)
-
-    const batches: (readonly SystemStub[])[] = []
-    for (let at = 0; at < ordered.length; at += SEARCH_BATCH)
-      batches.push(ordered.slice(at, at + SEARCH_BATCH))
-
-    let answered = 0
-    const run = async (): Promise<readonly WorldMatch[]> => {
-      for (const batch of batches) {
-        if (stopped) break
-        const payload = {
-          seed,
-          galaxy: this.world.galaxy as string,
-          stubs: batch.map(encodeStub),
-          query,
-          from: wire,
-        }
-        const job =
-          pool === null
-            ? {
-                result: Promise.resolve(
-                  findWorldsTask.run(payload, {
-                    canceled: () => stopped,
-                  }),
-                ),
-                cancel: () => {},
-              }
-            : pool.submit(findWorldsTask, payload)
-        jobs.push(job)
-        void Promise.resolve(job.result)
-          .then((answer) => {
-            if (stopped) return
-            total += answer.matches.length
-            found.push(...answer.matches)
-            /*
-             * Trimmed at twice the cap rather than at the cap, so the sort is
-             * amortized: cutting on every batch would sort a nearly-full array
-             * every time, and cutting at twice it sorts once per capful.
-             */
-            if (found.length > limit * 2) {
-              found.sort((a, b) => a.lightYears - b.lightYears)
-              found = found.slice(0, limit)
-            }
-            answered += 1
-            options.onBatch?.(found, answered / batches.length, total)
-          })
-          .catch(() => {
-            // A batch that failed is a gap in an answer, not a failed search.
-            // Counting it keeps the progress honest about being finished.
-            answered += 1
-          })
-      }
-      await Promise.allSettled(jobs.map((job) => job.result))
-      found.sort((a, b) => a.lightYears - b.lightYears)
-      return found.slice(0, limit)
-    }
-
-    return {
-      systems: ordered.length,
-      cancel: () => {
-        stopped = true
-        for (const job of jobs) job.cancel()
-      },
-      done: run(),
-    }
+  /** Sweep the volume for bodies that answer a query, in batches. See `finding.ts`. */
+  findWorlds(query: WorldQuery, options: FindWorldsOptions = {}): WorldSweep {
+    return findWorlds(this.#vantage(), this.#host.pool(), query, options)
   }
 
   /**
@@ -2294,12 +1733,13 @@ export class GameHarness {
     ].join('\n')
   }
 
-  /** Where the listing is taken from: the player, or the first system loaded. */
-  #here(): UniverseVector {
-    const player = this.#host.player()
-    if (player === null)
-      return this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN
-    return this.world.canonicalPositionOf(player)
+  /** Where a search is asked from: the ship, and the planetarium's eye. */
+  #vantage(): Vantage {
+    return {
+      world: this.world,
+      player: this.#host.player(),
+      observer: this.#observatory.eye,
+    }
   }
 
   #scenarioResult(

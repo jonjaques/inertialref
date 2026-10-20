@@ -45,7 +45,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { currentSystemOf, resolveDestination } from './travel.ts'
-import type { Host } from './harness.ts'
+import type { Host } from './host.ts'
 
 /*
  * What a thing *is*, as a page of astronomy.
