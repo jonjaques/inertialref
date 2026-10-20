@@ -261,20 +261,16 @@ installed red teaches `--no-exit-code`.
   above asks every pull request to run it, and a script in the tree is how ten
   bodies quote the same arithmetic.
 
-**Decide.**
+**Decided: the three `hud/` components are deleted.** Nothing in `routes/` or
+`hud/` references `AddressForm`, `NavFailure` or `ConnectionPip`, and a
+component whose screen does not exist is designed against a guess.
 
-- _Delete or mount the three `hud/` components._ **Recommended: delete.**
-  Nothing in `routes/` or `hud/` references `AddressForm`, `NavFailure` or
-  `ConnectionPip`, and a component whose screen does not exist is designed
-  against a guess.
-- _Whether `fta:check` enters the gate at all._ The report leaves it as a
-  policy decision because the declarative files are nearest the line:
-  `smallBodies.ts` at 86.48 grows when a body is added, `terrainKernel.ts` at
-  84.10 when a band is. **Recommended: yes.** At 109 both have twenty points of
-  room, and at 91 — after 4 — five to seven. If a table ever crosses the cap,
-  the answer is a filename exclusion in `fta.json` with the reason written
-  beside it, never a higher cap; a table is the one kind of file the score
-  cannot read.
+**Decided: `fta:check` enters the gate.** The declarative files are nearest
+the line — `smallBodies.ts` at 86.48 grows when a body is added,
+`terrainKernel.ts` at 84.10 when a band is — and at 109 both have twenty points
+of room, at 91, after 4, five to seven. If a table ever crosses the cap, the
+answer is a filename exclusion in `fta.json` with the reason written beside it,
+never a higher cap; a table is the one kind of file the score cannot read.
 
 **Gate.** `pnpm knip:check` exits 0. `pnpm fta:check` exits 0 at 109.
 `pnpm check --only gate` lists both stages and the group stays under the
@@ -414,11 +410,9 @@ over the world, the catalog and an options record, beside `search`, `rowsFor`,
   tests flight. The two uncovered closures at `:930` and `:945` are branches of
   the options; the direct test reaches them.
 
-**Decide.**
-
-- _Whether the search leaves._ **Recommended: yes**, on the deletion test —
-  `findWorlds` has no harness state in it, and the harness's forward is one
-  line. If the walk finds otherwise, the tests land and the move does not.
+**Decided: the search leaves.** `findWorlds` has no harness state in it and
+the harness's forward is one line. If the walk finds otherwise, the tests land
+and the move does not.
 
 **Gate.** Every verb in `help()` is entered by a Node test: `harness.ts`
 functions entered rise from 111 of 153 to the count the body quotes, with the
@@ -501,17 +495,16 @@ The galaxy journey (`:728–851`, 120 lines, tested) is the second lift if the
 arm alone leaves the file over 91; a module of its own is already the shape
 `galaxyJourney.test.ts` tests it in.
 
-**Decide.**
+**Decided: `stanceGeometry.ts` lives in `packages/devtools`.**
+`packages/rendering` is arithmetic and would take it, but
+`apps/game/src/planetarium/entryAid.ts` draws these figures through the
+harness, so there is one caller. It is promoted when a second appears.
 
-- _Where `stanceGeometry.ts` lives._ `packages/rendering` is arithmetic and
-  would take it; `apps/game/src/planetarium/entryAid.ts` draws these figures
-  but reads them through the harness, so there is one caller. **Recommended:
-  `packages/devtools`**, promoted when a second caller appears.
-- _Whether the six unentered functions are tested or deleted._ `look`, `turn`
-  and `center` are the look arm's console verbs; `levelToHorizon`, `sites` and
-  `stanceBounds` the stance's. `ir.sites` and `ir.aim` reach them from the
-  rig. **Recommended: tested**, in 3's `harness.test.ts`, which is why 3 comes
-  first.
+**Decided: the six unentered functions are tested, not deleted.** `look`,
+`turn` and `center` are the look arm's console verbs; `levelToHorizon`, `sites`
+and `stanceBounds` the stance's. `ir.sites` and `ir.aim` reach them from the
+rig, and 3's `harness.test.ts` enters them before the lift — which is why 3
+comes first.
 
 **Gate.** `observatory.ts` under 91, and `fta:check` lowered to 91 in the same
 change. Every function in the three files entered. `observatory.test.ts`,
@@ -685,13 +678,10 @@ source)` returning the field and the volume ratio; `shapes.ts` keeps
 `main.ts` (0 of 35) is the command-line shell and stays untested as one; its
 three `*License` builders are pure strings and are not worth a file.
 
-**Decide.**
-
-- _Fixture excerpts in the tree._ **Recommended: yes**, under 20 KB each,
-  each with a comment naming the source URL and the date it was cut. The
-  alternative — asserting only the committed output's shape, as
-  `textures.test.ts` does — proves the writer ran once, not that the parser
-  decides anything.
+**Decided: fixture excerpts land in the tree.** Under 20 KB each, with a
+comment naming the source URL and the date it was cut. Asserting only the
+committed output's shape, as `textures.test.ts` does, proves the writer ran
+once, not that the parser decides anything.
 
 **Gate.** `solarRecords.ts` and `shapeResample.ts` above 85% of statements
 with every parser entered; the fta rows for `shapes.ts` and
@@ -862,13 +852,10 @@ needs. `DROP_ZONES` is the third, and knip lists it as unused.
   test to be: reintroduce one cycle in a scratchpad copy and watch
   `knip:check` exit 1 before keeping it.
 
-**Decide.**
-
-- _Whether `moduleGraph.test.ts` grows to cover `drainage.ts` and
-  `terrain.ts`._ Its header says six spawns is the deliberate count and a
-  seventh "would cost a second and catch nothing" — once the cycle is gone,
-  knip's gate is the catch and the spawn test is the TDZ proof for the one
-  cycle that bit. **Recommended: add `versions.ts` only.**
+**Decided: `moduleGraph.test.ts` adds `versions.ts` only.** Its header says
+six spawns is the deliberate count and a seventh "would cost a second and catch
+nothing". Once the cycle is gone, knip's gate is the catch, and the spawn test
+is the TDZ proof for the one cycle that bit.
 
 **Gate.** `pnpm knip --cycles` reads `Circular dependencies (0)`;
 `pnpm knip:check` exits 0 with `cycles` included; `moduleGraph.test.ts`
