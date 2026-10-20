@@ -7,7 +7,7 @@ by the Node runner and the tests.
 > `ir.help()` in the console is the quickest list. This page explains the
 > supported vocabulary and the distinctions that the one-line help cannot.
 >
-> Code: `packages/devtools/src/harness.ts`
+> Code: `packages/devtools/src/harness.ts`, over the port in `host.ts`
 
 ---
 

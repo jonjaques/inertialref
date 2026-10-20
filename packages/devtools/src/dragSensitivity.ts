@@ -1,5 +1,5 @@
 import { DRAG_RADIANS_PER_PIXEL, pixelAngle } from '@inertialref/rendering'
-import type { RenderHost } from './harness.ts'
+import type { RenderHost } from './host.ts'
 
 /**
  * Radians of camera motion per pixel of pointer, over the reference rate.

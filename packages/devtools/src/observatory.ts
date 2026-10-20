@@ -107,7 +107,7 @@ import { pairFrame } from './tracking.ts'
 import type { PictureFraming } from './pictures.ts'
 import { dragSensitivityOf } from './dragSensitivity.ts'
 import { currentSystemOf, resolveDestination } from './travel.ts'
-import type { Host } from './harness.ts'
+import type { Host } from './host.ts'
 
 /*
  * The observatory: the planetarium's camera, bound to a live world.

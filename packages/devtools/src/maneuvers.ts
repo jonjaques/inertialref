@@ -40,7 +40,7 @@ import {
   viewingAltitudeKm,
 } from './travel.ts'
 import { OnFoot, type Stage } from './onFoot.ts'
-import type { Host } from './harness.ts'
+import type { Host } from './host.ts'
 
 /*
  * The flying verbs: put the player's ship somewhere, aim it, light it.

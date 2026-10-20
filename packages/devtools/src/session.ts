@@ -21,12 +21,8 @@ import {
   LocalAuthority,
   partitionOfEntity,
 } from '@inertialref/net'
-import {
-  GameHarness,
-  type Host,
-  type RenderHost,
-  renderHost,
-} from './harness.ts'
+import { GameHarness } from './harness.ts'
+import { type Host, type RenderHost, renderHost } from './host.ts'
 import type { CutsceneScript } from './cutscene.ts'
 
 /*

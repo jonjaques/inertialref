@@ -3,7 +3,7 @@ import { type FrameState, UV, type Vec3 } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import type { EntityId } from '@inertialref/universe'
 import { type CinematicSample, isUsableLens } from '@inertialref/rendering'
-import type { Host } from './harness.ts'
+import type { Host } from './host.ts'
 
 /*
  * The cutscene director: scripted scenes over a running world.
