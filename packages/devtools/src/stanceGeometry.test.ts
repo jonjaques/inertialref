@@ -247,13 +247,32 @@ describe('a flight step', () => {
   })
   const dt = fc.double({ min: 1e-4, max: 1, noNaN: true })
 
-  it('keeps |latitude| ≤ π/2', () => {
+  it('keeps |latitude| ≤ π/2 and wraps longitude into [−π, π]', () => {
     fc.assert(
       fc.property(stance, flight, dt, (from, keys, seconds) => {
         const step = flightStep(from, keys, MARS.radius, seconds)!
         expect(Math.abs(step.latitude)).toBeLessThanOrEqual(Math.PI / 2)
+        expect(step.longitude).toBeGreaterThanOrEqual(-Math.PI)
+        expect(step.longitude).toBeLessThanOrEqual(Math.PI)
       }),
     )
+  })
+
+  it('wraps by whole turns where one frame crosses several, at a pole', () => {
+    const step = flightStep(
+      {
+        latitude: -1.4576308049597233,
+        longitude: 0,
+        height: 2e6,
+        heading: -8.99780273437498,
+        pitch: 0,
+      },
+      { forward: 1, right: 0, up: 0, fast: true },
+      MARS.radius,
+      FLIGHT_MAX_STEP,
+    )!
+    expect(step.longitude).toBeGreaterThanOrEqual(-Math.PI)
+    expect(step.longitude).toBeLessThanOrEqual(Math.PI)
   })
 
   it('covers max(FLIGHT_FLOOR_SPEED, height × FLIGHT_SPEED_PER_HEIGHT) a second, FLIGHT_FAST times that when asked', () => {
