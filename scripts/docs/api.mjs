@@ -323,8 +323,9 @@ function packagePage({ module, short, route, description }, context) {
   }
 }
 
-function memberPage({ short }, reflection, context) {
-  const target = resolveReference(reflection, context)
+function memberPage({ module, short }, reflection, outer) {
+  const target = resolveReference(reflection, outer)
+  const context = { ...outer, owner: `${module.name}/${reflection.name}` }
   const headings = []
   const parts = []
 
@@ -556,103 +557,109 @@ function sourceHtml(reflection) {
 /* ------------------------------------------------------------------------- */
 
 /**
- * A type expression, as marked-up TypeScript.
+ * How each TypeDoc type kind is printed, keyed by `type.type`.
  *
- * Every variant TypeDoc can serialize is handled, and the default arm is a
- * question mark rather than a throw: a type this printer has not met is a
- * signature rendered slightly poorly, and a build that fell over for one would
- * take the other eight hundred pages with it.
+ * The keys are the whole of TypeDoc 0.28's `TypeKindMap`, `unknown` included:
+ * that is a type TypeDoc could not convert, and it carries the source text as
+ * its name. A kind outside the table throws in `typeHtml` rather than printing
+ * a placeholder, because a placeholder in a published signature is wrong in
+ * the one way a reader cannot tell from right. A TypeDoc upgrade that adds a
+ * kind fails `pnpm docs:build` until a row here prints it.
  *
  * References to documented reflections become links. That is the single thing
  * this whole file exists for — a signature you can read is worth a great deal
  * less than a signature you can *follow*, and it is what an embedded reference
  * generated somewhere else cannot do into a site it does not know about.
  */
+const TYPE_HTML = {
+  intrinsic: (type) => kw(type.name),
+  literal: (type) =>
+    `<span class="t-lit">${escapeHtml(
+      typeof type.value === 'string' ? `'${type.value}'` : String(type.value),
+    )}</span>`,
+  reference: (type, context) => {
+    const address = context.addresses.get(type.target)
+    const args =
+      (type.typeArguments ?? []).length === 0
+        ? ''
+        : `<span class="t-punct">&lt;</span>` +
+          type.typeArguments
+            .map((argument) => typeHtml(argument, context))
+            .join(`<span class="t-punct">, </span>`) +
+          `<span class="t-punct">&gt;</span>`
+    const name = escapeHtml(type.name)
+    return address === undefined
+      ? `<span class="t-ref">${name}</span>${args}`
+      : `<a class="t-ref t-link" href="${escapeAttribute(address)}" data-internal>${name}</a>${args}`
+  },
+  array: (type, context) =>
+    `${typeHtml(type.elementType, context)}<span class="t-punct">[]</span>`,
+  union: (type, context) =>
+    type.types
+      .map((member) => typeHtml(member, context))
+      .join(`<span class="t-punct"> | </span>`),
+  intersection: (type, context) =>
+    type.types
+      .map((member) => typeHtml(member, context))
+      .join(`<span class="t-punct"> &amp; </span>`),
+  tuple: (type, context) =>
+    `<span class="t-punct">[</span>` +
+    (type.elements ?? [])
+      .map((element) => typeHtml(element, context))
+      .join(`<span class="t-punct">, </span>`) +
+    `<span class="t-punct">]</span>`,
+  namedTupleMember: (type, context) =>
+    `<span class="t-param">${escapeHtml(type.name)}</span>` +
+    `<span class="t-punct">: </span>${typeHtml(type.element, context)}`,
+  typeOperator: (type, context) =>
+    `${kw(type.operator)} ${typeHtml(type.target, context)}`,
+  indexedAccess: (type, context) =>
+    `${typeHtml(type.objectType, context)}<span class="t-punct">[</span>` +
+    `${typeHtml(type.indexType, context)}<span class="t-punct">]</span>`,
+  query: (type, context) =>
+    `${kw('typeof')} ${typeHtml(type.queryType, context)}`,
+  predicate: (type, context) =>
+    (type.asserts === true ? `${kw('asserts')} ` : '') +
+    `<span class="t-param">${escapeHtml(type.name)}</span>` +
+    (type.targetType === undefined
+      ? ''
+      : ` ${kw('is')} ${typeHtml(type.targetType, context)}`),
+  conditional: (type, context) =>
+    `${typeHtml(type.checkType, context)} ${kw('extends')} ${typeHtml(type.extendsType, context)}` +
+    `<span class="t-punct"> ? </span>${typeHtml(type.trueType, context)}` +
+    `<span class="t-punct"> : </span>${typeHtml(type.falseType, context)}`,
+  rest: (type, context) =>
+    `<span class="t-punct">…</span>${typeHtml(type.elementType, context)}`,
+  optional: (type, context) =>
+    `${typeHtml(type.elementType, context)}<span class="t-punct">?</span>`,
+  templateLiteral: () => `<span class="t-lit">\`…\`</span>`,
+  inferred: (type) =>
+    `${kw('infer')} <span class="t-ref">${escapeHtml(type.name)}</span>`,
+  mapped: () =>
+    `<span class="t-punct">{ </span>${kw('in')}<span class="t-punct"> }</span>`,
+  reflection: (type, context) => reflectionTypeHtml(type.declaration, context),
+  unknown: (type) => `<span class="t-ref">${escapeHtml(type.name)}</span>`,
+}
+
+/** The kinds `typeHtml` prints. */
+export const TYPE_KINDS = Object.keys(TYPE_HTML)
+
+/**
+ * A type expression, as marked-up TypeScript.
+ *
+ * An absent type prints `unknown`: that is a signature TypeDoc gave no type,
+ * which TypeScript reads the same way. A present type of a kind outside
+ * `TYPE_HTML` throws, naming the kind and the symbol whose page reached it.
+ */
 function typeHtml(type, context) {
   if (type === undefined || type === null) return kw('unknown')
-  switch (type.type) {
-    case 'intrinsic':
-      return kw(type.name)
-    case 'literal':
-      return `<span class="t-lit">${escapeHtml(
-        typeof type.value === 'string' ? `'${type.value}'` : String(type.value),
-      )}</span>`
-    case 'reference': {
-      const address = context.addresses.get(type.target)
-      const args =
-        (type.typeArguments ?? []).length === 0
-          ? ''
-          : `<span class="t-punct">&lt;</span>` +
-            type.typeArguments
-              .map((argument) => typeHtml(argument, context))
-              .join(`<span class="t-punct">, </span>`) +
-            `<span class="t-punct">&gt;</span>`
-      const name = escapeHtml(type.name)
-      return address === undefined
-        ? `<span class="t-ref">${name}</span>${args}`
-        : `<a class="t-ref t-link" href="${escapeAttribute(address)}" data-internal>${name}</a>${args}`
-    }
-    case 'array':
-      return `${typeHtml(type.elementType, context)}<span class="t-punct">[]</span>`
-    case 'union':
-      return type.types
-        .map((member) => typeHtml(member, context))
-        .join(`<span class="t-punct"> | </span>`)
-    case 'intersection':
-      return type.types
-        .map((member) => typeHtml(member, context))
-        .join(`<span class="t-punct"> &amp; </span>`)
-    case 'tuple':
-      return (
-        `<span class="t-punct">[</span>` +
-        (type.elements ?? [])
-          .map((element) => typeHtml(element, context))
-          .join(`<span class="t-punct">, </span>`) +
-        `<span class="t-punct">]</span>`
-      )
-    case 'namedTupleMember':
-      return (
-        `<span class="t-param">${escapeHtml(type.name)}</span>` +
-        `<span class="t-punct">: </span>${typeHtml(type.element, context)}`
-      )
-    case 'typeOperator':
-      return `${kw(type.operator)} ${typeHtml(type.target, context)}`
-    case 'indexedAccess':
-      return (
-        `${typeHtml(type.objectType, context)}<span class="t-punct">[</span>` +
-        `${typeHtml(type.indexType, context)}<span class="t-punct">]</span>`
-      )
-    case 'query':
-      return `${kw('typeof')} ${typeHtml(type.queryType, context)}`
-    case 'predicate':
-      return (
-        (type.asserts === true ? `${kw('asserts')} ` : '') +
-        `<span class="t-param">${escapeHtml(type.name)}</span>` +
-        (type.targetType === undefined
-          ? ''
-          : ` ${kw('is')} ${typeHtml(type.targetType, context)}`)
-      )
-    case 'conditional':
-      return (
-        `${typeHtml(type.checkType, context)} ${kw('extends')} ${typeHtml(type.extendsType, context)}` +
-        `<span class="t-punct"> ? </span>${typeHtml(type.trueType, context)}` +
-        `<span class="t-punct"> : </span>${typeHtml(type.falseType, context)}`
-      )
-    case 'rest':
-      return `<span class="t-punct">…</span>${typeHtml(type.elementType, context)}`
-    case 'optional':
-      return `${typeHtml(type.elementType, context)}<span class="t-punct">?</span>`
-    case 'templateLiteral':
-      return `<span class="t-lit">\`…\`</span>`
-    case 'inferred':
-      return `${kw('infer')} <span class="t-ref">${escapeHtml(type.name)}</span>`
-    case 'mapped':
-      return `<span class="t-punct">{ </span>${kw('in')}<span class="t-punct"> }</span>`
-    case 'reflection':
-      return reflectionTypeHtml(type.declaration, context)
-    default:
-      return `<span class="t-ref">${escapeHtml(type.name ?? 'unknown')}</span>`
-  }
+  if (!Object.hasOwn(TYPE_HTML, type.type))
+    throw new Error(
+      `api: ${context.owner ?? 'the reference'} has a type of kind ` +
+        `'${type.type}', which scripts/docs/api.mjs does not print. ` +
+        `Add a row for it to TYPE_HTML.`,
+    )
+  return TYPE_HTML[type.type](type, context)
 }
 
 /**

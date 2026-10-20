@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildReference, canonicalReferenceLinks } from './api.mjs'
+import { TYPE_KINDS, buildReference, canonicalReferenceLinks } from './api.mjs'
 
 const project = {
   id: 0,
@@ -332,11 +332,36 @@ const goldens = [
 ]
 
 describe('API type printer', () => {
-  it('has a golden for every kind in the inline project', () => {
-    expect(goldens.map(([kind]) => kind)).toEqual(Object.keys(kinds))
+  it('has a golden for every kind it prints, and an inline member for each', () => {
+    expect(goldens.map(([kind]) => kind).sort()).toEqual([...TYPE_KINDS].sort())
+    expect(Object.keys(kinds)).toEqual(goldens.map(([kind]) => kind))
   })
 
   it.each(goldens)('renders a %s type', (kind, html) => {
     expect(aliasTypeHtml(buildReference(kindsProject), kind)).toBe(html)
+  })
+
+  it('refuses a kind it does not print, naming the kind and the symbol', () => {
+    const project = structuredClone(kindsProject)
+    project.children[0].children.push({
+      id: 200,
+      name: 'Novel',
+      kind: 2097152,
+      type: { type: 'novelKind', name: 'Novel' },
+    })
+    expect(() => buildReference(project)).toThrow(
+      "api: @inertialref/kinds/Novel has a type of kind 'novelKind'",
+    )
+  })
+
+  it('refuses a kind named after an Object.prototype member', () => {
+    const project = structuredClone(kindsProject)
+    project.children[0].children.push({
+      id: 200,
+      name: 'Proto',
+      kind: 2097152,
+      type: { type: 'constructor' },
+    })
+    expect(() => buildReference(project)).toThrow("kind 'constructor'")
   })
 })
