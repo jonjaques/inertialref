@@ -1,0 +1,79 @@
+{
+  "_fixture": "The response form of https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=101955&phys-par=1&discovery=1&full-prec=1, set 2026-10-20, carrying the values data/reference/solar-system.json holds (generated 2026-08-26) rather than a byte copy of a response. Every value is a string, as the API sends it: every value a string, each in a {name, value, title} entry. Entries the parser does not read are left out.",
+  "object": {
+    "fullname": "101955 Bennu (1999 RQ36)",
+    "shortname": "101955 Bennu",
+    "kind": "an",
+    "orbit_class": { "name": "Apollo", "code": "APO" }
+  },
+  "orbit": {
+    "epoch": "2455562.5",
+    "elements": [
+      { "name": "e", "value": "0.2037450762416414", "title": "eccentricity" },
+      { "name": "a", "value": "1.126391025894812", "title": "semi-major axis" },
+      {
+        "name": "q",
+        "value": "0.8968944004459729",
+        "title": "perihelion distance"
+      },
+      {
+        "name": "i",
+        "value": "6.03494377024794",
+        "title": "inclination; angle with respect to x-y ecliptic plane"
+      },
+      {
+        "name": "om",
+        "value": "2.06086619569642",
+        "title": "longitude of the ascending node"
+      },
+      {
+        "name": "w",
+        "value": "66.22306084084298",
+        "title": "argument of perihelion"
+      },
+      { "name": "ma", "value": "101.703952002457", "title": "mean anomaly" },
+      {
+        "name": "tp",
+        "value": "2455439.141945873",
+        "title": "time of perihelion passage"
+      },
+      {
+        "name": "per",
+        "value": "436.6487281120201",
+        "title": "sidereal orbital period"
+      },
+      {
+        "name": "ad",
+        "value": "1.355887651343651",
+        "title": "aphelion distance"
+      }
+    ]
+  },
+  "phys_par": [
+    { "name": "H", "value": "20.21", "title": "absolute magnitude" },
+    {
+      "name": "diameter",
+      "value": "0.48444",
+      "title": "effective body diameter"
+    },
+    {
+      "name": "extent",
+      "value": "0.5047 x 0.4918 x 0.4567",
+      "title": "tri-axial body dimensions"
+    },
+    {
+      "name": "GM",
+      "value": "4.8904E-9",
+      "title": "mass expressed as a product of the mass \"M\" and gravitational constant \"G\""
+    },
+    { "name": "density", "value": "1.194", "title": "bulk density" },
+    { "name": "rot_per", "value": "4.296061", "title": "rotation period" },
+    {
+      "name": "pole",
+      "value": "85.4522/-60.3678",
+      "title": "spin-pole direction"
+    },
+    { "name": "albedo", "value": "0.044", "title": "geometric albedo" }
+  ],
+  "discovery": { "date": "1999-Sep-11", "who": "LINEAR" }
+}

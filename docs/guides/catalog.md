@@ -91,8 +91,8 @@ flowchart LR
 | the sky's selection and its histogram   | `buildSkyCatalog`, in the same file             |
 | choosing the name that goes on screen   | `apps/ingest/src/naming.ts`                     |
 | the Solar System, transcribed           | `packages/universe/src/solar/`                  |
-| the JPL reference it is checked against | `apps/ingest/src/solarReference.ts`             |
-| shape models, downloaded and resampled  | `apps/ingest/src/shapes.ts`                     |
+| the JPL reference it is checked against | `apps/ingest/src/solarRecords.ts`               |
+| shape models, resampled onto a grid     | `apps/ingest/src/shapeResample.ts`              |
 | **the codec, both halves**              | `packages/universe/src/catalog/format.ts`       |
 | identity resolution                     | `packages/universe/src/catalog/identity.ts`     |
 | measured → physical                     | `packages/universe/src/catalog/photometry.ts`   |
