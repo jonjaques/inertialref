@@ -25,7 +25,7 @@
  *
  * The last two are converted by casting a ray per output sample, which is
  * exact for the sample and says nothing about what is between samples — hence
- * the volume check in `shapes.ts`.
+ * the volume check in `shapeResample.ts`.
  *
  * ## Resolution
  *

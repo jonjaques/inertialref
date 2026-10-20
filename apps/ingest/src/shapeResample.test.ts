@@ -8,7 +8,7 @@ import {
   shapePhi,
   shapeTheta,
 } from '@inertialref/rendering'
-import { shapeFieldFrom } from './shapes.ts'
+import { shapeFieldFrom } from './shapeResample.ts'
 import type { ShapeFormat, ShapeSource } from './shapeSources.ts'
 
 /*

@@ -14,7 +14,7 @@ import {
   tableRows,
   validateSmallBody,
   validateSource,
-} from './solarReference.ts'
+} from './solarRecords.ts'
 import { SMALL_BODIES, SOLAR_SOURCES } from './solarSources.ts'
 
 /*

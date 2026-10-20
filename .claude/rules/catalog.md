@@ -33,7 +33,9 @@ catalog })`. A singleton would make the catalog _version_ a hidden input, which
   `data/shapes/` and `data/reference/` follow the same contract with their own manifests.
 - **A shape model that the format cannot hold must fail the build, not ship rounded off.**
   A radius grid is single-valued per direction, so it needs a star-shaped surface;
-  `shapes.ts` measures the reconstructed volume against the source mesh's and refuses
-  past ±6%. Every current model lands between 99.8% and 100.6%. Never widen that
-  tolerance to make a body fit — a shape nobody can check is the one thing this pipeline
-  exists to prevent.
+  `shapeFieldFrom` in `shapeResample.ts` measures the reconstructed volume against the
+  source mesh's and refuses past ±6%. Every current model lands between 99.8% and 100.6%
+  (`shapes.test.ts`). Never widen that tolerance to make a body fit — a shape nobody can
+  check is the one thing this pipeline exists to prevent. `shapeResample.test.ts` holds
+  the rule: "refuses a torus, which no radius grid can hold" and "holds a cavity of %s of
+  the radius only inside ±6% of the volume".
