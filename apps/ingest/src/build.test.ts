@@ -144,6 +144,7 @@ describe('the volume build over the fixture rows', () => {
       OPTIONS,
     )
     expect(backward.catalog.stars).toEqual(forward.catalog.stars)
+    expect(backward.catalog.planets).toEqual(forward.catalog.planets)
     expect(backward.report).toEqual(forward.report)
   })
 })
