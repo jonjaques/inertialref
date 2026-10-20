@@ -75,7 +75,8 @@ export interface SensorDiagnostics {
 
 export interface Sensor {
   warm(target?: RenderTarget | null): Promise<void>
-  warmUpscale(): void
+  /** Compile the upscaler's pipelines; settles once a dispatch can run. */
+  warmUpscale(): Promise<void>
   readonly exposure: Exposure | null
   readonly diagnostics: SensorDiagnostics
   /**
@@ -292,9 +293,11 @@ export function createSensor(
   buildOutput()
 
   return {
-    warmUpscale: () => upscale?.prepare(),
+    warmUpscale: async () => {
+      await upscale?.ready()
+    },
     warm: async (target = null) => {
-      upscale?.prepare()
+      await upscale?.ready()
       if (upscale !== null) radiance.value = upscale.outputTexture.value
       await warmPipeline(post, target)
       for (const optical of [defocus, motion, psf]) {

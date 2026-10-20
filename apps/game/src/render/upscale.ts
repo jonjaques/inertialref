@@ -81,9 +81,16 @@ interface RawBackend {
   get(texture: Texture): { texture?: GPUTexture }
 }
 
-/** Verified against pinned 0.2.0: the public API exposes results but no opt-in. */
+/**
+ * Verified against pinned 0.5.0. `gpuTiming` is the public switch and
+ * `gpuTimings` holds only the latest frame; the per-frame sample queue a pass
+ * timeline needs is private. The timer exists only while `gpuTiming` is on,
+ * and turning it on after `init` allocates a new one, so it is looked up at
+ * each use rather than held.
+ */
 interface RawTimer {
-  enabled: boolean
+  /** Settles once the device has confirmed the query sets; never rejects. */
+  readonly ready: Promise<void>
   takeSamples(): unknown[]
   /** The queue, then every readback in flight. */
   drain(): Promise<void>
@@ -92,7 +99,7 @@ interface RawTimer {
 
 /*
  * A sample is `{ frameTag, sequence, passes: [{ label, milliseconds }] }` in
- * 0.2.0: `readback` subtracts each begin from its end and unmaps the buffer,
+ * 0.5.0: `readback` subtracts each begin from its end and unmaps the buffer,
  * so a duration is all that leaves the timer. Read defensively, because the
  * shape is the package's private business.
  */
@@ -151,8 +158,9 @@ export class UpscaleNode extends TempNode<'vec4'> {
   #resets = 0
   #bytes = 0
   #initMs = 0
+  #started = 0
+  #ready: Promise<void> = Promise.resolve()
   #debug: PictureDebug = 'none'
-  #timer: RawTimer | null = null
   #stopTiming: (() => void) | null = null
   #detach: (() => void) | null = null
   /** Durations kept for a pass timeline's run; null when none is measuring. */
@@ -193,8 +201,7 @@ export class UpscaleNode extends TempNode<'vec4'> {
   prepare(): void {
     if (this.#disposed) return
     if (!this.#initialized) {
-      const start = performance.now()
-      this.#kernel.init()
+      this.#started = performance.now()
       // compileAsync executes update-before dependencies too. The host input
       // must be backed before warming can dispatch the temporal kernel.
       this.#renderer.initTexture(this.#pre)
@@ -205,23 +212,21 @@ export class UpscaleNode extends TempNode<'vec4'> {
       this.#kernel.unjitteredProjectionMatrix.copy(
         this.#camera.projectionMatrix,
       )
-      // The private sample queue is the only way to opt out of timestamps, so
-      // its absence in a future release costs the readout and nothing else:
-      // a throw here runs inside `setup`, which is a frame that never draws.
-      // Last in the first prepare, because a throw above leaves
-      // `#initialized` false and the next prepare's `init` makes a new timer:
-      // lent before that, the timeline would hold two sources sharing
-      // `#collected`, and `dispose` would take back only the second.
-      const timer =
-        (this.#kernel as unknown as { _timer?: RawTimer })._timer ?? null
-      this.#timer = timer
-      const supported = timer?.enabled === true
+      // Timestamps cost a query set and a readback per pass, so they run only
+      // at the `full` timing level or for a pass timeline's run. Last in the
+      // first prepare, because a throw above leaves `#initialized` false and
+      // the next prepare attaches again: attached before that, the timeline
+      // would hold two sources sharing `#collected`, and `dispose` would take
+      // back only the second.
+      const kernel = this.#kernel
+      const supported = (
+        this.#renderer.backend as unknown as RawBackend
+      ).device.features.has('timestamp-query')
       let level = 'off'
       this.#stopTiming = onTimingLevel((next) => {
         level = next
-        if (timer === null || this.#collected !== null) return
-        timer.enabled = supported && level === 'full'
-        if (!timer.enabled) timer.reset()
+        if (!supported || this.#collected !== null) return
+        kernel.gpuTiming = level === 'full'
       })
       /*
        * The pass timeline is the renderer's one GPU instrument, and these
@@ -231,31 +236,34 @@ export class UpscaleNode extends TempNode<'vec4'> {
        * the timeline reports beside its own passes rather than among them.
        */
       const timeline = passTimelineOf(this.#renderer)
-      if (timer !== null && supported && timeline !== null) {
+      if (supported && timeline !== null) {
         this.#detach = timeline.attach({
           name: 'upscaler',
-          arm: () => {
+          arm: async () => {
+            kernel.gpuTiming = true
+            // A timer allocated just now times nothing until its query sets
+            // are confirmed, and a run is a handful of synchronous frames.
+            const timer = this.#timer()
+            await timer?.ready
             // A reset, not a take: a take empties what has landed, and the
             // readbacks of frames drawn before the run land during its first
             // drain and would be counted as its own. The epoch drops them.
-            timer.reset()
+            timer?.reset()
             this.#collected = []
-            timer.enabled = true
           },
           disarm: async () => {
             try {
-              await timer.drain()
-              this.#collected?.push(...durations(timer.takeSamples()))
+              const timer = this.#timer()
+              await timer?.drain()
+              this.#collected?.push(...durations(timer?.takeSamples() ?? []))
               return this.#collected ?? []
             } finally {
               this.#collected = null
-              timer.enabled = level === 'full'
-              if (!timer.enabled) timer.reset()
+              kernel.gpuTiming = level === 'full'
             }
           },
         })
       }
-      this.#initMs = performance.now() - start
       this.#initialized = true
     }
     this.#renderer.getDrawingBufferSize(this.#size)
@@ -310,10 +318,30 @@ export class UpscaleNode extends TempNode<'vec4'> {
         textures: unaccounted,
         path: this.#path,
       })
+    /*
+     * The library compiles the configured path's pipelines off the frame and
+     * refuses a dispatch until they exist, and `configure` is what names the
+     * path — preparing before it warms the default path, not this one. The
+     * boot awaits this through `ready`; a frame drawn sooner skips the
+     * dispatch and presents the output WebGPU zero-initialized, rather than
+     * throwing inside a render.
+     */
+    this.#ready = this.#kernel.prepare().then(() => {
+      if (this.#initMs === 0) this.#initMs = performance.now() - this.#started
+    })
+    this.#ready.catch((cause: unknown) => {
+      log.error('upscaler pipelines failed to prepare', { cause })
+    })
     this.#bytes = bytes
     this.outputTexture.value = this.#kernel.outputTexture
     this.#phase = 0
     this.#resets += 1
+  }
+
+  /** Settles once the kernel's pipelines exist; rejects if they cannot. */
+  ready(): Promise<void> {
+    this.prepare()
+    return this.#ready
   }
 
   beginFrame(
@@ -390,8 +418,9 @@ export class UpscaleNode extends TempNode<'vec4'> {
     // timings map. The interactive readout needs only the latter; drain the
     // former each submission so a long flight cannot grow it indefinitely,
     // and keep what it held while a pass timeline is measuring.
-    const samples = this.#timer?.takeSamples() ?? []
+    const samples = this.#timer()?.takeSamples() ?? []
     this.#collected?.push(...durations(samples))
+    if (!this.#kernel.isReady) return
     this.#kernel.dispatch(
       {
         color: this.#inputs.color.value,
@@ -431,6 +460,12 @@ export class UpscaleNode extends TempNode<'vec4'> {
         : {},
       debug: this.#debug,
     }
+  }
+
+  #timer(): RawTimer | null {
+    return (
+      (this.#kernel as unknown as { _timer?: RawTimer | null })._timer ?? null
+    )
   }
 
   override dispose(): void {

@@ -95,7 +95,9 @@ export interface OwnedSample {
 /**
  * A timer the timeline arms beside its own, for passes it cannot hook.
  *
- * `arm` runs before the measured frames and `disarm` after them; `disarm`
+ * `arm` runs before the measured frames and `disarm` after them. `arm` may
+ * settle later, for a timer that allocates its query sets on demand and times
+ * nothing until the device confirms them; the run starts once it has. `disarm`
  * settles once the source's own readbacks have, and returns the durations
  * its timer resolved for frames drawn since `arm` — none from before it. A
  * timer with a fixed set of query slots times at most that many frames of a
@@ -107,7 +109,7 @@ export interface OwnedSample {
  */
 export interface PassSource {
   readonly name: string
-  arm(): void
+  arm(): void | Promise<void>
   disarm(): Promise<readonly OwnedSample[]>
 }
 
@@ -359,14 +361,15 @@ export class PassTimeline {
     try {
       this.#pending.length = 0
       this.#dropped = 0
-      const sources = [...this.#sources].filter((source) => {
+      const sources: PassSource[] = []
+      for (const source of this.#sources) {
         try {
-          source.arm()
-          return true
+          await source.arm()
+          sources.push(source)
         } catch {
-          return false
+          // A source that cannot arm is left out; the run goes on without it.
         }
-      })
+      }
       // Armed per frame rather than across the drains, so nothing encoded
       // while the queue drains is taken for one of these frames.
       let wallMs: number

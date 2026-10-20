@@ -61,6 +61,7 @@ it.each([
       camera,
       sceneLayout(TEMPORAL, sceneBackend(gpu.renderer)),
     )
+    await sensor.warmUpscale()
     try {
       sensor.render(target)
       await gpu.read(target)
@@ -111,6 +112,7 @@ it('replaces hidden background reactivity and combines translucent coverage', as
     camera,
     sceneLayout(TEMPORAL, sceneBackend(gpu.renderer)),
   )
+  await sensor.warmUpscale()
   const coverage = async () => {
     sensor.render(target)
     await gpu.read(target)

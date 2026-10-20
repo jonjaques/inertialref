@@ -97,7 +97,7 @@ export function Sensor({
         label: 'compiling the upscaler',
         units: 1,
         run: async (done) => {
-          chain.current?.warmUpscale()
+          await chain.current?.warmUpscale()
           done()
         },
       })
