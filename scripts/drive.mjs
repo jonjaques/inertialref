@@ -59,7 +59,15 @@ import { analyzeFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveUrl } from './driveUrl.mjs'
-import { silentCompletion, wrap } from './driveScript.mjs'
+import { castFrames, connect, drainLogs, evaluate, traceFor } from './cdp.mjs'
+import { boot, clearStorage } from './drivePage.mjs'
+import {
+  checkSteps,
+  jsonReport,
+  planSteps,
+  runSteps,
+  sampleFrames,
+} from './driveSteps.mjs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -128,19 +136,6 @@ const OPTIONS = {
   quiet: { type: 'boolean', default: false },
   json: { type: 'boolean', default: false },
 }
-
-const STEPS = new Set([
-  'js',
-  'file',
-  'wait',
-  'settle',
-  'shot',
-  'cast',
-  'trace',
-  'sample',
-  'logs',
-  'reload',
-])
 
 const HELP = `pnpm drive — drive InertialRef in Chrome over the DevTools Protocol
 
@@ -294,55 +289,8 @@ const note = (line) => {
   if (!values.quiet) say(line)
 }
 
-/*
- * `parseArgs` returns values as a map, which loses the interleaving — and the
- * interleaving is the whole point of a step list. `tokens: true` gives them
- * back in source order.
- *
- * The `--no-` filter is not defensive tidying. `allowNegative` is on for
- * `--no-serve`, but it applies to every boolean in `OPTIONS`, and two of the
- * steps are booleans: `--no-reload` parses to a token named `reload` and would
- * otherwise re-boot the page — the negation running the very step it denies.
- */
-const script = tokens
-  .filter(
-    (t) =>
-      t.kind === 'option' &&
-      STEPS.has(t.name) &&
-      !String(t.rawName).startsWith('--no-'),
-  )
-  .map((t) => ({ step: t.name, arg: t.value }))
-
-/** A step argument that has to be a number. `Number('soon')` is `NaN`, and a
- *  `NaN` reaches `setTimeout` as 0 — a `--wait` that silently does not wait. */
-const count = (arg, flag, least) => {
-  const n = Number(arg)
-  if (!Number.isFinite(n) || n < least)
-    throw new Error(`--${flag} wants a number ≥ ${least}, not ${String(arg)}`)
-  return n
-}
-
-/** Every numeric step argument, checked before the dev server, Chrome and an
- *  six-second boot: a typo'd `--wait` should cost a line of output, not the
- *  whole start-up it sits behind. */
-function checkScript() {
-  if (
-    values['user-gesture'] === true &&
-    !script.some(({ step }) => step === 'js' || step === 'file')
-  )
-    throw new Error('--user-gesture needs a --js or --file step')
-  for (const { step, arg } of script) {
-    if (
-      !JAVASCRIPT &&
-      (step === 'sample' || step === 'cast' || step === 'settle')
-    )
-      throw new Error(`--${step} needs page scripts; omit --no-javascript`)
-    if (step === 'wait') count(arg, 'wait', 0)
-    if (step === 'settle') count(arg, 'settle', 0)
-    if (step === 'sample') count(arg, 'sample', 1)
-    if (step === 'trace') count(arg, 'trace', 100)
-  }
-}
+/** The steps, in the order written; `planSteps` says why the order survives. */
+const script = planSteps(tokens)
 
 /* ------------------------------------------------------------------ rig ---- */
 
@@ -465,212 +413,6 @@ async function pageTarget() {
   throw new Error(`no page target on port ${PORT}`)
 }
 
-/* ------------------------------------------------------------------ cdp ---- */
-
-function connect(ws) {
-  let next = 1
-  const pending = new Map()
-  const events = []
-  /*
-   * Synchronous listeners, and they may swallow the message.
-   *
-   * Screencast is the reason. Chrome sends the next frame only once the
-   * previous one is acknowledged, so an acknowledgement that waits on a poll
-   * loop throttles the stream to whatever the poll interval is — a 16 ms poll
-   * measured 18 fps on a page running at 60, which subsamples the capture and
-   * drops exactly the one-frame artifact a cast is taken to find. Acking from
-   * inside the message handler is what keeps the stream at the page's own rate.
-   */
-  const listeners = new Set()
-  ws.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data)
-    if (msg.id === undefined) {
-      let consumed = false
-      for (const listener of listeners)
-        if (listener(msg) === true) consumed = true
-      if (!consumed) events.push(msg)
-      return
-    }
-    const entry = pending.get(msg.id)
-    if (entry === undefined) return
-    pending.delete(msg.id)
-    clearTimeout(entry.timer)
-    if (msg.error) entry.reject(new Error(JSON.stringify(msg.error)))
-    else entry.resolve(msg.result)
-  })
-  const send = (method, params = {}) =>
-    new Promise((resolve, reject) => {
-      const id = next++
-      // Cleared on the reply, and `unref`d besides. A two-minute timer left
-      // armed on every command holds the event loop open, so an invocation
-      // that finished its work in one second still took two minutes to exit —
-      // which reads as a hung driver and is a forgotten timer.
-      const timer = setTimeout(() => {
-        if (pending.delete(id)) reject(new Error(`${method} timed out`))
-      }, 120_000)
-      timer.unref()
-      pending.set(id, { resolve, reject, timer })
-      ws.send(JSON.stringify({ id, method, params }))
-    })
-  // A socket that goes away takes every command in flight with it, and those
-  // timers are `unref`d — so without this the process drains its event loop
-  // and exits 0 having answered nothing, which reads as a passing run against
-  // a Chrome that crashed. `pending` is empty by the time `main` closes the
-  // socket itself, so the ordinary shutdown lands here as a no-op.
-  const abandon = (why) => {
-    for (const [id, entry] of pending) {
-      pending.delete(id)
-      clearTimeout(entry.timer)
-      entry.reject(new Error(why))
-    }
-  }
-  ws.addEventListener('close', () => abandon('the CDP socket closed'))
-  ws.addEventListener('error', () => abandon('the CDP socket errored'))
-  /** Returns its own removal, so a step cannot leak a listener into the next. */
-  const subscribe = (listener) => {
-    listeners.add(listener)
-    return () => listeners.delete(listener)
-  }
-  return { send, events, subscribe }
-}
-
-async function evaluate(send, expression, userGesture = false) {
-  const result = await send('Runtime.evaluate', {
-    expression: wrap(expression),
-    awaitPromise: true,
-    returnByValue: true,
-    ...(userGesture ? { userGesture: true } : {}),
-  })
-  if (result.exceptionDetails) {
-    throw new Error(
-      result.exceptionDetails.exception?.description ??
-        JSON.stringify(result.exceptionDetails),
-    )
-  }
-  return result.result.value
-}
-
-/** Clear this rig's cookies and local storage before the app can read them.
- * Navigating away first also discards in-memory preferences from a warm page.
- * IndexedDB saves, asset caches and service workers are outside this reset. */
-async function clearStorage(send) {
-  // Guarded like every probe in `boot`: a page mid-navigation, or one whose
-  // renderer died since the last invocation, answers `Runtime.evaluate` with
-  // "Cannot find context with specified id" — and the origin is only used to
-  // widen the clear beyond the one this call is about to boot.
-  const current = await evaluate(send, 'location.origin').catch(() => 'null')
-  await send('Page.navigate', { url: 'about:blank' })
-  // Page.navigate acknowledges the navigation before the new document is
-  // necessarily committed. Wait until the old app can no longer write back.
-  for (let i = 0; ; i++) {
-    const blank = await evaluate(send, "location.href === 'about:blank'").catch(
-      () => false,
-    )
-    if (blank) break
-    if (i === 100) throw new Error('page did not leave before clearing storage')
-    await sleep(50)
-  }
-  await send('Network.clearBrowserCookies')
-  for (const origin of new Set([current, new URL(URL_).origin])) {
-    if (origin === 'null') continue
-    // Session storage too: Chrome restores it with the tab after `--down`,
-    // and the app keeps its graphics-session strikes there. A rig whose every
-    // launch is a session that ended without `pagehide` would otherwise be
-    // refused the renderer on its second launch, with nothing on this side
-    // saying why. See `apps/game/src/graphicsSession.ts`.
-    await send('Storage.clearDataForOrigin', {
-      origin,
-      storageTypes: 'local_storage,session_storage',
-    })
-  }
-  note('cleared local, session storage and cookies')
-}
-
-/**
- * `ir.status().boot`, or `booting` until the harness is there to ask.
- *
- * A build without the field — the baseline `presets:compare --base` serves
- * from an older commit, driven by this tree's driver — reads `drawing` once it
- * has a renderer, never `booted`: reading `booting` would wait out the
- * renderer timeout on every plate, and `booted` would photograph the cover.
- * The cover wait gives up after its twelve seconds there, by which time the
- * cover has lifted.
- */
-const BOOT = `const status = window.ir?.status?.()
-  if (status === undefined) return 'booting'
-  return status.boot ?? (window.engine?.gl ? 'drawing' : 'booting')`
-
-const READY = DOCUMENT
-  ? "return document.readyState !== 'loading'"
-  : `return (() => { ${BOOT} })() !== 'booting'`
-
-async function boot(send, { force }) {
-  const ready = await evaluate(send, READY).catch(() => false)
-  // The mode is a function of the path, so a booted page on `/` is not a
-  // booted page on `/planetarium` — attaching to it regardless produced a
-  // screenshot of the home poster captioned as the planetarium. The query is
-  // half of that contract and carries the same weight: `?at=` is the body the
-  // planetarium opens on, `?t=` the cutscene frame, `?seed=` the universe.
-  //
-  // Asked-for keys only, never the whole search string. The app writes those
-  // same keys back as it plays — `CinemaPlayer` replaces `t` on every frame,
-  // `PlanetariumMode` replaces `at` on every target — so an exact comparison
-  // would miss on a page that is already showing exactly what was asked for,
-  // and turn every warm attach into a six-second re-boot.
-  const wanted = new URL(URL_)
-  const here = await evaluate(
-    send,
-    'return location.pathname + location.search',
-  ).catch(() => '')
-  const at = new URL(here, wanted.origin)
-  const showing =
-    at.pathname === wanted.pathname &&
-    [...wanted.searchParams].every(
-      ([key, value]) => at.searchParams.get(key) === value,
-    )
-  if (ready && !force && showing) {
-    note(
-      DOCUMENT ? 'attached to a ready document' : 'attached to a booted page',
-    )
-    return
-  }
-  // Always a full navigate, never HMR: a WebGPURenderer does not survive a
-  // dozen hot reloads, and a tab that has had them draws its HUD with
-  // no renderer under it — which reads as a rendering bug and is not one.
-  const navigation = await send('Page.navigate', { url: URL_ })
-  if (navigation.errorText) throw new Error(navigation.errorText)
-  const started = Date.now()
-  for (let i = 0; ; i += 1) {
-    await sleep(500)
-    // navigate acknowledges before the new document commits. The old page's
-    // readyState can still be complete, so match the navigation's loader first.
-    const committed =
-      !DOCUMENT ||
-      navigation.loaderId === undefined ||
-      (await send('Page.getFrameTree')).frameTree.frame.loaderId ===
-        navigation.loaderId
-    if (committed && (await evaluate(send, READY).catch(() => false))) break
-    if (i === 200)
-      throw new Error(
-        `${DOCUMENT ? 'document' : 'renderer'} never became ready`,
-      )
-  }
-  if (DOCUMENT) {
-    note(`document ready in ${((Date.now() - started) / 1000).toFixed(1)} s`)
-    return
-  }
-  // The boot cover lifts on the presentation watchdog, which needs a frame
-  // after the renderer appears. Poll for `booted` rather than sleeping a
-  // guessed interval, and give up rather than block: the scene underneath is
-  // already rendering, so a stuck cover is a HUD question, not a render one.
-  for (let i = 0; i < 24; i += 1) {
-    const phase = await evaluate(send, BOOT).catch(() => 'booted')
-    if (phase === 'booted') break
-    await sleep(500)
-  }
-  note(`renderer ready in ${((Date.now() - started) / 1000).toFixed(1)} s`)
-}
-
 /* ---------------------------------------------------------------- steps ---- */
 
 async function capture(send, target) {
@@ -711,68 +453,6 @@ async function capture(send, target) {
 }
 
 /**
- * A burst of frames as the compositor actually presented them.
- *
- * `--shot` cannot see a strobe. `Page.captureScreenshot` draws a frame of its
- * own on demand, so a one-frame artifact that recurs on a fixed period is
- * precisely what it never lands on — eight consecutive shots of a strobing
- * scene came back identical to six pixels while the page was visibly jumping
- * twice a second. A screencast is the compositor's own output, at the rate the
- * page is running, which is the only place the bad frame exists.
- *
- * Frames are acknowledged as they arrive because Chrome stops sending until
- * the previous one is, so a collector that batches its acks measures its own
- * back-pressure instead of the page.
- */
-async function castFrames(send, subscribe, count, out) {
-  const frames = []
-  const unsubscribe = subscribe((msg) => {
-    if (msg.method !== 'Page.screencastFrame') return false
-    // Acknowledge first. The frame is already in hand and the next one does
-    // not start until this returns; anything done before it is latency the
-    // capture rate pays for.
-    void send('Page.screencastFrameAck', { sessionId: msg.params.sessionId })
-    if (frames.length < count)
-      frames.push({ data: msg.params.data, at: msg.params.metadata.timestamp })
-    // Consumed, so `drainLogs` still sees only console output and exceptions.
-    return true
-  })
-  /*
-   * JPEG, and capped well under the drawing buffer.
-   *
-   * The capture rate is bounded by how fast Chrome can encode a frame, not by
-   * how fast the page draws one: PNG at a 3840x2400 retina buffer measured
-   * 17 fps on a page running at 60, which subsamples the stream and drops the
-   * one-frame artifact this exists to catch. At 1280 px and JPEG it keeps up.
-   * Nothing is lost — the difference runs at 480 px, because that is what
-   * averages away compression ringing and single-pixel star twinkle.
-   */
-  await send('Page.startScreencast', {
-    format: 'jpeg',
-    quality: 85,
-    maxWidth: CAST_PX,
-    maxHeight: CAST_PX,
-    everyNthFrame: 1,
-  })
-  const deadline = Date.now() + Math.max(10_000, count * 200)
-  while (frames.length < count && Date.now() < deadline) await sleep(16)
-  await send('Page.stopScreencast')
-  unsubscribe()
-  frames.sort((a, b) => a.at - b.at)
-
-  await mkdir(out, { recursive: true })
-  const paths = []
-  for (const [i, frame] of frames.entries()) {
-    const file = path.join(out, `${String(i).padStart(4, '0')}.jpg`)
-    await writeFile(file, Buffer.from(frame.data, 'base64'))
-    paths.push(file)
-  }
-  const at = frames.map((f) => f.at)
-  const span = at.length > 1 ? at[at.length - 1] - at[0] : 0
-  return { paths, timestamps: at, span, fps: span > 0 ? at.length / span : 0 }
-}
-
-/**
  * The cast, as something to attach to a pull request.
  *
  * A strobe argued in prose is a paragraph; the same strobe as five seconds of
@@ -808,124 +488,6 @@ async function castClip(dir, fps) {
   } catch {
     return null
   }
-}
-
-/**
- * A Chrome trace over a window, written where `scripts/timing.mjs` can read it.
- *
- * The categories are the narrow set that carries what this project emits.
- * `blink.user_timing` is where `performance.measure` lands and
- * `disabled-by-default-devtools.timeline` is where the extended
- * `console.timeStamp` does; `devtools.timeline` brings the frame and raster
- * events that put them in context. The V8 CPU profiler is deliberately absent —
- * it multiplies the file size and answers a different question, and a trace
- * nobody can open is a trace nobody reads.
- *
- * `Tracing.dataCollected` arrives in chunks and `Tracing.tracingComplete` is the
- * end. Collecting into an array and writing once is fine at these sizes; a
- * stream would be the right shape only for a recording long enough that the
- * frames in it are no longer the question.
- */
-async function traceFor(send, subscribe, ms, out) {
-  const events = []
-  let complete = false
-  const unsubscribe = subscribe((msg) => {
-    if (msg.method === 'Tracing.dataCollected') {
-      // A loop rather than `push(...chunk)`. Chrome chooses the chunk size and
-      // a spread is an argument list, so a large one throws `RangeError` from
-      // inside the socket's message handler — where the step's own `await`
-      // cannot catch it, so `--down` never runs and the browser is orphaned.
-      for (const event of msg.params.value) events.push(event)
-      return true
-    }
-    if (msg.method === 'Tracing.tracingComplete') {
-      complete = true
-      return true
-    }
-    return false
-  })
-
-  // In a `finally`, because a throw from `Tracing.start` — an unknown category,
-  // a target that went away — would otherwise leave this listener attached for
-  // the rest of the session, still appending to an array nothing will write.
-  try {
-    await send('Tracing.start', {
-      transferMode: 'ReportEvents',
-      traceConfig: {
-        recordMode: 'recordAsMuchAsPossible',
-        includedCategories: [
-          'blink.user_timing',
-          'devtools.timeline',
-          'disabled-by-default-devtools.timeline',
-          'disabled-by-default-devtools.timeline.frame',
-          'v8.execute',
-        ],
-      },
-    })
-    await sleep(ms)
-    await send('Tracing.end')
-    // Chrome flushes after `end`, so the events are still arriving here.
-    const deadline = Date.now() + 30_000
-    while (!complete && Date.now() < deadline) await sleep(50)
-  } finally {
-    unsubscribe()
-  }
-
-  await mkdir(path.dirname(out), { recursive: true })
-  await writeFile(out, JSON.stringify({ traceEvents: events }))
-  const { size } = await stat(out)
-  return { path: out, events: events.length, bytes: size }
-}
-
-async function sampleFrames(send, count, expression) {
-  // One reading per rAF from inside the page. A `--js` call per frame would be
-  // a round trip per frame, and the round trip is longer than the frame.
-  const samples = await evaluate(
-    send,
-    `const out = []
-     await new Promise((done) => {
-       const tick = () => {
-         out.push(${expression})
-         if (out.length < ${count}) requestAnimationFrame(tick)
-         else done()
-       }
-       requestAnimationFrame(tick)
-     })
-     return out`,
-  )
-  const numeric = {}
-  for (const s of samples)
-    if (s !== null && typeof s === 'object')
-      for (const [k, v] of Object.entries(s))
-        if (typeof v === 'number' || typeof v === 'boolean')
-          (numeric[k] ??= []).push(Number(v))
-  const spans = Object.fromEntries(
-    Object.entries(numeric).map(([k, v]) => [
-      k,
-      `${Math.min(...v)}..${Math.max(...v)}`,
-    ]),
-  )
-  return { frames: samples.length, spans, samples }
-}
-
-function drainLogs(events) {
-  const lines = []
-  for (const event of events.splice(0)) {
-    if (event.method === 'Runtime.consoleAPICalled') {
-      const text = event.params.args
-        .map((a) => a.value ?? a.description ?? a.type)
-        .join(' ')
-      lines.push(`${event.params.type}: ${text}`)
-    } else if (event.method === 'Runtime.exceptionThrown') {
-      lines.push(
-        `exception: ${
-          event.params.exceptionDetails.exception?.description ??
-          event.params.exceptionDetails.text
-        }`,
-      )
-    }
-  }
-  return lines
 }
 
 /* ----------------------------------------------------------------- main ---- */
@@ -974,10 +536,68 @@ async function status() {
   )
 }
 
+/** A cast written to `.data/drive/cast/`, differenced, and clipped, as the
+ *  step's result and the lines it says. */
+async function cast(wire, n) {
+  const dir = path.join(RIG, 'cast')
+  await rm(dir, { recursive: true, force: true })
+  const frames = await castFrames(wire, n, { maxPx: CAST_PX })
+  await mkdir(dir, { recursive: true })
+  const paths = []
+  for (const [i, frame] of frames.entries()) {
+    const file = path.join(dir, `${String(i).padStart(4, '0')}.jpg`)
+    await writeFile(file, Buffer.from(frame.data, 'base64'))
+    paths.push(file)
+  }
+  const at = frames.map((f) => f.at)
+  const span = at.length > 1 ? at[at.length - 1] - at[0] : 0
+  const fps = span > 0 ? at.length / span : 0
+  const analysis = await analyzeFrames(paths, at)
+  // The map is the answer to "where", which the counts never give. Only
+  // for the first isolated frame: one picture makes the point and a
+  // hundred is a directory nobody opens.
+  const first = analysis.isolated[0]
+  const map =
+    first === undefined
+      ? null
+      : await differenceMap(
+          paths[first.frame - 1],
+          paths[first.frame],
+          path.join(dir, 'difference.png'),
+        )
+  const clip = await castClip(dir, fps)
+  const lines = [
+    `cast: ${paths.length} frames in ${span.toFixed(2)}s ` +
+      `(${fps.toFixed(1)} fps) -> ${path.relative(ROOT, dir)}`,
+    ...reportFrames(analysis, fps)
+      .split('\n')
+      .map((line) => `  ${line}`),
+  ]
+  if (map !== null) lines.push(`  where: ${path.relative(ROOT, map)}`)
+  if (clip !== null) lines.push(`  clip:  ${path.relative(ROOT, clip)}`)
+  return {
+    result: { dir: path.relative(ROOT, dir), ...analysis, map, clip },
+    lines,
+  }
+}
+
+/** A trace written beside the shots, where `scripts/timing.mjs` reads it. */
+async function trace(wire, ms) {
+  const out = path.join(RIG, 'trace.json')
+  const events = await traceFor(wire, ms)
+  await mkdir(path.dirname(out), { recursive: true })
+  await writeFile(out, JSON.stringify({ traceEvents: events }))
+  const { size } = await stat(out)
+  return { path: path.relative(ROOT, out), events: events.length, bytes: size }
+}
+
 async function main() {
   if (values.down === true) return await down()
   if (values.status === true) return await status()
-  checkScript()
+  checkSteps(script, {
+    userGesture: values['user-gesture'] === true,
+    javascript: JAVASCRIPT,
+  })
 
   const prior = (await readState()) ?? {}
   const wasServing = await answers(URL_)
@@ -996,7 +616,8 @@ async function main() {
     ws.addEventListener('open', resolve, { once: true })
     ws.addEventListener('error', reject, { once: true })
   })
-  const { send, events, subscribe } = connect(ws)
+  const wire = connect(ws)
+  const { send, events } = wire
   await send('Page.enable')
   await send('Runtime.enable')
   await send('Emulation.setScriptExecutionDisabled', { value: !JAVASCRIPT })
@@ -1015,160 +636,47 @@ async function main() {
     mobile: false,
   })
   await send('Page.bringToFront')
-  if (values['keep-storage'] !== true) await clearStorage(send)
-  await boot(send, {
-    force:
-      values.fresh === true ||
-      (prior.javascript ?? true) !== JAVASCRIPT ||
-      JSON.stringify(prior.blockedUrls ?? []) !== JSON.stringify(BLOCKED_URLS),
-  })
+  const page = { url: URL_, document: DOCUMENT, note, sleep, now: Date.now }
+  if (values['keep-storage'] !== true) await clearStorage(send, page)
+  await boot(
+    send,
+    {
+      force:
+        values.fresh === true ||
+        (prior.javascript ?? true) !== JAVASCRIPT ||
+        JSON.stringify(prior.blockedUrls ?? []) !==
+          JSON.stringify(BLOCKED_URLS),
+    },
+    page,
+  )
   // Record the controls only once this navigation succeeds. A failed boot
   // must not make the next warm attach trust a page from a different mode.
   await writeState({ javascript: JAVASCRIPT, blockedUrls: BLOCKED_URLS })
 
-  const results = []
-  for (const { step, arg } of script) {
-    switch (step) {
-      case 'js':
-      case 'file': {
-        const expression =
-          step === 'file' ? await readFile(arg, 'utf8') : String(arg)
-        const value = await evaluate(
-          send,
-          expression,
-          values['user-gesture'] === true,
-        )
-        results.push({ step, value })
-        const warning = silentCompletion(expression, value)
-        if (warning !== null) process.stderr.write(`${warning}\n`)
-        say(`js: ${JSON.stringify(value ?? null)}`)
-        break
-      }
-      case 'wait': {
-        const ms = count(arg, 'wait', 0)
-        await sleep(ms)
-        results.push({ step, ms })
-        break
-      }
-      case 'settle': {
-        /*
-         * Two quiet reads in a row, not one: the sky publishes its cubes tile
-         * by tile and the streamer asks for another ring as the last one
-         * lands, so a single `ok` can sit in the gap between two bursts. The
-         * budget is a guard against a scene that never converges, and running
-         * out is reported rather than hidden — a plate taken then is a plate
-         * of something still arriving, and the report says which.
-         */
-        const budget = count(arg, 'settle', 0)
-        const began = performance.now()
-        let quiet = 0
-        let report = null
-        for (;;) {
-          report = await evaluate(send, 'ir.settled()')
-          quiet = report?.ok ? quiet + 1 : 0
-          if (quiet >= 2 || performance.now() - began >= budget) break
-          await sleep(250)
-        }
-        const ms = Math.round(performance.now() - began)
-        const settled = quiet >= 2
-        results.push({ step, ms, settled, ...(report ?? {}) })
-        say(
-          settled
-            ? `settle: converged after ${ms}ms`
-            : `settle: still arriving after ${ms}ms — ${JSON.stringify(report)}`,
-        )
-        break
-      }
-      case 'reload': {
-        await boot(send, { force: true })
-        results.push({ step })
-        break
-      }
-      case 'shot': {
-        const shot = await capture(send, String(arg))
-        results.push({ step, ...shot })
-        say(`shot: ${shot.path} (${(shot.bytes / 1024).toFixed(0)} KB)`)
-        break
-      }
-      case 'cast': {
-        const n = count(arg, 'cast', 2)
-        const dir = path.join(RIG, 'cast')
-        await rm(dir, { recursive: true, force: true })
-        const cast = await castFrames(send, subscribe, n, dir)
-        const analysis = await analyzeFrames(cast.paths, cast.timestamps)
-        // The map is the answer to "where", which the counts never give. Only
-        // for the first isolated frame: one picture makes the point and a
-        // hundred is a directory nobody opens.
-        let map = null
-        const first = analysis.isolated[0]
-        if (first !== undefined)
-          map = await differenceMap(
-            cast.paths[first.frame - 1],
-            cast.paths[first.frame],
-            path.join(dir, 'difference.png'),
-          )
-        const clip = await castClip(dir, cast.fps)
-        results.push({
-          step,
-          dir: path.relative(ROOT, dir),
-          ...analysis,
-          map,
-          clip,
-        })
-        say(
-          `cast: ${cast.paths.length} frames in ${cast.span.toFixed(2)}s ` +
-            `(${cast.fps.toFixed(1)} fps) -> ${path.relative(ROOT, dir)}`,
-        )
-        for (const line of reportFrames(analysis, cast.fps).split('\n'))
-          say(`  ${line}`)
-        if (map !== null) say(`  where: ${path.relative(ROOT, map)}`)
-        if (clip !== null) say(`  clip:  ${path.relative(ROOT, clip)}`)
-        break
-      }
-      case 'trace': {
-        const ms = count(arg, 'trace', 100)
-        const out = path.join(RIG, 'trace.json')
-        const trace = await traceFor(send, subscribe, ms, out)
-        results.push({ step, ...trace, path: path.relative(ROOT, out) })
-        say(
-          `trace: ${trace.events} events, ${(trace.bytes / 1024 / 1024).toFixed(1)} MB -> ${path.relative(ROOT, out)}`,
-        )
-        say(`  read it: node scripts/timing.mjs`)
-        break
-      }
-      case 'sample': {
-        const out = await sampleFrames(
-          send,
-          count(arg, 'sample', 1),
-          String(values['sample-js']),
-        )
-        results.push({ step, ...out })
-        say(
-          `sample: ${out.frames} frames — ` +
-            Object.entries(out.spans)
-              .map(([k, v]) => `${k} ${v}`)
-              .join(' | '),
-        )
-        break
-      }
-      case 'logs': {
-        const lines = drainLogs(events)
-        results.push({ step, lines })
-        for (const line of lines) say(`  ${line}`)
-        break
-      }
-    }
-  }
+  const run = (expression, userGesture) =>
+    evaluate(send, expression, userGesture)
+  const results = await runSteps(script, {
+    evaluate: run,
+    userGesture: values['user-gesture'] === true,
+    sleep,
+    now: () => performance.now(),
+    read: (file) => readFile(file, 'utf8'),
+    capture: (target) => capture(send, target),
+    cast: (n) => cast(wire, n),
+    trace: (ms) => trace(wire, ms),
+    sample: (n) => sampleFrames(run, n, String(values['sample-js'])),
+    logs: () => drainLogs(events),
+    reboot: () => boot(send, { force: true }, page),
+    say,
+    warn: (line) => process.stderr.write(`${line}\n`),
+  })
 
   // Page errors are reported whether or not they were asked for. A driver that
   // swallows an uncaught exception makes a broken page look like a blank shot.
   const trailing = drainLogs(events).filter((l) => /^(error|exception)/.test(l))
   for (const line of trailing) process.stderr.write(`${line}\n`)
 
-  if (values.json === true)
-    process.stdout.write(
-      `${JSON.stringify({ results, errors: trailing }, null, 2)}\n`,
-    )
+  if (values.json === true) process.stdout.write(jsonReport(results, trailing))
   ws.close()
 }
 
