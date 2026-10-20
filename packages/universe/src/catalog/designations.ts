@@ -23,6 +23,8 @@
  * have, and that must change what is on screen without changing any address.
  */
 
+import { superscript } from '@inertialref/shared'
+
 /** Which catalog or convention a name comes from. */
 export type DesignationKind =
   | 'proper'
@@ -178,11 +180,6 @@ const CONSTELLATIONS: Readonly<Record<string, string>> = {
 export const constellationGenitive = (abbreviation: string): string | null =>
   CONSTELLATIONS[abbreviation.trim()] ?? null
 
-const SUPERSCRIPTS = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'] as const
-
-const superscript = (digits: string): string =>
-  [...digits].map((d) => SUPERSCRIPTS[Number.parseInt(d, 10)] ?? d).join('')
-
 export interface BayerName {
   /** `Alpha Centauri`, or `Alpha¹ Centauri` when the superscript is kept. */
   readonly text: string
@@ -251,8 +248,9 @@ export function glieseName(gl: string): string | null {
 /* Search                                                                     */
 /* ------------------------------------------------------------------------- */
 
-// Built from SUPERSCRIPTS so the fold below and `superscript()` can never
-// disagree about which marks exist.
+// Built from `superscript()` so the fold below and the names it prints can
+// never disagree about which marks exist.
+const SUPERSCRIPTS: readonly string[] = [...superscript('0123456789')]
 const SUPERSCRIPT_PATTERN = new RegExp(`[${SUPERSCRIPTS.join('')}]`, 'g')
 
 /**
@@ -269,9 +267,7 @@ const SUPERSCRIPT_PATTERN = new RegExp(`[${SUPERSCRIPTS.join('')}]`, 'g')
  */
 export function searchKey(text: string): string {
   return text
-    .replace(SUPERSCRIPT_PATTERN, (mark) =>
-      String(SUPERSCRIPTS.indexOf(mark as (typeof SUPERSCRIPTS)[number])),
-    )
+    .replace(SUPERSCRIPT_PATTERN, (mark) => String(SUPERSCRIPTS.indexOf(mark)))
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()

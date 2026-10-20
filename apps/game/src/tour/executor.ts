@@ -17,6 +17,7 @@ import {
   type TourCameraMotion,
 } from '@inertialref/protocol'
 import type { Lens } from '@inertialref/rendering'
+import { radiansToDegrees } from '@inertialref/shared'
 import type { WorldQuery } from '@inertialref/universe'
 import { instantSeconds, pictureInstant } from './scene.ts'
 
@@ -124,8 +125,9 @@ function motionRecipe(
   }
 }
 
-const degrees = (radians: number): number =>
-  Math.round(((radians * 180) / Math.PI) * 10) / 10
+/** An angle the guide reports back, in degrees to a tenth. */
+const tenthsOfDegree = (angle: number): number =>
+  Math.round(radiansToDegrees(angle) * 10) / 10
 const radians = (value: number): number => (value * Math.PI) / 180
 
 export class GuideExecutor {
@@ -567,8 +569,8 @@ export class GuideExecutor {
     return {
       status: 'ok',
       subject: target.name,
-      azimuth_deg: degrees(after.desired.azimuth),
-      elevation_deg: degrees(after.desired.elevation),
+      azimuth_deg: tenthsOfDegree(after.desired.azimuth),
+      elevation_deg: tenthsOfDegree(after.desired.elevation),
       distance_radii:
         Math.round((after.desired.distance / target.radius) * 100) / 100,
       estimated_seconds: ESTIMATED_TRAVEL_SECONDS,

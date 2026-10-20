@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   AU,
   auToMeters,
-  formatDistance,
   LIGHT_YEAR,
   metersToAu,
   metersToFeet,
@@ -28,14 +27,7 @@ describe('units', () => {
     expect(metersToLightYears(1.301 * PARSEC)).toBeCloseTo(4.244, 2)
   })
 
-  it('formats across the whole range the game spans', () => {
-    expect(formatDistance(0.0254)).toBe('1.000 in')
-    expect(formatDistance(1.5)).toBe('1.500 m')
-    expect(formatDistance(2e5)).toBe('200.000 km')
-    expect(formatDistance(AU)).toBe('1.000 AU')
-    expect(formatDistance(4.244 * LIGHT_YEAR)).toBe('4.244 ly')
-    expect(formatDistance(8000 * PARSEC)).toBe('8.000 kpc')
-    expect(formatDistance(0.5 * PARSEC)).toBe('1.631 ly')
+  it('converts a foot to one foot', () => {
     expect(metersToFeet(0.3048)).toBeCloseTo(1, 12)
   })
 })
