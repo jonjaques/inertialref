@@ -1,17 +1,25 @@
 import {
+  arcs,
   AU,
+  density,
   EARTH_MASS,
   EARTH_RADIUS,
+  exponential,
   GRAVITATIONAL_CONSTANT,
   JUPITER_MASS,
   JUPITER_RADIUS,
   type Kilograms,
+  kilometers,
   LIGHT_YEAR,
   type Meters,
   metersToParsecs,
+  period,
+  pressurized,
+  radiansToDegrees,
+  round,
   type Seconds,
   SECONDS_PER_DAY,
-  SECONDS_PER_YEAR,
+  significant,
   SOLAR_LUMINOSITY,
   SOLAR_MASS,
   SOLAR_RADIUS,
@@ -699,16 +707,16 @@ function orbitGroup(
    */
   facts.push({
     label: 'Inclination',
-    value: `${round(degrees(elements.inclination), 3)}°`,
+    value: `${round(radiansToDegrees(elements.inclination), 3)}°`,
     note: primary === null ? 'to the plane' : `to ${primary.name}’s equator`,
   })
   facts.push({
     label: 'Ascending node Ω',
-    value: `${round(degrees(elements.longitudeOfAscendingNode), 2)}°`,
+    value: `${round(radiansToDegrees(elements.longitudeOfAscendingNode), 2)}°`,
   })
   facts.push({
     label: 'Periapsis argument ω',
-    value: `${round(degrees(elements.argumentOfPeriapsis), 2)}°`,
+    value: `${round(radiansToDegrees(elements.argumentOfPeriapsis), 2)}°`,
   })
   facts.push({ label: 'Periapsis', value: span(periapsis(elements)) })
   facts.push({ label: 'Apoapsis', value: span(apoapsis(elements)) })
@@ -800,8 +808,8 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
    * Uranus as 82.23° and Pluto as 60.41°, three numbers no reference carries.
    */
   const obliquity = retrograde
-    ? 180 - Math.abs(degrees(body.axialTilt))
-    : Math.abs(degrees(body.axialTilt))
+    ? 180 - Math.abs(radiansToDegrees(body.axialTilt))
+    : Math.abs(radiansToDegrees(body.axialTilt))
   facts.push({
     label: 'Axial tilt',
     value: `${round(obliquity, 2)}°`,
@@ -1505,18 +1513,6 @@ const findBody = (
 /* Formatting                                                                 */
 /* ------------------------------------------------------------------------- */
 
-/*
- * Written out rather than handed to `Intl`.
- *
- * `toLocaleString` would group the digits and would also decide the decimal
- * separator from whatever locale the browser is in — so the same body would
- * render "6.371,0 km" on one machine and "6,371.0 km" on another, and a test
- * asserting either would pass exactly where it was written. Every readout in
- * this interface is an instrument reading; instruments do not translate.
- */
-
-const degrees = (radians: number): number => (radians * 180) / Math.PI
-
 /**
  * The Sun's angular diameter from Earth, radians — 0.533°.
  *
@@ -1525,108 +1521,6 @@ const degrees = (radians: number): number => (radians * 180) / Math.PI
  * which is a bright star with a shape.
  */
 const SUN_FROM_EARTH = 9.3e-3
-
-function group(text: string): string {
-  const [whole = '', fraction] = text.split('.')
-  // U+2212, not the hyphen `toFixed` produces. In a tabular column a hyphen is
-  // two thirds the width of a digit and sits above the numerals' midline, so a
-  // negative reading is visibly narrower than the positive one under it — and
-  // `formatReading` and `elevationText` already print the real minus, so a
-  // hyphen here is two glyphs for one sign in one panel.
-  const sign = whole.startsWith('-') ? '−' : ''
-  const digits = sign === '' ? whole : whole.slice(1)
-  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return fraction === undefined
-    ? `${sign}${grouped}`
-    : `${sign}${grouped}.${fraction}`
-}
-
-function round(value: number, digits: number): string {
-  if (!Number.isFinite(value)) return '—'
-  return group(value.toFixed(digits))
-}
-
-/**
- * Three significant figures, which is what a reading of this kind is worth.
- *
- * A non-finite value is the em dash every other formatter here gives it, and
- * never `'0'`: a zero radius or a zero period sends `gravity`, the escape
- * velocity and the flux to infinity, and printing those as `0 m/s²` is a
- * confident measurement of the opposite of the truth. `0` stays the answer for
- * an actual zero.
- */
-function significant(value: number): string {
-  if (!Number.isFinite(value)) return '—'
-  if (value === 0) return '0'
-  const magnitude = Math.abs(value)
-  if (magnitude >= 1e5 || magnitude < 1e-3) return exponential(value)
-  const digits = Math.max(0, 3 - Math.ceil(Math.log10(magnitude)))
-  return group(value.toFixed(digits))
-}
-
-function exponential(value: number): string {
-  if (!Number.isFinite(value)) return '—'
-  const [mantissa = '', power = ''] = value.toExponential(3).split('e')
-  const sign = power.startsWith('-') ? '−' : ''
-  return `${mantissa}×10${superscript(sign + power.replace(/^[+-]/, ''))}`
-}
-
-const SUPERSCRIPTS: Readonly<Record<string, string>> = {
-  '0': '⁰',
-  '1': '¹',
-  '2': '²',
-  '3': '³',
-  '4': '⁴',
-  '5': '⁵',
-  '6': '⁶',
-  '7': '⁷',
-  '8': '⁸',
-  '9': '⁹',
-  '−': '⁻',
-}
-
-const superscript = (text: string): string =>
-  [...text].map((char) => SUPERSCRIPTS[char] ?? char).join('')
-
-function kilometers(meters: Meters): string {
-  const km = meters / 1000
-  if (!Number.isFinite(km)) return '—'
-  if (Math.abs(km) >= 1e7) return `${round(km / 1e6, 3)} million km`
-  if (Math.abs(km) >= 100) return `${round(km, 0)} km`
-  if (Math.abs(km) >= 1) return `${round(km, 2)} km`
-  return `${round(meters, 0)} m`
-}
-
-function period(seconds: Seconds): string {
-  const s = Math.abs(seconds)
-  if (!Number.isFinite(s)) return '—'
-  if (s >= 2 * SECONDS_PER_YEAR) return `${round(s / SECONDS_PER_YEAR, 2)} yr`
-  if (s >= 2 * SECONDS_PER_DAY) return `${round(s / SECONDS_PER_DAY, 2)} d`
-  if (s >= 7200) return `${round(s / 3600, 2)} h`
-  if (s >= 120) return `${round(s / 60, 1)} min`
-  return `${round(s, 1)} s`
-}
-
-function pressurized(pascals: number): string {
-  if (pascals >= 1e5) return `${significant(pascals / 1e5)} bar`
-  if (pascals >= 100) return `${significant(pascals / 1000)} kPa`
-  return `${significant(pascals)} Pa`
-}
-
-/**
- * Degrees, arcminutes or arcseconds — whichever the angle is actually read in.
- *
- * The break is at a twentieth of a degree rather than at one, because the
- * reference every reader has is the Sun from Earth and that is half a degree.
- * Rendered in arcminutes it comes out "32.0′", which is correct, is what an
- * almanac prints, and is not the number anybody is carrying around.
- */
-function arcs(radians: number): string {
-  const deg = degrees(radians)
-  if (deg >= 0.05) return `${round(deg, 3)}°`
-  if (deg >= 1 / 60) return `${round(deg * 60, 2)}′`
-  return `${round(deg * 3600, 1)}″`
-}
 
 function radiusNote(radius: Meters): string {
   if (radius >= JUPITER_RADIUS * 0.4)
@@ -1640,11 +1534,6 @@ function massNote(mass: Kilograms): string {
   // Below a thousandth of an Earth, the useful comparison is Luna rather than a
   // long row of zeroes: Ceres is 0.00016 M⊕ and 1.3% of the Moon.
   return `${significant((mass / 7.342e22) * 100)}% of Luna`
-}
-
-function density(mass: Kilograms, radius: Meters): string {
-  const volume = (4 / 3) * Math.PI * radius * radius * radius
-  return `${round(mass / volume / 1000, 3)} g/cm³`
 }
 
 const colorWord = (temperature: number): string => {
