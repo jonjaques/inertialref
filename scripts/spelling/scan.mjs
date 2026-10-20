@@ -5,6 +5,7 @@
  * review, so the report marks names that also appear at those boundaries.
  */
 import { execFileSync } from 'node:child_process'
+import { readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { Node, Project, SyntaxKind } from 'ts-morph'
@@ -44,13 +45,21 @@ const project = new Project({
   },
   skipAddingFilesFromTsConfig: true,
 })
-project.addSourceFilesAtPaths([
-  `${ROOT}apps/*/src/**/*.{ts,tsx}`,
-  `${ROOT}packages/*/src/**/*.ts`,
-  `${ROOT}apps/*/*.config.ts`,
-  `${ROOT}*.ts`,
-  `!${ROOT}**/node_modules/**`,
+/*
+ * One call per root, and the root's own `.ts` files added one by one.
+ * ts-morph walks from the directory every pattern in a call has in common and
+ * filters afterward, and a literal path counts as a pattern. A call that
+ * reaches the root walks the whole checkout — every linked worktree under
+ * `.claude/worktrees/` and its `node_modules` — and with thirty-five of them
+ * exhausts a 4 GB heap before a file is parsed.
+ */
+for (const patterns of [
+  [`${ROOT}apps/*/src/**/*.{ts,tsx}`, `${ROOT}apps/*/*.config.ts`],
+  [`${ROOT}packages/*/src/**/*.ts`],
 ])
+  project.addSourceFilesAtPaths([...patterns, `!${ROOT}**/node_modules/**`])
+for (const name of readdirSync(ROOT))
+  if (name.endsWith('.ts')) project.addSourceFileAtPath(`${ROOT}${name}`)
 
 /**
  * The name node of a declaration, when `node` is one. Import and export
