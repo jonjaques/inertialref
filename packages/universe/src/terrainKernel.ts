@@ -238,6 +238,10 @@ export const MAX_KERNEL_DRAINAGE_LISTS = 16 * MAX_KERNEL_DRAINAGE_NODES
 /** `vec4` slots per segment: `SEGMENT_STRIDE / 4`. */
 export const DRAINAGE_SEGMENT_STRIDE = SEGMENT_STRIDE / 4
 export const DRAINAGE_NODES_AT = 0
+/**
+ * An offset, not an alias: it equals `MAX_KERNEL_DRAINAGE_NODES` because the
+ * node records come first.
+ */
 export const DRAINAGE_SEGMENTS_AT = MAX_KERNEL_DRAINAGE_NODES
 /** `vec4` slots in the drainage records. */
 export const DRAINAGE_RECORDS =
@@ -306,7 +310,10 @@ export const KERNEL_WORDS = SLAB_AT + 4 * MAX_KERNEL_LEVELS + 4
  */
 export const COVER_WORDS = COVER_CHANNELS / 4
 
-/** Where the tail's grit octaves start in a tile's rung frames. */
+/**
+ * Where the tail's grit octaves start in a tile's rung frames. An offset, not
+ * an alias: it equals `MAX_KERNEL_LEVELS` because the crater frames come first.
+ */
 export const GRIT_FRAMES_AT = MAX_KERNEL_LEVELS
 /** Rung frames a tile carries: every crater level, then every grit octave. */
 export const TILE_FRAMES = MAX_KERNEL_LEVELS + GRIT_OCTAVES
