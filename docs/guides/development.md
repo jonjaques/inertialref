@@ -180,6 +180,14 @@ tsconfig projects type-check the portable core and four host environments:
 | `apps/server/tsconfig.json`   | the Worker        | workerd globals and `Env`, from `.cloudflare/types/index.d.ts`            |
 | `apps/ingest/tsconfig.json`   | the catalog build | Node types; runs offline, never at play time                              |
 
+**Two TypeScript packages, one per job.** The five projects are checked by
+TypeScript 7's native compiler, installed as `typescript7` and run by path
+from `scripts/check.mjs`; it checks the client's 2,661 files in about a second.
+`typescript` itself stays on 6, because TypeDoc and `astro check` import its
+JavaScript API, which 7 does not ship, and both cap their peer range at 6.0.
+Both packages declare a `tsc` bin, so `pnpm exec tsc` runs whichever pnpm
+linked last; `pnpm typecheck` is the unambiguous command.
+
 `packages/*` are source-only workspace links. There is no build step between
 an edit and a test. Each package declares `inertialref.layer` in
 `package.json` and may depend only on strictly lower layers. `pnpm graph`

@@ -63,7 +63,9 @@
       // against `apps/game/package.json`, because pnpm does not hoist it to the
       // root. knip reads the `require('webgpu')` as the root's own import and
       // reports it unlisted; listing it here would install it twice.
-      "ignoreDependencies": ["webgpu"],
+      // `typescript7` is the native compiler under an alias, run by path from
+      // `scripts/check.mjs` because its `tsc` bin collides with TypeScript 6's.
+      "ignoreDependencies": ["webgpu", "typescript7"],
     },
     "apps/game": {
       /*
