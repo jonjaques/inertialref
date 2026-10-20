@@ -28,7 +28,7 @@ import {
   regionForDirection,
   regionNeighbor,
   seaDatumElevation,
-} from './terrain.ts'
+} from './regions.ts'
 
 /*
  * The drainage graph: where a body's rivers run, and which way is downhill.

@@ -74,10 +74,10 @@ clear by construction.
 That rejection is about the _model_, and it survives the `float` zone above.
 A floated panel keeps the pane's width, cannot be resized, and carries the only
 z-index in the workspace — panels do not stack or compete for order. `float` is
-also not a drop target: `DROP_ZONES` is the two panes, so a drag can only be
-_inserted_ into a pane, and floating is what a release over the scene means. The
-default arrangement is still two columns and an empty center; one panel out over
-the scene is a thing the reader does on purpose.
+also not a drop target: the drop zones are `PANE_ZONES`, the two panes, so a
+drag can only be _inserted_ into a pane, and floating is what a release over the
+scene means. The default arrangement is still two columns and an empty center;
+one panel out over the scene is a thing the reader does on purpose.
 
 **A fixed layout with no docking at all.** Cheapest, and it fails the actual
 use: a catalog wants a tall column, a transport wants a wide bar, and which of

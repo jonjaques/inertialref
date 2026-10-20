@@ -4,7 +4,7 @@ import { PARSEC } from '@inertialref/shared'
 import { deriveSeed, noise3, rootSeed } from '@inertialref/procedural'
 import { UV } from '@inertialref/spatial'
 import { SUN_POSITION } from '../catalog/astrometry.ts'
-import { GENERATION_VERSIONS } from '../system.ts'
+import { GENERATION_VERSIONS } from '../versions.ts'
 import {
   createGalaxyField,
   GALAXY_FIELD_VERSIONS,
