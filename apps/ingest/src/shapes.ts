@@ -13,21 +13,12 @@ import { SHAPE_SOURCES, type ShapeSource } from './shapeSources.ts'
 /*
  * Published shape models to the grids the game ships.
  *
- * Two things happen here, and only one of them is arithmetic.
- *
- * **The resample.** A mesh becomes a radius grid by casting one ray per sample
- * from the body's center and keeping the *farthest* surface it hits. Farthest
- * rather than nearest is the whole of the star-shaped assumption made explicit:
- * where a ray does cross the surface more than once, the outer crossing is the
- * silhouette, and the silhouette is what a shape model is for.
- *
- * **The check.** Every model is measured after conversion and compared against
- * the source it came from — the enclosed volume, and the tri-axial extent. A
- * grid that dropped a concavity gains volume; one that is too coarse for its
- * source loses it. Both are reported, and past a threshold both fail the build.
- * Without that, a bad projection produces a file, a mesh, and an asteroid that
- * is merely the wrong shape — which is not something anyone would catch by
- * looking, because nobody knows what Golevka looks like.
+ * Fetch, convert, write. `download` fetches and caches each source and refuses
+ * the archive's HTML error page; `shapeFieldFrom` in `shapeResample.ts` reads
+ * the text, resamples it onto a radius grid and refuses a body the grid cannot
+ * hold; this encodes the grid, writes it, and records its extent and its
+ * volume against the source's in the manifest, so every shipped model says how
+ * faithful it is.
  */
 
 export interface ShapeEntry {
@@ -557,6 +548,74 @@ function wrapping(
 }
 
 /* ------------------------------------------------------------------------- */
+/* The conversion                                                             */
+/* ------------------------------------------------------------------------- */
+
+export interface ShapeConversion {
+  readonly field: ShapeField
+  /** Grid volume over source volume. 1 is a perfect reconstruction. */
+  readonly volumeRatio: number
+  /** What the source was, for the build's report: `5,000 facets`. */
+  readonly sourceDetail: string
+}
+
+/**
+ * A source's text to the grid the game ships, refused if the grid cannot hold
+ * it.
+ */
+export function shapeFieldFrom(
+  text: string,
+  source: ShapeSource,
+): ShapeConversion {
+  const width = source.width
+  // Latitude spans half the longitude range, plus the row that is the pole.
+  const height = width / 2 + 1
+
+  let field: ShapeField
+  let sourceVolume: number
+  let sourceDetail: string
+  if (source.format === 'grid') {
+    const grid = readGrid(text, source)
+    field = resampleGrid(grid, width, height)
+    // A grid has no faces, so its "source volume" is the same integral this
+    // takes of the output — at the source's own spacing. Comparing the two
+    // measures the resample and nothing else, which is the honest claim.
+    sourceVolume = shapeExtent(
+      resampleGrid(grid, grid.longitudes.length, grid.latitudes.length),
+    ).volume
+    sourceDetail = `${grid.longitudes.length} × ${grid.latitudes.length} grid`
+  } else {
+    const mesh =
+      source.format === 'obj'
+        ? readObj(text, source)
+        : readVertexTable(text, source)
+    field = resampleMesh(mesh, width, height)
+    sourceVolume = volumeAndCentroid(mesh).volume
+    sourceDetail = `${(mesh.faces.length / 3).toLocaleString('en-US')} facets`
+  }
+
+  const volumeRatio =
+    sourceVolume === 0 ? 0 : shapeExtent(field).volume / sourceVolume
+  // `!Number.isFinite` first, because NaN loses every comparison it is in:
+  // `Math.abs(NaN - 1) > 0.06` is `false`, so the one check that exists to
+  // catch a bad conversion passed on the worst possible input. A single
+  // unparseable vertex line makes every radius NaN, and `encodeShapeField`
+  // then writes `Math.round(NaN)` — which is 0 through ToUint16 — for every
+  // sample, shipping a committed model of a body with no size at all, with a
+  // valid digest in the manifest and not one word of complaint.
+  if (
+    !Number.isFinite(volumeRatio) ||
+    Math.abs(volumeRatio - 1) > VOLUME_TOLERANCE
+  )
+    throw new Error(
+      `${source.name}: the radius grid encloses ${(volumeRatio * 100).toFixed(1)}% of the source's volume. ` +
+        `Past ±${VOLUME_TOLERANCE * 100}% that is not a resampling loss — the body is not star-shaped about its centroid, ` +
+        `and a grid cannot represent it. See the header of packages/rendering/src/shape.ts.`,
+    )
+  return { field, volumeRatio, sourceDetail }
+}
+
+/* ------------------------------------------------------------------------- */
 /* The build                                                                  */
 /* ------------------------------------------------------------------------- */
 
@@ -610,51 +669,9 @@ export async function buildShapes({
 
   for (const source of SHAPE_SOURCES) {
     const text = await download(source, root, refresh)
-    const width = source.width
-    // Latitude spans half the longitude range, plus the row that is the pole.
-    const height = width / 2 + 1
-
-    let field: ShapeField
-    let sourceVolume: number
-    let sourceDetail: string
-    if (source.format === 'grid') {
-      const grid = readGrid(text, source)
-      field = resampleGrid(grid, width, height)
-      // A grid has no faces, so its "source volume" is the same integral this
-      // takes of the output — at the source's own spacing. Comparing the two
-      // measures the resample and nothing else, which is the honest claim.
-      sourceVolume = shapeExtent(
-        resampleGrid(grid, grid.longitudes.length, grid.latitudes.length),
-      ).volume
-      sourceDetail = `${grid.longitudes.length} × ${grid.latitudes.length} grid`
-    } else {
-      const mesh =
-        source.format === 'obj'
-          ? readObj(text, source)
-          : readVertexTable(text, source)
-      field = resampleMesh(mesh, width, height)
-      sourceVolume = volumeAndCentroid(mesh).volume
-      sourceDetail = `${(mesh.faces.length / 3).toLocaleString('en-US')} facets`
-    }
-
+    const { field, volumeRatio, sourceDetail } = shapeFieldFrom(text, source)
     const extent = shapeExtent(field)
-    const volumeRatio = sourceVolume === 0 ? 0 : extent.volume / sourceVolume
-    // `!Number.isFinite` first, because NaN loses every comparison it is in:
-    // `Math.abs(NaN - 1) > 0.06` is `false`, so the one check that exists to
-    // catch a bad conversion passed on the worst possible input. A single
-    // unparseable vertex line makes every radius NaN, and `encodeShapeField`
-    // then writes `Math.round(NaN)` — which is 0 through ToUint16 — for every
-    // sample, shipping a committed model of a body with no size at all, with a
-    // valid digest in the manifest and not one word of complaint.
-    if (
-      !Number.isFinite(volumeRatio) ||
-      Math.abs(volumeRatio - 1) > VOLUME_TOLERANCE
-    )
-      throw new Error(
-        `${source.name}: the radius grid encloses ${(volumeRatio * 100).toFixed(1)}% of the source's volume. ` +
-          `Past ±${VOLUME_TOLERANCE * 100}% that is not a resampling loss — the body is not star-shaped about its centroid, ` +
-          `and a grid cannot represent it. See the header of packages/rendering/src/shape.ts.`,
-      )
+    const { width, height } = field
 
     const bytes = encodeShapeField(field)
     const file = `${source.key}.irsm`

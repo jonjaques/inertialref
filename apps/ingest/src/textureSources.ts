@@ -38,7 +38,7 @@
 
 export type MapKind = 'albedo' | 'normal' | 'night' | 'clouds' | 'ring'
 
-export type License = 'public-domain' | 'cc-by-4.0'
+type License = 'public-domain' | 'cc-by-4.0'
 
 export interface TextureSource {
   /** Body key, matching `BodyAppearance.texture`. */

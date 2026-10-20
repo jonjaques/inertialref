@@ -3,29 +3,21 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import {
   SMALL_BODIES,
+  type SmallBodyQuery,
   sbdbUrl,
   SOLAR_SOURCES,
   type SolarSource,
 } from './solarSources.ts'
 
 /*
- * JPL's tables, turned into the reference the Solar System is checked against.
+ * JPL's tables, fetched and turned into `data/reference/solar-system.json`.
  *
- * The output is `data/reference/solar-system.json`: one record per planet,
- * dwarf planet, satellite and small body, in the units JPL publishes them in
- * rather than the SI the engine works in. That is deliberate. The conversion
- * from kilometers and days is exactly the step a transcription gets wrong, so
- * the reference keeps the published number and the test does the arithmetic —
- * a check that shared the conversion with the thing it checks would agree with
- * itself about a factor of 86,400.
- *
- * Two of the three tables are HTML, which is an unpleasant thing to parse and
- * the only form JPL publishes them in. The parser below is deliberately
- * literal: find rows, find cells, strip tags, take the first token. It does not
- * try to be a browser. What makes that safe is that every extracted table is
- * checked for the rows it must contain before anything is written — a layout
- * change produces an empty parse and an error naming the table, not a
- * reference file with four planets in it.
+ * The output is one record per planet, dwarf planet, satellite and small body.
+ * This file is the I/O at the edge: it fetches and caches each source, refuses
+ * a payload that is not the page it expects, hands the texts to
+ * `solarReference` in `solarRecords.ts`, and stamps the result with the date
+ * and the digest of each input. The parsing, and the reason it is literal, is
+ * there.
  */
 
 /** Published as HTML tables with footnote markers and sigmas inside the cell. */
@@ -201,7 +193,7 @@ const required = (value: number | null, what: string): number => {
 const PLANET_MASS_SCALE = 1e24
 const DWARF_MASS_SCALE = 1e18
 
-function parsePlanetTable(html: string): {
+export function parsePlanetTable(html: string): {
   planets: PlanetRecord[]
   dwarfPlanets: PlanetRecord[]
 } {
@@ -272,7 +264,7 @@ function parsePlanetTable(html: string): {
 const satelliteKey = (planet: string, name: string): string =>
   `${planet}/${name}`.toLowerCase()
 
-function parseSatellites(
+export function parseSatellites(
   physicalHtml: string,
   elementsHtml: string,
 ): SatelliteRecord[] {
@@ -367,7 +359,7 @@ const parsePole = (
   return { ra: numberOf(ra), dec: numberOf(dec) }
 }
 
-function parseSmallBody(
+export function parseSmallBody(
   designation: string,
   name: string,
   payload: unknown,
@@ -427,6 +419,86 @@ function parseSmallBody(
 }
 
 /* ------------------------------------------------------------------------- */
+/* The reference                                                              */
+/* ------------------------------------------------------------------------- */
+
+/** What the fetched texts decide: everything in the reference but provenance. */
+export type SolarRecords = Pick<
+  SolarReference,
+  'planets' | 'dwarfPlanets' | 'satellites' | 'smallBodies'
+>
+
+export interface SolarTexts {
+  /** Each HTML table's text, by `SolarSource.key`. */
+  readonly tables: ReadonlyMap<string, string>
+  /** Each SBDB response's text, beside the query that fetched it. */
+  readonly smallBodies: readonly {
+    readonly query: SmallBodyQuery
+    readonly text: string
+  }[]
+}
+
+/**
+ * The fetched texts, parsed and checked against what each page is *for*.
+ *
+ * An empty result and a result with three planets in it are the same failure,
+ * and both of them are a layout change rather than a bad download — which the
+ * byte-count check in `validateSource` cannot see.
+ */
+export function solarReference(texts: SolarTexts): SolarRecords {
+  const { planets, dwarfPlanets } = parsePlanetTable(
+    texts.tables.get('planets') ?? '',
+  )
+  if (planets.length !== 8)
+    throw new Error(
+      `planet table: parsed ${planets.length} planets, expected 8 — the page layout changed`,
+    )
+  if (dwarfPlanets.length < 5)
+    throw new Error(
+      `planet table: parsed ${dwarfPlanets.length} dwarf planets, expected at least 5`,
+    )
+
+  const satellites = parseSatellites(
+    texts.tables.get('satellitePhysical') ?? '',
+    texts.tables.get('satelliteElements') ?? '',
+  )
+  if (satellites.length < 200)
+    throw new Error(
+      `satellite tables: parsed ${satellites.length} moons, expected hundreds`,
+    )
+
+  const smallBodies = texts.smallBodies.map(({ query, text }) =>
+    parseSmallBody(query.designation, query.name, JSON.parse(text)),
+  )
+  return { planets, dwarfPlanets, satellites, smallBodies }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Refusing the wrong payload                                                 */
+/* ------------------------------------------------------------------------- */
+
+export function validateSource(source: SolarSource, text: string): void {
+  if (text.length < source.minimumBytes)
+    throw new Error(
+      `${source.name}: got ${text.length} bytes, expected at least ${source.minimumBytes}. ` +
+        `JPL serves a 17 KB "page not found" with a 200, so a short body is the usual shape of a moved URL.`,
+    )
+  if (!text.includes(source.sentinel))
+    throw new Error(
+      `${source.name}: the payload does not contain "${source.sentinel}", so it is not the table this expects.`,
+    )
+}
+
+/** An SBDB response is JSON with an `object` block; an error is anything else. */
+export function validateSmallBody(designation: string, payload: string): void {
+  const parsed: unknown = JSON.parse(payload)
+  if (typeof parsed !== 'object' || parsed === null || !('object' in parsed))
+    throw new Error(
+      `SBDB ${designation}: no object block — ${payload.slice(0, 200)}`,
+    )
+}
+
+/* ------------------------------------------------------------------------- */
 /* Fetching                                                                   */
 /* ------------------------------------------------------------------------- */
 
@@ -465,7 +537,7 @@ const digest = (text: string): string =>
   createHash('sha256').update(text).digest('hex').slice(0, 16)
 
 /**
- * Fetch everything and assemble the reference.
+ * Fetch everything, read it with `solarReference`, and stamp the provenance.
  *
  * `onProgress` rather than `console.log` because the ingest prints its own
  * report and this is a library — the same split every other builder here uses.
@@ -481,7 +553,7 @@ export async function buildSolarReference({
   today: string
   onProgress?: (message: string) => void
 }): Promise<SolarReference> {
-  const texts = new Map<string, string>()
+  const tables = new Map<string, string>()
   const sources: {
     name: string
     url: string
@@ -496,7 +568,7 @@ export async function buildSolarReference({
       refresh,
       (payload) => validateSource(source, payload),
     )
-    texts.set(source.key, text)
+    tables.set(source.key, text)
     sources.push({
       name: source.name,
       url: source.url,
@@ -510,33 +582,7 @@ export async function buildSolarReference({
     )
   }
 
-  const { planets, dwarfPlanets } = parsePlanetTable(texts.get('planets') ?? '')
-  // The parse is checked against what the page is *for*. An empty result and a
-  // result with three planets in it are the same failure, and both of them are
-  // a layout change rather than a bad download — which the byte-count check
-  // upstream cannot see.
-  if (planets.length !== 8)
-    throw new Error(
-      `planet table: parsed ${planets.length} planets, expected 8 — the page layout changed`,
-    )
-  if (dwarfPlanets.length < 5)
-    throw new Error(
-      `planet table: parsed ${dwarfPlanets.length} dwarf planets, expected at least 5`,
-    )
-
-  const satellites = parseSatellites(
-    texts.get('satellitePhysical') ?? '',
-    texts.get('satelliteElements') ?? '',
-  )
-  if (satellites.length < 200)
-    throw new Error(
-      `satellite tables: parsed ${satellites.length} moons, expected hundreds`,
-    )
-  onProgress(
-    `\n  ${planets.length} planets, ${dwarfPlanets.length} dwarf planets, ${satellites.length} satellites`,
-  )
-
-  const smallBodies: SmallBodyRecord[] = []
+  const smallBodies: { query: SmallBodyQuery; text: string }[] = []
   for (const query of SMALL_BODIES) {
     const url = sbdbUrl(query.designation)
     const file = `sbdb_${query.designation.replace(/[^\w]+/g, '_')}.json`
@@ -544,48 +590,22 @@ export async function buildSolarReference({
       url,
       join(cacheDirectory(root), 'sbdb', file),
       refresh,
-      (payload) => {
-        const parsed: unknown = JSON.parse(payload)
-        if (
-          typeof parsed !== 'object' ||
-          parsed === null ||
-          !('object' in parsed)
-        )
-          throw new Error(
-            `SBDB ${query.designation}: no object block — ${payload.slice(0, 200)}`,
-          )
-      },
+      (payload) => validateSmallBody(query.designation, payload),
     )
-    smallBodies.push(
-      parseSmallBody(query.designation, query.name, JSON.parse(text)),
-    )
+    smallBodies.push({ query, text })
   }
+
+  const records = solarReference({ tables, smallBodies })
+  onProgress(
+    `\n  ${records.planets.length} planets, ${records.dwarfPlanets.length} dwarf planets, ${records.satellites.length} satellites`,
+  )
   sources.push({
     name: 'JPL Small-Body Database (SBDB) API',
     url: sbdbUrl('<designation>'),
     credit: 'NASA/JPL-Caltech Solar System Dynamics',
-    sha256: digest(smallBodies.map((b) => b.fullName).join('|')),
+    sha256: digest(records.smallBodies.map((b) => b.fullName).join('|')),
   })
-  onProgress(`  ${smallBodies.length} small bodies from SBDB`)
+  onProgress(`  ${records.smallBodies.length} small bodies from SBDB`)
 
-  return {
-    generated: today,
-    sources,
-    planets,
-    dwarfPlanets,
-    satellites,
-    smallBodies,
-  }
-}
-
-function validateSource(source: SolarSource, text: string): void {
-  if (text.length < source.minimumBytes)
-    throw new Error(
-      `${source.name}: got ${text.length} bytes, expected at least ${source.minimumBytes}. ` +
-        `JPL serves a 17 KB "page not found" with a 200, so a short body is the usual shape of a moved URL.`,
-    )
-  if (!text.includes(source.sentinel))
-    throw new Error(
-      `${source.name}: the payload does not contain "${source.sentinel}", so it is not the table this expects.`,
-    )
+  return { generated: today, sources, ...records }
 }
