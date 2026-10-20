@@ -7,8 +7,9 @@ import { GALAXY_FIELD_ALGORITHM } from './galaxy/field.ts'
  *
  * A leaf on purpose. `system.ts` and `solar/system.ts` both stamp a system with
  * `GENERATION_VERSIONS`, and `system.ts` imports `solar/system.ts` to build Sol;
- * with the versions in `system.ts` the two closed a cycle that once threw a TDZ
- * `ReferenceError` on `import('system.ts')`. Nothing here imports a module that
+ * with the versions in `system.ts` the two close a cycle, and a value read
+ * across that cycle at module scope throws a TDZ `ReferenceError` on
+ * `import('system.ts')`. Nothing here imports a module that
  * imports this one, and `moduleGraph.test.ts` in `apps/headless` imports it
  * first in its own Node process to hold it so.
  */

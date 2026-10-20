@@ -212,7 +212,7 @@ identical on both sides of a pole that moved. One bump covers everything that
 moved with it — the spin floor's lengthened period, and `polarRadius` on 1,515
 bodies, which is presentation and rides along rather than earning its own
 number. [ADR-0027](../adr/0027-the-rings.md) records the argument and
-`system.ts` carries it at the constant.
+`versions.ts` carries it at the constant.
 
 So "this save was made with terrain v4" is a statement the loader can act on,
 rather than a mystery about why the coastline moved. Deciding _what_ to do about

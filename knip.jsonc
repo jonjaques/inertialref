@@ -37,8 +37,9 @@
    * `"error"` changes only the exit code: `pnpm knip` carries
    * `--no-exit-code`, so the report reads the same. Nothing else polices an
    * intra-package cycle — `pnpm graph` discards every edge inside a package
-   * before it looks — and one such cycle has thrown a TDZ `ReferenceError` on
-   * import (`apps/headless/src/moduleGraph.test.ts`).
+   * before it looks — and a value read across such a cycle at module scope
+   * throws a TDZ `ReferenceError` on import
+   * (`apps/headless/src/moduleGraph.test.ts`).
    */
   /*
    * `rg` is ripgrep, which `scripts/spelling/scan.mjs` shells out to for the

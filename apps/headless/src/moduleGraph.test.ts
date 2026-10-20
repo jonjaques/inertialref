@@ -68,7 +68,7 @@ const ENTRY_POINTS = [
 describe('the universe package imports cleanly', () => {
   // One `it`, and the spawns are serial inside it: seven Node processes started
   // at once is a load spike, and this is not a test that needs to be fast.
-  it('lets every module on the cycle be the first in its own graph', async () => {
+  it('lets every module that could close the cycle be the first in its own graph', async () => {
     for (const entry of ENTRY_POINTS) {
       const result = await run(
         process.execPath,

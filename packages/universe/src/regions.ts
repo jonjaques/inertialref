@@ -31,8 +31,7 @@ import type { SurfaceParameters } from './system.ts'
  * drainage graph and the graph is built on the lattice and runs down to the
  * datums, so with these in `terrain.ts` the two files imported each other.
  * Nothing here samples the field: every datum is a function of the surface
- * parameters alone. `terrain.ts` re-exports all of it, so the package's
- * surface is unchanged.
+ * parameters alone. The package exports all of it through `terrain.ts`.
  */
 
 export const FACE_COUNT = 6

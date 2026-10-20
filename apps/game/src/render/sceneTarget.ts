@@ -6,12 +6,10 @@ import {
 } from './sceneLayout.ts'
 
 /*
- * The 4×4 stand-in targets the warm-up compiles against.
- *
  * Its own module because the sensor and the warm-up both reach it, and the
- * sensor imports the warm-up's `warmPipeline`: with the cache in `sensor.ts`
- * the two imported each other. This reads `sceneLayout.ts` and three and
- * nothing of the sensor's. `sensor.ts` re-exports `warmTargetFor`.
+ * sensor imports the warm-up's `warmPipeline`: in `sensor.ts` the two would
+ * import each other. This reads `sceneLayout.ts` and three and nothing of the
+ * sensor's.
  */
 
 /*
