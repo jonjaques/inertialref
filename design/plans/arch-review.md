@@ -23,44 +23,6 @@ the reference.
 
 ---
 
-## In the tree
-
-The deepenings already landed, each carrying its reasoning in its own file:
-
-| Landed                                                       | Where                                                                                                                                                                    |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The band stack's composition is one description              | [`packages/universe/src/bandStack.ts`](../../packages/universe/src/bandStack.ts), ADR-0023 § Consequences                                                                |
-| A mesh that wears the ground is dressed in one place         | [`apps/game/src/render/groundWear.ts`](../../apps/game/src/render/groundWear.ts), `render/wear.ts`                                                                       |
-| The harness is built over one host                           | `Host` and `renderHost` in [`packages/devtools/src/harness.ts`](../../packages/devtools/src/harness.ts)                                                                  |
-| The preference registry owns every knob the frame loop reads | [`apps/game/src/state/engineKnobs.ts`](../../apps/game/src/state/engineKnobs.ts)                                                                                         |
-| The entity store hands out its read half                     | `EntityView` in [`packages/simulation/src/entity.ts`](../../packages/simulation/src/entity.ts), `spawnShip`                                                              |
-| The heightfield request carries the surface                  | `HeightfieldSource.submit(surface, request)` and `WireSurface` in `packages/workers/src/tasks.ts`, ADR-0023 § 3                                                          |
-| A body's visual residency is a policy that runs in Node      | [`apps/game/src/scene/bodyResidency.ts`](../../apps/game/src/scene/bodyResidency.ts) and its test                                                                        |
-| On foot is a session verb                                    | [`packages/devtools/src/onFoot.ts`](../../packages/devtools/src/onFoot.ts), ADR-0047                                                                                     |
-| The flying verbs are a module                                | [`packages/devtools/src/maneuvers.ts`](../../packages/devtools/src/maneuvers.ts) and its test                                                                            |
-| Time has one writer                                          | [`apps/game/src/hud/time.ts`](../../apps/game/src/hud/time.ts) and its test                                                                                              |
-| The ground under a walker is one module                      | [`packages/rendering/src/ground.ts`](../../packages/rendering/src/ground.ts), `supportUnder`, rule 53                                                                    |
-| The walker's presentation is a function                      | [`apps/game/src/engine/onFootPresentation.ts`](../../apps/game/src/engine/onFootPresentation.ts) and its test                                                            |
-| A body's uniforms are a pure mapping                         | [`apps/game/src/render/bodyUniforms.ts`](../../apps/game/src/render/bodyUniforms.ts) and its test                                                                        |
-| The frame's owner is named once                              | [`apps/game/src/engine/frameOwner.ts`](../../apps/game/src/engine/frameOwner.ts), `engine.owner`, rule 31                                                                |
-| The engine's derived state keys on one generation            | [`engine/starSurvey.ts`](../../apps/game/src/engine/starSurvey.ts), `engine/orbitTraces.ts` and their tests                                                              |
-| The director is a sub-object, and the app says it has booted | `ir.cutscene`, `openSession({ cutscenes })`, `ir.status().boot`, `scripts/drive.mjs`                                                                                     |
-| The guide's wire contract is one module                      | [`packages/protocol/src/guideWire.ts`](../../packages/protocol/src/guideWire.ts) and its test                                                                            |
-| The game holds one guide verdict per mode                    | [`apps/game/src/tour/verdict.ts`](../../apps/game/src/tour/verdict.ts), `mountGuide`, and their tests                                                                    |
-| The Worker decides "configured" once                         | `guideAccess` in [`apps/server/src/tour/access.ts`](../../apps/server/src/tour/access.ts), ADR-0048                                                                      |
-| The Live channel speaks in verbs                             | [`apps/game/src/tour/channel.ts`](../../apps/game/src/tour/channel.ts), `liveFake.ts`, `endsStop`, ADR-0042                                                              |
-| The heightfield archive is one object                        | `HeightfieldArchive` in `packages/workers/src/heightfieldCache.ts`, the fingerprint test, ADR-0045                                                                       |
-| A body the kernel cannot pack goes to the pool alone         | `refuse` in [`apps/game/src/render/terrainProducer.ts`](../../apps/game/src/render/terrainProducer.ts) and its GPU test                                                  |
-| One water decision per patch                                 | `patchWater` in [`packages/rendering/src/terrainPalette.ts`](../../packages/rendering/src/terrainPalette.ts), `patchWater.test.ts`                                       |
-| One quad-pass runner                                         | `runQuadPasses` in [`apps/game/src/render/quadPass.ts`](../../apps/game/src/render/quadPass.ts) and its GPU test                                                         |
-| The drainage graph is prepared off the draw thread           | `SurfacePreparation` in [`packages/workers/src/surfacePreparation.ts`](../../packages/workers/src/surfacePreparation.ts) and its test                                    |
-| The scene target's layout is one table                       | `sceneLayout` in [`apps/game/src/render/sceneLayout.ts`](../../apps/game/src/render/sceneLayout.ts), `engine.sceneLayout`, and its test                                  |
-| One render size and one resolution                           | `renderSize` and `pictureUpscales` in [`apps/game/src/render/picture.ts`](../../apps/game/src/render/picture.ts), `SceneLayout.picture`, and their tests                 |
-| GPU timing is one instrument                                 | `PassSource` and `owned` in [`apps/game/src/render/passTimeline.ts`](../../apps/game/src/render/passTimeline.ts), the upscaler's source in `render/upscale.ts`, ADR-0044 |
-| East at a surface point is one function                      | `compassBasis` in [`packages/universe/src/frames.ts`](../../packages/universe/src/frames.ts), `surfaceCompass.test.ts`, `CONTEXT.md`                                     |
-
----
-
 ## The order
 
 | #   | Pull request                                                                       | Track       | Builds on | When                 |
@@ -77,13 +39,11 @@ flowchart LR
 **Every pull request builds only on ones numbered before it, and within a track
 the numbering is the order to take them in. Nothing left crosses a track.**
 
-**What is left waits on something.** The guide and terrain tracks are in the
-tree, and of the picture track everything but 20, which waits on a fourth
-optical stage, which is per-glass iris sampling. B rides the next terrain
-version. Each section says what it costs.
+**What is left waits on something.** 20 waits on a fourth optical stage,
+which is per-glass iris sampling. B rides the next terrain version. Each section says what it costs.
 [Open from the review of 6–11](#open-from-the-review-of-611) and the lists
-after it hold the smaller follow-ups those pull requests left, none of them a
-pull request of its own.
+after it hold the smaller follow-ups the landed pull requests left, none of
+them a pull request of its own.
 
 ---
 
@@ -226,9 +186,6 @@ own.
   cannot wait, so a `goTo` or `ir.land` onto unprepared ground pays the build
   once, in the frame of the cut. `ir.sites`, `ir.visit` with a site and
   `ir.descend` do the same from the console.
-- **Every pool worker still builds its own graph.** Off the draw thread, and in
-  [perf](perf.md#every-pool-worker-builds-a-wet-bodys-drainage-graph-for-itself-unmeasured)
-  with the measurement that would say whether the ground waits on it.
 - **The pixel angle stays the display's under a reduced render scale.** The
   terrain and water detail fades divide the display's pixel angle by the
   drawing buffer, so at a render ratio `r` they assume samples `r` times finer
@@ -244,6 +201,38 @@ own.
 
 ---
 
+## Open from the simplification
+
+What the complexity findings' pull requests left. None is a pull request of
+its own.
+
+- **The surface arm's lift has no picture comparison.** `pnpm presets:compare`
+  over the lit pictures, at least one of them a stance on a generated body
+  outside Sol, within the noise floor
+  [the regression rig](../../docs/guides/testing.md#the-pictures-are-a-fixture)
+  names, has not been run since `surfaceArm.ts`, `heldTime.ts` and
+  `stanceGeometry.ts` moved out of the observatory.
+- **The driver's split has no real browser run.** One invocation exercising
+  every step kind the moved dispatch handles — `--preset earthrise --js
+"ir.status()" --settle 8000 --shot earthrise.jpg --cast 30 --logs`, then
+  `--down` — is not recorded. The compare rig has a driver of its own and is
+  not evidence for it.
+- **`galaxyReference.ts` is half fetch, parse and write.** `extractSky` and
+  `readDustCube` are tested against the generated tables; `extractClouds` and
+  `buildGalaxyReference`, the two exports knip lists as unused, take the same
+  treatment the solar reference and the shapes took, in the next change that
+  opens the file.
+- **Three whole-degree readouts are still written by hand.**
+  `hud/navCluster.ts` (two), `hud/NavBall.tsx` and
+  `packages/rendering/src/observer.ts` round `radians * 180 / Math.PI` where
+  `wholeDegrees` in `packages/shared/src/units.ts` is the vocabulary.
+- **The control limits are exported for a test.** `FOV_MIN`/`FOV_MAX`,
+  `SHUTTER_MIN`/`SHUTTER_MAX` and their neighbors in `hud/controls.ts` are most
+  of knip's unused exports; a behavior test of the clamps lets each pair stop
+  being exported, the next time those tests are opened.
+
+---
+
 ## What the landed deepenings left, deliberately
 
 - **The band stack's bodies are still two.** The kernel does not walk
@@ -256,10 +245,10 @@ own.
   locally. The session's `onWorldReplaced` option is the engine's subscription;
   letting the director and the observatory register on it instead of checking
   is a separate design, built on the world generation the engine names.
-- **`RENDER_HDR` and `RENDER_AA` stay in `App`.** Both are facts about the
-  renderer it builds — a constructor argument and the drawing buffer's ratio —
-  and the canvas key reads them. `RENDER_AA` is also bound by the registry, for
-  the supersample factor the terrain predicate divides back out. The pixel
+- **`RENDER_HDR` and `RENDER_PICTURE` stay in `App`.** Both are facts about
+  the renderer it builds — a constructor argument and the drawing buffer's
+  ratio — and the canvas key reads them. `RENDER_PICTURE` is also bound by the
+  registry, for the supersample factor the terrain predicate divides back out. The pixel
   angle reads it too, and stays the display's: see "Open from 16–18".
 - **The streamer still caches the palette for the renderer.** `TerrainState`
   carries `palette`, `datumRadius`, `orientation`, `center` and `lens` so the
@@ -290,6 +279,8 @@ own.
 - **The cinema playhead keeps its `mine` guard.** With the director on
   `ir.cutscene` a console `ir.play` can still replace a scene the session
   opened, and the guard is what keeps the session from claiming that ending.
+- **`stanceGeometry.ts` stays in `packages/devtools`** until a second caller
+  outside the observatory's surface arm appears.
 - **The Saturn frame-spike figure is not re-measured:** worst main-thread frame
   2.3 ms across a warm Saturn approach, zero over 8 ms. `ir.profile` over a
   Saturn approach with `?presentation=occluded` reads it, and the caveats in
@@ -353,7 +344,9 @@ carries the argument.
   [ADR-0008](../../docs/adr/0008-multiplayer-partitions.md) is design-only, and
   the single `AuthorityPort` adapter cannot rot because no `if (online)` branch
   exists.
-- **Wiring `World.updateInterest`** — a gameplay decision, per the build log.
+- **Wiring `World.updateInterest`** — decided in
+  [perf](perf.md#nothing-unloads-a-system-and-snapshot-scales-with-what-is-loaded):
+  it is wired once the heap breakdown and the jump's heap diff are in.
 - **A kernel that walks the band stack's table** — the scalar mirror
   [ADR-0023](../../docs/adr/0023-the-gpu-producer.md) refuses; the table is a
   description.

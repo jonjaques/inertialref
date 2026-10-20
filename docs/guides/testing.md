@@ -535,6 +535,13 @@ pnpm test                       # regular Node suite
 pnpm test:slow                  # terrain descent and galaxy calibration/population
 pnpm test:gpu                   # the shader suite, on the real GPU — not in check
 pnpm test:coverage              # the same suite, plus coverage/coverage-final.json
+# The GPU suite's coverage, which test:coverage excludes by suffix. The render
+# layer's figure is the union of this report and coverage-final.json.
+pnpm vitest run --config apps/game/vitest.gpu.config.ts \
+  --coverage --coverage.reporter=json --coverage.reportsDirectory=.scratch/coverage-gpu
+# --coverage.reportOnFailure=true writes the report when an instrumented test
+# times out: v8 costs a third of the suite and far more on one tight loop, and
+# geology.test.ts's crater-rim walk is 2.5 s alone and over its 20 s timeout under it.
 pnpm vitest run world.test      # one file
 # One GPU file. The root config excludes the suffix, so the plain form above
 # answers "No test files found" for anything named *.gpu.test.ts.

@@ -44,7 +44,7 @@ describe('the route a file gets', () => {
      wrote for a reader. */
   it('does not publish the plans', () => {
     expect(routeFor('design/plans/terrain.md')).toBeNull()
-    expect(routeFor('design/reports/complexity.md')).toBeNull()
+    expect(routeFor('design/reports/review.md')).toBeNull()
   })
 })
 

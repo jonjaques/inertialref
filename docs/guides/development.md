@@ -137,8 +137,23 @@ circular import — and not on an unused export, which a test asserting a
 constant is. The cycle is the one `pnpm graph` cannot see, because it looks
 only at edges between packages. Coverage stays
 outside the gate; `scripts/coverageFiles.mjs` reads the per-file figures a
-pull request body quotes. The findings are in
-[the complexity report](../../design/reports/complexity.md).
+pull request body quotes.
+
+`fta.json` is three settings and each is a decision. `output_limit: 25` makes
+the report a ranked list to act on rather than an inventory, `exclude_under: 25`
+drops files that cannot approach the cap, and `extensions: [".mjs"]` adds
+`scripts/` to the defaults rather than replacing them. fta counts code, not
+comments, so the house's comment density costs nothing in any score. A score
+is size: read `cyclo` beside `fta_score`, because a four-figure line count with
+a cyclomatic complexity under about twenty is a data table, and the score says
+nothing about it worth acting on. A refactor's pull request pins the current
+shape with tests in its first commits, so the move is checked by tests that
+passed before it, and its body quotes the `fta` row, the per-file statement,
+function and branch figures for each file it touches, and the knip delta,
+before and after. Coverage has no floor: its denominator is the whole source
+tree, 354 files on 1 September 2026 and 626 seven weeks later, and a threshold
+on a denominator that moves that fast is a number that will be argued with.
+The `fta` cap is the ratchet.
 
 `pnpm spelling` reads identifier declarations through the TypeScript checker
 and reports their references and boundary sites. `pnpm spelling -- --json`
