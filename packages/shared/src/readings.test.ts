@@ -47,14 +47,13 @@ describe('the reading vocabulary', () => {
   })
 
   it('never prints an exponent the way a programmer types one', () => {
+    // A hyphen in either place is the sign `toExponential` wrote, which
+    // `group` replaces with U+2212 everywhere else.
     fc.assert(
-      fc.property(
-        fc.double({ min: 0, noNaN: true, noDefaultInfinity: true }),
-        (value) => {
-          expect(exponential(value)).not.toMatch(/[e+-]/)
-          expect(significant(value)).not.toMatch(/[e+-]/)
-        },
-      ),
+      fc.property(finite, (value) => {
+        expect(exponential(value)).not.toMatch(/[e+-]/)
+        expect(significant(value)).not.toMatch(/[e+-]/)
+      }),
     )
   })
 
@@ -94,7 +93,7 @@ describe('the goldens', () => {
 
   it('typesets the exponent and the minus', () => {
     expect(exponential(1.989e30)).toBe('1.989×10³⁰')
-    expect(exponential(2.5e-7)).toBe('2.500×10⁻⁷')
+    expect(exponential(-2.5e-7)).toBe('−2.500×10⁻⁷')
     expect(significant(-1234.5)).toBe('−1,235')
     expect(round(-1234.5678, 2)).toBe('−1,234.57')
     expect(superscript('−12')).toBe('⁻¹²')
