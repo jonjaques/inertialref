@@ -506,6 +506,17 @@ that ends level with the horizon facing the star, which is a thing to watch and
 useless to photograph the start of. `ir.ascend()` abandons one part-way at the
 framing it left. [ADR-0034](../adr/0034-the-drop.md).
 
+The arm is its own module beside the observatory.
+[`surfaceArm.ts`](../../packages/devtools/src/surfaceArm.ts) owns the stance,
+the site, the held keys, a drop in flight and the aim, and the observatory
+forwards `ir.observatory`'s surface verbs to it by the same names.
+[`stanceGeometry.ts`](../../packages/devtools/src/stanceGeometry.ts) is its
+arithmetic — the drop aid's rings and arc, a held-key flight step, the stance
+at each instant of a drop — as functions of a body, a direction and an eye in
+the body's rotating axes, with the figures' claims tested as properties.
+[`heldTime.ts`](../../packages/devtools/src/heldTime.ts) is the photographic
+instant every pose is taken at, held or live.
+
 Sites are derived from the body's own terrain rather than authored, so
 "the highest ground on this world" survives regeneration and is still the
 interesting place afterward. Four come from a beam search — `summit`, `basin`,

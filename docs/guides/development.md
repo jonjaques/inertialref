@@ -34,7 +34,7 @@ pnpm check            # every stage as one graph: graph, spelling, brand, preset
 pnpm check --only gate  # what the Stop hook runs: graph, knip, fta, lint, typecheck, test
 
 # Reports describe the tree; each :check also gates it.
-pnpm fta              # complexity per file; fta:check exits 1 above a score of 109, in the gate
+pnpm fta              # complexity per file; fta:check exits 1 above a score of 91, in the gate
 pnpm knip             # what nothing imports; knip:check narrows to the five hard classes, in the gate
 pnpm spelling         # British declarations and their references
 pnpm spelling:check   # reject British declarations; part of pnpm check
