@@ -22,6 +22,11 @@ import {
  * and "6,371.0 km" on another, and a test asserting either would pass exactly
  * where it was written. Every readout in this interface is an instrument
  * reading; instruments do not translate.
+ *
+ * A reading that is not finite prints the em dash alone. Each formatter that
+ * appends a unit returns early for one, because the guard inside `round` and
+ * `significant` returns before the unit does: `— bar` claims a unit for a
+ * quantity that has no value.
  */
 
 /**
@@ -202,6 +207,7 @@ export function period(seconds: Seconds): string {
 
 /** A pressure in bar, kPa or Pa, three significant figures. */
 export function pressurized(pascals: number): string {
+  if (!Number.isFinite(pascals)) return '—'
   if (pascals >= 1e5) return `${significant(pascals / 1e5)} bar`
   if (pascals >= 100) return `${significant(pascals / 1000)} kPa`
   return `${significant(pascals)} Pa`
@@ -216,14 +222,23 @@ export function pressurized(pascals: number): string {
  * almanac prints, and is not the number anybody is carrying around.
  */
 export function arcs(radians: number): string {
+  if (!Number.isFinite(radians)) return '—'
   const deg = radiansToDegrees(radians)
   if (deg >= 0.05) return `${round(deg, 3)}°`
   if (deg >= 1 / 60) return `${round(deg * 60, 2)}′`
   return `${round(deg * 3600, 1)}″`
 }
 
-/** Mean density in g/cm³ of a sphere of this mass and radius. */
+/**
+ * Mean density in g/cm³ of a sphere of this mass and radius.
+ *
+ * An infinite radius is a dash rather than `0.000 g/cm³`, and a zero radius a
+ * dash rather than an infinite density.
+ */
 export function density(mass: number, radius: Meters): string {
+  if (!Number.isFinite(mass) || !Number.isFinite(radius)) return '—'
   const volume = (4 / 3) * Math.PI * radius * radius * radius
-  return `${round(mass / volume / 1000, 3)} g/cm³`
+  const value = mass / volume / 1000
+  if (!Number.isFinite(value)) return '—'
+  return `${round(value, 3)} g/cm³`
 }
