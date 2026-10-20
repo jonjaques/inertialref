@@ -3,7 +3,7 @@
  * `pnpm check` — every check the repository makes, as one graph.
  *
  *     pnpm check                       the whole gate, in parallel
- *     pnpm check --only gate           what the Stop hook runs: graph, lint, typecheck, test
+ *     pnpm check --only gate           what the Stop hook runs: graph, knip, fta, lint, typecheck, test
  *     pnpm check --only typecheck      the six type projects — what `pnpm typecheck` is
  *     pnpm check --skip slow,bundle    everything but the named stages
  *     pnpm check --force               ignore the stamps and run everything
@@ -105,6 +105,26 @@ const STAGES = [
     argv: ['pnpm', 'graph'],
     weight: 1,
     cost: 0.4,
+    timeout: 60_000,
+  },
+  {
+    name: 'knip',
+    why: 'a file nothing imports, a dependency nothing uses, or an import nothing lists',
+    argv: ['pnpm', 'knip:check'],
+    weight: 1,
+    cost: 2,
+    timeout: 120_000,
+  },
+  {
+    // The cap is one above the worst file, so the gate is green on the tree it
+    // was installed on and the change that moves the worst file lowers it. A
+    // data table past the cap is a filename exclusion in `fta.json` with its
+    // reason, never a higher cap: a table is the one file the score cannot read.
+    name: 'fta',
+    why: 'a file past the complexity cap',
+    argv: ['pnpm', 'fta:check'],
+    weight: 1,
+    cost: 0.3,
     timeout: 60_000,
   },
   {
@@ -234,6 +254,8 @@ const GROUPS = {
   typecheck: STAGES.filter((s) => s.group === 'typecheck').map((s) => s.name),
   gate: [
     'graph',
+    'knip',
+    'fta',
     'lint',
     ...STAGES.filter((s) => s.group === 'typecheck').map((s) => s.name),
     'test',

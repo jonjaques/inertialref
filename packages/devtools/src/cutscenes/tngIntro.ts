@@ -1591,17 +1591,17 @@ function buildStage(world: World): Stage {
   const bodies = [...walkBodies(system)]
   const byName = (name: string): Body | undefined =>
     bodies.find((body) => body.name.toLowerCase() === name.toLowerCase())
-  const require = (name: string): Body => {
+  const stagedBody = (name: string): Body => {
     const body = byName(name)
     if (body === undefined)
       throw new Error(`The ${name} this script stages on is not in SOL`)
     return body
   }
 
-  const earth = require('Earth')
-  const mars = require('Mars')
-  const jupiter = require('Jupiter')
-  const saturn = require('Saturn')
+  const earth = stagedBody('Earth')
+  const mars = stagedBody('Mars')
+  const jupiter = stagedBody('Jupiter')
+  const saturn = stagedBody('Saturn')
 
   const at = (
     body: Body,

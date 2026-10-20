@@ -47,6 +47,11 @@
       // files. `.claude/hooks/gate.mjs` is run by Claude Code's Stop hook.
       "entry": ["scripts/**/*.mjs", ".claude/hooks/*.mjs", "vitest.config.ts"],
       "project": ["scripts/**/*.mjs", ".claude/hooks/*.mjs", "*.ts"],
+      // `scripts/gpuAdapter.mjs` loads the Dawn addon through `createRequire`
+      // against `apps/game/package.json`, because pnpm does not hoist it to the
+      // root. knip reads the `require('webgpu')` as the root's own import and
+      // reports it unlisted; listing it here would install it twice.
+      "ignoreDependencies": ["webgpu"],
     },
     "apps/game": {
       /*

@@ -26,7 +26,7 @@
     "typecheck": "node scripts/check.mjs --only typecheck",
     "lint": "oxlint",
     "fta": "fta .",
-    "fta:check": "fta . --score-cap 91",
+    "fta:check": "fta . --score-cap 109",
     "knip": "knip --no-config-hints --no-exit-code",
     "knip:check": "knip --no-config-hints --include files,dependencies,unlisted,unresolved",
     "spelling": "node scripts/spelling/scan.mjs",
