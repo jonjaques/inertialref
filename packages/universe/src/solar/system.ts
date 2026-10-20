@@ -24,14 +24,14 @@ import { liquidAppearance, PIGMENTS } from '../appearance.ts'
 import { equilibriumTemperature, surfaceGrammar } from '../grammar.ts'
 import type { SystemStub } from '../galaxy.ts'
 import { systemSeedOf } from '../galaxy.ts'
-import {
-  type Body,
-  type BodyAppearance,
-  GENERATION_VERSIONS,
-  type Star,
-  type StarSystem,
-  type SurfaceParameters,
+import type {
+  Body,
+  BodyAppearance,
+  Star,
+  StarSystem,
+  SurfaceParameters,
 } from '../system.ts'
+import { GENERATION_VERSIONS } from '../versions.ts'
 import { SOLAR_PLANETS, type SolarBody } from './bodies.ts'
 import { SOLAR_SMALL_BODIES } from './smallBodies.ts'
 

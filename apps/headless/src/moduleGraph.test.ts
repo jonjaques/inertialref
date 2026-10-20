@@ -37,31 +37,36 @@ const run = promisify(execFile)
 const root = fileURLToPath(new URL('../../../', import.meta.url))
 
 /**
- * The modules that sit on the `system.ts` ↔ `solar/system.ts` cycle, plus the
+ * The modules that can close a `system.ts` ↔ `solar/system.ts` cycle, plus the
  * one the application actually enters through.
  *
  * Deliberately not every file in the package. Each entry is a Node process that
  * type-strips the whole graph, and `pnpm check` runs sixty-four test files
  * across every core at once — a first version with ten of these, fanned out by
  * `it.each`, starved the rest of the suite badly enough to time out four
- * unrelated tests that had nothing to do with this change. These six are the
- * ones that can close the cycle; a seventh would cost a second and catch
- * nothing.
+ * unrelated tests that had nothing to do with this change. These seven are the
+ * ones that can close the cycle; an eighth would cost a second and catch
+ * nothing. `knip:check` refuses any intra-package cycle statically; this is the
+ * proof, in Node's own linker, for the one that threw.
  *
- * `rounding.ts` is in the list because it is the *fix* — a leaf with no imports
- * of its own — and an edit that gave it one is how this comes back.
+ * `rounding.ts` and `versions.ts` are in the list because they are the *fix* —
+ * leaves that import nothing on the cycle — and an edit that gave either one
+ * such an import is how it comes back. `versions.ts` holds
+ * `GENERATION_VERSIONS`, the value `solar/system.ts` stamps on Sol, which is
+ * why `solar/system.ts` imports nothing but types from `system.ts`.
  */
 const ENTRY_POINTS = [
   'packages/universe/src/index.ts',
   'packages/universe/src/system.ts',
   'packages/universe/src/rounding.ts',
+  'packages/universe/src/versions.ts',
   'packages/universe/src/solar/system.ts',
   'packages/universe/src/solar/smallBodies.ts',
   'packages/universe/src/solar/minorMoons.ts',
 ]
 
 describe('the universe package imports cleanly', () => {
-  // One `it`, and the spawns are serial inside it: six Node processes started
+  // One `it`, and the spawns are serial inside it: seven Node processes started
   // at once is a load spike, and this is not a test that needs to be fast.
   it('lets every module on the cycle be the first in its own graph', async () => {
     for (const entry of ENTRY_POINTS) {

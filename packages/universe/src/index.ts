@@ -22,6 +22,7 @@ export * from './structures.ts'
 export * from './system.ts'
 export * from './terrain.ts'
 export * from './terrainKernel.ts'
+export * from './versions.ts'
 export * from './worldQuery.ts'
 
 export * from './galaxy/arms.ts'
