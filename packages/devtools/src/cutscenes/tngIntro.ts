@@ -657,8 +657,8 @@ const WIPE: readonly ScreenBeat[] = [
   { frame: 1322, x: 2.1, y: -0.5, range: atWidth(1.2) },
 ]
 /**
- * The credit descent as a rail — the pass `design/plans/tng-intro.md` §2 says
- * jags, and the jag is what a straight line refuses.
+ * The credit descent as a rail — the pass whose authored beats jag, and the
+ * jag is what a straight line refuses.
  *
  * Fitted on the screen residual over its own measured beats, with f2050 and
  * f2065 left out of the fit. Those two are where the refit splices the box
@@ -677,9 +677,9 @@ const WIPE: readonly ScreenBeat[] = [
  * a line at 5.0%, so that is the material and not the model.
  *
  * `SHIP_RETURN` keeps every one of those beats. They are the specification the
- * rail is checked against, not the path it flies —
- * `design/plans/tng-intro.md` §3.3 — and they still drive the skim, which
- * begins where this leg ends.
+ * rail is checked against, not the path it flies — `cutscene.test.ts` projects
+ * the rail back to them — and they still drive the skim, which begins where
+ * this leg ends.
  */
 export const DESCENT_RAIL: LinePath = (() => {
   const direction = Vec.normalize(vec3(0.062, -0.3821, 0.922))
@@ -776,8 +776,8 @@ const WARP_OUT_2_RAIL: LinePath = (() => {
  * entry mark looks the same, and at 850 m the difference between missing the
  * lens by 294 m and hitting it is the whole shot. Projected back, the rail
  * reproduces the measured track to 0.010 of the frame or better across
- * f1288–1315 — the whole approach — which is the assertion
- * `design/plans/tng-intro.md` §3.3 asks a fit to carry.
+ * f1288–1315 — the whole approach — which is the assertion `cutscene.test.ts`
+ * holds a fit to.
  *
  * Past f1316 the beats stop being measurements: the reference's hull is across
  * the lens and its box is the frame. The authored pair at (1.15, 0.05) and
@@ -1277,7 +1277,7 @@ interface FacingBeat {
   /**
    * Nose-down pitch relative to the derived frame, degrees.
    *
-   * The overlay `design/plans/tng-intro.md` §3.2 asks for, and it is needed because a fitted
+   * An overlay on the derived frame, needed because a fitted
    * line gives the hull's **flight path**, not its attitude, and here the two
    * differ. The reference's hull climbs the frame through the cruise while the
    * camera plainly looks down on the saucer's top — lit window rows, nacelles

@@ -70,29 +70,14 @@ range beat.
 
 ## 2. The staging, and what is still authored
 
-Every straight pass in the piece is a line now, and its attitude is derived
-from that line rather than authored beside it. Two forms, because the reference
-constrains the camera differently in different shots.
-
-**The cruise is a `TrackedPass`.** There is no text on screen through f532–1091,
-so nothing measures the camera as locked, and the shot is a starship flying past
-— which is a thing a camera does something about. The hull is a `LinePath`, the
-camera stands at `ship − range · standoff`, and the framing is solved through
-`frameTarget`, so the screen mark and the apparent size are satisfied by
-construction: sampled against every authored beat, the reproduction error is
-0.000. What the camera buys is everything the diff is blind to. The nose is on
-its own velocity to 0.000° at every frame instead of a mean 54°; the hull's
-speed is one number instead of a range from 0.5 to 629 m per frame; and the
-camera swings 130° around the pass, which the starfield shows.
-
-**The titles shot flies rails against a locked camera.** The reference measures
-that camera locked wherever text is on screen — 375 to 433 matched starfield
-inliers at scale 1.0000 — so a solved camera is not available, and the physics
-comes from the rail alone. With the camera holding still that is enough: a
-straight ship is a straight _image_ line. The three wipes, both warp-outs and
-the credit descent are `LinePath`s; `cutscene.test.ts` audits every throttle for
-reversal at four samples a frame and projects every rail back to the beats it
-was fitted to.
+Every straight pass in the piece is a line, and its attitude is derived from
+that line rather than authored beside it. The cruise is a `TrackedPass` with a
+solved camera, because no text is on screen through f532–1091; the three wipes,
+both warp-outs and the credit descent are `LinePath` rails against a locked
+camera, because the reference measures that camera locked wherever text is on
+screen. `fitLinePath` (`packages/devtools/src/linePathFit.ts`) is the solver
+behind every rail, and `cutscene.test.ts` projects each rail back to the beats
+it was fitted to.
 
 **What is still authored is the skim**, f2131–2379, and deliberately. Its beats
 are a camera-clearance solution rather than a trajectory — a straight line
@@ -117,18 +102,6 @@ the pan can only begin at f2032, because Wheaton's credit is the last text on
 screen and nothing may move before it clears. Whether 350 frames is enough to
 carry a tilt that follows a ship overhead is a question for a capture, not for
 this file.
-
-**`fitLinePath` is the solver behind every rail**
-(`packages/devtools/src/linePathFit.ts`). It scores a candidate line by the
-screen distance from each beat's mark to the point on the line at that beat's
-range, takes each throttle knot as the root of its range, and pools and splits
-the knots until no quarter-frame sample reverses. `linePathFit.test.ts` refits
-all six rails from the beats they were fitted to: both warp-outs come back to
-the tenth of a meter they were typed to, the three wipes within 0.36° and 0.005
-of the frame, and the descent within 0.40° and 0.015 — its entry fillers land at
-f1760 and f1765 where the script has f1760–1770, the same repair for the same
-overshoot. The script's numbers stay as they are, and the solver is where they come
-from.
 
 **The descent's f1920–1960 residual is half the beats and half the
 reference.** `apps/headless/src/descentTrackFit.test.ts` fits a free line to the

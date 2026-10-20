@@ -524,9 +524,8 @@ describe('tng-intro flight dynamics', () => {
     /*
      * The descent passes at 14.16° against its own 15.0°, which is inside the
      * fit and only just: the authored beats' chord and the direction they were
-     * fitted to are not the same line. `design/plans/tng-intro.md` §3.3 —
-     * project the fitted line back to the screen beats and assert the residual
-     * — is the check that would tighten this, and it does not exist yet.
+     * fitted to are not the same line. "reproduces the measured tracks it was
+     * fitted to" below holds the residual on the screen beats instead.
      */
     expect(
       degreesBetween(noseOf(at(1800)!), heading(at, 1800, 280)),
@@ -684,7 +683,7 @@ describe('tng-intro flight dynamics', () => {
 
   it('reproduces the measured tracks it was fitted to', () => {
     /*
-     * `design/plans/tng-intro.md` \u00a73.3: the measured beats stay in the
+     * The measured beats stay in the
      * script as the specification, and the fits are held to them by projecting
      * a rail back to the screen. The residuals are each pass's own, and each
      * is a number about the *material* rather than about the fit:
