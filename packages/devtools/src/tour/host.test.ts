@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { openSession } from '../session.ts'
-import { NO_GUIDE_USAGE, type GuideStatus } from '../harness.ts'
+import { NO_GUIDE_USAGE, type GuideStatus } from '../host.ts'
 
 describe('the optional guide host', () => {
   it('is unavailable headlessly and never constructs a conversation', async () => {

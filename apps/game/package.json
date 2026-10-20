@@ -22,7 +22,6 @@
     "@inertialref/devtools": "workspace:*",
     "@inertialref/net": "workspace:*",
     "@inertialref/persistence": "workspace:*",
-    "@inertialref/physics": "workspace:*",
     "@inertialref/procedural": "workspace:*",
     "@inertialref/protocol": "workspace:*",
     "@inertialref/rendering": "workspace:*",

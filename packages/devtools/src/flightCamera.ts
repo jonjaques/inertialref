@@ -15,7 +15,7 @@ import {
   zoomFactorForNotches,
 } from '@inertialref/rendering'
 import { dragSensitivityOf } from './dragSensitivity.ts'
-import type { Host } from './harness.ts'
+import type { Host } from './host.ts'
 
 /*
  * The flight camera: which view the ship arm stands in, and where.

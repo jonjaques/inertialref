@@ -658,7 +658,7 @@ const plateWeightCode = wgslFn(
 
 const drainageCellCode = wgslFn(`
   fn drainageCell(d: vec3<f32>, cells: u32) -> u32 {
-    // terrain.ts \`regionForDirection\` at the lattice's level, as a node
+    // regions.ts \`regionForDirection\` at the lattice's level, as a node
     // index: the dominant axis names the face, the projection the cell.
     // A float decision, and \`drainage.ts\` says why that is allowed here.
     let a = abs(d);

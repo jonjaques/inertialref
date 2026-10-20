@@ -125,8 +125,8 @@ Claude, Cursor, and Codex adapters share the hook implementations in
 [`.codex/README.md`](../../.codex/README.md). When the host has not trusted or
 enabled hooks, perform setup, formatting, and verification explicitly.
 
-A Stop hook runs the `gate` group of `scripts/check.mjs` — graph, lint, the
-six typecheck projects and the root suite — after a turn that touched source,
+A Stop hook runs the `gate` group of `scripts/check.mjs` — graph, knip, fta,
+lint, the six typecheck projects and the root suite — after a turn that touched source,
 as a graph under the machine's core budget. It is a safety net, not the
 definition of done. The full `pnpm check` is the same runner with every stage,
 and CI runs it on every push; the `ship` skill does not. `IR_SKIP_GATE=1`

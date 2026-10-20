@@ -31,14 +31,15 @@ pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Astro build
 pnpm check            # every stage as one graph: graph, spelling, brand, presets, format, lint,
                       # typecheck, test, test:slow, sim, build. --list prints them, --force ignores the stamps
-pnpm check --only gate  # what the Stop hook runs: graph, lint, typecheck, test
+pnpm check --only gate  # what the Stop hook runs: graph, knip, fta, lint, typecheck, test
 
-# Reports describe the tree; spelling:check also gates it.
-pnpm fta              # complexity per file; fta:check exits 1 above a score of 91
-pnpm knip             # what nothing imports; knip:check narrows to the four hard classes
+# Reports describe the tree; each :check also gates it.
+pnpm fta              # complexity per file; fta:check exits 1 above a score of 91, in the gate
+pnpm knip             # what nothing imports; knip:check narrows to the five hard classes, in the gate
 pnpm spelling         # British declarations and their references
 pnpm spelling:check   # reject British declarations; part of pnpm check
 pnpm test:coverage    # the suite again, writing coverage/coverage-final.json
+node scripts/coverageFiles.mjs <path>…  # per-file statements, functions, branches, and what no test enters
 
 pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
@@ -124,12 +125,19 @@ reuses — and `--force` runs everything. CI runs the same command, so there is
 no list of CI stages to drift; a pull request is not done until it passes
 there.
 
-Complexity, unused-code and coverage reports stay outside the gate. `fta`
-scores complexity, coverage counts what the suite executed, and `knip` asks
-whether a file needs to exist at all. `fta` and `knip` each pair a report that
-exits 0 with a `:check` that exits 1 when its threshold is exceeded. The
-threshold belongs on the command line so the report remains usable while
-there is existing debt. The findings are in
+`fta` scores complexity, coverage counts what the suite executed, and `knip`
+asks whether a file needs to exist at all. `fta` and `knip` each pair a report
+that exits 0 with a `:check` that exits 1, and both `:check`s are stages in the
+gate group. The `fta` cap is one above the worst file, so the gate is green on
+the tree it describes and the change that moves the worst file lowers it; a
+data table past the cap is a filename exclusion in `fta.json` with its reason,
+never a higher cap. `knip:check` fails on the five unambiguous classes — an
+unused file, an unused dependency, an unlisted one, an unresolved import, a
+circular import — and not on an unused export, which a test asserting a
+constant is. The cycle is the one `pnpm graph` cannot see, because it looks
+only at edges between packages. Coverage stays
+outside the gate; `scripts/coverageFiles.mjs` reads the per-file figures a
+pull request body quotes. The findings are in
 [the complexity report](../../design/reports/complexity.md).
 
 `pnpm spelling` reads identifier declarations through the TypeScript checker

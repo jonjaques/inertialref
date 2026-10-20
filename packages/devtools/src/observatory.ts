@@ -12,7 +12,6 @@ import {
   Quaternion as Q,
   UV,
   type UniverseVector,
-  vec3,
   Vec,
   type Vec3,
 } from '@inertialref/spatial'
@@ -20,19 +19,13 @@ import {
   type Body,
   bodyFixedFrameId,
   bodyFrameId,
-  datumRadius,
   directionToGeodetic,
   formatAddress,
-  geodeticDirection,
   parentOf,
   hasSolidSurface,
   parseAddress,
-  findBody,
-  drawnElevation,
-  drawnSurfaceRadius,
   type StarSystem,
   type SurveySite,
-  surveySites,
   systemFrameId,
   type SystemId,
   type UniverseAddress,
@@ -51,54 +44,31 @@ import {
   anglesForPhase,
   angularRadius,
   applyDrag,
-  arcAnomaly,
-  arcContinuation,
-  arcPoint,
-  arcSamples,
   applyLook,
   applyZoom,
   approachState,
   clampDistance,
   clampElevation,
-  clampLatitude,
-  clampPitch,
   clampStanceHeight,
   distanceBounds,
   DRAG_RADIANS_PER_PIXEL,
-  DROP_SECONDS,
-  dropBlend,
-  dropLevel,
-  dropProgress,
-  dropRadius,
-  type EntryArc,
-  entryArc,
   findComposition,
   framingDistance,
-  heightForScrub,
-  horizonPitch,
   isCentered,
-  localTriad,
-  launchArc,
   type LookOffset,
   NO_LOOK,
   MIN_DISTANCE_RADII,
-  MIN_STANCE_HEIGHT,
   type ObserverState,
   observerPose,
   type Lens,
-  PITCH_LIMIT,
   placeComposition,
   RISE_CLEARANCE,
   riseFov,
   riseStance,
-  scrubForHeight,
   shortestAngle,
   smooth,
   expApproach,
   stanceToward,
-  type SurfaceStance,
-  surfaceHeightBounds,
-  surfaceStancePose,
   verticalFov,
   verticalFovDegrees,
   zoomFactorForNotches,
@@ -107,7 +77,19 @@ import { pairFrame } from './tracking.ts'
 import type { PictureFraming } from './pictures.ts'
 import { dragSensitivityOf } from './dragSensitivity.ts'
 import { currentSystemOf, resolveDestination } from './travel.ts'
-import type { Host } from './harness.ts'
+import type { Host } from './host.ts'
+import { HeldTime } from './heldTime.ts'
+import {
+  bodyOf,
+  type DescentStatus,
+  SurfaceArm,
+  type SurfaceStatus,
+} from './surfaceArm.ts'
+import {
+  type DropAim,
+  type EntryArcPreview,
+  type StanceFlight,
+} from './stanceGeometry.ts'
 
 /*
  * The observatory: the planetarium's camera, bound to a live world.
@@ -139,6 +121,18 @@ import type { Host } from './harness.ts'
 
 const log = getLogger('devtools.observatory')
 
+export {
+  FLIGHT_FAST,
+  FLIGHT_FLOOR_SPEED,
+  FLIGHT_SPEED_PER_HEIGHT,
+} from './stanceGeometry.ts'
+export type {
+  DropAim,
+  EntryArcPreview,
+  StanceFlight,
+} from './stanceGeometry.ts'
+export type { DescentStatus, SurfaceStatus } from './surfaceArm.ts'
+
 /** A camera pose in universe coordinates: where the eye is, and where it looks. */
 export interface ObserverPose {
   readonly position: UniverseVector
@@ -161,62 +155,11 @@ export interface ObserverTarget {
   readonly detail: string
 }
 
-/**
- * Where the camera is standing, when it is standing rather than orbiting.
- *
- * Everything a panel needs to draw the descent controls, including the two
- * numbers that only mean something down here: `scrub`, which is the slider's
- * own position because the band is logarithmic, and `groundElevation`, which is
- * what the terrain says is under your feet.
- */
-export interface SurfaceStatus {
-  readonly stance: SurfaceStance
-  /** The scrub's position in [0, 1] for `stance.height`. */
-  readonly scrub: number
-  /** Elevation of the ground below the stance, relative to the datum. */
-  readonly groundElevation: Meters
-  /** Distance from the body's center to the eye. */
-  readonly radius: Meters
-  readonly heightText: string
-  /** The survey site the stance is on, when it was set from one. */
-  readonly site: string | null
-}
-
 /** Everything a panel needs to draw the observatory's state. */
 export interface GalaxyJourneyStatus {
   readonly progress: number
   readonly destination: number
   readonly remainingSeconds: number
-}
-
-/** A drop in flight: how far down it is, and how long it has left. */
-export interface DescentStatus {
-  /** 0 at release, 1 on the ground. */
-  readonly progress: number
-  readonly remainingSeconds: number
-}
-
-/**
- * A drop in progress, in the body's rotating axes throughout.
- *
- * Body-fixed so the touchdown point stays put while the body turns under the
- * camera: the arc is solved once at release and read every frame, and a world
- * that rotates 0.02° in the eight seconds of an Earth drop rotates much more
- * under time warp — a target held in universe axes would land the camera
- * east of where the ring was drawn by however far the ground had moved.
- */
-interface Descent {
-  readonly arc: EntryArc
-  /** The camera's orientation at release, in the body's rotating axes. */
-  readonly from: Quat
-  /** Unit vector from the center to the touchdown point. */
-  readonly ground: Vec3
-  readonly latitude: Radians
-  readonly longitude: Radians
-  readonly seconds: Seconds
-  elapsed: Seconds
-  /** How much of the surface camera's roll is showing this frame, `[0, 1]`. */
-  blend: number
 }
 
 export interface ObserverMotionRecipe {
@@ -273,16 +216,6 @@ export interface ObserverStatus {
  */
 export const TRAVEL_TAU: Seconds = 0.55
 
-/*
- * Flying the stance. The speed is a share of the height per second, with a
- * floor for the walkable band: two meters up moves at a run, a hundred meters
- * up at highway speed, and the orbit floor at kilometers a second, which is
- * the same logarithm the scrub spends on the same six decades.
- */
-export const FLIGHT_SPEED_PER_HEIGHT = 0.8
-export const FLIGHT_FLOOR_SPEED: Meters = 4
-export const FLIGHT_FAST = 4
-
 /**
  * Below this the ease has arrived and snaps.
  *
@@ -313,59 +246,6 @@ export const DEFAULT_FILL = 0.55
  * has to make a picture on Phobos (710 m up) and on Ganymede (166 km).
  */
 export const RISE_HEIGHT_RADII = 0.063
-
-/**
- * How much of the frame the drop ring covers, radians of half-angle.
- *
- * Two degrees. A mark that says "here" has to be findable against a cratered
- * surface without claiming ground the camera is not landing on, and the only
- * size that holds across the six decades this gesture spans is an angular one.
- */
-const RING_ANGLE = 0.035
-
-/** Segments in either ring. Enough that a couple of degrees reads as a circle. */
-const RING_SEGMENTS = 48
-
-/**
- * How much of the frame the held figure's ring covers, radians of half-angle.
- *
- * Smaller than the ground ring's: this one sits near the eye and is the thing
- * the hand is moving, so it wants to be a cursor rather than a target. At 0.9°
- * it is about 25 px on a 900-line frame, which is a mark a pointer can be
- * inside without covering what it is aiming at.
- */
-const HOLD_ANGLE = 0.016
-
-/**
- * How far above the ground the figure hangs, as a share of the eye's altitude.
- *
- * A fifth. It has to be a share rather than a distance because the gesture is
- * used from a hundred body-radii out and from just above the orbit floor, and
- * the one thing the mark may not do is leave the frame at either end.
- */
-const HOLD_ALTITUDE_SHARE = 0.2
-
-/**
- * How far the ring floats over the ground it follows, as a share of its own
- * radius.
- *
- * Proportional, and it has to be. A fixed lift is a meter-scale number, and the
- * vertex buffer holding it is float32 at a planetary radius — where one step is
- * half a meter — so a two-meter lift is a handful of bits and the loop z-fights
- * with the patch drawing the same height. Worse at a limb, where the ground is
- * edge-on and any lift is foreshortened to nothing. A twelfth of the ring's own
- * radius is clear at every distance the gesture spans and still reads as lying
- * on the ground rather than hovering over it.
- */
-const RING_LIFT_SHARE = 0.08
-
-export interface DropAim {
-  readonly latitude: Radians
-  readonly longitude: Radians
-  /** Launch samples and screen up, in body radii and body-fixed axes. */
-  readonly launch?: readonly Vec3[]
-  readonly up?: Vec3
-}
 
 export class Observatory {
   #mutationRevision = 0
@@ -410,7 +290,7 @@ export class Observatory {
       )
     if (
       this.#target === null ||
-      this.#stance !== null ||
+      this.#surface.standing ||
       this.#galaxyView !== null
     )
       return false
@@ -474,54 +354,40 @@ export class Observatory {
     this.#stopJourneyTravel()
     this.#desired = { ...this.#state }
     this.#phaseOrbit = null
-    this.#descent = null
-    this.#aim = null
+    this.#surface.halt()
     return this.status()
   }
 
-  #time: number | null = null
-  #timePaused = true
-  #timeScale = 1
+  /** The photographic instant. `heldTime.ts` holds its bounds. */
+  readonly #clock: HeldTime
   get timePaused(): boolean {
-    return this.#timePaused
+    return this.#clock.paused
   }
   get timeScale(): number {
-    return this.#timeScale
+    return this.#clock.scale
   }
   setTimePaused(paused: boolean): void {
     this.#changed()
-    this.#timePaused = paused
+    this.#clock.setPaused(paused)
   }
   setTimeScale(scale: number): void {
     this.#changed()
-    if (!Number.isFinite(scale) || scale <= 0 || scale > 100000)
-      throw new Error('Invalid photographic time rate.')
-    this.#timeScale = scale
+    this.#clock.setScale(scale)
   }
   advanceTime(seconds: number): void {
-    if (this.#time !== null && !this.#timePaused) {
-      const next = this.#time + Math.max(0, seconds) * this.#timeScale
-      if (Math.abs(next) <= 3.15576e12) this.#time = next
-      else this.#timePaused = true
-    }
+    this.#clock.advance(seconds)
   }
 
   /** A held photographic instant, or the live simulation's presentation time. */
   get time(): number {
-    return this.#time ?? this.#host.world.clock.renderTime
+    return this.#clock.time
   }
   get heldTime(): number | null {
-    return this.#time
+    return this.#clock.heldTime
   }
   setTime(time: number | null): void {
     this.#changed()
-    if (
-      time !== null &&
-      (!Number.isFinite(time) || Math.abs(time) > 3.15576e12)
-    )
-      throw new Error('Choose a finite time within 100,000 years of J2000.')
-    this.#time = time
-    this.#timePaused = true
+    this.#clock.set(time)
   }
 
   capture(): Extract<PictureFraming, { kind: 'camera' }> {
@@ -546,14 +412,15 @@ export class Observatory {
         distance: this.#state.distance * transform.scale,
       },
       look: { ...this.#look },
-      surface: this.#stance === null ? null : { ...this.#stance },
+      surface:
+        this.#surface.stance === null ? null : { ...this.#surface.stance },
     }
   }
 
   validatePicture(address: string, framing: PictureFraming): void {
     const target = this.#resolve(address)
     if (framing.kind !== 'camera') {
-      const body = this.#bodyOf(target)
+      const body = bodyOf(this.#host.world, target)
       if (body === null)
         throw new Error(
           'This preset needs a planet or moon to compose against.',
@@ -585,7 +452,7 @@ export class Observatory {
         this.#pair(target, tracked, framing.tracking.referenceTime)
       }
       if (framing.surface !== null) {
-        const body = this.#bodyOf(target)
+        const body = bodyOf(this.#host.world, target)
         if (body === null || !hasSolidSurface(body))
           throw new Error('This preset has no solid surface to stand on.')
         if (
@@ -666,7 +533,7 @@ export class Observatory {
     if (target !== null) {
       if (
         this.#target === null ||
-        this.#stance !== null ||
+        this.#surface.standing ||
         this.galaxyInstrument
       )
         throw new Error('Enter orbit before targeting another body.')
@@ -856,41 +723,8 @@ export class Observatory {
     rate: number
     tilt: number
   } | null = null
-  /**
-   * The surface arm's whole state: non-null exactly while standing.
-   *
-   * Not a mode flag beside the orbit state but *instead* of it — a nullable
-   * field, so "which arm owns the camera" is a question with one answer and
-   * cannot be inconsistent. The orbit state is left untouched underneath, which
-   * is what makes `leaveSurface` a restore with nothing to restore: the camera
-   * goes back to the framing it had before the descent, because it never left.
-   */
-  #stance: SurfaceStance | null = null
-  /** Which survey site the stance came from, when it came from one. */
-  #site: string | null = null
-  /**
-   * The keys held against the stance, in its own heading: forward, right and
-   * up in -1..1, and whether the fast modifier is down. Null when nothing is
-   * held. Applied by `sample`, so a flight is a presentation motion like the
-   * fly-to ease and never a write to the world — the planetarium keeps its
-   * promise while the viewer crosses a continent.
-   */
-  #flight: {
-    readonly forward: number
-    readonly right: number
-    readonly up: number
-    readonly fast: boolean
-  } | null = null
-  /**
-   * The drop in flight, when there is one.
-   *
-   * Rides the surface arm: while it is set, `#stance` is rewritten every frame
-   * from the arc, so the orbit writers stay refused and `standing` is true from
-   * the first frame. Cleared by whatever replaces the stance, and by landing.
-   */
-  #descent: Descent | null = null
-  /** The point a drop is being aimed at. Presentation only; see `aim`. */
-  #aim: DropAim | null = null
+  /** The second camera arm: standing on the target's ground. */
+  readonly #surface: SurfaceArm
   /**
    * Where the head is turned, relative to whatever the pose aims at.
    *
@@ -910,6 +744,32 @@ export class Observatory {
 
   constructor(host: Host) {
     this.#host = host
+    this.#clock = new HeldTime(() => host.world.clock.renderTime)
+    this.#surface = new SurfaceArm(host, {
+      target: () => this.#target,
+      resolve: (destination) => this.#resolve(destination),
+      focus: (address) => {
+        this.focus(address, { ease: false })
+      },
+      enter: () => {
+        this.#journey = null
+        this.track(null)
+        this.#basis = Q.IDENTITY
+        this.#phaseOrbit = null
+        this.#look = NO_LOOK
+      },
+      pose: () => this.pose(),
+      eye: () => this.eye,
+      time: () => this.time,
+      starInBody: () => {
+        const toStar = this.#starDirection()
+        return toStar === null ? null : this.#toBodyFixed(toStar)
+      },
+      changed: () => this.#changed(),
+      moved: () => {
+        this.#mutationRevision += 1
+      },
+    })
   }
 
   get target(): ObserverTarget | null {
@@ -925,7 +785,7 @@ export class Observatory {
 
   /** Whether the camera is on the ground rather than in orbit. */
   get standing(): boolean {
-    return this.#stance !== null
+    return this.#surface.standing
   }
 
   /**
@@ -946,7 +806,7 @@ export class Observatory {
     // underneath it is stale by design — a catalog sorting by distance from
     // "the viewer" while the viewer is standing on Iapetus must not sort by
     // where the viewer was before the descent.
-    if (this.#stance !== null) return this.#surfacePose()?.position ?? null
+    if (this.#surface.standing) return this.#surface.pose()?.position ?? null
     const center = this.#targetPosition(target)
     return center === null ? null : this.#orbitPose(center).position
   }
@@ -963,7 +823,7 @@ export class Observatory {
     if (this.#galaxyView !== null) return GALAXY_VIEWS[this.#galaxyView].pose
     const target = this.#target
     if (target === null) return null
-    if (this.#stance !== null) return this.#surfacePose()
+    if (this.#surface.standing) return this.#surface.pose()
     const center = this.#targetPosition(target)
     return center === null ? null : this.#orbitPose(center)
   }
@@ -1017,10 +877,7 @@ export class Observatory {
     // Focusing something else is leaving the ground. A stance names a latitude
     // and a longitude on one particular body, so carrying it across a change of
     // target would put the camera at those coordinates on a different world.
-    this.#descent = null
-    this.#aim = null
-    this.#stance = null
-    this.#site = null
+    this.#surface.reset()
     // A focus is a new picture, so the head goes back to center. The other
     // three writers that replace a pose — `frameTarget`, `setAngles` and
     // `stand` — do the same; a drag, a dolly and a wheel notch do not.
@@ -1093,24 +950,21 @@ export class Observatory {
     // Idle presentation updates also clear, and must not reset every frame.
     if (this.#target !== null || this.#galaxyView !== null)
       this.#host.render.declareCut()
-    this.#time = null
+    this.#clock.release()
     this.#journey = null
     this.#galaxyView = null
     this.#target = null
     this.#tracking = null
     this.#basis = Q.IDENTITY
     this.#phaseOrbit = null
-    this.#descent = null
-    this.#aim = null
-    this.#stance = null
-    this.#site = null
+    this.#surface.reset()
     this.#look = NO_LOOK
   }
 
   /*
    * The orbit arm's writers refuse while the surface arm holds the camera.
    *
-   * `sample` short-circuits to `#surfacePose` when a stance is held, so a drag,
+   * `sample` short-circuits to the surface arm's pose when a stance is held, so a drag,
    * a wheel notch or a preset down here changes nothing on screen — and every
    * one of them is wired straight through by `useObserverInput`, which has no
    * idea which arm is drawing. Without the refusal the gesture silently rewrites
@@ -1132,7 +986,7 @@ export class Observatory {
     sensitivity = this.dragSensitivity(),
   ): void {
     this.#changed()
-    if (this.#stance !== null || this.#galaxyView !== null) return
+    if (this.#surface.standing || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     // Both are written, not just the desired: a drag is direct manipulation and
     // must not lag a damping filter. Easing is for travel, not for the hand.
@@ -1143,7 +997,7 @@ export class Observatory {
   /** Zoom by a ratio. Above 1 retreats. */
   zoom(factor: number): void {
     this.#changed()
-    if (this.#stance !== null || this.#galaxyView !== null) return
+    if (this.#surface.standing || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     const radius = this.#target?.radius ?? 0
     const scale = this.#trackingTransform().scale
@@ -1167,7 +1021,7 @@ export class Observatory {
   /** Set the distance directly — the panel's slider and the presets. */
   setDistance(distance: Meters, ease = true): void {
     this.#changed()
-    if (this.#stance !== null || this.#galaxyView !== null) return
+    if (this.#surface.standing || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     const radius = this.#target?.radius ?? 0
     this.#desired = {
@@ -1194,7 +1048,7 @@ export class Observatory {
     look: LookOffset = NO_LOOK,
   ): void {
     this.#changed()
-    if (this.#stance !== null || this.#galaxyView !== null) return
+    if (this.#surface.standing || this.#galaxyView !== null) return
     this.#stopJourneyTravel()
     this.#desired = {
       ...this.#desired,
@@ -1249,35 +1103,28 @@ export class Observatory {
   turn(dxPixels: number, dyPixels: number): void {
     this.#changed()
     const sensitivity = this.dragSensitivity()
-    const stance = this.#stance
-    if (stance !== null) {
-      const k = DRAG_RADIANS_PER_PIXEL * sensitivity
-      this.#stance = {
-        ...stance,
-        // The same grab metaphor the orbit uses: the ground follows the hand.
-        heading: stance.heading - dxPixels * k,
-        pitch: clampPitch(stance.pitch + dyPixels * k),
-      }
+    if (
+      this.#surface.turn(
+        dxPixels,
+        dyPixels,
+        DRAG_RADIANS_PER_PIXEL * sensitivity,
+      )
+    )
       return
-    }
     this.#look = applyLook(this.#look, dxPixels, dyPixels, sensitivity)
   }
 
   /** Aim the head at an absolute offset, radians. `ir.aim`. */
   setLook(yaw: number, pitch: number): void {
     this.#changed()
-    const stance = this.#stance
-    if (stance !== null) {
-      this.#stance = { ...stance, heading: yaw, pitch: clampPitch(pitch) }
-      return
-    }
+    if (this.#surface.look(yaw, pitch)) return
     this.#look = { yaw, pitch: clampElevation(pitch) }
   }
 
   /** Back to whatever the pose aims at. */
   center(): void {
     this.#changed()
-    if (this.#stance !== null) {
+    if (this.#surface.standing) {
       this.levelToHorizon()
       return
     }
@@ -1325,7 +1172,7 @@ export class Observatory {
    */
   orbitPhase(phase: number, rate: number, tilt = 10): void {
     this.#changed()
-    if (this.#target === null || this.#stance !== null) return
+    if (this.#target === null || this.#surface.standing) return
     this.#phaseOrbit = { phase, rate, tilt }
     this.setPhase(phase, tilt, false)
   }
@@ -1369,9 +1216,7 @@ export class Observatory {
     if (placement.kind === 'orbit') {
       // The stance goes first: `setAngles` refuses while one is held, and a
       // composition above the floor is a claim about the orbit arm.
-      this.#descent = null
-      this.#stance = null
-      this.#site = null
+      this.#surface.clearStance()
       this.#host.render.declareCut()
       this.setDistance(placement.distance)
       this.setAngles(
@@ -1531,37 +1376,7 @@ export class Observatory {
   /* The surface arm                                                        */
   /* --------------------------------------------------------------------- */
 
-  /**
-   * Put the camera on the ground.
-   *
-   * Below `MIN_DISTANCE_RADII`, which the orbit arm refuses to go under and is
-   * right to: half a radius up is where a planetarium stops showing you a world
-   * and starts showing you ground with no horizon in it. What that clamp also
-   * prevented was ever *inspecting* a surface, so the only way to look at
-   * terrain was to fly a ship at it — which is the line in the plan's gap table
-   * that says iteration and testing both pay for it.
-   *
-   * Read-only like everything else here. No teleport, no clock, no entity
-   * write: it samples `surfaceRadius` and returns a camera pose, and
-   * `observatory.test.ts`'s state-hash comparison covers this arm too.
-   *
-   * **Entering is a cut, not a fly-to, and that is deliberate.** The orbit arm
-   * eases because a transition across fourteen decades has to read as a move;
-   * this one is the instrument a plate is captured through, and an ease means
-   * every capture has to wait an unspecified number of frames for a filter to
-   * settle before the picture is the picture. `ir.visit` returns and the frame
-   * after it is the frame you asked for.
-   *
-   * **It resolves before it commits, and the ordering is the whole of two
-   * bugs.** Calling `focus` first is the obvious shape and is wrong twice.
-   * `focus` re-solves the distance from `framingDistance`, so a `stand` on the
-   * body already held silently discarded the framing the user had zoomed to —
-   * and `leaveSurface` then "restored" a default nobody had chosen, which is
-   * exactly the thing four docstrings here promise it does not do. And because
-   * the surface check ran *after* the commit, `stand('s:SOL/b:5')` retargeted
-   * the camera to Saturn and only then threw "no surface to stand on", leaving
-   * the planetarium looking at a body the call had refused.
-   */
+  /** Put the camera on the ground. A cut, not a fly-to. See `SurfaceArm.stand`. */
   stand(
     destination?: string,
     options: {
@@ -1573,278 +1388,32 @@ export class Observatory {
       readonly pitch?: Radians
     } = {},
   ): ObserverStatus {
-    this.#changed()
-    const wanted =
-      destination === undefined ? this.#target : this.#resolve(destination)
-    if (wanted === null) {
-      throw new Error('The observatory is not looking at anything')
-    }
-    const body = this.#bodyOf(wanted)
-    if (body === null) {
-      throw new Error(`${wanted.name} is not a body`)
-    }
-    if (!hasSolidSurface(body)) {
-      throw new Error(`${body.name} has no surface to stand on`)
-    }
-    // Before the focus below, with the no-surface check: every refusal has to
-    // come before anything commits, or a typo'd site retargets the planetarium
-    // and throws away the caller's framing on a call that then refuses.
-    const site =
-      options.site === undefined
-        ? undefined
-        : surveySites(body).find((one) => one.id === options.site)
-    if (options.site !== undefined && site === undefined) {
-      throw new Error(
-        `${body.name} has no site "${options.site}" — try ${surveySites(body)
-          .map((one) => one.id)
-          .join(', ')}`,
-      )
-    }
-    // Only now, and only if it is somewhere else. Re-focusing the address
-    // already held throws the framing away, and committing before the last
-    // refusal leaves the camera on a body the call declined to stand on.
-    if (wanted.address !== this.#target?.address) {
-      this.focus(wanted.address, { ease: false })
-    }
-
-    // Clamped to the same limit `simulateDescent` clamps to, and for the same
-    // reason: past ±90° `cos(latitude)` flips sign and the eye stands on the
-    // anti-meridian while the stance reports the number it was handed. The
-    // probe exists to predict this camera, so the two cannot disagree about
-    // what a latitude means.
-    const latitude = clampLatitude(options.latitude ?? site?.latitude ?? 0)
-    const longitude = options.longitude ?? site?.longitude ?? 0
-    const height = clampStanceHeight(
-      options.height ?? MIN_STANCE_HEIGHT,
-      body.radius,
-    )
-    this.#journey = null
-    this.track(null)
-    this.#basis = Q.IDENTITY
-    this.#descent = null
-    this.#aim = null
-    this.#stance = {
-      latitude,
-      longitude,
-      height,
-      heading: options.heading ?? 0,
-      // Level with the horizon rather than level with the tangent plane. From
-      // 400 km up the horizon is 19.79° *below* the local horizontal, so a
-      // pitch of zero at the top of a descent is a picture of empty sky.
-      pitch: clampPitch(options.pitch ?? horizonPitch(body.radius, height)),
-    }
-    this.#site = site?.id ?? null
-    // The stance carries its own heading and pitch, so the orbit arm's offset
-    // would come back on the ascent aimed at something nobody chose.
-    this.#look = NO_LOOK
-    this.#host.render.declareCut()
-    log.info('observatory standing', {
-      address: this.#target?.address,
-      site: this.#site,
-      height,
-    })
+    this.#surface.stand(destination, options)
     return this.status()
   }
 
-  /**
-   * Fly the stance with the keys: axes in the stance's own heading, -1..1.
-   *
-   * The speed follows the height, a brisk walk two meters up and the whole
-   * planet in reach from the orbit floor, so one set of keys serves the
-   * shoreline and the crossing to the next continent. The heading is where
-   * the head is turned, which is what free look already sets; the keys do
-   * not turn it, so a viewer looking at a peak flies toward the peak.
-   */
-  setStanceFlight(
-    flight: {
-      readonly forward: number
-      readonly right: number
-      readonly up: number
-      readonly fast: boolean
-    } | null,
-  ): void {
-    const held =
-      flight === null ||
-      (flight.forward === 0 && flight.right === 0 && flight.up === 0)
-        ? null
-        : {
-            forward: Math.max(-1, Math.min(1, flight.forward)),
-            right: Math.max(-1, Math.min(1, flight.right)),
-            up: Math.max(-1, Math.min(1, flight.up)),
-            fast: flight.fast,
-          }
-    if (
-      held !== null &&
-      ![held.forward, held.right, held.up].every(Number.isFinite)
-    )
-      return
-    this.#flight = held
-  }
-
-  #advanceFlight(dt: Seconds): void {
-    const flight = this.#flight
-    const stance = this.#stance
-    const body = this.#body()
-    if (flight === null || stance === null || body === null || !(dt > 0)) return
-    const speed =
-      Math.max(FLIGHT_FLOOR_SPEED, stance.height * FLIGHT_SPEED_PER_HEIGHT) *
-      (flight.fast ? FLIGHT_FAST : 1)
-    const distance = speed * Math.min(dt, 0.1)
-    const north =
-      flight.forward * Math.cos(stance.heading) -
-      flight.right * Math.sin(stance.heading)
-    const east =
-      flight.forward * Math.sin(stance.heading) +
-      flight.right * Math.cos(stance.heading)
-    const reach = body.radius + stance.height
-    const latitude = clampLatitude(stance.latitude + (north * distance) / reach)
-    const cosine = Math.max(1e-6, Math.cos(latitude))
-    let longitude = stance.longitude + (east * distance) / (reach * cosine)
-    if (longitude > Math.PI) longitude -= 2 * Math.PI
-    if (longitude < -Math.PI) longitude += 2 * Math.PI
-    this.#stance = { ...stance, latitude, longitude }
-    if (flight.up !== 0)
-      this.setStanceHeight(stance.height + flight.up * distance)
-    // A flight moves the picture as surely as a drag does, and the address
-    // bar follows the revision; `#changed` stays quiet while sampling.
-    this.#mutationRevision += 1
+  /** Fly the stance with the keys: axes in the stance's own heading, -1..1. */
+  setStanceFlight(flight: StanceFlight | null): void {
+    this.#surface.setStanceFlight(flight)
   }
 
   /** Back to orbit, at whatever framing the camera had before the descent. */
   leaveSurface(): ObserverStatus {
-    if (this.#stance !== null || this.#descent !== null)
-      this.#host.render.declareCut()
-    this.#changed()
-    // A drop in flight is abandoned, not finished: the orbit state underneath
-    // is the one the camera left, so this is also how a drop is canceled.
-    this.#descent = null
-    this.#aim = null
-    this.#stance = null
-    this.#site = null
+    this.#surface.leaveSurface()
     return this.status()
   }
 
-  /**
-   * Fly the camera from where it is down to a point on the ground, and stand
-   * there facing the star.
-   *
-   * The one eased entry to the surface arm. `stand` cuts, and is right to: it
-   * is the instrument a plate is captured through, and a plate has to be the
-   * frame after the call returns. This is the other thing arriving can be — a
-   * picture of it — and it is asked for by a different gesture, the figure
-   * dragged from orbit onto a world. The path is the ballistic entry
-   * `entryArc` describes, walked down `dropRadius`'s logarithmic schedule over
-   * `seconds` of wall clock; the camera watches the touchdown point on the way
-   * and turns to face the star along the horizon over the last third.
-   *
-   * Everything about the release is measured before anything commits, for the
-   * reason `stand` gives at length: a refusal after a retarget would leave the
-   * planetarium looking at a body the call declined. The eye and its
-   * orientation are taken from the camera as it *is* — tracking transform and
-   * look offset included — and carried into the body's rotating axes, so the
-   * first frame of the drop is the frame before it and the arc lands where it
-   * was aimed however far the body turns underneath.
-   *
-   * Presentation only, like every verb here: no teleport, no clock, no entity
-   * write. `observatory.test.ts` compares the state hash across one.
-   */
+  /** Fly from orbit down to a point on the ground. See `SurfaceArm.drop`. */
   drop(
     destination: string | undefined,
     point: { readonly latitude: Radians; readonly longitude: Radians },
     options: { readonly seconds?: Seconds } = {},
   ): ObserverStatus {
-    this.#changed()
-    const wanted =
-      destination === undefined ? this.#target : this.#resolve(destination)
-    if (wanted === null) {
-      throw new Error('The observatory is not looking at anything')
-    }
-    const body = this.#bodyOf(wanted)
-    if (body === null) throw new Error(`${wanted.name} is not a body`)
-    if (!hasSolidSurface(body)) {
-      throw new Error(`${body.name} has no surface to stand on`)
-    }
-    if (this.#stance !== null) {
-      throw new Error('Already on the ground — leave the surface to drop again')
-    }
-    if (!Number.isFinite(point.longitude) || !Number.isFinite(point.latitude)) {
-      throw new Error('A drop needs a finite latitude and longitude')
-    }
-    const pose = this.pose()
-    if (pose === null) {
-      throw new Error('The observatory has no camera to drop from')
-    }
-    const spin = this.#spinOf(body)
-    if (spin === null) {
-      throw new Error(`${body.name} has no presentation frame`)
-    }
-    const latitude = clampLatitude(point.latitude)
-    const longitude = point.longitude
-    const ground = geodeticDirection(latitude, longitude)
-    const eye = Q.rotateInverse(
-      spin.orientation,
-      UV.difference(pose.position, spin.position),
-    )
-    // The touchdown radius is the drawn ground plus eye height, so the arc
-    // ends where the stance will stand rather than on the datum under it.
-    const arc = entryArc(
-      eye,
-      Vec.scale(ground, drawnSurfaceRadius(body, ground) + MIN_STANCE_HEIGHT),
-    )
-    if (arc === null) {
-      throw new Error(`The camera is not above ${body.name}'s ground`)
-    }
-    const from = Q.normalize(
-      Q.multiply(Q.conjugate(spin.orientation), pose.orientation),
-    )
-
-    // Only now, and only if it is somewhere else — the ordering `stand` argues.
-    if (wanted.address !== this.#target?.address) {
-      this.focus(wanted.address, { ease: false })
-    }
-    this.#journey = null
-    this.track(null)
-    this.#basis = Q.IDENTITY
-    this.#phaseOrbit = null
-    this.#site = null
-    // The stance carries the heading and the pitch from here on.
-    this.#look = NO_LOOK
-    this.#descent = {
-      arc,
-      from,
-      ground,
-      latitude,
-      longitude,
-      seconds: Math.max(0.1, options.seconds ?? DROP_SECONDS),
-      elapsed: 0,
-      blend: 0,
-    }
-    this.#aim = null
-    this.#stance = this.#descentStance(0)
-    log.info('observatory dropping', {
-      address: this.#target?.address,
-      latitude,
-      longitude,
-      altitude: formatDistance(arc.apoapsis - arc.touchdown),
-    })
+    this.#surface.drop(destination, point, options)
     return this.status()
   }
 
-  /**
-   * Where a ray from the eye meets a body's ground, as a latitude and
-   * longitude, or null when it misses.
-   *
-   * The hit test behind the drop gesture. The pointer is a direction from the
-   * camera, and the answer is a point on the *datum* sphere — `body.radius` —
-   * rather than on the drawn terrain, because a fingertip is not aiming at a
-   * ridge, and finding where a ray enters a heightfield means sampling the
-   * field along it. The drop then lands on the drawn ground at that latitude
-   * and longitude, which is what the ring drawn there promised.
-   *
-   * `direction` is in universe axes, which are also the render camera's:
-   * render space is a translation and a radial compression about the eye, and
-   * neither turns a direction. Nothing here reads a render position.
-   */
+  /** Where a ray from the eye meets a body's ground, or null when it misses. */
   groundUnderRay(
     destination: string | undefined,
     direction: Vec3,
@@ -1853,86 +1422,23 @@ export class Observatory {
     readonly latitude: Radians
     readonly longitude: Radians
   } | null {
-    const target = this.#targetFor(destination)
-    const body = this.#bodyOf(target)
-    if (target === null || body === null || !hasSolidSurface(body)) return null
-    const eye = this.eye
-    const spin = this.#spinOf(body)
-    if (eye === null || spin === null || Vec.length(direction) === 0)
-      return null
-    const relative = UV.difference(eye, spin.position)
-    const along = Vec.normalize(direction)
-    // |relative + t·along|² = R², the nearer root. No root is a miss; a
-    // negative one is a body behind the eye or an eye already inside it.
-    const b = Vec.dot(relative, along)
-    const c = Vec.dot(relative, relative) - body.radius * body.radius
-    const discriminant = b * b - c
-    /*
-     * A ray that misses answers with the limb rather than with nothing.
-     *
-     * Aiming *past* a world is how anybody reaches its edge: the near limb is
-     * the one part of a sphere a pointer cannot land on from outside, because
-     * the ray grazes it at a tangent and a pixel either way is the difference
-     * between a hit and the sky. Refusing there makes the last few degrees of
-     * every drop unreachable — and it is exactly where a person aims when they
-     * want a horizon in the frame. So a miss is answered with the point on the
-     * surface nearest the ray, which is continuous across the limb: the mark
-     * slides onto the edge and stays there rather than blinking out.
-     */
-    const t = discriminant >= 0 ? -b - Math.sqrt(discriminant) : -b
-    if (!(t > 0)) return null
-    const hit = Vec.add(relative, Vec.scale(along, t))
-    const { latitude, longitude } = directionToGeodetic(
-      Q.rotateInverse(spin.orientation, hit),
-    )
-    return { address: target.address, latitude, longitude }
+    return this.#surface.groundUnderRay(destination, direction)
   }
 
-  /**
-   * The point a drop is being aimed at, or null when nothing is being aimed.
-   *
-   * Presentation state, set by whatever is holding the gesture and read by
-   * whatever draws the aid — a hover, in the same sense the look offset is a
-   * hover. It writes nothing canonical, it does not move the camera, and it is
-   * cleared by everything that replaces the pose, so an aim cannot survive the
-   * body it was taken over.
-   */
+  /** The point a drop is being aimed at, or null when nothing is being aimed. */
   get aim(): DropAim | null {
-    return this.#aim
+    return this.#surface.aim
   }
 
   previewDrop(
     point: { readonly latitude: Radians; readonly longitude: Radians } | null,
   ): void {
-    this.#aim =
-      point === null
-        ? null
-        : {
-            latitude: clampLatitude(point.latitude),
-            longitude: point.longitude,
-          }
+    this.#surface.previewDrop(point)
   }
 
   /** Aim by a held point in body radii. Gravity chooses the touchdown. */
   previewLaunch(hold: Vec3, up: Vec3): void {
-    const body = this.#body()
-    if (body === null || !hasSolidSurface(body) || Vec.length(hold) <= 1) {
-      this.#aim = null
-      return
-    }
-    const launch = [...launchArc(hold, up)]
-    const end = launch.at(-1)
-    if (end === undefined) {
-      this.#aim = null
-      return
-    }
-    const { latitude, longitude } = directionToGeodetic(end)
-    const ground = geodeticDirection(latitude, longitude)
-    launch[launch.length - 1] = Vec.scale(
-      ground,
-      (drawnSurfaceRadius(body, ground) + MIN_STANCE_HEIGHT) / body.radius,
-    )
-    this.#aim = { latitude, longitude, launch, up }
+    this.#surface.previewLaunch(hold, up)
   }
 
   /** Scene geometry in body radii, sharing the landing coordinate with release. */
@@ -1940,462 +1446,48 @@ export class Observatory {
     destination: string | undefined,
     point: DropAim,
     samples = 48,
-  ): {
-    /** Every field below is body radii, in the body's own rotating axes. */
-    readonly from: Vec3
-    readonly hold: readonly Vec3[]
-    readonly arc: readonly Vec3[]
-    readonly through: readonly Vec3[]
-    readonly ring: readonly Vec3[]
-    readonly touchdown: Vec3
-  } | null {
-    const target = this.#targetFor(destination)
-    const body = this.#bodyOf(target)
-    if (body === null || !hasSolidSurface(body)) return null
-    const eye = this.eye
-    const spin = this.#spinOf(body)
-    if (eye === null || spin === null) return null
-    const ground = geodeticDirection(
-      clampLatitude(point.latitude),
-      point.longitude,
-    )
-    // The eye in the body's rotating axes, which is the frame the whole
-    // preview is solved in — so the aim stays on the ground it was taken over
-    // while the body turns under it.
-    const local = Q.rotateInverse(
-      spin.orientation,
-      UV.difference(eye, spin.position),
-    )
-    if (point.launch !== undefined) {
-      const from = point.launch[0]!
-      const touchdown = point.launch.at(-1)!
-      const unit = (offset: Vec3): Vec3 => Vec.scale(offset, 1 / body.radius)
-      return {
-        from,
-        hold: this.#holdRing(Vec.scale(from, body.radius), local, point.up).map(
-          unit,
-        ),
-        arc: point.launch,
-        through: [],
-        ring: this.#groundRing(
-          body,
-          ground,
-          Vec.length(touchdown) * body.radius,
-          eye,
-        ).map(unit),
-        touchdown,
-      }
-    }
-    /*
-     * The figure is held in the viewer's own orbit, above the point aimed at.
-     *
-     * Not at the eye, which is the version this replaces and the one that
-     * cannot be drawn: an arc leaving from the camera starts behind the near
-     * plane and spends most of its length off the sides of the frame, so what
-     * a viewer sees of it is a few dashes arriving from nowhere. Held at the
-     * eye's own radius it is a thing *in* the picture, at the altitude the
-     * viewer is already at — which is what "in orbit" means here — and the
-     * fall from it is a line with two visible ends.
-     *
-     * Directly above the aim, so the mark and the ground it names share a
-     * vertical. The consequence is honest and worth stating: aim at the middle
-     * of the disk and that vertical points at the camera, so the fall
-     * foreshortens to almost nothing. Aim anywhere near a limb — which is
-     * where a horizon comes from, and where anybody composing a picture aims —
-     * and it is the full drop, drawn side-on.
-     */
-    const groundRadius = drawnSurfaceRadius(body, ground)
-    /*
-     * How high the figure is held: a share of the viewer's own altitude, not
-     * the viewer's own radius.
-     *
-     * Held at the full orbital radius the mark is 3.3 body-radii out at Earth,
-     * which is off the side of a 65° frame — the figure leaves the picture
-     * exactly when the aim reaches the limb, which is where the aim is most
-     * often pointed. A fifth of the altitude puts it a half-radius clear of
-     * the ground: outside the disk when the aim is near a limb, so the fall is
-     * drawn side-on, and still in frame.
-     */
-    const altitude = Math.max(
-      body.radius * 0.02,
-      (Vec.length(local) - body.radius) * HOLD_ALTITUDE_SHARE,
-    )
-    const arc = entryArc(
-      Vec.scale(ground, groundRadius + altitude),
-      Vec.scale(ground, groundRadius + MIN_STANCE_HEIGHT),
-    )
-    if (arc === null) return null
-    /*
-     * Body radii, in the body's own rotating axes — not universe positions.
-     *
-     * The aid hugs a body, and a body is not drawn where its metric position
-     * says: render compression pulls it nearer and shrinks it so its angular
-     * size survives, and `placement.scale` is the radius it comes out at. A
-     * point placed by its *own* compression therefore lands at a different
-     * depth from the sphere it is supposed to be lying on — which is why a
-     * ring built that way sank inside the planet and vanished. Handed back
-     * normalized, the drawer can put it through the body's own placement, the
-     * way a terrain patch already is, and one unit is exactly the drawn
-     * surface.
-     */
-    const unit = (offset: Vec3): Vec3 => Vec.scale(offset, 1 / body.radius)
-    const whole = arcSamples(arc, samples)
-    const touchdown = arcPoint(arc, arc.sweep, arc.touchdown)
-    const from = whole[0] ?? touchdown
-    return {
-      from: unit(from),
-      hold: this.#holdRing(from, local).map(unit),
-      arc: whole.map(unit),
-      through: arcContinuation(arc, samples).map(unit),
-      ring: this.#groundRing(body, ground, arc.touchdown, eye).map(unit),
-      touchdown: unit(touchdown),
-    }
-  }
-
-  /**
-   * The loop drawn around the held figure, facing the eye.
-   *
-   * A ring on a plane perpendicular to the line of sight, so it reads as a
-   * circle from where the viewer is standing rather than as an ellipse edge-on
-   * — this one is a marker rather than a place, and a marker that foreshortens
-   * to a line has stopped marking anything. The ground ring is the opposite
-   * case and is deliberately laid flat: it *is* a place.
-   *
-   * Angular, like the ground ring, and for the same reason: the gesture spans
-   * six decades of distance and no fixed size survives that.
-   */
-  #holdRing(at: Vec3, eye: Vec3, screenUp?: Vec3): readonly Vec3[] {
-    const toEye = Vec.sub(eye, at)
-    const range = Vec.length(toEye)
-    if (!(range > 0)) return []
-    const forward = Vec.scale(toEye, 1 / range)
-    const seed =
-      screenUp ?? (Math.abs(forward.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0))
-    const right = Vec.normalize(Vec.cross(seed, forward))
-    const up = Vec.cross(forward, right)
-    const across = range * HOLD_ANGLE
-    const out: Vec3[] = []
-    for (let index = 0; index <= RING_SEGMENTS; index += 1) {
-      const angle = (index / RING_SEGMENTS) * Math.PI * 2
-      out.push(
-        Vec.add(
-          at,
-          Vec.add(
-            Vec.scale(right, Math.cos(angle) * across),
-            Vec.scale(up, Math.sin(angle) * across),
-          ),
-        ),
-      )
-    }
-    return out
-  }
-
-  /**
-   * A loop on the ground around a direction, following the terrain under it.
-   *
-   * Its radius is **angular from the eye, not fixed in meters**, and that is
-   * the whole of its legibility: a ring sized in meters is a few pixels across
-   * from orbit and swallows the horizon from two meters up, and the gesture
-   * that draws it spans exactly that range. Two degrees of the frame, capped
-   * at a share of the body so it cannot wrap a small moon.
-   *
-   * Every point is sampled against `drawnSurfaceRadius`, so the loop lies on
-   * the ground rather than on the datum — on a slope the two are a kilometer
-   * apart, and a ring that floated over a crater rim would be pointing at
-   * somewhere the camera does not land.
-   */
-  #groundRing(
-    body: Body,
-    center: Vec3,
-    touchdownRadius: Meters,
-    eye: UniverseVector,
-  ): readonly Vec3[] {
-    const spin = this.#spinOf(body)
-    if (spin === null) return []
-    const local = Q.rotateInverse(
-      spin.orientation,
-      UV.difference(eye, spin.position),
-    )
-    const range = Math.max(
-      1,
-      Vec.length(Vec.sub(local, Vec.scale(center, touchdownRadius))),
-    )
-    const across = Math.min(body.radius * 0.22, range * RING_ANGLE)
-    // The angle the ring subtends at the body's center, which is what turns a
-    // distance across the ground into a rotation of the direction.
-    const sweep = Math.min(Math.PI / 3, across / body.radius)
-    const triad = localTriad(center)
-    const out: Vec3[] = []
-    for (let index = 0; index <= RING_SEGMENTS; index += 1) {
-      const angle = (index / RING_SEGMENTS) * Math.PI * 2
-      const offset = Vec.add(
-        Vec.scale(triad.east, Math.cos(angle)),
-        Vec.scale(triad.north, Math.sin(angle)),
-      )
-      /*
-       * Back through a latitude, which is what carries the `body-fixed` brand
-       * the terrain sampler demands. The round trip agrees to a float and is
-       * the only spelling that proves the direction is in the axes the
-       * mountains are in — see `#descentStance`, which pays the same toll.
-       */
-      const turned = Vec.add(
-        Vec.scale(center, Math.cos(sweep)),
-        Vec.scale(offset, Math.sin(sweep)),
-      )
-      const { latitude, longitude } = directionToGeodetic(turned)
-      const direction = geodeticDirection(latitude, longitude)
-      out.push(
-        Vec.scale(
-          direction,
-          drawnSurfaceRadius(body, direction) + across * RING_LIFT_SHARE,
-        ),
-      )
-    }
-    return out
-  }
-
-  /** The target a verb names, or the one held; null rather than a throw. */
-  #targetFor(destination: string | undefined): ObserverTarget | null {
-    if (destination === undefined) return this.#target
-    try {
-      return this.#resolve(destination)
-    } catch {
-      return null
-    }
-  }
-
-  /** A body's rotating frame at the presentation instant, or null. */
-  #spinOf(body: Body): { position: UniverseVector; orientation: Quat } | null {
-    try {
-      return this.#host.world.frames.pose(
-        bodyFixedFrameId(body.address),
-        this.time,
-      )
-    } catch {
-      return null
-    }
-  }
-
-  /** The star's bearing at a point on the ground, or null with no star. */
-  #starHeadingAt(direction: Vec3): Radians | null {
-    const toStar = this.#starDirection()
-    const local = toStar === null ? null : this.#toBodyFixed(toStar)
-    return local === null ? null : stanceToward(direction, local).heading
-  }
-
-  /**
-   * The stance a drop is at, `progress` of the way down.
-   *
-   * Position from the arc at the schedule's radius, held at least eye height
-   * over the drawn ground under it — the conic is solved against the touchdown
-   * point's ground and a ridge on the way can stand higher. The aim is the
-   * touchdown point, until the last third turns it to the star along the
-   * horizon. As the camera comes down the touchdown falls toward the nadir, and
-   * the bearing of a point nearly under the eye is a number that swings with
-   * every meter of sideways travel — so the heading is also eased toward the
-   * star's as the pitch steepens, which is where the swing would otherwise be
-   * loudest. The last frame is written outright from the point that was asked
-   * for, so a drop lands on the coordinates it was given and not on the
-   * arithmetic's account of them.
-   */
-  #descentStance(progress: number): SurfaceStance {
-    const descent = this.#descent
-    const body = this.#body()
-    if (descent === null || body === null) {
-      return (
-        this.#stance ?? {
-          latitude: 0,
-          longitude: 0,
-          height: MIN_STANCE_HEIGHT,
-          heading: 0,
-          pitch: 0,
-        }
-      )
-    }
-    const starHeading = this.#starHeadingAt(descent.ground)
-    if (progress >= 1) {
-      return {
-        latitude: descent.latitude,
-        longitude: descent.longitude,
-        height: MIN_STANCE_HEIGHT,
-        heading: starHeading ?? 0,
-        pitch: clampPitch(horizonPitch(body.radius, MIN_STANCE_HEIGHT)),
-      }
-    }
-    const radius = dropRadius(descent.arc, progress)
-    const { latitude, longitude } = directionToGeodetic(
-      arcPoint(descent.arc, arcAnomaly(descent.arc, radius), radius),
-    )
-    /*
-     * Back through `geodeticDirection` rather than normalizing the arc point.
-     * The two agree to a float, and only one of them carries the `body-fixed`
-     * brand the terrain sampler demands — which is the brand's whole job: a
-     * direction that has been round-tripped through a latitude is provably in
-     * the axes the mountains are in.
-     */
-    const direction = geodeticDirection(latitude, longitude)
-    const groundRadius = drawnSurfaceRadius(body, direction)
-    const height = Math.max(MIN_STANCE_HEIGHT, radius - groundRadius)
-    const here = Vec.scale(direction, groundRadius + height)
-    const touchdown = Vec.scale(descent.ground, descent.arc.touchdown)
-    const toGround = Vec.sub(touchdown, here)
-    // A nearby aim still has a bearing. Switching it at a distance threshold
-    // cuts the head before `dropLevel` has finished its turn to the horizon.
-    // Only coincident points lack a direction; the endpoint owns that pose.
-    const aim =
-      Vec.length(toGround) > 0
-        ? stanceToward(direction, toGround)
-        : { heading: starHeading ?? 0, pitch: -PITCH_LIMIT }
-    // Steepness in [0, 1]: 0 while the touchdown is within 60° of the
-    // horizon, 1 by the time it is 5° from straight down.
-    const steep = Math.max(
-      0,
-      Math.min(1, (-aim.pitch - Math.PI / 3) / (PITCH_LIMIT - Math.PI / 3)),
-    )
-    const level = dropLevel(progress)
-    const turn = Math.max(level, steep * steep * (3 - 2 * steep))
-    const heading =
-      starHeading === null
-        ? aim.heading
-        : aim.heading + shortestAngle(aim.heading, starHeading) * turn
-    const pitch =
-      aim.pitch + (horizonPitch(body.radius, height) - aim.pitch) * level
-    return { latitude, longitude, height, heading, pitch: clampPitch(pitch) }
-  }
-
-  #advanceDescent(dt: Seconds): void {
-    const descent = this.#descent
-    if (descent === null) return
-    descent.elapsed += Math.max(0, dt)
-    const progress = dropProgress(descent.elapsed, descent.seconds)
-    descent.blend = dropBlend(progress)
-    this.#stance = this.#descentStance(progress)
-    if (progress >= 1) {
-      this.#descent = null
-      log.info('observatory landed', {
-        address: this.#target?.address,
-        latitude: descent.latitude,
-        longitude: descent.longitude,
-      })
-    }
-  }
-
-  #descentStatus(): DescentStatus | null {
-    const descent = this.#descent
-    if (descent === null) return null
-    return {
-      progress: dropProgress(descent.elapsed, descent.seconds),
-      remainingSeconds: Math.max(0, descent.seconds - descent.elapsed),
-    }
+  ): EntryArcPreview | null {
+    return this.#surface.entryArcPreview(destination, point, samples)
   }
 
   /** Move the stance without changing the height or the heading. */
   moveTo(site: string | { latitude: Radians; longitude: Radians }): void {
-    this.#changed()
-    const stance = this.#stance
-    const body = this.#body()
-    if (stance === null || body === null) return
-    if (typeof site !== 'string') {
-      this.#stance = {
-        ...stance,
-        latitude: clampLatitude(site.latitude),
-        longitude: site.longitude,
-      }
-      this.#site = null
-      return
-    }
-    const found = surveySites(body).find((one) => one.id === site)
-    if (found === undefined) return
-    this.#stance = {
-      ...stance,
-      latitude: found.latitude,
-      longitude: found.longitude,
-    }
-    this.#site = found.id
+    this.#surface.moveTo(site)
   }
 
-  /**
-   * Set the height above the ground, meters.
-   *
-   * Direct manipulation, unfiltered, exactly like `drag` and for the same
-   * reason: this is a slider under a finger, and a damping filter between the
-   * finger and the picture is lag rather than easing.
-   */
+  /** Set the height above the ground, meters. Direct, unfiltered. */
   setStanceHeight(height: Meters): void {
-    this.#changed()
-    const stance = this.#stance
-    const body = this.#body()
-    if (stance === null || body === null) return
-    const next = clampStanceHeight(height, body.radius)
-    this.#stance = {
-      ...stance,
-      height: next,
-      // The horizon moves as you climb, so a pitch that was tracking it keeps
-      // tracking it. A pitch the user has aimed somewhere does not: the test is
-      // whether the current pitch is still the one the previous height implied.
-      pitch:
-        Math.abs(stance.pitch - horizonPitch(body.radius, stance.height)) < 1e-6
-          ? horizonPitch(body.radius, next)
-          : stance.pitch,
-    }
+    this.#surface.setStanceHeight(height)
   }
 
   /** Set the height from a scrub position in [0, 1]. See `heightForScrub`. */
   setStanceScrub(t: number): void {
-    this.#changed()
-    const body = this.#body()
-    if (body === null) return
-    this.setStanceHeight(heightForScrub(body.radius, t))
+    this.#surface.setStanceScrub(t)
   }
 
   /** Compass heading in radians: 0 is north, increasing toward east. */
   setHeading(heading: Radians): void {
-    this.#changed()
-    // A heading has no bound to clamp to — it wraps — so the only thing to
-    // refuse is the one value that is not an angle. See the note above
-    // `clampPitch`: NaN here is a NaN quaternion and a black frame.
-    if (this.#stance === null || !Number.isFinite(heading)) return
-    this.#stance = { ...this.#stance, heading }
+    this.#surface.setHeading(heading)
   }
 
   /** Above the horizontal, radians. Clamped short of vertical. */
   setPitch(pitch: Radians): void {
-    this.#changed()
-    if (this.#stance === null) return
-    this.#stance = { ...this.#stance, pitch: clampPitch(pitch) }
+    this.#surface.setPitch(pitch)
   }
 
-  /**
-   * Put the horizon across the middle of the frame from where the eye is now.
-   *
-   * The height comes from the stance rather than from a caller, because a panel
-   * reads the stance out of an 8 Hz sample: a control that solved the dip from
-   * the height it last *saw* would aim at 0.045° after a scrub to 400 km, and —
-   * worse — `setStanceHeight` decides whether to keep tracking the horizon by
-   * comparing the pitch it holds against the dip the current height implies, so
-   * a pitch solved from a stale height fails that test forever after and the
-   * tracking never resumes.
-   */
+  /** Put the horizon across the middle of the frame from where the eye is now. */
   levelToHorizon(): void {
-    this.#changed()
-    const stance = this.#stance
-    const body = this.#body()
-    if (stance === null || body === null) return
-    this.#stance = {
-      ...stance,
-      pitch: horizonPitch(body.radius, stance.height),
-    }
+    this.#surface.levelToHorizon()
   }
 
   /** The named places on the body being looked at. Empty for a star. */
   sites(): readonly SurveySite[] {
-    const body = this.#body()
-    return body === null || !hasSolidSurface(body) ? [] : surveySites(body)
+    return this.#surface.sites()
   }
 
   /** The height band the surface arm covers here. Panels draw sliders against it. */
   stanceBounds(): { readonly min: Meters; readonly max: Meters } {
-    return surfaceHeightBounds(this.#target?.radius ?? 0)
+    return this.#surface.stanceBounds()
   }
 
   status(): ObserverStatus {
@@ -2403,7 +1495,7 @@ export class Observatory {
     const scale = this.#trackingTransform().scale
     const distance = this.#state.distance * scale
     const altitude = Math.max(0, distance - radius)
-    const surface = this.#surfaceStatus()
+    const surface = this.#surface.status()
     /*
      * How much of the frame the body fills — and standing on it, that is all of
      * it, whatever the orbit arm was left at.
@@ -2431,7 +1523,7 @@ export class Observatory {
       timePaused: this.timePaused,
       timeScale: this.timeScale,
       journey: this.journey,
-      descent: this.#descentStatus(),
+      descent: this.#surface.descentStatus(),
       galaxyView: this.#galaxyView,
       target: this.#target,
       tracking: this.#tracking?.target ?? null,
@@ -2441,7 +1533,7 @@ export class Observatory {
       aimed: !isCentered(this.#look),
       traveling:
         this.#galaxyView === null &&
-        (this.#descent !== null ||
+        (this.#surface.descending ||
           this.#journey?.motion != null ||
           !this.#arrived()),
       motion:
@@ -2484,10 +1576,9 @@ export class Observatory {
     // A drop rewrites the stance every frame from its arc and the wall clock,
     // and lands by clearing itself. Before the short-circuit below, because it
     // is one of the two motions the surface arm has; the keys are the other.
-    if (this.#descent !== null) this.#advanceDescent(dt)
-    else if (this.#flight !== null) this.#advanceFlight(dt)
+    this.#surface.advance(dt)
     // The surface arm short-circuits the ease entirely. See `stand`.
-    if (this.#stance !== null) return this.#surfacePose()
+    if (this.#surface.standing) return this.#surface.pose()
 
     const orbit = this.#phaseOrbit
     if (orbit !== null) {
@@ -2552,140 +1643,9 @@ export class Observatory {
     }
   }
 
-  /**
-   * The body being looked at, or null when it is a star or has gone away.
-   *
-   * Resolved on demand rather than held on `ObserverTarget`, because a `Body`
-   * is a snapshot of a generated system and the world underneath can be
-   * replaced by a save load. A held reference would keep the camera standing on
-   * a mountain belonging to a universe that no longer exists.
-   */
+  /** The body being looked at, or null when it is a star or has gone away. */
   #body(): Body | null {
-    return this.#bodyOf(this.#target)
-  }
-
-  /**
-   * The same, for a target that has not been committed yet.
-   *
-   * `stand` has to know whether a body has a surface *before* it retargets the
-   * camera — see the ordering note there — and that means resolving a target
-   * this object is not holding.
-   */
-  #bodyOf(target: ObserverTarget | null): Body | null {
-    if (target === null || target.kind === 'star') return null
-    try {
-      const address = parseAddress(target.address)
-      if (address.kind !== 'body') return null
-      const system = this.#host.world.system(address.system)
-      if (system === undefined) return null
-      return findBody(system, address.body) ?? null
-    } catch {
-      return null
-    }
-  }
-
-  /**
-   * Where the eye is when it is standing, in universe coordinates.
-   *
-   * Two frames and they are not interchangeable. The offset and the orientation
-   * come out of `surfaceStancePose` in the body's **rotating** axes, so both are
-   * carried into universe axes by the `bf:` frame's pose — the `b:` frame's
-   * orbital pose does not turn, and using it would leave the camera fixed in
-   * inertial space while the mountain it is standing on rotates out from under
-   * it. That is the same bug the `BodyFixedDirection` brand exists to prevent,
-   * met one layer up where a brand cannot reach.
-   *
-   * `renderTime`, never `clock.time`, exactly as `#targetPosition` documents.
-   */
-  #surfacePose(): ObserverPose | null {
-    const stance = this.#stance
-    const body = this.#body()
-    if (stance === null || body === null) return null
-    const world = this.#host.world
-    let spin
-    try {
-      spin = world.frames.pose(bodyFixedFrameId(body.address), this.time)
-    } catch {
-      return null
-    }
-    const up = geodeticDirection(stance.latitude, stance.longitude)
-    /*
-     * The **drawn** radius, not the contact test's.
-     *
-     * A stance is a height above the ground the viewer can see, and since Phase
-     * 4 the ground the viewer can see carries a presentational tail the contact
-     * test does not — up to `drawnDivergence`, which is 1.25 m. Stood
-     * against `surfaceRadius` at a two-meter stance, the eye sits 0.4 m over the
-     * plain in one place and inside a crater rim in the next, which is the
-     * divergence made visible in exactly the picture the phase is judged from.
-     * The ship still lands on `surfaceRadius`: physics may not read a term the
-     * renderer is free to change.
-     */
-    const { offset, orientation } = surfaceStancePose(
-      up,
-      drawnSurfaceRadius(body, up),
-      stance,
-    )
-    const aimed = Q.multiply(spin.orientation, orientation)
-    /*
-     * During a drop the roll is blended in from the orbit camera's. The orbit
-     * arm keeps the pole up and this arm keeps the local vertical up, and at
-     * release the two can differ by the co-latitude; slerping between the
-     * orientation the camera had and the one the stance wants, over the first
-     * fifth of the descent, is what keeps the horizon from snapping on the
-     * frame the figure is let go.
-     */
-    const descent = this.#descent
-    return {
-      position: UV.translate(spin.position, Q.rotate(spin.orientation, offset)),
-      orientation:
-        descent === null || descent.blend >= 1
-          ? aimed
-          : Q.slerp(
-              Q.normalize(Q.multiply(spin.orientation, descent.from)),
-              aimed,
-              descent.blend,
-            ),
-    }
-  }
-
-  #surfaceStatus(): SurfaceStatus | null {
-    const stance = this.#stance
-    const body = this.#body()
-    if (stance === null || body === null) return null
-    const up = geodeticDirection(stance.latitude, stance.longitude)
-    // One elevation sample, not two. `drawnSurfaceRadius` is `datumRadius +
-    // drawnElevation`, so asking for both the radius and the elevation the way
-    // they read is fourteen octaves of noise run twice, eight times a second.
-    // The drawn one, because this is the number under the altitude readout and
-    // the stance above stands on it.
-    const elevation = drawnElevation(body.surface, up)
-    return {
-      stance,
-      scrub: scrubForHeight(body.radius, stance.height),
-      /*
-       * The terrain's own elevation, not `surfaceRadius − body.radius`.
-       *
-       * `surfaceRadius` is `datumRadius + groundElevation`, and `datumRadius`
-       * is the measured *ellipsoid* on any body with a figure — so subtracting
-       * `body.radius` folds the figure offset into a number the panel prints as
-       * a terrain elevation. On Phobos that is about −3.5 km of "elevation" on a
-       * body with a kilometer of relief; on Haumea it reaches −513 km. Worse, the
-       * Ground section prints it directly under site buttons showing
-       * `SurveySite.elevation`, which is the same quantity — the same place,
-       * two numbers, kilometers apart.
-       *
-       * It is the **drawn** field and the site's is canonical, so the two are
-       * still not the same number: up to `drawnDivergence`, 1.25 m on Luna.
-       * That is the right side to be on — the readout is under an altitude the
-       * stance above stands on, and the stance is drawn — and it is the site
-       * that has the wrong field, which is `surveySites` to fix and not this.
-       */
-      groundElevation: elevation,
-      radius: datumRadius(body, up) + elevation + stance.height,
-      heightText: formatReading(stance.height),
-      site: this.#site,
-    }
+    return bodyOf(this.#host.world, this.#target)
   }
 
   /** Unit vector from the target toward its star, in universe axes. */

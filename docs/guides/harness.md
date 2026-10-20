@@ -7,7 +7,7 @@ by the Node runner and the tests.
 > `ir.help()` in the console is the quickest list. This page explains the
 > supported vocabulary and the distinctions that the one-line help cannot.
 >
-> Code: `packages/devtools/src/harness.ts`
+> Code: `packages/devtools/src/harness.ts`, over the port in `host.ts`
 
 ---
 
@@ -217,6 +217,12 @@ node scripts/drive.mjs --url http://localhost:5173/planetarium \
 | `ir.findWorlds(q)`  | bodies matching what a world _is_, swept in worker batches    |
 | `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
 | `ir.loadSystem(id)` | generate a system without moving the ship                     |
+
+The first four are functions over the world and a vantage — the ship, and
+the planetarium's eye when it holds one — in
+[`finding.ts`](../../packages/devtools/src/finding.ts), beside the per-question
+answers in `travel.ts`; the harness forwards to them, and their tests call them
+directly.
 
 `goTo` and the observatory's `look` accept human forms such as `SOL`,
 `s:SOL/b:2`, or `b:2` relative to the current system. The low-level
@@ -499,6 +505,17 @@ it returns is the frame asked for; `drop` is eight seconds of ballistic entry
 that ends level with the horizon facing the star, which is a thing to watch and
 useless to photograph the start of. `ir.ascend()` abandons one part-way at the
 framing it left. [ADR-0034](../adr/0034-the-drop.md).
+
+The arm is its own module beside the observatory.
+[`surfaceArm.ts`](../../packages/devtools/src/surfaceArm.ts) owns the stance,
+the site, the held keys, a drop in flight and the aim, and the observatory
+forwards `ir.observatory`'s surface verbs to it by the same names.
+[`stanceGeometry.ts`](../../packages/devtools/src/stanceGeometry.ts) is its
+arithmetic — the drop aid's rings and arc, a held-key flight step, the stance
+at each instant of a drop — as functions of a body, a direction and an eye in
+the body's rotating axes, with the figures' claims tested as properties.
+[`heldTime.ts`](../../packages/devtools/src/heldTime.ts) is the photographic
+instant every pose is taken at, held or live.
 
 Sites are derived from the body's own terrain rather than authored, so
 "the highest ground on this world" survives regeneration and is still the
@@ -841,6 +858,20 @@ ir.load(text) // → Result<stateHash, error>
 DevTools Protocol against a Chrome it launches itself, never an extension in
 somebody's own browser. `pnpm drive --help`, and the
 [`drive` skill](../../.claude/skills/drive/SKILL.md) for the traps.
+
+`drive.mjs` is the entry point, and holds the flags, the
+help text, the state file, Chrome and the dev server, and the `main()` that
+wires them. [`driveSteps.mjs`](../../scripts/driveSteps.mjs) plans the step
+list from the command line and runs it over a rig of callbacks, and holds the
+`--settle` rule — two consecutive quiet `ir.settled()` answers inside a
+budget. [`cdp.mjs`](../../scripts/cdp.mjs) is the wire: `connect` over a
+socket, `evaluate`, the buffered logs, and the screencast and trace
+recordings. [`drivePage.mjs`](../../scripts/drivePage.mjs) clears storage and
+climbs the boot ladder — `drawing`, `booted`, document mode, the twelve-second
+cover give-up. Each has a `.test.mjs` beside it that runs against a fake
+socket, a scripted `send` or a fake rig, so a change to how the driver
+decides is checked by `pnpm test` without a browser; only what a compositor
+shows needs the real invocation.
 
 The pattern that works well:
 

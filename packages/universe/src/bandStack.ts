@@ -63,8 +63,9 @@ export type StageKind =
 /**
  * What a gate reads: the fields of the body both evaluations have in hand.
  *
- * `sea` is passed in rather than derived, because deriving it is
- * `seaDatumElevation` in `terrain.ts` and this module sits under that one.
+ * `sea` is passed in rather than derived: both evaluations already hold it,
+ * from `seaDatumElevation` in `regions.ts`, and a gate reads only what it is
+ * handed.
  * `seabed` is the request's flag — the same `HeightfieldRequest.seabed` the
  * packer takes — and only the clamp reads it.
  */

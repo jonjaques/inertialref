@@ -114,86 +114,10 @@ export const metersToFeet = (m: Meters): Feet => (m / FOOT) as Feet
 export const metersToInches = (m: Meters): Inches => (m / INCH) as Inches
 export const radiansToDegrees = (r: Radians): Degrees =>
   ((r * 180) / Math.PI) as Degrees
+/** Whole degrees, which is every angle a panel prints or puts on a slider. */
+export const wholeDegrees = (r: Radians): Degrees =>
+  Math.round(radiansToDegrees(r)) as Degrees
 export const degreesToRadians = (d: Degrees): Radians => (d * Math.PI) / 180
-
-/**
- * Pick the unit a human would use at this magnitude and format it.
- *
- * Deliberately spans the whole range the game does — an inch-scale readout and
- * a kiloparsec readout come out of the same call, because the HUD shows one
- * distance field whether you are docking or crossing the galaxy.
- */
-export function formatDistance(m: Meters, digits = 3): string {
-  const a = Math.abs(m)
-  if (!Number.isFinite(m)) return `${m}`
-  // Light-years rather than parsecs below a kiloparsec: astronomers prefer pc,
-  // but the HUD is read by pilots, and every catalog name the player sees
-  // ("4.24 ly to Proxima") is quoted in light-years.
-  if (a >= 1e3 * PARSEC) return `${(m / (1e3 * PARSEC)).toFixed(digits)} kpc`
-  if (a >= 0.05 * LIGHT_YEAR)
-    return `${metersToLightYears(m).toFixed(digits)} ly`
-  if (a >= 0.001 * AU) return `${metersToAu(m).toFixed(digits)} AU`
-  if (a >= 1e5) return `${metersToKilometers(m).toFixed(digits)} km`
-  if (a >= 1) return `${m.toFixed(digits)} m`
-  if (a >= 0.01) return `${metersToInches(m).toFixed(digits)} in`
-  return `${(m * 1e3).toFixed(digits)} mm`
-}
-
-/**
- * The same distance, written the way a panel is read rather than logged.
- *
- * `formatDistance` carries three decimals at every magnitude, which is right
- * for a log line and wrong on screen: a camera 20,780 km out reads
- * "20779.659 km", where the last four digits move every frame and none of them
- * is a fact anyone is using. The rule is decimals by magnitude within the unit
- * band — none at 100 and above, one above 10, two below — so what prints is
- * never finer than about a thousandth of the reading itself, which is the
- * resolution at which a digit stops moving every frame. It is not a
- * significant-figure rule and does not read as one at the top of a band:
- * `123,456,789 m` is `123,457 km`, six figures, because the band runs to
- * an AU and cutting it to three would round a camera position to the nearest
- * thousand kilometers.
- *
- * The thousands separator is what makes five digits scannable at a glance —
- * the difference between "20780" and "20,780" is the difference between
- * counting and reading.
- *
- * Grouped by hand rather than through `toLocaleString`, for the reason
- * `dossier.ts` states: the browser's locale would choose the decimal separator,
- * so the same body would render "6.371,0 km" on one machine and "6,371.0 km" on
- * another. Every readout in this interface is an instrument reading, and
- * instruments do not translate.
- */
-export function formatReading(m: Meters): string {
-  if (!Number.isFinite(m)) return '—'
-  const [value, unit] = scaled(m)
-  const a = Math.abs(value)
-  return `${group(value.toFixed(a >= 100 ? 0 : a >= 10 ? 1 : 2))} ${unit}`
-}
-
-/** The same unit ladder `formatDistance` walks, without the formatting. */
-function scaled(m: Meters): readonly [number, string] {
-  const a = Math.abs(m)
-  if (a >= 1e3 * PARSEC) return [m / (1e3 * PARSEC), 'kpc']
-  if (a >= 0.05 * LIGHT_YEAR) return [metersToLightYears(m), 'ly']
-  if (a >= 0.001 * AU) return [metersToAu(m), 'AU']
-  if (a >= 1e5) return [metersToKilometers(m), 'km']
-  if (a >= 1) return [m, 'm']
-  if (a >= 0.01) return [metersToInches(m), 'in']
-  return [m * 1e3, 'mm']
-}
-
-/** Thousands separators, on the integer part only. */
-function group(fixed: string): string {
-  const sign = fixed.startsWith('-') ? '−' : ''
-  const [digits = '', fraction] = (sign === '' ? fixed : fixed.slice(1)).split(
-    '.',
-  )
-  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return fraction === undefined
-    ? `${sign}${grouped}`
-    : `${sign}${grouped}.${fraction}`
-}
 
 /*
  * What the simulation clock's zero actually is.
@@ -222,13 +146,3 @@ export const SIMULATION_EPOCH_UTC_MS = Date.UTC(2000, 0, 1, 12, 0, 0)
  */
 export const instantMillis = (s: Seconds): number =>
   SIMULATION_EPOCH_UTC_MS + s * 1000
-
-/** Human-readable duration for HUD/debug output. Input is simulation seconds. */
-export function formatDuration(s: Seconds): string {
-  const a = Math.abs(s)
-  if (a >= SECONDS_PER_YEAR) return `${(s / SECONDS_PER_YEAR).toFixed(2)} yr`
-  if (a >= SECONDS_PER_DAY) return `${(s / SECONDS_PER_DAY).toFixed(2)} d`
-  if (a >= 3600) return `${(s / 3600).toFixed(2)} h`
-  if (a >= 60) return `${(s / 60).toFixed(2)} min`
-  return `${s.toFixed(2)} s`
-}

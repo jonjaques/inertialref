@@ -28,7 +28,7 @@
     "fta": "fta .",
     "fta:check": "fta . --score-cap 91",
     "knip": "knip --no-config-hints --no-exit-code",
-    "knip:check": "knip --no-config-hints --include files,dependencies,unlisted,unresolved",
+    "knip:check": "knip --no-config-hints --include files,dependencies,unlisted,unresolved,cycles",
     "spelling": "node scripts/spelling/scan.mjs",
     "spelling:check": "node scripts/spelling/scan.mjs --check",
     "graph": "node scripts/check-graph.mjs",

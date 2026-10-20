@@ -275,7 +275,7 @@ GPU suite use the word in WebGPU's own sense, the physical device
 `pnpm test:gpu` needs, and the two meanings never meet.
 
 **Host** — two things at two layers. In `packages/devtools`, `Host`
-(`harness.ts`) is what the harness is built over: the simulation half — `world`
+(`host.ts`) is what the harness is built over: the simulation half — `world`
 as a getter, `player()`, `pool()`, `replaceWorld`, `authority()`, `now` — and
 `render`, a `RenderHost` a drawing host supplies whole. `openSession` returns a
 `Session`, which is a `Host` with the harness, the store, the system, the target

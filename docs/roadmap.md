@@ -493,7 +493,7 @@ has the token mapping.
 | different `Toggle`s                     |                                                           |
 | `GraphicsPanel`'s `Cycle`               | `ToggleGroup` — see "one correction" below                |
 | `ShellBar`'s `<button role="switch">`   | `Toggle`                                                  |
-| The catalog's address field             | `Input`, via `hud/AddressForm.tsx`                        |
+| The catalog's address field             | `Input`, once a screen mounts the field                   |
 | The `w-px bg-slate-800` dividers        | `Separator`                                               |
 | The status chips                        | `Badge`                                                   |
 | Icon-only controls' `title` attribute   | `Tooltip` — the rest keep `title`; see below              |

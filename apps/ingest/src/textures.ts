@@ -126,7 +126,7 @@ const open = (bytes: Buffer) =>
  * throwing 80% of them away produces a normal map full of detail the albedo
  * underneath it does not have.
  */
-async function elevationToNormal(
+export async function elevationToNormal(
   bytes: Buffer,
   source: TextureSource,
 ): Promise<Buffer> {
@@ -237,7 +237,7 @@ async function elevationToNormal(
 }
 
 /** Brightness into alpha, for a layer that must be transparent where it is dark. */
-async function luminanceToAlpha(
+export async function luminanceToAlpha(
   bytes: Buffer,
   source: TextureSource,
 ): Promise<Buffer> {
@@ -265,7 +265,7 @@ async function luminanceToAlpha(
     .toBuffer()
 }
 
-async function plainImage(
+export async function plainImage(
   bytes: Buffer,
   source: TextureSource,
 ): Promise<Buffer> {

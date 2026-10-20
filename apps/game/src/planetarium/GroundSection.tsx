@@ -1,4 +1,4 @@
-import { formatReading } from '@inertialref/shared'
+import { formatReading, wholeDegrees } from '@inertialref/shared'
 import { compassDegrees } from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
 import { Action } from '../hud/Action.tsx'
@@ -176,14 +176,14 @@ export function GroundSection({
             <span className="type-ui flex items-baseline gap-1.5 text-slate-400">
               Tilt
               <span className="ml-auto text-slate-300 tabular-nums">
-                {degrees(eye.pitch)}°
+                {wholeDegrees(eye.pitch)}°
               </span>
             </span>
             <Slider
               min={-88}
               max={88}
               step={1}
-              value={[degrees(eye.pitch)]}
+              value={[wholeDegrees(eye.pitch)]}
               aria-label="Tilt above the horizontal"
               onValueChange={([next]) => {
                 if (next !== undefined) onPitch((next * Math.PI) / 180)
@@ -233,7 +233,3 @@ export function GroundSection({
     </div>
   )
 }
-
-/** Radians as whole degrees, which is every angle this section prints. */
-const degrees = (radians: number): number =>
-  Math.round((radians * 180) / Math.PI)

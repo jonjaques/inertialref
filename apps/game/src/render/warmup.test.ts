@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Camera, Object3D, Scene } from 'three/webgpu'
 import { DEFAULT_PICTURE } from './picture.ts'
 import { sceneLayout, type SceneLayout } from './sceneLayout.ts'
-import { warmTargetFor } from './sensor.ts'
+import { warmTargetFor } from './sceneTarget.ts'
 import {
   type BootProgress,
   type WarmRenderer,

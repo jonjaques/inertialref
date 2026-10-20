@@ -74,8 +74,6 @@ export const isPaneState = (value: unknown): value is PaneState =>
     (zone) => typeof (value as Record<string, unknown>)[zone] === 'boolean',
   )
 
-export const DROP_ZONES = PANE_ZONES
-
 export type DockLayout = {
   readonly [Z in DockZone]: readonly string[]
 }

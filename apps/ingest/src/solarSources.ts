@@ -35,7 +35,7 @@
  * traceability, not compliance.
  */
 
-export type SolarSourceKind = 'html' | 'json'
+type SolarSourceKind = 'html' | 'json'
 
 export interface SolarSource {
   readonly key: string

@@ -14,7 +14,7 @@ import {
 } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import type { SceneLayout } from './sceneLayout.ts'
-import { warmTargetFor } from './sensor.ts'
+import { warmTargetFor } from './sceneTarget.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
 /*

@@ -21,15 +21,25 @@
    *    directly — there is no build step and no `dist` — so the entry is the
    *    source file itself.
    *
-   * There are no `rules` here, for the reason `fta.json` carries no
+   * Severity stays off the config, for the reason `fta.json` carries no
    * `score_cap`: severity in the config applies to the report too, which turns
    * `pnpm knip` into something that exits 1 while printing the answer. The
    * split is on the command line instead — `pnpm knip` reports everything and
-   * always exits 0, `pnpm knip:check` narrows to the four unambiguous classes
-   * (files, dependencies, unlisted, unresolved) and exits 1 on any of them.
-   * An unused *export* is deliberately not one of those: this repository
+   * always exits 0, `pnpm knip:check` narrows to the unambiguous classes
+   * (files, dependencies, unlisted, unresolved, cycles) and exits 1 on any of
+   * them. An unused *export* is deliberately not one of those: this repository
    * exports named constants for a test to assert against, and a component can
    * be finished before the screen that mounts it.
+   *
+   * `cycles` is the one rule, and it does not break the split.
+   * knip reports a circular dependency as a warning by default, which prints
+   * it and never fails, so `--include cycles` alone could not gate anything.
+   * `"error"` changes only the exit code: `pnpm knip` carries
+   * `--no-exit-code`, so the report reads the same. Nothing else polices an
+   * intra-package cycle — `pnpm graph` discards every edge inside a package
+   * before it looks — and a value read across such a cycle at module scope
+   * throws a TDZ `ReferenceError` on import
+   * (`apps/headless/src/moduleGraph.test.ts`).
    */
   /*
    * `rg` is ripgrep, which `scripts/spelling/scan.mjs` shells out to for the
@@ -39,6 +49,8 @@
    */
   "ignoreBinaries": ["rg"],
 
+  "rules": { "cycles": "error" },
+
   "workspaces": {
     ".": {
       // `scripts/` is the build and rig layer: every one of these is invoked by
@@ -47,6 +59,11 @@
       // files. `.claude/hooks/gate.mjs` is run by Claude Code's Stop hook.
       "entry": ["scripts/**/*.mjs", ".claude/hooks/*.mjs", "vitest.config.ts"],
       "project": ["scripts/**/*.mjs", ".claude/hooks/*.mjs", "*.ts"],
+      // `scripts/gpuAdapter.mjs` loads the Dawn addon through `createRequire`
+      // against `apps/game/package.json`, because pnpm does not hoist it to the
+      // root. knip reads the `require('webgpu')` as the root's own import and
+      // reports it unlisted; listing it here would install it twice.
+      "ignoreDependencies": ["webgpu"],
     },
     "apps/game": {
       /*
