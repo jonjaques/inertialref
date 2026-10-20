@@ -842,6 +842,20 @@ DevTools Protocol against a Chrome it launches itself, never an extension in
 somebody's own browser. `pnpm drive --help`, and the
 [`drive` skill](../../.claude/skills/drive/SKILL.md) for the traps.
 
+`drive.mjs` is the entry point, and holds the flags, the
+help text, the state file, Chrome and the dev server, and the `main()` that
+wires them. [`driveSteps.mjs`](../../scripts/driveSteps.mjs) plans the step
+list from the command line and runs it over a rig of callbacks, and holds the
+`--settle` rule — two consecutive quiet `ir.settled()` answers inside a
+budget. [`cdp.mjs`](../../scripts/cdp.mjs) is the wire: `connect` over a
+socket, `evaluate`, the buffered logs, and the screencast and trace
+recordings. [`drivePage.mjs`](../../scripts/drivePage.mjs) clears storage and
+climbs the boot ladder — `drawing`, `booted`, document mode, the twelve-second
+cover give-up. Each has a `.test.mjs` beside it that runs against a fake
+socket, a scripted `send` or a fake rig, so a change to how the driver
+decides is checked by `pnpm test` without a browser; only what a compositor
+shows needs the real invocation.
+
 The pattern that works well:
 
 ```mermaid
