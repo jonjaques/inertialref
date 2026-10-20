@@ -51,8 +51,9 @@ indistinguishable to it, so it can drive the wrong one. `scripts/drive.mjs` laun
 own Chrome on its own profile and port and needs no focus at all.
 
 Its decisions run without Chrome. The step list, `--settle` and the step results
-are `scripts/driveSteps.mjs`; the CDP channel, the cast and the trace are
-`scripts/cdp.mjs`; storage clearing and the boot ladder are `scripts/drivePage.mjs`.
+are `scripts/driveSteps.mjs`; the CDP channel and the frame and trace-event
+collection are `scripts/cdp.mjs`, while writing, differencing and clipping a cast stay in
+`drive.mjs`; storage clearing and the boot ladder are `scripts/drivePage.mjs`.
 `pnpm vitest run driveSteps.test cdp.test drivePage.test` answers a change to any of
 them in under a second.
 

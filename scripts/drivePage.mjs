@@ -71,8 +71,8 @@ export async function clearStorage(send, { url, note, sleep }) {
  * Whether the page at `here` (a path and search) shows what `url` asks for.
  *
  * The mode is a function of the path, so a booted page on `/` is not a
- * booted page on `/planetarium` — attaching to it regardless produced a
- * screenshot of the home poster captioned as the planetarium. The query is
+ * booted page on `/planetarium` — attaching to it regardless captions a
+ * screenshot of the home poster as the planetarium. The query is
  * half of that contract and carries the same weight: `?at=` is the body the
  * planetarium opens on, `?t=` the cutscene frame, `?seed=` the universe.
  *

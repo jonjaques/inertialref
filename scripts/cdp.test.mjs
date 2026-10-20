@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { wrap } from './driveScript.mjs'
 import { castFrames, connect, drainLogs, evaluate, traceFor } from './cdp.mjs'
 
 /** A `WebSocket` with the three events `connect` listens to, and a log of
@@ -103,6 +104,7 @@ describe('evaluate', () => {
     }
     expect(await evaluate(send, '1 + 2')).toBe(3)
     expect(calls[0].method).toBe('Runtime.evaluate')
+    expect(calls[0].params.expression).toBe(wrap('1 + 2'))
     expect(calls[0].params).toMatchObject({
       awaitPromise: true,
       returnByValue: true,
@@ -160,7 +162,7 @@ describe('castFrames', () => {
     const wire = connect(ws)
     const clock = fakeClock()
     const sent = []
-    const send = (method, params) => {
+    const send = (method) => {
       sent.push(method)
       if (method === 'Page.startScreencast')
         for (const [id, at] of [

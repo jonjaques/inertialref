@@ -248,7 +248,8 @@ const PORT = Number(values.port)
  * `?presentation=occluded` tells the page the probe is unreadable rather than
  * black — `QUERY.presentation` in `apps/game/src/pages/paths.ts` carries the
  * argument. It is added to whatever `--url` asks for, and the attach check
- * below compares asked-for keys only, so it does not disturb the match.
+ * (`showing` in `drivePage.mjs`) compares asked-for keys only, so it does not
+ * disturb the match.
  */
 const URL_ = driveUrl({
   url: values.url,
@@ -279,8 +280,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 /**
  * Two channels, because they answer to different flags. `say` is what a step
  * returned and is the reason the command was run; `note` is the rig narrating
- * itself, which `--quiet` exists to silence. Routing both through one writer
- * made `--quiet` swallow the answer as well as the narration.
+ * itself, which `--quiet` exists to silence. One writer for both would make
+ * `--quiet` swallow the answer as well as the narration.
  */
 const say = (line) => {
   if (!values.json) process.stdout.write(`${line}\n`)

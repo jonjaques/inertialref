@@ -195,7 +195,20 @@ describe('clearStorage', () => {
     expect(p.notes).toEqual(['cleared local, session storage and cookies'])
   })
 
-  it('skips an opaque origin and refuses a page that never leaves', async () => {
+  it('skips an opaque origin', async () => {
+    const calls = []
+    const { send } = chrome(
+      ladder({ origin: [new Error('no context')], blank: [true] }),
+    )
+    const recording = async (method, params) => {
+      if (method === 'Storage.clearDataForOrigin') calls.push(params.origin)
+      return send(method, params)
+    }
+    await clearStorage(recording, page())
+    expect(calls).toEqual(['http://localhost:5173'])
+  })
+
+  it('refuses a page that never leaves', async () => {
     const { send } = chrome(
       ladder({ origin: [new Error('no context')], blank: [false] }),
     )

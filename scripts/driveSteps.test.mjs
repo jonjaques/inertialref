@@ -197,6 +197,11 @@ describe('runSteps', () => {
     const rig = fakeRig([OK, OK])
     const results = await runSteps(script, rig)
     expect(results.map((r) => r.step)).toEqual(script.map((s) => s.step))
+    // `--json` prints these in key order, and the step name leads every one.
+    expect(results.map((r) => Object.keys(r)[0])).toEqual(
+      results.map(() => 'step'),
+    )
+    expect(Object.keys(results[3])).toEqual(['step', 'ms', 'settled', 'ok'])
     expect(results).toEqual([
       { step: 'js', value: 7 },
       { step: 'file', value: 7 },
@@ -293,7 +298,9 @@ describe('jsonReport', () => {
     const results = [{ step: 'wait', ms: 1 }]
     const errors = ['exception: boom']
     const text = jsonReport(results, errors)
-    expect(text.endsWith('}\n')).toBe(true)
-    expect(JSON.parse(text)).toEqual({ results, errors })
+    expect(text).toBe(
+      '{\n  "results": [\n    {\n      "step": "wait",\n      "ms": 1\n    }\n  ],\n' +
+        '  "errors": [\n    "exception: boom"\n  ]\n}\n',
+    )
   })
 })

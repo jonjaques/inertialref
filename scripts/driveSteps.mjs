@@ -2,14 +2,14 @@
  * The steps `scripts/drive.mjs` runs, as a plan and an interpreter over a rig.
  *
  * `planSteps` turns `parseArgs`'s tokens into the ordered list; `runSteps`
- * walks it against a `rig` of `{ evaluate, sleep, now, read, capture, cast,
- * trace, sample, logs, reboot, say, warn }`. Chrome, the file system and the
+ * walks it against a `rig` of `{ evaluate, userGesture, sleep, now, read,
+ * capture, cast, trace, sample, logs, reboot, say, warn }`. Chrome, the file system and the
  * clock all live in the rig, so `driveSteps.test.mjs` runs every step with a
  * fake one.
  */
 import { silentCompletion } from './driveScript.mjs'
 
-export const STEPS = new Set([
+const STEPS = new Set([
   'js',
   'file',
   'wait',
@@ -44,7 +44,7 @@ export const planSteps = (tokens) =>
 
 /** A step argument that has to be a number. `Number('soon')` is `NaN`, and a
  *  `NaN` reaches `setTimeout` as 0 — a `--wait` that silently does not wait. */
-export const count = (arg, flag, least) => {
+const count = (arg, flag, least) => {
   const n = Number(arg)
   if (!Number.isFinite(n) || n < least)
     throw new Error(`--${flag} wants a number ≥ ${least}, not ${String(arg)}`)
@@ -98,7 +98,7 @@ export async function settle(budget, { read, sleep, now }) {
 const kb = (bytes) => (bytes / 1024).toFixed(0)
 const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1)
 
-/** One handler per step kind; each pushes one result and says what it found. */
+/** One handler per step kind; each returns one result and says what it found. */
 const RUN = {
   async js({ step, arg }, rig) {
     const expression = step === 'file' ? await rig.read(arg) : String(arg)
