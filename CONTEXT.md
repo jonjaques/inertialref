@@ -8214,7 +8214,7 @@ pre-exposed with the scene and bloomed white under the 2,400 s instrument;
 they now carry `integratedSkyGain` and present at one brightness at every
 exposure, held by `orbitTrace.gpu.test.ts` across 10⁶ of pre-exposure. The
 meter still counts them. The rigs are `.scratch/galaxy-perf/` and the record
-is [perf § The galaxy](design/plans/perf.md#the-galaxy). Every browser figure
+is [ADR-0032](docs/adr/0032-the-stellar-field.md#dust-transport-m5). Every browser figure
 is from a 960×540 rig at the user's request.
 
 ## Orbit dragging was spending the frame on an invisible sky (06 Sep 2026)
@@ -8576,8 +8576,8 @@ radians. Product input handling did not change.
 The M7–M11 completion branch is stacked on PR #72 at `2847688`, by Jon's
 explicit choice. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
 records the architecture, and
-[the performance plan](design/plans/perf.md#the-galaxy) carries
-the final evidence and quality budgets. The source model is now active
+[its measured operating points](docs/adr/0038-the-stars-and-the-diffuse-sky.md#measured-operating-points)
+carry the final evidence and quality budgets. The source model is now active
 `galaxy@5` / `galaxy-field@5`, with GPU port `galaxy-tsl@8`. Old `P` addresses
 still use the exact legacy generator. New `Q` addresses carry level, cell and
 ordinal; the saved manifest identifies generation drift rather than promising
