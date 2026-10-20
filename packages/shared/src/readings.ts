@@ -23,10 +23,12 @@ import {
  * where it was written. Every readout in this interface is an instrument
  * reading; instruments do not translate.
  *
- * A reading that is not finite prints the em dash alone. Each formatter that
- * appends a unit returns early for one, because the guard inside `round` and
+ * A reading that is not finite prints the em dash alone. Each instrument
+ * formatter that appends a unit returns early for one, because the guard inside `round` and
  * `significant` returns before the unit does: `— bar` claims a unit for a
- * quantity that has no value.
+ * quantity that has no value. `formatDistance` and `formatDuration` are the
+ * exception: they write logs and debug lines, print the number as it is, and
+ * `tour/brief.ts` reads `formatDuration`'s output as a quantity and a unit.
  */
 
 /**
@@ -113,8 +115,7 @@ export function formatDuration(s: Seconds): string {
  *
  * U+2212, not the hyphen `toFixed` produces. In a tabular column a hyphen is
  * two thirds the width of a digit and sits above the numerals' midline, so a
- * negative reading is visibly narrower than the positive one under it, and two
- * glyphs for one sign in one panel.
+ * negative reading is visibly narrower than the positive one under it.
  */
 export function group(fixed: string): string {
   const sign = fixed.startsWith('-') ? '−' : ''

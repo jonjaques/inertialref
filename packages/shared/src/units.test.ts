@@ -27,7 +27,7 @@ describe('units', () => {
     expect(metersToLightYears(1.301 * PARSEC)).toBeCloseTo(4.244, 2)
   })
 
-  it('converts to feet exactly', () => {
+  it('converts a foot to one foot', () => {
     expect(metersToFeet(0.3048)).toBeCloseTo(1, 12)
   })
 })

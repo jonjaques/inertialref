@@ -28,7 +28,7 @@ import {
 const MARS_YEAR = 686.98 * SECONDS_PER_DAY
 
 const finite = fc.double({ noNaN: true, noDefaultInfinity: true })
-const nonFinite = fc.constantFrom(Number.NaN, Infinity, -Infinity)
+const NON_FINITE = [Number.NaN, Infinity, -Infinity] as const
 
 /** The index of a unit in its ladder, smallest first; `million km` before `km`. */
 const rung = (ladder: readonly string[], text: string): number =>
@@ -81,8 +81,8 @@ describe('the reading vocabulary', () => {
     /*
      * A unit after the dash claims a quantity that has no value, and the
      * guard inside `round` and `significant` cannot stop it: the unit is
-     * appended after they return. Every instrument formatter is in this list,
-     * so a new one that appends its unit to a dash fails it.
+     * appended after they return. The list is every instrument formatter, and
+     * the domain is three values, so it is walked whole rather than sampled.
      *
      * `formatDistance` and `formatDuration` are not instrument readings.
      * They are log and debug formatters that print the number as it is, and
@@ -101,15 +101,14 @@ describe('the reading vocabulary', () => {
       'density of mass': (value) => density(value, EARTH_RADIUS),
       'density of radius': (value) => density(EARTH_MASS, value),
     }
-    fc.assert(
-      fc.property(
-        fc.constantFrom(...Object.keys(formatters)),
-        nonFinite,
-        (name, value) => {
-          expect(formatters[name]?.(value), `${name}(${value})`).toBe('—')
-        },
-      ),
-    )
+    for (const [name, format] of Object.entries(formatters)) {
+      for (const value of NON_FINITE) {
+        expect(format(value), `${name}(${value})`).toBe('—')
+      }
+    }
+    // A finite input whose reading is not finite: a zero radius is an
+    // infinite density.
+    expect(density(EARTH_MASS, 0)).toBe('—')
   })
 })
 
@@ -151,5 +150,6 @@ describe('the goldens', () => {
     expect(formatReading(20_779_659)).toBe('20,780 km')
     expect(formatReading(123_456_789)).toBe('123,457 km')
     expect(formatReading(-12.34)).toBe('−12.3 m')
+    expect(group('-1234567.891')).toBe('−1,234,567.891')
   })
 })
