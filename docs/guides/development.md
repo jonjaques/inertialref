@@ -35,7 +35,7 @@ pnpm check --only gate  # what the Stop hook runs: graph, knip, fta, lint, typec
 
 # Reports describe the tree; each :check also gates it.
 pnpm fta              # complexity per file; fta:check exits 1 above a score of 109, in the gate
-pnpm knip             # what nothing imports; knip:check narrows to the four hard classes, in the gate
+pnpm knip             # what nothing imports; knip:check narrows to the five hard classes, in the gate
 pnpm spelling         # British declarations and their references
 pnpm spelling:check   # reject British declarations; part of pnpm check
 pnpm test:coverage    # the suite again, writing coverage/coverage-final.json
@@ -131,9 +131,11 @@ that exits 0 with a `:check` that exits 1, and both `:check`s are stages in the
 gate group. The `fta` cap is one above the worst file, so the gate is green on
 the tree it describes and the change that moves the worst file lowers it; a
 data table past the cap is a filename exclusion in `fta.json` with its reason,
-never a higher cap. `knip:check` fails on the four unambiguous classes — an
-unused file, an unused dependency, an unlisted one, an unresolved import — and
-not on an unused export, which a test asserting a constant is. Coverage stays
+never a higher cap. `knip:check` fails on the five unambiguous classes — an
+unused file, an unused dependency, an unlisted one, an unresolved import, a
+circular import — and not on an unused export, which a test asserting a
+constant is. The cycle is the one `pnpm graph` cannot see, because it looks
+only at edges between packages. Coverage stays
 outside the gate; `scripts/coverageFiles.mjs` reads the per-file figures a
 pull request body quotes. The findings are in
 [the complexity report](../../design/reports/complexity.md).

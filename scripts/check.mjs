@@ -109,7 +109,7 @@ const STAGES = [
   },
   {
     name: 'knip',
-    why: 'a file nothing imports, a dependency nothing uses, or an import nothing lists',
+    why: 'a file nothing imports, a dependency nothing uses, an import nothing lists, or a module on a cycle',
     argv: ['pnpm', 'knip:check'],
     weight: 1,
     cost: 2,
