@@ -9180,7 +9180,7 @@ The production review compares `codex/galaxy` with `origin/main` across 468
 changed files. The full baseline passes 2,218 regular tests, eight slow tests
 and the emitted-site checks. Isolated reviews cover the canonical packages,
 rendering and application shell; the integrated fixes pass 2,241 regular tests.
-The review record is [alpha production review](design/reports/alpha-production-review.md).
+The two device checks it left open are a row in [the roadmap's automation gaps](docs/roadmap.md#automation-gaps).
 
 API content comprises 1,459 of the 1,554 documentation pages. Rendering each
 through the full React shell makes the measured local Astro build emit 1,576
