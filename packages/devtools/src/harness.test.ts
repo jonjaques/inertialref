@@ -557,7 +557,7 @@ describe('searching the volume, inline', () => {
     const sweep = ir.findWorlds(
       {},
       {
-        lightYears: 12,
+        lightYears: 20,
         onBatch: () => {
           batches += 1
           sweep.cancel()

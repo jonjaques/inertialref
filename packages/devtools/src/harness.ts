@@ -1,10 +1,6 @@
 import type { PassReport } from './passReport.ts'
 import type { PictureReport } from './pictureReport.ts'
-import {
-  GENERATION_VERSIONS,
-  type WorldMatch,
-  type WorldQuery,
-} from '@inertialref/universe'
+import { GENERATION_VERSIONS, type WorldQuery } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
 import type { OnFoot } from './onFoot.ts'
 import {
@@ -26,21 +22,13 @@ import {
   type Degrees,
   degreesToRadians,
   getLogger,
-  LIGHT_YEAR,
   logHub,
   type LogRecord,
   radiansToDegrees,
   type Result,
   RingBufferSink,
 } from '@inertialref/shared'
-import { formatSeed } from '@inertialref/procedural'
-import {
-  type UniverseVector,
-  UV,
-  Vec,
-  type Vec3,
-  vec3,
-} from '@inertialref/spatial'
+import { Vec, type Vec3, vec3 } from '@inertialref/spatial'
 import {
   snapshot,
   type World,
@@ -59,9 +47,7 @@ import {
   isLandable,
   systemId,
   type SystemId,
-  type SystemStub,
   surveySites,
-  systemsWithin,
   walkBodies,
 } from '@inertialref/universe'
 import {
@@ -80,16 +66,11 @@ import {
   observerPose,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import {
-  encodeStub,
-  findWorldsTask,
-  type PoolStats,
-} from '@inertialref/workers'
+import type { PoolStats } from '@inertialref/workers'
 import type { AuthorityStatus } from '@inertialref/net'
 import {
   describeDrift,
   TOUR_LIMITS,
-  encodeUniverseVector,
   type VersionDrift,
 } from '@inertialref/protocol'
 import {
@@ -107,19 +88,13 @@ import {
   type WorldInspection,
 } from './inspect.ts'
 import {
-  DEFAULT_SEARCH_LIGHT_YEARS,
-  DEFAULT_SEARCH_LIMIT,
-  SEARCH_BATCH,
   currentSystemOf,
   resolveDestination,
   type SearchEntry,
   searchEntries,
   searchIndexVersion,
-  searchTargets,
-  targetsFor,
   type TravelTarget,
   type TravelTargetOptions,
-  travelTargets,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
 import {
@@ -160,6 +135,16 @@ import {
 } from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
 import { CUTSCENES } from './cutscenes/index.ts'
+import {
+  findWorlds,
+  type FindWorldsOptions,
+  nearbyTargets,
+  rowsFor,
+  searchByName,
+  systemsNearby,
+  type Vantage,
+  type WorldSweep,
+} from './finding.ts'
 import {
   type BootPhase,
   type FrameStats,
@@ -248,19 +233,6 @@ function placementInRadians(structure: SurfacePlacement): SurfacePlacement {
     longitude: degreesToRadians(structure.longitude as Degrees),
     heading: degreesToRadians(structure.heading as Degrees),
   }
-}
-
-/** A 500 ly box fits the 200,000-cell travel budget at every grid alignment. */
-function boundedTravelRadius(lightYears: number): number {
-  const bounded = Number.isNaN(lightYears)
-    ? 0
-    : Math.max(0, Math.min(500, lightYears))
-  if (bounded !== lightYears)
-    log.warn('Travel query radius is bounded to 0–500 light-years', {
-      requested: lightYears,
-      applied: bounded,
-    })
-  return bounded * LIGHT_YEAR
 }
 
 export class GameHarness {
@@ -391,87 +363,28 @@ export class GameHarness {
   systemsNearby(
     lightYears = 8,
   ): readonly { id: string; name: string; lightYears: number }[] {
-    const center = this.#here()
-    return systemsWithin(
-      this.world.galaxySeed,
-      this.world.catalog,
-      center,
-      boundedTravelRadius(lightYears),
-    )
-      .map((stub) => ({
-        id: stub.id as string,
-        name: stub.name,
-        lightYears: UV.distance(stub.position, center) / LIGHT_YEAR,
-      }))
-      .sort((a, b) => a.lightYears - b.lightYears)
+    return systemsNearby(this.#vantage(), lightYears)
   }
 
-  /**
-   * Everywhere the player can be sent right now, nearest system first, each
-   * system followed by its bodies if it is loaded.
-   *
-   * The one call that answers "where can I go?", which nothing answered before:
-   * every other verb here takes an address and none of them would tell you one.
-   * The debug overlay renders this list and the console prints it.
-   */
+  /** Everywhere the player can be sent right now. See `finding.ts`. */
   targets(options: TravelTargetOptions = {}): readonly TravelTarget[] {
-    /*
-     * `origin: 'observer'` falls back to the player rather than returning
-     * nothing, and that is not defensiveness — the observatory holds no target
-     * until the planetarium's first focus lands, which is several frames after
-     * the panel's first poll. A listing that was empty for those frames would
-     * flash a "nothing within 16 ly" empty state on every entry to the mode.
-     */
-    const from =
-      (options.origin === 'observer' ? this.observatory.eye : null) ??
-      this.#here()
-    return travelTargets(this.world, from, options)
+    return nearbyTargets(this.#vantage(), options)
   }
 
-  /**
-   * Everywhere matching what somebody typed, nearest first — the *whole*
-   * catalog, not the survey.
-   *
-   * Split from `targets` by question rather than by cost: that one asks "what
-   * is near me", which is a star sweep and cannot run per keystroke; this asks
-   * "what is called this", which is an index lookup and must. Filtering the
-   * survey's result — which is what the two panels did — could only ever find
-   * what was already within a few light years of the camera.
-   */
+  /** Everywhere matching what somebody typed, nearest first — the whole catalog. */
   search(
     text: string,
     options: TravelTargetOptions = {},
   ): readonly TravelTarget[] {
-    const from =
-      (options.origin === 'observer' ? this.observatory.eye : null) ??
-      this.#here()
-    return searchTargets(this.world, from, text)
+    return searchByName(this.#vantage(), text, options)
   }
 
-  /**
-   * Rows for addresses the caller already holds, nearest first not implied —
-   * the order is the caller's.
-   *
-   * The third question, after `targets` and `search`: a fuzzy index in the
-   * navigator answers with addresses, and this turns them back into the rows
-   * the survey draws, measured from the same eye. `b:2` and friends resolve
-   * against the system the player is in, exactly as `goTo` reads them; an
-   * address that names nothing is dropped rather than thrown, so one stale
-   * entry cannot empty the list.
-   */
+  /** Rows for addresses the caller already holds, in the caller's order. */
   rowsFor(
     addresses: readonly string[],
     options: TravelTargetOptions = {},
   ): readonly TravelTarget[] {
-    const from =
-      (options.origin === 'observer' ? this.observatory.eye : null) ??
-      this.#here()
-    return targetsFor(
-      this.world,
-      from,
-      addresses,
-      currentSystemOf(this.world, this.#host.player()),
-    )
+    return rowsFor(this.#vantage(), addresses, options)
   }
 
   /**
@@ -490,156 +403,9 @@ export class GameHarness {
     return searchIndexVersion(this.world)
   }
 
-  /**
-   * Search the volume for bodies that answer a query, in batches.
-   *
-   * The other question a catalog can be asked. `search` answers "what is
-   * called this" from an index; this answers "what is out there *like* this",
-   * and it cannot come from an index because the bodies do not exist until
-   * they are generated. So it is a sweep, and the sweep is the cost: a system
-   * is milliseconds to build and a body is microseconds to test.
-   *
-   * **It answers in batches rather than once.** The volume is cut into jobs
-   * and each is submitted separately, so rows arrive while the search is still
-   * running and a fifty-light-year question is not a blank panel for two
-   * seconds. That shape is forced as well as chosen: a job is one request and
-   * one response, with no partial-result message in the protocol, so streaming
-   * has to be several jobs rather than one job that reports as it goes.
-   *
-   * `cancel` stops it — the queued jobs are dropped and the running ones are
-   * told through `TaskContext.canceled`, which `findWorlds` polls once per
-   * system. A second question therefore does not wait behind the first one's
-   * whole volume.
-   *
-   * With no pool the batches run inline, on this thread, in order. That is the
-   * headless runner and it is slow rather than wrong, which is the same
-   * bargain every other task here makes.
-   */
-  findWorlds(
-    query: WorldQuery,
-    options: {
-      lightYears?: number
-      /**
-       * How many of the nearest matches to keep.
-       *
-       * A sweep is bounded by the volume, and the volume is not bounded by
-       * anything a reader will read: "rocky, within 150 light years" answers
-       * with over a hundred thousand bodies. Keeping them all is twenty
-       * megabytes of records nobody scrolls to, and re-sorting them on every
-       * batch is the main thread's whole budget — measured, it dropped the
-       * simulation clock to a fifth of real time while the sweep ran. So the
-       * nearest are kept and the rest are counted.
-       */
-      limit?: number
-      /**
-       * Called as each batch answers: the nearest matches so far, how far
-       * through the sweep it is, and how many were found in total — which is
-       * not `found.length` once the cap has bitten, and saying so is the
-       * difference between a list that is short and a search that found little.
-       */
-      onBatch?: (
-        found: readonly WorldMatch[],
-        progress: number,
-        total: number,
-      ) => void
-    } = {},
-  ): {
-    /** How many systems the sweep will walk. Zero means there is nothing to do. */
-    readonly systems: number
-    readonly cancel: () => void
-    readonly done: Promise<readonly WorldMatch[]>
-  } {
-    const from = this.observatory.eye ?? this.#here()
-    const stubs = systemsWithin(
-      this.world.galaxySeed,
-      this.world.catalog,
-      from,
-      boundedTravelRadius(options.lightYears ?? DEFAULT_SEARCH_LIGHT_YEARS),
-    )
-    /*
-     * Nearest first, so the batches that answer first are the ones a reader
-     * cares about most. `systemsWithin` sorts by id to stay a pure function of
-     * its query; the ordering that matters *here* is a display decision and is
-     * made here, which is the same split `orbitalOrder` makes.
-     */
-    const ordered = [...stubs].sort(
-      (a, b) => UV.distance(a.position, from) - UV.distance(b.position, from),
-    )
-    const pool = this.#host.pool()
-    const jobs: {
-      readonly result: Promise<{ readonly matches: readonly WorldMatch[] }>
-      readonly cancel: () => void
-    }[] = []
-    const limit = Math.max(1, options.limit ?? DEFAULT_SEARCH_LIMIT)
-    let stopped = false
-    let total = 0
-    let found: WorldMatch[] = []
-    const wire = encodeUniverseVector(from)
-    const seed = formatSeed(this.world.rootSeed)
-
-    const batches: (readonly SystemStub[])[] = []
-    for (let at = 0; at < ordered.length; at += SEARCH_BATCH)
-      batches.push(ordered.slice(at, at + SEARCH_BATCH))
-
-    let answered = 0
-    const run = async (): Promise<readonly WorldMatch[]> => {
-      for (const batch of batches) {
-        if (stopped) break
-        const payload = {
-          seed,
-          galaxy: this.world.galaxy as string,
-          stubs: batch.map(encodeStub),
-          query,
-          from: wire,
-        }
-        const job =
-          pool === null
-            ? {
-                result: Promise.resolve(
-                  findWorldsTask.run(payload, {
-                    canceled: () => stopped,
-                  }),
-                ),
-                cancel: () => {},
-              }
-            : pool.submit(findWorldsTask, payload)
-        jobs.push(job)
-        void Promise.resolve(job.result)
-          .then((answer) => {
-            if (stopped) return
-            total += answer.matches.length
-            found.push(...answer.matches)
-            /*
-             * Trimmed at twice the cap rather than at the cap, so the sort is
-             * amortized: cutting on every batch would sort a nearly-full array
-             * every time, and cutting at twice it sorts once per capful.
-             */
-            if (found.length > limit * 2) {
-              found.sort((a, b) => a.lightYears - b.lightYears)
-              found = found.slice(0, limit)
-            }
-            answered += 1
-            options.onBatch?.(found, answered / batches.length, total)
-          })
-          .catch(() => {
-            // A batch that failed is a gap in an answer, not a failed search.
-            // Counting it keeps the progress honest about being finished.
-            answered += 1
-          })
-      }
-      await Promise.allSettled(jobs.map((job) => job.result))
-      found.sort((a, b) => a.lightYears - b.lightYears)
-      return found.slice(0, limit)
-    }
-
-    return {
-      systems: ordered.length,
-      cancel: () => {
-        stopped = true
-        for (const job of jobs) job.cancel()
-      },
-      done: run(),
-    }
+  /** Sweep the volume for bodies that answer a query, in batches. See `finding.ts`. */
+  findWorlds(query: WorldQuery, options: FindWorldsOptions = {}): WorldSweep {
+    return findWorlds(this.#vantage(), this.#host.pool(), query, options)
   }
 
   /**
@@ -1967,12 +1733,13 @@ export class GameHarness {
     ].join('\n')
   }
 
-  /** Where the listing is taken from: the player, or the first system loaded. */
-  #here(): UniverseVector {
-    const player = this.#host.player()
-    if (player === null)
-      return this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN
-    return this.world.canonicalPositionOf(player)
+  /** Where a search is asked from: the ship, and the planetarium's eye. */
+  #vantage(): Vantage {
+    return {
+      world: this.world,
+      player: this.#host.player(),
+      observer: this.#observatory.eye,
+    }
   }
 
   #scenarioResult(
