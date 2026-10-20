@@ -54,7 +54,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@types/node": "^24.13.3",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "5.0.5",
     "fast-check": "^4.1.1",
     "fontkit": "^2.0.4",
     "fta-cli": "^3.0.1",
@@ -70,7 +70,7 @@
     "typedoc": "^0.28.20",
     "typescript": "~6.0.2",
     "vite": "^8.3.4",
-    "vitest": "^4.0.5",
+    "vitest": "^5.0.5",
     "vitest-nyancat-reporter": "^1.0.0",
     "wawoff2": "^2.0.1",
     "ws": "8.21.0"
