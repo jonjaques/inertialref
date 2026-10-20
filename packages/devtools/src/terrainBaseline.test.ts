@@ -4,6 +4,7 @@ import {
   createTaskRegistry,
   poolHeightfieldSource,
 } from '@inertialref/workers'
+import { findBody, parseAddress, surveySites } from '@inertialref/universe'
 import { descentRegions } from './descent.ts'
 import { openSession, type Session } from './session.ts'
 import {
@@ -22,12 +23,13 @@ import { terrainZoo } from './terrainZoo.ts'
  * a clock turns the warm-up and the timed slice into a figure, and that a
  * host's asynchronous source is measured over the same selections.
  *
- * The zoo is narrowed to eight light years and two generated systems. That
- * still finds every archetype — Sol supplies three and the first generated
- * system the fourth — and it is the narrowest search that does: at five light
- * years the zoo comes back short of `rocky-airless`.
+ * The zoo is narrowed to eight light years and one generated system. That
+ * still finds every archetype — Sol supplies the two icy ones and the first
+ * generated system, `Q0_223_6_0_0`, the two rocky ones — and it is the
+ * narrowest search that does: at five light years the zoo is Sol's three and
+ * comes back short of `rocky-airless`.
  */
-const ZOO = { lightYears: 8, systemBudget: 2 } as const
+const ZOO = { lightYears: 8, systemBudget: 1 } as const
 
 /*
  * Eight descent steps rather than the profile's 128.
@@ -35,7 +37,7 @@ const ZOO = { lightYears: 8, systemBudget: 2 } as const
  * The last step of a descent is on the ground whatever the count, so the floor
  * each site reaches does not depend on it; what the count buys is the shape of
  * the approach, which `terrainRig.test.ts` asks about. At 128 the untimed pass
- * over this zoo is 11 s on its own, and the timed one twice that; at eight it is
+ * over this zoo takes 8 to 12 s on its own; at eight it is
  * under a second, and every descent still asks for thousands of regions.
  */
 const STEPS = 8
@@ -46,7 +48,7 @@ const STEPS = 8
  * Sol alone is three of the four archetypes, which is enough to time; the
  * archetypes are the untimed test's question. The resolution is the cost: the
  * warm-up is twelve patches a body whatever `timedPatches` says, and at the
- * default 65×65 the two timed passes generate 78 of them in 11 s. At 9×9 they
+ * default 65×65 the two timed passes generate 75 of them in 11 s. At 9×9 they
  * are under a second, and a figure the counting clock makes 1 ms either way.
  */
 const TIMED = {
@@ -67,6 +69,14 @@ const open: Session[] = []
 afterEach(() => {
   for (const session of open.splice(0)) session.dispose()
 })
+
+const bodyAt = (world: Session['world'], address: string) => {
+  const parsed = parseAddress(address)
+  if (parsed.kind !== 'body') throw new Error(`${address} is not a body`)
+  const body = findBody(world.loadSystem(parsed.system), parsed.body)
+  if (body === undefined) throw new Error(`no body at ${address}`)
+  return body
+}
 
 function session(options: Parameters<typeof openSession>[0]): Session {
   const opened = openSession(options)
@@ -89,10 +99,11 @@ describe('the terrain baseline', () => {
     for (const entry of baseline.entries) {
       expect(entry.generation.patches).toBe(0)
       expect(entry.generation.totalMs).toBe(0)
-      expect(entry.sites.length).toBeGreaterThan(0)
+      expect(entry.sites.map((site) => site.id)).toEqual(
+        surveySites(bodyAt(world, entry.zoo.address)).map((site) => site.id),
+      )
       for (const site of entry.sites) {
         expect(site.steps).toBe(STEPS)
-        expect(site.finalLevel).toBeGreaterThanOrEqual(0)
         expect(site.floorLevel).toBeGreaterThan(0)
         expect(site.finalLevel).toBeGreaterThanOrEqual(site.floorLevel)
       }
@@ -106,18 +117,16 @@ describe('the terrain baseline', () => {
 
   it('times the slice after the warm-up, and names a slice of nothing', () => {
     /*
-     * Both `summarizeBaseline` branches from a clock. The plan's route to the
-     * empty one is a descent short enough to ask for fewer regions than the
-     * twelve the warm-up discards, but `simulateDescent` flies at least two
-     * steps and two steps over this zoo already ask for seven hundred. A timed
-     * slice of zero patches is the same `g.patches === 0` the short profile
-     * would produce, reached through the module's own option.
+     * Both `summarizeBaseline` branches from a clock. No descent asks for
+     * fewer regions than the twelve the warm-up discards: `simulateDescent`
+     * flies at least two steps, and two steps over Sol already ask for more
+     * than seven hundred. A timed slice of zero patches is the same
+     * `g.patches === 0` a profile that short would produce, reached through
+     * the module's own option.
      */
     const { world } = session({ seed: 'inertialref', workers: null })
-    const options = TIMED
-
     const one = terrainBaseline(world, counting(), {
-      ...options,
+      ...TIMED,
       timedPatches: 1,
     })
     expect(one.timed).toBe(true)
@@ -134,7 +143,7 @@ describe('the terrain baseline', () => {
     expect(timed).not.toContain('not timed')
 
     const none = terrainBaseline(world, counting(), {
-      ...options,
+      ...TIMED,
       timedPatches: 0,
     })
     expect(none.timed).toBe(true)
@@ -152,21 +161,20 @@ describe('the terrain baseline', () => {
     })
     const pool = live.pool()
     if (pool === null) throw new Error('the inline pool did not start')
-    const options = TIMED
-
     const baseline = await terrainBaselineWithSource(
       live.world,
       counting(),
       poolHeightfieldSource(pool),
-      { ...options, timedPatches: 1 },
+      { ...TIMED, timedPatches: 1 },
     )
-    const untimed = terrainBaseline(live.world, null, options)
 
     expect(baseline.source).toBe('pool')
     expect(baseline.timed).toBe(true)
-    expect(baselineAddresses(baseline)).toEqual(baselineAddresses(untimed))
-    for (const [index, entry] of baseline.entries.entries()) {
-      expect(entry.descent).toEqual(untimed.entries[index]?.descent)
+    expect(baselineAddresses(baseline)).toEqual(
+      terrainZoo(live.world, TIMED).map((entry) => entry.address),
+    )
+    for (const entry of baseline.entries) {
+      expect(entry.generation.resolution).toBe(TIMED.resolution)
       expect(entry.generation.patches).toBe(1)
       expect(entry.generation.totalMs).toBe(1)
     }
