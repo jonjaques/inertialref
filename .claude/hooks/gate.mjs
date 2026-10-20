@@ -13,12 +13,12 @@
 // the slowest one costs and the suite starts beside them. `pnpm test` is that cheap
 // because the terrain descent lives in the slow suite — `gameEngine.descent.slow.test.ts`,
 // which the full `pnpm check` and CI run and this never does: cold, it generates a
-// landing's worth of ground through an inline worker in 96 s on one core. Every figure
+// landing's worth of ground across a pool of worker threads, minutes of CPU. Every figure
 // here moves whenever the field gets deeper; the runner prints the wall clock of each
 // stage, so re-measure by reading that rather than a number off this comment, and quote
 // the CPU percentage beside it, because a suite started while the last run's workers
-// are still exiting reads twice its settled cost. `design/plans/test-speed.md` has the
-// accounting.
+// are still exiting reads twice its settled cost. `docs/guides/testing.md` has the
+// rule and ADR-0045 the descent's accounting.
 //
 // The runner stamps every stage that passes with a key made of the working tree's
 // content, so a `/ship` minutes later on the same tree runs the rest of `pnpm check` and

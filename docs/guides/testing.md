@@ -255,8 +255,9 @@ lands on the ground it drew" has to be proved before a merge. Anything else
 that streams a landing takes the suffix. A change under
 `engine/terrainStreamer.ts` or the terrain path is therefore proved by
 `pnpm check` and CI rather than by the Stop gate, and `pnpm test:slow` by hand
-is how to prove it sooner. [Test speed](../../design/plans/test-speed.md) carries the dated
-measurements and remaining cold-run work.
+is how to prove it sooner.
+[ADR-0045](../adr/0045-generated-terrain-is-a-disposable-cache.md#measured-cpu-descent)
+carries the dated cold and warm measurements, inline and on threads.
 
 `galaxy/field.slow.test.ts` also takes the suffix. Its count-convergence check
 samples 9,953,280 positions across two quadratures: 8.4 s in isolation locally,
@@ -265,8 +266,18 @@ all count assertions, with a two-minute timeout at the call site.
 
 **The figure moves with the field and cache state.** Every level the detail
 floor gains requests another ring of heightfields. A cold CPU descent pays
-their generation serially; a warm descent validates and reads retained records.
-Report which path the measured run took.
+their generation across the pool's threads; a warm descent validates and reads
+retained records. Report which path the measured run took.
+
+**Let the machine settle between runs, and quote the CPU percentage beside the
+wall clock.** Started while the previous run's workers were still exiting, the
+root suite read 35.7 s at 456% of a core on an Apple M5, against 16.8 s at 796%
+once the tail had drained. macOS's load average is the wrong instrument for
+deciding this on Apple silicon: it sits above 3 with every process on the
+machine summing to two thirds of one core. A wall clock quoted without its CPU
+percentage is not a measurement, and a stage timed under `pnpm check` is timed
+in the graph's company, not alone — the runner's own table says what each
+stage cost there.
 
 ### Check a distribution when the claim is about one
 

@@ -26,7 +26,7 @@ import { DiskHeightfieldStore } from '@inertialref/workers/node'
  * gate proves everything but the landing in about ten seconds, and `pnpm check`
  * and CI — where "the ship lands on the ground it drew" has to be proved before
  * a merge — run this project as well. It moves the payment, not the price;
- * `design/plans/test-speed.md` has what would make the landing itself cheaper.
+ * ADR-0045 § "Measured CPU descent" has what the landing costs.
  */
 
 /**
@@ -52,7 +52,7 @@ import { DiskHeightfieldStore } from '@inertialref/workers/node'
  * thread. On a four-core Xeon — two workers by `poolSize()`, the CI runner's
  * count — the thread pool takes the cold descent from 247 s to 127 s at the
  * same CPU time, so the headroom over CI's cold run is wider than the figures
- * say. `design/plans/test-speed.md` § 2 has the measurement.
+ * say. ADR-0045 § "Measured CPU descent" has the measurement.
  *
  * It is a timeout rather than a target: what it guards against is a hang, so
  * the headroom is the point, and a cold archive makes the run slow rather than

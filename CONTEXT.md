@@ -6377,7 +6377,7 @@ physical GPU on macOS — SwiftShader has no build there — so the reason
 `drive.mjs` launches a window is `--cast`, not the adapter; its header said the
 other thing and now says this.
 
-[Test speed](design/plans/test-speed.md) records where the root suite's time goes,
+The test-speed plan (since retired) recorded where the root suite's time goes,
 measured on the same idle machine: 102.9 s for `pnpm test`, 10.0 s without
 `gameEngine.test.ts`, whose `beforeAll` streams one landing through the inline
 worker for 101.5 s. Nothing is changed on that page; the four levers it names
@@ -6432,7 +6432,7 @@ What the port found, each on the device rather than in a mirror:
   `CRATER_LIMIT` went to zero instead.
 - **A routing test does not need a field.** The streamer's source-routing
   test took 10.6 s with a real heightfield fixture and takes 104 ms with a
-  flat one; [test-speed](design/plans/test-speed.md) has the rest.
+  flat one.
 
 Left open, named in the ADR: normal tiles and the mesh stay on the main
 thread at 0.25 ms a patch; the kernel's level-0 offset term is the
@@ -11396,7 +11396,7 @@ On a cloud machine — four Xeon vCPUs at 2.10 GHz, so two threads — the cold
 descent is 247.1 s and 237.7 s inline at 100–101% CPU, and 127.1 s and
 129.9 s on threads at 195%, at the same 238–253 s of CPU time; warm, 10.7 s
 inline and 10.9 s threaded, so the threads buy nothing there.
-`design/plans/test-speed.md` § 2 has the table and the boundary measured
+[ADR-0045](docs/adr/0045-generated-terrain-is-a-disposable-cache.md#measured-cpu-descent) has the table and the boundary measured
 from inside: 0.45–5.4 ms of round trip on a 197 ms tile, and 225–230 ms for
 a thread to load its modules.
 
