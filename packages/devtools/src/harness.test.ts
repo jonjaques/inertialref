@@ -370,10 +370,14 @@ describe('structure verbs', () => {
   })
 
   it('visitStructure stands above it looking down its approach, and refuses a stranger', () => {
-    const ir = session().harness
+    const { session: live, told } = recording()
+    const ir = live.harness
     ir.placeStructure(PAD as never)
     const hash = ir.world.stateHash()
+    const cuts = told.cuts
     const status = ir.visitStructure('test-pad', 50)
+    // Standing somewhere is a discontinuous placement.
+    expect(told.cuts).toBeGreaterThan(cuts)
     expect(status.target?.address).toBe(MARS)
     expect(status.surface?.stance.latitude).toBeCloseTo((10 * Math.PI) / 180, 9)
     expect(status.surface?.stance.longitude).toBeCloseTo(
@@ -551,7 +555,7 @@ describe('searching the volume, inline', () => {
     expect(found[0]!.lightYears).toBeLessThan(1)
   })
 
-  it('stops an inline sweep that is canceled while it runs', async () => {
+  it('drops the answers an inline sweep gives after it is canceled', async () => {
     const ir = session().harness
     let batches = 0
     const sweep = ir.findWorlds(

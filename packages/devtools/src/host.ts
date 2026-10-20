@@ -36,7 +36,7 @@ import type { TimingPort } from './profile.ts'
  * `Host`; `renderHost()` is the render side of every host that draws nothing.
  */
 
-/** Frame timing from a render loop. One definition; it used to have three. */
+/** Frame timing from a render loop, defined once for every reader. */
 export interface FrameStats {
   readonly fps: number
   readonly frameMs: number

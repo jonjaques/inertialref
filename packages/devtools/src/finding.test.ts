@@ -127,9 +127,14 @@ describe('sweeping the volume', () => {
       )
     expect(totals.at(-1)).toBeGreaterThan(3 * 2)
     expect(progress.at(-1)).toBe(1)
+    // The nearest three of the whole answer, not any three sorted.
+    const all = await findWorlds(vantage(), null, {}, { lightYears: 12 }).done
+    expect(found.map((one) => one.lightYears)).toEqual(
+      all.slice(0, 3).map((one) => one.lightYears),
+    )
   })
 
-  it('is asked from the eye when there is one, whatever the origin option', async () => {
+  it('is asked from the eye whenever there is one, with no origin option', async () => {
     const found = await findWorlds(
       vantage('sirius'),
       null,
@@ -140,7 +145,10 @@ describe('sweeping the volume', () => {
     expect(found.every((one) => one.address.includes(SIRIUS))).toBe(true)
   })
 
-  it('stops an inline sweep that is canceled while it answers', async () => {
+  it('drops the answers an inline sweep gives after it is canceled', async () => {
+    // Inline, `findWorldsTask.run` is synchronous and the batch loop never
+    // awaits, so every batch is computed before the first answer is read:
+    // cancel cannot save the work, only stop the later answers arriving.
     let batches = 0
     const sweep = findWorlds(
       vantage(),
