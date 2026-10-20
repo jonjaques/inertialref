@@ -151,7 +151,7 @@ export function exponential(value: number): string {
   if (!Number.isFinite(value)) return '—'
   const [mantissa = '', power = ''] = value.toExponential(3).split('e')
   const sign = power.startsWith('-') ? '−' : ''
-  return `${mantissa}×10${superscript(sign + power.replace(/^[+-]/, ''))}`
+  return `${mantissa.replace('-', '−')}×10${superscript(sign + power.replace(/^[+-]/, ''))}`
 }
 
 const SUPERSCRIPTS: Readonly<Record<string, string>> = {
