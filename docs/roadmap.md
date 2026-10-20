@@ -298,9 +298,10 @@ its own evidence, and none of them gates the default image.
 | Display-headroom discovery         | Authored peak luminance is a setting because the browser exposes no measurement of the actual panel                            | A supported measurable signal. The authored peak limits and their fallback stay until one exists                                                                                                            |
 | Additional response styles         | The controls offer Enhanced's authored look and the shared neutral photographic look, plus imported Gentle and Crisp shoulders | Evidence that a further style adds a useful choice without changing mode, source lighting or metering. A curve that decides exposure is the thing ADR-0037 separated out                                    |
 
-[The upscaler](../design/plans/the-upscaler.md) is a separate performance
-proposal. Whole-scene temporal reconstruction, reversed-Z conversion and new
-reactive buffers are not prerequisites for any row here.
+The upscaler is [ADR-0044](adr/0044-the-sensor-reconstructs-the-display.md),
+and [its plan](../design/plans/the-upscaler.md) holds the one defect it has
+open. Its temporal reconstruction, reversed-Z conversion and new reactive
+buffers are not prerequisites for any row here.
 
 ---
 
