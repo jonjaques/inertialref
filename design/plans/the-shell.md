@@ -9,16 +9,6 @@ author's instruments a visitor should meet — and those are gathered in
 because they are not decisions a measurement makes on its own. All but one are
 decided.
 
-> **The standing test is answered.**
-> [`DESIGN.md`](../../DESIGN.md) sets it — "would this still be readable with
-> a star filling the frame behind it?" — and [`PRODUCT.md`](../../PRODUCT.md)
-> records that whether the dock meets it has never been measured. It does, at
-> every text grade, with margin. The one
-> element with no panel behind it, the crosshair, now carries a light hairline
-> between two dark ones (`hud/crosshair.ts`) and measures **11.3:1** over the
-> Sun on its dark strokes, 8.8:1 over Earth's disk, and 9.8:1 over the sky on
-> its light one, against 1.05:1 as a single pale stroke.
-
 ---
 
 ## Where the numbers come from
@@ -37,142 +27,16 @@ Apple M5. Sampling is the modal pixel of a 12×12 crop of a native-resolution
 plate, so a ratio is against the real composited ground — blur, alpha and
 `dynamic-range-limit` included — not against a swatch.
 
-The keyboard, target-size and zoom figures are from live DOM measurement on the
-same window. Two routes to the same count disagree and both are reported, with
-the counting rule named, because the disagreement is the counting rule.
+The zoom figures are from live DOM measurement on the same window. The
+**in-page detector** reports `/` 1, `/planetarium` 204, `/docs` 25,
+`/cinema` 1, `/settings/display` 29. Nearly all are the design system working:
+171 `undersized-ui-text` are the documented `type-micro` step, `text-occlusion`
+on `/settings/display` is the scrim, `nested-cards` is the documented two-level
+nesting. One signal survives — the twelve `type-micro` sites carrying prose.
 
-**Two passes, isolated, on separate Chromes and separate ports.** Neither saw
-the other's output, and they reach the panel-material result by different
-framings — a star filling the frame, and a sunlit limb behind the left pane.
-Agreement between them is why the Legibility-Over-Glass claim below is stated
-as settled rather than as one sample.
-
-Three other instruments back the reading pass, and none of them adds a finding
-it missed:
-
-- **The static detector** scans 177 files across ten trees for four findings,
-  all four false positives: three `gray-on-color` hits (`hud/OptionGroup.tsx:71`,
-  and the two catalog rows) are Radix `ToggleGroupItem` class strings whose
-  off-state gray and on-state sky never co-occur in the DOM, and one `side-tab`
-  hit (`docs/DocsWingLink.tsx:32`) is an `aria-current` marker. `--no-config`
-  produces identical findings, so the design system suppresses nothing.
-- **The in-page detector** reports `/` 1, `/planetarium` 204, `/docs` 25,
-  `/cinema` 1, `/settings/display` 29. Nearly all are the design system working:
-  171 `undersized-ui-text` are the documented `type-micro` step, `text-occlusion`
-  on `/settings/display` is the scrim, `nested-cards` is the documented two-level
-  nesting. One signal survives — the twelve `type-micro` sites carrying prose.
-- **The console** is clean: zero errors and zero warnings on cold load of all
-  five routes. For a WebGPU app booting a renderer, a worker pool, a service
-  worker and the catalog, that is the unusual result.
-
-**Some figures below name a site the tree has moved, and five name a control
-that now carries the thing the finding says is missing.** Each is marked where
-it sits. Phase 0 re-takes them; a finding is not deleted on a static read,
-because a visual finding is not closed without the rig.
-
----
-
-## Contrast: the panel material holds, and three things sit outside it
-
-With the Sun filling the frame, scene luminance one pixel outside the chrome is
-**0.606 to 0.660**. The panel composites that ground down to **0.014**.
-`slate-950/85` plus `backdrop-blur` plus the standard-range clamp is doing what
-[`DESIGN.md`](../../DESIGN.md) says it is doing, and the alpha has room to spare.
-
-| Element                                   | Size   | Ratio    | Floor |
-| ----------------------------------------- | ------ | -------- | ----- |
-| Flight strip, ship name `sky-300`         | 12.5px | 9.38     | 4.5   |
-| Flight strip, speed `slate-200`           | 12.5px | 12.64    | 4.5   |
-| Flight strip, frame `slate-300`           | 12.5px | 10.61    | 4.5   |
-| Flight strip, tick/rate `slate-400`       | 12.5px | 6.00     | 4.5   |
-| Catalog section heading `sky-400/80`      | 11px   | **5.30** | 4.5   |
-| Catalog row value `slate-400`             | 10px   | 5.92     | 4.5   |
-| IR menu resting glyph `slate-400`         | —      | 6.49     | 3.0   |
-| IR menu pressed `sky-200` on `sky-500/15` | —      | 10.32    | 3.0   |
-| Crosshair, dark strokes over the Sun      | —      | 11.32    | 3.0   |
-
-The second operating point agrees about the ink and adds the grades the system
-has already retired:
-
-| Backdrop            | Panel ground    | `slate-400` | `slate-300` | `slate-500` | `slate-600` |
-| ------------------- | --------------- | ----------- | ----------- | ----------- | ----------- |
-| Black sky           | `rgb(4,7,24)`   | 7.8         | 13.5        | 4.2         | 2.6         |
-| Sunlit limb, offset | `rgb(24,27,44)` | 6.4         | 11.0        | **3.4**     | **2.2**     |
-
-**The floor holds at `slate-400` under a five-fold rise in ground luminance.**
-That is the Legibility-Over-Glass Rule working as written, and it is the
-strongest argument the design system has for keeping its alpha where it is.
-
-### One site sits outside the panel and fails
-
-The crosshair and the `· projected` label are closed: the mark carries a dark
-stroke either side of its light one, which is the fix that survives a mid-gray
-limb where an inverting blend does not, and the label is `slate-400` with the
-dashed rule the accessibility section names for provenance. What is left:
-
-- **Navigation icons in the reading mode** — `docs/DocFooter.tsx:46,66` and
-  `docs/DocsRailGroup.tsx:53` at `text-slate-600`, 2.2–2.6:1, below the 3:1
-  non-text floor. `pages/ModeRow.tsx:31` is `slate-500` for the same reason —
-  the icon, not the label beside it, which that file's own comment already
-  argues down to the 400 floor.
-
-**Caveat, because the point matters more than the figure.** These numbers
-describe chrome with a bright scene _beside_ it. The cockpit HUD specified in
-[`docs/design/ux.md`](../../docs/design/ux.md) is projected on the canopy — over
-the subject, by construction — so none of this transfers to it. The Edge Rule is
-carrying at least as much of the result as the translucency is.
-
----
-
-## The keyboard: navigation is 133 stops deep
-
-`/planetarium` at 1600×900 has **148 real tab stops** — visible, enabled, not
-inside `[inert]`, `tabIndex` 0 or above — and the IR menu begins at **stop
-133**. The catalog is a tree with one stop: `Tab` lands on the current row,
-the arrows move between the 138 rows and fold a system, and the camera's arrow
-bindings yield to it because a focused row is a control inside `.hud-layer`.
-Measured against the same census before the tree, 281 stops with the menu at
-272, so the catalog was 133 of them. What is left is the order itself: the
-Catalog panel's controls, nine neighborhood rail dots, six more panels' switches
-and sliders, and then the bar carrying the way home, every pane and panel
-toggle, and Settings.
-
-| Route               | Real tab stops | IR menu at  |
-| ------------------- | -------------- | ----------- |
-| `/`                 | 5              | n/a         |
-| `/cinema`           | 7              | 1–6         |
-| `/settings/display` | 15             | 2–4         |
-| `/docs`             | 84             | 78–83       |
-| `/planetarium`      | **148**        | **133–147** |
-
-There is no skip link and no landmark shortcut, and that is now the finding:
-a hundred and thirty stops of instruments before the way home is the shape of
-a page with no landmarks, not of a long list. Nothing else about the order is
-broken — no trap, and every stop is reachable.
-
-`pages/OverlayPage.tsx` already carries the argument, having found and fixed the
-identical defect for the dialog at 79 stops: "Open settings, then press Tab
-eighty times" is not a keyboard path. A skip link to the menu at the top of
-`.hud-layer`, or the menu earlier in DOM order than the panes it names, is the
-next step; the mobile target problem below is untouched by any of this.
-
-**A routed dialog's Close button is its sixth tab stop**, behind five links
-belonging to the page the dialog covers. The dialog is deliberately non-modal —
-`modal = false` is the default at `pages/OverlayPage.tsx:16`, reaching
-`aria-modal` at `:73`, with a written argument, because the simulation keeps
-running underneath — so the page below stays in the tab order by design. What
-does not follow from that argument is that the dismissal comes sixth.
-
-The rest of the dialog's keyboard contract holds and is what any change here has
-to keep: `aria-live="polite"` on the notice and the boot status, `aria-valuetext`
-on `LensSlider`, and focus restored to the opener on dismissal.
-
-**`blur()` in click handlers costs more here than it looks.** A keyboard
-`Enter` or `Space` produces a click, so activating any control by keyboard drops
-focus to `<body>` and the next Tab restarts from stop 0. The self-blur is
-correct — flight input is a window-level listener and a focused button swallows
-Space — but its price is proportional to the tab depth above.
-
+The tab-stop census, the target sweep and the accessible-name audit describe
+the tree as of 18 October 2026; the modal-pixel sample at both points and the
+boot frame predate it.
 ---
 
 ## Zoom: the route home leaves the viewport
@@ -202,46 +66,7 @@ the menu and the strip stay on screen while the panels keep clipping.
 
 ---
 
-## Controls that do not name themselves
-
-`/planetarium` carries 45 icon-only controls. Ten have no accessible name at
-all, and the visible label sits in a sibling element with no `aria-labeledby`
-and no wrapping `<label>`, so a screen reader announces "switch, off" and
-"slider":
-
-| Control                                                 | Role     | Size  |
-| ------------------------------------------------------- | -------- | ----- |
-| `Free Look`                                             | `switch` | 24×14 |
-| `Names`, `Minor Bodies`, `Orbit Paths`, `Show the Ship` | `switch` | 24×14 |
-| `Lens Flare` (`/settings/display`)                      | `switch` | 24×14 |
-| Slider thumbs ×5 (Camera panel)                         | `slider` | 14×14 |
-
-`DESIGN.md` is explicit that a control in a panel body is a word and that the
-icon-only exception is navigation chrome only. These are panel bodies, and the
-label text is already on screen — it is not written, it is only not wired.
-
-**Open to re-measurement, not closed.** `hud/SwitchRow.tsx:59` wraps the whole
-row in a real `<label htmlFor>`, and `planetarium/CameraPanel.tsx:296` carries
-an `aria-label` on the glare slider. A static read reaches two of the ten; what
-the count is on the live DOM is phase 0's question.
-
-Four `ToggleGroup` roots — "Label density" and "Which orbits are traced" in the
-View panel, "Anti-aliasing" and "Extended-range output" in settings — render as
-`div role="radiogroup" tabindex="0"` with no focus style. `:focus-visible`
-returns `false` on them, so Tab lands on an invisible stop and Tab again lands
-on the first item: two stops for one control, the first drawn as nothing.
-**Closed by live Tab presses:** the root carries `tabindex="0"`, but Radix
-forwards every focus that is not a pointer's to the checked item, a
-programmatic `focus()` included, so no forward or backward walk rests on it.
-The two stops are the static count's, which reads `tabindex` rather than
-pressing Tab.
-
-Nineteen focusable targets are under 24×24 CSS px, below WCAG 2.2 SC 2.5.8:
-nine 20×20 `NeighborhoodRail` pips (correctly labeled, and adjacent on a
-track), four 24×14 switches, six 14×14 slider parts. **Open to re-measurement**
-for the same reason: `hud/OptionGroup.tsx:71` sets the group's items to
-`h-6 min-w-6` naming that clause, and a labeled row is a larger target than the
-switch inside it.
+## The IR menu: twelve glyphs and no names on the runs
 
 **The IR menu is twelve unlabeled 28×28 toggles plus one text link.** Its own
 exception in `DESIGN.md` argues a menu is a row of peers read by shape and
@@ -305,22 +130,21 @@ the scene's own black, stars first
 | Site                                 | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dock/IrMenu.tsx:96–110`             | In `/cinema` both pane toggles report `aria-pressed="true"` and render highlighted with **zero pane elements in the document**; in `/docs` both report `false` and are also no-ops. The bar whose job is saying what is on screen misreports it in two of five modes. Gating on whether the mode's workspace has panes settles both                                                                                                                                 |
-| `components/ui/slider.tsx:56`        | `bg-white rounded-full` with `hover:ring-4 focus-visible:ring-4` — four white circles in a system with two radii and no circles, plus a glow `DESIGN.md` rules out. The `tooltip.tsx` precedent says fix it in the file, not at the call sites                                                                                                                                                                                                                      |
+| `components/ui/slider.tsx:87`        | `bg-white rounded-full` with `hover:ring-4 focus-visible:ring-4` — four white circles in a system with two radii and no circles, plus a glow `DESIGN.md` rules out. The `tooltip.tsx` precedent says fix it in the file, not at the call sites                                                                                                                                                                                                                      |
 | `components/ui/tabs.tsx:65`          | `dark:text-muted-foreground`, which maps to `slate-500` at `index.css:143`. `planetarium/PresetsPage.tsx:42` renders `TabsTrigger` for the Included and Saved tabs, so the grade is on screen in the Presets panel                                                                                                                                                                                                                                                  |
-| `pages/OverlayPage.tsx`              | Every routed dialog draws Chrome's own focus ring, `outline: auto 1px rgb(153,200,255)` — brighter than `slate-200`, the system's brightest neutral. **Open to re-measurement**: the panel is `tabIndex={-1}` and its class string carries `outline-none` at `:75` and no `FOCUS_RING`, so whether the ring still draws, and what draws instead, is phase 0's question                                                                                              |
-| `pages/ModeRoutes.tsx:265`           | `<Route path="*">` renders the front door at a wrong address with no correction, in a product whose thesis is that the URL is the public surface                                                                                                                                                                                                                                                                                                                    |
+| `pages/ModeRoutes.tsx:282`           | `<Route path="*">` renders the front door at a wrong address with no correction, in a product whose thesis is that the URL is the public surface                                                                                                                                                                                                                                                                                                                    |
 | `pages/FooterLink.tsx:18`            | `min-h-6` — 24px tap targets, measured 105×24, 66×24 and 53×24 at 390×844, in a build that sets 44px as the thumb minimum                                                                                                                                                                                                                                                                                                                                           |
-| `planetarium/CatalogPage.tsx`        | 138 rows at 324×28 inside the compact sheet: 151 of 161 targets there are under 44×44. The compact bar itself is 3 targets and 0 undersized. Virtualizing the rows is the same change as the sheet's target count                                                                                                                                                                                                                                                   |
-| `planetarium/NavigatorPanel.tsx:271` | The search placeholder names the field (`Name or address`); `hud/AddressForm.tsx:42` teaches the syntax and lives behind the instruments disclosure                                                                                                                                                                                                                                                                                                                 |
+| `planetarium/NavigatorRow.tsx`       | Catalog rows are `h-7`, 28px, inside the compact sheet, under the 44px thumb minimum; the tree is virtualized, so the row height is the window's estimate as well as the target. The compact bar itself is 3 targets and 0 undersized                                                                                                                                                                                                                               |
+| `planetarium/NavigatorPanel.tsx:271` | The search placeholder names the field (`Name or address`) and does not teach the address syntax                                                                                                                                                                                                                                                                                                                                                                    |
 | `hud/LensSection.tsx`                | The Lens header rounds to `19 mm` where the Focal length row four pixels below reads `18.8 mm` — one quantity, two roundings, in the register `PRODUCT.md` makes a commitment about. `hud/controls.ts:156` is the channel                                                                                                                                                                                                                                           |
-| Orbit traces                         | `planetarium.orbits` is `initial: true` and `planetarium.orbitScope` is `context` (`state/preferences.ts:401–415`), so at `s:SOL` the first frame carries thirty-odd chords crossing the subject — the ellipses are edge-on at these distances, so it reads as wireframe debris. The loudest element in the product, on by default                                                                                                                                  |
+| Orbit traces                         | `planetarium.orbits` is `initial: true` and `planetarium.orbitScope` is `context` (`state/preferences.ts:414–425`), so at `s:SOL` the first frame carries thirty-odd chords crossing the subject — the ellipses are edge-on at these distances, so it reads as wireframe debris. The loudest element in the product, on by default                                                                                                                                  |
 | `pages/KeysPage.tsx`                 | Two rows render invisible key caps — a backtick and a comma at 11px `slate-400` — and the sheet clips mid-row with no scroll affordance                                                                                                                                                                                                                                                                                                                             |
 | `cinema/CinemaLibrary.tsx:47`        | `type-display` on a mode name, where the type table reserves that step for the product name on the front door and gives a mode `type-title`. The backdrop is the Enterprise-D dead center; it becomes a planet ([decision 3](#decisions-and-the-question-still-open))                                                                                                                                                                                               |
 | The front door's status labels       | "Solo — BUILT" sits under "NOT IN THIS BUILD", and `PLAYABLE` badges sit above prose reading "It is early", one click from `/about`'s "There is no gameplay yet." Three vocabularies for one fact                                                                                                                                                                                                                                                                   |
 | The homage                           | The ship is the Enterprise-D and the TNG title study has no in-product statement that it is a study — two of five surfaces presenting the homage as identity, which `PRODUCT.md` forbids building on. The ship's name reaches a visitor as `Debug One`, and `warming surface maps` reaches one too. [Decision 4](#decisions-and-the-question-still-open) closes it: the Rocinante by default, the study labeled, no borrowed name on any surface but a cinema title |
 | Settings tab                         | A filled chip, where `DESIGN.md` specifies a `border-sky-400` underline for Instrument Blue 400                                                                                                                                                                                                                                                                                                                                                                     |
 | `type-micro` carrying prose          | Twelve sites set sentences in the 10px mono step, which the type table assigns to a chart axis, a unit or a timecode. Prose is `type-body`                                                                                                                                                                                                                                                                                                                          |
-| Reduced motion                       | Honored properly — `MotionConfig reducedMotion="user"` in `Root.tsx` covers every `motion/react` site, and `index.css` kills the only `@keyframes`. Ungated transforms: `animate-in`/`animate-out` in `tooltip.tsx:85-86`, `hover:scale-125` in `NeighborhoodRail.tsx:83`, and the front door's raw-rAF camera orbit at 1.8°/s, which is the largest-field motion in the product. The boot cover's spinner is not among them; phase 0 counts                        |
+| Reduced motion                       | Honored properly — `MotionConfig reducedMotion="user"` in `Root.tsx` covers every `motion/react` site, and `index.css` kills the only `@keyframes`. Ungated transforms: `animate-in`/`animate-out` in `tooltip.tsx:86–87`, `hover:scale-125` in `NeighborhoodRail.tsx:90`, and the front door's raw-rAF camera orbit at 1.8°/s, which is the largest-field motion in the product. The boot cover's spinner is not among them; phase 0 counts                        |
 | `body`                               | Computes `transition: width` on every route. Nothing in `index.css` sets it, so the source is whatever injects it, and that is the first thing to find                                                                                                                                                                                                                                                                                                              |
 | `/docs` diagrams                     | Mermaid node and edge labels sit at the low end of the ramp and are close to illegible. 83 `mermaid` fences across 32 source files under `docs/`                                                                                                                                                                                                                                                                                                                    |
 
@@ -332,25 +156,21 @@ Each phase lands green on its own and ends with a measurement somebody can run.
 Every gate below is a measurement this document already describes, with a
 different number in it.
 
-| Phase | Lands                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Done when                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0     | The census re-taken against the tree: tab stops per route, the target sweep and the accessible-name audit from the live DOM, the modal-pixel sample at both points, the boot frame                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Every table above either reproduces or carries a fresh number; every site named resolves; the five findings marked open to re-measurement are closed or restated with the figure that keeps them                                                                                                                                                                                                                   |
-| 1     | Chrome anchored to the visual viewport — the IR menu, the flight strip, the overlay panel — with panel bodies still clipping internally                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | At `zoom: 2` on `/planetarium`, `/docs` and `/settings/display` every route home, every dialog control and the flight strip measure inside the visual viewport rect; the text-only path at a 32px root still overflows nothing                                                                                                                                                                                     |
-| 2     | A skip link as the first stop in `.hud-layer`, or `IrMenu` earlier in DOM order with CSS `order` holding its place. **Landed, and the gate re-run holds:** the skip link, rendered by `Root` ahead of `GameLoader` in a `.hud-layer` of its own and only while a way-home link is mounted (`dock/SkipLink.tsx`, `dock/wayHome.ts`); the menu keeps its DOM place because that place is its paint and hit-testing order. `PageShell` puts the dialog band before the mode band, so a routed dialog's Close leads the page it covers without the dialog becoming modal. Measured on 18 Oct 2026 against `main` on the same server and environment, at 1600×900 and DPR 1, by live Tab presses over CDP. The skip link is stop 1 on `/cinema`, `/docs` and `/planetarium`, and activating it focuses the way home. Close is stop 1 on `/settings/display` (9 on `main`) and stop 2 over the planetarium (100 on `main`). Stop counts move by the link alone: `/` 8→8, `/cinema` 11→12, `/settings/display` 29→29, `/docs` 87→88, `/planetarium` 99→100. No stop is lost and no trap appears. A control that unmounts itself names where a keyboard goes next (`handFocus` in `hud/focus.ts`; a pointer click still blurs): a panel's Close returns focus to its menu toggle, falling back to the way home when the toggle is not drawn; its pin keeps focus on the same pin in the other arrangement; the Object panel's primary and satellite rows put it on the new subject's heading. Measured on 18 Oct 2026 at 1600×900 and DPR 1 by activating every stop by keyboard: on `/planetarium` no control that stays on the route drops focus to `<body>`, against ten without `handFocus`. The two that do are the way home and Documentation, which leave the route. A Close lands 3 to 8 stops from the way home in the same menu bar; a pin or a heading stays in its panel, which is the case of the 79 of 100 controls that keep focus, a median 20 stops from the way home in either direction. `/docs` stays as it is, as reading-mode behavior: its seven "On this page" entries are fragment links, and the browser moves the next Tab to the target section's heading permalink. A rail link is a route change, and the next Tab continues in the new page's prose | The phase 0 census re-run: the way home is reachable within three stops of a cold focus on every route, and within three of activating any control by keyboard; the total stop count moves by at most the link; no stop is lost and no trap appears                                                                                                                                                                |
-| 3     | The named standards: an accessible name on every control in a panel body, docs navigation icons off `slate-600`, targets at 24×24, the `ToggleGroup` root's invisible stop, the dialog's own focus ring. **Landed, and the gate re-run holds:** Radix's `Slider.Root` keeps a call site's `aria-label` on its own span, so every thumb was unnamed, the glare slider included; `components/ui/slider.tsx` moves the name and value text to the thumb, and the lens and glare thumbs and every `SwitchRow` switch are named by their on-screen word through `aria-labelledby`. Icons at `slate-400`; the rail's pips at 24×24, with the switch and thumb naming their SC 2.5.8 exception in file; no change to the `ToggleGroup` root, because it is not a stop: Radix forwards every focus that is not a pointer's to the checked item, and neither a forward nor a Shift+Tab walk rests on any of the eight roots; `FOCUS_RING` on the dialog panel, and `FOCUS_RING` itself names `outline-solid`, because `focus:outline-none` sets `--tw-outline-style` to `none` under the `outline` utility and no stop drew a ring. Measured on 18 Oct 2026 at 1600×900 and DPR 1. Chrome's accessibility tree finds no unnamed control on `/planetarium` or `/settings/display` (6 and 1 on `main`). Every navigation icon is at or above 3:1 on the scene as rendered and on white behind the chrome; the closed docs-rail chevron needs a 2.5 stroke, which reads 4.71:1 against 2.66:1 at Lucide's 2. The only targets under 24×24 are slider thumbs and `SwitchRow` switches, each naming its exception, once `FactRow`'s "no data" trigger is 24px tall (14 of them at 46×17 before). The dialog draws the sky-400 hairline on a keyboard open and nothing on a pointer open                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | The name audit returns zero unnamed controls on `/planetarium` and `/settings/display`; a modal-pixel sample puts every navigation icon at or above 3:1 on both grounds; the target sweep returns zero focusable targets under 24×24, or each exception names the SC 2.5.8 clause in its file; `:focus-visible` returns true on the group root or the root is not a stop; `OverlayPage`'s panel draws `FOCUS_RING` |
-| 4     | The IR menu reads as runs: a `type-label` name per run, a pressed state separable at 28px, `PanelLeft`/`PanelRight` distinguishable at 16px, the pane pair gated on whether the mode has panes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | A modal-pixel sample separates pressed from resting by at least the 3:1 the non-text floor asks of a control boundary; `/cinema` and `/docs` report no pane toggles; the twelve glyphs carry three names and the menu is still one press deep to every panel                                                                                                                                                       |
-| 5     | The first viewport: the cover is the scene's black, the starfield first and the planet arriving into it, with the live `12/12` self-test on the ledger                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | The starfield presents before the surface maps finish warming; the self-test reaches 12/12 or names its failure without moving first light; the cover's plate taken at 1600×900 and 390×844, at the slow boot and the fast one                                                                                                                                                                                     |
-| 6     | The sweep: the smaller findings, each in the file that owns it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Every row of § Smaller findings is closed, or carried with the reason it stays; the in-page detector's `type-micro` signal returns zero; `body` computes no `transition: width` on any route                                                                                                                                                                                                                       |
+| Phase | Lands                                                                                                                                                                                          | Done when                                                                                                                                                                                                                                                    |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0     | The rest of the census re-taken against the tree: the modal-pixel sample at both points and the boot frame                                                                                     | Every table above either reproduces or carries a fresh number, and every site named resolves                                                                                                                                                                 |
+| 1     | Chrome anchored to the visual viewport — the IR menu, the flight strip, the overlay panel — with panel bodies still clipping internally                                                        | At `zoom: 2` on `/planetarium`, `/docs` and `/settings/display` every route home, every dialog control and the flight strip measure inside the visual viewport rect; the text-only path at a 32px root still overflows nothing                               |
+| 4     | The IR menu reads as runs: a `type-label` name per run, a pressed state separable at 28px, `PanelLeft`/`PanelRight` distinguishable at 16px, the pane pair gated on whether the mode has panes | A modal-pixel sample separates pressed from resting by at least the 3:1 the non-text floor asks of a control boundary; `/cinema` and `/docs` report no pane toggles; the twelve glyphs carry three names and the menu is still one press deep to every panel |
+| 5     | The first viewport: the cover is the scene's black, the starfield first and the planet arriving into it, with the live `12/12` self-test on the ledger                                         | The starfield presents before the surface maps finish warming; the self-test reaches 12/12 or names its failure without moving first light; the cover's plate taken at 1600×900 and 390×844, at the slow boot and the fast one                               |
+| 6     | The sweep: the smaller findings, each in the file that owns it                                                                                                                                 | Every row of § Smaller findings is closed, or carried with the reason it stays; the in-page detector's `type-micro` signal returns zero; `body` computes no `transition: width` on any route                                                                 |
 
 ---
 
 ## The order it is worth taking
 
-1. **Phase 0, alone and first.** It changes nothing anyone sees and it decides
-   what the rest of this document is. Five findings name a control that now
-   carries the thing the finding says is missing, and a gate written as "the
-   same measurement with this number instead" is worth nothing while the first
-   measurement describes a different tree.
+1. **Phase 0, alone and first.** It changes nothing anyone sees, and a gate
+   written as "the same measurement with this number instead" is worth nothing
+   while the first measurement describes a different tree.
 2. **Phase 1, and it is a go.** Every other phase is a change to a control.
    This one changes how each piece of chrome resolves its position, against a
    commitment in `PRODUCT.md` — three text sizes scaling all UI including the
@@ -358,17 +178,13 @@ different number in it.
    stands and chrome anchors to the visual viewport; restating `PRODUCT.md` is
    not the answer. If anchoring breaks the internal clipping the panels already
    do, that is a defect in phase 1, not a reason to narrow the promise.
-3. **Phase 2 next, because it is cheap and certain**, and because it is what
-   makes phase 3's gate readable: a name audit run from a cold focus is a
-   different exercise when the way home is 133 stops away.
-4. **Phase 5 is independent of all of them and can land beside any.** It touches
+3. **Phase 5 is independent of all of them and can land beside any.** It touches
    `hud/BootOverlay.tsx` and the two files it draws, and nothing else in the
    shell reads them. It is also the one phase whose subject is the first minute
    of a visitor's acquaintance, so its value does not wait on the others.
-5. **Phase 3, then phase 4.** Both are labeling; 3 has a standard behind every
-   gate and 4 has taste behind one of them, so 3 is the one that can be argued
-   from a number alone.
-6. **Phase 6 last.** A sweep across fourteen files collides with every phase
+4. **Phase 4.** It is labeling with taste behind one of its gates, so it
+   follows the phases a number alone can argue.
+5. **Phase 6 last.** A sweep across fourteen files collides with every phase
    above it, and the cheapest time to take it is when nothing else is moving.
 
 ---
@@ -406,11 +222,12 @@ Still open:
   more of the contrast result than the translucency is: the panels survive a
   star mostly because the subject is never behind them, and the one center-frame
   element measured 1.05:1 before its hairline. A HUD projected on the canopy is
-  over the subject by construction, so none of the figures above transfer to it.
+  over the subject by construction, so none of the dock's figures in
+  `PRODUCT.md` transfer to it.
 
 ---
 
 ## Related
 
 - [`DESIGN.md`](../../DESIGN.md) — the design bible every finding above is measured against
-- [`PRODUCT.md`](../../PRODUCT.md) — the audiences, the zoom commitment, and the note that the dock's contrast is unmeasured
+- [`PRODUCT.md`](../../PRODUCT.md) — the audiences, the zoom commitment, and the dock's measured contrast
