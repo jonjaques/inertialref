@@ -317,9 +317,11 @@ it.each(['full', 'plain'] as const)(
   async (detail) => {
     /*
      * The sea lever selects a material, so each one is a pipeline the
-     * warm-up owes. Warmed through `warmRenderer` against the production
-     * layout, the frame drawn into a target of that layout, with the pass's
-     * outputs, must build none.
+     * warm-up owes — and the full one binds a multisampled depth whose
+     * texture type the builder reads off the bound target, which is the
+     * scene pass's shape only if the compile was bound to it. Warmed through
+     * `warmRenderer` against the production layout, the frame drawn into a
+     * target of that layout, with the pass's outputs, must build none.
      */
     const { renderer } = gpu
     const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))

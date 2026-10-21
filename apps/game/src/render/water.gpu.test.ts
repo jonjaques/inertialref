@@ -31,10 +31,14 @@ import {
  * The sea's two materials, drawn the way the scene pass draws them: into a
  * four-sample target with a float depth, after the opaque ground they read.
  *
- * A bay with a cliff standing out of it, seen from three meters. The full
- * sea copies the frame and must split the scene pass once; the plain sea
- * must not split it at all. And the clock: the waves have to move at a
- * present-day instant, and the surf has to run in at the swell's period.
+ * A bay with a red cliff standing out of it, seen from three meters: the full
+ * sea has to mirror the cliff in the water under it and the sky beside it,
+ * and the plain sea has to mirror nothing — the land is a search over the
+ * frame's depth, and the plain material is the one built without the frame.
+ * Then the splits: the full sea copies the frame and its depth and must still
+ * split the scene pass once, and the plain sea must not split it at all. And
+ * the clock: the waves have to move at a present-day instant, and the surf
+ * has to run in at the swell's period.
  */
 
 const SIZE = 64
@@ -131,12 +135,61 @@ function bay(water: WaterMaterial) {
   }
 }
 
+describe('the sea mirrors the land', () => {
+  it('the full sea mirrors the cliff under it and the sky beside it', async () => {
+    const water = createWaterMaterial()
+    water.setQuality({ frame: true, waveOctaves: 0 })
+    const rig = bay(water)
+    try {
+      const frame = await gpu.draw(rig.scene, rig.camera, {
+        into: rig.target,
+      })
+      // The cliff's mirror image is the cliff turned over at the waterline:
+      // its middle seven meters below the water, straight under it.
+      const [mx, my] = rig.pixel(new Vector3(0, 40, -7))
+      // The same row, well clear of the cliff's ten meters of width.
+      const [sx] = rig.pixel(new Vector3(25, 40, -7))
+      const mirrored = frame.at(mx, my)
+      const beside = frame.at(sx, my)
+      expect(mirrored.every(Number.isFinite)).toBe(true)
+      // Fresnel leaves about 0.42 of the reflection at this angle, so the
+      // red of the cliff arrives at about that; the sky beside it is black.
+      expect(mirrored[0] - beside[0]).toBeGreaterThan(0.2 * 255)
+      expect(mirrored[0]).toBeGreaterThan(mirrored[1] + 0.2 * 255)
+      expect(mirrored[0]).toBeLessThan(255)
+    } finally {
+      rig.dispose()
+    }
+  })
+
+  it('the plain sea mirrors nothing, because it has no frame to search', async () => {
+    const water = createWaterMaterial()
+    water.setQuality({ frame: false, waveOctaves: 0 })
+    const rig = bay(water)
+    try {
+      const frame = await gpu.draw(rig.scene, rig.camera, {
+        into: rig.target,
+      })
+      const [mx, my] = rig.pixel(new Vector3(0, 40, -7))
+      const [sx] = rig.pixel(new Vector3(25, 40, -7))
+      // The two differ only by the liquid's own shading across a few
+      // degrees of view, far under the cliff's 0.4.
+      expect(Math.abs(frame.at(mx, my)[0] - frame.at(sx, my)[0])).toBeLessThan(
+        0.02 * 255,
+      )
+    } finally {
+      rig.dispose()
+    }
+  })
+})
+
 describe.skipIf(!TIMESTAMPS)('the sea splits the scene pass', () => {
   /*
-   * The full sea copies the frame, and three's path for a copy ends the
-   * pass and begins it again, so the timeline sees the scene pass and one
-   * resumption of it. The plain sea copies nothing and the pass stays whole
-   * — which is the whole reason `plain` is a material.
+   * The full sea copies two attachments, and three's path for a copy ends
+   * the pass and begins it again for each. Both ride in one split here, so
+   * the timeline sees the scene pass and one resumption of it; a second
+   * split would read as a third pass. The plain sea copies nothing and the
+   * pass stays whole — which is the whole reason `plain` is a material.
    */
   it.each([
     ['full', true, ['scene', 'scene after copy']],

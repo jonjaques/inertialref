@@ -18,11 +18,14 @@ import {
   max,
   min,
   mix,
+  modelViewMatrix,
   normalize,
   oneMinus,
   positionLocal,
   positionPrevious,
+  positionView,
   pow,
+  reflect,
   saturate,
   screenUV,
   smoothstep,
@@ -32,7 +35,6 @@ import {
   vec2,
   vec3,
   vec4,
-  viewportSharedTexture,
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
 import { OPEN_OCEAN, type TerrainPalette } from '@inertialref/rendering'
@@ -49,6 +51,7 @@ import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import { seaWearOf } from './wear.ts'
 import { WAVE_OCTAVES } from './quality.ts'
 import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
+import { landReflection, seaFrame, type SeaFrameNode } from './seaReflection.ts'
 
 /*
  * The sea's own material.
@@ -56,16 +59,15 @@ import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
  * The ground under a sea is a seabed, drawn by `render/terrain.ts` like any
  * other ground, and this is the sheet laid over it at the datum — the second
  * of the two surfaces `buildPatch` emits for a patch the sea reaches. What it
- * does is what a real surface of water does: it reflects the sky and the sun
- * by Fresnel's law, it refracts what is under it, and it absorbs that light
- * by the path it takes through the water, so a shelf is turquoise and the
- * deep is the liquid's own color. The refraction is real rather than a tint:
- * the sheet reads the frame the opaque pass just drew — the seabed, lit —
- * through `viewportSharedTexture`, displaced by the wave slope, and attenuates
- * it by `e^(−absorption · path)`. What is not here is a reflection of the
- * land in the water; that is a screen-space search this material does not
- * make, and the sky and the sun are what the eye reads as "sea" from any
- * distance a ship flies at.
+ * does is what a real surface of water does: it reflects the sky, the sun and
+ * the land standing over it by Fresnel's law, it refracts what is under it,
+ * and it absorbs that light by the path it takes through the water, so a shelf
+ * is turquoise and the deep is the liquid's own color. The refraction is real
+ * rather than a tint: the sheet reads the frame the opaque pass just drew —
+ * the seabed, lit — displaced by the wave slope, and attenuates it by
+ * `e^(−absorption · path)`. The land comes from the same frame, by a search
+ * of the depth behind it (`render/seaReflection.ts`); where the search finds
+ * nothing the sky is the reflection.
  *
  * **Everything is in body-fixed axes**, for the reason the ground gives, and
  * the sheet morphs onto its parent exactly as the ground does — the same
@@ -80,8 +82,8 @@ import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
  * texture binding and a copy, and the copy ends the scene pass and begins it
  * again — so whether the sheet reads it is a fact about the pipeline, not a
  * value a uniform can switch off. `full` draws with the material that reads
- * the frame; `plain` and `flat` with the one built without, and the scene
- * pass stays whole.
+ * the frame and its depth; `plain` and `flat` with the one built without, and
+ * the scene pass stays whole.
  */
 
 export interface WaterMaterial {
@@ -106,9 +108,10 @@ export interface WaterMaterial {
 /** What the graphics settings may turn down. */
 export interface WaterQuality {
   /**
-   * Whether the sheet reads the frame behind it: the seabed, refracted. Off
-   * selects the material built without the read, which draws the liquid's
-   * color and the sky's reflection and leaves the scene pass unsplit.
+   * Whether the sheet reads the frame behind it: the seabed refracted and the
+   * land mirrored. Off selects the material built without the read, which
+   * draws the liquid's color and the sky's reflection and leaves the scene
+   * pass unsplit.
    */
   readonly frame: boolean
   /**
@@ -207,21 +210,33 @@ const SWELL_FADE: readonly [number, number] = [0.4, 3]
 const SWELL_DETAIL_FADE: readonly [number, number] = [0.8, 6]
 const CHOP_FADE: readonly [number, number] = [0.32, 2.4]
 
+/**
+ * The eye's height over the water at which the land's reflection has gone,
+ * meters; it starts to go at half of it. From higher the sea under the eye is
+ * seen nearly square on, where Fresnel's law leaves two percent of any
+ * reflection, and what is left is the far field, where the waves have already
+ * smeared it and the depth behind it is the coarsest the frame holds. Past
+ * the reach the search does not run at all.
+ */
+const REFLECTION_REACH = 1_000
+
 /** The index of refraction the path length is bent by. Water's; close enough for the rest. */
 const REFRACTIVE_INDEX = 1.33
 
 /**
- * What one sea material is built with. A *build* option rather than a
- * uniform because it is a texture binding, and a binding is a fact about the
- * pipeline.
+ * What one sea material is built with. Both are *build* options rather than
+ * uniforms because each is a texture binding — the frame, and its depth — and
+ * a binding is a fact about the pipeline.
  */
 interface WaterBuild {
   /** Read the frame behind the sheet: the refraction, and the copy that splits the pass. */
   readonly refraction: boolean
+  /** Search the depth behind the sheet for the land's reflection. Implies the frame. */
+  readonly reflection: boolean
 }
 
-const FULL_SEA: WaterBuild = { refraction: true }
-const PLAIN_SEA: WaterBuild = { refraction: false }
+const FULL_SEA: WaterBuild = { refraction: true, reflection: true }
+const PLAIN_SEA: WaterBuild = { refraction: false, reflection: false }
 
 export function createWaterMaterial(): WaterMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
@@ -432,7 +447,9 @@ export function createWaterMaterial(): WaterMaterial {
         saturate(screenUV.x.add(shift.x)),
         saturate(screenUV.y.add(shift.y)),
       )
-      const frame = options.refraction ? viewportSharedTexture(shifted) : null
+      const frame: SeaFrameNode | null = options.refraction
+        ? seaFrame(shifted, options.reflection)
+        : null
       const liquid = asVector(liquidColor)
       /*
        * The liquid's own color, lit: what scatters back out of the body of
@@ -477,16 +494,56 @@ export function createWaterMaterial(): WaterMaterial {
       const facing = max(dot(view, half), float(0))
       const glintFresnel = float(0.02).add(pow(oneMinus(facing), 5).mul(0.98))
       const lobe = max(dot(normal, half), float(0))
-      const glint = pow(lobe, float(1800))
-        .add(pow(lobe, float(110)).mul(0.32))
-        .mul(glintFresnel)
-        .mul(daylight)
-        .mul(60)
+      let glint: Vector = asVector(
+        pow(lobe, float(1800))
+          .add(pow(lobe, float(110)).mul(0.32))
+          .mul(glintFresnel)
+          .mul(daylight)
+          .mul(60),
+      )
+
+      /*
+       * The land, where the search finds it: the reflected ray in view space,
+       * weighted in over the sky by how much of the reflection it is. The
+       * search runs only where the reflection can be seen — under the reach,
+       * and where Fresnel leaves more than a few percent of it — and the sun's
+       * glint goes where the land stands in front of it.
+       */
+      let reflection: Vector = asVector(skyLight)
+      if (frame !== null && options.reflection) {
+        const toView = (direction: Vector) =>
+          asVector(normalize(modelViewMatrix.mul(vec4(direction, 0)).xyz))
+        const height = dot(toEye, up)
+        const reach = oneMinus(
+          smoothstep(
+            float(REFLECTION_REACH / 2),
+            float(REFLECTION_REACH),
+            height,
+          ),
+        ).mul(smoothstep(float(0.025), float(0.06), fresnel))
+        const land = vec4(0).toVar()
+        If(reach.greaterThan(0), () => {
+          land.assign(
+            landReflection(frame, {
+              position: asVector(positionView),
+              direction: asVector(
+                reflect(normalize(positionView), toView(normal)),
+              ),
+              up: toView(asVector(up)),
+            }),
+          )
+        })
+        const mirrored = land.a.mul(reach)
+        reflection = asVector(
+          mix(skyLight, land.rgb.div(sceneRadianceGain), mirrored),
+        )
+        glint = asVector(glint.mul(oneMinus(mirrored)))
+      }
 
       /* --- the surface ------------------------------------------------------ */
 
       let color: Vector = asVector(
-        mix(subsurface, skyLight, fresnel).add(sunlight.mul(glint)),
+        mix(subsurface, reflection, fresnel).add(sunlight.mul(glint)),
       )
 
       /*
