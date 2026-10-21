@@ -625,6 +625,14 @@ what happens when three weights all say 0.4; a stack says the ice is on the
 sand, which is true. The angle of repose does most of the visible work, and 33°
 is a fact about friction rather than about a planet.
 
+**The slope a deposit reads is the detail floor's at every level.** A coarse
+patch's normal is the ground smoothed over its cell, so read raw it draws
+flatter ground than the floor would, and the deposits ring at every morph band.
+A worker measures each body's drawn slopes at every level, and the material
+maps a patch's slope onto the floor's distribution, rank kept, mixing its own
+level's row with its parent's by the morph
+([ADR-0051](../adr/0051-a-rock-stands-on-the-drawn-ground.md)).
+
 **The palette is ratios against the body's own published color, never absolute
 values.** `packages/rendering/src/terrainPalette.ts` holds it. Absolute colors
 make every rocky world the same sandstone, and they make the ground disagree

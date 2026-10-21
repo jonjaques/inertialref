@@ -226,9 +226,10 @@ measures the drainage band under 0.06 m on Earth at level 0.
 **What is not here, and the plan still owes.** Dendry refinement below the
 lattice; the delta and the ria as shapes rather than a depth; gullies,
 talus and the derivative-damped grain; a river sheet with a flow direction
-for its waves; the slope and seat in the cover's spare bytes; and the
-per-pass timestamp query that every row of the plan's tradeoff table is
-measured against.
+for its waves; and the per-pass timestamp query that every row of the plan's
+tradeoff table is measured against. The deposit slope and the rock seat are
+[ADR-0051](0051-a-rock-stands-on-the-drawn-ground.md)'s, and spend no byte of
+the cover.
 
 ## Related
 

@@ -192,6 +192,10 @@ export const WINGS = [
             'docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md',
             'Accounts are Clerk’s',
           ],
+          [
+            'docs/adr/0051-a-rock-stands-on-the-drawn-ground.md',
+            'The rock and the deposit read the drawn level',
+          ],
         ],
       },
     ],
